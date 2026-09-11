@@ -410,6 +410,31 @@ measured its independence — it has asserted it.
 
 ---
 
+## P27 — Automated task assignment and execution monitoring
+
+A factory does not rely on a human to assign work or follow up on stalled tasks.
+When an issue is created on the board, the factory assigns it to a persistent worker
+lane, establishes a claim record, and runs an automated watchdog to monitor execution.
+
+- *Proven:* opencrabs-dev (Triage assignment, worker ledger claim records, `oc-waiter-sweep`
+  monitoring active tasks, timeouts, and stale claims).
+- *Mechanism — 3 Stages:*
+  1. **Automated Dispatch:** Triage scans unassigned issues on the board, performs the claim
+     check (unclaimed on board, unclaimed in ledger), selects the designated persistent worker lane,
+     and delivers the brief via direct session message.
+  2. **Claim Registration:** An immutable ledger/claim record stamps `task_id`, `lane_id`, `state=claimed`,
+     and `timestamp`.
+  3. **Execution Watchdog:** A periodic trigger (cron / background sweep) checks live task status:
+     - Detects idle or dead workers (no progress for *N* cycles).
+     - Detects finished tasks awaiting review/verification.
+     - Escalates blocked or failed tasks to HQ or triggers a retry with fresh context.
+- *Prevents:* "Fire-and-forget" dispatch where an issue is filed, assigned into an unmonitored lane,
+  and quietly stalls forever with no completion receipt or failure report.
+- *Boundary:* The watchdog detects staleness and notifies; it does not take over the worker's
+  implementation. Remediation is routed through HQ or Triage re-dispatch.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that
