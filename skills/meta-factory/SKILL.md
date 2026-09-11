@@ -70,13 +70,30 @@ not edit a member's repo, write its ontology, file its issues, or run its tests.
 Doing a member's work duplicates a lane, bypasses the member's own process law, and leaves
 this factory's own work undone.
 
-**Delegation.** Member-factory conversation is delegated to a separate lane:
+**Delegation.** Member-factory conversation is delegated to a separate lane.
 
-| Thing | Value |
-|---|---|
-| Delegate lane session | `f5a2d0fd-03e8-4366-a659-7a736b774f17` |
-| Delegate topic | `thread_id` 68 in the Factories group |
-| HQ topic | `thread_id` 21 |
+**This factory's own lanes.** All four are topic-bound sessions in the Factories group; the
+ids below were read back from `session_bindings` on 2026-09-11 14:2xZ. A lane is addressed by
+its **session id**, and that id is re-read from live state before any send — never carried
+over from an earlier turn.
+
+| Topic | `thread_id` | Lane session | Carries |
+|---|---|---|---|
+| HQ | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | analysis, rulings, owner conversation |
+| Delegate | 68 | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | member-factory comms |
+| Triage | 20 | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | intake and routing |
+| Surveys | 19 | `5c99ad51-8889-40cb-b589-fa13fd673c06` | survey and measurement work |
+
+**A lane exists only once a message has arrived in its topic.** A topic's session is created
+by its first **inbound** message — an outbound post never claims one. So a topic is
+addressable (deliveries target its `thread_id`) but unowned until someone writes into it, and
+"the lane is up" is a claim that needs a `session_bindings` read, not an assumption.
+
+**A subagent id is not a lane.** The delegate was first dispatched as a one-shot subagent
+(`subagent: delegate`), and its id was recorded here as "the Delegate lane session". It
+finished, and the three member HQs' replies — six messages, 11:33Z–11:50Z — parked in its
+`notify_queue` with nothing left to read them. A dispatch returned a receipt; nothing consumed
+it. A subagent session has no channel binding, so it cannot be a lane.
 
 - This lane (the HQ topic) is for **analysis and owner conversation only**.
 - Member traffic goes to the **Delegate** lane, never into the HQ topic.
