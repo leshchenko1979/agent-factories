@@ -1,0 +1,76 @@
+# {{FACTORY}} — ontology
+
+**Version:** 0.1.0
+**Owns:** the canonical vocabulary of this factory. One term, one meaning.
+
+Every term below is the **only** word allowed for that concept — in code, in
+ADRs, in issue titles, in reports, in chat. Anything in the banned column is a
+defect to fix, not a synonym to tolerate.
+
+> Why this file exists: the same concept under three names makes reports
+> unreadable and `grep` useless. Drift starts on day one and is never cheaper
+> to fix later.
+
+---
+
+## Canonical terms
+
+| Term | Definition | Not |
+|---|---|---|
+| `{{TERM}}` | {{DEFINITION}} | {{BANNED}} |
+
+<!--
+Rules for a good entry:
+- The definition states what the term IS, in one sentence, without using a
+  banned synonym to explain it.
+- "Not" lists every word the team actually says instead. If nobody says it,
+  do not list it.
+- Terms that only appear in code go in the code's own glossary, not here.
+-->
+
+---
+
+## Banned synonyms
+
+| Don't say | Say | Why it matters |
+|---|---|---|
+| {{WORD}} | `{{TERM}}` | {{CONSEQUENCE}} |
+
+<!--
+The "why it matters" column is the load-bearing one. A ban with no stated
+consequence reads as taste, and taste gets overridden under deadline. State
+what breaks: a report that cannot be compared, a query that misses rows, a
+handover that means two different things to two people.
+-->
+
+---
+
+## Enforcement
+
+| Where | How |
+|---|---|
+| Code | `{{TEST_COMMAND}}` fails the build on a banned synonym |
+| Issues / topics | Title prefix vocabulary: {{PREFIXES}} |
+| Reports | Reviewed at close — a banned synonym is a finding, not a nit |
+
+**Status:** {{ENFORCEMENT_STATUS}}
+
+<!--
+If enforcement is not yet automated, say so explicitly and name what would
+prove it. An ontology nobody can violate is documentation; an ontology a test
+enforces is law. Do not claim the second while shipping the first.
+-->
+
+---
+
+## Naming law
+
+| Artifact | Pattern | Example |
+|---|---|---|
+| Work-unit topic | `Worker — #N <title>` | `Worker — #14 session_notify alerts` |
+| Closed topic | `Done — #N <title>` | `Done — #14 session_notify alerts` |
+| Issue | `<prefix>: <statement>` | `probe: rank basis is undocumented` |
+| Decision record | `NNNN-<slug>` | `0003-authoritative-state-writer` |
+
+Rename on close; never re-create. The topic id is stable and is what a cron's
+`deliver_to` points at.

@@ -1,0 +1,107 @@
+# {{FACTORY}} — repository law
+
+**Owns:** how work is done **in this repository** — build, test, commit, review.
+Process law (how the factory runs) lives in the skill: `{{SKILL_PATH}}`.
+
+> This file is the repo's `AGENTS.md`. It is read by agents working here,
+> whatever harness they run under. Keep it about this codebase; keep factory
+> procedure in the skill.
+
+---
+
+## What this repository is
+
+{{REPO_DESCRIPTION}}
+
+**Not** in this repo: {{NON_GOALS}} — those live in `{{OTHER_LOCATION}}`.
+
+<!--
+Naming what is NOT here is load-bearing on a multi-repo factory. Without it,
+someone will add the campaign state to the code repo, or the client records to
+the platform repo, and there will be two writers for one fact.
+-->
+
+---
+
+## The board is the task list
+
+Tasks are issues on this repo. Nothing is in flight unless it is an issue.
+
+| Kind | Prefix | Example |
+|---|---|---|
+| Factory process | `hq:` | `hq: rank basis is undocumented` |
+| Product work | `{{PREFIX}}:` | `{{EXAMPLE}}` |
+| Infrastructure | `ops:` | `ops: rotate the probe key` |
+
+- Issue body states **goal, owner, done-criteria**.
+- Status changes are **comments**, never silent body rewrites.
+- Close with what changed, the evidence, and how to re-check it.
+
+---
+
+## Build and test
+
+```
+{{BUILD_COMMAND}}
+{{TEST_COMMAND}}
+{{LINT_COMMAND}}
+```
+
+A change is not done because it compiles. It is done when `{{TEST_COMMAND}}`
+passes, and the output of that run is in the issue.
+
+---
+
+## Commits
+
+- **One change per commit**, as small as the change itself. Three unrelated
+  edits in one file are three commits.
+- Several files touched for one change are one commit; several files each
+  changed for their own reason are one commit each.
+- Split as fine as the tree still builds at every commit.
+- Commit as you go. Progress that is not committed is lost when a turn is
+  interrupted.
+- **Never** `git add -A` or `git commit -a`. Stage the paths you changed.
+
+---
+
+## Branches and other agents
+
+Other sessions may be working in this repository at the same time.
+
+- Never revert, reset, rebase or amend a commit you did not write. Report it
+  and wait, or branch off and work there.
+- Re-read a file immediately before overwriting it.
+- Before calling any work lost, check which branch contains it.
+- A sub-agent has its own worktree and branch: its work is there, not on yours.
+
+---
+
+## Mechanical gates
+
+Where a check can be a command, it is a command with a documented return code,
+and it runs in CI. Prose judgment is reserved for what a command cannot decide.
+
+| Gate | Command | Refuses |
+|---|---|---|
+| {{GATE}} | `{{COMMAND}}` | {{WHAT_IT_REFUSES}} |
+
+---
+
+## Claims and evidence
+
+- **No claim without a same-turn receipt.** "Passing", "fixed", "shipped" need
+  the tool output that shows it, in the same turn.
+- **Never report an identifier you did not read back** — issue numbers, run
+  ids, shas, commit trailers.
+- If a tool result arrives truncated, any claim resting on the elided region is
+  unverified: re-run a targeted check before asserting it.
+
+---
+
+## Secrets
+
+- Never commit credentials. `{{SECRETS_FILE}}` is the only place they live, and
+  it is not in this repository.
+- Never paste a credential into an issue, a topic, a log or a commit message —
+  including in a screenshot.

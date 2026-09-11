@@ -1,0 +1,148 @@
+# {{FACTORY}} — process law
+
+**Version:** 0.1.0
+**Owns:** how this factory runs — briefing, dispatch, closing, escalation.
+**Repo:** `{{REPO}}` · **Chat:** `{{CHAT}}` · **Ontology:** `ONTOLOGY.md`
+
+> Replace every `{{PLACEHOLDER}}` and delete this line. Keep this file short
+> enough to reload after every compaction — it is the first thing every session
+> reads, so length here is paid on every turn.
+
+---
+
+## 1. What this factory is
+
+**Purpose.** {{PURPOSE}}
+
+**The three legs.** This factory is the pairing of:
+
+| Leg | Where it lives |
+|---|---|
+| Process law | this file (+ `roles/`, mirrored to `{{SKILL_REPO}}`) |
+| Chat surface | `{{CHAT}}` — topics carry state in their names |
+| Issue board | `{{REPO}}` issues — the task list |
+
+Remove any leg and this stops being a factory.
+
+---
+
+## 2. Roles
+
+| Role | Owns | Card |
+|---|---|---|
+| `HQ` | The process: dispatch, rulings, gates. Does not implement. | [`roles/hq.md`](roles/hq.md) |
+| `Triage` | Intake, routing, enforcement | [`roles/triage.md`](roles/triage.md) |
+| `Worker` | One work unit, start to close | [`roles/worker.md`](roles/worker.md) |
+| `Carrier` | Merge and release chain (add-on `ship`) | [`roles/carrier.md`](roles/carrier.md) |
+
+A session loads **its own card and this file** — not the other cards.
+
+---
+
+## 3. Briefing
+
+**An agent is briefed with a session notification carrying its session UUID.
+Never with a chat post.** Telegram topics exist for the human to observe,
+supervise and archive; they do not reach agents.
+
+**A fresh session has no channel binding**, so a notification sent before its
+channel claims it is parked, not delivered. Every kickoff therefore has two
+hops: `session_notify` for the record, then `send_input` into the running
+session to actually deliver.
+
+A brief states: the issue number, the goal, the done-criteria, the evidence
+expected, and the topic the lane reports into.
+
+---
+
+## 4. Dispatch
+
+Before dispatching any work to a lane, check whether it is already claimed —
+grep the board and the ledger for an open claim on that issue. Dispatching an
+issue that is already held is the most common coordination defect.
+
+Work goes **sender → owner of the resource**, directly. No relay hops: a lane
+does not re-send or forward work to a third lane.
+
+---
+
+## 5. Work units and topics
+
+| Event | Action |
+|---|---|
+| Lane spawned for issue `#N` | Create topic `Worker — #N <title>` |
+| Lane reports complete | Rename to `Done — #N <title>`, leave it in place |
+| Lane blocked | Post the block in its topic and notify `HQ` |
+
+The topic id is stable and is what a cron's `deliver_to` points at. Rename,
+never re-create.
+
+---
+
+## 6. Closing a work unit
+
+A work unit closes when the issue carries, in this order:
+
+1. **What changed** — the artifact, with its identifier.
+2. **The evidence** — the command that was run and its result. A claim without
+   a same-turn receipt is not evidence.
+3. **The verification** — how a third party could re-check it.
+
+Then rename the topic. The issue is the record; the topic is the archive.
+
+---
+
+## 7. Verdicts and claims
+
+- **Verdict verbs need a receipt.** "Green", "passing", "verified", "shipped"
+  may only be stated when the same turn contains the tool output that shows it.
+  A job name proves identity, never outcome.
+- **Identifiers are never hand-assembled.** Copy the full value from live
+  output — issue numbers, session UUIDs, run ids. A remembered prefix plus a
+  guessed tail is a fabrication, even when it happens to be right.
+- **No claim without a check.** Existence, absence and status all require a
+  tool call in the same turn. "I have not verified" is an acceptable answer;
+  a confident guess is not.
+
+---
+
+## 8. After a context compaction
+
+The law lives in the message history, and compaction clears it. Therefore:
+
+> **First action after any compaction, before any ruling, dispatch or status
+> claim: reload this file.**
+
+This line is the recovery anchor. The always-loaded workspace brain file
+carries a one-line pointer here for exactly this reason.
+
+---
+
+## 9. Escalation
+
+| Situation | Route |
+|---|---|
+| Work needs a ruling | `HQ` |
+| Issue already claimed / routing conflict | `Triage` |
+| A tool misbehaves | the tool's owner role |
+| The law itself is wrong or stale | `HQ` (authorship of the law is not a worker's call) |
+| Human decision required | the operator, in the chat — with the options stated |
+
+---
+
+## 10. Add-ons in force
+
+{{ADDONS}} — see each add-on's page for the topics, roles, gates and rules it
+adds. Delete this section if the factory takes none.
+
+---
+
+## 11. Gates
+
+Where a check can be a command, it is a command with a documented return code.
+
+| Gate | Command | Passing |
+|---|---|---|
+| {{GATE}} | `{{COMMAND}}` | `{{RC}}` |
+
+Human judgment is reserved for the part a command cannot decide.
