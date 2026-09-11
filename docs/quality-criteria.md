@@ -102,6 +102,35 @@ language."*
 
 ---
 
+## Who scores a factory?
+
+A factory **scores itself** (owner order 2026-09-11).
+
+Self-judgment is not a compromise — it is the **engine of self-improvement**. When a factory
+evaluates itself honestly against this rubric, gaps become visible internally, which directly
+triggers local corrective action, process sharpening, and tool refinement.
+
+Periodically, the meta-factory's **Surveyor** lane will also audit and score member factories
+independently (at a less frequent cadence than daily self-scoring). The value of the surveyor's
+audit is the calibration check: comparing the factory's self-score with an outside read reveals
+blind spots and unevidenced assumptions. But the standing operational heartbeat relies on
+self-scoring.
+
+---
+
+## Mandatory at bootstrap vs. volume-earned criteria
+
+Not all 13 criteria are day-one requirements. Bootstrapping a factory requires distinguishing
+what must be in place before the first task runs versus what is earned over time.
+
+| Tier | Criteria | Why |
+|---|---|---|
+| **Day-1 Mandatory** (Foundation) | **Law:** Law freshness (L1), Vocabulary conformance (L2), Single-writer state (L3)<br/>**Machine:** Specification clarity (M1), Boundary clarity (M4) | Without written law, controlled vocabulary, and clear boundaries, early work immediately compounds errors and creates unrecoverable state drift. |
+| **Early Operational** (Process) | **Machine:** Verification depth (M2), Coordination integrity (M3)<br/>**Stewardship:** Recoverability (S2), Human cognitive load (S1) | Handoffs must be direct, verification must have receipts, and recovery steps must be documented as soon as multiple lanes collaborate. |
+| **Volume-Earned** (Maturity) | **Output:** Throughput (O1), Stability (O2), Cost per successful task (O3)<br/>**Stewardship:** Improvement loop (S3) | Meaningful rates and stability statistics require historical sample size. Prematurely tracking throughput or cost before standard execution patterns exist produces noise instead of control. |
+
+---
+
 ## Output — does the work land?
 
 | Criterion | What it measures | What it prevents |

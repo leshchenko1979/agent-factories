@@ -9,11 +9,13 @@ procedure lives in this file, not in the job.**
 
 ---
 
-## Cadence
+## Cadence and Roles
 
-**Daily, for now** (owner order 2026-09-11). Deliberately conservative — the
-cadence is expected to relax once the scores' variance is known and a stable
-trend exists. Revisit when a score has changed for reasons already understood.
+**Self-scoring:** each member factory maintains its own standing measurement loop (daily or on its
+own sprint cadence) to trigger continuous self-correction.
+
+**Surveyor audit:** periodic meta-factory review (less frequent than daily self-scoring; owner order 2026-09-11).
+The surveyor's role is calibration and cross-factory pattern discovery, not micro-management.
 
 ---
 
@@ -21,11 +23,11 @@ trend exists. Revisit when a score has changed for reasons already understood.
 
 For each surveyed factory:
 
-1. **Score** it against [quality-criteria.md](quality-criteria.md) — 13
-   criteria, 0–4 each. Re-score only from **live state**: the factory's repo,
+1. **Review** the factory's self-score and audit against [quality-criteria.md](quality-criteria.md) — 13
+   criteria, 0–4 each. Verify against **live state**: the factory's repo,
    its board, its law files, its scheduled jobs. Never from memory and never
    from the previous report.
-2. **Diff** against the previous score. State what moved and why.
+2. **Diff** against previous records. Note where self-judgment and external audit diverge (the calibration gap).
 3. **Record** the dated score in this repo — the diff is the signal, a single
    score is an opinion.
 4. **Report** to the analysis topic: the scores, the movements, and any
