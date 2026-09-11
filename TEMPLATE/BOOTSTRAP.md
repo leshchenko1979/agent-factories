@@ -87,8 +87,31 @@ Promote the factory bot to admin with `manage_topics`. Without it the bot
 cannot create or rename the work-unit topics, and the whole naming law is
 inoperable.
 
-**Evidence:** every topic id read back from live state (`GetForumTopics` or
-equivalent) — never from the UI, never from the creation response alone.
+**Stand up each lane.** Creating a topic does not create its lane. A topic's
+session is created by its **first inbound message** — an outbound post never
+claims one — so a freshly created topic is addressable (deliveries target its
+`thread_id`) but unowned: nobody is listening in it yet. Until a lane exists,
+anything sent to it is parked, and "the lane is up" is an assumption rather than
+a fact.
+
+So the step that actually creates a lane is an **inbound message in its topic**.
+The operator writes one line into each spine topic — the role it is to play
+(`You are <role>`) — and the daemon binds a session to that topic on arrival.
+
+Two consequences, both load-bearing:
+
+- **Read the lane id back from live state** (`session_bindings` for the chat and
+  `thread_id`), and re-read it before every send. A lane id carried over from an
+  earlier turn — or worse, a one-shot subagent's id recorded as if it were a lane
+  — is how dispatches end up parked against a session that no longer exists.
+  A subagent session has no channel binding; it can never be a lane.
+- **A topic post is owner visibility, never dispatch.** Writing the role line
+  into a topic stands the lane up; it does not brief it. Brief the lane by
+  `session_notify` to its session id.
+
+**Evidence:** for each spine topic, the session id from `session_bindings`, and
+every topic id read back from live state (`GetForumTopics` or equivalent) —
+never from the UI, never from the creation response alone.
 
 ---
 
