@@ -17,6 +17,7 @@ new factory, and the rulebook that says why each piece is there.
 |---|---|---|
 | **Template** | [`TEMPLATE/`](TEMPLATE/) | The instantiable skeleton — bootstrap checklist, process-law skeleton, ontology, topic spec, role cards |
 | **Best practices** | [docs/best-practices.md](docs/best-practices.md) | The rules the template encodes, each with the factory that proves it |
+| **Quality criteria** | [docs/quality-criteria.md](docs/quality-criteria.md) | The rubric: 13 criteria in 4 families, scored 0–4, with the research behind each — and this factory scored against itself |
 | **Add-ons** | [docs/addons.md](docs/addons.md) | Domain packs — what a factory adds when it ships code, runs outreach, watches routes, or operates a multi-tenant platform |
 | **Product spec** | [docs/product.md](docs/product.md) | What the product is, who it is for, what v1 covers, what it deliberately does not |
 | **Evidence** | [evidence/](evidence/) | The four real factories, surveyed — the receipts behind every practice |
@@ -27,6 +28,7 @@ new factory, and the rulebook that says why each piece is there.
 2. Follow [`TEMPLATE/BOOTSTRAP.md`](TEMPLATE/BOOTSTRAP.md) — the ordered checklist that takes an empty directory to a running factory.
 3. Pick the add-ons your domain needs from [docs/addons.md](docs/addons.md).
 4. Keep [docs/best-practices.md](docs/best-practices.md) open — it is the normative rulebook.
+5. Score the result against [docs/quality-criteria.md](docs/quality-criteria.md) — a factory with no numbers is Provisional by definition.
 
 ## The thesis
 
