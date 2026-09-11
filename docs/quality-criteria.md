@@ -225,15 +225,19 @@ own is the most flattering way to make a rubric useless.
 | Law | 1 / 12 (8%) | The law is written but not versioned, not enforced, not recorded |
 | Stewardship | 5 / 12 (42%) | Version control and a habit of writing rules down |
 
-**The finding:** the factory that writes the rulebook is the weakest factory in
-the set, and it fails on exactly the criteria it prescribes to others. It
-carries no ontology of its own, keeps no state of its own, measures none of its
-own output, and until this turn had no written boundary.
+**The finding:** the factory that writes the rulebook fails on exactly the
+criteria it prescribes to others. It carries no ontology of its own, keeps no
+state of its own, measures none of its own output, and until this turn had no
+written boundary.
 
 That is the useful part of the exercise, and it is the argument for the rubric
 existing: **a factory can be articulate about process and still be Provisional.**
-Prose about practice is not practice. The four factories this repo surveys score
-higher on output and law than the meta-layer that describes them.
+Prose about practice is not practice.
+
+**No ranking is claimed.** The four surveyed factories have no baseline yet —
+they are *not yet scored*, which is not the same as scored zero — so the
+comparison this paragraph used to make does not exist. The first daily run
+produces their baseline, and a ranking becomes a fact then, not now.
 
 ---
 
