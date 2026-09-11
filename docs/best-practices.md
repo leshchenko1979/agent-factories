@@ -300,6 +300,30 @@ each must name the decision it informs.
 
 ---
 
+## P23 — The operator reads plain language, never the factory's shorthand
+
+Every criterion, rule and role has a **plain name**, and that name is what any
+report to the operator uses. Internal codes — `O2`, `L2`, `P19` — are handles
+for cross-referencing between documents. They are not a vocabulary to speak in.
+
+- *Proven:* this project, 2026-09-11. A status report scored the factory
+  "13/52, weakest on L2 and L3". The owner's reply: *"I don't understand L1, O2
+  and such — use plain language."* The report was accurate and unusable at the
+  same time.
+- *Prevents:* a factory that can only be understood by the people who built it.
+  Shorthand is cheap for the author and expensive for the reader — and the
+  reader is the one who has to act on it. A code also hides an empty criterion:
+  "L2: 0" reads like a number, "vocabulary conformance: nothing exists" reads
+  like a gap.
+- *Test:* replace every code in the report with its plain name. If a sentence
+  stops making sense, the sentence was leaning on shared memory rather than on
+  what it said.
+- *Boundary:* this governs the operator-facing surface only. Inside the law
+  files and the ledger, stable codes are useful — short, diffable, and immune to
+  rewording. Keep the codes; stop speaking in them.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that
