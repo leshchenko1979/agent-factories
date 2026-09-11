@@ -75,6 +75,27 @@ pattern:
 
 Per-factory detail: [evidence/factories.md](evidence/factories.md).
 
+## This project's own surface
+
+The meta-factory runs on the same pattern it prescribes, so its own surface is
+recorded here. Group **Factories**, a Telegram forum:
+
+| Topic | `thread_id` | Who speaks | What belongs |
+|---|---|---|---|
+| `HQ` | 21 | The supervisor lane | Analysis, rulings, owner conversation |
+| `Delegate` | 68 | The delegate lane | Member-factory comms — dispatches to member HQs, and their answers |
+| `Triage` | 20 | — | Intake and routing |
+| `Surveys` | 19 | — | Survey and measurement work |
+
+`HQ` is the analysis surface and the owner's conversation. Member-factory
+traffic does **not** belong there: that is what `Delegate` is for, and keeping
+the two apart is a boundary rule rather than a preference. A meta-factory that
+routes member traffic through its own analysis lane has re-created the exact
+confusion the boundary exists to prevent.
+
+Topic ids are read back from live state, never predicted. The ids above are a
+record of one such read; any delivery targeting one re-confirms it first.
+
 ## Status
 
 **v0.1 — the template is written, no factory has been created from it yet.**
