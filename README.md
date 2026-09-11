@@ -96,6 +96,29 @@ confusion the boundary exists to prevent.
 Topic ids are read back from live state, never predicted. The ids above are a
 record of one such read; any delivery targeting one re-confirms it first.
 
+### Member-factory lanes
+
+Who the delegate lane talks to. Resolved from live state on 2026-09-11 — a lane
+is addressed by the **full session id read back in the same turn**, because a
+remembered prefix is how a message lands in the wrong session.
+
+| Member factory | HQ lane session | Their surface |
+|---|---|---|
+| OpenCrabs dev | `d72bd52d-42aa-4dbd-ac99-5b5300770019` | Crabs Kanban Board, topic `OC DEV HQ` |
+| InferHub Watch | `359fe71b-c7a1-420b-b856-acfb49939a7b` | Inferhub watch, topic `Auditor` |
+| AI AntiSpam | `acc3fa9b-cefa-4e35-bf87-422696e558f0` | ai-antispam, group root |
+| Miidas | **none exists** | `Miidas Factory` has no session binding |
+
+**Miidas is the open gap.** Its own skill states that no lane has been
+dispatched from that factory yet and that its topic map is a scaffold. Standing
+up its `HQ` lane is **that factory's own work**, not this one's — until it
+exists the delegate cannot reach Miidas, and that is a finding rather than a
+defect to fix from here.
+
+The topic names above are the live titles, not the ones a factory's own law
+would lead you to expect: InferHub Watch's HQ topic is named `Auditor` in
+practice. Record the read, not the expectation.
+
 ## Status
 
 **v0.1 — the template is written, no factory has been created from it yet.**
