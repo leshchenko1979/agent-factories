@@ -84,12 +84,36 @@ receipts and acknowledgements; use the immediate mode only for something
 genuinely urgent. A lane that gets interrupted for every routine receipt stops
 making progress.
 
-### Known defect
+### Delivery mechanics — what the CLI actually does (live-tested 2026-09-11)
 
-`opencrabs session notify --mode turn-end` from the CLI is unusable: the CLI
-always emits `interrupt:false` alongside `delivery.mode`, and the policy
-rejects the pair (exit 4, *"delivery.mode and interrupt disagree"*). Use the
-tool surface, not the CLI, until that is fixed.
+Reaching a lane that is **mid-turn** is the normal case, not the exception: an
+active lane is `running` most of the time. The three CLI modes behave very
+differently there, and only one of them works:
+
+| Invocation | Target mid-turn | Result |
+|---|---|---|
+| `--mode now` (default) | ❌ | `refused_in_flight` — *"session … is mid-turn and interrupt was not set — retry when idle or resend with interrupt=true (#13 failsafe)"*, **exit 3**. Nothing is queued. |
+| `--mode quiet` | ⚠️ hangs | Waits out a **60 s idle window** (`--quiet-for-secs`, default 60) before delivering. Against a busy lane the window never opens, so the call starves toward the **1800 s** cap (`--max-delay-secs`). Looks like a hang. |
+| `--interrupt` | ✅ | Delivers immediately. **This is the only reliable path to a running lane.** |
+
+`--interrupt` is documented as a *deprecated alias for `--mode turn-end`*, but
+the alias is the one that works: the bare `--mode turn-end` form is still
+rejected with exit 4 (*"delivery.mode and interrupt disagree"*) because the CLI
+emits `interrupt:false` alongside `delivery.mode`. Use `--interrupt`.
+
+**Budget one call per target.** Each invocation costs ~45 s of daemon init
+before it sends. Batching three targets into one shell call blows a 120 s tool
+timeout and leaves a partial send — chain them across separate calls, or raise
+the timeout to ≥180 s, and read each `rc=` individually.
+
+**Cadence caveat still applies:** `--interrupt` is the *delivery* path for a
+running lane, but it interrupts whatever that lane is doing. For a routine
+receipt to an idle lane, the deferred/quiet path is still correct — the table
+above is about *reaching a busy lane*, not a licence to interrupt for trivia.
+
+**Receipt discipline.** `✅ delivered: delivered to session <uuid>` with `rc=0`
+is proof the daemon accepted and routed the message — not that the lane read
+it. Confirm by reading the lane's first reply.
 
 ---
 
