@@ -76,7 +76,7 @@ Create the spine topics, in this order:
 
 | Topic | Purpose |
 |---|---|
-| `HQ` | The supervisor lane: process work, rulings, gates |
+| `HQ` | The HQ lane: process work, rulings, gates |
 | `Triage` | Intake, routing, enforcement — omit only if `ROLES` is `HQ` alone |
 | `{{DOMAIN}}` … | One per domain topic, in the order the factory will use them |
 

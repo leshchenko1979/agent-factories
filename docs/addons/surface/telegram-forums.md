@@ -37,7 +37,7 @@ binding for that surface instead; the
 ## The spine
 
 ```
-HQ                  the supervisor lane — process work, rulings, gates
+HQ                  the HQ lane — process work, rulings, gates
 Triage              intake, routing, enforcement
 <domain>            one topic per workstream the factory actually has
 Worker — #N <title> one topic per dispatched work unit
@@ -56,7 +56,7 @@ exists carries a guess, and the naming law is the point.
 
 | Topic | Who writes | What belongs | What does not |
 |---|---|---|---|
-| `HQ` | Supervisor | Dispatch decisions, rulings, gates, cross-lane conflicts | Routine receipts, status pings, "lane idle" notes |
+| `HQ` | HQ | Dispatch decisions, rulings, gates, cross-lane conflicts | Routine receipts, status pings, "lane idle" notes |
 | `Triage` | Triage | Intake, routing, enforcement, claim conflicts | Implementation detail |
 | `<domain>` | The lane owning that workstream | Work in that stream, its evidence and its blocks | Unrelated conversations |
 | `Worker — #N` | The lane | Its brief, receipts, and result report | Everything else |

@@ -28,7 +28,8 @@ view`, `git remote -v`, the ops profile config and cron DB). Receipts:
 | `leshchenko1979/opencrabs-dev-state` | Private off-box durability tier: ledger, journals, receipts |
 
 **Roles** (carved out of a single editor over time): EDITOR (per-task worktree,
-signed commit, CI gate, ship), SUPERVISOR (skill set + worker ledger), TRIAGE
+signed commit, CI gate, ship), SUPERVISOR (skill set + worker ledger; renamed
+**HQ** 2026-09-11 — one role, one term), TRIAGE
 (intake, fix routing, enforcement), TOOLSMITH (owns `tools/` — the `oc-*` CLI).
 Compiler is retired with a documented re-enable trigger.
 

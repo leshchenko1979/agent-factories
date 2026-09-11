@@ -10,7 +10,7 @@ All four factories converge on the same shape. What differs is only the
 domain topics in the middle:
 
 ```
-HQ          the supervisor lane — process work, rulings, gates
+HQ          the HQ lane — process work, rulings, gates
 Triage      intake, routing, enforcement
 <domain>    one topic per workstream the factory actually has
 Worker — #N <title>   one topic per dispatched work unit
@@ -18,7 +18,7 @@ Done — #N <title>     same topic, renamed when the unit closes
 ```
 
 `HQ` and `Triage` are the load-bearing pair. InferHub Watch runs on `HQ`
-alone; OpenCrabs dev splits supervisor from triage. A factory with neither
+alone; OpenCrabs dev splits HQ from triage. A factory with neither
 has no place for a lane to be briefed.
 
 **Naming law.** Work-unit topics carry the issue number in the title, so the

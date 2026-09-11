@@ -47,7 +47,8 @@ role file. A shared "shared facts + router" file holds what every role needs.
 
 - *Proven:* opencrabs-dev — EDITOR / SUPERVISOR / TRIAGE / TOOLSMITH, four
   files plus a router; the compiler role was retired with a documented
-  re-enable trigger rather than deleted.
+  re-enable trigger rather than deleted. (*SUPERVISOR* was renamed **HQ** on
+  2026-09-11 — one role, one term. The old name stays here as the record.)
 - *Prevents:* every lane loading 3 000 tokens of someone else's procedure, and
   the drift that comes from one giant file being edited by everyone.
 
@@ -89,12 +90,12 @@ the lane: brief, receipts and result report all land there.
 
 ## P6 — HQ works *on* the process, not *in* it
 
-A supervisor role dispatches; it does not implement. Hands-on work goes to a
+The HQ role dispatches; it does not implement. Hands-on work goes to a
 lane. Sub-agents are reserved for **review** tasks, where fresh context without
 session bias is the whole point.
 
 - *Proven:* inferhub-watch (delegation law, owner order).
-- *Prevents:* the supervisor becoming the bottleneck and the single point of
+- *Prevents:* HQ becoming the bottleneck and the single point of
   failure, and review being done by the author of the thing under review.
 
 ## P7 — Cron is a thin trigger, not the worker

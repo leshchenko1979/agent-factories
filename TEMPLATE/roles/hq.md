@@ -16,7 +16,7 @@
 ## What HQ does not do
 
 - **Implement.** The moment HQ edits the artifact, it is a lane, and the
-  factory has lost its supervisor.
+  factory has lost its HQ.
 - **Relay.** Work goes sender → owner of the resource, directly. HQ does not
   forward a lane's message to a third lane.
 - **Reply to pure acknowledgements.** A loop-closing ACK needs no ruling. HQ

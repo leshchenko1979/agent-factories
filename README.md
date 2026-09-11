@@ -82,7 +82,7 @@ recorded here. Group **Factories**, a Telegram forum:
 
 | Topic | `thread_id` | Who speaks | What belongs |
 |---|---|---|---|
-| `HQ` | 21 | The supervisor lane | Analysis, rulings, owner conversation |
+| `HQ` | 21 | The HQ lane | Analysis, rulings, owner conversation |
 | `Delegate` | 68 | The delegate lane | Member-factory comms — dispatches to member HQs, and their answers |
 | `Triage` | 20 | — | Intake and routing |
 | `Surveys` | 19 | — | Survey and measurement work |
