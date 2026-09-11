@@ -110,12 +110,22 @@ warm-pool group → shared trial OpenCrabs → support converts in place to an
 isolated managed bot built from `miidas-template`. Each client gets their own
 bot, group and container.
 
-**Chat surface.** Per-client Telegram groups: `МИИДАС: <client>` and the
-onboarding funnel `МИИДАС · Бухгалтерия без лишнего человека` (dozens of
-instances), plus a client-facing forum group `Умница Миидаша` with business
-topics (Посты, Объявления, Юридические вопросы, Бухгалтерия, …).
-**There is no factory chat** — no forum group where Miidas work is dispatched,
-tracked and archived. This is the main structural gap.
+**Chat surface.** Factory forum group **`Miidas Factory`**
+(`-1003996392908`) — **created 2026-09-11** for this project; before it, the
+factory had no chat at all. Topics: `HQ` (4), `Triage` (5), `Agent runtime`
+(6), `Landing` (7), `CDP` (8), `Manager` (9) — see
+[topics.md](topics.md).
+
+Per-client Telegram groups remain the *product* surface and are untouched:
+`МИИДАС: <client>` and the onboarding funnel
+`МИИДАС · Бухгалтерия без лишнего человека` (dozens of instances), plus a
+client-facing forum group `Умница Миидаша` with business topics (Посты,
+Объявления, Юридические вопросы, Бухгалтерия, …).
+
+**Repository.** `leshchenko1979/miidas` — it was documented as "MOVED to
+`alexeyleshchenko/miidas`"; the owner confirmed on 2026-09-11 that it **was
+moved back to `leshchenko1979`**, which resolves the open question in
+`gaps.md`.
 
 **Repos.**
 
@@ -150,10 +160,16 @@ all-in-one script is for full-platform work only.
 (`@ai_spam_blocker_bot`) and a **monoforum outreach campaign** that pitches the
 bot to channel owners (wave 0, started 2026-08-23).
 
-**Chat surface.** Telegram group **`ai-antispam`** (`-1003993000918`, 2
-members) — a **plain group, not a forum**, and today it functions almost purely
-as the cron delivery sink: six campaign crons deliver there. No topics, no lane
-structure. This is the main structural gap.
+**Chat surface.** Telegram forum group **`ai-antispam`**
+(`-1003993000918`, 2 members). **Converted from a plain megagroup to a forum
+on 2026-09-11** via `channels.ToggleForum`; its 10,779 existing messages stay
+in `General`. Topics: `Outreach` (10780), `Triage` (10781), `HQ` (10782),
+`Landing` (10783), `Bot` (10784) — see [topics.md](topics.md).
+
+The group's historical function — the cron delivery sink — is **not yet
+fixed**: all eleven crons still post without a `message_thread_id` and so land
+in `General`. The re-point mapping is drafted in [topics.md](topics.md) and
+awaiting owner approval.
 
 **Repos.**
 

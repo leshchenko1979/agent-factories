@@ -13,8 +13,13 @@ factories actually involves.
 |---|---|---|---|---|---|
 | OpenCrabs development | ✅ | ✅ `Crabs Kanban Board` | ✅ opencrabs-dev | ✅ fork issues | ✅ workers-ledger |
 | InferHub Watch | ✅ | ✅ `Inferhub watch` | ✅ `skills/inferhub` | ✅ repo issues | ✅ WORKLOG |
-| Miidas | ❌ | ❌ **none** | ⚠️ repo `AGENTS.md` only | ⚠️ ADRs, no live board | ⚠️ `docs/clients.md` |
-| AI AntiSpam | ❌ | ⚠️ plain group, cron sink | ⚠️ split 3 ways | ❌ none | ⚠️ send log only |
+| Miidas | ✅ | ✅ `Miidas Factory` | ⚠️ repo `AGENTS.md` only | ⚠️ ADRs, no live board | ⚠️ `docs/clients.md` |
+| AI AntiSpam | ✅ | ✅ `ai-antispam` (forum) | ⚠️ split 3 ways | ❌ none | ⚠️ send log only |
+
+**Update 2026-09-11:** both groups are now forums with topics — see
+[topics.md](topics.md). The ❌ in the "On topic system" column is resolved for
+all four factories. What remains open for Miidas and AI AntiSpam is the
+*process* half (skill, issue board, state writer), not the surface.
 
 ---
 
@@ -59,10 +64,14 @@ chat is for the platform's own development, not for client conversations.
 
 ## AI AntiSpam — what is missing
 
-**The group is a delivery sink, not a factory.** `ai-antispam`
-(`-1003993000918`, 2 members) is a **plain group** — it cannot hold topics — and
-six campaign crons deliver into it. Reports pile up in one timeline with no
-lane structure and nothing to reply *in*.
+**The group is a delivery sink, not a factory — though it now has the
+surface.** `ai-antispam` (`-1003993000918`, 2 members) was a **plain group**;
+on 2026-09-11 it was converted to a forum with `HQ`, `Triage`, `Outreach`,
+`Bot` and `Landing` topics (see [topics.md](topics.md)). What has *not*
+changed is the routing: **eleven** campaign crons deliver into it — not six,
+as the first survey said — and none of them sets a `message_thread_id`, so
+every report still lands in `General`. The surface is fixed; the routing is
+not.
 
 **No issue board.** Campaign work is tracked in
 `plans/marketing-plan-monoforum-outreach.md` and a recon queue file. That is a
