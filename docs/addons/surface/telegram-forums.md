@@ -94,9 +94,17 @@ Create topics **serially** if you want ordered ids. Read them back either way.
 
 ## Creating and renaming a topic
 
-Telegram exposes topic creation on **MTProto**, not through the bot API surface
-most harnesses wrap — so on a harness with no topic tool you reach for the raw
-invoke. Two facts cost real time to rediscover, and both fail in a way that
+**Telegram itself supports this on the bot API.** `createForumTopic` and
+`editForumTopic` are standard Bot API methods, and the common Rust client
+(`teloxide-core` 0.13.0) already exposes both as `create_forum_topic` /
+`edit_forum_topic`. So a harness with no topic tool has a **harness** gap, not a
+platform limit — and the fix is to add the action, not to conclude the platform
+cannot do it.
+
+The mechanics below were reached the other way: by a raw **MTProto** invoke from
+a *user* session. That route works, but it is a workaround, not the only road —
+and it is not available to a bot-only harness, so it must not be prescribed as
+if it were. Two facts cost real time to rediscover, and both fail in a way that
 reads like something else:
 
 - **The methods live under `messages.*`, not `channels.*`.** `channels` carries
@@ -196,22 +204,30 @@ to confirm zero rows remained on the unthreaded target.
 
 ## Reporting a defect in the surface tooling
 
-The Telegram tooling has an owner too, and it is not the same owner as the
-harness. Owner order, 2026-09-11: **a missing or broken Telegram tool is
-reported to the `fast-mcp-telegram` session** — a defect dispatch, not a
-member-factory conversation, and never a request that someone else do the work.
+The surface tooling has owners, plural, and they are not the same owner as the
+harness. Owner order, 2026-09-11: a missing or broken **Telegram** tool goes to
+the `fast-mcp-telegram` session — a defect dispatch, never a member-factory
+conversation, and never a request that someone else do the work.
 
-Reported from this project on 2026-09-11, all three still open at the time of
-writing:
+**Attribution is the hard part, and it is where this project got it wrong
+first.** Two of the three gaps below were filed with `fast-mcp-telegram` when
+they belonged to **OpenCrabs core** — same symptom surface, different codebase,
+different approval path (a core change needs the owner's go/no-go and a rebuild).
+The question to ask before filing is not *which tool did I use* but **which
+repository carries the code that would have to change**.
 
-| Gap | Evidence |
-|---|---|
-| `get_chat_info` fails for **every** caller | The wrapper injects its own documented default `common_chats_limit=10`; the server rejects it as an unexpected keyword argument. Filed as `fast-mcp-telegram#150` |
-| `list_topics` under-reports the surface | It returns only topics the bot has **observed activity in**. With one active topic it reported one row for a five-topic forum |
-| No action creates or renames a topic | Neither `telegram_send` nor any OpenCrabs CLI exposes it; topic management falls through to a raw MTProto invoke (see above) |
+Reported from this project on 2026-09-11:
 
-The third is the one that costs the most: a factory whose naming law depends on
-renaming topics has its core mechanic outside every tool it owns.
+| Gap | Owner — the code that must change | Status |
+|---|---|---|
+| `get_chat_info` fails for **every** caller. The registered signature omits `common_chats_limit` while the type alias, the implementation and the tool's own description all carry it | `fast-mcp-telegram` | **Fixed and deployed.** `c3ae1c8`, CI run `34595474558` green, container recreated 11:46:56Z, live `tools/list` carries the property, end-to-end repro passes. The regression test drives the *registered* tool — the old suite called the implementation directly, which is exactly why the defect shipped |
+| `list_topics` under-reports the surface. It is DB-backed, so it lists only topics the bot has **observed messages in** — with one active topic it returned one row for a five-topic forum | **OpenCrabs core** (`src/brain/tools/telegram_send.rs`) | With OpenCrabs HQ — pending the owner's go/no-go and a rebuild |
+| No action creates or renames a topic. The 20-action enum has no topic action, so the naming law's core mechanic sits outside every tool the factory owns | **OpenCrabs core** (`src/brain/tools/telegram_send.rs`) | With OpenCrabs HQ. Implementable on the **existing bot API** — `teloxide-core` 0.13.0 already exposes `create_forum_topic` / `edit_forum_topic` |
+
+The third is the one that costs the most, and the one most easily
+mis-attributed: because a raw MTProto invoke *does* work from a user session, the
+gap reads as a platform limit. It is not — it is a missing action in one
+harness's tool wrapper.
 
 ---
 
