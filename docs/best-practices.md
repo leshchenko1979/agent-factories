@@ -353,6 +353,35 @@ the change.
 
 ---
 
+## P25 — A factory's rules live in its own skill, not in the shared brain
+
+Every session on a harness shares an **always-loaded workspace brain file**.
+Writing a factory's rule there does not scope it to that factory — it binds
+every other session on the box, silently.
+
+- *Proven:* this project, 2026-09-11 (owner order). The meta-factory had been
+  writing its own process rules — its boundary law, its delegate lane, its
+  measurement cadence — straight into the shared `AGENTS.md`, where every
+  unrelated lane on the profile reads them. The rules were not wrong; their
+  *home* was.
+- *Practice:* a factory's rules go in its own skill, in its own repo. The shared
+  brain file carries a **one-line pointer** to that skill and nothing more. Only
+  a rule that must bind every session on the harness goes in the shared file.
+- *Prevents:* rule pollution that is invisible to its author. The writer sees
+  their own rule working and cannot see the other factories paying for it. It
+  also makes the shared file the de-facto constitution of a box whose parts have
+  nothing in common.
+- *Test:* before writing a rule into the shared brain, ask **"does every other
+  factory on this harness need to obey this?"** If not, it belongs in the skill.
+- *Boundary:* this is about *where a rule lives*, not about whether it binds.
+  A factory's own skill is still law for that factory — it is versioned, and it
+  reloads after compaction like any other.
+- *Note:* the scoping mechanism is a property of the **harness**, so the
+  mechanics — discovery paths, what a skill's frontmatter actually honours —
+  belong in the harness binding (see `harness/opencrabs`), never here.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

@@ -254,3 +254,28 @@ vocabulary to speak in.
 - Test: replace every code with its plain name. If a sentence stops making
   sense, it was leaning on shared memory rather than on what it said.
 
+---
+
+## 17. Where this factory's rules live
+
+The harness has an **always-loaded workspace brain** — a file such as
+`AGENTS.md` that *every* session on that profile reads, including sessions
+belonging to other factories and unrelated conversations. A rule written there
+binds all of them, and none of them asked for it.
+
+| Kind of rule | Where it goes |
+|---|---|
+| Must hold for **every** session on the harness | the shared brain file — and only then |
+| Holds for **this factory** | this file, in this repo |
+| Holds for **one role** | that role's card |
+
+**The shared brain file carries a one-line pointer to this file and nothing
+more.** That pointer is the recovery anchor (§10); the law itself lives here,
+where it is versioned, diffable, and mirrored to the repo.
+
+Mechanics — how the harness discovers, scopes and reloads this file — belong in
+the harness binding, not here.
+
+*Test:* before writing a rule into the shared brain, ask **"does every other
+factory on this harness need to obey this?"** If not, it belongs in this file.
+

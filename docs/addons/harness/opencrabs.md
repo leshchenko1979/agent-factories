@@ -50,6 +50,43 @@ in a session's context.
 
 ---
 
+### Rule isolation — the skill is the home, not the shared brain
+
+OpenCrabs loads a **workspace brain file** (`AGENTS.md`, plus the other `.md`
+files in the profile) into **every** session on that profile — every factory,
+every lane, every unrelated conversation. A rule written there is not scoped to
+the factory that wrote it; it is a rule for the whole box.
+
+- **A factory's own rules go in its skill file**, which lives in the factory's
+  repo and is discovered from the profile's `skills/` directory — versioned,
+  diffable, mirrored.
+- **The shared brain file carries a one-line pointer** to that skill — the
+  recovery anchor — and nothing else.
+- **Only a rule that must bind every session on the box** belongs in the shared
+  brain.
+
+**Mechanics.** Skills are discovered from three layers, merged by name (last
+writer wins): built-ins shipped in the binary; project overlays at
+`projects/<slug>/skills/<name>/SKILL.md`; and the profile overlay at
+`<profile>/skills/<name>/SKILL.md`. A skill directory may be a **symlink** to
+the factory's repo, which keeps one source of truth and no drift.
+
+**Two traps, both live-verified 2026-09-11:**
+
+- **A skill's `globs:` frontmatter does nothing.** The skill parser reads only
+  `name`, `description` and `review_gate`; `globs` falls through a catch-all and
+  is ignored. A skill is listed **globally** — it is not scoped to files
+  matching a glob. The glob-conditional tier belongs to *directive* files
+  (`.cursor/rules/*.mdc`, `CLAUDE.md`, `AGENTS.md`), which the harness discovers
+  from the working directory and renders as "read when touching matching files".
+- **A folded-block description (`description: >`) parses as the literal `>`.**
+  The frontmatter reader takes `key: value` per line, so `>` becomes the whole
+  value and the indented block below it is discarded. The skill then appears in
+  every prompt as `/name: >`, and the agent has nothing to decide on. **Write
+  the description on one line.**
+
+---
+
 ## Direct address — `session_notify`
 
 A lane is briefed by a notification carrying its **session UUID**. Never by a
