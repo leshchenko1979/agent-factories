@@ -154,6 +154,29 @@ it. Confirm by reading the lane's first reply.
 
 ---
 
+## Lane creation, reuse discipline, and binding workarounds
+
+A topic-bound session (a "lane") in OpenCrabs requires an entry in `session_bindings`.
+The daemon writes this entry **only upon processing an inbound message** (`src/channels/telegram/handler.rs:1890`).
+An outbound message from the bot (`telegram_send`) does not claim the topic.
+
+### 1. Primary rule: Reuse existing persistent lanes
+Do not spawn fresh lanes or temporary topic workers for each task. The factory should
+operate with a fixed roster of spine lanes (HQ, Triage, Surveys, Delegate) and persistent
+worker lanes. Route work to these existing lanes via `session_notify`.
+
+### 2. Upstream status: Mechanized topic binding
+The absence of a tool or CLI command to programmatically bind a session to a topic is
+tracked in upstream issue **`leshchenko1979/opencrabs#170`** (*"no instrument lets a session bind itself to a forum topic"*). OpenCrabs HQ is actively mechanizing this capability.
+
+### 3. Temporary workaround: Userbot kickstart
+Until `#170` lands in the daemon binary, if a factory must stand up a fresh topic lane without manual human intervention in the chat UI:
+- Use `tg_send_message` (which authenticates as the userbot/operator account) to send the role prompt (e.g. `"You are worker"`) into the target topic.
+- Because this message arrives as an **inbound update** to the OpenCrabs bot, the daemon automatically instantiates a new session and writes the `session_bindings` record.
+- Read back the newly created session UUID from `session_bindings` before sending briefings via `session_notify`.
+
+---
+
 ## Periodic processes — `cron_manage`
 
 **Every recurring process in an OpenCrabs factory is a `cron_manage` job.** It

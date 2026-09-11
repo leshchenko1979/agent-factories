@@ -122,6 +122,12 @@ the measurement cadence (P26). A deliberate approval gate belongs on that list a
 act that needs the operator only because no instrument exists is a candidate for
 mechanization — and the count falling is the evidence that the factory is transferable.
 
+**Lane reuse over lane spawning:** To minimize operator friction and avoid topic clutter,
+factories should prioritize reusing established persistent worker lanes over spawning a new topic
+session for every small subtask. When fresh lane instantiation is mandatory and native harness
+mechanization is unavailable, the temporary workaround is to use the surface's userbot sending tool
+to post the initial inbound role line on behalf of the operator (see surface add-on notes).
+
 **Evidence:** for each spine topic, the session id from `session_bindings`; every topic id
 read back from live state (`GetForumTopics` or equivalent) — never from the UI, never from
 the creation response alone; and the counted list of acts that still require the operator.
