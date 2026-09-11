@@ -19,7 +19,7 @@
 | Leg | Where it lives |
 |---|---|
 | Process law | this file (+ `roles/`, mirrored to `{{SKILL_REPO}}`) |
-| Chat surface | `{{CHAT}}` — topics carry state in their names |
+| Chat surface | `{{CHAT}}` — where the human watches, and a work unit's state is readable at a glance |
 | Issue board | `{{REPO}}` issues — the task list |
 
 Remove any leg and this stops being a factory.
@@ -76,7 +76,7 @@ mechanism and its trap; the requirement here is: **do not treat a dispatch as
 delivered until the lane has acknowledged it.** Accepted is not delivered.
 
 A brief states: the issue number, the goal, the done-criteria, the evidence
-expected, and the topic the lane reports into.
+expected, and the named place the lane reports into.
 
 ---
 
@@ -91,16 +91,26 @@ does not re-send or forward work to a third lane.
 
 ---
 
-## 6. Work units and topics
+## 6. Work units and their named places
+
+A work unit gets its **own named place**, and its **state is readable at a glance** from that
+name. The binding states the mechanics — what a named place is on that surface, how its
+address is obtained, and how the name changes on close.
 
 | Event | Action |
 |---|---|
-| Lane spawned for issue `#N` | Create topic `Worker — #N <title>` |
-| Lane reports complete | Rename to `Done — #N <title>`, leave it in place |
-| Lane blocked | Post the block in its topic and notify `HQ` |
+| Lane spawned for issue `#N` | Give the work unit its own named place, in the spawn state |
+| Lane reports complete | Flip the name to the closed state, leaving it in place |
+| Lane blocked | Post the block in that place and notify `HQ` |
 
-The topic id is stable and is what a scheduled job's delivery points at.
+The address is stable across the rename and is what a scheduled job's delivery points at.
 **Rename, never re-create.**
+
+> **A named place is not a lane.** On this binding the place exists as soon as it is created,
+> but a session is bound to it only by a message *arriving* there. Until that happens, the
+> place is addressable and unowned — anything delivered to it parks, and "the lane is up" is
+> an assumption. The binding carries the mechanics and the current blocker for creating one
+> without an operator's hand.
 
 ---
 
@@ -114,7 +124,7 @@ someone's head. The binding names the mechanism; the requirements are:
 2. **Never put procedure in a job's payload.** A job's definition cannot be
    updated by a change to this file, so procedure placed inside one silently
    goes stale while the law moves on.
-3. **Deliver to the owning topic**, never to the chat root.
+3. **Deliver to the owning place**, never to the chat root.
 4. **Creating a job is a write, and a write needs a receipt.** Never announce a
    scheduled job without the tool result that created it.
 
@@ -129,7 +139,8 @@ A work unit closes when the issue carries, in this order:
    a same-turn receipt is not evidence.
 3. **The verification** — how a third party could re-check it.
 
-Then rename the topic. The issue is the record; the topic is the archive.
+Then flip the name to its closed state. The issue is the record; the named place is the
+archive.
 
 ---
 
@@ -201,7 +212,7 @@ template law it implies.
 | Binding | `harness/{{HARNESS_SLUG}}` | §2 |
 | Domain | {{DOMAIN_ADDONS}} | {{DOMAIN_ADDONS_WHY}} |
 
-Each pack carries the topics, roles, gates and rules it adds. Delete a row only
+Each pack carries the places, roles, gates and rules it adds. Delete a row only
 when the pack is genuinely no longer taken.
 
 ---

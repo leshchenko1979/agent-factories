@@ -37,7 +37,8 @@ Before you commit a change to any core file, run:
 
 ```sh
 grep -rniE 'telegram|opencrabs|forum|session_notify|github' \
-  TEMPLATE/SKILL.md.tmpl TEMPLATE/AGENTS.md.tmpl TEMPLATE/ONTOLOGY.md.tmpl
+  TEMPLATE/SKILL.md.tmpl TEMPLATE/AGENTS.md.tmpl TEMPLATE/ONTOLOGY.md.tmpl \
+  docs/best-practices.md
 ```
 
 A hit that states **mechanics** is a leak — a rule that will be wrong the day
