@@ -12,6 +12,30 @@ operator re-deriving any of the decisions.
 
 ---
 
+## What this project does and does not concern itself with
+
+This is the meta-layer. Its subject is **the factory as a machine** — how
+effective it is, how healthy it is, and which laws hold for every factory of a
+given shape.
+
+| In scope | Out of scope |
+|---|---|
+| Factory effectiveness and health, measured | The domain work a factory does |
+| Template laws that hold for **every** factory | One factory's product decisions |
+| Add-on laws that hold for **every** factory of that kind | One factory's backlog, clients or code |
+| The mechanics of a surface or harness, as a swappable binding | Any given factory's configuration of them |
+
+The **peculiarities of an individual project are not this project's concern.**
+They belong to that factory's own `HQ`, which has the context to decide them.
+This project talks to a member factory's HQ or that HQ's delegate — it never
+does a member's work, and it never files a member's issues.
+
+That boundary is not politeness. A meta-layer that absorbs domain detail stops
+being a meta-layer: it becomes a second, worse `HQ` for every factory at once,
+and its own output — the laws — goes unwritten.
+
+---
+
 ## The problem it solves
 
 Every factory here was built by hand, and each one re-derived the same
@@ -78,10 +102,16 @@ once, and substituting them through the skeletons:
 | `PURPOSE` | One sentence: what this factory delivers | Daily probes + value ranking of InferHub routes |
 | `REPO` | The factory's own repo, owner/name | `leshchenko1979/inferhub-watch` |
 | `CHAT` | Forum group title + chat id | `Inferhub watch`, `-1004379632866` |
+| `SURFACE` / `SURFACE_SLUG` | The chat surface binding | `Telegram forums` / `telegram-forums` |
+| `HARNESS` / `HARNESS_SLUG` | The agent runtime binding | `OpenCrabs` / `opencrabs` |
 | `ROLES` | Which roles exist (HQ, Triage, workers, carrier) | `HQ` only for a minimal factory |
 | `DOMAINS` | Domain topics in the middle of the spine | `Landing`, `Bot`, `Outreach` |
-| `ADDONS` | Domain packs to apply | `watch` |
+| `ADDONS` | **Domain** packs to apply (bindings are separate and mandatory) | `watch` |
 | `GATES` | Commands that decide, where a command can | `oc-*` tool set, or a repo test suite |
+
+`SURFACE` and `HARNESS` are not optional. A factory always runs on some surface
+and some harness; naming them is what keeps their mechanics in the add-on layer
+instead of welded through the core law.
 
 ---
 

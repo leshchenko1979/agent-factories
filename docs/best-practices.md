@@ -1,8 +1,17 @@
 # Best practices for organizing an agent factory
 
-**Status: v0.1 — hypothesis derived from four factories, 2026-09-11.** Every
-practice below is marked with the factory that already proves it. Nothing here
-is theory; nothing here is yet validated across all four.
+**Status: v0.2 — adopted 2026-09-11.** Every practice below is marked with the
+factory that already proves it. Nothing here is theory; nothing here is yet
+validated across all four.
+
+**Scope.** These are laws for **factories as machines** — they must hold for
+every factory of a given shape. The peculiarities of any individual project are
+that project's own concern, handled by its own `HQ`; they do not belong here.
+
+**Two layers.** A practice is either **core** (true on any substrate) or
+**binding** (mechanics that hold for one surface or one harness, in an add-on
+page). P21 is the rule that keeps the two apart, and the add-on pages are where
+the mechanics live.
 
 ## What a factory is
 
@@ -251,6 +260,44 @@ first-pass yield, rework rate — not only the work it ships.
 - *Note:* do not treat the top of the scale as the target. A criterion with no
   decisions hanging off it is a dashboard, not a control.
 
+## P21 — Separate requirements from mechanics; bind the substrate as an add-on
+
+The **core** law states *requirements*. A **binding** add-on states the
+*mechanics* that satisfy them on one product. Every factory has exactly two
+bindings — a chat **surface** and an agent **harness** — and they are named
+explicitly rather than assumed.
+
+- *Proven:* this project's own restructure, 2026-09-11 (owner order). The core
+  law had `session_notify`, `send_input`, Telegram topics and `gh` written into
+  it. Each is true only while the surface and harness stay put — and each would
+  silently become a wrong rule the day either changed, in the one place nobody
+  would think to look.
+- *Prevents:* a law that is correct today and quietly false tomorrow. The
+  failure is invisible because nothing errors — the rule simply stops matching
+  reality, and lanes follow it anyway.
+- *Mechanical check:* a grep for product names across the core files. A hit that
+  states **mechanics** is a leak; move it to the binding. The check is a command,
+  so it can be a gate.
+- *Test of the split:* you can state, for each binding, **what changes if it is
+  swapped**. If you cannot write that list, the mechanics have leaked inward.
+
+## P22 — Measure the factory on a cadence, and keep domain detail out of the number
+
+A scored baseline is recorded at bootstrap and **re-scored on a schedule** —
+a recurring job, not an intention. Factory-specific measures are welcome, but
+each must name the decision it informs.
+
+- *Proven:* this project, 2026-09-11 (owner order: adopt the rubric, measure the
+  surveyed factories daily for now, revisit the cadence later).
+- *Prevents:* the score that exists once, in a document nobody re-reads. Drift
+  is only visible as a **diff** between dated scores.
+- *Scope rule:* the score covers **effectiveness and health**, never the
+  peculiarities of the domain. A member factory's product detail belongs to its
+  own `HQ`; what travels up is the number and the law it implies.
+- *Restraint:* a measure with no decision attached is dropped. Dashboards are
+  not controls, and the top of the scale is not a goal — each level costs more
+  than the last.
+
 ---
 
 ## The minimum viable factory
@@ -259,11 +306,14 @@ If you are standing up factory number five, this is the smallest set that
 already works:
 
 1. One repo. Issues enabled. `AGENTS.md` stating the verification commands.
-2. One forum chat. Topics: `HQ`, and one per work unit.
-3. One skill file: mission, issue law, delegation law, agent-communication law.
-4. One `ONTOLOGY.md` with a banned-synonyms table.
-5. One cron: a thin trigger that notifies the HQ session.
-6. One ledger: a file that gets a row per task.
+2. One chat surface, bound explicitly, with an `HQ` topic and one topic per work unit.
+3. One agent harness, bound explicitly.
+4. One skill file: mission, issue law, delegation law, agent-communication law.
+5. One `ONTOLOGY.md` with a banned-synonyms table.
+6. One recurring job: a thin trigger that notifies the `HQ` session.
+7. One ledger: a file that gets a row per task.
+8. One baseline score, re-scored on a cadence.
 
+Items 2 and 3 are the bindings — they are not optional, only *swappable*.
 Everything else — role splits, CLI tooling, self-approval — is earned by
 volume, not adopted on day one.

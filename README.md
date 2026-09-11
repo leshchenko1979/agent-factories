@@ -15,20 +15,35 @@ new factory, and the rulebook that says why each piece is there.
 
 | Piece | Path | What it is |
 |---|---|---|
-| **Template** | [`TEMPLATE/`](TEMPLATE/) | The instantiable skeleton — bootstrap checklist, process-law skeleton, ontology, topic spec, role cards |
-| **Best practices** | [docs/best-practices.md](docs/best-practices.md) | The rules the template encodes, each with the factory that proves it |
-| **Quality criteria** | [docs/quality-criteria.md](docs/quality-criteria.md) | The rubric: 13 criteria in 4 families, scored 0–4, with the research behind each — and this factory scored against itself |
-| **Add-ons** | [docs/addons.md](docs/addons.md) | Domain packs — what a factory adds when it ships code, runs outreach, watches routes, or operates a multi-tenant platform |
-| **Product spec** | [docs/product.md](docs/product.md) | What the product is, who it is for, what v1 covers, what it deliberately does not |
+| **Template** | [`TEMPLATE/`](TEMPLATE/) | The instantiable skeleton — bootstrap checklist, process-law skeleton, ontology, role cards |
+| **Best practices** | [docs/best-practices.md](docs/best-practices.md) | The laws the template encodes, each with the factory that proves it |
+| **Quality criteria** | [docs/quality-criteria.md](docs/quality-criteria.md) | The adopted measurement system: 13 criteria in 4 families, scored 0–4, re-scored on a cadence — with this factory scored against itself |
+| **Add-ons** | [docs/addons.md](docs/addons.md) | Two mandatory **bindings** (chat surface, agent harness) plus optional **domain** packs |
+| **Product spec** | [docs/product.md](docs/product.md) | What the product is, who it is for, what v1 covers, and what it deliberately does not |
 | **Evidence** | [evidence/](evidence/) | The four real factories, surveyed — the receipts behind every practice |
+
+## Scope — what this project is not about
+
+This is the meta-layer. Its subject is **the factory as a machine**: how
+effective it is, how healthy it is, and which laws hold for every factory of a
+given shape.
+
+It does **not** concern itself with the peculiarities of any individual project.
+A factory's own product decisions, backlog, clients and code are that factory's
+`HQ`'s business — not this project's. This project converses with a member
+factory's HQ or that HQ's delegate, and never does a member's work.
+
+That boundary is load-bearing. A meta-layer that absorbs domain detail becomes a
+second, worse `HQ` for every factory at once — and stops producing the laws it
+exists to produce.
 
 ## Start here
 
 1. Read [docs/product.md](docs/product.md) — what you are building.
 2. Follow [`TEMPLATE/BOOTSTRAP.md`](TEMPLATE/BOOTSTRAP.md) — the ordered checklist that takes an empty directory to a running factory.
-3. Pick the add-ons your domain needs from [docs/addons.md](docs/addons.md).
+3. Take the two **bindings**, then pick your **domain** add-ons from [docs/addons.md](docs/addons.md).
 4. Keep [docs/best-practices.md](docs/best-practices.md) open — it is the normative rulebook.
-5. Score the result against [docs/quality-criteria.md](docs/quality-criteria.md) — a factory with no numbers is Provisional by definition.
+5. Score the result against [docs/quality-criteria.md](docs/quality-criteria.md) — a factory with no numbers is Provisional by definition — and schedule the re-score.
 
 ## The thesis
 

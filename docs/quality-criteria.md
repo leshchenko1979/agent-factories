@@ -1,10 +1,18 @@
 # Quality criteria for an agent factory
 
-**Status: v0.1 — proposed 2026-09-11. Not validated.** Each criterion below is
-either derived from published research or extracted from a factory that runs
-today. The scoring is untested, the thresholds are hypotheses, and the first
-factory scored against it is the one that wrote it — see
+**Status: v0.2 — ADOPTED 2026-09-11 (owner order).** The 13 criteria and the
+0–4 scale are the standing measurement system; factory-specific measures will be
+added on top. Each criterion is either derived from published research or
+extracted from a factory that runs today. The scale is still young, the
+thresholds are hypotheses, and the first factory scored against it is the one
+that wrote it — see
 [the self-audit](#worked-example-this-factory-scored-against-itself).
+
+**Cadence:** the surveyed factories are scored **daily** for now, relaxing once
+the numbers are stable. See [how this rubric is used](#how-this-rubric-is-used).
+
+**Scope:** this measures **effectiveness and health** — the factory as a machine.
+It does not measure, and must not adjudicate, any factory's own domain work.
 
 ---
 
@@ -206,6 +214,32 @@ That is the useful part of the exercise, and it is the argument for the rubric
 existing: **a factory can be articulate about process and still be Provisional.**
 Prose about practice is not practice. The four factories this repo surveys score
 higher on F1 and F3 than the meta-layer that describes them.
+
+---
+
+## How this rubric is used
+
+**Adopted 2026-09-11** (owner order). Three standing decisions:
+
+| Decision | Detail |
+|---|---|
+| **The rubric is the measurement system** | Factories are scored against it, 0–4 per criterion |
+| **The surveyed factories are measured on a cadence** | **Daily, for now** — deliberately conservative; the cadence is expected to relax once the numbers are stable and their variance is known |
+| **Factory-specific measures will be added** | The 13 criteria are the floor, not the ceiling. A factory's own domain adds measures — each one naming the decision it informs |
+
+**Where the cadence lives.** The recurring measurement is a **scheduled job** —
+in the OpenCrabs harness binding, that is
+[`cron_manage`](addons/harness/opencrabs.md#periodic-processes--cron_manage),
+and it is the harness binding, not this document, that carries the mechanism.
+
+**What the daily run produces.** A dated score per factory, recorded in the
+repo. Consecutive scores diff into a **trend**; a single score is an opinion.
+
+**What it must not produce.** Detail about a factory's own project. The score
+covers **effectiveness and health** — how well the machine works, not what it is
+working on. Domain specifics belong to that factory's `HQ`, which has the
+context to act on them. A measurement process that starts adjudicating product
+decisions has stopped measuring and started meddling.
 
 ---
 
