@@ -138,7 +138,7 @@ This factory is scored against `docs/quality-criteria.md` — 13 criteria, 4 fam
 
 | Requirement | Detail |
 |---|---|
-| A scored baseline exists | Recorded in this repo, with the date |
+| A scored baseline exists | `evidence/scores/<date>.md` — one file per run, committed, so drift shows as a diff |
 | Re-scoring is a scheduled job | `cron_manage`, daily to start, relaxed once variance is known |
 | The procedure is a pointer, never a copy | `docs/measurement-procedure.md`; the job carries the pointer |
 | The score is a diff, not an impression | Committed, so drift shows as a change |
