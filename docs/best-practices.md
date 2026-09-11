@@ -220,6 +220,37 @@ delivery table back.
   serially if you want ordered ids; read them back either way, never predict
   them.
 
+## P19 — Boundaries are named, and the meta-layer advises rather than executes
+
+Every factory states what it **owns**, what it **consumes**, and how it talks
+to each neighbour. A factory whose output is other factories — a meta-layer, a
+platform team, a template repo — **converses with a member factory's HQ or its
+delegate, and never does that factory's work**.
+
+- *Proven:* owner order 2026-09-11 on this repo — the factory that produces the
+  template does not write the other factories' ontologies, file their issues or
+  run their tests; it talks to their HQs.
+- *Prevents:* the failure that looks like helpfulness. Doing a member's work
+  duplicates a lane, bypasses the member's own process law, and leaves the
+  meta-layer's own work undone. The member also learns nothing, because the
+  work appeared without its process producing it.
+- *Corollary:* an unnamed boundary defaults to the most expensive interaction
+  mode. Say which relationship it is — service, collaboration, or facilitation.
+
+## P20 — Measure the machine, not only the output
+
+Track at least one number that describes the **factory itself** — law freshness,
+first-pass yield, rework rate — not only the work it ships.
+
+- *Proven:* the research base in [quality-criteria.md](quality-criteria.md) —
+  DORA's 2025 finding is that AI adoption **raises throughput and lowers
+  stability**, and MAST found 78.7% of multi-agent failures are specification
+  and coordination, not model capability.
+- *Prevents:* the lucky factory — strong output, no idea why, and no warning
+  when the reason stops holding.
+- *Note:* do not treat the top of the scale as the target. A criterion with no
+  decisions hanging off it is a dashboard, not a control.
+
 ---
 
 ## The minimum viable factory
