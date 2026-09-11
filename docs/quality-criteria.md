@@ -231,6 +231,8 @@ higher on F1 and F3 than the meta-layer that describes them.
 in the OpenCrabs harness binding, that is
 [`cron_manage`](addons/harness/opencrabs.md#periodic-processes--cron_manage),
 and it is the harness binding, not this document, that carries the mechanism.
+The **procedure** the job runs is [measurement-procedure.md](measurement-procedure.md);
+the job carries a pointer to it, never a copy.
 
 **What the daily run produces.** A dated score per factory, recorded in the
 repo. Consecutive scores diff into a **trend**; a single score is an opinion.
