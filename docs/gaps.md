@@ -1,9 +1,9 @@
 # Gaps and migration shape
 
-Surveyed 2026-09-11. This file is the actionable half of the survey: what each
-factory is missing against the pattern in
-[best-practices.md](best-practices.md), and what converting the last two
-factories actually involves.
+Surveyed 2026-09-11; **updated the same day after the migration pass**. The
+surface half of the migration is now done for all four factories. This file is
+the actionable half of the survey: what each factory is still missing against
+the pattern in [best-practices.md](best-practices.md).
 
 ---
 
@@ -13,96 +13,94 @@ factories actually involves.
 |---|---|---|---|---|---|
 | OpenCrabs development | ✅ | ✅ `Crabs Kanban Board` | ✅ opencrabs-dev | ✅ fork issues | ✅ workers-ledger |
 | InferHub Watch | ✅ | ✅ `Inferhub watch` | ✅ `skills/inferhub` | ✅ repo issues | ✅ WORKLOG |
-| Miidas | ✅ | ✅ `Miidas Factory` | ⚠️ repo `AGENTS.md` only | ⚠️ ADRs, no live board | ⚠️ `docs/clients.md` |
-| AI AntiSpam | ✅ | ✅ `ai-antispam` (forum) | ⚠️ split 3 ways | ❌ none | ⚠️ send log only |
+| Miidas | ✅ | ✅ `Miidas Factory` | ✅ `skills/miidas` | ⚠️ enabled, 0 issues | ⚠️ `docs/clients.md` |
+| AI AntiSpam | ✅ | ✅ `ai-antispam` (forum) | ✅ `skills/ai-antispam` (router) | ⚠️ enabled, 0 issues | ⚠️ send log only |
 
-**Update 2026-09-11:** both groups are now forums with topics — see
-[topics.md](topics.md). The ❌ in the "On topic system" column is resolved for
-all four factories. What remains open for Miidas and AI AntiSpam is the
-*process* half (skill, issue board, state writer), not the surface.
+Every factory now has a forum group with topics — the ❌ that stood in the
+"On topic system" column is gone for all four. Topic ids: [topics.md](topics.md).
 
 ---
 
-## Miidas — what is missing
+## Migration log — executed 2026-09-11
 
-**No factory chat at all.** Miidas work is dispatched from a private operator
-DM and tracked in repo ADRs. There is no forum group where a lane can be
-briefed, where evidence lands, and where the owner can watch the line run.
+| # | Step | Result |
+|---|---|---|
+| 1 | Create the Miidas factory forum | `Miidas Factory` `-1003996392908`, forum, 6 topics + `General` |
+| 2 | Promote the bot in that group | `redevest_admin_tools_bot` was a plain member; promoted to admin with `manage_topics` (rank `factory bot`) |
+| 3 | Convert the AI AntiSpam group to a forum | `channels.ToggleForum` on `-1003993000918`; the 10,779 pre-existing messages stay in `General` |
+| 4 | Create the AI AntiSpam topics | `Outreach` 10780, `Triage` 10781, `HQ` 10782, `Landing` 10783, `Bot` 10784 |
+| 5 | Re-point the crons | all **11** crons delivering to `-1003993000918` moved off the group root: ten → `Outreach` (10780), `max-api-retest` → `Bot` (10784). Zero remain unthreaded |
+| 6 | Write the two process skills | `skills/miidas/SKILL.md`, `skills/ai-antispam/SKILL.md` (router) |
+| 7 | Convert this project's own chat | `Factories` `-1004497192134` → forum, topics `HQ` 21, `Triage` 20, `Surveys` 19 |
+| 8 | Correct the stale repo metadata | `leshchenko1979/miidas` and `leshchenko1979/miidas-template` carried "MOVED to alexeyleshchenko/…" descriptions from a reverted migration; both rewritten |
 
-**No process skill.** `AGENTS.md` is a good *repo* instruction file — build,
-verify, deploy, never-do — but it is not a factory process: it says nothing
-about intake, dispatch, lane structure or where state lives.
+Every topic id in steps 1, 4 and 7 was read back from live state with
+`messages.GetForumTopics`, and step 5 was verified by reading the cron table
+after the writes — not from the UI, and not from memory.
 
-**No live task board.** ADRs record decisions; they do not record what is in
-flight. `docs/clients.md` tracks clients, not work.
-
-**Client traffic is well-structured already** — per-client groups
-(`МИИДАС: <client>`, the onboarding funnel `МИИДАС · Бухгалтерия без лишнего
-человека`) and a client-facing forum (`Умница Миидаша`). That is the *product*
-surface; it is not the *factory* surface, and the two must not be confused.
-
-### Migration shape (proposal, not yet approved)
-
-1. Create a forum group, e.g. `Miidas factory`. Topics: `HQ`, `Triage`, and one
-   per workstream — at minimum `agent runtime`, `manager`, `landing`, `cdp`,
-   plus `Worker — #N …` topics as work is dispatched.
-2. Write `skills/miidas/SKILL.md`: mission, issue law (issues on
-   `leshchenko1979/miidas` as the task list), delegation law, verification law
-   (pointing at the existing per-component commands — do not duplicate them,
-   reference them).
-3. Add `ONTOLOGY.md` with the platform's canonical terms (slot, warm pool,
-   convert, component, deploy) and a banned-synonyms table.
-4. Pick one state writer. Today, client runtime state is `pool/slots/*.env` on
-   apps and the client log is a markdown file — declare which one is
-   authoritative and let the other be a snapshot.
-5. One thin cron that notifies the HQ session.
-
-**Constraint:** the per-client *product* groups stay untouched. The factory
-chat is for the platform's own development, not for client conversations.
+**Correction carried from the survey:** the first pass said six crons deliver to
+`ai-antispam`. The live count was **eleven** (9 enabled, 2 disabled —
+`max-api-retest`, `wave0-sprint-batches`). The re-point used the verified
+eleven.
 
 ---
 
-## AI AntiSpam — what is missing
+## Miidas — what remains
 
-**The group is a delivery sink, not a factory — though it now has the
-surface.** `ai-antispam` (`-1003993000918`, 2 members) was a **plain group**;
-on 2026-09-11 it was converted to a forum with `HQ`, `Triage`, `Outreach`,
-`Bot` and `Landing` topics (see [topics.md](topics.md)). What has *not*
-changed is the routing: **eleven** campaign crons deliver into it — not six,
-as the first survey said — and none of them sets a `message_thread_id`, so
-every report still lands in `General`. The surface is fixed; the routing is
-not.
+The surface exists and the process law is written. What is still missing is
+**practice**, not structure:
 
-**No issue board.** Campaign work is tracked in
-`plans/marketing-plan-monoforum-outreach.md` and a recon queue file. That is a
-plan document, not a task board: there is no per-item owner, state or close
-condition.
+- **`ONTOLOGY.md` is not written.** Canonical platform terms (slot, warm pool,
+  claim, convert, component, deploy, decommission) plus a banned-synonyms table.
+  Without it, "slot" and "container", or "warm pool" and "trial", drift apart
+  between the manager code, the ADRs and the reports.
+- **The issue board is enabled but unused** — `leshchenko1979/miidas` has issues
+  on and **zero open**. The skill declares the board to be the task list; no
+  task has been filed on it yet. ADRs still carry the decisions and
+  `docs/clients.md` carries the clients, so nothing is lost — but the
+  board-is-the-task-list convention is currently a claim, not a practice.
+- **No declared state writer.** Client runtime state is `pool/slots/*.env` on
+  apps; the client record is a markdown file. The skill names the file-based
+  registry as the runtime writer, but the *authoritative* record for "who is a
+  client" is still ambiguous.
+- **No cron.** The first one should be a thin trigger (one `session_notify`),
+  not a job that does project work in its prompt.
+- **No lane has ever been dispatched from this factory.** The topic map is a
+  scaffold. It has not yet carried a brief.
 
-**Process law is split three ways** — repo `CLAUDE.md`, `memory-bank/*.md`, and
-the `outreach-reply-sweep` skill. Each is good in isolation; nothing states
-which wins when they disagree.
-
-**What already works and should be kept:** the single-writer rule on the
-Postgres `outreach` schema (P11), the nightly DB→repo export, and the
-skill-governed cron prompts (P7).
-
-### Migration shape (proposal, not yet approved)
-
-1. Convert `ai-antispam` to a **forum** (or create a sibling factory group if
-   the owner prefers to keep the delivery sink quiet). Topics: `HQ`,
-   `Outreach`, `Bot`, `Landing`, `Worker — #N …`.
-2. Move campaign crons' `deliver_to` into the matching topic rather than the
-   group's General.
-3. Create the issue board — on `leshchenko1979/ai-antispam-outreach` for
-   campaign items and `alexeyleshchenko/ai-antispam` for product items; state
-   in the skill which repo owns which kind.
-4. Write `skills/ai-antispam/SKILL.md` as the router that says which of the
-   three existing law layers wins, and link out — do not copy their content.
-5. Keep the DB as the single operational writer; the repo stays a snapshot.
+**Constraint, unchanged:** the per-client *product* groups (`МИИДАС: <client>`,
+the onboarding funnel, the client-facing forum `Умница Миидаша`) stay
+untouched. The factory chat is for the platform's own development.
 
 ---
 
-## Smaller gaps in the two factories already on the system
+## AI AntiSpam — what remains
+
+- **The routing gap is closed.** All eleven crons now target a topic. This was
+  the single most concrete defect in the survey: after the forum conversion the
+  reports would still have piled into `General`, because a forum conversion does
+  not move existing cron deliveries.
+- **The three-way law split is now resolved on paper.** `skills/ai-antispam/`
+  is a router that states which layer wins per surface and links out, rather
+  than copying content. That precedence is a *convention written today* — it has
+  not yet been tested by a disagreement.
+- **The issue board is enabled but unused** — zero open on both
+  `leshchenko1979/ai-antispam-outreach` (campaign) and
+  `alexeyleshchenko/ai-antispam` (service). Campaign work still lives in
+  `plans/marketing-plan-monoforum-outreach.md` and a recon queue file: a plan
+  document, not a per-item board with owner, state and close condition.
+- **Two GitHub identities in play.** The local clone uses the `github.com-alexey`
+  SSH alias for `alexeyleshchenko/ai-antispam` (public) while the campaign repo
+  is `leshchenko1979/ai-antispam-outreach` (private). The router states which
+  repo owns which kind of work; the SSH alias still hides which account owns
+  what.
+- **What already works and should be kept:** the single-writer rule on the
+  Postgres `outreach` schema (P11), the nightly DB→repo export, and the
+  skill-governed cron prompts (P7).
+
+---
+
+## Smaller gaps in the factories already on the system
 
 | Item | Factory | Note |
 |---|---|---|
@@ -110,4 +108,25 @@ skill-governed cron prompts (P7).
 | Legacy non-forum group `OC Dev` (`-1003627148483`) | OpenCrabs dev | Superseded by `Crabs Kanban Board`; still has a session binding |
 | `skills/inferhub/SKILL.md` vs `ONTOLOGY.md` vs `WORKLOG.md` | InferHub Watch | Three files, no stated precedence — add a one-line precedence rule |
 | Two GitHub identities in play (`leshchenko1979`, `alexeyleshchenko`) | AI AntiSpam | Canonical remote must be stated explicitly per repo in the skill; the local `github.com-alexey` SSH alias hides which account owns what |
-| `leshchenko1979/miidas` described as "MOVED to alexeyleshchenko/miidas" | Miidas | The target repo did not resolve at survey time while the local clone still pushes to the `leshchenko1979` remote — **resolve before writing the skill** |
+| ~~`leshchenko1979/miidas` described as "MOVED to alexeyleshchenko/miidas"~~ | Miidas | **Resolved 2026-09-11.** The owner confirmed miidas was moved back; neither `alexeyleshchenko/miidas` nor `alexeyleshchenko/miidas-template` exists, and both stale descriptions were rewritten. Lesson: verify the live remote with `gh`, never a repo description |
+
+---
+
+## What the two migrations taught
+
+Three things that generalise, and belong in the pattern:
+
+1. **A forum conversion does not move anything.** `channels.ToggleForum` gives
+   the chat topics and parks every existing message in `General`; every
+   delivery path — crons, webhooks, bound sessions — keeps pointing at the chat
+   root. Converting a group that is already a delivery sink therefore creates a
+   *new* problem (everything still in one stream, now with a misleading topic
+   list beside it) unless the deliveries are re-pointed in the same pass.
+2. **Surface first, process second, practice third.** Creating topics is
+   minutes. Writing the skill is an hour. Getting the board, the ontology and
+   the first dispatched lane into use is what actually makes it a factory — and
+   that is the part that can silently never happen.
+3. **Repo metadata rots.** The single wrong fact in the first survey — miidas's
+   repo location — came from reading a repo *description* instead of resolving
+   the remote. Any fact that decides routing should be read from the live
+   system.

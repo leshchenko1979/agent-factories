@@ -96,32 +96,86 @@ The group's 10,779 existing messages stay in `General`.
 The bot was already an admin here **with `manage_topics`**, so no promotion
 was needed.
 
-### Outstanding: cron delivery still lands in `General`
+### Cron routing — applied 2026-09-11
 
-**11** crons deliver to `telegram:-1003993000918` — 9 enabled, 2 disabled
+**11** crons delivered to `telegram:-1003993000918` — 9 enabled, 2 disabled
 (`max-api-retest`, `wave0-sprint-batches`). The first survey said six; it was
-wrong, and this count was re-verified against the live `cron_manage list`
-output on 2026-09-11. None of the eleven sets a `message_thread_id`, so after
-the forum conversion they all still land in `General` — the same
+wrong, and the count was re-verified against the live cron table before the
+re-point. None of the eleven set a `message_thread_id`, so after the forum
+conversion they would all still have landed in `General` — the same
 undifferentiated timeline the conversion was meant to fix.
 
-| Cron | Proposed topic |
-|---|---|
-| `wave0-reply-sweep` | `Outreach` |
-| `wave0-unactivated-reprobe` | `Outreach` |
-| `wave0-sprint-batches` | `Outreach` |
-| `outreach-mining-tranche` | `Outreach` |
-| `outreach-auto-kick` | `Outreach` |
-| `outreach-watch-poll` | `Outreach` |
-| `watch-funnel-day7-report` | `Outreach` |
-| `kick-watcher-lazy4` | `Outreach` |
-| `resume-lazy4-watcher` | `Outreach` |
-| `outreach-db-sync` | `Triage` |
-| `max-api-retest` | `Bot` |
+All eleven were re-pointed in the same pass. Verified by reading the cron table
+back afterwards: **zero** rows remain on the unthreaded target.
+
+| Cron | Topic | thread_id |
+|---|---|---|
+| `wave0-reply-sweep` | `Outreach` | 10780 |
+| `wave0-unactivated-reprobe` | `Outreach` | 10780 |
+| `wave0-sprint-batches` | `Outreach` | 10780 |
+| `outreach-mining-tranche` | `Outreach` | 10780 |
+| `outreach-auto-kick` | `Outreach` | 10780 |
+| `outreach-watch-poll` | `Outreach` | 10780 |
+| `watch-funnel-day7-report` | `Outreach` | 10780 |
+| `kick-watcher-lazy4` | `Outreach` | 10780 |
+| `resume-lazy4-watcher` | `Outreach` | 10780 |
+| `outreach-db-sync` | `Outreach` | 10780 |
+| `max-api-retest` | `Bot` | 10784 |
+
+`outreach-db-sync` went to `Outreach`, not `Triage` as first proposed: it is an
+outreach-state sync, and `Triage` in this pattern means *incoming signal
+needing a decision*, not an automated heartbeat. `Triage`, `HQ` and `Landing`
+therefore hold no cron delivery — they are for the human and for lanes.
 
 Delivery syntax is `telegram:<chat_id>:<thread_id>` — the InferHub factory
 already uses `telegram:-1004379632866:2` for its HQ topic, so the form is
 proven in this codebase.
 
-**Not applied.** Re-pointing eleven production crons is a behaviour change to
-live monitoring and is left for the owner to approve.
+## 5. Agent Factories — `Factories` (converted to a forum 2026-09-11)
+
+`-1004497192134`. This project's own chat. Was a plain megagroup; flipped with
+`channels.ToggleForum` in the same pass.
+
+| Topic | id |
+|---|---|
+| `HQ` | 21 |
+| `Triage` | 20 |
+| `Surveys` | 19 |
+| `General` | 1 |
+
+The three topics were created concurrently, so their ids are in reverse creation
+order — the ids are the topic's create-service message id, which is why they
+sit just above the group's existing message ids rather than in a tidy run. This
+is normal and is exactly why **ids are read back, never derived**: a topic id
+cannot be predicted from the topic's position in the list.
+
+## Creating and renaming topics
+
+Topic management goes through the **userbot** (`tg_mtproto`), never the Bot API —
+a bot cannot manage topics it did not create, and the Bot API has no
+`listForumTopics` endpoint at all, so the bot can only learn topic names from
+messages it happens to see.
+
+```
+# create   (namespace is messages.*, NOT channels.* — channels has no CreateForumTopic)
+messages.CreateForumTopic
+  {"peer": <chat_id>, "title": "<title>", "random_id": <unique int64>, "icon_color": <int>}
+
+# list
+messages.GetForumTopics
+  {"peer": <chat_id>, "offset_date": 0, "offset_id": 0, "offset_topic": 0, "limit": 100}
+
+# rename on close
+channels.EditForumTopic
+  {"channel": <chat_id>, "topic_id": <id>, "title": "Done — #N <title>"}
+
+# convert a megagroup into a forum
+channels.ToggleForum
+  {"channel": <chat_id>, "enabled": true, "tabs": false}
+```
+
+`ToggleForum` lives in `channels.*`; `CreateForumTopic` / `GetForumTopics` /
+`EditForumTopic` live in `messages.*`. The `peer` argument is named `peer`, not
+`channel`. `random_id` must be unique per topic, and the ids already consumed by
+this pass are `900000000001`–`900000000006` (Miidas), `900000000011`–
+`900000000015` (AI AntiSpam) and `900000000021`–`900000000023` (Factories).

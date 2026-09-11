@@ -22,12 +22,16 @@ factories, extract what actually holds up, and turn it into a reusable pattern.
 |---|---|---|---|
 | 1 | OpenCrabs development | ✅ yes — 20+ topics, 4 roles | `skills/opencrabs-dev/` (SKILL.md + 4 role files + fleet-directives.md) |
 | 2 | InferHub Watch | ✅ yes — HQ + one topic per worker | `skills/inferhub/SKILL.md` + `ONTOLOGY.md` + `WORKLOG.md` |
-| 3 | Miidas | ✅ surface created 2026-09-11 — process law still to write | repo `AGENTS.md` + `docs/adr/` + per-component `AGENTS.md` |
-| 4 | AI AntiSpam | ✅ surface created 2026-09-11 — process law still to write | repo `CLAUDE.md` + `memory-bank/` + `skills/outreach-reply-sweep/` |
+| 3 | Miidas | ✅ yes — `Miidas Factory`, 6 topics + `General` | `skills/miidas/SKILL.md` (factory) + repo `AGENTS.md` (engineering) + `docs/adr/` |
+| 4 | AI AntiSpam | ✅ yes — `ai-antispam` forum, 5 topics + `General` | `skills/ai-antispam/SKILL.md` (router) → repo `CLAUDE.md` + `memory-bank/` + `skills/outreach-reply-sweep/` |
 
-All four factories now have a forum group with topics. For Miidas and AI
-AntiSpam the **surface** half of the migration is done; the **process** half
-(a versioned skill, and in AI AntiSpam's case an issue board) is not.
+All four factories now have a forum group with topics, and all four have a
+versioned process law. For Miidas and AI AntiSpam the migration completed on
+2026-09-11: the surfaces were created (or converted), the eleven AI AntiSpam
+crons were re-pointed off the group root into their topics, and the two missing
+skills were written. What remains for both is **practice** — an ontology, a
+board that actually carries tasks, and a first dispatched lane. See
+[docs/gaps.md](docs/gaps.md).
 
 ## Contents
 

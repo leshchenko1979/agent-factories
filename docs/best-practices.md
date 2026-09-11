@@ -199,6 +199,27 @@ not a delivery.
 - *Prevents:* the most damaging failure mode of an autonomous factory — a
   confident report that nothing happened to produce.
 
+## P18 — Converting a group to a forum does not move anything
+
+`channels.ToggleForum` gives the chat topics and parks every existing message in
+`General`. Every delivery path — crons, webhooks, bound sessions — keeps
+pointing at the **chat root**, so a group that was already a delivery sink
+becomes a forum whose topics are decorative: the reports still pile into one
+undifferentiated stream, now with a topic list beside it that suggests
+otherwise. Re-point the deliveries in the same pass, and verify by reading the
+delivery table back.
+
+- *Proven:* ai-antispam, 2026-09-11 — eleven crons all still targeted
+  `telegram:-1003993000918` after the conversion; all eleven were re-pointed to
+  `telegram:-1003993000918:<thread_id>` and the table was re-read to confirm
+  zero rows remained on the unthreaded target.
+- *Prevents:* declaring a migration complete because the surface looks right,
+  while the behaviour is unchanged.
+- *Corollary:* a topic id is the id of the topic's **create-service message**
+  and cannot be derived from the topic's position in a list. Create topics
+  serially if you want ordered ids; read them back either way, never predict
+  them.
+
 ---
 
 ## The minimum viable factory

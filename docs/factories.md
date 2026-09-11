@@ -122,10 +122,11 @@ Per-client Telegram groups remain the *product* surface and are untouched:
 client-facing forum group `Умница Миидаша` with business topics (Посты,
 Объявления, Юридические вопросы, Бухгалтерия, …).
 
-**Repository.** `leshchenko1979/miidas` — it was documented as "MOVED to
-`alexeyleshchenko/miidas`"; the owner confirmed on 2026-09-11 that it **was
-moved back to `leshchenko1979`**, which resolves the open question in
-`gaps.md`.
+**Repository.** `leshchenko1979/miidas` — the repo's own description claimed
+"MOVED to `alexeyleshchenko/miidas`"; the owner confirmed on 2026-09-11 that it
+**was moved back to `leshchenko1979`**. Neither `alexeyleshchenko/miidas` nor
+`alexeyleshchenko/miidas-template` exists, and both stale descriptions were
+rewritten on 2026-09-11. Resolves the open question in `gaps.md`.
 
 **Repos.**
 
@@ -134,12 +135,18 @@ moved back to `leshchenko1979`**, which resolves the open question in
 | `leshchenko1979/miidas` | Platform: `agent/`, `manager/`, `landing/`, `cdp/`, `pool/`, `templates/`, `docs/` |
 | `leshchenko1979/miidas-template` | The per-client OpenCrabs brain/config template (AGENTS.md, SOUL.md, TOOLS.md, tools.toml, skills/) |
 
-**Process law.** Repo `AGENTS.md` is the single source (with `CLAUDE.md` as a
-thin adapter for other agents). It carries: verification commands per changed
-component, required secrets, the "edit locally only, then deploy" workflow, and
-per-component ops rules. Depth lives in `docs/adr/` (numbered architecture
-decisions), `docs/engineering-rules.md`, `docs/postmortems.md`, and
-`manager/AGENTS.md` / `agent/AGENTS.md` / `landing/AGENTS.md`.
+**Process law.** Two layers:
+
+- Repo `AGENTS.md` — the engineering source (with `CLAUDE.md` as a thin adapter
+  for other agents). It carries: verification commands per changed component,
+  required secrets, the "edit locally only, then deploy" workflow, and
+  per-component ops rules. Depth lives in `docs/adr/` (numbered architecture
+  decisions), `docs/engineering-rules.md`, `docs/postmortems.md`, and
+  `manager/AGENTS.md` / `agent/AGENTS.md` / `landing/AGENTS.md`.
+- `skills/miidas/SKILL.md` (ops profile) — the **factory** process, written
+  2026-09-11: identity, mission, topic map, client-boundary law, issue law,
+  delegation law, verification law, deploy law. It points at the repo's own
+  commands rather than duplicating them.
 
 **State.** Runtime state is on the apps host — `pool/slots/miidas-{slug}.env`;
 the client log is `docs/clients.md` in the repo.
@@ -166,10 +173,11 @@ on 2026-09-11** via `channels.ToggleForum`; its 10,779 existing messages stay
 in `General`. Topics: `Outreach` (10780), `Triage` (10781), `HQ` (10782),
 `Landing` (10783), `Bot` (10784) — see [topics.md](topics.md).
 
-The group's historical function — the cron delivery sink — is **not yet
-fixed**: all eleven crons still post without a `message_thread_id` and so land
-in `General`. The re-point mapping is drafted in [topics.md](topics.md) and
-awaiting owner approval.
+The group's historical function — the cron delivery sink — is **fixed**: all
+eleven crons were re-pointed on 2026-09-11 to carry a `message_thread_id` (ten
+to `Outreach` 10780, `max-api-retest` to `Bot` 10784), verified by reading the
+cron table back afterwards. None lands in `General` any more. See
+[topics.md](topics.md).
 
 **Repos.**
 
@@ -178,7 +186,7 @@ awaiting owner approval.
 | `alexeyleshchenko/ai-antispam` | The bot + landing (public); local `/root/ai-antispam` |
 | `leshchenko1979/ai-antispam-outreach` | Private campaign-ops repo: plans, recon, send logs, MTProto pipeline scripts |
 
-**Process law.** Three layers:
+**Process law.** Four layers — the fourth routes the first three:
 
 - Repo `CLAUDE.md` — architecture, commands, error-handling contract (the
   two-layer Telegram retry/decorator rule with its incident note).
@@ -186,16 +194,24 @@ awaiting owner approval.
   techContext, systemPatterns. Read at the start of a dialog.
 - `skills/outreach-reply-sweep/SKILL.md` — the single source of truth for the
   outreach crons; cron prompts are kept thin and point at it.
+- `skills/ai-antispam/SKILL.md` (ops profile) — the **factory router**, written
+  2026-09-11: identity, topic map, and the precedence rule stating which of the
+  three layers above wins for which surface. It links out and copies nothing.
 
 **State.** Postgres `ai_spam_bot` schema `outreach` on apps is the **single
 operational writer**; `outreach/lib/db.py` is the only writer. The repo holds
 code, plans and nightly `export/*.jsonl` snapshots. The retired reverse
 direction (`etl_sends.py`) caused double-writer duplication and is gone.
 
-**Automation.** Six crons all deliver to the `ai-antispam` group:
-`wave0-reply-sweep` (daily), `wave0-unactivated-reprobe` (weekly),
-`outreach-db-sync` (daily), `outreach-mining-tranche` (Mon/Wed/Fri),
-`outreach-auto-kick` (daily), `outreach-watch-poll` (every 3 h).
+**Automation.** **Eleven** crons deliver to the `ai-antispam` group — not six,
+as the first survey said. Nine are enabled; two are disabled
+(`max-api-retest`, `wave0-sprint-batches`). All eleven now carry a
+`message_thread_id`: `wave0-reply-sweep` (daily), `wave0-unactivated-reprobe`
+(weekly), `wave0-sprint-batches`, `outreach-db-sync` (daily),
+`outreach-mining-tranche` (Mon/Wed/Fri), `outreach-auto-kick` (daily),
+`outreach-watch-poll` (every 3 h), `watch-funnel-day7-report`,
+`kick-watcher-lazy4`, `resume-lazy4-watcher` → `Outreach` (10780);
+`max-api-retest` → `Bot` (10784).
 
 **Verification.** `pytest tests/ -v`, `ruff check`, `uvx ty check`, plus a
 codified logging contract (`docs/LOGGING.md`).
