@@ -18,7 +18,7 @@ the mechanics live.
 A factory is a **pairing of three things**, not one:
 
 1. a **versioned process law** (a skill / directive file that the agent reloads),
-2. a **chat surface** whose topics carry state in their names,
+2. a **chat surface** whose named places carry state,
 3. a **repo whose issues are the task list**.
 
 Remove the law and the agent improvises; remove the chat and the human loses
@@ -54,7 +54,7 @@ role file. A shared "shared facts + router" file holds what every role needs.
 
 ## P3 — The issue board *is* the task list
 
-Tasks live as GitHub issues on the factory's own repo. Title prefixes encode
+Tasks live as issues on the factory's own tracker. Title prefixes encode
 kind (`hq:` process, `probe:` product, `site:` surface, `ops:` infra). Issue
 bodies state goal, owner and done-criteria; status changes are comments, never
 silent body rewrites.
@@ -66,26 +66,28 @@ silent body rewrites.
 - *Variant (opencrabs-dev):* issues on the fork + a numbered **workers-ledger**
   for claims/fanouts/attribution.
 
-## P4 — Agents are briefed with `session_notify`, never with a chat post
+## P4 — Agents are briefed by direct message to their own session, never by a chat post
 
-Telegram topics exist for the **human** to observe, supervise and archive.
-Instructions reach an agent only through a direct session notification carrying
-the target session UUID.
+The chat surface exists for the **human** to observe, supervise and archive.
+Instructions reach an agent only through a direct message carrying that
+session's identifier. The binding names the mechanism; the requirement is that a
+brief posted to the shared chat performs **zero work** for the worker.
 
 - *Proven:* inferhub-watch (agent-communication law) and the ops profile's
   briefing law.
 - *Prevents:* the silent-no-op failure — posting a briefing to a topic looks
   like dispatch but reaches no worker, so the lane idles blind.
 
-## P5 — One topic per work unit, named with its state
+## P5 — One named place per work unit, and the name carries its state
 
-Each worker gets its own forum topic at spawn time, named
-`Worker — #N <title>`, flipped to `Done — #N <title>` on close. The topic is
-the lane: brief, receipts and result report all land there.
+Each work unit gets its own named place at spawn time, in the spawn state, and
+the name flips to the closed state on close. That place is the lane: brief,
+receipts and result report all land there. The binding states what a named place
+is on that surface and how the name changes.
 
 - *Proven:* inferhub-watch (topic creation + rename on close);
   opencrabs-dev (role and workstream topics, e.g. `Triage`, `Skills`).
-- *Prevents:* a single General topic where a worker's brief, its evidence and
+- *Prevents:* a single shared place where a worker's brief, its evidence and
   three unrelated conversations are interleaved.
 
 ## P6 — HQ works *on* the process, not *in* it
@@ -209,26 +211,23 @@ not a delivery.
 - *Prevents:* the most damaging failure mode of an autonomous factory — a
   confident report that nothing happened to produce.
 
-## P18 — Converting a group to a forum does not move anything
+## P18 — A surface change does not move the delivery paths with it
 
-`channels.ToggleForum` gives the chat topics and parks every existing message in
-`General`. Every delivery path — crons, webhooks, bound sessions — keeps
-pointing at the **chat root**, so a group that was already a delivery sink
-becomes a forum whose topics are decorative: the reports still pile into one
-undifferentiated stream, now with a topic list beside it that suggests
-otherwise. Re-point the deliveries in the same pass, and verify by reading the
-delivery table back.
+When the surface's addressing model changes, every delivery path — scheduled
+jobs, webhooks, bound sessions — keeps pointing at the **old address**. A chat
+that was already a delivery sink becomes a surface whose named places are
+decorative: the reports still pile into one undifferentiated stream, now with a
+place list beside it that suggests otherwise. Re-point the deliveries in the same
+pass, and verify by reading the delivery table back.
 
-- *Proven:* ai-antispam, 2026-09-11 — eleven crons all still targeted
-  `telegram:-1003993000918` after the conversion; all eleven were re-pointed to
-  `telegram:-1003993000918:<thread_id>` and the table was re-read to confirm
-  zero rows remained on the unthreaded target.
+- *Proven:* ai-antispam, 2026-09-11 — eleven crons all still targeted the chat
+  root after the conversion; all eleven were re-pointed to the per-topic target
+  and the table was re-read to confirm zero rows remained on the unthreaded one.
 - *Prevents:* declaring a migration complete because the surface looks right,
   while the behaviour is unchanged.
-- *Corollary:* a topic id is the id of the topic's **create-service message**
-  and cannot be derived from the topic's position in a list. Create topics
-  serially if you want ordered ids; read them back either way, never predict
-  them.
+- *Corollary:* a topic's address is the id of the message that **created** it, and
+  cannot be derived from its position in a list. Create named places serially if
+  you want ordered addresses; read them back either way, never predict them.
 
 ## P19 — Boundaries are named, and the meta-layer advises rather than executes
 
