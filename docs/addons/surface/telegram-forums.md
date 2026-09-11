@@ -92,6 +92,55 @@ Create topics **serially** if you want ordered ids. Read them back either way.
 
 ---
 
+## Creating and renaming a topic
+
+Telegram exposes topic creation on **MTProto**, not through the bot API surface
+most harnesses wrap — so on a harness with no topic tool you reach for the raw
+invoke. Two facts cost real time to rediscover, and both fail in a way that
+reads like something else:
+
+- **The methods live under `messages.*`, not `channels.*`.** `channels` carries
+  `ToggleForum` and nothing else for topics. Calling `channels.createForumTopic`
+  fails as a *missing module attribute* — which reads like a Telethon version
+  problem, and is not.
+- **The peer parameter is named `peer`, not `channel`.** The request resolves
+  the peer correctly and *then* rejects the keyword. The error names the
+  parameter it wanted; read it instead of guessing a second time.
+
+| Action | Method | Params that matter |
+|---|---|---|
+| Create | `messages.createForumTopic` | `peer`, `title`, `random_id`, `icon_color` |
+| Rename | `messages.editForumTopic` | `peer`, `topic_id`, `title` |
+| List | `messages.getForumTopics` | `peer`, `offset_date`, `offset_id`, `offset_topic`, `limit` |
+| Read one back | `messages.getForumTopicsByID` | `peer`, `topics` — a **list** |
+
+`random_id` is an idempotency nonce: any random 63-bit integer. It is **not**
+the topic id. The topic id is the id of the create-service message, and the
+creation response's `UpdateMessageID` is a *claim*, not proof — read the topic
+back with `getForumTopicsByID` and take the id from there.
+
+**Rename, never re-create.** A re-created topic gets a new id and silently
+orphans every delivery aimed at the old one.
+
+### A topic's session arrives on its first inbound message
+
+A session claims a topic when a message **arrives** in it — the binding is
+written on inbound resolution, and an outbound post never creates one. So a
+freshly created topic is addressable (deliveries target its `thread_id`) but
+unowned: nobody is listening in it yet.
+
+Two consequences worth knowing before you plan a lane:
+
+- A lane that must be *conversible* — the human writes to it and the same
+  session answers — needs the topic's first inbound message to come from the
+  human. Until then, route work to the lane by the harness's direct-address
+  primitive, and treat the topic as the reporting surface only.
+- A topic post is therefore **owner visibility**, never dispatch. This is the
+  surface half of the "topics are for the human" rule above, and it is why a
+  briefing posted into a topic performs no work.
+
+---
+
 ## Delivery
 
 Crons and watchers deliver to a **topic**, never to the group root. A job
