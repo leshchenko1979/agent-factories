@@ -67,10 +67,14 @@ enforces is law. Do not claim the second while shipping the first.
 
 | Artifact | Pattern | Example |
 |---|---|---|
-| Work-unit topic | `Worker — #N <title>` | `Worker — #14 session_notify alerts` |
-| Closed topic | `Done — #N <title>` | `Done — #14 session_notify alerts` |
+| Work-unit topic | `<State> — #N <title>` | `Worker — #14 rank basis undocumented` |
+| Closed topic | `<State> — #N <title>` | `Done — #14 rank basis undocumented` |
 | Issue | `<prefix>: <statement>` | `probe: rank basis is undocumented` |
 | Decision record | `NNNN-<slug>` | `0003-authoritative-state-writer` |
 
-Rename on close; never re-create. The topic id is stable and is what a cron's
-`deliver_to` points at.
+Rename on close; never re-create. A work unit's address is stable across
+renames, which is what scheduled deliveries point at.
+
+> The **exact** naming mechanics — what a topic is, how its id is obtained, what
+> a delivery target looks like — belong to the surface binding, not here. This
+> table states the pattern; the binding states how it is realised.

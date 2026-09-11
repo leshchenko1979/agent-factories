@@ -11,19 +11,49 @@ checklist.
 | [`SKILL.md.tmpl`](SKILL.md.tmpl) | The process law — how the factory runs. Becomes the factory's skill file. |
 | [`AGENTS.md.tmpl`](AGENTS.md.tmpl) | The repository law — build, test, commit, review. Becomes the factory repo's `AGENTS.md`. |
 | [`ONTOLOGY.md.tmpl`](ONTOLOGY.md.tmpl) | Canonical terms and banned synonyms. |
-| [`topics.md`](topics.md) | The chat surface spec: which topics exist, what goes in each, how they change. |
+| [`topics.md`](topics.md) | **Pointer** — the chat surface is a binding, not core. See the surface add-on. |
 | [`roles/`](roles/) | One card per role. A session loads its own card and the law — not the others. |
 
 `.tmpl` files carry `{{PLACEHOLDER}}` markers and are meant to be filled. The
 `.md` files are specs you read and adapt, not fill in.
 
+## The one thing to get right
+
+> **These files state requirements. The add-ons state mechanics.**
+
+Nothing here names a chat product or an agent runtime. That is deliberate, and
+it is what makes the core survive a substrate swap: when the surface or the
+harness changes, you replace one add-on page and the law above is still correct.
+
+The two mandatory add-ons — one [surface binding](../docs/addons/surface/telegram-forums.md),
+one [harness binding](../docs/addons/harness/opencrabs.md) — carry every concrete
+mechanism: how a lane is actually addressed, how a recurring job is actually
+scheduled, which shell a gate actually runs in, how a work unit's address is
+actually obtained.
+
+### The leak test
+
+Before you commit a change to any core file, run:
+
+```sh
+grep -rniE 'telegram|opencrabs|forum|session_notify|github' \
+  TEMPLATE/SKILL.md.tmpl TEMPLATE/AGENTS.md.tmpl TEMPLATE/ONTOLOGY.md.tmpl
+```
+
+A hit that states **mechanics** is a leak — a rule that will be wrong the day
+the substrate changes, sitting where nobody will look for it. Move it to the
+binding.
+
 ## How to use it
 
 1. Answer the [fill-in variables](../docs/product.md#fill-in-variables).
-2. Pick your [add-ons](../docs/addons.md).
-3. Walk [`BOOTSTRAP.md`](BOOTSTRAP.md) top to bottom. Do not skip a step's
+2. Take the two **bindings** — the surface and the harness you run on. These are
+   not optional: a factory always runs on something, and if it does not name it,
+   it has bound it invisibly.
+3. Pick your **domain** add-ons from [docs/addons.md](../docs/addons.md).
+4. Walk [`BOOTSTRAP.md`](BOOTSTRAP.md) top to bottom. Do not skip a step's
    evidence — every one of them is a check that has caught a real failure.
-4. Delete the `{{PLACEHOLDER}}` markers and the HTML comment guidance blocks
+5. Delete the `{{PLACEHOLDER}}` markers and the HTML comment guidance blocks
    from the filled files before committing.
 
 ## Why the placeholders exist

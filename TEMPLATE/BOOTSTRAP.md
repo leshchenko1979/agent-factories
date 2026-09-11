@@ -21,10 +21,32 @@ Write down, before creating anything:
 | Which domain topics does it need? | `DOMAINS` |
 | Which add-ons? | `ADDONS` → [docs/addons.md](../docs/addons.md) |
 | What command can decide "done"? | `GATES` |
+| Which **surface** does it run on? | `SURFACE` |
+| Which **harness** do its agents run under? | `HARNESS` |
 
 **Rule:** if you cannot name the smallest thing that proves the factory works,
 you are not ready to bootstrap. A factory with no first issue has an
 unfalsifiable process — the failure mode is a beautiful scaffold nobody uses.
+
+---
+
+## Step 0b — Take the bindings
+
+A factory runs on **a chat surface** and **an agent harness**. Take exactly one
+of each, and read both pages end to end before creating anything:
+
+- a [surface binding](../docs/addons.md#surface) — where the human watches the
+  work, how a work unit gets its own named place, how a message is routed there;
+- a [harness binding](../docs/addons.md#harness) — how a session loads its law,
+  how a lane is addressed directly, what schedules a recurring process.
+
+**Do not copy their mechanics into the core law.** The core states requirements;
+the bindings state how those requirements are met on one product. If you find
+yourself writing a product name into `SKILL.md` in a sentence that states
+mechanics, move it to the binding — that is the [leak test](../TEMPLATE/README.md#the-leak-test).
+
+**Evidence:** the two binding pages named, and the `{{SURFACE}}` / `{{HARNESS}}`
+rows filled in §2 of the law.
 
 ---
 
@@ -156,6 +178,28 @@ lane must still be able to state its own process **after a compaction**, from
 its own files.
 
 **Evidence:** the renamed topic, and the closing comment on the issue.
+
+---
+
+## Step 9 — Score the factory, and schedule the re-score
+
+Record a **baseline score** against the
+[quality criteria](../docs/quality-criteria.md) — 13 criteria in 4 families,
+0–4 each — in the factory's repo, with the date.
+
+Then make re-scoring a **scheduled job** (§7 of the law): daily to start. A
+score with no cadence is a snapshot; a score on a cadence is a signal.
+
+Add any **factory-specific measures** the domain needs — but only ones with a
+decision hanging off them. A measure nobody acts on is maintenance with no
+payoff.
+
+**Scope.** Score the factory's *effectiveness and health*. Do **not** pull the
+domain's own detail up into the score — that is the factory's `HQ`'s business.
+What travels is the number and the template law it implies.
+
+**Evidence:** the committed baseline score with its date, and the scheduled job
+that re-scores it.
 
 ---
 

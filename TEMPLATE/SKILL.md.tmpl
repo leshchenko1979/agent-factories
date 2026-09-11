@@ -26,7 +26,29 @@ Remove any leg and this stops being a factory.
 
 ---
 
-## 2. Roles
+## 2. Bindings — what this factory runs on
+
+A factory runs on **a chat surface** and **an agent harness**. These are
+*bindings*: exactly one of each, named here so every rule that depends on them
+is attributable to a product rather than welded into this law.
+
+| Kind | Bound to | Pack |
+|---|---|---|
+| Surface | {{SURFACE}} | `surface/{{SURFACE_SLUG}}` |
+| Harness | {{HARNESS}} | `harness/{{HARNESS_SLUG}}` |
+
+**This law states requirements. A binding states the mechanics that satisfy them
+on one product.** Where a rule below reads as generic, the binding carries the
+concrete mechanism — how a lane is actually addressed, how a job is actually
+scheduled, which shell a gate actually runs in.
+
+Swapping a binding is a **one-file change** and must not require editing this
+law. If a product name appears below in a sentence that states *mechanics*, that
+is a leak: move it to the binding.
+
+---
+
+## 3. Roles
 
 | Role | Owns | Card |
 |---|---|---|
@@ -39,23 +61,26 @@ A session loads **its own card and this file** — not the other cards.
 
 ---
 
-## 3. Briefing
+## 4. Briefing
 
-**An agent is briefed with a session notification carrying its session UUID.
-Never with a chat post.** Telegram topics exist for the human to observe,
-supervise and archive; they do not reach agents.
+**An agent is briefed by a direct message to its own session, carrying that
+session's identifier. Never by a post in the shared chat.**
 
-**A fresh session has no channel binding**, so a notification sent before its
-channel claims it is parked, not delivered. Every kickoff therefore has two
-hops: `session_notify` for the record, then `send_input` into the running
-session to actually deliver.
+The chat surface exists for the human to observe, supervise and archive. Agents
+do not read it. A brief posted there performs **zero work** for the worker — it
+only looks like dispatch, which is the most expensive silent failure in a
+factory.
+
+**A freshly started session may not be reachable yet.** The binding states the
+mechanism and its trap; the requirement here is: **do not treat a dispatch as
+delivered until the lane has acknowledged it.** Accepted is not delivered.
 
 A brief states: the issue number, the goal, the done-criteria, the evidence
 expected, and the topic the lane reports into.
 
 ---
 
-## 4. Dispatch
+## 5. Dispatch
 
 Before dispatching any work to a lane, check whether it is already claimed —
 grep the board and the ledger for an open claim on that issue. Dispatching an
@@ -66,7 +91,7 @@ does not re-send or forward work to a third lane.
 
 ---
 
-## 5. Work units and topics
+## 6. Work units and topics
 
 | Event | Action |
 |---|---|
@@ -74,12 +99,28 @@ does not re-send or forward work to a third lane.
 | Lane reports complete | Rename to `Done — #N <title>`, leave it in place |
 | Lane blocked | Post the block in its topic and notify `HQ` |
 
-The topic id is stable and is what a cron's `deliver_to` points at. Rename,
-never re-create.
+The topic id is stable and is what a scheduled job's delivery points at.
+**Rename, never re-create.**
 
 ---
 
-## 6. Closing a work unit
+## 7. Periodic processes
+
+Anything recurring is a **scheduled job**, never a habit and never a note in
+someone's head. The binding names the mechanism; the requirements are:
+
+1. **One job, one thing.** A job notifies the owning session; the work runs in
+   that session, under the current law.
+2. **Never put procedure in a job's payload.** A job's definition cannot be
+   updated by a change to this file, so procedure placed inside one silently
+   goes stale while the law moves on.
+3. **Deliver to the owning topic**, never to the chat root.
+4. **Creating a job is a write, and a write needs a receipt.** Never announce a
+   scheduled job without the tool result that created it.
+
+---
+
+## 8. Closing a work unit
 
 A work unit closes when the issue carries, in this order:
 
@@ -92,7 +133,7 @@ Then rename the topic. The issue is the record; the topic is the archive.
 
 ---
 
-## 7. Verdicts and claims
+## 9. Verdicts and claims
 
 - **Verdict verbs need a receipt.** "Green", "passing", "verified", "shipped"
   may only be stated when the same turn contains the tool output that shows it.
@@ -106,7 +147,7 @@ Then rename the topic. The issue is the record; the topic is the archive.
 
 ---
 
-## 8. After a context compaction
+## 10. After a context compaction
 
 The law lives in the message history, and compaction clears it. Therefore:
 
@@ -118,7 +159,7 @@ carries a one-line pointer here for exactly this reason.
 
 ---
 
-## 9. Escalation
+## 11. Escalation
 
 | Situation | Route |
 |---|---|
@@ -130,14 +171,42 @@ carries a one-line pointer here for exactly this reason.
 
 ---
 
-## 10. Add-ons in force
+## 12. Measurement
 
-{{ADDONS}} — see each add-on's page for the topics, roles, gates and rules it
-adds. Delete this section if the factory takes none.
+This factory is measured against the **quality criteria** — 13 criteria in 4
+families, scored 0–4 — plus **factory-specific measures** it adds for its own
+domain. The criteria live outside this factory, in the template project; this
+section states only what this factory must *do* about them.
+
+| Requirement | Detail |
+|---|---|
+| **A scored baseline exists** | Record a score at bootstrap, in the repo, with the date |
+| **Re-scoring is a scheduled job** | §7 — daily to start, relaxed once the numbers are stable |
+| **Measures are declared, not implied** | Every number this factory tracks is named here or in its ontology, with the decision it informs |
+| **A measure with no decision attached is dropped** | Dashboards are not controls; an unused number is maintenance with no payoff |
+| **The score is a diff, not an impression** | Recorded in the repo so drift shows up as a change, not a memory |
+
+**Scope note.** This factory measures *its own effectiveness and health* — not
+the peculiarities of the work it does. The domain detail is this factory's own
+business, handled by its `HQ`; what travels back up is the score and the
+template law it implies.
 
 ---
 
-## 11. Gates
+## 13. Add-ons in force
+
+| Class | Pack | Why |
+|---|---|---|
+| Binding | `surface/{{SURFACE_SLUG}}` | §2 |
+| Binding | `harness/{{HARNESS_SLUG}}` | §2 |
+| Domain | {{DOMAIN_ADDONS}} | {{DOMAIN_ADDONS_WHY}} |
+
+Each pack carries the topics, roles, gates and rules it adds. Delete a row only
+when the pack is genuinely no longer taken.
+
+---
+
+## 14. Gates
 
 Where a check can be a command, it is a command with a documented return code.
 
@@ -149,7 +218,7 @@ Human judgment is reserved for the part a command cannot decide.
 
 ---
 
-## 12. Boundaries
+## 15. Boundaries
 
 What this factory **owns**, what it **consumes**, and how it talks to each
 neighbour. An unnamed boundary defaults to the most expensive interaction mode,
