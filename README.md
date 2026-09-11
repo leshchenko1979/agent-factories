@@ -80,12 +80,17 @@ Per-factory detail: [evidence/factories.md](evidence/factories.md).
 The meta-factory runs on the same pattern it prescribes, so its own surface is
 recorded here. Group **Factories**, a Telegram forum:
 
-| Topic | `thread_id` | Who speaks | What belongs |
+| Topic | `thread_id` | Lane session | What belongs |
 |---|---|---|---|
-| `HQ` | 21 | The HQ lane | Analysis, rulings, owner conversation |
-| `Delegate` | 68 | The delegate lane | Member-factory comms — dispatches to member HQs, and their answers |
-| `Triage` | 20 | — | Intake and routing |
-| `Surveys` | 19 | — | Survey and measurement work |
+| `HQ` | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | Analysis, rulings, owner conversation |
+| `Delegate` | 68 | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | Member-factory comms — dispatches to member HQs, and their answers |
+| `Triage` | 20 | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | Intake and routing |
+| `Surveys` | 19 | `5c99ad51-8889-40cb-b589-fa13fd673c06` | Survey and measurement work |
+
+Each topic has its own session, created when the topic's first **inbound**
+message arrives — outbound sends never claim a topic. All four are live as of
+2026-09-11 14:20Z. A lane is addressed by its session id, and that id is read
+back from `session_bindings` in the same turn, never carried over.
 
 `HQ` is the analysis surface and the owner's conversation. Member-factory
 traffic does **not** belong there: that is what `Delegate` is for, and keeping
@@ -107,13 +112,12 @@ remembered prefix is how a message lands in the wrong session.
 | OpenCrabs dev | `d72bd52d-42aa-4dbd-ac99-5b5300770019` | Crabs Kanban Board, topic `OC DEV HQ` |
 | InferHub Watch | `359fe71b-c7a1-420b-b856-acfb49939a7b` | Inferhub watch, topic `Auditor` |
 | AI AntiSpam | `acc3fa9b-cefa-4e35-bf87-422696e558f0` | ai-antispam, group root |
-| Miidas | **none exists** | `Miidas Factory` has no session binding |
+| Miidas | `e4f96a33-45ac-412e-8788-1b678cf2addb` | `Miidas Factory`, topic `HQ` (4) |
 
-**Miidas is the open gap.** Its own skill states that no lane has been
-dispatched from that factory yet and that its topic map is a scaffold. Standing
-up its `HQ` lane is **that factory's own work**, not this one's — until it
-exists the delegate cannot reach Miidas, and that is a finding rather than a
-defect to fix from here.
+**Miidas is no longer the gap.** It was recorded here as `none exists`; the owner
+stood its HQ lane up at 12:37Z on 2026-09-11, and the delegate has since made
+first contact. The earlier note still holds as a rule — standing up a member's
+lane is that member's own work, not this factory's — but the work got done.
 
 The topic names above are the live titles, not the ones a factory's own law
 would lead you to expect: InferHub Watch's HQ topic is named `Auditor` in
