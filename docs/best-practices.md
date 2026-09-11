@@ -324,6 +324,34 @@ for cross-referencing between documents. They are not a vocabulary to speak in.
 
 ---
 
+## P24 — A defect in the substrate goes to the substrate's owner
+
+Every factory runs **on** something — a chat surface, an agent harness, a
+database, a CI system. Each of those has an owner. When an instrument is
+missing, broken, or simply inadequate for what the process law requires, the
+finding goes to that owner **in the same turn it is found**, as a request for
+the change.
+
+- *Proven:* this project, 2026-09-11 (owner order). Three gaps in the Telegram
+  tooling — a `get_chat_info` that fails for every caller, a `list_topics` that
+  sees only topics the bot has posted in, and no action at all for creating or
+  renaming a topic — had been **documented in a binding** and dispatched
+  nowhere. A fourth, in the harness, had been diagnosed wrongly (a stale-mtime
+  theory for a guard that ignores mtime) because nobody had taken it to the
+  party who could answer.
+- *Prevents:* the workaround that becomes permanent. A documented gap reads like
+  a known limitation, and a known limitation is a decision — one nobody made.
+  Every undocumented workaround is a permanent tax on every future factory that
+  inherits this template.
+- *Test:* for each binding, name the owner and the route. A binding with no
+  named owner leaves every future defect homeless.
+- *Boundary:* a defect dispatch is not a conversation about the neighbour's
+  work, and it is not a request that someone else do it. It is a finding handed
+  to the party who can act, which is the same discipline as P16 applied to the
+  substrate rather than to the queue.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

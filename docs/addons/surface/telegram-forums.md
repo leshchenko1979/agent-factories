@@ -194,6 +194,27 @@ to confirm zero rows remained on the unthreaded target.
 
 ---
 
+## Reporting a defect in the surface tooling
+
+The Telegram tooling has an owner too, and it is not the same owner as the
+harness. Owner order, 2026-09-11: **a missing or broken Telegram tool is
+reported to the `fast-mcp-telegram` session** — a defect dispatch, not a
+member-factory conversation, and never a request that someone else do the work.
+
+Reported from this project on 2026-09-11, all three still open at the time of
+writing:
+
+| Gap | Evidence |
+|---|---|
+| `get_chat_info` fails for **every** caller | The wrapper injects its own documented default `common_chats_limit=10`; the server rejects it as an unexpected keyword argument. Filed as `fast-mcp-telegram#150` |
+| `list_topics` under-reports the surface | It returns only topics the bot has **observed activity in**. With one active topic it reported one row for a five-topic forum |
+| No action creates or renames a topic | Neither `telegram_send` nor any OpenCrabs CLI exposes it; topic management falls through to a raw MTProto invoke (see above) |
+
+The third is the one that costs the most: a factory whose naming law depends on
+renaming topics has its core mechanic outside every tool it owns.
+
+---
+
 ## Costs
 
 - **One topic per work unit** means the forum grows without bound. That is

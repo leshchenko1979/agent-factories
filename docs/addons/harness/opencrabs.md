@@ -179,6 +179,50 @@ Two harness-specific traps when writing gates:
 
 ---
 
+## Reporting a defect in the harness
+
+The harness has an owner, and the owner is where a defect goes. Asking for the
+change is a **dispatch**, not a complaint in a status report: a defect noted in
+a report is a defect unfiled, and the operator is not the one who should have to
+carry it.
+
+Owner order, 2026-09-11: **an inadequate OpenCrabs instrument is reported to
+OpenCrabs' own `HQ` as a request for the change** — for this meta-factory, the
+Crabs Kanban Board `OC DEV HQ` lane, reached by `session_notify`. Core daemon
+faults are a separate route (the fork's issue tracker); the rule is that each
+goes to the party who owns that surface.
+
+The same rule generalises: **a factory names the owner of every substrate it
+runs on, and a defect in that substrate goes there in the same turn.** A binding
+that does not name its owner leaves every future defect homeless.
+
+---
+
+## A write is not a read — `write_file`'s overwrite guard
+
+Live-tested 2026-09-11, because the earlier note in this repo had the cause
+wrong. The guard is **not** mtime-based. It refuses an overwrite whenever the
+file has not been *read* in this session — including a file **this session
+wrote moments earlier**:
+
+| Sequence | Result |
+|---|---|
+| `write_file` (creates) → `write_file` again | **refused**, fresh mtime or not |
+| `write_file` (creates) → `read_file` → `write_file` | succeeds |
+
+So the fix is to read the file, or pass `overwrite_read_confirm: true` — not to
+reach for `edit_file` because the clock looked wrong. Two consequences worth
+carrying:
+
+- **The refusal message is the receipt, not a bug.** "was not fully read in
+  this session" is accurate about a file you authored, which reads oddly and
+  invites the wrong diagnosis.
+- **Diagnose with the variable you can move.** The stale-mtime theory was
+  plausible, untested, and wrong; holding mtime constant while varying the read
+  separated the two in one probe.
+
+---
+
 ## Costs
 
 - **Sessions are stateful and long-lived**, so a factory accumulates context
