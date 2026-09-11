@@ -52,8 +52,8 @@ of work that already measured the same problem in a different setting.
 Two of these findings shape the whole rubric:
 
 1. **AI raises throughput and lowers stability.** A factory that only measures
-   speed will get faster and less trustworthy at the same time. O2 and M2 exist
-   to catch that.
+   speed will get faster and less trustworthy at the same time. Stability and
+   verification depth exist to catch that.
 2. **The failures are organisational, not model-level.** 78.7% of MAST's
    failures are specification and coordination. Buying a better model does not
    fix a factory with vague briefs and no verifier.
@@ -85,13 +85,30 @@ hanging off it is a dashboard, not a control.
 
 ---
 
-## F1 — Output: does the work land?
+## How to read the criterion names
 
-| # | Criterion | Measure | Prevents |
+Each criterion has a **plain name**. That name is its identity, and it is what a
+report must use. The short codes in brackets — `O1`, `M2`, `L3` — exist only as
+stable handles for cross-referencing between documents.
+
+**Never cite a criterion by its code alone in anything a human reads.** "13/52,
+weakest on L2 and L3" is unreadable to the person it is reported to; "weakest on
+vocabulary conformance and single-writer state" is the same sentence, and it is
+the one that gets acted on. The codes are internal shorthand, and they leaked
+into an operator-facing report once. That is why this paragraph exists.
+
+Origin: owner, 2026-09-11 — *"I don't understand L1, O2 and such — use plain
+language."*
+
+---
+
+## Output — does the work land?
+
+| Criterion | What it measures | What it prevents |
 |---|---|---|---|
-| **O1** | **Throughput** | Items reaching done per week; change lead time from task opened to landed | A factory that is busy but not shipping — activity read as progress |
-| **O2** | **Stability** | Change fail rate (share of changes needing immediate intervention) **and** rework rate (share of work that is unplanned fixes) | "Fast and broken". DORA's 2025 finding: AI adoption lifts throughput and drops stability. Speed with no stability measure is a factory running up a debt it cannot see |
-| **O3** | **Cost per successful task** | Total spend ÷ tasks that reached the intended outcome — never spend ÷ tasks attempted | Cheap failures looking efficient. An agent that gives up fast and wrong is cheap per task and expensive per outcome |
+| **Throughput** (O1) | Items reaching done per week; change lead time from task opened to landed | A factory that is busy but not shipping — activity read as progress |
+| **Stability** (O2) | Change fail rate (share of changes needing immediate intervention) **and** rework rate (share of work that is unplanned fixes) | "Fast and broken". DORA's 2025 finding: AI adoption lifts throughput and drops stability. Speed with no stability measure is a factory running up a debt it cannot see |
+| **Cost per successful task** (O3) | Total spend ÷ tasks that reached the intended outcome — never spend ÷ tasks attempted | Cheap failures looking efficient. An agent that gives up fast and wrong is cheap per task and expensive per outcome |
 
 *Evidence:* DORA's five metrics are the standard here, with rework rate the 2024
 addition that finally made "how much of our work is repair?" visible.
@@ -101,58 +118,60 @@ $0.20 per success.
 
 ---
 
-## F2 — Machine: is the factory sound?
+## Machine — is the factory sound?
 
-| # | Criterion | Measure | Prevents |
+| Criterion | What it measures | What it prevents |
 |---|---|---|---|
-| **M1** | **Specification clarity** | Share of briefs that two independent domain experts would grade pass/fail **identically** | The single largest failure class. A task that two experts cannot grade the same way cannot be graded by a verifier either — and ambiguity in the spec becomes noise in every metric downstream |
-| **M2** | **Verification depth — and its record** | Verification at more than one level (unit → integration → acceptance); grader resistant to being gamed; every task leaves a trace a third party can re-check without asking the author | Superficial verifiers that pass broken work. MAST's example: a chess program that compiles, passes review, and accepts illegal moves. Also the phantom report — a confident claim with nothing behind it |
-| **M3** | **Coordination integrity** | Brief completeness (objective, output format, tool access, boundaries); share of handoffs delivered **directly** rather than relayed; count of tasks derailed by an unstated assumption | Duplicated and dropped work. MAST's second-largest class is agents proceeding on wrong assumptions instead of asking, and agents ignoring each other's input |
-| **M4** | **Boundary clarity** | Written statement of what this factory **owns**, what it **consumes**, and the interaction mode for each neighbour | Two factories doing the same work; or a meta-layer quietly doing a member's work while its own goes undone. Also the reverse: a factory that will not act on anything outside its own repo |
+| **Specification clarity** (M1) | Share of briefs that two independent domain experts would grade pass/fail **identically** | The single largest failure class. A task that two experts cannot grade the same way cannot be graded by a verifier either — and ambiguity in the spec becomes noise in every metric downstream |
+| **Verification depth — and its record** (M2) | Verification at more than one level (unit → integration → acceptance); grader resistant to being gamed; every task leaves a trace a third party can re-check without asking the author | Superficial verifiers that pass broken work. MAST's example: a chess program that compiles, passes review, and accepts illegal moves. Also the phantom report — a confident claim with nothing behind it |
+| **Coordination integrity** (M3) | Brief completeness (objective, output format, tool access, boundaries); share of handoffs delivered **directly** rather than relayed; count of tasks derailed by an unstated assumption | Duplicated and dropped work. MAST's second-largest class is agents proceeding on wrong assumptions instead of asking, and agents ignoring each other's input |
+| **Boundary clarity** (M4) | Written statement of what this factory **owns**, what it **consumes**, and the interaction mode for each neighbour | Two factories doing the same work; or a meta-layer quietly doing a member's work while its own goes undone. Also the reverse: a factory that will not act on anything outside its own repo |
 
 *Evidence:* MAST (arXiv 2503.13657) found explicit verifiers reduce failures but
 are no silver bullet — the verifiers were performing surface checks while the
-output was broken. M1 comes from Anthropic's eval-design rule: a task is only
-well-formed when two domain experts would reach the same verdict, and a task
-that cannot be passed by an agent following the instructions is a broken task,
-not an incapable agent. M4 is Team Topologies' interaction modes — a
-relationship that is not named defaults to the most expensive one.
+output was broken. Specification clarity comes from Anthropic's eval-design
+rule: a task is only well-formed when two domain experts would reach the same
+verdict, and a task that cannot be passed by an agent following the
+instructions is a broken task, not an incapable agent. Boundary clarity is
+Team Topologies' interaction modes — a relationship that is not named defaults
+to the most expensive one.
 
 ---
 
-## F3 — Law: does the process stay true?
+## Law — does the process stay true?
 
-| # | Criterion | Measure | Prevents |
+| Criterion | What it measures | What it prevents |
 |---|---|---|---|
-| **L1** | **Law freshness** | The process law is versioned; every session reloads it after a context compaction; a check flags a lane running under a stale version | Ruling from a stale memory of the law — worse than not ruling, because it looks authoritative. A factory whose law is older than its code is running yesterday's process with today's confidence |
-| **L2** | **Vocabulary conformance** | An ontology with a banned-synonyms table, **and a test that fails the build when the code drifts from it** | The same concept under three names. Reports become unreadable, grep stops working, and every new lane re-derives the vocabulary |
-| **L3** | **Single-writer state** | The authoritative writer is **named** for every state surface; every other path is read-only or a snapshot | Double-writer duplication — the classic way a factory's numbers stop matching reality, and the hardest defect to notice because both writers look correct in isolation |
+| **Law freshness** (L1) | The process law is versioned; every session reloads it after a context compaction; a check flags a lane running under a stale version | Ruling from a stale memory of the law — worse than not ruling, because it looks authoritative. A factory whose law is older than its code is running yesterday's process with today's confidence |
+| **Vocabulary conformance** (L2) | An ontology with a banned-synonyms table, **and a test that fails the build when the code drifts from it** | The same concept under three names. Reports become unreadable, grep stops working, and every new lane re-derives the vocabulary |
+| **Single-writer state** (L3) | The authoritative writer is **named** for every state surface; every other path is read-only or a snapshot | Double-writer duplication — the classic way a factory's numbers stop matching reality, and the hardest defect to notice because both writers look correct in isolation |
 
-*Evidence:* L1 is the opencrabs-dev post-compaction law plus its drift check —
-the skill is gone from context after compaction, so the always-loaded file
-carries a recovery anchor pointing at it. L2 is inferhub-watch's
-`tests/test_ontology.py`, which turns the ontology from a document into a gate.
-L3 is ai-antispam's outreach schema: one writer module, the repo holding only
-nightly snapshots, and a retired reverse-ETL path removed precisely because it
-was a second writer.
+*Evidence:* Law freshness is the opencrabs-dev post-compaction law plus its
+drift check — the skill is gone from context after compaction, so the
+always-loaded file carries a recovery anchor pointing at it. Vocabulary
+conformance is inferhub-watch's `tests/test_ontology.py`, which turns the
+ontology from a document into a gate. Single-writer state is ai-antispam's
+outreach schema: one writer module, the repo holding only nightly snapshots,
+and a retired reverse-ETL path removed precisely because it was a second
+writer.
 
 ---
 
-## F4 — Stewardship: is it sustainable?
+## Stewardship — is it sustainable?
 
-| # | Criterion | Measure | Prevents |
+| Criterion | What it measures | What it prevents |
 |---|---|---|---|
-| **S1** | **Human cognitive load** | How much of the factory the operator must hold in their head. Proxy measures: time to first useful output for a new task; the count of facts only the operator knows | The factory that works only while its founder watches. This is the failure mode the whole product exists to prevent — and the one that is invisible in every output metric |
-| **S2** | **Recoverability** | Time from a bad change to restored service — and whether the operator is required in that path | A single bad merge that needs the owner to unpick it. A factory that cannot recover without its founder is not autonomous, it is supervised |
-| **S3** | **Improvement loop** | Every failure becomes a rule, a test, or a gate — and the change is checked against the next occurrence | A factory that makes the same mistake quarterly, with the same surprise each time. Distinct from L1: the law can be fresh and still never learn anything |
+| **Human cognitive load** (S1) | How much of the factory the operator must hold in their head. Proxy measures: time to first useful output for a new task; the count of facts only the operator knows | The factory that works only while its founder watches. This is the failure mode the whole product exists to prevent — and the one that is invisible in every output metric |
+| **Recoverability** (S2) | Time from a bad change to restored service — and whether the operator is required in that path | A single bad merge that needs the owner to unpick it. A factory that cannot recover without its founder is not autonomous, it is supervised |
+| **Improvement loop** (S3) | Every failure becomes a rule, a test, or a gate — and the change is checked against the next occurrence | A factory that makes the same mistake quarterly, with the same surprise each time. Distinct from law freshness: the law can be fresh and still never learn anything |
 
-*Evidence:* S1 is Team Topologies' thinnest-viable-platform principle, with
-Trade Me's *time to first hello world* as the measured version (three weeks to
-one day). S2 is DORA's failed deployment recovery time, promoted to the
-throughput group precisely because fast recovery is what keeps delivery moving.
-S3 is Anthropic's eval practice: failures become test cases, capability evals
-start at a low pass rate to give a hill to climb, and regression evals protect
-what already works.
+*Evidence:* Human cognitive load is Team Topologies' thinnest-viable-platform
+principle, with Trade Me's *time to first hello world* as the measured version
+(three weeks to one day). Recoverability is DORA's failed deployment recovery
+time, promoted to the throughput group precisely because fast recovery is what
+keeps delivery moving. The improvement loop is Anthropic's eval practice:
+failures become test cases, capability evals start at a low pass rate to give a
+hill to climb, and regression evals protect what already works.
 
 ---
 
@@ -162,8 +181,9 @@ what already works.
   people and agents work inside, not as scores on a person. The moment a metric
   becomes a target it stops measuring what it was meant to (Goodhart), and
   velocity is the clearest casualty — it climbs while cycle time gets worse.
-- **Agent count, message count, token count.** All three are activity. O1 and
-  O3 already capture what they are proxies for.
+- **Agent count, message count, token count.** All three are activity.
+  Throughput and cost-per-successful-task already capture what they are proxies
+  for.
 - **The sophistication of the machinery.** A wiki page can be a platform. The
   thinnest structure that carries the work is the correct one; more machinery
   is a cost until a criterion says otherwise.
@@ -180,40 +200,40 @@ of **this** factory (this repo + this session + this chat surface), not of the
 parent infrastructure it borrows from. Scoring inherited capability as one's
 own is the most flattering way to make a rubric useless.
 
-| # | Criterion | Score | Why |
+| Criterion | Score | Why |
 |---|---|---|---|
-| O1 | Throughput | 1 | Work lands, but nothing counts it. No rate, no lead-time record |
-| O2 | Stability | 0 | No record of rework, no change-fail measure. Nothing exists |
-| O3 | Cost per successful task | 0 | No cost tracking of any kind |
-| M1 | Specification clarity | 1 | Briefs are prose. Detailed, but never tested against the two-experts rule |
-| M2 | Verification depth + record | 2 | Strong inherited law (receipts, read-back-immune proofs) applied by hand; no mechanical gate in this repo |
-| M3 | Coordination integrity | 2 | Direct dispatch is codified and briefs carry deliverables. The delivery path itself failed once and needed a second hop |
-| M4 | Boundary clarity | 1 | Was **zero** until this turn. The owner had to state it: the meta-factory converses with member HQs, it does not do their work |
-| L1 | Law freshness | 1 | The docs exist; they carry no version and no reload trigger for this factory itself |
-| L2 | Vocabulary conformance | 0 | This repo ships an `ONTOLOGY.md` template and has never instantiated one for itself |
-| L3 | Single-writer state | 0 | No ledger, no state surface. The factory has no memory outside the chat |
-| S1 | Human cognitive load | 1 | The owner asked twice about one open question and had to correct the product framing |
-| S2 | Recoverability | 2 | Versioned and pushed to a remote; no documented recovery path |
-| S3 | Improvement loop | 2 | Failures do become rules — this document is the loop firing. Nothing checks whether a failure recurs |
+| Throughput | 1 | Work lands, but nothing counts it. No rate, no lead-time record |
+| Stability | 0 | No record of rework, no change-fail measure. Nothing exists |
+| Cost per successful task | 0 | No cost tracking of any kind |
+| Specification clarity | 1 | Briefs are prose. Detailed, but never tested against the two-experts rule |
+| Verification depth + record | 2 | Strong inherited law (receipts, read-back-immune proofs) applied by hand; no mechanical gate in this repo |
+| Coordination integrity | 2 | Direct dispatch is codified and briefs carry deliverables. The delivery path itself failed once and needed a second hop |
+| Boundary clarity | 1 | Was **zero** until this turn. The owner had to state it: the meta-factory converses with member HQs, it does not do their work |
+| Law freshness | 1 | The docs exist; they carry no version and no reload trigger for this factory itself |
+| Vocabulary conformance | 0 | This repo ships an `ONTOLOGY.md` template and has never instantiated one for itself |
+| Single-writer state | 0 | No ledger, no state surface. The factory has no memory outside the chat |
+| Human cognitive load | 1 | The owner asked twice about one open question and had to correct the product framing |
+| Recoverability | 2 | Versioned and pushed to a remote; no documented recovery path |
+| Improvement loop | 2 | Failures do become rules — this document is the loop firing. Nothing checks whether a failure recurs |
 
 **Total: 13 / 52 = 25% — Provisional.** By family:
 
 | Family | Score | Reading |
 |---|---|---|
-| F1 Output | 1 / 12 (8%) | Nothing about output is measured |
-| F2 Machine | 6 / 16 (38%) | The strongest family — inherited rules, applied by hand |
-| F3 Law | 1 / 12 (8%) | The law is written but not versioned, not enforced, not recorded |
-| F4 Stewardship | 5 / 12 (42%) | Version control and a habit of writing rules down |
+| Output | 1 / 12 (8%) | Nothing about output is measured |
+| Machine | 6 / 16 (38%) | The strongest family — inherited rules, applied by hand |
+| Law | 1 / 12 (8%) | The law is written but not versioned, not enforced, not recorded |
+| Stewardship | 5 / 12 (42%) | Version control and a habit of writing rules down |
 
 **The finding:** the factory that writes the rulebook is the weakest factory in
 the set, and it fails on exactly the criteria it prescribes to others. It
-carries no ontology of its own (L2), keeps no state of its own (L3), measures
-none of its own output (F1), and until this turn had no written boundary (M4).
+carries no ontology of its own, keeps no state of its own, measures none of its
+own output, and until this turn had no written boundary.
 
 That is the useful part of the exercise, and it is the argument for the rubric
 existing: **a factory can be articulate about process and still be Provisional.**
 Prose about practice is not practice. The four factories this repo surveys score
-higher on F1 and F3 than the meta-layer that describes them.
+higher on output and law than the meta-layer that describes them.
 
 ---
 
@@ -248,12 +268,14 @@ decisions has stopped measuring and started meddling.
 ## Open questions for discussion
 
 1. **Should the meta-factory be held to this rubric at all, or is it a
-   different kind of thing?** It has no product output to measure with O1–O3 in
-   the same way. Candidate answer: its output is *factories bootstrapped*, and
-   its O3 is the cost of each bootstrap — but that is a guess.
+   different kind of thing?** It has no product output to measure with
+   throughput, stability and cost-per-task in the same way. Candidate answer:
+   its output is *factories bootstrapped*, and its cost-per-task is the cost of
+   each bootstrap — but that is a guess.
 2. **Which criteria are mandatory at bootstrap, and which are earned by
-   volume?** The minimal-factory list in `best-practices.md` implies L1, L2, L3
-   and M1 are day-one; O2 and O3 are almost certainly not.
+   volume?** The minimal-factory list in `best-practices.md` implies law
+   freshness, vocabulary conformance, single-writer state and specification
+   clarity are day-one; stability and cost-per-task are almost certainly not.
 3. **Who scores the factory?** Self-scoring has an obvious bias. A peer HQ, or
    the operator, would produce a different number — and the gap between the two
    is itself worth measuring.
@@ -261,7 +283,7 @@ decisions has stopped measuring and started meddling.
    with nothing measured cannot distinguish "defined but unmeasured" from
    "ad-hoc" reliably.
 5. **What is the failure threshold?** DORA-style, a factory below *Operational*
-   on F3 should probably not be given work that others depend on. That is a
+   on law should probably not be given work that others depend on. That is a
    policy, and policy belongs to the owner.
 
 ---
