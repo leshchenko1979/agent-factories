@@ -41,6 +41,12 @@ factories to derive laws that hold for every factory of a given shape.
 | Chat surface | `Factories` group — topics carry state in their names |
 | Issue board | `leshchenko1979/agent-factories` issues |
 
+**The board is the intake surface** (owner ruling 2026-09-11). A finding, gap or task that
+arrives anywhere — this chat, a member factory's reply, a lane's own observation — is filed
+as an issue on `leshchenko1979/agent-factories`. It is not tracked in chat. Chat carries the
+conversation; the board carries the work. Triage owns intake, and a closed issue carries the
+receipt that resolved it.
+
 ---
 
 ## 2. Scope — the boundary law
