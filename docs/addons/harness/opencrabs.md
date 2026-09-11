@@ -200,8 +200,10 @@ that does not name its owner leaves every future defect homeless.
 
 ## A write is not a read — `write_file`'s overwrite guard
 
-Live-tested 2026-09-11, because the earlier note in this repo had the cause
-wrong. The guard is **not** mtime-based. It refuses an overwrite whenever the
+Live-tested 2026-09-11. The guard is **not** mtime-based — a stale-mtime
+diagnosis had been circulated in conversation, untested, and **no committed note
+in this repo ever carried it**. This section is the repo's first statement on
+the guard. It refuses an overwrite whenever the
 file has not been *read* in this session — including a file **this session
 wrote moments earlier**:
 
