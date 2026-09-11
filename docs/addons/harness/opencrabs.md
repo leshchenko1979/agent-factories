@@ -73,12 +73,12 @@ the factory's repo, which keeps one source of truth and no drift.
 
 **Two traps, both live-verified 2026-09-11:**
 
-- **A skill's `globs:` frontmatter does nothing.** The skill parser reads only
-  `name`, `description` and `review_gate`; `globs` falls through a catch-all and
-  is ignored. A skill is listed **globally** — it is not scoped to files
-  matching a glob. The glob-conditional tier belongs to *directive* files
-  (`.cursor/rules/*.mdc`, `CLAUDE.md`, `AGENTS.md`), which the harness discovers
-  from the working directory and renders as "read when touching matching files".
+- **Skill `globs:` frontmatter & just-in-time gate (#150).** In daemon versions
+  carrying #150 (`b3b3fc9a`+), skill `globs:` declare governed filesystem paths.
+  When any tool call touches a matching path without the skill loaded in the
+  current epoch, the daemon intercepts and rejects the call with a `[SKILL GATE]`
+  envelope carrying the skill's full text, forcing immediate compliance before
+  execution. This mechanically guarantees law adherence across context compactions.
 - **A folded-block description (`description: >`) parses as the literal `>`.**
   The frontmatter reader takes `key: value` per line, so `>` becomes the whole
   value and the indented block below it is discarded. The skill then appears in
