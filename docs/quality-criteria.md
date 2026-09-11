@@ -136,6 +136,14 @@ instructions is a broken task, not an incapable agent. Boundary clarity is
 Team Topologies' interaction modes — a relationship that is not named defaults
 to the most expensive one.
 
+**How "with the founder out of the loop" is evidenced.** Not as a yes/no — that verdict is
+only observable when the founder leaves, which is the one moment it is too late to act on.
+It is evidenced as a **count**: the acts that still require the operator's hand, enumerated
+and re-counted on the cadence. A deliberate approval gate belongs on the list by design; an
+act that needs the operator only because no instrument exists is a candidate for
+mechanization. The count falling is the evidence; the count not moving is the finding. See
+[best-practices.md](best-practices.md) P26.
+
 ---
 
 ## Law — does the process stay true?

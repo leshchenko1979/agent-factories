@@ -109,9 +109,22 @@ Two consequences, both load-bearing:
   into a topic stands the lane up; it does not brief it. Brief the lane by
   `session_notify` to its session id.
 
-**Evidence:** for each spine topic, the session id from `session_bindings`, and
-every topic id read back from live state (`GetForumTopics` or equivalent) —
-never from the UI, never from the creation response alone.
+**This is a mechanical choke point, not a design choice — say which one it is.** The operator
+writes the line because a binding is created only by an **inbound** message, and no instrument
+in the factory's tool set produces one. That is a property of the harness, not a decision
+anyone made — and the distinction matters, because a work unit gets its own topic (P5) and
+works in it, so this act recurs **per work unit**, not once at bootstrap. A factory whose
+lanes can only be created by the founder has the founder in the loop permanently, whatever
+its other criteria say.
+
+So: enumerate the acts that still require the operator, count them, and re-run the count on
+the measurement cadence (P26). A deliberate approval gate belongs on that list and stays. An
+act that needs the operator only because no instrument exists is a candidate for
+mechanization — and the count falling is the evidence that the factory is transferable.
+
+**Evidence:** for each spine topic, the session id from `session_bindings`; every topic id
+read back from live state (`GetForumTopics` or equivalent) — never from the UI, never from
+the creation response alone; and the counted list of acts that still require the operator.
 
 ---
 

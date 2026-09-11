@@ -382,6 +382,35 @@ every other session on the box, silently.
 
 ---
 
+## P26 — A factory counts the acts that still need its operator
+
+The rubric's machine family asks one question: *will it still land next month, with the
+founder out of the loop?* A factory answers it with an **enumeration, not a yes**. Every act
+that still requires the operator's hand is listed and counted, and the number falling over
+time is the evidence of transferability. A factory that cannot produce the list has not
+measured its independence — it has asserted it.
+
+- *Proven:* this project, 2026-09-11. The template stated lane creation as an operator act
+  and rested transferability on a mechanism that needs the operator **per work unit** — so
+  the claim and the mechanism contradicted each other in the same document, and nothing
+  caught it until a member factory tried to answer the question for itself.
+- *Why a count and not a verdict:* "the factory survives its founder" is unfalsifiable as a
+  yes/no. Every founder-dependent act is invisible until the founder leaves — the one moment
+  the answer arrives too late to use. A count is checkable today, it moves in a direction,
+  and every act on it is a candidate for mechanization.
+- *Prevents:* an assertion of transferability standing in for its measurement. The
+  founder-leaving question is the easiest one to *claim* and the only one whose failure
+  cannot be observed while it still matters.
+- *Practice:* at bootstrap, enumerate the acts only the operator can perform. Re-run the
+  count on the measurement cadence. An act that gets mechanized leaves the list, and the
+  count is the trend.
+- *Boundary:* an act on the list is not automatically a defect. A deliberate approval gate
+  (P14) belongs to the operator **by design** and stays on the list. The defect is an act
+  that needs the operator for *mechanical* reasons nobody chose — those are the ones that
+  can be mechanized, and the ones that quietly make a factory un-transferable.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that
