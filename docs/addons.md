@@ -1,153 +1,128 @@
 # Add-ons
 
-The core template is deliberately minimal — the InferHub Watch shape: one
-`HQ` topic, a thin cron, an issue board. That is enough for a factory that
-watches something and reports.
+The core template is deliberately minimal. An **add-on** is a pack of extra
+structure a factory takes on top of the core — extra topics, roles, gates,
+crons and rules, together with the failure each one prevents.
 
-Most factories do more than that. An **add-on** is a domain pack: the extra
-topics, roles, gates, crons and rules a factory needs when it ships code, runs
-an outreach campaign, or operates a platform for other people.
-
-An add-on says *what structure the domain needs*. It never says what the
-domain's work actually is.
+An add-on says *what structure is needed*. It never says what the factory's
+work actually is.
 
 ---
 
-## The four known add-ons
+## Two classes of add-on
 
-Each is extracted from a factory that runs it today, not invented.
+Add-ons come in two kinds, and the difference matters more than any individual
+pack:
 
-| Add-on | Take it when | Proven by |
+| Class | Question | How many | Examples |
+|---|---|---|---|
+| **Binding** | What substrate does the factory run *on*? | **Exactly one of each kind** | `surface/telegram-forums`, `harness/opencrabs` |
+| **Domain** | What does the factory *do*? | Zero or more, composable | `ship`, `outreach`, `watch`, `platform` |
+
+A factory always runs on *some* chat surface and *some* agent harness. If it
+does not name them, it has bound them implicitly and invisibly — and every rule
+that depends on them is now welded into the core.
+
+**Bindings are mandatory and singular. Domains are optional and plural.**
+
+---
+
+## The binding rule
+
+> The **core** states *requirements*. A **binding** states the *mechanics* that
+> satisfy them on one product.
+
+The core says: *"a lane is briefed by a direct message to its own session, never
+by a post in the shared channel."* That is a requirement, and it is true on any
+surface and any harness.
+
+The binding says: *"on OpenCrabs, that is `session_notify` — and because a
+freshly spawned session has no channel binding yet, the notify parks, so the
+kickoff needs a second hop with `send_input`."* That is mechanics, and it is
+true only here.
+
+Why the split is load-bearing:
+
+- **The core survives the swap.** Change the harness and the core law is still
+  correct — you swap one binding file and nothing else moves.
+- **The leak becomes visible.** A product name inside the core law is a defect
+  you can grep for, not a judgement call. See the leak test below.
+- **Failure modes stay attributable.** The `send_input` second hop is not a
+  general law of agent factories; it is a quirk of one harness. Filed in the
+  core, it teaches the wrong lesson to every future factory.
+
+### The leak test
+
+A rule belongs in a binding if it stops being true when you replace the
+product. Mechanical form:
+
+```sh
+# core files must not name a bound product
+grep -rniE 'telegram|opencrabs|forum|topic|session_notify|gh |github' \
+  TEMPLATE/SKILL.md.tmpl TEMPLATE/AGENTS.md.tmpl TEMPLATE/ONTOLOGY.md.tmpl
+```
+
+A hit is not automatically wrong — the core may legitimately *mention* a
+binding by name as the thing it is currently bound to. A hit that states
+**mechanics** is the defect: it is a rule that will be wrong the day the
+substrate changes, sitting where nobody will look for it.
+
+---
+
+## Bindings
+
+### Surface
+
+| Pack | Binds | Take it when |
 |---|---|---|
-| [`ship`](#ship--delivering-code) | The factory's output is code that gets merged and released | OpenCrabs development |
-| [`outreach`](#outreach--running-a-campaign) | The factory contacts people outside the team and must track replies | AI AntiSpam |
-| [`watch`](#watch--monitoring-something) | The factory's job is periodic probing and ranking | InferHub Watch |
-| [`platform`](#platform--operating-for-other-people) | The factory runs a service for clients, not just for itself | Miidas |
+| [`surface/telegram-forums`](addons/surface/telegram-forums.md) | Telegram, forum-enabled group | The factory's chat is a Telegram forum. Currently true of all four factories |
+
+A surface binding answers: where does the human watch the work, how does a work
+unit get its own named place, how does a message get routed to that place.
+
+### Harness
+
+| Pack | Binds | Take it when |
+|---|---|---|
+| [`harness/opencrabs`](addons/harness/opencrabs.md) | OpenCrabs | The agents run as OpenCrabs sessions. Currently true of all four factories |
+
+A harness binding answers: how does a session load its law, how is a session
+addressed directly, what schedules a periodic process, what turns a check into a
+command.
+
+---
+
+## Domains
+
+| Pack | Take it when | Proven by |
+|---|---|---|
+| [`ship`](addons/domain/ship.md) | The factory's output is code that gets merged and released | OpenCrabs development |
+| [`outreach`](addons/domain/outreach.md) | The factory contacts people outside the team and must track replies | AI AntiSpam |
+| [`watch`](addons/domain/watch.md) | The factory's job is periodic probing and ranking | InferHub Watch |
+| [`platform`](addons/domain/platform.md) | The factory runs a service for clients, not just for itself | Miidas |
 
 They compose. A platform factory that also ships code takes `platform` +
 `ship`. A factory that watches its own product takes `watch` + `ship`.
 
----
-
-## `ship` — delivering code
-
-**Adds topics.** `Skills` (where the process law itself is edited), `Harvest`
-(upstream intake), plus per-workstream topics as they appear.
-
-**Adds roles.** `Triage` (intake, routing, enforcement — the load-bearing
-partner to `HQ`), `Editor` (a lane that owns one workstream and edits code),
-`Toolsmith` (owns the `oc-*` tooling surface), `Carrier` (owns the merge and
-ship chain).
-
-**Adds gates.** Where prose would say "make sure it is correct", a command
-with a return code says it instead: a validator that refuses a malformed
-trailer, a checker that refuses a feature-loss diff, a PR gate that refuses an
-unverified sha. Aim for a tool per ritual, and a ritual that can be run by any
-lane and produce the same answer.
-
-**Adds state.** A numbered **workers-ledger**: claims, fan-outs, attribution.
-The issue board says *what* is in flight; the ledger says *who claimed it and
-under what authority*.
-
-**Adds rules.**
-
-- The upstream repo is never pinged; PR feedback stays on GitHub.
-- A gate verdict requires a same-turn receipt — no verdict from memory.
-- After any compaction, reload the skill before any ruling or status claim.
-- Smoke verification has four legs: lineage, identity, CI gate, live probe.
-
-**Costs.** This is the heaviest add-on. It buys correctness on work that is
-expensive to get wrong, and it is overkill for a factory whose output is a
-report.
-
----
-
-## `outreach` — running a campaign
-
-**Adds topics.** `Outreach` (the campaign lane), plus one topic per wave or
-channel when they run in parallel.
-
-**Adds state — this is the defining part.** Campaign state lives in a
-**database**, not in files: targets, candidates, sends, replies, state. Exactly
-one writer component touches it. The repo holds code, plans and nightly
-snapshots — never live state. Editing a repo JSON as if it were live state is
-the failure this add-on exists to prevent; it produced double-writer
-duplication once already.
-
-**Adds crons.** The reply sweep, as a thin trigger. Reporting goes through the
-scheduler's `deliver_to` — no send-tool calls inside a cron prompt.
-
-**Adds rules.**
-
-- **Owner-handled is absolute.** Never close a lead the owner has personally
-  replied to. Re-read the thread before drafting any close-out.
-- Anything addressed to an administrator is a **draft awaiting approval**, not
-  a send.
-- A cron prompt cannot be updated by a skill change — keep crons thin so they
-  cannot freeze stale law in place.
-
-**Costs.** Every factory in this list converges on a chat topic per workstream;
-outreach converges on a topic per *channel*, because the deliverability of one
-channel is independent of another's.
-
----
-
-## `watch` — monitoring something
-
-**Adds almost nothing, on purpose.** This is the add-on you take to keep a
-factory small.
-
-**Shape.** Exactly one standing topic (`HQ`). Every work unit gets its own
-topic named `Worker — #N <title>`, renamed to `Done — #N <title>` on close and
-**left in place** — the forum doubles as the archive. One thin hourly cron that
-does exactly one thing: notify the owning session.
-
-**Adds rules.**
-
-- The issue board is the task list, hard: open issues are re-triaged every
-  cycle, and the issue title prefix encodes kind (`probe:`, `site:`, `ops:`,
-  `hq:`).
-- Findings are ranked by a stated basis (e.g. quality per unit cost), and the
-  basis itself is a documented decision, not a number someone liked.
-
-**Costs.** Nothing structural — but it does not scale to a factory where
-multiple lanes edit the same artifact. Take `ship` for that.
-
----
-
-## `platform` — operating for other people
-
-**Adds topics.** One topic per surface the platform actually has (`Landing`,
-`CDP`, `Agent runtime`, `Manager`), plus a hard boundary: **client-facing
-groups are not factory topics.** The factory chat is for building the platform;
-the client's own group is the product.
-
-**Adds artifacts.** `docs/adr/` — decisions recorded as ADRs, because a
-platform accumulates decisions that outlive the session that made them. An
-`ONTOLOGY.md` carrying platform terms (slot, warm pool, claim, convert,
-deploy, decommission) with a banned-synonyms table, so the manager code, the
-ADRs and the reports do not drift apart.
-
-**Adds the one rule this add-on exists for:** **name the authoritative state
-writer.** Multi-tenant platforms accumulate state in several places at once —
-a runtime registry on disk, a client record in markdown, a provisioning log.
-Exactly one of them is *authoritative* for "who is a client", and the skill
-must say which. Ambiguity here is the single most expensive defect class in a
-platform factory, because every report inherits it.
-
-**Adds lifecycle gates.** Provisioning and decommissioning are procedures with
-steps, not ad-hoc sequences — a client must be able to be removed cleanly, and
-that procedure must be written before the second client exists.
+**Composition rule:** domain packs may assume a surface and a harness *exist*;
+they may not assume *which*. A domain pack that names a product has the same
+defect as a core file that does.
 
 ---
 
 ## Writing a new add-on
 
-An add-on is a page with six headings: **take it when · adds topics · adds
-roles · adds state · adds gates · adds rules · costs**. Derive it from a
-factory that already runs it; if no factory runs it, mark it
-`status: unproven` and say what would prove it.
+Every pack — binding or domain — is a page with these headings:
+
+**take it when · what it binds / adds · rules · costs · what changes if you
+swap it.**
+
+A binding's last heading is the important one: it lists exactly which rules
+evaporate when the bound product is replaced. If you cannot write that list,
+the pack has leaked into the core somewhere.
+
+Derive a pack from a factory that already runs it. If no factory runs it, mark
+it `status: unproven` and say what would prove it.
 
 The test of a good add-on: a factory that takes it can point at each thing it
-added and say which failure it prevents. If it cannot, the add-on is
-decoration.
+added and say which failure it prevents. If it cannot, the add-on is decoration.
