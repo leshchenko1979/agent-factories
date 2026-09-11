@@ -174,7 +174,12 @@ The shared brain file carries a one-line pointer here for exactly this reason.
 | Domain | `domain/watch` | surveying the member factories |
 
 **This law states requirements. A binding states the mechanics that satisfy them on one
-product.** A product name in a sentence stating *mechanics* is a leak — move it to the binding.
+product.** A product name in a sentence stating *mechanics* is a leak — run the leak test
+(`TEMPLATE/README.md`) before shipping any core law file.
+
+Bindings are **mandatory and singular**: a factory must have a chat surface and a runtime,
+and exactly one of each. Domain packs are **optional and compose**: a factory may carry
+several, or none.
 
 ---
 
