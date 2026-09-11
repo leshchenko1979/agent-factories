@@ -3,7 +3,7 @@
 Surveyed 2026-09-11; **updated the same day after the migration pass**. The
 surface half of the migration is now done for all four factories. This file is
 the actionable half of the survey: what each factory is still missing against
-the pattern in [best-practices.md](best-practices.md).
+the pattern in [best-practices.md](../docs/best-practices.md).
 
 ---
 
