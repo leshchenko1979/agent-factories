@@ -1,51 +1,65 @@
 # Agent Factories
 
-Best practices for organizing **agent factories** — the structure that turns a
-repository plus a Telegram group into a self-driving delivery line run by AI
-agents under human supervision.
+**A template for creating a new agent factory** — plus the best practices it
+encodes, and add-ons for the domains a factory works in.
 
-This repo is the **shared surface** for that work: one place to compare the
-factories, extract what actually holds up, and turn it into a reusable pattern.
+An *agent factory* is the structure that turns a repository plus a chat group
+into a self-driving delivery line: AI agents do the work, a human supervises
+through the chat, and the process itself is a versioned file rather than
+something living in someone's head.
 
-## The four factories
+This repo is the **product**: the thing you copy when you want to stand up a
+new factory, and the rulebook that says why each piece is there.
 
-| Factory | Purpose | Factory chat | Primary repos |
-|---|---|---|---|
-| **OpenCrabs development** | Build and ship the OpenCrabs agent itself | `Crabs Kanban Board` (forum, topic per lane/role) | `leshchenko1979/opencrabs` (fork, issues home), `adolfousier/opencrabs` (upstream, PRs only), `opencrabs-skill`, `opencrabs-dev-state` |
-| **InferHub Watch** | Daily probes + value ranking of InferHub routes (IQ per $) | `Inferhub watch` (forum: `HQ`, `Worker — #N …`, `Done — #N …`) | `leshchenko1979/inferhub-watch` |
-| **Miidas** | Multi-tenant Telegram AI platform (warm-pool trial → managed bot per client) | `Miidas Factory` (forum: `HQ`, `Triage`, `Agent runtime`, `Landing`, `CDP`, `Manager`) | `leshchenko1979/miidas`, `leshchenko1979/miidas-template` |
-| **AI AntiSpam** | LLM spam moderation bot + monoforum outreach campaign | `ai-antispam` (forum: `HQ`, `Triage`, `Outreach`, `Bot`, `Landing`) | `leshchenko1979/ai-antispam`, `leshchenko1979/ai-antispam-outreach` |
+## What you get
+
+| Piece | Path | What it is |
+|---|---|---|
+| **Template** | [`TEMPLATE/`](TEMPLATE/) | The instantiable skeleton — bootstrap checklist, process-law skeleton, ontology, topic spec, role cards |
+| **Best practices** | [docs/best-practices.md](docs/best-practices.md) | The rules the template encodes, each with the factory that proves it |
+| **Add-ons** | [docs/addons.md](docs/addons.md) | Domain packs — what a factory adds when it ships code, runs outreach, watches routes, or operates a multi-tenant platform |
+| **Product spec** | [docs/product.md](docs/product.md) | What the product is, who it is for, what v1 covers, what it deliberately does not |
+| **Evidence** | [evidence/](evidence/) | The four real factories, surveyed — the receipts behind every practice |
+
+## Start here
+
+1. Read [docs/product.md](docs/product.md) — what you are building.
+2. Follow [`TEMPLATE/BOOTSTRAP.md`](TEMPLATE/BOOTSTRAP.md) — the ordered checklist that takes an empty directory to a running factory.
+3. Pick the add-ons your domain needs from [docs/addons.md](docs/addons.md).
+4. Keep [docs/best-practices.md](docs/best-practices.md) open — it is the normative rulebook.
+
+## The thesis
+
+A factory is **three things paired**, not one:
+
+```
+process law  ×  chat surface  ×  issue board
+```
+
+- the **law** is a versioned file the agent reloads after every compaction;
+- the **chat** carries state in its topic names — one topic per work unit;
+- the **board** is the task list — issues, not a shadow tracker.
+
+Remove the law and the agent improvises. Remove the chat and the human loses
+sight of the work. Remove the board and progress becomes unfalsifiable.
+
+## Reference implementations
+
+The template is extracted from four factories that run today. They are not
+examples — they are the evidence, and each one proves a different part of the
+pattern:
+
+| Factory | What it proves |
+|---|---|
+| **OpenCrabs development** | Mechanical gates, role split, ledger, carrier/ship chain — the full-weight instance |
+| **InferHub Watch** | The cleanest minimal instance: one `HQ` topic, everything else a work unit that closes by rename |
+| **Miidas** | The multi-tenant platform case: ADRs as decisions, client state, a factory chat created from scratch |
+| **AI AntiSpam** | The router skill and the outreach domain — cron re-pointing, campaign state in a database |
+
+Per-factory detail: [evidence/factories.md](evidence/factories.md).
 
 ## Status
 
-| # | Factory | On the topic system? | Process law lives in |
-|---|---|---|---|
-| 1 | OpenCrabs development | ✅ yes — 20+ topics, 4 roles | `skills/opencrabs-dev/` (SKILL.md + 4 role files + fleet-directives.md) |
-| 2 | InferHub Watch | ✅ yes — HQ + one topic per worker | `skills/inferhub/SKILL.md` + `ONTOLOGY.md` + `WORKLOG.md` |
-| 3 | Miidas | ✅ yes — `Miidas Factory`, 6 topics + `General` | `skills/miidas/SKILL.md` (factory) + repo `AGENTS.md` (engineering) + `docs/adr/` |
-| 4 | AI AntiSpam | ✅ yes — `ai-antispam` forum, 5 topics + `General` | `skills/ai-antispam/SKILL.md` (router) → repo `CLAUDE.md` + `memory-bank/` + `skills/outreach-reply-sweep/` |
-
-All four factories now have a forum group with topics, and all four have a
-versioned process law. For Miidas and AI AntiSpam the migration completed on
-2026-09-11: the surfaces were created (or converted), the eleven AI AntiSpam
-crons were re-pointed off the group root into their topics, and the two missing
-skills were written. What remains for both is **practice** — an ontology, a
-board that actually carries tasks, and a first dispatched lane. See
-[docs/gaps.md](docs/gaps.md).
-
-## Contents
-
-| Doc | What |
-|---|---|
-| [docs/topics.md](docs/topics.md) | The topic map: every factory's topics with live-verified ids, and the naming law |
-| [docs/factories.md](docs/factories.md) | Per-factory survey: purpose, surface, repos, roles, process law, automation, verification |
-| [docs/survey-2026-09-11.md](docs/survey-2026-09-11.md) | The dated first survey with the receipts behind every claim |
-| [docs/best-practices.md](docs/best-practices.md) | Derived patterns (v0.1 hypothesis — to be validated, not gospel) |
-| [docs/gaps.md](docs/gaps.md) | What each factory is still missing, and the migration shape |
-
-## Working assumption
-
-The factory is not the repo and not the chat — it is the **pairing** of a
-versioned process law, a chat surface that carries state in its topic names,
-and a repo whose issues are the task list. Remove any leg and the factory
-degrades into "a repo some agent edits sometimes".
+**v0.1 — the template is written, no factory has been created from it yet.**
+The first factory bootstrapped with it will be the validation. Until then the
+practices are proven by their origin factories, not by the template.
