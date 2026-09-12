@@ -4,3 +4,4 @@
 {"n": 4, "ts": "2026-09-12T11:00:15Z", "event": "intake", "actor": "triage", "subject": "#7", "detail": "single-writer state surface"}
 {"n": 5, "ts": "2026-09-12T11:00:15Z", "event": "claim", "actor": "hq", "subject": "#7", "detail": "tools/ledger.py is the sole writer for evidence/ledger.jsonl"}
 {"n": 6, "ts": "2026-09-12T11:02:34Z", "event": "close", "actor": "hq", "subject": "#7", "detail": "closed by f3a1a93+c25ec76+9fb7e1f; ledger verify rc=0, 20-parallel-append test passes"}
+{"n": 7, "ts": "2026-09-12T11:09:57Z", "event": "close", "actor": "hq", "subject": "#8", "detail": "closed by aeb0bcd+dd2ac8a+a442dbd; rework gate rc=0 (8 entries), ontology rc=0, template-sync rc=0 (4 pairs)"}
