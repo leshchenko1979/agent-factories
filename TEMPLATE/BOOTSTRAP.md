@@ -209,6 +209,13 @@ genesis row, so set `EXEMPTIONS = []` when you copy, and add an entry only for a
 close that predates **your own** gate. An exemption inherited from another
 factory's history excuses a defect your ledger does not have.
 
+**Declare any lane the core set does not have.** The actor set in `tools/ledger.py`
+is closed, and it is exactly the four role cards in §3 plus `owner`. A factory whose
+law names a lane beyond them — a member-comms lane, a survey lane — writes it into
+`tools/actors.txt`, one role per line, beside the tool. A lane that cannot be declared
+cannot record its rows, so this is the difference between a lane and a name the ledger
+refuses to hear from.
+
 **Why this is a step and not a habit.** State kept only in chat is a memory of a
 conversation: it survives exactly as long as the context does. The ledger is the
 durable record, and `tools/ledger.py` is its **only** append path — the lock is

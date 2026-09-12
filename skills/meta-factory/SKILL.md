@@ -93,6 +93,15 @@ over from an earlier turn.
 | Triage | 20 | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | intake and routing |
 | Surveys | 19 | `5c99ad51-8889-40cb-b589-fa13fd673c06` | survey and measurement work |
 
+**Two of these lanes are this factory's own, not the template's** (owner ruling
+2026-09-12). `delegate` and `surveys` are not roles a bootstrapped factory has: the
+template ships four cards — `hq`, `triage`, `worker`, `carrier` — and no delegate card.
+A lane that cannot write a state row cannot do its job, so both are declared in
+`tools/actors.txt`, the extension point for a role the core set does not have. The core
+set in `tools/ledger.py` is exactly the template's four cards plus `owner`; the
+declaration file is what lets a factory name its own lanes without editing a file that
+is copied byte-identically into every factory.
+
 **A lane exists only once a message has arrived in its topic.** A topic's session is created
 by its first **inbound** message — an outbound post never claims one. So a topic is
 addressable (deliveries target its `thread_id`) but unowned until someone writes into it, and
@@ -227,6 +236,17 @@ repo, on a surface with **one named writer**. Every other path to it is read-onl
 | `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
 | `skills/meta-factory/SKILL.md` | this law | `HQ` | read-only |
+
+**The actor set is the roles the law names, and it is closed.** A role that is not listed
+cannot write a row, so adding one is a law change rather than a convenience. The core set
+is the template's four role cards plus `owner`, who directs without being a lane; a factory
+whose law names a lane beyond them declares it in `tools/actors.txt`, one role per line. It
+is declared there and not in the constant because `tools/ledger.py` is copied
+byte-identically into the template — a lane only one factory has cannot live in a value that
+must match everywhere. This set was **wrong until 2026-09-12**: it named `delegate` and
+`surveys`, which the template does not ship, and refused `worker` and `carrier`, which it
+does — a gate rejecting the very roles its own template hands out. Both directions are now
+probed in `tests/test_ledger.py`.
 
 **Single-writer is a mechanism, not a habit.** The ledger has exactly one append path
 because concurrent writers would each read the same last row and each write `n+1` — the
