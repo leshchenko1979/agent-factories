@@ -104,11 +104,88 @@ untouched. The factory chat is for the platform's own development.
 
 | Item | Factory | Note |
 |---|---|---|
-| Duplicate forum group `5414677736` (`Inferhub watch`, 0 members) | InferHub Watch | Stale twin of the live group `4379632866`; retire it so reports cannot land in a dead chat |
-| Legacy non-forum group `OC Dev` (`-1003627148483`) | OpenCrabs dev | Superseded by `Crabs Kanban Board`; still has a session binding |
+| Migrated shell `-5414677736` (`Inferhub watch`, 0 members) | InferHub Watch | **Retired 2026-09-12** — not a twin; a migrated shell. See [Decommission records](#decommission-records) |
+| Legacy non-forum group `OC Dev` (`-1003627148483`) | OpenCrabs dev | **Retired as a delivery surface 2026-09-12** — superseded, but not dead. See [Decommission records](#decommission-records) |
 | `skills/inferhub/SKILL.md` vs `ONTOLOGY.md` vs `WORKLOG.md` | InferHub Watch | Three files, no stated precedence — add a one-line precedence rule |
 | Two GitHub identities in play (`leshchenko1979`, `alexeyleshchenko`) | AI AntiSpam | Canonical remote must be stated explicitly per repo in the skill; the local `github.com-alexey` SSH alias hides which account owns what |
 | ~~`leshchenko1979/miidas` described as "MOVED to alexeyleshchenko/miidas"~~ | Miidas | **Resolved 2026-09-11.** The owner confirmed miidas was moved back; neither `alexeyleshchenko/miidas` nor `alexeyleshchenko/miidas-template` exists, and both stale descriptions were rewritten. Lesson: verify the live remote with `gh`, never a repo description |
+
+---
+
+## Decommission records
+
+Two places were retired on 2026-09-12. Both records below carry the live facts
+they were decided on, so the next survey does not re-litigate them.
+
+### `-5414677736` — `Inferhub watch` — **retired, migrated shell**
+
+The earlier survey called this a *"stale twin"* of the live group. It is not a
+twin. It is a **migrated shell** — the old identity of a chat that was upgraded
+to a supergroup — and the record also carried the id without its leading minus.
+
+| Field | Value |
+|---|---|
+| Id | `-5414677736` (the record had `5414677736` — wrong) |
+| Title | `Inferhub watch` |
+| Shape | group, **not** a forum, **0 members** |
+| Created | 2026-09-10T04:38:12Z (`[Service: ChatCreate]`) |
+| Last message | 2026-09-10T04:39:31Z — `[Service: ChatMigrateTo]` |
+| Lifetime | **79 seconds** — created, renamed, migrated |
+| Deliveries targeting it | **0** (all 19 scheduled jobs scanned) |
+| Bindings | 1 row — root → `7a96d7a1-c4ce-4faf-9b37-5cba88cae124`, 2026-09-10 04:38:07Z |
+
+**Why it is a shell and not a twin.** A group was created, briefly used (a
+working-directory change), renamed, and migrated — all inside 79 seconds. A
+`ChatMigrateTo` event as the final message is the signature of an in-place
+upgrade; the id survives as a tombstone while the content moves.
+
+**The content did not land in the live group, and that is worth stating.** The
+live `Inferhub watch` group is `-1004379632866`, a forum with 16 topics and 2
+members. Fetching the shell's message ids from it returns *not found*, and a
+text search for its one real message returns nothing. So the shell is **not**
+the migration source of the live group either — it is an abandoned pre-upgrade
+attempt, and nothing of it needs preserving.
+
+**Resolution:** nothing routes to it; nothing may. **Retired.**
+
+### `-1003627148483` — `OC Dev` — **retired as a delivery surface, still an archive**
+
+The earlier survey called this one *"legacy"* and left the decision open. The
+live read says **superseded, not dead** — and that distinction is the whole
+record.
+
+| Field | Value |
+|---|---|
+| Id | `-1003627148483` |
+| Title | `OC Dev` |
+| Shape | group, **not** a forum, **5 members** |
+| Last message | 2026-09-07T13:57:38Z — **5 days before this record** |
+| Content | a real conversation with the upstream maintainer (Adolfo Usier, `adolfodev`) about the no-DM-pings rule, with the bot replying |
+| Deliveries targeting it | **0** (all 19 scheduled jobs scanned) |
+| Bindings | **2 rows** — root → `55943b3e-ad07-4b21-aa81-2243a8a48092` (2026-08-31), thread 1 → `16720f42-c03f-4381-8aa0-6b5a7fdd0fa0` (2026-09-07 13:57:09Z) |
+| Superseded by | `Crabs Kanban Board` (`-1003936827469`), now titled `Opencrabs Dev Factory` |
+
+**Why the distinction matters.** A place whose last message is a week old is
+not the same as a place whose last message is a service event. Someone was
+still talking here five days ago, and the second binding was refreshed within
+the same minute as that last message. Calling it dead would have been wrong on
+the live evidence — and the binding refresh is itself the signal that the
+runtime still considered it live.
+
+**Resolution:** retired **as a delivery surface** — no delivery may target it,
+and none does. The group itself **stays**: it holds a decision record, and
+retirement means nothing routes to it, never that history is deleted.
+
+### The one thing left open, and whose it is
+
+Both places still carry **binding rows** — one for the shell, two for `OC Dev`.
+A binding is what routes a *future* inbound message to a session, so leaving
+them is not neutral: the rows are the mechanism by which a retired place could
+come back to life.
+
+Retiring them is a write to the **harness's** state, not this repo's, so it is
+not done here. It is handed to the harness owner (OpenCrabs Kanban Board HQ)
+with the ids above.
 
 ---
 
