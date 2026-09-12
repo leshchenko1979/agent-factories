@@ -23,6 +23,9 @@
   - Escalates blocked or failing tasks to `HQ` or re-dispatches to an available worker.
 - **Enforcement.** Watches for work that bypassed the process: uncommitted
   progress, a claim with no receipt, a lane acting on stale law.
+- **Rework recording.** Every closure that resolved a *defect* — something that
+  was wrong and had to be redone — adds an entry to `evidence/rework.md` before
+  the issue closes. Triage owns the entry because Triage owns the close.
 
 ## What Triage does not do
 
@@ -49,7 +52,35 @@
 3. If active & progress verified → maintain claim.
    If stalled (> threshold)      → notify worker / escalate to HQ.
    If finished with receipts     → verify done-criteria, close issue, release claim.
+4. If the close resolved a defect → the rework entry is written BEFORE the close.
 ```
+
+## The rework entry
+
+`evidence/rework.md` is the factory's memory of its own mistakes. It is what
+makes "are we getting better?" answerable rather than a feeling.
+
+| Column | What goes in it |
+|---|---|
+| **Date** | When the defect was found — not when it was introduced, which is often unknown and guessing turns the log into fiction |
+| **Source** | What surfaced it: an owner instruction, a lane report, a gate, a review |
+| **Defect** | What was wrong, stated so a reader can tell whether it is fixed |
+| **Root cause** | The mechanism, not the symptom. "Careless" is not a root cause |
+| **Resolution** | The commit or action that fixed it |
+| **Prevented by** | The rule, test or gate that stops recurrence. `nothing yet` is a valid answer, and an important one |
+
+Three rules make the log worth keeping:
+
+- **Write it at the close, not later.** A defect resolved and not recorded is a
+  defect whose root cause is lost within a day.
+- **`nothing yet` is honest; a placeholder is not.** If nothing prevents the
+  defect from returning, say so — that column is the input to the improvement
+  loop, and a false "prevented by" removes the defect from it.
+- **It records the process, never a person.** An entry names a mechanism that
+  failed, not a lane that erred.
+
+The log is gated: `tests/test_rework.py` fails the build when an entry is
+incomplete or carries a placeholder. Run it with the other gates.
 
 ## Reporting
 

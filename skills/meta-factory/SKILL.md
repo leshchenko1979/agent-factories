@@ -220,6 +220,7 @@ repo, on a surface with **one named writer**. Every other path to it is read-onl
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
 | `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling | `tools/ledger.py append` | `tail`, `verify` — read-only |
+| `evidence/rework.md` | every defect this factory produced, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only, gated by `tests/test_rework.py` |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the daily measurement job (`Surveys`) | read-only |
 | `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
@@ -241,6 +242,31 @@ guarantee is *one append path*, not *tamper-proof*.
 **An append-only surface with no reader is a write-only memory.** `tools/ledger.py tail`
 is the read path. When a lane's state is in question, the ledger is what it is checked
 against.
+
+**The rework log is the other half of the ledger, and it is what makes "are we getting
+better?" answerable.** The ledger records that work closed; `evidence/rework.md` records
+what had to be redone and why. The rubric's Stability criterion asks for two rates —
+change fail rate and rework rate — and neither is computable from memory. The log is the
+numerator, the ledger's `close` rows are the denominator, and both are **recomputed on
+each measurement run**, never recalled: a remembered rate is an impression with a decimal
+point.
+
+Two properties make the log worth keeping, and both are easy to lose:
+
+- **`Prevented by` is the load-bearing column.** It is the only one that changes future
+  behaviour — it is where a failure becomes a rule, a test or a gate. `nothing yet` is a
+  legitimate and useful entry: it marks the defect as still live. A log whose every entry
+  reads "be more careful next time" has quietly stopped working.
+- **It records the process, never a person.** An entry names a mechanism that failed, not
+  a lane that erred. Blame entries stop being written, and an incomplete log is worse than
+  none.
+
+`tests/test_rework.py` gates it: an incomplete row or a placeholder fails the build.
+
+**The first readings are uninformative, and that is expected.** This factory opened with
+two closes against eight rework entries — a rework share of 80%, which is what any factory
+looks like before its gates exist. The number is not alarming; it carries no signal until
+the gates have had time to bite. Report it as a direction, not a verdict.
 
 ---
 

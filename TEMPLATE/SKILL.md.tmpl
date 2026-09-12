@@ -205,6 +205,7 @@ section states only what this factory must *do* about them.
 | **Re-scoring is a scheduled job** | §7 — daily to start, relaxed once the numbers are stable |
 | **Measures are declared, not implied** | Every number this factory tracks is named here or in its ontology, with the decision it informs |
 | **A measure with no decision attached is dropped** | Dashboards are not controls; an unused number is maintenance with no payoff |
+| **Rework is counted, not felt** | `evidence/rework.md` is the numerator and the ledger's `close` rows the denominator. Both rates are recomputed each run, never recalled — a remembered rate is an impression with a decimal point |
 | **The score is a diff, not an impression** | Recorded in the repo so drift shows up as a change, not a memory |
 
 **Scope note.** This factory measures *its own effectiveness and health* — not
@@ -224,6 +225,7 @@ read-only.
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
 | `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling | `tools/ledger.py append` | `tail`, `verify` — read-only |
+| `evidence/rework.md` | every defect, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only, gated by `tests/test_rework.py` |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the measurement job | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated |
 | this law | the process rules | `HQ` | read-only |
@@ -240,6 +242,12 @@ is a surface that will acquire two.
 
 **An append-only surface with no reader is a write-only memory.** Ship the read
 path with the write path — the ledger is what a state claim is checked against.
+
+**A defect fixed is not a defect learned.** `evidence/rework.md` is where a
+failure turns into a rule, a test or a gate, and the `Prevented by` column is the
+only part that changes future behaviour. `nothing yet` is a legitimate and useful
+entry: it marks the defect as still live. A log whose every entry says "be more
+careful next time" is a log that has quietly stopped working.
 
 ---
 
@@ -264,6 +272,7 @@ Where a check can be a command, it is a command with a documented return code.
 |---|---|---|
 | Ledger integrity | `python3 tools/ledger.py verify` | exit 0 |
 | Vocabulary | `python3 tests/test_ontology.py` | exit 0 |
+| Rework log | `python3 tests/test_rework.py` | exit 0 |
 | {{GATE}} | `{{COMMAND}}` | `{{RC}}` |
 
 Human judgment is reserved for the part a command cannot decide.

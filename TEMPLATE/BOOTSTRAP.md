@@ -212,6 +212,41 @@ single-writer claim *tested* rather than asserted.
 
 ---
 
+## Step 4c — Open the rework log
+
+Create `evidence/rework.md`, copy [`tests/test_rework.py`](tests/test_rework.py),
+and make the log the **input to the improvement loop** rather than a diary.
+
+The log answers the two Stability measures the rubric asks for — change fail
+rate and rework rate — and neither can be computed from memory. The log is the
+numerator; the ledger is the denominator.
+
+| Column | What goes in it |
+|---|---|
+| **Date** | When the defect was **found** — not when it was introduced, which is usually unknown, and guessing turns the log into fiction |
+| **Source** | What surfaced it: an owner instruction, a lane report, a gate, a review |
+| **Defect** | What was wrong, stated so a reader can tell whether it is fixed |
+| **Root cause** | The mechanism, not the symptom. "Careless" is not a root cause |
+| **Resolution** | The commit or action that fixed it |
+| **Prevented by** | The rule, test or gate that stops recurrence. `nothing yet` is a valid answer — and an important one |
+
+**Why this is a step and not a habit.** A defect fixed and not recorded loses its
+root cause within a day, and the factory pays for the same mistake again with the
+same surprise. The `Prevented by` column is the load-bearing one: it is what
+converts a failure into a rule, a test or a gate. A false "prevented by" removes
+the defect from the improvement loop, so write `nothing yet` when nothing yet
+prevents it.
+
+**The log records the process, never a person.** An entry names a mechanism that
+failed, not a lane that erred — otherwise the honest entries stop being written,
+and an incomplete log is worse than none.
+
+**Evidence:** `python3 tests/test_rework.py` exiting 0, and at least one entry
+already in the log — a bootstrap that has never recorded a defect either had a
+perfect bootstrap, which is not credible, or is not recording.
+
+---
+
 ## Step 5 — Wire the board
 
 File the first issues on `{{REPO}}`, using title prefixes that encode kind

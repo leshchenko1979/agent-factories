@@ -14,7 +14,7 @@ checklist.
 | [`topics.md`](topics.md) | **Pointer** — the chat surface is a binding, not core. See the surface add-on. |
 | [`roles/`](roles/) | One card per role. A session loads its own card and the law — not the others. |
 | [`tools/ledger.py`](tools/ledger.py) | The **single writer** for the state ledger. Copy it, keep it as the only append path. |
-| [`tests/`](tests/) | The gates: `test_ontology.py` (vocabulary) and `test_ledger.py` (the single-writer property). Copy both and run them before you commit. |
+| [`tests/`](tests/) | The gates: `test_ontology.py` (vocabulary), `test_ledger.py` (the single-writer property), `test_rework.py` (rework entries are complete). Copy all three and run them before you commit. |
 
 `.tmpl` files carry `{{PLACEHOLDER}}` markers and are meant to be filled. The
 `.md` files are specs you read and adapt, not fill in.
