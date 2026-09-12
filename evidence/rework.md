@@ -41,9 +41,9 @@ Two forms of the rework number are reported because they answer different
 questions: the *share* is comparable across factories, and *per close* is the
 one that tells this factory how much repair it pays per unit of planned work.
 
-**Read the first readings with care.** At 2026-09-12 this factory had 3 closes
-against 10 rework entries — a share of 77%, which is what a factory looks like
-before its gates exist. The number is not alarming; it is *uninformative* until
+**Read the first readings with care.** At 2026-09-12 this factory had 4 closes
+against 11 rework entries — a share of 73%, or 2.75 entries per close, which is
+what a factory looks like before its gates exist. The number is not alarming; it is *uninformative* until
 the gates have had time to bite. What matters is the direction, which is why the
 rates are reported in the daily score file as a diff.
 
@@ -61,9 +61,9 @@ rates are reported in the daily score file as a diff.
 | 2026-09-12 | The new vocabulary gate | Ten occurrences of `meta-layer` — a second name for this project — across five files | Two names were in use since the first week, and nothing checked | `744819f` | `tests/test_ontology.py` fails the build on it |
 | 2026-09-12 | Self-caught while writing the gate | The vocabulary gate used plain `git ls-files`, so a brand-new file carrying drift passed until the commit that landed it | The obvious command was used without asking what it returns: tracked files only | `677a477` — `--cached --others --exclude-standard` | The gate's own probe: an untracked file with drift must exit 1 |
 | 2026-09-12 | Self-caught while probing the gate above | The first probe of the rework gate reported a clean pass on a deliberately malformed row | The probe appended the row *after* the `## Entries` section, so the gate never parsed it — and an empty result from an unparsed region was read as a pass | Probe corrected in the same turn, then re-run: the malformed row was caught | A probe must write *inside* the region it claims to test, and a pass that follows a malformed input is checked against where that input landed |
-
 | 2026-09-12 | Self-caught while probing the ledger above | The ledger's concurrency probe ran against the **live** `evidence/ledger.jsonl` and left 20 probe rows in it | The tool's path was not parameterised when the probe was written, so "run the probe" meant "run it against the real file" — and the real file was the thing the probe existed to protect | `OC_LEDGER_PATH` added; the probe moved into `tests/test_ledger.py` against a temp file, and the live ledger was reset to its genuine rows | The test cannot reach the real ledger: it appends to a temp path and asserts the row numbers are `1..N` |
 | 2026-09-12 | Self-caught while writing the #7 receipt | A receipt comment on the board cited a rework entry for the ledger-probe defect that **did not exist** in this log | The citation was written from memory of the defect rather than from a read of the file — and the defect was in fact missing from the log entirely, so the memory was the only thing that noticed | The entry was added (this row) and the receipt corrected | A receipt that cites a row number is checked against the log in the same turn, the same way any other identifier is |
+| 2026-09-12 | Self-caught while repairing this file | The Rates paragraph stated "3 closes against 10 rework entries — a share of 77%" while the ledger already held 4 closes, so the log's own headline number was wrong | The paragraph was written before #9 closed and nothing recomputes it: the file's rule "recomputed rather than remembered" had no mechanism behind it | Recomputed from live state and rewritten — 4 closes, 11 entries, 73% | nothing yet |
 
 ---
 
