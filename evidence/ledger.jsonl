@@ -17,3 +17,6 @@
 {"n": 17, "ts": "2026-09-12T13:24:22Z", "event": "claim", "actor": "hq", "subject": "#10", "detail": "tools/ledger.py transition-sequence check + SKILL.md 11 rule; acceptance widened to the claim leg"}
 {"n": 18, "ts": "2026-09-12T13:24:23Z", "event": "claim", "actor": "hq", "subject": "#11", "detail": "rule on the lane that owns repo implementation; SKILL.md 3 lane table and bullet"}
 {"n": 19, "ts": "2026-09-12T13:24:23Z", "event": "claim", "actor": "hq", "subject": "#12", "detail": "repair the fragmented Entries table; add the contiguity assertion and its self-probe"}
+{"n": 20, "ts": "2026-09-12T13:26:43Z", "event": "close", "actor": "hq", "subject": "#10", "detail": "closed by 5538eed+5bf29a0; sequence gate rc=0, four shapes probed, acceptance widened to the claim leg"}
+{"n": 21, "ts": "2026-09-12T13:26:44Z", "event": "close", "actor": "hq", "subject": "#11", "detail": "closed by 68f7512; SKILL.md 3 lane table and bullet give HQ repo implementation for this factory's own repo"}
+{"n": 22, "ts": "2026-09-12T13:26:45Z", "event": "close", "actor": "hq", "subject": "#12", "detail": "closed by eddb82f+5bf29a0; contiguity assertion and re-insertion probe; table repaired; stale rates recomputed"}
