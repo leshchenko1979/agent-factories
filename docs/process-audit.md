@@ -1,7 +1,11 @@
 # The process register — a law needs the processes that uphold it
 
 **Status: proposed, not law.** Nothing in this file is in force. It is written
-from an owner question of 2026-09-12 and waits on the owner's ruling.
+from an owner question of 2026-09-12. The owner ruled on **three** of its five
+open questions that same day, so those three are decisions and the other two are
+still open. The register itself is not yet written — it is the next piece of
+work, and it now has to be written the way the rulings say rather than the way
+§4.3 first proposed.
 
 > *"A law needs to have processes that uphold it, and most probably also an
 > auditor of those processes. It's the auditor who decides whether the factory
@@ -101,21 +105,27 @@ and has never been used; the others need one more event type (`run`) in the
 closed set. A missed cadence then becomes **visible as a gap in the sequence**,
 which is what the ledger gate was built to read.
 
-### 4.3 The verdict — self-score stays the engine, the band moves
+### 4.3 The verdict — two bands, not one
 
-Today the factory scores itself *and* the band follows its own score. The
-question says the audit decides efficiency. Both can hold if the two jobs are
-split:
+**Ruled 2026-09-12: both parties keep their own band.** The factory's own score
+carries the factory's band; the `Surveys` lane scores independently and carries
+its own. Neither reading replaces the other — and a disagreement between them is
+itself the finding, because it means the factory's picture of itself and the
+outside reading of it have drifted apart.
 
-| Job | Who | Cadence | Output |
+| Reading | Who | Cadence | Output |
 |---|---|---|---|
-| Self-score | the factory | continuous / daily | the improvement trigger — gaps become work |
-| The band | the `Surveys` lane | periodic | the verdict on efficiency |
+| Self-score, self-band | the factory | continuous / daily | the improvement trigger — gaps become work |
+| The audit, its own band | the `Surveys` lane | periodic | the outside verdict on efficiency |
 
-A score is a measurement and a factory may take its own. A **band** is a verdict,
-and a verdict issued by the party being judged is not one. This keeps the owner's
-2026-09-11 ruling — self-judgment is the engine of self-improvement — and adds
-the audit on top rather than replacing it.
+This keeps the owner's 2026-09-11 ruling — self-judgment is the engine of
+self-improvement — and adds the audit on top rather than replacing it.
+
+The first draft of this section proposed *moving* the band to `Surveys`, on the
+argument that a verdict issued by the party being judged is not a verdict. The
+ruling is the other shape, and it is the better one for a reason the draft
+missed: moving the band would have deleted the factory's own reading, and with
+it the only signal that fires self-improvement without waiting for an audit.
 
 ### 4.4 The audit is itself a process
 
@@ -136,13 +146,28 @@ the audit is not a special case, it is the same mechanism read one level up.
 
 ---
 
-## 6. Open questions for the owner
+## 6. The five questions, and what was ruled
 
-1. **The band** — does it become the `Surveys` lane's verdict, or does the
-   factory keep assigning its own?
-2. **Who audits this factory's own processes** — its own `Surveys` lane, or a
-   peer factory's?
-3. **Does the register ship in the template**, so every factory inherits it, or
-   is it meta-factory-only?
-4. **A missed cadence** — does it block the score, or is it reported alongside it?
-5. **The unenforced second banned table** (§3) — enforce it, or delete it?
+The owner answered three of the five on 2026-09-12, in one line each. Those three
+are now decisions this file has to be read against; the other two are still open.
+
+| # | Question | Ruling |
+|---|---|---|
+| 1 | **The band** — does it become the `Surveys` lane's verdict, or does the factory keep assigning its own? | **Both have their own bands** |
+| 2 | **Who audits this factory's own processes** — its own `Surveys` lane, or a peer factory's? | **Its own, plus the meta-factory** |
+| 3 | **Does the register ship in the template**, so every factory inherits it, or is it meta-factory-only? | **It ships** |
+| 4 | **A missed cadence** — does it block the score, or is it reported alongside it? | *open* |
+| 5 | **The unenforced second banned table** (§3) — enforce it, or delete it? | *open* |
+
+Two consequences follow from the rulings, and both change what gets built:
+
+- **Ruling 3 makes the register a template artifact.** It is not a meta-factory
+  convenience; every bootstrapped factory inherits it, so its rows may not name
+  this factory's own lanes and its text may not leak the harness.
+- **Ruling 1 makes §4.3 a two-column reading**, not a handover: the register must
+  carry a band for the factory and a band for the audit, and the register's own
+  audit line names both auditors from ruling 2.
+
+Question 4 still shapes the register — a cadence is only meaningful once it is
+known what a miss does — so the register waits on it. Question 5 is independent
+of the register and can be settled on its own.
