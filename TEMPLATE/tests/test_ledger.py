@@ -8,9 +8,9 @@ That is a property of the code, and a property nobody tests is a hope.
 It holds a second property too: a subject that reaches `close` must have been
 filed (`intake`) and taken (`claim`) before it. Both are tested here.
 
-This runs the probes against throwaway ledgers (`OC_LEDGER_PATH`), never the
-real one: a test that writes the live state surface is how a probe becomes
-permanent corruption.
+This runs the probes against throwaway ledgers (`OC_LEDGER_PATH`) and throwaway
+actor declarations (`OC_ACTORS_PATH`), never the live ones: a test that writes
+the real state surface is how a probe becomes permanent corruption.
 
 Run:  python3 tests/test_ledger.py
 Exit: 0 all checks pass, 1 a check failed.
@@ -35,8 +35,15 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     if not ok:
         failures.append(name)
 
-def run(ledger: Path, *args: str) -> subprocess.CompletedProcess:
+def run(ledger: Path, *args: str, actors: Path | None = None) -> subprocess.CompletedProcess:
+    """Run the tool against a throwaway ledger.
+
+    `OC_ACTORS_PATH` is pinned to a throwaway path as well unless a probe brings
+    its own. Without that pin a probe would read the live `tools/actors.txt` and
+    pass or fail on this factory's own declared lanes instead of on the code.
+    """
     env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
+    env["OC_ACTORS_PATH"] = str(actors if actors is not None else ledger.parent / "no-actors.txt")
     return subprocess.run(
         [sys.executable, str(TOOL), *args],
         capture_output=True,
@@ -124,6 +131,33 @@ def main() -> int:
         r = run(ledger, "append", "--event", "ruling", "--actor", "nobody",
                 "--subject", "x", "--detail", "y")
         check("unknown actor is refused", r.returncode != 0, r.stderr.strip()[:60])
+
+        print("\nthe actor set — the core roles, plus what the factory declares")
+        # The template ships four role cards; a factory whose law names a lane
+        # beyond them declares it in tools/actors.txt. A lane that cannot be
+        # declared cannot record its rows, so a shipped role the gate rejects —
+        # or an undeclared lane it accepts — is a defect in the gate.
+        act = Path(tmp) / "actors.jsonl"
+        declared = Path(tmp) / "actors.txt"
+
+        r = run(act, "append", "--event", "claim", "--actor", "worker",
+                "--subject", "x", "--detail", "a shipped role")
+        check("a role the template ships is accepted", r.returncode == 0,
+              r.stderr.strip()[:60])
+
+        r = run(act, "append", "--event", "claim", "--actor", "delegate",
+                "--subject", "x", "--detail", "not declared here")
+        check("a lane this factory has not declared is refused",
+              r.returncode != 0, r.stderr.strip()[:60])
+
+        declared.write_text("delegate\n", encoding="utf-8")
+        r = run(act, "append", "--event", "claim", "--actor", "delegate",
+                "--subject", "x", "--detail", "declared", actors=declared)
+        check("a declared lane is accepted", r.returncode == 0, r.stderr.strip()[:60])
+
+        r = run(act, "verify", actors=declared)
+        check("verify accepts a row written by a declared lane",
+              r.returncode == 0, r.stdout.strip().splitlines()[0] if r.stdout else "")
 
         print("\ncorruption is detected, not tolerated")
         with open(ledger, "a") as fh:

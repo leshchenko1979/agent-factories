@@ -56,7 +56,29 @@ LOCK = LEDGER.parent / ".ledger.lock"
 # intake    an issue filed
 # genesis   the surface came into existence
 EVENTS = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling")
-ACTORS = ("hq", "triage", "surveys", "delegate", "owner")
+
+# The closed set of actors — the roles a factory's law names as lanes. A role
+# that is not listed cannot write a row, so adding one is a law change, never a
+# convenience. The core set is exactly the roles this template ships cards for
+# (`roles/`), plus `owner`, who directs without being a lane. A factory whose
+# law names a lane the core set does not have — a meta-factory's member-comms
+# lane, say — declares it in `tools/actors.txt`, one role per line. It lives
+# there and not here because this file is copied byte-identically into every
+# factory: a lane that only one factory has cannot sit in a constant that must
+# match everywhere.
+ACTORS = ("hq", "triage", "worker", "carrier", "owner")
+ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", Path(__file__).with_name("actors.txt")))
+
+
+def known_actors() -> tuple[str, ...]:
+    """The core actors, plus any this factory declares in `tools/actors.txt`."""
+    extra: list[str] = []
+    if ACTORS_FILE.exists():
+        for line in ACTORS_FILE.read_text(encoding="utf-8").splitlines():
+            role = line.split("#", 1)[0].strip()
+            if role:
+                extra.append(role)
+    return ACTORS + tuple(role for role in extra if role not in ACTORS)
 
 # Closes written before the sequence check existed, keyed by (subject, leg).
 # An exemption is a dated, attributed admission, never a convenience: it may
@@ -93,8 +115,8 @@ def read_rows(path: Path) -> list[dict]:
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
-    if args.actor not in ACTORS:
-        sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(ACTORS)}")
+    if args.actor not in known_actors():
+        sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
 
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
     # The lock is what makes this the single writer. Read-last + write-next
@@ -143,7 +165,7 @@ def cmd_verify(_: argparse.Namespace) -> int:
             problems.append(f"line {i}: n={row.get('n')} — row numbers must be 1..N with no gaps")
         if row.get("event") not in EVENTS:
             problems.append(f"line {i}: unknown event {row.get('event')!r}")
-        if row.get("actor") not in ACTORS:
+        if row.get("actor") not in known_actors():
             problems.append(f"line {i}: unknown actor {row.get('actor')!r}")
         for field in ("ts", "subject", "detail"):
             if not row.get(field):

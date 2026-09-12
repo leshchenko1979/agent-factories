@@ -1,0 +1,12 @@
+# Lanes this factory's law names that the template's core set does not have.
+# One role per line; `#` starts a comment.
+#
+# The core set in tools/ledger.py is the four role cards the template ships
+# (`hq`, `triage`, `worker`, `carrier`) plus `owner`. `delegate` and `surveys`
+# are this factory's own lanes — the meta-factory converses with member HQs and
+# measures factories, and neither is a role a bootstrapped factory has. They are
+# declared here rather than in the constant because tools/ledger.py is copied
+# byte-identically into the template, and a lane only this factory has cannot
+# live in a constant that must match everywhere.
+delegate
+surveys
