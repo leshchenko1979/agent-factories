@@ -182,6 +182,36 @@ enforcement is deferred and why.
 
 ---
 
+## Step 4b — Stand up the state surface
+
+Copy [`tools/ledger.py`](tools/ledger.py) and
+[`tests/test_ledger.py`](tests/test_ledger.py), create `evidence/ledger.jsonl`,
+and write the genesis row:
+
+```sh
+python3 tools/ledger.py append --event genesis --actor hq \
+  --subject evidence/ledger.jsonl --detail "state surface created"
+python3 tools/ledger.py verify
+python3 tests/test_ledger.py
+```
+
+**Why this is a step and not a habit.** State kept only in chat is a memory of a
+conversation: it survives exactly as long as the context does. The ledger is the
+durable record, and `tools/ledger.py` is its **only** append path — the lock is
+what stops two lanes from both writing row 41. That is the defect that makes
+every count taken from the file wrong from then on, while both writers still
+look correct in isolation.
+
+**Name the writer for every surface you add.** §13 of the law carries the table;
+fill it in when you add a surface, not after. A surface with no named writer is
+one that will acquire two.
+
+**Evidence:** `python3 tools/ledger.py verify` exiting 0, and
+`python3 tests/test_ledger.py` passing — the second is what makes the
+single-writer claim *tested* rather than asserted.
+
+---
+
 ## Step 5 — Wire the board
 
 File the first issues on `{{REPO}}`, using title prefixes that encode kind

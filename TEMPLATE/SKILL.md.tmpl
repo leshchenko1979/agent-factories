@@ -214,7 +214,36 @@ template law it implies.
 
 ---
 
-## 13. Add-ons in force
+## 13. State — every surface has one writer
+
+State that lives only in chat is not state. It is a memory of a conversation,
+and it survives exactly as long as the context does. Every durable fact lives in
+the repo, on a surface with **one named writer**; every other path to it is
+read-only.
+
+| Surface | Holds | Authoritative writer | Everyone else |
+|---|---|---|---|
+| `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling | `tools/ledger.py append` | `tail`, `verify` — read-only |
+| `evidence/scores/<date>.md` | one measurement run, one file per run | the measurement job | read-only |
+| `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated |
+| this law | the process rules | `HQ` | read-only |
+
+**Single-writer is a mechanism, not a habit.** An append-only surface with two
+writers is the hardest defect here to notice, because each writer looks correct
+in isolation: both read the same last row, both write `n+1`, and every count
+taken from the file is wrong from then on — in a way that looks fine.
+`tools/ledger.py` takes an exclusive lock and computes the next row number
+*inside* it, so the collision cannot happen. Ship its test with it.
+
+**Declare the writer for every surface you add.** A surface with no named writer
+is a surface that will acquire two.
+
+**An append-only surface with no reader is a write-only memory.** Ship the read
+path with the write path — the ledger is what a state claim is checked against.
+
+---
+
+## 14. Add-ons in force
 
 | Class | Pack | Why |
 |---|---|---|
@@ -227,19 +256,21 @@ when the pack is genuinely no longer taken.
 
 ---
 
-## 14. Gates
+## 15. Gates
 
 Where a check can be a command, it is a command with a documented return code.
 
 | Gate | Command | Passing |
 |---|---|---|
+| Ledger integrity | `python3 tools/ledger.py verify` | exit 0 |
+| Vocabulary | `python3 tests/test_ontology.py` | exit 0 |
 | {{GATE}} | `{{COMMAND}}` | `{{RC}}` |
 
 Human judgment is reserved for the part a command cannot decide.
 
 ---
 
-## 15. Boundaries
+## 16. Boundaries
 
 What this factory **owns**, what it **consumes**, and how it talks to each
 neighbour. An unnamed boundary defaults to the most expensive interaction mode,
@@ -261,7 +292,7 @@ factory's own work undone.
 
 ---
 
-## 16. Reporting language
+## 17. Reporting language
 
 Reports to the operator are written in **plain language**. Every criterion,
 rule and role in this file has a plain name, and that name is what a report
@@ -277,7 +308,7 @@ vocabulary to speak in.
 
 ---
 
-## 17. Where this factory's rules live
+## 18. Where this factory's rules live
 
 The harness has an **always-loaded workspace brain** — a file such as
 `AGENTS.md` that *every* session on that profile reads, including sessions
