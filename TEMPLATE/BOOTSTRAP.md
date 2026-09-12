@@ -166,6 +166,17 @@ Then enforce it — a test that fails the build when the code uses a banned
 synonym. An ontology nobody can violate is documentation; an ontology a test
 enforces is law.
 
+Write the gate so it **parses the banned-synonyms table** rather than repeating
+the list in code: with the table as the source of truth, adding a row is what
+enforces it, and the ban list cannot drift from the check. Exempt a historical
+mention by `(path, substring)` — the line must also contain a justifying
+substring — so a rename record can still name the old word without opening the
+whole repo to it.
+
+Run the gate before the initial commit and **fix what it finds**: the first run
+is what proves the ban list describes words people actually use, rather than
+aspirations nobody typed.
+
 **Evidence:** the test command and its passing result, or an explicit note that
 enforcement is deferred and why.
 

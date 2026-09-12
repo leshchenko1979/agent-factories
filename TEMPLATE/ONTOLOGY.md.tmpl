@@ -55,6 +55,17 @@ handover that means two different things to two people.
 
 **Status:** {{ENFORCEMENT_STATUS}}
 
+**Make the table the source of truth.** Write the gate so it *parses* this
+file's banned-synonyms table instead of repeating the list in code. Two copies
+of a ban list drift apart, and the copy nobody reads is the one that is wrong.
+With the table parsed, adding a row here is what enforces it — no second edit.
+
+**An exemption is a `(path, substring)` pair.** Historical mentions are real:
+a rename record has to name the old word, and dated evidence quotes it. Exempt
+the *line* that also contains a justifying substring, never the word
+everywhere — so the mention stays visible and is justified where it appears,
+rather than silently tolerated across the repo.
+
 <!--
 If enforcement is not yet automated, say so explicitly and name what would
 prove it. An ontology nobody can violate is documentation; an ontology a test
@@ -71,6 +82,7 @@ enforces is law. Do not claim the second while shipping the first.
 | Closed place | `<State> — #N <title>` | `Done — #14 rank basis undocumented` |
 | Issue | `<prefix>: <statement>` | `probe: rank basis is undocumented` |
 | Decision record | `NNNN-<slug>` | `0003-authoritative-state-writer` |
+| Score record | `evidence/scores/YYYY-MM-DD.md` | `evidence/scores/2026-09-12.md` |
 
 Rename on close; never re-create. A work unit's address is stable across
 renames, which is what scheduled deliveries point at.
