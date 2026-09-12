@@ -229,10 +229,10 @@ pass, and verify by reading the delivery table back.
   cannot be derived from its position in a list. Create named places serially if
   you want ordered addresses; read them back either way, never predict them.
 
-## P19 — Boundaries are named, and the meta-layer advises rather than executes
+## P19 — Boundaries are named, and the meta-factory advises rather than executes
 
 Every factory states what it **owns**, what it **consumes**, and how it talks
-to each neighbour. A factory whose output is other factories — a meta-layer, a
+to each neighbour. A factory whose output is other factories — a meta-factory, a
 platform team, a template repo — **converses with a member factory's HQ or its
 delegate, and never does that factory's work**.
 
@@ -241,7 +241,7 @@ delegate, and never does that factory's work**.
   run their tests; it talks to their HQs.
 - *Prevents:* the failure that looks like helpfulness. Doing a member's work
   duplicates a lane, bypasses the member's own process law, and leaves the
-  meta-layer's own work undone. The member also learns nothing, because the
+  meta-factory's own work undone. The member also learns nothing, because the
   work appeared without its process producing it.
 - *Corollary:* an unnamed boundary defaults to the most expensive interaction
   mode. Say which relationship it is — service, collaboration, or facilitation.

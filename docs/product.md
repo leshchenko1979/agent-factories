@@ -14,7 +14,7 @@ operator re-deriving any of the decisions.
 
 ## What this project does and does not concern itself with
 
-This is the meta-layer. Its subject is **the factory as a machine** — how
+This is a meta-factory. Its subject is **the factory as a machine** — how
 effective it is, how healthy it is, and which laws hold for every factory of a
 given shape.
 
@@ -30,8 +30,8 @@ They belong to that factory's own `HQ`, which has the context to decide them.
 This project talks to a member factory's HQ or that HQ's delegate — it never
 does a member's work, and it never files a member's issues.
 
-That boundary is not politeness. A meta-layer that absorbs domain detail stops
-being a meta-layer: it becomes a second, worse `HQ` for every factory at once,
+That boundary is not politeness. A meta-factory that absorbs domain detail stops
+being a meta-factory: it becomes a second, worse `HQ` for every factory at once,
 and its own output — the laws — goes unwritten.
 
 ---
