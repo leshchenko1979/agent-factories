@@ -48,6 +48,74 @@ Rules for a good entry:
 - Terms that only appear in code go in the code's own glossary, not here.
 -->
 
+### The shape
+
+The terms above are not a list, they are a graph. This is that graph: what a
+factory is made of, and who does what to whom.
+
+```mermaid
+classDiagram
+    class Factory
+    class MetaFactory
+    class MemberFactory
+    class Owner
+    class Lane
+    class HQ
+    class Delegate
+    class Triage
+    class Surveys
+    class WorkUnit
+    class Surface
+    class Binding
+    class AddOn
+    class Law
+    class Rubric
+    class Score
+    class Band
+    class Receipt
+    class Evidence
+    class Subagent
+
+    Factory <|-- MetaFactory
+    Factory <|-- MemberFactory
+    MetaFactory "1" --> "*" MemberFactory : surveys
+    Owner "1" --> "*" Factory : approves and directs
+    Factory "1" *-- "1" Law : is governed by
+    Factory "1" *-- "1" Surface : runs on
+    Factory "1" *-- "1..*" Lane : runs
+    Factory "1" *-- "*" WorkUnit : issue board
+    Surface "1" --> "1" Binding : is named by
+    AddOn <|-- Binding
+    Lane <|-- HQ
+    Lane <|-- Delegate
+    Lane <|-- Triage
+    Lane <|-- Surveys
+    HQ --> Law : authors
+    Triage --> WorkUnit : turns findings into
+    Surveys --> Rubric : measures against
+    Surveys --> Score : produces
+    Score --> Factory : rates
+    Score --> Band : falls into
+    WorkUnit --> Receipt : closed with
+    Receipt --> Evidence : written into
+    Subagent ..> Lane : never a lane
+```
+
+Class names are the canonical terms written as one word: `MetaFactory` is
+`meta-factory`, `WorkUnit` is `work unit`, `AddOn` is `add-on`. Three edges
+carry the load:
+
+- **`Factory <|-- MetaFactory` and `Factory <|-- MemberFactory`** — both are
+  factories. They differ in what they produce, not in what they are made of.
+- **`AddOn <|-- Binding`** — every binding is an add-on; not every add-on is a
+  binding.
+- **`Subagent ..> Lane : never a lane`** — the dashed edge *is* the constraint.
+  A subagent has no named place and does not persist, which is exactly what a
+  lane is.
+
+`Owner` sits outside `Lane` deliberately: this file says the owner is not a lane
+and not a role, so the diagram may not draw one.
+
 ### Terms that are not synonyms
 
 Three pairs look interchangeable and are not. Conflating them is how work gets
