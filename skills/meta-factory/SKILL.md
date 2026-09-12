@@ -263,8 +263,9 @@ Two properties make the log worth keeping, and both are easy to lose:
 
 `tests/test_rework.py` gates it: an incomplete row or a placeholder fails the build.
 
-**The first readings are uninformative, and that is expected.** This factory opened with
-two closes against eight rework entries — a rework share of 80%, which is what any factory
+**The first readings are uninformative, and that is expected.** This factory
+opened with three closes against ten rework entries — a rework share of 77%,
+which is what any factory
 looks like before its gates exist. The number is not alarming; it carries no signal until
 the gates have had time to bite. Report it as a direction, not a verdict.
 
