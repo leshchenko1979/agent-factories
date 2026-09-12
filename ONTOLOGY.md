@@ -116,6 +116,217 @@ carry the load:
 `Owner` sits outside `Lane` deliberately: this file says the owner is not a lane
 and not a role, so the diagram may not draw one.
 
+### The classes and what they carry
+
+The shape above says what is a kind of what. These two say what each kind
+**holds** and what it **does**: a line without parentheses is state an object
+carries, a line with parentheses is a duty it performs.
+
+**The factory and its people.**
+
+```mermaid
+classDiagram
+    class Factory {
+        +string name
+        +string roles
+        +string lawVersion
+        +bootstrap()
+        +score()
+    }
+    class MetaFactory {
+        +survey()
+        +template()
+    }
+    class MemberFactory {
+        +selfScore()
+    }
+    class Owner {
+        +string name
+        +approve()
+        +direct()
+    }
+    class Lane {
+        +string place
+        +string session
+        +reload()
+    }
+    class HQ {
+        +rule()
+        +dispatch()
+        +authorLaw()
+        +gate()
+    }
+    class Triage {
+        +intake()
+        +assign()
+        +watch()
+        +close()
+    }
+    class Surveys {
+        +measure()
+        +band()
+        +audit()
+    }
+    class Delegate {
+        +converse()
+    }
+    class Subagent {
+        +finish()
+    }
+
+    Factory <|-- MetaFactory
+    Factory <|-- MemberFactory
+    Owner --> Factory : approves and directs
+    Factory *-- Lane
+    Lane <|-- HQ
+    Lane <|-- Triage
+    Lane <|-- Surveys
+    Lane <|-- Delegate
+    Subagent ..> Lane : never a lane
+```
+
+**The work and its record.**
+
+```mermaid
+classDiagram
+    class WorkUnit {
+        +int number
+        +string state
+        +list doneCriteria
+        +open()
+        +close()
+    }
+    class Receipt {
+        +string turn
+        +string output
+        +prove()
+    }
+    class Evidence {
+        +string path
+        +string date
+        +record()
+    }
+    class Law {
+        +string version
+        +state()
+    }
+    class Rubric {
+        +list criteria
+        +measure()
+    }
+    class Score {
+        +string date
+        +int value
+        +band()
+    }
+    class Band {
+        +string label
+        +string range
+    }
+    class Surface {
+        +string product
+        +deliver()
+    }
+    class Binding {
+        +string substrate
+        +name()
+    }
+
+    WorkUnit --> Receipt : closes with
+    Receipt --> Evidence : written into
+    Rubric --> Score : rates with
+    Score --> Band : reads as
+    Law ..> WorkUnit : governs
+    Surface --> Binding : is named by
+```
+
+A class with no members is still a class. `Subagent` holds nothing and has one
+duty — to finish — which is exactly why it can never be a lane.
+
+### The objects
+
+The classes above are kinds. These are the objects: this factory's live
+instances of them. A class is what a thing is; an object is the thing.
+
+| Object | Its class | What it is |
+|---|---|---|
+| Alexey | `Owner` | the human who approves and directs |
+| agent-factories | `MetaFactory` | this repo — the factory whose output is factories |
+| the four surveyed factories | `MemberFactory` | the factories this one surveys |
+| the HQ topic | `HQ` | the lane that rules, dispatches and authors law |
+| the Triage topic | `Triage` | the lane that files work and watches it run |
+| the Surveys topic | `Surveys` | the lane that measures and audits |
+| the Delegate topic | `Delegate` | the lane that converses with member HQs |
+| the Factories chat | `Surface` | the place this factory runs in |
+| the binding in force | `Binding` | the mechanics that name that place |
+| issues #6 to #12 | `WorkUnit` | the work units this factory has run |
+| `skills/meta-factory/SKILL.md` | `Law` | the process law, versioned in git |
+| `docs/quality-criteria.md` | `Rubric` | the 13 criteria and the scale |
+| 2026-09-12, 14 of 52 | `Score` | the latest reading of this factory |
+| Operational | `Band` | the label that score falls into |
+| `evidence/ledger.jsonl` | `Evidence` | where state transitions are written |
+| `evidence/rework.md` | `Evidence` | where defects and their prevention are written |
+
+`Subagent` has no object in this table, and that is the point: a subagent does
+not persist, so there is nothing to list. An id recorded as a lane is a defect
+this table would have caught.
+
+### Participants, duties and owners
+
+An **owner** is the one party accountable for a thing. It is not always a lane:
+the owner of the factory's direction is the human.
+
+| Participant | Owns | Duties | Does not do |
+|---|---|---|---|
+| **Owner** | the direction | approves, directs, rules on policy | is not a lane and not a role |
+| **HQ** | the process | rules, dispatches, authors the law, runs the gates | implements a member's work, or work it has already dispatched |
+| **Triage** | intake and routing | files work units, checks claims, assigns, watches execution, closes, records rework | decides direction; implements |
+| **Surveys** | measurement | runs the measurement, reads the band, audits the processes | adjudicates a member's product decisions |
+| **Delegate** | member conversation | converses with member HQs and their delegates | does a member's work |
+| **Worker** *(template card)* | one work unit | executes, verifies, reports | closes its own place; widens scope |
+| **Carrier** *(template card)* | the ship chain | merges, verifies the artifact, records the ship, rolls back | decides whether the change was right |
+
+This factory runs no `Worker` and no `Carrier` lane: with `ROLES` set to `HQ`
+alone there is no lane to delegate to, so HQ implements its own repo. The two
+rows are the template's cards, not this factory's lanes.
+
+### The processes
+
+The model above is what the factory is made of. This is what it **does** — the
+recurring acts that keep its properties true. A property is a state; a process
+is the act that holds the state up, and only the second one can silently stop.
+
+```mermaid
+flowchart TD
+    A["A finding, an alert, a score gap"] --> B["Triage: intake<br/>file a work unit"]
+    B --> C["Triage: assign<br/>check the claim, brief the lane"]
+    C --> D["Lane: execute<br/>work, with receipts"]
+    D --> E["HQ: gate<br/>rule on the receipt"]
+    E --> F["Triage: close<br/>verify the done-criteria"]
+    F --> G["Triage: record rework<br/>if the close resolved a defect"]
+    G --> H["Surveys: measure<br/>score against the rubric"]
+    H --> I["Surveys: audit<br/>did each process run at its cadence"]
+    I -->|a process stopped| B
+    I -->|all ran| J["The band stands"]
+```
+
+| Process | Owner | What it upholds | What a run leaves behind |
+|---|---|---|---|
+| The four gates | HQ | verification depth, vocabulary conformance, single-writer state | an exit code and its output |
+| Intake | Triage | specification clarity | a work unit with a goal, an owner and done-criteria |
+| Assignment | Triage | coordination integrity | a claim row, and a brief delivered to the lane |
+| Execution watchdog | Triage | coordination integrity | an escalation, or nothing to report |
+| Rework entry | Triage | the improvement loop | an entry in `evidence/rework.md` |
+| The ship chain | Carrier | recoverability | the ship record: version, commit, artifact identity |
+| Daily measurement | Surveys | the rubric — throughput, stability, cost | `evidence/scores/<date>.md` |
+| The process audit | Surveys, and the meta-factory | law freshness, the improvement loop | **proposed** — the register is not written yet |
+
+Every process above has a named owner and leaves a trace, except the last one.
+The audit of the processes themselves is proposed in `docs/process-audit.md`;
+the owner ruled on three of its five open calls on 2026-09-12 — the factory's
+own `Surveys` lane audits it, the meta-factory audits the factory, and both
+keep their own band — and the register itself is not yet written.
+
 ### Terms that are not synonyms
 
 Three pairs look interchangeable and are not. Conflating them is how work gets
