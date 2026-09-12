@@ -5,7 +5,10 @@ The claim in SKILL.md is that `tools/ledger.py` is the *sole* writer for
 `evidence/ledger.jsonl`, so concurrent lanes cannot collide on a row number.
 That is a property of the code, and a property nobody tests is a hope.
 
-This runs the probe against a throwaway ledger (`OC_LEDGER_PATH`), never the
+It holds a second property too: a subject that reaches `close` must have been
+filed (`intake`) and taken (`claim`) before it. Both are tested here.
+
+This runs the probes against throwaway ledgers (`OC_LEDGER_PATH`), never the
 real one: a test that writes the live state surface is how a probe becomes
 permanent corruption.
 
@@ -27,12 +30,10 @@ TOOL = REPO / "tools" / "ledger.py"
 
 failures: list[str] = []
 
-
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f" — {detail}" if detail else ""))
     if not ok:
         failures.append(name)
-
 
 def run(ledger: Path, *args: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
@@ -43,12 +44,35 @@ def run(ledger: Path, *args: str) -> subprocess.CompletedProcess:
         env=env,
     )
 
-
 def rows(ledger: Path) -> list[dict]:
     if not ledger.exists():
         return []
     return [json.loads(line) for line in ledger.read_text().splitlines() if line.strip()]
 
+def write_ledger(path: Path, *events: tuple[str, str]) -> None:
+    """Write an explicit ledger from (event, subject) pairs, numbered 1..N.
+
+    Every row carries a known event and actor and a contiguous `n`, so the only
+    thing a probe can trip is the sequence leg — a probe that could fail for two
+    reasons proves neither.
+    """
+    path.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "n": i,
+                    "ts": "2026-09-12T00:00:00Z",
+                    "event": event,
+                    "actor": "hq",
+                    "subject": subject,
+                    "detail": "probe",
+                }
+            )
+            for i, (event, subject) in enumerate(events, 1)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
@@ -110,6 +134,29 @@ def main() -> int:
         check("verify exits 1 on a gap in row numbers", r.returncode == 1,
               r.stdout.strip().splitlines()[0] if r.stdout else "")
 
+        print("\nthe transition sequence — a close needs its legs")
+        # A ledger can be perfectly numbered and still say that something was
+        # closed without ever saying who took it. That is the shape this
+        # catches, and it is why a row count is not an integrity check.
+        seq = Path(tmp) / "seq.jsonl"
+
+        def seq_case(name: str, events: tuple[tuple[str, str], ...],
+                     want_rc: int, want: tuple[str, ...]) -> None:
+            write_ledger(seq, *events)
+            r = run(seq, "verify")
+            ok = r.returncode == want_rc and all(s in r.stdout for s in want)
+            lines = r.stdout.strip().splitlines()
+            check(name, ok, lines[1].strip() if len(lines) > 1 else (lines[0] if lines else ""))
+
+        seq_case("P1 close with no intake is refused",
+                 (("close", "#1"),), 1, ("#1", "intake"))
+        seq_case("P2 close with no claim is refused",
+                 (("intake", "#2"), ("close", "#2")), 1, ("#2", "claim"))
+        seq_case("P3 a full sequence passes",
+                 (("intake", "#3"), ("claim", "#3"), ("close", "#3")), 0, ())
+        seq_case("P4 a claim before its intake is refused",
+                 (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 1, ("#4", "precedes"))
+
     print()
     if failures:
         print(f"ledger gate FAILED: {len(failures)} check(s)")
@@ -118,7 +165,6 @@ def main() -> int:
         return 1
     print("ledger gate passed")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
