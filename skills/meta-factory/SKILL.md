@@ -211,7 +211,40 @@ several, or none.
 
 ---
 
-## 11. Boundaries
+## 11. State — every surface has one writer
+
+State that lives only in chat is not state. It is a memory of a conversation, and it
+survives exactly as long as the context does. Every durable fact therefore lives in the
+repo, on a surface with **one named writer**. Every other path to it is read-only.
+
+| Surface | Holds | Authoritative writer | Everyone else |
+|---|---|---|---|
+| `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling | `tools/ledger.py append` | `tail`, `verify` — read-only |
+| `evidence/scores/<date>.md` | one measurement run, one file per run | the daily measurement job (`Surveys`) | read-only |
+| `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
+| `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
+| `skills/meta-factory/SKILL.md` | this law | `HQ` | read-only |
+
+**Single-writer is a mechanism, not a habit.** The ledger has exactly one append path
+because concurrent writers would each read the same last row and each write `n+1` — the
+file silently gains two row 41s, and every count taken from it is wrong from then on in a
+way that looks fine. `tools/ledger.py` takes an exclusive lock, computes the next row
+number *inside* it, and fsyncs before releasing. `tests/test_ledger.py` runs twenty
+concurrent appends and asserts the row numbers are still `1..N`: the property is tested,
+not asserted.
+
+**What this does not give you.** The ledger is append-only by construction — the tool has
+no rewrite command — but it is still a file, and a file can be edited. That is what
+version control is for: a rewrite shows up as a diff, and the history is the audit. The
+guarantee is *one append path*, not *tamper-proof*.
+
+**An append-only surface with no reader is a write-only memory.** `tools/ledger.py tail`
+is the read path. When a lane's state is in question, the ledger is what it is checked
+against.
+
+---
+
+## 12. Boundaries
 
 | Neighbour | Mode | What crosses |
 |---|---|---|
