@@ -50,6 +50,13 @@ EXEMPTIONS: list[tuple[str, str, str]] = [
         "renamed",
         "dated survey evidence of the pre-rename state",
     ),
+    (
+        "evidence/rework.md",
+        "`meta-layer`",
+        "the rework log records defects that WERE vocabulary drift; the banned "
+        "term appears backticked as the quoted term of art, and rewriting it "
+        "would delete the evidence that the defect happened.",
+    ),
 ]
 
 

@@ -26,6 +26,7 @@ PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
     ("tests/test_ontology.py", "TEMPLATE/tests/test_ontology.py"),
     ("tests/test_ledger.py", "TEMPLATE/tests/test_ledger.py"),
+    ("tests/test_rework.py", "TEMPLATE/tests/test_rework.py"),
 ]
 
 
