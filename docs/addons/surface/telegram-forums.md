@@ -202,6 +202,78 @@ to confirm zero rows remained on the unthreaded target.
 
 ---
 
+## Decommissioning a place
+
+A place outlives its usefulness. Any factory's chat map accumulates: a group
+superseded by a forum, a forum whose factory moved elsewhere, a group created
+during a migration and never removed. The rule is that **a stale place is
+retired deliberately and the retirement is recorded** — because a place that
+still exists and still has a binding is a place a delivery can still land in.
+
+### Is it actually stale?
+
+Three signals, all read from live state. None of them can be answered from a
+written record, because a record is a claim about the past:
+
+| Signal | Where it is read |
+|---|---|
+| Nothing delivers to it | the delivery table (`cron_manage list` or equivalent) — every row's target |
+| No live lane is bound to it | the runtime's binding table, matched on chat id |
+| Its content is superseded | the place's own last messages — is anything still being said there? |
+
+A place with zero deliveries, only dead bindings, and a last message days or
+weeks old is stale. A place with a *recent* message is not, whatever the record
+says — someone is still using it, and that is the fact that matters.
+
+### The order of operations
+
+Retiring a place is done in this order, and the order is load-bearing:
+
+1. **Find the deliveries first.** A group can be dead for conversation and still
+   be a live delivery target. Retire the place before re-pointing and the reports
+   go to a chat nobody reads.
+2. **Re-point every delivery, then re-read the table.** Not "I changed it" —
+   read the table back and confirm zero rows still name the old target.
+3. **Retire the bindings.** A binding is what routes a future message to a
+   session; retiring the group does not remove the row. This is a write to the
+   runtime's state, so it belongs to whoever owns that runtime — hand it over
+   rather than editing the state file directly.
+4. **Record the retirement** with the live facts: id, title, chat type, member
+   count, last message date, and what superseded it. The record is what stops
+   the place being re-discovered and re-litigated next survey.
+
+### A migrated group is not a twin
+
+Telegram upgrades a group to a supergroup in place: the old chat becomes a
+**migrated shell** — it keeps its id, drops to zero members, and gains a
+migration service event as its last message. The content moves to the new
+supergroup.
+
+This matters because the shell looks exactly like a duplicate place, and the
+obvious response — "we have two groups, delete the dead one" — is wrong twice
+over. The shell is not a second place; it is the same place's old identity, and
+it cannot be deleted as a duplicate. Treat it as a tombstone: leave it, and make
+sure nothing is pointed at it.
+
+**Distinguish a shell from a genuine duplicate by checking the content, not the
+name.** A shell and a real twin can share a title exactly. Read the live shape —
+`is_forum`, member count, last message — and, when in doubt, test whether the
+new group actually holds the old group's messages.
+
+### Never retire a place that is still the archive
+
+A retired work unit's topic, or a group holding a decision record, stays where
+it is. Retirement means **nothing routes to it any more**; it does not mean
+deleting the history. Delete only a place that is genuinely empty *and* points
+at nothing.
+
+*Proven:* this project's own surface, 2026-09-12 — a group recorded as a "stale
+twin forum" was a zero-member migrated shell of a chat created 79 seconds
+earlier, and the group recorded as its live twin had never held any of its
+messages. Both facts came from live reads; the record had said otherwise.
+
+---
+
 ## Reporting a defect in the surface tooling
 
 The surface tooling has owners, plural, and they are not the same owner as the

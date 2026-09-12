@@ -128,6 +128,12 @@ session for every small subtask. When fresh lane instantiation is mandatory and 
 mechanization is unavailable, the temporary workaround is to use the surface's userbot sending tool
 to post the initial inbound role line on behalf of the operator (see surface add-on notes).
 
+**Retiring a place:** the chat map will accumulate dead entries — a group
+superseded by a forum, a group left behind by a migration. A place that still
+exists and still has a binding is a place a delivery can still land in, so a
+stale place is retired deliberately and the retirement is recorded. The rules
+and the order of operations are in `topics.md` and the surface binding.
+
 **Evidence:** for each spine topic, the session id from `session_bindings`; every topic id
 read back from live state (`GetForumTopics` or equivalent) — never from the UI, never from
 the creation response alone; and the counted list of acts that still require the operator.
