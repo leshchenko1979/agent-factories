@@ -92,9 +92,10 @@ is on that surface and how the name changes.
 
 ## P6 — HQ works *on* the process, not *in* it
 
-The HQ role dispatches; it does not implement. Hands-on work goes to a
-lane. Sub-agents are reserved for **review** tasks, where fresh context without
-session bias is the whole point.
+The HQ role dispatches; it does not implement work it has dispatched. Hands-on
+work goes to a lane — unless `ROLES` is `HQ` alone, where there is no lane and
+HQ is the factory's implementer. Sub-agents are reserved for **review** tasks,
+where fresh context without session bias is the whole point.
 
 - *Proven:* inferhub-watch (delegation law, owner order).
 - *Prevents:* HQ becoming the bottleneck and the single point of
