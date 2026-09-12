@@ -34,6 +34,7 @@ defect to fix, not a synonym to tolerate.
 | `law` | A factory's versioned process rules | policy, guidelines, SOP, playbook, rules doc |
 | `rubric` | The 13 quality criteria | scorecard, checklist, matrix |
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
+| `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
 | `receipt` | Tool output, produced in the same turn, that proves a claim | proof, log, trace |
 | `evidence` | The dated file a receipt is written into | proof, receipt, log |
 | `subagent` | A one-shot spawned session with no channel binding. **Never a lane** | lane, worker |
