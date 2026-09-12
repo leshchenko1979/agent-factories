@@ -237,6 +237,16 @@ taken from the file is wrong from then on — in a way that looks fine.
 `tools/ledger.py` takes an exclusive lock and computes the next row number
 *inside* it, so the collision cannot happen. Ship its test with it.
 
+**A row count is not an integrity check.** The ledger is read as a *sequence*: a
+subject that reaches `close` must have been filed (`intake`) before it and taken
+(`claim`) after that intake, and `verify` fails naming the subject and the missing
+leg. A ledger can be perfectly numbered and still say that something was closed
+without ever saying who took it. The only exemptions are closes written before
+the gate existed, listed explicitly by subject, leg and date in `EXEMPTIONS` in
+`tools/ledger.py`, and printed as `excused:` whenever one is used — so "clean"
+and "excused" are never the same output. An exemption nobody would defend in
+that output is one that gets fixed instead.
+
 **Declare the writer for every surface you add.** A surface with no named writer
 is a surface that will acquire two.
 
@@ -270,7 +280,7 @@ Where a check can be a command, it is a command with a documented return code.
 
 | Gate | Command | Passing |
 |---|---|---|
-| Ledger integrity | `python3 tools/ledger.py verify` | exit 0 |
+| Ledger integrity | `python3 tools/ledger.py verify` | exit 0 (monotonic, sequence-complete; used exemptions printed) |
 | Vocabulary | `python3 tests/test_ontology.py` | exit 0 |
 | Rework log | `python3 tests/test_rework.py` | exit 0 |
 | {{GATE}} | `{{COMMAND}}` | `{{RC}}` |

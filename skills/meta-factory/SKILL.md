@@ -234,6 +234,19 @@ number *inside* it, and fsyncs before releasing. `tests/test_ledger.py` runs twe
 concurrent appends and asserts the row numbers are still `1..N`: the property is tested,
 not asserted.
 
+**A row count is not an integrity check.** The ledger is read as a *sequence*: a subject
+that reaches `close` must have been filed (`intake`) before it and taken (`claim`) after
+that intake, and `verify` fails naming the subject and the missing leg. A ledger can be
+perfectly numbered and still say that work was closed without ever saying who took it. Each
+missing leg is reported independently, so one pass says everything that is absent, and the
+order leg is evaluated only when both legs are present — bounded by the latest intake before
+the close, so a re-opened subject must be re-claimed. The only exemptions are closes written
+before the gate existed, listed explicitly by subject, leg and date in `EXEMPTIONS` inside
+`tools/ledger.py`, and printed as `excused:` whenever one is used, so "clean" and "excused"
+are never the same output. An exemption nobody would defend in that output is one that gets
+fixed instead. Nothing is ever backfilled: an intake row written today for work filed before
+the gate is a falsified record, not a repair.
+
 **What this does not give you.** The ledger is append-only by construction — the tool has
 no rewrite command — but it is still a file, and a file can be edited. That is what
 version control is for: a rewrite shows up as a diff, and the history is the audit. The
@@ -251,7 +264,7 @@ numerator, the ledger's `close` rows are the denominator, and both are **recompu
 each measurement run**, never recalled: a remembered rate is an impression with a decimal
 point.
 
-Two properties make the log worth keeping, and both are easy to lose:
+Three properties make the log worth keeping, and all three are easy to lose:
 
 - **`Prevented by` is the load-bearing column.** It is the only one that changes future
   behaviour — it is where a failure becomes a rule, a test or a gate. `nothing yet` is a
@@ -260,11 +273,17 @@ Two properties make the log worth keeping, and both are easy to lose:
 - **It records the process, never a person.** An entry names a mechanism that failed, not
   a lane that erred. Blame entries stop being written, and an incomplete log is worse than
   none.
+- **The entries are one contiguous table.** The log is read as a table, so a blank line
+  inside it splits the log into fragments and every row after the break renders with no
+  header above it — a broken artifact that still parses, which is why the first version of
+  the gate passed it. The gate asserts that the rows it parsed are the rows sitting under
+  one header, so a re-inserted blank line fails the build.
 
-`tests/test_rework.py` gates it: an incomplete row or a placeholder fails the build.
+`tests/test_rework.py` gates it: an incomplete row, a placeholder, or a fragmented table
+fails the build.
 
 **The first readings are uninformative, and that is expected.** This factory
-opened with three closes against ten rework entries — a rework share of 77%,
+opened with four closes against eleven rework entries — a rework share of 73%,
 which is what any factory
 looks like before its gates exist. The number is not alarming; it carries no signal until
 the gates have had time to bite. Report it as a direction, not a verdict.

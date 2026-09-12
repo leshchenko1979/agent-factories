@@ -201,6 +201,14 @@ python3 tools/ledger.py verify
 python3 tests/test_ledger.py
 ```
 
+**Clear the exemption list when you copy it.** The shipped `tools/ledger.py` is a
+byte-identical copy of the one this template was built from, so it also carries
+that factory's pre-gate `EXEMPTIONS` — closes written before the gate that
+enforces the sequence. A bootstrapped factory's ledger starts with a single
+genesis row, so set `EXEMPTIONS = []` when you copy, and add an entry only for a
+close that predates **your own** gate. An exemption inherited from another
+factory's history excuses a defect your ledger does not have.
+
 **Why this is a step and not a habit.** State kept only in chat is a memory of a
 conversation: it survives exactly as long as the context does. The ledger is the
 durable record, and `tools/ledger.py` is its **only** append path — the lock is
