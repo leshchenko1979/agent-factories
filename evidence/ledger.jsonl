@@ -8,3 +8,4 @@
 {"n": 8, "ts": "2026-09-12T11:17:40Z", "event": "intake", "actor": "triage", "subject": "#9", "detail": "retire stale surface artifacts; carry decommission guidance"}
 {"n": 9, "ts": "2026-09-12T11:17:41Z", "event": "claim", "actor": "hq", "subject": "#9", "detail": "decommission record in evidence/gaps.md; procedure in the surface binding and TEMPLATE/topics.md"}
 {"n": 10, "ts": "2026-09-12T11:26:16Z", "event": "close", "actor": "hq", "subject": "#9", "detail": "closed by 0dfa157+292b982+dcd4432; owner closed the issue 11:18:11Z; record corrected (id -5414677736, migrated shell not twin; OC Dev superseded not dead)"}
+{"n": 11, "ts": "2026-09-12T11:26:46Z", "event": "intake", "actor": "triage", "subject": "#10", "detail": "ledger gate cannot detect an incomplete transition sequence (close with no intake)"}
