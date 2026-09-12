@@ -21,10 +21,11 @@ new factory, and the rulebook that says why each piece is there.
 | **Add-ons** | [docs/addons.md](docs/addons.md) | Two mandatory **bindings** (chat surface, agent harness) plus optional **domain** packs |
 | **Product spec** | [docs/product.md](docs/product.md) | What the product is, who it is for, what v1 covers, and what it deliberately does not |
 | **Evidence** | [evidence/](evidence/) | The four real factories, surveyed — the receipts behind every practice |
+| **Ontology** | [ONTOLOGY.md](ONTOLOGY.md) | This factory's own canonical vocabulary and banned synonyms, enforced by [`tests/test_ontology.py`](tests/test_ontology.py) |
 
 ## Scope — what this project is not about
 
-This is the meta-layer. Its subject is **the factory as a machine**: how
+This is a meta-factory. Its subject is **the factory as a machine**: how
 effective it is, how healthy it is, and which laws hold for every factory of a
 given shape.
 
@@ -33,7 +34,7 @@ A factory's own product decisions, backlog, clients and code are that factory's
 `HQ`'s business — not this project's. This project converses with a member
 factory's HQ or that HQ's delegate, and never does a member's work.
 
-That boundary is load-bearing. A meta-layer that absorbs domain detail becomes a
+That boundary is load-bearing. A meta-factory that absorbs domain detail becomes a
 second, worse `HQ` for every factory at once — and stops producing the laws it
 exists to produce.
 
