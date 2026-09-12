@@ -88,7 +88,7 @@ over from an earlier turn.
 
 | Topic | `thread_id` | Lane session | Carries |
 |---|---|---|---|
-| HQ | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | analysis, rulings, owner conversation |
+| HQ | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | analysis, rulings, owner conversation, repo implementation (this factory has no worker lane; its own repo is the artifact) |
 | Delegate | 68 | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | member-factory comms |
 | Triage | 20 | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | intake and routing |
 | Surveys | 19 | `5c99ad51-8889-40cb-b589-fa13fd673c06` | survey and measurement work |
@@ -104,7 +104,9 @@ finished, and the three member HQs' replies — six messages, 11:33Z–11:50Z �
 `notify_queue` with nothing left to read them. A dispatch returned a receipt; nothing consumed
 it. A subagent session has no channel binding, so it cannot be a lane.
 
-- This lane (the HQ topic) is for **analysis and owner conversation only**.
+- This lane (the HQ topic) owns analysis, rulings and owner conversation **and** repo
+  implementation for this factory's own repo. It still does not do a **member** factory's
+  work — the hard boundary above is unchanged.
 - Member traffic goes to the **Delegate** lane, never into the HQ topic.
 - A topic post is **owner visibility only** — agents do not read topics. Briefing the
   delegate means `session_notify` to its UUID; a topic post does zero work for it.
