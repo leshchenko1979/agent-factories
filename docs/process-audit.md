@@ -42,7 +42,7 @@ only one of them is measured today.
 |---|---|---|---|
 | Law | Yes | `SKILL.md`, `TEMPLATE/SKILL.md.tmpl` | — |
 | Processes | Partly | four gates in `tests/`, `tools/ledger.py verify`, the daily job | They exist as **code**, not as a **named list** with an owner and a cadence |
-| The factory tracking its own processes | **No** | — | Nothing records that a process ran |
+| The factory tracking its own processes | **Partly** | `evidence/ledger.jsonl` | One process leaves a row — the daily run, from 2026-09-13. Every other process leaves none |
 | An audit of the processes | **No** | — | Nothing asks whether they still run |
 | A verdict on efficiency | Partly | the score and its band | The band is assigned by the factory's own score |
 
@@ -50,13 +50,23 @@ only one of them is measured today.
 
 ## 3. The gap, with evidence
 
-**`score` is a declared event type with zero rows.** The ledger's closed event set
-is `genesis, intake, claim, dispatch, close, score, ruling`. In the live ledger of
-2026-09-12 the counts are: genesis 1, intake 6, claim 5, dispatch 1, close 7,
-ruling 3 — and **score 0**. The daily measurement run writes
-`evidence/scores/<date>.md` and leaves no state transition behind. The one
-process this factory runs on a schedule is invisible in the surface built to
+**`score` was a declared event type with zero rows — until 2026-09-13.** The
+ledger's closed event set is `genesis, intake, claim, dispatch, close, score,
+ruling`. On 2026-09-12 the counts were genesis 1, intake 6, claim 5, dispatch 1,
+close 7, ruling 3 — and **score 0**. The daily measurement run wrote
+`evidence/scores/<date>.md` and left no state transition behind, so the one
+process this factory runs on a schedule was invisible in the surface built to
 record state.
+
+**The 2026-09-13 run changed that, and nothing written says it should have.**
+It appended row **n=25** — event `score`, actor `surveys`, subject
+`survey-2026-09-13`. So the gap is now half closed from the wrong end:
+`docs/measurement-procedure.md` does not mention the ledger at all, and neither
+does the cron prompt. The row is real, and no written process requires it. A
+behaviour that exists but is unwritten is the same defect from the other side —
+it survives on the run's own initiative, and the next run may simply not repeat
+it. A register row for this process would have caught the difference immediately,
+because the register is where "this process appends a row" is stated.
 
 **This is the third instance of one shape in this repo.** A check that reads only
 what is *present* cannot see an *absence*:
