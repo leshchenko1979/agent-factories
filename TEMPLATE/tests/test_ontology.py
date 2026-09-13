@@ -92,6 +92,41 @@ def parse_banned(ontology: Path) -> list[tuple[str, str]]:
     return rows
 
 
+def parse_terms(ontology: Path) -> list[str]:
+    """Return the canonical terms, counted by SECTION, not by row shape.
+
+    Three tables in ONTOLOGY.md begin a row with a backticked term — the terms,
+    the objects, and the banned synonyms — so a pattern over the whole file
+    counts seven rows that are not terms as terms. A count without its predicate
+    cannot be checked, and this one was published 7 too high before it was.
+    """
+    text = ontology.read_text(encoding="utf-8")
+    match = re.search(
+        r"^## Canonical terms\s*$(.*?)(?=^## |^### )",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        sys.exit("ONTOLOGY.md has no '## Canonical terms' section — cannot count")
+
+    terms: list[str] = []
+    for line in match.group(1).splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 3:
+            continue
+        first = cells[0].strip("`").strip()
+        if not first or first.startswith("---") or first.lower() == "term":
+            continue
+        terms.append(first)
+
+    if not terms:
+        sys.exit("parsed zero canonical terms — the table shape changed")
+    return terms
+
+
 def tracked_files() -> list[Path]:
     """Files to scan: git-tracked plus untracked-not-ignored, else a walk.
 
@@ -124,6 +159,7 @@ def is_exempt(rel: str, line: str) -> bool:
 
 def main() -> int:
     banned = parse_banned(ONTOLOGY)
+    terms = parse_terms(ONTOLOGY)
     patterns = [
         (
             re.compile(
@@ -163,7 +199,10 @@ def main() -> int:
         )
         return 1
 
-    print(f"vocabulary clean: {len(banned)} banned term(s), {scanned} file(s) scanned")
+    print(
+        f"vocabulary clean: {len(terms)} canonical term(s), "
+        f"{len(banned)} banned term(s), {scanned} file(s) scanned"
+    )
     return 0
 
 
