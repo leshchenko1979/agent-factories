@@ -35,6 +35,14 @@ defect to fix, not a synonym to tolerate.
 | `rubric` | The 13 quality criteria | scorecard, checklist, matrix |
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
 | `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
+| `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, and a run that leaves a trace | workflow, routine, procedure, pipeline |
+| `run` | One execution of a process, recorded as a state transition | execution, invocation |
+| `throughput` | What a process produces per period — units reaching done | volume, productivity |
+| `cadence` | How often a process actually runs, against how often it is declared to run | frequency, interval, periodicity |
+| `duration` | Wall time one run takes, from start to the trace it leaves | runtime, elapsed time, latency |
+| `resources consumed` | What one run spends — tokens, agent turns, wall time, money | spend, usage, burn |
+| `first-pass yield` | The share of runs whose output was accepted without rework | success rate, acceptance rate |
+| `waste` | What a process spends on output that was reworked, re-run, or abandoned. Rework is one form of it, not the term for it | scrap, churn, overhead |
 | `receipt` | Tool output, produced in the same turn, that proves a claim | proof, log, trace |
 | `evidence` | The dated file a receipt is written into | proof, receipt, log |
 | `subagent` | A one-shot spawned session with no channel binding. **Never a lane** | lane, worker |
@@ -320,6 +328,15 @@ flowchart TD
 | The ship chain | Carrier | recoverability | the ship record: version, commit, artifact identity |
 | Daily measurement | Surveys | the rubric — throughput, stability, cost | `evidence/scores/<date>.md` |
 | The process audit | Surveys, and the meta-factory | law freshness, the improvement loop | **proposed** — the register is not written yet |
+
+A process is not merely checked, it is **measured**. Six readings a run can
+carry: `throughput`, `cadence`, `duration`, `resources consumed`,
+`first-pass yield` and `waste`. They are the same measures the rubric applies
+one level **up** — the Output family's Throughput (O1), Stability (O2) and Cost
+per successful task (O3) — so a measured process is where those numbers come
+from rather than something Surveys has to read by hand. Which measures apply to
+which process is stated by the process register, proposed in
+`docs/process-audit.md` §4.5.
 
 Every process above has a named owner and leaves a trace, except the last one.
 The audit of the processes themselves is proposed in `docs/process-audit.md`;
