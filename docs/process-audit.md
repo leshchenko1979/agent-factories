@@ -225,23 +225,34 @@ needs all six — a gate has no meaningful throughput, an intake sweep has no
 meaningful duration budget. Naming which measures apply is part of the register,
 not an afterthought.
 
-| Process | Owner | Declared cadence | Measures that apply |
-|---|---|---|---|
-| The four gates | HQ | every change | duration · resources consumed · first-pass yield · waste |
-| Intake | Triage | on finding | throughput · duration |
-| Assignment | Triage | on intake | throughput · duration · first-pass yield |
-| Execution watchdog | Triage | periodic | cadence · throughput |
-| Rework entry | Triage | on defect | throughput · first-pass yield |
-| Ship chain | Carrier | every release | duration · resources consumed · first-pass yield · waste |
-| Daily measurement | Surveys | daily | cadence · duration · resources consumed · throughput |
-| Process audit | Surveys, and the meta-factory | periodic | cadence · first-pass yield |
+| Process | Owner | Client | Declared cadence / trigger | Measures that apply |
+|---|---|---|---|---|
+| The four gates | HQ | Carrier / Author | every change | duration · resources consumed · first-pass yield · waste |
+| Intake | Triage | Reporter / Finder | on finding | throughput · duration |
+| Assignment | Triage | Worker / Task | on intake | throughput · duration · first-pass yield |
+| Execution watchdog | Triage | HQ / Owner | periodic (hourly) | cadence · throughput · first-pass yield |
+| Rework entry | Triage | Surveys / Quality loop | on defect | throughput · first-pass yield |
+| Ship chain | Carrier | Consumers / Release | every release | duration · resources consumed · first-pass yield · waste |
+| Daily measurement | Surveys | Owner / Factory HQs | daily (09:00 MSK) | cadence · duration · resources consumed · throughput |
+| Process audit | Surveys, and the meta-factory | Owner / Governance | periodic | cadence · first-pass yield |
 
-**And it makes question 4 answerable.** *"Does a missed cadence block the score,
-or sit alongside it?"* — under a measured model there is nothing for a miss to
-block with. A miss is a **reading** of the cadence measure, and that reading
-feeds Stability (O2). It sits alongside, as a number, and the number is what a
-reader acts on. That is a reading of the owner's input and not a ruling on his
-behalf; it is put to him as a reading.
+**The client ruling on missed cadence (ruling 4, 2026-09-13).** On 2026-09-13 the
+owner ruled: *"Every process runs for its client. The client decides when the
+process should start. The failure to start when the client expects it to run is a
+failure and should be scored as such."*
+
+This resolves Question 4 cleanly:
+1. **The client sets the expectation.** A process does not exist in isolation;
+   it serves a named client who decides when execution is expected (by event
+   trigger or scheduled cadence).
+2. **Failure to start is an execution failure.** If the client's trigger arrives
+   or the scheduled interval passes and the process fails to start, that missed
+   start is recorded as a failed run (`outcome = failed`).
+3. **It scores directly against yield and stability.** It is neither an
+   informational note nor a clumsy gate blocking the audit: it enters the
+   metrics as a failure, depressing **first-pass yield** and directly lowering
+   the rubric's **Stability (O2)** score. If a process stops completely, its
+   yield collapses to zero, and the stability score collapses with it.
 
 ---
 
@@ -261,18 +272,18 @@ behalf; it is put to him as a reading.
 
 ## 6. The five questions, and what was ruled
 
-The owner answered three of the five on 2026-09-12, in one line each. Those three
-are now decisions this file has to be read against; the other two are still open.
+The owner answered the first three questions on 2026-09-12 and resolved Question 4
+and Question 5 on 2026-09-13. All five questions are now ruled and recorded.
 
 | # | Question | Ruling |
 |---|---|---|
-| 1 | **The band** — does it become the `Surveys` lane's verdict, or does the factory keep assigning its own? | **Both have their own bands** |
-| 2 | **Who audits this factory's own processes** — its own `Surveys` lane, or a peer factory's? | **Its own, plus the meta-factory** |
-| 3 | **Does the register ship in the template**, so every factory inherits it, or is it meta-factory-only? | **It ships** |
-| 4 | **A missed cadence** — does it block the score, or is it reported alongside it? | *open — §4.5 makes it answerable, and offers a reading* |
-| 5 | **The unenforced second banned table** (§3) — enforce it, or delete it? | *open* |
+| 1 | **The band** — does it become the `Surveys` lane's verdict, or does the factory keep assigning its own? | **Both have their own bands** (2026-09-12) |
+| 2 | **Who audits this factory's own processes** — its own `Surveys` lane, or a peer factory's? | **Its own, plus the meta-factory** (2026-09-12) |
+| 3 | **Does the register ship in the template**, so every factory inherits it, or is it meta-factory-only? | **It ships** (2026-09-12) |
+| 4 | **A missed cadence** — does it block the score, or is it reported alongside it? | **A failure to start when the client expects it is an execution failure and scored as such** (2026-09-13) |
+| 5 | **The unenforced second banned table** (§3) — enforce it, or delete it? | **Rename column to contextual disambiguation; enforce only the global banned table** (2026-09-13) |
 
-Two consequences follow from the rulings, and both change what gets built:
+Three consequences follow from the complete rulings:
 
 - **Ruling 3 makes the register a template artifact.** It is not a meta-factory
   convenience; every bootstrapped factory inherits it, so its rows may not name
@@ -280,10 +291,9 @@ Two consequences follow from the rulings, and both change what gets built:
 - **Ruling 1 makes §4.3 a two-column reading**, not a handover: the register must
   carry a band for the factory and a band for the audit, and the register's own
   audit line names both auditors from ruling 2.
-
-Question 4 was the register's blocker; §4.5 is the owner's own answer to the
-shape of it, and the reading above is put to him rather than assumed. Question 5
-is independent of the register and can be settled on its own.
+- **Ruling 4 binds cadence to the client.** A process exists for its client;
+  missing expected execution is scored as a failed run, depressing first-pass
+  yield and Stability (O2).
 
 **The vocabulary gap this file depends on.** Checked mechanically on 2026-09-13:
 `ONTOLOGY.md` carried **20** canonical terms, and `process` — the central noun of

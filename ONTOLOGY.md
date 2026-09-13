@@ -16,7 +16,7 @@ defect to fix, not a synonym to tolerate.
 
 ## Canonical terms
 
-| Term | Definition | Not |
+| Term | Definition | Contextual synonyms (avoid when meaning this term) |
 |---|---|---|
 | `factory` | A versioned process law, a chat surface whose place names carry state, and a repo whose issues are the task list — all three, or it is not a factory | bot, agent, team, department, project |
 | `meta-factory` | This project: the factory whose output is factories | meta-layer, the factory, main factory, mother factory |
@@ -378,12 +378,16 @@ handover that means two different things to two people.
 
 | Where | How |
 |---|---|
-| This repo's prose | `python3 tests/test_ontology.py` fails on any unexempted banned synonym |
+| This repo's prose | `python3 tests/test_ontology.py` fails on any unexempted banned synonym from `## Banned synonyms` |
+| Contextual synonyms column | Reference only: guidance for disambiguation; not a global prose ban (per owner ruling 2026-09-13) |
 | Issue titles | Prefix vocabulary: `triage:`, `law:`, `survey:`, `template:`, `surface:` |
 | Reports | Reviewed at close — a banned synonym is a finding, not a nit |
 
-The test parses the table above, so **the ban list is the source of truth** and
-the gate cannot drift from it. An exemption is a `(path, substring)` pair in
+The test parses the `## Banned synonyms` table above, so **the ban list is the
+source of truth** and the gate cannot drift from it. The third column of the
+terms table ("Contextual synonyms") provides contextual disambiguation (e.g.
+avoiding "lane" when specifically meaning "subagent") and is not parsed as a
+global prose ban. An exemption is a `(path, substring)` pair in
 `tests/test_ontology.py`, and it exempts only a line that also contains the
 named substring — so a historical mention stays visible and justified rather
 than silently tolerated.
