@@ -175,7 +175,7 @@ row naming a derived measure without its inputs cannot be read at all.
 | Layer | Measure | Where it comes from |
 |---|---|---|
 | **Recorded** — one run writes it | Duration | the run's own start and end |
-| | Resources consumed | what the run spent: tokens, turns, money, wall time |
+| | Resources consumed | what the run spent: tokens, turns, money — wall time is the separate duration column, not a second entry in this one |
 | | Outcome | accepted · reworked · abandoned |
 | **Derived** — read off many rows | Cadence | runs ÷ the runs the register declares — needs one law fact, not one more field |
 | | Throughput | accepted outputs ÷ the period |
