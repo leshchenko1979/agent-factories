@@ -52,6 +52,21 @@ recorded on each run from what is read off the record:
 | | `waste` | `(1 − yield) × resources consumed` |
 | | `cost per successful task` | Total resources consumed ÷ accepted outputs |
 
+### 2.1 Co-ownership of Process Cost: Demand vs. Supply
+
+Process spend (`resources consumed`, and derived `cost per successful task` and
+`waste`) is **co-owned across two boundaries**:
+- **Demand side (Process Owner & Implementer):** Owns prompt structure, context
+  budget, tool payload footprint, turn economy, and model tier selection (using
+  a compact model where a frontier model is waste).
+- **Supply side (InferHub / token provider):** Owns model routing, token unit
+  pricing ($/M tokens), prompt caching discounts, inference latency (time to
+  first token, tokens per second), and endpoint uptime.
+
+When process costs spike or yield falls due to model timeouts, diagnosis investigates
+both sides: did the process inflate its prompt, or did the provider suffer routing
+latency, pricing drift, or dropouts?
+
 ---
 
 ## 3. The Meta-Factory Process Register

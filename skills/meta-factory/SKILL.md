@@ -154,6 +154,7 @@ feature requests and instrument specifications.
 | Substrate | Owner |
 |---|---|
 | OpenCrabs instruments (daemon, core tools, brain/skill loading) | **OpenCrabs Kanban Board HQ** — session `d72bd52d-42aa-4dbd-ac99-5b5300770019`; fork issues on `leshchenko1979/opencrabs` |
+| Token provisioning, model routing, inference pricing & endpoints | **InferHub Watch HQ** — session `359fe71b-c7a1-420b-b856-acfb49939a7b`; issues on `leshchenko1979/inferhub-watch` |
 | `tg_*` tools (`tg_get_chat_info`, `tg_mtproto`) | `leshchenko1979/fast-mcp-telegram` |
 | `telegram_send` | **OpenCrabs core** (`src/brain/tools/telegram_send.rs`) — not fast-mcp-telegram |
 | The template / skill law text in this repo | this factory's HQ |
@@ -333,3 +334,4 @@ the gates have had time to bite. Report it as a direction, not a verdict.
 | The four member factories | consulting | diagnostic findings, recommendations, template laws and scores; they own their own decisions and implementation |
 | The operator | service | analysis, decisions framed as options |
 | OpenCrabs (harness & dev factory) | client-supplier loop | runtime friction, telemetry requirements, and feature requests; daemon release builds |
+| InferHub (inference & token provider / inferhub-watch) | client-supplier loop | token pricing, model availability, routing latency, prompt caching, and retry economics |
