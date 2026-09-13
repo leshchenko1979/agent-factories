@@ -286,9 +286,19 @@ shape of it, and the reading above is put to him rather than assumed. Question 5
 is independent of the register and can be settled on its own.
 
 **The vocabulary gap this file depends on.** Checked mechanically on 2026-09-13:
-`ONTOLOGY.md` carries 27 canonical terms, and `process` — the central noun of
+`ONTOLOGY.md` carried **20** canonical terms, and `process` — the central noun of
 this entire proposal, used in 33 files — was not among them. Neither were
 `cadence` (13 files), `throughput` (7 files) or `first-pass yield` (2 files), and
 `duration` and `waste` appeared in **no file at all**. All eight are canonical
 now, because a proposal about measuring processes cannot be written in words the
 factory's own vocabulary does not define.
+
+**The predicate, because the number is not readable without it.** A canonical
+term is a row of the `## Canonical terms` table, counted between that heading and
+the next one. The file counts are case-insensitive hits across git-tracked files
+at `247654e`, the commit before the eight terms landed. The first version of this
+paragraph said 27, and the total was reported as 35: both came from a pattern
+matching every row whose first cell was a backticked term, and three tables in
+`ONTOLOGY.md` start a row that way — the terms, the objects, the banned synonyms.
+Seven rows that are not terms were counted as terms, in both figures. The counts
+are 20 and 28.
