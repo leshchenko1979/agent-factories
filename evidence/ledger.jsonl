@@ -25,3 +25,4 @@
 {"n": 25, "ts": "2026-09-13T07:14:07Z", "event": "score", "actor": "surveys", "subject": "survey-2026-09-13", "detail": "five factories scored: opencrabs-dev 42, inferhub-watch 39, ai-antispam 29, miidas 26, meta-factory 25 — evidence/scores/2026-09-13.md"}
 {"n": 26, "ts": "2026-09-13T10:37:28Z", "event": "run", "actor": "hq", "subject": "the-four-gates", "detail": "duration=4s turns=0 outcome=accepted gate=all-pass"}
 {"n": 27, "ts": "2026-09-13T14:57:58Z", "event": "run", "actor": "hq", "subject": "the-five-gates", "detail": "duration=3s turns=0 outcome=accepted gate=all-pass"}
+{"n": 28, "ts": "2026-09-13T20:36:38Z", "event": "score", "actor": "surveys", "subject": "fleet-measurement-2026-09-14", "detail": "rubric=13-criteria procedure=docs/measurement-procedure.md delta=+8-meta outcome=accepted"}
