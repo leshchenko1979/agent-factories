@@ -21,7 +21,7 @@ defect to fix, not a synonym to tolerate.
 | `factory` | A versioned process law, a chat surface whose place names carry state, and a repo whose issues are the task list — all three, or it is not a factory | bot, agent, team, department, project |
 | `meta-factory` | This project: the factory whose output is factories | meta-layer, the factory, main factory, mother factory |
 | `member factory` | A factory this project surveys and converses with | client, tenant, subject, target, downstream |
-| `owner` | The human who approves and directs. Not a lane, not a role | boss, admin, user, client, customer |
+| `owner` | The party accountable for a thing. When unqualified, refers to the human who approves and directs the factory. Not a lane, not a role | boss, admin, user, client, customer |
 | `HQ` | The lane that rules, holds the owner relationship, and owns law authorship | supervisor, lead, manager, boss, admin |
 | `Delegate` | The lane that converses with member HQs | liaison, ambassador, envoy, middleman, messenger |
 | `Triage` | The lane that turns findings into tracked work and assigns it | intake, dispatcher, router, janitor |
@@ -36,6 +36,11 @@ defect to fix, not a synonym to tolerate.
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
 | `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
 | `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, and a run that leaves a trace | workflow, routine, procedure, pipeline |
+| `subprocess` | A nested process delegated by a parent process owner, with its own process owner, process client, and process implementers | sub-routine, step, stage |
+| `process owner` | The role accountable for the design, health, and SLA of a process. Delegates execution to implementers | owner, lead, pipeline owner |
+| `process client` | The party who triggers a process, sets its acceptance criteria, and consumes its output | client, requester, customer, upstream |
+| `process implementer` | The actor (lane, tool, subagent, automated script) executing a run of a process and spending its resources | worker, executor, runner, actor |
+| `process quality criteria` | The explicit standards a process must meet, defined in terms of client and stakeholder value | quality gate, acceptance criteria, standards |
 | `run` | One execution of a process, recorded as a state transition | execution, invocation |
 | `throughput` | What a process produces per period — units reaching done | volume, productivity |
 | `cadence` | How often a process actually runs, against how often it is declared to run | frequency, interval, periodicity |
@@ -281,8 +286,10 @@ this table would have caught.
 
 ### Participants, duties and owners
 
-An **owner** is the one party accountable for a thing. It is not always a lane:
-the owner of the factory's direction is the human.
+An **owner** is the one party accountable for a thing. When unqualified, it
+refers to the human who approves and directs the factory. Within a process, the
+**process owner** is the role accountable for the design, health, and SLA of the
+process, while **process implementers** execute the runs.
 
 | Participant | Owns | Duties | Does not do |
 |---|---|---|---|
@@ -304,6 +311,12 @@ The model above is what the factory is made of. This is what it **does** — the
 recurring acts that keep its properties true. A property is a state; a process
 is the act that holds the state up, and only the second one can silently stop.
 
+Every process has:
+- A **process client** who triggers it and consumes its value.
+- A **process owner** accountable for its design and health.
+- Delegated **process implementers** who execute the runs.
+- Explicit **process quality criteria** defined in terms of client and stakeholder value.
+
 ```mermaid
 flowchart TD
     A["A finding, an alert, a score gap"] --> B["Triage: intake<br/>file a work unit"]
@@ -318,16 +331,16 @@ flowchart TD
     I -->|all ran| J["The band stands"]
 ```
 
-| Process | Owner | What it upholds | What a run leaves behind |
-|---|---|---|---|
-| The four gates | HQ | verification depth, vocabulary conformance, single-writer state | an exit code and its output |
-| Intake | Triage | specification clarity | a work unit with a goal, an owner and done-criteria |
-| Assignment | Triage | coordination integrity | a claim row, and a brief delivered to the lane |
-| Execution watchdog | Triage | coordination integrity | an escalation, or nothing to report |
-| Rework entry | Triage | the improvement loop | an entry in `evidence/rework.md` |
-| The ship chain | Carrier | recoverability | the ship record: version, commit, artifact identity |
-| Daily measurement | Surveys | the rubric — throughput, stability, cost | `evidence/scores/<date>.md` |
-| The process audit | Surveys, and the meta-factory | law freshness, the improvement loop | **proposed** — the register is not written yet |
+| Process | Process Owner | Process Client | Delegated Implementers | Quality Criteria (Stakeholder Value) | What a run leaves behind |
+|---|---|---|---|---|---|
+| The four gates | HQ | Carrier / Author | automated runner / CLI | Zero regressions, immediate feedback (<10s) | an exit code and its output |
+| Intake | Triage | Reporter / Finder | Triage lane | Unambiguous scope and done-criteria on intake | a work unit with a goal, an owner and done-criteria |
+| Assignment | Triage | Worker / Task | Triage lane | Verified unclaimed, unambiguous task brief | a claim row, and a brief delivered to the lane |
+| Execution watchdog | Triage | HQ / Owner | Triage lane | No silent worker stall > declared SLA | an escalation, or nothing to report |
+| Rework entry | Triage | Surveys / Quality loop | Triage lane | Root cause and preventative rule recorded | an entry in `evidence/rework.md` |
+| The ship chain | Carrier | Consumers / Release | Carrier lane | Reversible atomic release, verified artifacts | the ship record: version, commit, artifact identity |
+| Daily measurement | Surveys | Owner / Factory HQs | Surveys lane / cron | Objective, reproducible score diffs at 09:00 MSK | `evidence/scores/<date>.md` |
+| The process audit | Surveys, and the meta-factory | Owner / Governance | Surveys lane | Detection of unexecuted or stopped processes | **proposed** — the register is not written yet |
 
 A process is not merely checked, it is **measured**. Six readings a run can
 carry: `throughput`, `cadence`, `duration`, `resources consumed`,

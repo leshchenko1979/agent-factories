@@ -220,21 +220,21 @@ flowchart TD
 ```
 
 **What each row has to carry.** The register states the declared cadence and
-which measures apply; the run row carries the per-run values. Not every process
-needs all six — a gate has no meaningful throughput, an intake sweep has no
-meaningful duration budget. Naming which measures apply is part of the register,
-not an afterthought.
+which measures apply; the run row carries the per-run values. Each process is
+defined with its **Process Owner**, **Process Client**, delegated **Implementers**,
+and its **Quality Criteria framed as client/stakeholder value**. Naming which
+measures apply is part of the register, not an afterthought.
 
-| Process | Owner | Client | Declared cadence / trigger | Measures that apply |
-|---|---|---|---|---|
-| The four gates | HQ | Carrier / Author | every change | duration · resources consumed · first-pass yield · waste |
-| Intake | Triage | Reporter / Finder | on finding | throughput · duration |
-| Assignment | Triage | Worker / Task | on intake | throughput · duration · first-pass yield |
-| Execution watchdog | Triage | HQ / Owner | periodic (hourly) | cadence · throughput · first-pass yield |
-| Rework entry | Triage | Surveys / Quality loop | on defect | throughput · first-pass yield |
-| Ship chain | Carrier | Consumers / Release | every release | duration · resources consumed · first-pass yield · waste |
-| Daily measurement | Surveys | Owner / Factory HQs | daily (09:00 MSK) | cadence · duration · resources consumed · throughput |
-| Process audit | Surveys, and the meta-factory | Owner / Governance | periodic | cadence · first-pass yield |
+| Process | Process Owner | Process Client | Delegated Implementers | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Measures that apply |
+|---|---|---|---|---|---|---|
+| The four gates | HQ | Carrier / Author | CLI / test runner | every change | Zero regressions, immediate verification receipt | duration · resources consumed · first-pass yield · waste |
+| Intake | Triage | Reporter / Finder | Triage lane | on finding | Unambiguous scope, owner, and done-criteria | throughput · duration |
+| Assignment | Triage | Worker / Task | Triage lane | on intake | Clean claim check, clear brief delivered | throughput · duration · first-pass yield |
+| Execution watchdog | Triage | HQ / Owner | Triage lane | periodic (hourly) | Detection of stalled workers before SLA breach | cadence · throughput · first-pass yield |
+| Rework entry | Triage | Surveys / Quality loop | Triage lane | on defect | Root cause and actionable prevention recorded | throughput · first-pass yield |
+| Ship chain | Carrier | Consumers / Release | Carrier lane | every release | Atomic, verified artifact without release rollback | duration · resources consumed · first-pass yield · waste |
+| Daily measurement | Surveys | Owner / Factory HQs | Surveys lane / cron | daily (09:00 MSK) | Reproducible, objective score diffs on schedule | cadence · duration · resources consumed · throughput |
+| Process audit | Surveys, and the meta-factory | Owner / Governance | Surveys lane | periodic | Early detection of silently stopped processes | cadence · first-pass yield |
 
 **The client ruling on missed cadence (ruling 4, 2026-09-13).** On 2026-09-13 the
 owner ruled: *"Every process runs for its client. The client decides when the
