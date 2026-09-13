@@ -1,8 +1,8 @@
-# Process Register — {{FACTORY}}
+# Process Register — Template
 
-> **Owns:** the canonical register of every recurring process in {{FACTORY}},
-> its process owner, process client, delegated implementers, quality criteria,
-> declared cadence or trigger, and trace evidence.
+> **Owns:** the canonical register of recurring processes for a factory bootstrapped
+> from this template, their process owners, process clients, delegated implementers,
+> quality criteria, declared cadences or triggers, and trace evidence.
 
 ---
 
@@ -15,9 +15,9 @@ state up, and only the act can silently stop.
 
 Every process in this register adheres to five structural laws:
 
-1. **The Client Principle:** Every process runs for a **process client**. The
-   client decides why the process runs, sets its trigger condition or cadence
-   expectation, and consumes its value.
+1. **The Client Principle:** Every process runs for a **process client**. The client
+   decides why the process runs, sets its trigger condition or cadence expectation,
+   and consumes its value.
 2. **Failure to start is an execution failure:** When the client's trigger condition
    fires or the declared interval passes, failure to start is recorded as a
    failure (`outcome = failed`). It directly lowers **first-pass yield** and
@@ -52,22 +52,58 @@ recorded on each run from what is read off the record:
 | | `waste` | `(1 − yield) × resources consumed` |
 | | `cost per successful task` | Total resources consumed ÷ accepted outputs |
 
+### 2.1 Co-ownership of Process Cost: Demand vs. Supply
+
+Process spend (`resources consumed`, and derived `cost per successful task` and
+`waste`) is **co-owned across two boundaries**:
+- **Demand side (Process Owner & Implementer):** Owns prompt structure, context
+  budget, tool payload footprint, turn economy, and model tier selection.
+- **Supply side (Token Provider / Inference Gateway):** Owns model routing, token
+  unit pricing, prompt caching discounts, inference latency, and endpoint uptime.
+
 ---
 
-## 3. Process Register
+## 3. The Factory Process Register
 
-Fill in the processes this factory runs. The core baseline processes from the
-template are pre-populated below; add domain-specific processes as needed:
+Every factory bootstrapped from this template organizes its recurring work into
+**two primary operational processes** (the delivery value stream and the rework
+prevention loop) plus an automated **hygiene process**:
 
 | Process | Process Owner | Process Client | Delegated Implementers | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
 |---|---|---|---|---|---|---|---|
-| **Verification gates** | HQ | Carrier / Author | automated runner / CLI | every change | Zero regressions, clean invariants, immediate feedback | Command exit code and output | duration · resources consumed · first-pass yield · waste |
-| **Intake** | Triage | Reporter / Finder | Triage lane | on finding / gap | Unambiguous scope, clear goal, and verifiable done-criteria | Work unit issue on the board | throughput · duration |
-| **Assignment** | Triage | Worker / Task | Triage lane | on intake | Clean claim check, clear task brief, no orphan runs | Ledger claim row, dispatch brief | throughput · duration · first-pass yield |
-| **Execution watchdog** | Triage | HQ / Owner | Triage lane | periodic (hourly) | Early detection of stalled workers before SLA breach | Escalation report or clean sweep log | cadence · throughput · first-pass yield |
-| **Rework entry** | Triage | Surveys / Quality loop | Triage lane | on defect resolution | Root cause and actionable prevention rule recorded | Row in `evidence/rework.md` | throughput · first-pass yield |
-| **Ship chain** | Carrier | Consumers / Release | Carrier lane | every release | Atomic, verified artifact without release rollback | Release commit, artifact identity proof | duration · resources consumed · first-pass yield · waste |
-| **Periodic self-measurement** | Surveys | Owner / HQ | Surveys lane / cron | daily / weekly | Reproducible, objective score diffs delivered on schedule | `evidence/scores/<date>.md`, ledger row | cadence · duration · resources consumed · throughput |
-| **Process audit** | Surveys | Owner / Governance | Surveys lane | periodic | Early detection of silently stopped processes | Audit report in evidence | cadence · first-pass yield |
+| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | on task, finding, or request | Zero regressions, rapid cycle time, verified release without rollback | Task issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
+| **2. Rework Prevention & Learning Loop** | Triage | Factory Stability / Governance | Triage lane, defect resolving lane | on defect resolution | Root mechanism identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
+| **3. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
-*(Add domain processes below)*
+---
+
+## 4. Process Specifications and Subprocesses
+
+### 4.1 Work Delivery Pipeline (Value Stream)
+- **Process Owner:** HQ
+- **Process Client:** Factory Owner / Requester
+- **Subprocesses:**
+  1. *Intake & Specification (Implementer: Triage)*: Converts requests into issues with clear scope and acceptance criteria. Emits ledger `intake` event.
+  2. *Assignment & Briefing (Implementer: Triage)*: Checks claims, acquires lock, and emits ledger `claim` event with direct session briefing.
+  3. *Implementation & Self-Verification (Implementer: Worker)*: Writes code and runs the verification suite.
+  4. *The Verification Gates (Implementer: Automated test suite)*: Runs ontology conformance, rework consistency, single-writer state checks, and ledger sequence verification.
+  5. *Ship & Release (Implementer: Carrier)*: Merges verified change, validates artifact identity, and emits ledger `close` event.
+- **Quality Criteria:** Verified delivery with zero rollbacks and all gates green in <10s.
+
+### 4.2 Rework Prevention & Learning Loop (Feedback Loop)
+- **Process Owner:** Triage
+- **Process Client:** Factory Stability / Governance
+- **Subprocesses:**
+  1. *Defect Mechanism Extraction (Implementer: Triage)*: Isolates the structural flaw rather than narrative blame.
+  2. *Mechanized Prevention (Implementer: Fixing Lane)*: Adds an automated test, gate, or codified rule preventing the defect.
+  3. *Audit & Entry Gate (Implementer: Triage)*: Appends contiguous entry to `evidence/rework.md` passing `tests/test_rework.py` invariants.
+- **Quality Criteria:** Zero defect recurrences; 100% of rework entries carry audited `Prevented by` mechanisms.
+
+### 4.3 Workspace Hygiene Sweep (Hygiene Loop)
+- **Process Owner:** HQ
+- **Process Client:** Host Environment / Operators
+- **Subprocesses:**
+  1. *Scratch Script Audit (Implementer: tools/hygiene.py)*: Detects scratch files older than 24 hours.
+  2. *Garbage Collection (Implementer: tools/hygiene.py)*: Safely reaps orphaned scratch files to prevent inode/space exhaustion.
+  3. *Git Status Verification (Implementer: tools/hygiene.py)*: Asserts working tree is free of untracked clutter.
+- **Quality Criteria:** Host storage remains unexhausted; zero orphaned scratch scripts >24h.

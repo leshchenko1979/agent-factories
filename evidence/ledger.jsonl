@@ -24,3 +24,4 @@
 {"n": 24, "ts": "2026-09-12T18:14:02Z", "event": "ruling", "actor": "hq", "subject": "#11", "detail": "delegate names a meta-factory lane, not a template role (owner ruling 2026-09-12); the template ships four cards and no delegate card. The actor set was realigned: the core is the four template roles plus owner, and a factory-local lane is declared in tools/actors.txt — commit 94494b8"}
 {"n": 25, "ts": "2026-09-13T07:14:07Z", "event": "score", "actor": "surveys", "subject": "survey-2026-09-13", "detail": "five factories scored: opencrabs-dev 42, inferhub-watch 39, ai-antispam 29, miidas 26, meta-factory 25 — evidence/scores/2026-09-13.md"}
 {"n": 26, "ts": "2026-09-13T10:37:28Z", "event": "run", "actor": "hq", "subject": "the-four-gates", "detail": "duration=4s turns=0 outcome=accepted gate=all-pass"}
+{"n": 27, "ts": "2026-09-13T14:57:58Z", "event": "run", "actor": "hq", "subject": "the-five-gates", "detail": "duration=3s turns=0 outcome=accepted gate=all-pass"}

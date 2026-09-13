@@ -71,91 +71,61 @@ latency, pricing drift, or dropouts?
 
 ## 3. The Meta-Factory Process Register
 
+The meta-factory organizes its work into **three primary operational processes** (the core
+value stream, the quality feedback loop, and the measurement/governance loop) plus an
+automated **hygiene process** upholding workspace resource safety:
+
 | Process | Process Owner | Process Client | Delegated Implementers | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
 |---|---|---|---|---|---|---|---|
-| **The four gates** | HQ | Carrier / Author | automated runner / CLI | every change | Zero regressions, clean invariants, immediate feedback (<10s) | Command exit code and output | duration · resources consumed · first-pass yield · waste |
-| **Intake** | Triage | Reporter / Finder | Triage lane | on finding / gap | Unambiguous scope, clear goal, and verifiable done-criteria | Work unit issue on the board | throughput · duration |
-| **Assignment** | Triage | Worker / Task | Triage lane | on intake | Clean claim check, clear task brief, no orphan runs | Ledger claim row, session dispatch brief | throughput · duration · first-pass yield |
-| **Execution watchdog** | Triage | HQ / Owner | Triage lane | periodic (hourly) | Early detection of stalled workers before SLA breach | Escalation report or clean sweep log | cadence · throughput · first-pass yield |
-| **Rework entry** | Triage | Surveys / Quality loop | Triage lane | on defect resolution | Root cause and actionable prevention rule recorded | Row in `evidence/rework.md` | throughput · first-pass yield |
-| **Ship chain** | Carrier | Consumers / Release | Carrier lane | every release | Atomic, verified artifact without release rollback | Release commit, artifact identity proof | duration · resources consumed · first-pass yield · waste |
-| **Daily measurement** | Surveys | Owner / Factory HQs | Surveys lane / cron | daily (09:00 MSK) | Reproducible, objective score diffs delivered on schedule | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
-| **Process audit** | Surveys & meta-factory | Owner / Governance | Surveys lane | periodic (weekly) | Early detection of silently stopped processes across fleet | Audit report section in evidence | cadence · first-pass yield |
+| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
+| **2. Rework Prevention & Learning Loop** | Triage | Factory Stability / Governance | Triage lane, defect resolving lane | on defect resolution | Root mechanism (not symptom) identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
+| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
+| **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
 ---
 
 ## 4. Process Specifications and Subprocesses
 
-### 4.1 The Four Gates
+### 4.1 Work Delivery Pipeline (Value Stream)
 - **Process Owner:** HQ
-- **Process Client:** Author (immediate code feedback), Carrier (release safety)
+- **Process Client:** Factory Owner / Requester
 - **Subprocesses:**
-  1. *Ontology gate* (`tests/test_ontology.py`): Rejects banned synonyms and uncanonical terminology.
-  2. *Rework gate* (`tests/test_rework.py`): Verifies contiguous rework logging and prevents placeholder prevention fields.
-  3. *Template sync gate* (`tests/test_template_sync.py`): Guarantees byte-identity between template gates and canonical tools.
-  4. *Ledger sequence gate* (`tools/ledger.py verify`): Verifies monotonicity, intact state sequences (intake -> claim -> close), and single-writer locks.
-- **Quality Criteria:** Complete verification suite exits 0 in <10 seconds with zero false positives.
+  1. *Intake & Specification (Implementer: Triage)*: Converts findings into board issues with clear scope and verifiable acceptance criteria. Emits ledger `intake` event.
+  2. *Assignment & Briefing (Implementer: Triage)*: Checks claims, acquires lock, and emits ledger `claim` event with direct session briefing.
+  3. *Implementation & Self-Verification (Implementer: Worker)*: Writes code and runs the verification suite.
+  4. *The Verification Gates (Implementer: Automated test suite)*:
+     - `test_ontology.py` (vocabulary conformance)
+     - `test_rework.py` (contiguous rework logging)
+     - `test_template_sync.py` (template sync pair identity)
+     - `test_single_writer.py` (single-writer state surface audit & lock verification)
+     - `tools/ledger.py verify` (ledger sequence & monotonicity)
+  5. *Ship & Release (Implementer: Carrier)*: Fast-forward merges to main, verifies artifact identity, and emits ledger `close` event.
+- **Quality Criteria:** Complete pipeline cycle delivers verified change with zero rollbacks and all gates green in <10s.
 
-### 4.2 Intake
+### 4.2 Rework Prevention & Learning Loop (Feedback Loop)
 - **Process Owner:** Triage
-- **Process Client:** Reporter / Finder
+- **Process Client:** Factory Stability / Governance
 - **Subprocesses:**
-  1. *Classification & Deduplication:* Verify finding is not already tracked.
-  2. *Work Unit Specification:* Ensure title prefix, goal, acceptance criteria, and owner are specified.
-  3. *Ledger Intake:* Append immutable `intake` event row to state ledger.
-- **Quality Criteria:** Work units have unambiguous done-criteria and clear scope; no untracked findings left in chat.
+  1. *Defect Mechanism Extraction (Implementer: Triage)*: Isolates the structural flaw rather than narrative blame.
+  2. *Mechanized Prevention (Implementer: Fixing Lane)*: Adds an automated test, gate, or codified rule preventing the defect.
+  3. *Audit & Entry Gate (Implementer: Triage)*: Appends contiguous entry to `evidence/rework.md` passing `tests/test_rework.py` invariants.
+- **Quality Criteria:** Zero defect recurrences; 100% of rework entries carry audited, non-placeholder `Prevented by` mechanisms.
 
-### 4.3 Assignment
-- **Process Owner:** Triage
-- **Process Client:** Worker / Assigned Lane
-- **Subprocesses:**
-  1. *Claim Check:* Verify target work unit is unclaimed in ledger.
-  2. *Ledger Claim:* Append immutable `claim` event row to state ledger.
-  3. *Direct Briefing:* Dispatch task brief to worker session without relay hops.
-- **Quality Criteria:** Zero duplicate dispatches; clear and complete brief delivered directly to implementer.
-
-### 4.4 Execution Watchdog
-- **Process Owner:** Triage
-- **Process Client:** HQ / Factory Owner
-- **Subprocesses:**
-  1. *Roster Sweep:* Check in-flight worker sessions against active claims.
-  2. *Stall Detection:* Identify lanes exceeding SLA duration without heartbeat or receipt.
-  3. *Escalation:* Notify HQ or Owner when worker is unresponsive.
-- **Quality Criteria:** Stalled executions flagged before client SLA is breached; zero unmonitored orphan sessions.
-
-### 4.5 Rework Entry
-- **Process Owner:** Triage
-- **Process Client:** Surveys / Quality Loop
-- **Subprocesses:**
-  1. *Defect Extraction:* Extract root mechanism (not symptom) on defect close.
-  2. *Prevention Definition:* Formulate rule, test, or gate preventing recurrence (`nothing yet` if unaddressed).
-  3. *Table Formatting:* Append contiguous row adhering to `tests/test_rework.py` invariants.
-- **Quality Criteria:** Every defect resolved by rework has an audited entry with an actionable `Prevented by` field.
-
-### 4.6 Ship Chain
-- **Process Owner:** Carrier
-- **Process Client:** Release Consumers / Downstream
-- **Subprocesses:**
-  1. *Gate Run:* Execute verification gates on release candidate.
-  2. *Merge & Tag:* Fast-forward merge to production branch.
-  3. *Artifact Verification:* Confirm deployed artifact identity matches built commit.
-- **Quality Criteria:** Zero release rollbacks; 100% verified artifact identity.
-
-### 4.7 Daily Measurement
+### 4.3 Operational Measurement & Consulting (Governance Loop)
 - **Process Owner:** Surveys
 - **Process Client:** Factory Owner / Member Factory HQs
 - **Subprocesses:**
-  1. *Live State Collection:* Inspect member repos, test suites, ledgers, and boards.
-  2. *Rubric Scoring:* Score against 13 criteria (0-4) across 4 families.
-  3. *Diff & Report Generation:* Commit `evidence/scores/<date>.md`.
-  4. *Ledger Recording:* Append `score` event row to `evidence/ledger.jsonl`.
-- **Quality Criteria:** Objective, reproducible diffs delivered daily at 09:00 MSK; zero subjective grading.
+  1. *Live Evidence Collection (Implementer: Surveys)*: Collects repo, ledger, and test evidence across 5 factories.
+  2. *Rubric Scoring (Implementer: Surveys)*: Evaluates 13 criteria (0–4) across 4 families objectively.
+  3. *Consulting Diagnostics & Advisory (Implementer: Surveys)*: Synthesizes fleet patterns, identifies stopped processes or harness friction, and provides recommendations to member HQs.
+  4. *Ledger Recording (Implementer: Surveys)*: Appends ledger `score` row and commits `evidence/scores/<date>.md`.
+- **Quality Criteria:** Scores delivered daily at 09:00 MSK; diffs are reproducible and advisory items directly increase member factory yield.
 
-### 4.8 Process Audit
-- **Process Owner:** Surveys & Meta-Factory HQ
-- **Process Client:** Governance / Factory Owner
+### 4.4 Workspace Hygiene Sweep (Hygiene Loop)
+- **Process Owner:** HQ
+- **Process Client:** Host Environment / Operators
 - **Subprocesses:**
-  1. *Register Comparison:* Compare actual run rows in ledger against declared cadences in this register.
-  2. *Yield & Waste Analysis:* Compute first-pass yield, waste, and duration trends per process.
-  3. *Gap Identification:* Convert stopped or degrading processes into intake findings.
-- **Quality Criteria:** 100% of declared processes audited; stopped processes caught within one audit cycle.
+  1. *Scratch Script Audit (Implementer: tools/hygiene.py)*: Detects `/tmp/oc-*` scripts older than 24 hours.
+  2. *Garbage Collection (Implementer: tools/hygiene.py)*: Safely reaps orphaned scratch files to prevent inode/space exhaustion.
+  3. *Git Status Verification (Implementer: tools/hygiene.py)*: Asserts working tree is free of untracked clutter.
+- **Quality Criteria:** Host storage remains unexhausted; zero orphaned scratch scripts >24h.
