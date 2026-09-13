@@ -57,6 +57,7 @@ rows filled in §2 of the law.
   no task list.
 - Add `AGENTS.md` from [`AGENTS.md.tmpl`](AGENTS.md.tmpl) with placeholders filled.
 - Add `ONTOLOGY.md` from [`ONTOLOGY.md.tmpl`](ONTOLOGY.md.tmpl).
+- Add `processes.md` from [`processes.md.tmpl`](processes.md.tmpl).
 - Add `docs/adr/` with a `0001-` decision record if the add-on `platform` is
   taken.
 - Initial commit.

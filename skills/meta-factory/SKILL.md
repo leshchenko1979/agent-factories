@@ -235,6 +235,7 @@ repo, on a surface with **one named writer**. Every other path to it is read-onl
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the daily measurement job (`Surveys`) | read-only |
 | `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
+| `docs/processes.md` | the canonical process register | `HQ` | read-only |
 | `skills/meta-factory/SKILL.md` | this law | `HQ` | read-only |
 
 **The actor set is the roles the law names, and it is closed.** A role that is not listed

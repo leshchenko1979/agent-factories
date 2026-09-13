@@ -1,0 +1,73 @@
+# Process Register — {{FACTORY}}
+
+> **Owns:** the canonical register of every recurring process in {{FACTORY}},
+> its process owner, process client, delegated implementers, quality criteria,
+> declared cadence or trigger, and trace evidence.
+
+---
+
+## 1. Principles and Model
+
+This register makes the rule verifiable: **the factory keeps track of its own
+processes, and these processes are audited.** A process is a recurring act that
+keeps a property true. A property is a state; a process is the act that holds the
+state up, and only the act can silently stop.
+
+Every process in this register adheres to five structural laws:
+
+1. **The Client Principle:** Every process runs for a **process client**. The
+   client decides why the process runs, sets its trigger condition or cadence
+   expectation, and consumes its value.
+2. **Failure to start is an execution failure:** When the client's trigger condition
+   fires or the declared interval passes, failure to start is recorded as a
+   failure (`outcome = failed`). It directly lowers **first-pass yield** and
+   depresses **Stability (O2)**.
+3. **Accountability cannot be delegated:** The **process owner** is accountable
+   for the design, health, specification, and SLA of the process. The process
+   owner delegates execution to **process implementers** (lanes, tools, or
+   automated runners). If a run fails or stalls, the process owner remains
+   accountable to the client.
+4. **Subprocesses recurse:** When an implementer's execution consists of distinct
+   stages, each stage is a **subprocess** with its own `(Process Client, Process
+   Owner, Delegated Implementers, Process Quality Criteria)` triad.
+5. **Quality criteria reflect client and stakeholder value:** Each process defines
+   explicit quality criteria framed around the value delivered to the client,
+   not internal mechanical chores.
+
+---
+
+## 2. Telemetry: Recorded vs. Derived Measures
+
+A process run is **measured, not merely checked**. We distinguish what is
+recorded on each run from what is read off the record:
+
+| Layer | Measure | Source |
+|---|---|---|
+| **Recorded** (per run) | `duration` | Elapsed wall time of the run |
+| | `resources consumed` | Compute, tokens, turns, or cost spent |
+| | `outcome` | `accepted` · `reworked` · `abandoned` · `failed` |
+| **Derived** (over time) | `cadence` | Actual runs ÷ declared runs |
+| | `throughput` | Accepted outputs ÷ elapsed period |
+| | `first-pass yield` | Accepted runs ÷ total runs |
+| | `waste` | `(1 − yield) × resources consumed` |
+| | `cost per successful task` | Total resources consumed ÷ accepted outputs |
+
+---
+
+## 3. Process Register
+
+Fill in the processes this factory runs. The core baseline processes from the
+template are pre-populated below; add domain-specific processes as needed:
+
+| Process | Process Owner | Process Client | Delegated Implementers | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
+|---|---|---|---|---|---|---|---|
+| **Verification gates** | HQ | Carrier / Author | automated runner / CLI | every change | Zero regressions, clean invariants, immediate feedback | Command exit code and output | duration · resources consumed · first-pass yield · waste |
+| **Intake** | Triage | Reporter / Finder | Triage lane | on finding / gap | Unambiguous scope, clear goal, and verifiable done-criteria | Work unit issue on the board | throughput · duration |
+| **Assignment** | Triage | Worker / Task | Triage lane | on intake | Clean claim check, clear task brief, no orphan runs | Ledger claim row, dispatch brief | throughput · duration · first-pass yield |
+| **Execution watchdog** | Triage | HQ / Owner | Triage lane | periodic (hourly) | Early detection of stalled workers before SLA breach | Escalation report or clean sweep log | cadence · throughput · first-pass yield |
+| **Rework entry** | Triage | Surveys / Quality loop | Triage lane | on defect resolution | Root cause and actionable prevention rule recorded | Row in `evidence/rework.md` | throughput · first-pass yield |
+| **Ship chain** | Carrier | Consumers / Release | Carrier lane | every release | Atomic, verified artifact without release rollback | Release commit, artifact identity proof | duration · resources consumed · first-pass yield · waste |
+| **Periodic self-measurement** | Surveys | Owner / HQ | Surveys lane / cron | daily / weekly | Reproducible, objective score diffs delivered on schedule | `evidence/scores/<date>.md`, ledger row | cadence · duration · resources consumed · throughput |
+| **Process audit** | Surveys | Owner / Governance | Surveys lane | periodic | Early detection of silently stopped processes | Audit report in evidence | cadence · first-pass yield |
+
+*(Add domain processes below)*
