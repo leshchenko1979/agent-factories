@@ -144,6 +144,13 @@ Work goes **sender → owner of the resource**, directly. No relay hops.
 When an instrument is inadequate, name **the repository that carries the code**, not the
 tool that surfaced the defect, and dispatch in the same turn it is found.
 
+The harness that this meta-factory and all surveyed factories run on is produced and managed
+by the **OpenCrabs factory** (`leshchenko1979/opencrabs`, Crabs Kanban Board topic `OC DEV HQ`).
+The OpenCrabs factory is simultaneously one of our surveyed member factories and the fleet's
+runtime supplier. All factories act as clients to OpenCrabs: we experience runtime friction,
+telemetry gaps, and scheduling bottlenecks directly, and advise OpenCrabs HQ with concrete
+feature requests and instrument specifications.
+
 | Substrate | Owner |
 |---|---|
 | OpenCrabs instruments (daemon, core tools, brain/skill loading) | **OpenCrabs Kanban Board HQ** — session `d72bd52d-42aa-4dbd-ac99-5b5300770019`; fork issues on `leshchenko1979/opencrabs` |
@@ -325,4 +332,4 @@ the gates have had time to bite. Report it as a direction, not a verdict.
 |---|---|---|
 | The four member factories | consulting | diagnostic findings, recommendations, template laws and scores; they own their own decisions and implementation |
 | The operator | service | analysis, decisions framed as options |
-| OpenCrabs (the harness) | collaboration | harness defects and instrument requests |
+| OpenCrabs (harness & dev factory) | client-supplier loop | runtime friction, telemetry requirements, and feature requests; daemon release builds |

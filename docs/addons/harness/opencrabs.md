@@ -239,12 +239,24 @@ Two harness-specific traps when writing gates:
 
 ---
 
-## Reporting a defect in the harness
+## The supplier-client loop: advising OpenCrabs and requesting features
 
-The harness has an owner, and the owner is where a defect goes. Asking for the
-change is a **dispatch**, not a complaint in a status report: a defect noted in
-a report is a defect unfiled, and the operator is not the one who should have to
-carry it.
+The harness is not an external third-party black box: it is built and maintained by the
+**OpenCrabs factory** (`leshchenko1979/opencrabs`), which is itself one of the member
+factories on our survey roster.
+
+The entire factory fleet (the meta-factory and all surveyed member factories) are the
+primary industrial clients of the OpenCrabs harness. This creates an active feedback loop:
+1. **Fleet friction & bottlenecks:** Factories encounter operational friction, scheduling
+   delays, telemetry gaps (e.g. process run metrics), or awkward workarounds (e.g. topic
+   binding).
+2. **Consulting & aggregation:** The meta-factory identifies structural harness bottlenecks
+   across the fleet and formulates concrete instrument requests.
+3. **Feature dispatch:** Requests are dispatched directly to OpenCrabs Factory HQ
+   (Crabs Kanban Board topic `OC DEV HQ`, session `d72bd52d-42aa-4dbd-ac99-5b5300770019`)
+   via `session_notify`, or filed as fork issues on `leshchenko1979/opencrabs`.
+4. **Harness evolution:** The OpenCrabs factory implements, tests, and ships binary updates
+   via its release chain, resolving inefficiencies across the entire fleet at once.
 
 Owner order, 2026-09-11: **an inadequate OpenCrabs instrument is reported to
 OpenCrabs' own `HQ` as a request for the change** — for this meta-factory, the
