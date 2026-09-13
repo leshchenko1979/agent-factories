@@ -168,6 +168,33 @@ six measures are what turn the register from a checklist into an instrument.
 | **First-pass yield** | How much of its output was accepted without rework? | It produces work that keeps coming back |
 | **Waste** | How much went into rework, re-runs, abandoned runs? | The complement of yield, and the part nobody sees |
 
+**They are not six independent axes — three are recorded, three are read off the
+record.** That distinction decides what a run row has to carry, and it is why a
+row naming a derived measure without its inputs cannot be read at all.
+
+| Layer | Measure | Where it comes from |
+|---|---|---|
+| **Recorded** — one run writes it | Duration | the run's own start and end |
+| | Resources consumed | what the run spent: tokens, turns, money, wall time |
+| | Outcome | accepted · reworked · abandoned |
+| **Derived** — read off many rows | Cadence | runs ÷ the runs the register declares — needs one law fact, not one more field |
+| | Throughput | accepted outputs ÷ the period |
+| | First-pass yield | accepted runs ÷ runs |
+| | Waste | `(1 − yield) × spend` — arithmetic on two derived readings, not a fourth measurement |
+| | Cost per successful task | `spend ÷ throughput` — the rubric's O3, and the composite of all of them |
+
+So the register asks a process to **record three**, not to collect six. Two
+consequences, and both are corrections to the table below:
+
+- **A derived measure is readable only if its inputs are named beside it.** The
+  four gates row listed `waste` without `resources consumed`; the ship chain row
+  listed `waste` without `first-pass yield`. Neither could be read as written,
+  and `waste` on its own is the one measure that always reduces to others.
+- **Cadence applies only to a process that has a period.** A gate that runs
+  *every change* has no declared interval to fall short of, so it carries no
+  cadence reading; a watchdog that runs hourly does. Cadence is the one measure
+  that needs a law fact — the declared rate — rather than a run.
+
 **None of this is a new measurement system.** `docs/quality-criteria.md` already
 adopted exactly these, one level **up**: the Output family is Throughput (O1),
 Stability (O2) and Cost per successful task (O3), and the rubric's own cited
@@ -200,12 +227,12 @@ not an afterthought.
 
 | Process | Owner | Declared cadence | Measures that apply |
 |---|---|---|---|
-| The four gates | HQ | every change | duration · first-pass yield · waste |
+| The four gates | HQ | every change | duration · resources consumed · first-pass yield · waste |
 | Intake | Triage | on finding | throughput · duration |
 | Assignment | Triage | on intake | throughput · duration · first-pass yield |
 | Execution watchdog | Triage | periodic | cadence · throughput |
 | Rework entry | Triage | on defect | throughput · first-pass yield |
-| Ship chain | Carrier | every release | duration · resources consumed · waste |
+| Ship chain | Carrier | every release | duration · resources consumed · first-pass yield · waste |
 | Daily measurement | Surveys | daily | cadence · duration · resources consumed · throughput |
 | Process audit | Surveys, and the meta-factory | periodic | cadence · first-pass yield |
 
