@@ -1,14 +1,19 @@
-# Product: the factory template
+# Product: the factory template and consulting practice
 
-**What this is.** A template for creating a new agent factory — a working
-structure an operator (or an agent) copies and instantiates, plus the rules
-that make it work and the domain add-ons that adapt it to a particular kind of
-work.
+**What this is.** Two things in one project:
+1. **The template product:** A working structure an operator (or an agent) copies
+   and instantiates to create a new agent factory, plus the rules that make it work
+   and the domain add-ons that adapt it to a particular kind of work.
+2. **The consulting practice:** An active process-consultancy to the surveyed
+   member factories — diagnosing operational bottlenecks, surfacing stopped or
+   low-yield processes, recommending hardened gates and practices, and helping their
+   HQs measurably increase their efficiency (throughput, cadence, yield, waste reduction).
 
 **What it is not.** Not a framework, not a runtime, not a library. There is no
-code to import. The product is a set of files plus an ordered procedure, and it
-is complete when a new factory can be stood up in an afternoon without the
-operator re-deriving any of the decisions.
+code to import. The template product is a set of files plus an ordered procedure,
+and it is complete when a new factory can be stood up in an afternoon without the
+operator re-deriving any of the decisions. The consulting practice advises and
+diagnoses — it never seizes the tools or writes code in a member factory's repository.
 
 ---
 
@@ -21,18 +26,20 @@ given shape.
 | In scope | Out of scope |
 |---|---|
 | Factory effectiveness and health, measured | The domain work a factory does |
+| Process consulting to member HQs to raise efficiency | Doing member implementation or backlog work |
 | Template laws that hold for **every** factory | One factory's product decisions |
 | Add-on laws that hold for **every** factory of that kind | One factory's backlog, clients or code |
 | The mechanics of a surface or harness, as a swappable binding | Any given factory's configuration of them |
 
 The **peculiarities of an individual project are not this project's concern.**
 They belong to that factory's own `HQ`, which has the context to decide them.
-This project talks to a member factory's HQ or that HQ's delegate — it never
-does a member's work, and it never files a member's issues.
+This project acts as a consultant to a member factory's HQ or that HQ's delegate —
+it diagnoses, advises, and recommends improvements, but it never does a member's
+work, and it never files a member's issues.
 
 That boundary is not politeness. A meta-factory that absorbs domain detail stops
 being a meta-factory: it becomes a second, worse `HQ` for every factory at once,
-and its own output — the laws — goes unwritten.
+and its own output — the laws and objective consulting — goes unwritten.
 
 ---
 

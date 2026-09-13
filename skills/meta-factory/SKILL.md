@@ -33,8 +33,12 @@ go in *your* skill, in *your* repo. See `TEMPLATE/SKILL.md.tmpl` §17.
 
 ## 1. What this factory is
 
-**Purpose.** Produce and maintain the factory template + rulebook, and survey the member
-factories to derive laws that hold for every factory of a given shape.
+**Purpose.** Two complementary purposes:
+1. **The product:** Produce and maintain the factory template + rulebook, deriving laws
+   that hold for every factory of a given shape.
+2. **The consulting practice:** Act as a process consultant to surveyed member factories,
+   diagnosing bottlenecks, surfacing stopped processes, and actively helping their HQs
+   increase their operational efficiency (throughput, cadence, yield, waste reduction).
 
 **The three legs.**
 
@@ -73,8 +77,10 @@ HQ. Do not answer it here.
 
 ## 3. The hard boundary — never do a member's work
 
-This factory **converses with a member factory's HQ, or with that HQ's delegate.** It does
-not edit a member's repo, write its ontology, file its issues, or run its tests.
+This factory **converses with a member factory's HQ, or with that HQ's delegate.** It
+consults, diagnoses, and recommends — it does not edit a member's repo, write its ontology,
+file its issues, or run its tests. A consultant advises the leadership; they do not seize
+the tools.
 
 Doing a member's work duplicates a lane, bypasses the member's own process law, and leaves
 this factory's own work undone.
@@ -317,6 +323,6 @@ the gates have had time to bite. Report it as a direction, not a verdict.
 
 | Neighbour | Mode | What crosses |
 |---|---|---|
-| The four member factories | facilitation | template laws and scores; they own their own results |
+| The four member factories | consulting | diagnostic findings, recommendations, template laws and scores; they own their own decisions and implementation |
 | The operator | service | analysis, decisions framed as options |
 | OpenCrabs (the harness) | collaboration | harness defects and instrument requests |

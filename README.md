@@ -8,8 +8,10 @@ into a self-driving delivery line: AI agents do the work, a human supervises
 through the chat, and the process itself is a versioned file rather than
 something living in someone's head.
 
-This repo is the **product**: the thing you copy when you want to stand up a
-new factory, and the rulebook that says why each piece is there.
+This repo holds **the product and the consulting practice**: the template you
+copy when you want to stand up a new factory, the rulebook that explains why each
+piece is there, and the advisory framework that helps surveyed member factories
+diagnose bottlenecks and measurably increase their operational efficiency.
 
 ## What you get
 
@@ -31,8 +33,10 @@ given shape.
 
 It does **not** concern itself with the peculiarities of any individual project.
 A factory's own product decisions, backlog, clients and code are that factory's
-`HQ`'s business — not this project's. This project converses with a member
-factory's HQ or that HQ's delegate, and never does a member's work.
+`HQ`'s business — not this project's. This project acts as an objective process
+consultant to a member factory's HQ or that HQ's delegate, diagnosing machine
+efficiency and recommending template solutions, while strictly never doing a
+member's implementation work.
 
 That boundary is load-bearing. A meta-factory that absorbs domain detail becomes a
 second, worse `HQ` for every factory at once — and stops producing the laws it
