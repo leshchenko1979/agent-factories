@@ -113,13 +113,16 @@ automated **hygiene process** upholding workspace resource safety:
 
 ### 4.3 Operational Measurement & Consulting (Governance Loop)
 - **Process Owner:** Surveys
-- **Process Client:** Factory Owner / Member Factory HQs
+- **Process Client:** Factory Owner & Member Factory HQs
 - **Subprocesses:**
-  1. *Live Evidence Collection (Implementer: Surveys)*: Collects repo, ledger, and test evidence across 5 factories.
-  2. *Rubric Scoring (Implementer: Surveys)*: Evaluates 13 criteria (0–4) across 4 families objectively.
-  3. *Consulting Diagnostics & Advisory (Implementer: Surveys)*: Synthesizes fleet patterns, identifies stopped processes or harness friction, and provides recommendations to member HQs.
-  4. *Ledger Recording (Implementer: Surveys)*: Appends ledger `score` row and commits `evidence/scores/<date>.md`.
-- **Quality Criteria:** Scores delivered daily at 09:00 MSK; diffs are reproducible and advisory items directly increase member factory yield.
+  1. *Internal Self-Audit (Implementer: tools/audit.py)*: Executes automated verification of meta-factory ledger sequence, rework rates, lead times, and the 6 mechanical gates.
+  2. *Meta-Audit of Member Factories (Implementer: Surveys)*: Audits the integrity of member self-audits:
+     - *Cadence Verification*: Checks whether member self-audits fired on declared schedule (Client Principle).
+     - *Structural Invariants*: Audits member ledger monotonicity and single-writer locking.
+     - *Calibration Spot-Check*: Samples one recently closed task and verifies unbroken intake -> claim -> close sequence.
+  3. *Consulting Diagnostics & Advisory (Implementer: Surveys & Delegate)*: Synthesizes fleet patterns, identifies stopped processes or harness friction, and dispatches actionable advisories to member HQs.
+  4. *Ledger Telemetry (Implementer: Surveys)*: Appends ledger `score` or `run` rows and commits score diffs.
+- **Quality Criteria:** Self-audit automated via `tools/audit.py`; meta-audit spot-checks prevent grade inflation; advisories measurably increase member factory yield.
 
 ### 4.4 Workspace Hygiene Sweep (Hygiene Loop)
 - **Process Owner:** HQ

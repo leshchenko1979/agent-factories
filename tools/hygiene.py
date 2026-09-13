@@ -54,8 +54,10 @@ def reap_stale_scratch(dry_run: bool = False) -> tuple[int, list[str]]:
 def audit_git_clutter() -> list[str]:
     """Check if repository working tree has untracked clutter or temp files."""
     try:
+        repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         res = subprocess.run(
             ["git", "status", "--porcelain"],
+            cwd=repo_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

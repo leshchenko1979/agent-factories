@@ -98,45 +98,75 @@ The surveyor does not merely check if a cron job or scheduled trigger is written
 
 ---
 
-## 5. What One Run Does (Step-by-Step)
+## 5. What One Run Does: The Two-Tier Audit Architecture
 
-For each surveyed factory:
+The measurement framework operates as a **two-tier quality management system**:
 
-1. **Inspect Live State:**
-   Gather receipts directly from live systems:
-   - Git repository: recent commits, tags, branches, dirty state.
-   - Issue board / Task tracker: open vs closed issues, triage throughput, backlog age.
-   - Mechanical gates & test suites: run test runners, check exit codes, count collected tests.
-   - Run logs and schedules: verify last execution time of recurring jobs.
-   - Ledger & rework files: check sequence monotonicity, claim/close legs, rework table integrity.
+```mermaid
+flowchart TD
+    subgraph Tier1["Tier 1: Member Factory Internal Self-Audit"]
+        direction TB
+        M1["tools/audit.py executed on schedule"]
+        M2["Calculates yield, rework rate, lead time"]
+        M3["Executes mechanical gates suite"]
+        M4["Generates evidence/scores/<date>-self-audit.md"]
+        M1 --> M2 --> M3 --> M4
+    end
+
+    subgraph Tier2["Tier 2: Meta-Factory Governance Audit (Audit of the Audit)"]
+        direction TB
+        G1["Cadence Integrity Verification (Client Principle)"]
+        G2["Structural Invariants Audit (Ledger Monotonicity, Locks)"]
+        G3["Calibration Spot-Check (Sample 1 Task: intake -> claim -> close)"]
+        G4["Consulting Diagnostics & Advisory Delivery"]
+        G1 --> G2 --> G3 --> G4
+    end
+
+    M4 -->|Audit artifact & ledger| G1
+```
+
+### Step-by-Step Procedure:
+
+1. **Tier 1 — Internal Self-Audit (Local Factory Execution):**
+   - Each factory runs its own internal self-audit using `tools/audit.py` (or local equivalent).
+   - Verifies ledger sequence monotonicity, single-writer locking, and gate bite.
+   - Derives operational measures: first-pass yield, rework rate, lead time.
+   - Records run telemetry into `evidence/ledger.jsonl`.
+
+2. **Tier 2 — Meta-Audit of Member Factories (By Surveys Lane):**
+   For each surveyed member factory:
+   - **Cadence & Trigger Verification:** Inspect whether the factory's recurring self-audit executed on its declared schedule. A missed or stalled run is scored as `outcome = failed` per Ruling 4.
+   - **Structural Invariants Check:** Audit ledger monotonicity, unbroken row numbering, and single-writer file locking in live state.
+   - **Calibration Spot-Check:** Sample exactly **one** recently closed task from the member factory's ledger and audit the complete receipt chain (`intake` → `claim` → `run` → `close` + entry in `evidence/rework.md`). If the claims diverge from receipts, flag an audit calibration failure.
+   - **Gate Verification:** Check whether mechanical gates ran and passed with live rc=0 receipts.
    *Rule: Never score from memory, narrative claims, or the previous report.*
 
-2. **Audit against the 13 Quality Criteria:**
+3. **Audit against the 13 Quality Criteria:**
    Score each criterion (0–4) against [quality-criteria.md](quality-criteria.md).
    Evaluate whether capabilities are *Absent* (0), *Ad-hoc* (1), *Defined* (2),
    *Measured* (3), or *Self-correcting* (4).
 
-3. **Assess Process Health & Cadence:**
+4. **Assess Process Health & Cadence:**
    Evaluate the 3 core value streams and verify client cadence fulfillment. Flag any
    stopped, deadlocked, or un-upheld processes.
 
-4. **Diff against Previous Run:**
+5. **Diff against Previous Run:**
    Compare each score against the previous dated entry in `evidence/scores/`. Note
    movement drivers and whether the calibration gap (self-score vs surveyor audit) is closing.
 
-5. **Generate Consulting Diagnostics:**
+6. **Generate Consulting Diagnostics:**
    Formulate actionable, prioritized recommendations for that factory's HQ:
    - Bottlenecks in the Work Delivery Pipeline.
    - Recurrent defects requiring mechanical gates.
    - Stalled cycles requiring trigger restoration.
    - Un-upheld laws that lack automated verification.
 
-6. **Record and Commit:**
+7. **Record and Commit:**
    - Write dated report to `evidence/scores/<YYYY-MM-DD>.md`.
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`.
    - Commit cleanly to the repository.
 
-7. **Report to Operator & Member HQs:**
+8. **Report to Operator & Member HQs:**
    - Present summary, score movements, and fleet patterns to the Factories analysis topic.
    - Deliver consulting advisories to member factory HQs via direct communication channels.
 

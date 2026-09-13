@@ -66,14 +66,15 @@ Process spend (`resources consumed`, and derived `cost per successful task` and
 ## 3. The Factory Process Register
 
 Every factory bootstrapped from this template organizes its recurring work into
-**two primary operational processes** (the delivery value stream and the rework
-prevention loop) plus an automated **hygiene process**:
+**three primary operational processes** (the delivery value stream, the rework
+prevention loop, and the self-audit governance loop) plus an automated **hygiene process**:
 
 | Process | Process Owner | Process Client | Delegated Implementers | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
 |---|---|---|---|---|---|---|---|
 | **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | on task, finding, or request | Zero regressions, rapid cycle time, verified release without rollback | Task issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
 | **2. Rework Prevention & Learning Loop** | Triage | Factory Stability / Governance | Triage lane, defect resolving lane | on defect resolution | Root mechanism identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
-| **3. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
+| **3. Internal Self-Audit** | Surveys (or HQ) | Factory Owner & Governance | Automated runner / cron (`python3 tools/audit.py`) | daily (09:00 MSK) | Objective verification of mechanical gates; unbroken ledger sequence; spot-checked task evidence | `evidence/scores/<date>.md`, ledger `run` row | cadence · duration · first-pass yield · rework rate |
+| **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
 ---
 
@@ -99,7 +100,18 @@ prevention loop) plus an automated **hygiene process**:
   3. *Audit & Entry Gate (Implementer: Triage)*: Appends contiguous entry to `evidence/rework.md` passing `tests/test_rework.py` invariants.
 - **Quality Criteria:** Zero defect recurrences; 100% of rework entries carry audited `Prevented by` mechanisms.
 
-### 4.3 Workspace Hygiene Sweep (Hygiene Loop)
+### 4.3 Internal Self-Audit (Governance Loop)
+- **Process Owner:** Surveys (or HQ)
+- **Process Client:** Factory Owner & Governance
+- **Subprocesses:**
+  1. *Ledger & Evidence Verification (Implementer: tools/audit.py)*: Validates ledger sequence monotonicity and single-writer locking.
+  2. *Metric Calculation (Implementer: tools/audit.py)*: Computes first-pass yield, rework rate, average lead time, and cadence integrity.
+  3. *Gate Suite Execution (Implementer: tools/audit.py)*: Runs mechanical gates (ontology, rework, single-writer, hygiene, template sync).
+  4. *Calibration Spot-Check (Implementer: tools/audit.py)*: Samples the latest closed task and verifies unbroken intake -> claim -> close sequence.
+  5. *Report Generation & Stamping (Implementer: tools/audit.py)*: Writes dated `evidence/scores/<date>.md` and records telemetry `run` event.
+- **Quality Criteria:** Complete self-audit execution without manual calculation; all metrics derived directly from immutable ledger and rework logs.
+
+### 4.4 Workspace Hygiene Sweep (Hygiene Loop)
 - **Process Owner:** HQ
 - **Process Client:** Host Environment / Operators
 - **Subprocesses:**
