@@ -9,70 +9,170 @@ procedure lives in this file, not in the job.**
 
 ---
 
-## Cadence and Roles
+## 1. Purpose: Measurement & Consulting Practice
 
-**Self-scoring:** each member factory maintains its own standing measurement loop (daily or on its
-own sprint cadence) to trigger continuous self-correction.
-
-**Surveyor audit:** periodic meta-factory review (less frequent than daily self-scoring; owner order 2026-09-11).
-The surveyor's role is calibration and cross-factory pattern discovery, not micro-management.
+This procedure operationalizes **Process 3 (Operational Measurement & Consulting)**
+from the Process Register ([processes.md](processes.md)). It fulfills the factory's
+two-part mission:
+1. **The Product:** Measure effectiveness and health across the surveyed fleet against
+   [quality-criteria.md](quality-criteria.md), deriving template laws from empirical patterns.
+2. **The Consulting Practice:** Act as a process consultant to surveyed member
+   factories, diagnosing operational bottlenecks, detecting stalled pipelines, and
+   advising member factory HQs on concrete interventions to increase throughput,
+   cadence, and first-pass yield while eliminating waste.
 
 ---
 
-## What one run does
+## 2. Roles and the Process Triad
+
+| Role | Entity | Accountability & Function |
+|---|---|---|
+| **Process Owner** | `Surveys` role (meta-factory) | Accountable for the audit specification, rubric consistency, objective scoring, and consulting advisory delivery. |
+| **Process Client** | Factory Owner & Member Factory HQs | Sets expectations for timing (daily at 09:00 MSK), consumes the dated scores, and uses consulting advisories to improve operational performance. |
+| **Process Implementer** | Surveys lane / scheduled runner | Executes the survey steps, gathers live evidence, computes diffs, records telemetry, and formats reports. |
+
+---
+
+## 3. The Audit Lens: Process Operations & Value Streams
+
+The survey evaluates a factory not as a static collection of files, but as a live
+operating engine structured around **three primary operational processes**:
+
+```mermaid
+flowchart TD
+    subgraph Stream1["1. Work Delivery Pipeline"]
+        WD1["Intake and Spec"] --> WD2["Assignment and Lock"]
+        WD2 --> WD3["Build and Self-Verification"]
+        WD3 --> WD4["Automated Gates and Release"]
+    end
+
+    subgraph Stream2["2. Quality and Rework Prevention"]
+        RP1["Defect Isolation"] --> RP2["Mechanism RCA"]
+        RP2 --> RP3["Automated Gate Creation"]
+        RP3 --> RP4["Contiguous Rework Log"]
+    end
+
+    subgraph Stream3["3. Governance and Measurement"]
+        GM1["Standing Cadence"] --> GM2["Process Register Audit"]
+        GM2 --> GM3["Telemetry and Yield Tracking"]
+    end
+```
+
+For each surveyed factory, the audit examines:
+
+### 3.1 Work Delivery Pipeline (Value Stream)
+- Does work flow reliably from client finding/task to verified release?
+- Is intake disciplined with explicit acceptance criteria, or do lanes begin work on vague prompts?
+- Is there a clear handoff and locking mechanism preventing duplicate work?
+- Are verification gates mechanized and automated, or does release rely on manual review?
+- Where is work currently queueing or stalling?
+
+### 3.2 Quality & Rework Prevention (Feedback Loop)
+- When a bug or regression occurs, what process runs to ensure it never happens again?
+- Does the factory perform root cause analysis identifying the structural mechanism, or does it record superficial narrative blame?
+- Is every defect paired with an automated test, mechanical gate, or enforceable law preventing recurrence?
+- Is the rework log contiguous, audited, and linked to real preventative changes?
+
+### 3.3 Governance, Measurement & Laws without Processes
+- Does the factory maintain an accurate, audited process register?
+- Are codified laws (e.g. single-writer state, workspace cleanliness, boundary enforcement) actually upheld by running processes and automated gates, or are they dead letters?
+- Are process costs co-owned across Demand (prompt/model efficiency) and Supply (token provider latency/pricing)?
+
+---
+
+## 4. The Client Principle: Scoring Cadence & Stalled Triggers
+
+Per **Ruling 4 (2026-09-13)**:
+> *"Every process runs for its client. The client decides when the process should start.
+> The failure to start when the client expects it to run is a failure and should be
+> scored as such."*
+
+The surveyor does not merely check if a cron job or scheduled trigger is written in a file:
+1. **Verify live execution against declared cadence:** Inspect the factory's scheduler,
+   run logs, and ledger timestamps.
+2. **Deadlocks and missed triggers are execution failures:** If an automated cycle was
+   scheduled to run hourly or daily and silently stalled (e.g. locked scheduler, missed
+   trigger, unhandled exception), it is recorded as `outcome = failed`.
+3. **Scoring penalty:** A stalled or deadlocked process directly depresses **Stability**
+   and **Cadence**. Codification without live execution does not earn level 3 or 4.
+
+---
+
+## 5. What One Run Does (Step-by-Step)
 
 For each surveyed factory:
 
-1. **Review** the factory's self-score and audit against [quality-criteria.md](quality-criteria.md) — 13
-   criteria, 0–4 each. Verify against **live state**: the factory's repo,
-   its board, its law files, its scheduled jobs. Never from memory and never
-   from the previous report.
-2. **Diff** against previous records. Note where self-judgment and external audit diverge (the calibration gap).
-3. **Record** the dated score in this repo — the diff is the signal, a single
-   score is an opinion.
-4. **Report** to the analysis topic: the scores, the movements, and any
-   **template law** the movement implies.
+1. **Inspect Live State:**
+   Gather receipts directly from live systems:
+   - Git repository: recent commits, tags, branches, dirty state.
+   - Issue board / Task tracker: open vs closed issues, triage throughput, backlog age.
+   - Mechanical gates & test suites: run test runners, check exit codes, count collected tests.
+   - Run logs and schedules: verify last execution time of recurring jobs.
+   - Ledger & rework files: check sequence monotonicity, claim/close legs, rework table integrity.
+   *Rule: Never score from memory, narrative claims, or the previous report.*
+
+2. **Audit against the 13 Quality Criteria:**
+   Score each criterion (0–4) against [quality-criteria.md](quality-criteria.md).
+   Evaluate whether capabilities are *Absent* (0), *Ad-hoc* (1), *Defined* (2),
+   *Measured* (3), or *Self-correcting* (4).
+
+3. **Assess Process Health & Cadence:**
+   Evaluate the 3 core value streams and verify client cadence fulfillment. Flag any
+   stopped, deadlocked, or un-upheld processes.
+
+4. **Diff against Previous Run:**
+   Compare each score against the previous dated entry in `evidence/scores/`. Note
+   movement drivers and whether the calibration gap (self-score vs surveyor audit) is closing.
+
+5. **Generate Consulting Diagnostics:**
+   Formulate actionable, prioritized recommendations for that factory's HQ:
+   - Bottlenecks in the Work Delivery Pipeline.
+   - Recurrent defects requiring mechanical gates.
+   - Stalled cycles requiring trigger restoration.
+   - Un-upheld laws that lack automated verification.
+
+6. **Record and Commit:**
+   - Write dated report to `evidence/scores/<YYYY-MM-DD>.md`.
+   - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`.
+   - Commit cleanly to the repository.
+
+7. **Report to Operator & Member HQs:**
+   - Present summary, score movements, and fleet patterns to the Factories analysis topic.
+   - Deliver consulting advisories to member factory HQs via direct communication channels.
 
 ---
 
-## What one run must NOT do
+## 6. What One Run Must NOT Do (Hard Boundaries)
 
 | Don't | Why |
 |---|---|
-| Adjudicate a factory's product decisions | That is its own `HQ`'s call. This run measures the machine, not the work |
-| File, edit or close anything in a member factory's repo | Doing a member's work duplicates a lane and bypasses its process law |
-| Talk to a member factory's lanes directly | Converse with its **HQ**, or that HQ's delegate — never into its lanes |
-| Report a score without the read that produced it | A score is a claim; claims need a same-turn receipt |
-| Pull domain detail into the number | The score is effectiveness and health — how the machine works, not what it is working on |
+| **Adjudicate a factory's product decisions** | That is its own HQ's responsibility. The survey measures the machine and process, not the product domain. |
+| **Touch or edit a member factory's repository** | Doing a member's work violates **P25 (Non-Participation)**, duplicates lanes, and breaks their process ownership. |
+| **Talk directly into a member factory's worker lanes** | Communication flows strictly between meta-factory (or Delegate) and the member factory's **HQ**. |
+| **Report a score without a live receipt** | Every score is an evidentiary claim; claims require same-turn tool receipts. |
+| **Bypass failures because "code is written"** | A written rule whose process does not execute is un-upheld; score what runs, not what is intended. |
 
-**If a factory is unreadable** — no board, no law file, no reachable HQ — that
-is a finding, not a blocker. Score what is absent as absent and say which read
-failed. "Could not read" and "scored zero" are different results and must be
-reported differently.
-
----
-
-## Measures
-
-The 13 criteria are the **floor**. Factory-specific measures are added as the
-need appears, and each must name the **decision it informs**.
-
-A measure with no decision attached is dropped. Dashboards are not controls.
+**Unreadable factories:** If a factory's live state cannot be reached (e.g. repo inaccessible,
+scheduler offline), log this as an explicit finding and score absent elements as 0.
+"Could not read" and "scored zero" must be distinguished with the exact read failure stated.
 
 ---
 
-## Trend, not snapshot
+## 7. Consulting Advisory Format
 
-Keep every run's date and score. The value of the daily cadence is that a
-**movement** becomes visible while it is still cheap to act on. A run that
-reports only the current score has thrown away the reason it runs daily.
+When communicating findings to a member factory HQ, structure each advisory around:
+1. **Observed Symptom / Bottleneck:** What is stalled, drifting, or producing waste.
+2. **Underlying Mechanism:** Why it is happening (e.g. scheduler lock, un-gated state file).
+3. **Recommended Process Fix:** The concrete template pattern, gate, or role adjustment to resolve it.
+4. **Expected Impact:** How the fix will improve throughput, cadence, or stability.
 
 ---
 
-## Routing
+## 8. Fleet Supplier-Client Feedback Loop
 
-- **Results** go to the analysis topic in the Factories group — the owner's
-  lane.
-- **Anything needing a member factory's action** goes to that factory's HQ via
-  its own direct-address path, as a finding. Not as a work order: the HQ decides
-  what its factory does about it.
+When live measurement reveals that member factories are experiencing friction caused by
+underlying substrates (runtime harness or token provider):
+- **Harness Friction:** Synthesize patterns and file instrument requests with the
+  runtime development factory (e.g. native process telemetry hooks, topic auto-binding).
+- **Inference & Token Supply:** Flag latency spikes, routing failures, or prompt caching
+  anomalies with the inference monitoring factory (`inferhub-watch`).
