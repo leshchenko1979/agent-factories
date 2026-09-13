@@ -55,7 +55,8 @@ LOCK = LEDGER.parent / ".ledger.lock"
 # ruling    HQ decided something
 # intake    an issue filed
 # genesis   the surface came into existence
-EVENTS = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling")
+# run       a process execution recorded per processes.md
+EVENTS = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", "run")
 
 # The closed set of actors — the roles a factory's law names as lanes. A role
 # that is not listed cannot write a row, so adding one is a law change, never a

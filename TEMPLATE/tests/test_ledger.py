@@ -124,6 +124,10 @@ def main() -> int:
         r = run(ledger, "verify")
         check("verify exits 0 on a good ledger", r.returncode == 0, r.stdout.strip())
 
+        r = run(ledger, "append", "--event", "run", "--actor", "hq",
+                "--subject", "four-gates", "--detail", "duration=3s outcome=accepted")
+        check("run event type is accepted", r.returncode == 0, r.stdout.strip() if r.stdout else r.stderr.strip()[:60])
+
         print("\nrejection — the schema is closed")
         r = run(ledger, "append", "--event", "nonsense", "--actor", "hq",
                 "--subject", "x", "--detail", "y")

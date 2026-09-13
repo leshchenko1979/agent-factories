@@ -52,7 +52,7 @@ only one of them is measured today.
 
 **`score` was a declared event type with zero rows — until 2026-09-13.** The
 ledger's closed event set is `genesis, intake, claim, dispatch, close, score,
-ruling`. On 2026-09-12 the counts were genesis 1, intake 6, claim 5, dispatch 1,
+ruling, run`. On 2026-09-12 the counts were genesis 1, intake 6, claim 5, dispatch 1,
 close 7, ruling 3 — and **score 0**. The daily measurement run wrote
 `evidence/scores/<date>.md` and left no state transition behind, so the one
 process this factory runs on a schedule was invisible in the surface built to
