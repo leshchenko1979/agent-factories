@@ -101,16 +101,21 @@ where fresh context without session bias is the whole point.
 - *Prevents:* HQ becoming the bottleneck and the single point of
   failure, and review being done by the author of the thing under review.
 
-## P7 — Cron is a thin trigger, not the worker
+## P7 — Cron is a thin pacemaker trigger, not the worker
 
-A scheduled job should do one thing: notify the owning session. The work runs
-in that session, under the current law.
+A scheduled job should do one thing: wake up and notify the owning session (the **Pacemaker Law**).
+The substantive work runs inside that persistent session, under the current law.
 
-- *Proven:* inferhub-watch — `inferhub-watch-hq-hourly` runs exactly one
-  `session notify` command and stops.
-- *Prevents:* cron prompts freezing old law in place — a prompt cannot be
-  updated by a skill change, so anything substantive inside it goes stale
-  silently.
+- *Proven:* inferhub-watch — `inferhub-watch-hq-hourly` runs exactly one thin trigger
+  notifying the HQ session UUID and stops; opencrabs-dev — `oc-triage-hourly`.
+- *The Pacemaker Requirement:* Every agent role that owns a periodic process (surveys,
+  triage sweeps, hygiene, health checks) **must** have a scheduled pacemaker job targeting
+  its persistent session UUID. Without an automated heartbeat, language models default to
+  one-shot conversational stopping, and declared cadences stall the instant the human steps away.
+- *Prevents:*
+  1. **Process stall / amnesia:** An agent sitting idle forever awaiting human turn input.
+  2. **Substantive drift:** Cron prompts freezing old law in place — a prompt cannot be
+     updated by a skill change, so anything substantive inside a cron payload goes stale silently.
 
 ## P8 — Codify the vocabulary, and enforce it with a test
 

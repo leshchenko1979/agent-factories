@@ -50,14 +50,15 @@ flowchart TD
 
 ---
 
-### Stage 1: Autonomous Intake (Continuous Flow)
+### Stage 1: Autonomous Intake & The Pacemaker Law (Continuous Flow)
 
 - **Throughput:** 5–50 tasks / week.
-- **Operating Profile:** Scheduled jobs (crons) periodically scan the issue board, match open tasks, and invoke worker agents.
+- **Operating Profile:** Scheduled jobs (crons) act as thin pacemakers, periodically notifying persistent lane sessions to scan the issue board, match open tasks, and invoke worker agents.
+- **The Pacemaker Law:** Every agent role that owns a periodic process must have a dedicated thin cron pacemaker waking its session UUID. Without it, conversational bias halts the loop.
 - **The Roadblock:** **The Concurrency Paradox & Queue Lag Illusion.**
   1. Multiple cron sweeps spawn duplicate workers on the same issue, leading to git merge collisions and clobbered work.
   2. While LLMs code in minutes, tasks spend 95% of their lifecycle idling in queue waiting for polling cycles (The 10.4-Hour Queue Trap).
-- **Breakthrough Mechanism:** Atomic task claiming via exclusive file locks (`fcntl.flock`) and single-writer state surfaces.
+- **Breakthrough Mechanism:** Atomic task claiming via exclusive file locks (`fcntl.flock`), single-writer state surfaces, and thin session-nudging pacemakers.
 - **Primary Metric:** `queue_dwell_time` (time from issue creation to first worker claim).
 
 ---
@@ -102,7 +103,7 @@ flowchart TD
 
 | From | To | Trigger to Evolve | Mechanics to Deploy |
 |---|---|---|---|
-| **0** | **1** | Operator spends >2 hrs/day babysitting agent turns | Issue board intake + automated scheduler |
+| **0** | **1** | Operator spends >2 hrs/day babysitting agent turns | Issue board intake + thin cron pacemaker nudges |
 | **1** | **2** | Workers collide on git branches or duplicate claims | `tools/ledger.py` with `fcntl.flock`, closed actor sets |
 | **2** | **3** | Rework share exceeds 30% or tasks stall silently | `tools/audit.py`, `evidence/rework.md`, RCA gates |
 | **3** | **4** | Substrate friction or token costs dominate spend | Supplier-client loops, runtime feature requests, value routing |

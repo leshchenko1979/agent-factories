@@ -124,18 +124,23 @@ The address is stable across the rename and is what a scheduled job's delivery p
 
 ---
 
-## 7. Periodic processes
+## 7. Periodic processes & the Pacemaker Law
 
-Anything recurring is a **scheduled job**, never a habit and never a note in
-someone's head. The binding names the mechanism; the requirements are:
+Anything recurring is a **scheduled pacemaker job**, never a habit and never a note in
+someone's head. Language models are conversational and stop after each turn; without an automated
+heartbeat trigger, periodic processes halt the moment human attention leaves.
 
-1. **One job, one thing.** A job notifies the owning session; the work runs in
-   that session, under the current law.
-2. **Never put procedure in a job's payload.** A job's definition cannot be
+The binding names the mechanism; the requirements are:
+
+1. **Every process owner has a pacemaker.** Every agent role that owns a recurring process
+   in `docs/processes.md` must have an active scheduled job configured to wake it.
+2. **One job, one thin trigger.** A job notifies the owning persistent session UUID; the work
+   runs in that session, under the current law.
+3. **Never put procedure in a job's payload.** A job's definition cannot be
    updated by a change to this file, so procedure placed inside one silently
    goes stale while the law moves on.
-3. **Deliver to the owning place**, never to the chat root.
-4. **Creating a job is a write, and a write needs a receipt.** Never announce a
+4. **Deliver directly to the owning session UUID**, never to the chat root or via relay hops.
+5. **Creating a job is a write, and a write needs a receipt.** Never announce a
    scheduled job without the tool result that created it.
 
 ---
