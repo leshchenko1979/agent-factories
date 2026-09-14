@@ -198,7 +198,22 @@ When communicating findings to a member factory HQ, structure each advisory arou
 
 ---
 
-## 8. Fleet Supplier-Client Feedback Loop
+## 8. Surveyed Member Factory Roster
+
+The fleet consists of 6 surveyed member factories:
+
+| Factory | Repository | Purpose & Domain | Primary Client |
+|---|---|---|---|
+| **Meta-factory** | `/root/agent-factories` | Factory template governance, process laws, fleet measurement, consulting | Factory Owner & Member HQs |
+| **OpenCrabs dev** | `/root/opencrabs` | Agent harness runtime, core daemon, tools, and channel gateways | Factory Fleet & Developers |
+| **InferHub Watch** | `/root/inferhub-watch` | Token routing telemetry, pricing models, provider latency and health | OpenCrabs & Fleet Lanes |
+| **AI AntiSpam** | `/root/ai-antispam` | Anti-spam filtering, outreach campaign sweeps, moderation | Channel Admins & Outreach |
+| **Miidas** | `/root/miidas` | Multi-tenant customer dialogue automation and business operations | Business Tenants & Operator |
+| **Infra** | `/root/vds-servers` | VDS server fleet ops (`vpn`, `apps`, `agents`), Gatus recovery, tunnels | Operator & Live Fleet Nodes |
+
+---
+
+## 9. Fleet Supplier-Client Feedback Loop
 
 When live measurement reveals that member factories are experiencing friction caused by
 underlying substrates (runtime harness or token provider):

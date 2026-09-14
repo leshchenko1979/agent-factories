@@ -27,7 +27,13 @@ SKILL_PATHS = [
 
 
 def find_skill_file() -> Path | None:
-    for p in SKILL_PATHS:
+    candidates = list(SKILL_PATHS) + sorted(REPO.glob("skills/*/SKILL.md"))
+    for p in candidates:
+        if p.is_file():
+            text = p.read_text(encoding="utf-8", errors="ignore")
+            if "Authoritative writer" in text:
+                return p
+    for p in candidates:
         if p.is_file():
             return p
     return None
