@@ -1,149 +1,118 @@
-# The Anatomy of an Autonomous AI Factory: From Prompt Loops to Industrial Continuous Flow
+# Field Notes from Five Autonomous AI Factories: Where Time Actually Goes
 
-> **Origin:** Empirical findings, architectural breakthroughs, and live fleet telemetry from 5 operational agent factories (OpenCrabs dev, InferHub Watch, AI AntiSpam, Miidas, and Meta-Factory).
-> **Codified in:** `evidence/insights.jsonl` and `docs/growth-stages.md`.
-
----
-
-## Executive Summary
-
-The prevailing public narrative around AI coding agents focuses on single-turn benchmark speed: *"Our AI agent wrote a full microservice in 2 minutes!"*
-
-Across a running fleet of five production AI factories handling thousands of automated events and hundreds of GitHub issues, live operational telemetry revealed a very different reality:
-
-1. **The 10.4-Hour Queue Trap:** While an agent generates code and runs tests in 30 seconds, tasks spent **95% of their total lead time** idling in ticket queues waiting for human triage.
-2. **The Concurrency Paradox:** Automating issue assignment via continuous cron dispatchers instantly breaks down without OS-level atomic locks (`fcntl.flock`) and single-writer state ledgers.
-3. **The Auditor's Trap:** Centralized inspection agents waste compute and hallucinate states; scalable quality requires shipping a **self-audit kit** to each factory (an ISO 9001 model for AI) and auditing only the mathematical integrity of their measurements.
-4. **The Growth Map:** Agent architectures must fundamentally change across 5 discrete throughput stages (from single prompt sessions to 1,000+ event/day fleet ecosystems).
+> **Context:** Engineering findings and operational telemetry from five agent factories running in production (OpenCrabs dev, InferHub Watch, AI AntiSpam, Miidas, and Meta-Factory).
+> **Data source:** `evidence/insights.jsonl` and `docs/growth-stages.md`.
 
 ---
 
-## 1. The Core Empirical Insights
+## The Reality of Multi-Agent Workflows
 
-### Insight 1: The 10.4-Hour Queue Trap (`queue-lag-trap`)
-* **Naive Assumption:** An AI coding factory's velocity is determined by LLM inference speed, prompt caching, and test execution time.
-* **Empirical Reality:** When InferHub Watch deployed its first internal self-audit tool (`tools/audit.py`), average task lead time was measured at **10.4 hours** (`37,620s`). Actual active coding duration was 20–30 minutes. Tasks spent 95% of their lifecycle idling in the backlog waiting for a human operator to notice the issue, triage it, and prompt an agent.
-* **Breakthrough Mechanism:** Autonomous continuous intake and dispatch. A scheduled background scanner matches unassigned issues to persistent worker lanes on a continuous cycle, converting batch processing into continuous pipeline flow.
+Benchmarking AI coding agents usually focuses on generation speed: how many seconds it takes a model to write a function or pass a test suite.
 
-### Insight 2: The Concurrency Paradox (`concurrency-locking-paradox`)
-* **Naive Assumption:** Once issue assignment is automated, throughput scales linearly by adding more autonomous agent worker loops.
-* **Empirical Reality:** The moment human dispatch is removed, autonomous agents race for the same issues, duplicate PRs, and corrupt shared repository state. Git worktree clobbering and state file overwrite collisions become the primary operational failure mode.
-* **Breakthrough Mechanism:** Single-writer state ledgers backed by OS-level exclusive file locking (`fcntl.flock(LOCK_EX)`) and mandatory filesystem sync (`os.fsync`). Every state transition (`intake` → `claim` → `run` → `close`) is an atomic, immutable append. An issue must be locked before any branch is touched.
+In an environment with five autonomous factories handling issues, pull requests, and background maintenance, that measurement turned out to be mostly irrelevant.
 
-### Insight 3: The Inspector's Trap (`auditor-trap-iso9001`)
-* **Naive Assumption:** Fleet quality is maintained by a centralized auditor or inspection agent crawling member factory repositories from the outside.
-* **Empirical Reality:** External crawling costs millions of tokens per day, hallucinates missing capabilities due to shallow regex checks, creates antagonistic gaming dynamics, and leaves the member factories dependent on external monitoring.
-* **Breakthrough Mechanism:** The Two-Tier Quality Architecture (ISO 9001 for AI). Ship a standardized self-audit kit (`tools/audit.py`, `tests/test_single_writer.py`, `tests/test_rework.py`, `tools/hygiene.py`) directly into the factory template. The member factory runs its own daily self-audit; the meta-factory audits only the structural invariants (cadence fulfillment, ledger monotonicity, gate execution proofs, and receipt spot-checks).
+Tracking timestamps from issue intake to production merge showed that tasks were taking an average of **10.4 hours**. The model spent only 20 to 25 minutes writing code and running tests. The remaining ten hours were spent sitting in a backlog waiting for a human operator to notice the ticket and kick off a session.
 
-### Insight 4: Substrate Feedback Loops & Native Topic Binding (`substrate-topic-binding`)
-* **Naive Assumption:** Standard chat or messaging interfaces are sufficient for multi-agent factory orchestration.
-* **Empirical Reality:** Topic-bound worker lanes suffered deadlocks because the substrate required a human to send the first message before a session could bind to a Telegram forum topic.
-* **Breakthrough Mechanism:** Direct supplier-client feedback loops. The factory fleet articulated runtime friction directly to the harness maintainers (OpenCrabs), resulting in native topic auto-binding on ingestion (`telegram_send action: "bind_topic"` / Issue `#170`).
+Closing that gap required addressing traditional systems engineering problems rather than prompt tuning:
+- Automated dispatchers without mutual exclusion cause race conditions on git branches.
+- Centralized code auditing agents burn tokens and hallucinate findings; measurement works better as a local self-audit script with verifiable receipts.
+- Orchestration patterns must evolve as daily throughput increases from five tasks a week to hundreds of events a day.
 
 ---
 
-## 2. The 5 Stages of Factory Growth
+## Core Findings
 
-```
-Stage 0: Interactive Worker (1–5 tasks/wk)
-  └── Roadblock: Operator fatigue & babysitting
-Stage 1: Autonomous Intake (5–50 tasks/wk)
-  └── Roadblock: Concurrency races & queue lag
-Stage 2: Single-Writer & Locking (50–200 events/day)
-  └── Roadblock: Silent rework & unmeasured defects
-Stage 3: Self-Auditing Quality Loops (200–1,000 events/day)
-  └── Roadblock: Substrate limits & token waste
-Stage 4: Fleet Ecosystem & Value Optimization (1,000+ events/day)
-  └── Roadblock: Value drift & strategic misalignment
-```
+### 1. Queue dwell time dominates task duration (`queue-lag-trap`)
+* **Initial expectation:** Factory throughput depends on inference latency, prompt caching, and test run times.
+* **Observed data:** In InferHub Watch, measuring task lead time revealed an average of 10.4 hours (`37,620s`). Active agent execution was 20–30 minutes. Tasks spent 95% of their duration waiting for triage.
+* **Working solution:** A scheduled dispatcher that matches unassigned issues to persistent worker lanes on an hourly cycle, moving work from manual batches into an automated pipeline.
 
----
+### 2. Autonomous dispatch causes git race conditions (`concurrency-locking-paradox`)
+* **Initial expectation:** Once issue assignment is automated, workers can simply poll the backlog and pick up tasks.
+* **Observed data:** When human coordination was removed, agents frequently picked the same issue simultaneously. They created divergent branches from the same commit, clobbered each other's work, and corrupted state files.
+* **Working solution:** A single-writer ledger backed by `fcntl.flock(LOCK_EX)` and `os.fsync`. Every state transition (`intake` → `claim` → `run` → `close`) is an atomic append. A worker must hold an exclusive lock on the ledger row before creating a git branch.
 
-## 3. Ready-to-Publish Assets
+### 3. External auditing agents fail to scale (`auditor-trap-iso9001`)
+* **Initial expectation:** Fleet-wide compliance can be checked by a central agent that inspects other repositories from the outside.
+* **Observed data:** External inspection spent thousands of tokens parsing file trees, frequently misidentified project structures, and produced false positives. Member teams ignored guidelines until an audit was run.
+* **Working solution:** An internal self-audit script (`tools/audit.py`) provided in the factory template. Each project runs its own audit, computing first-pass yield, rework rate, and task lead time. The central layer verifies only that the ledger sequence is monotonic, file locks exist, and test execution receipts are present.
 
-### Asset A: English Twitter / X Thread
-
-```text
-1/8 We thought our AI coding factory was hyper-fast because unit tests passed in 30 seconds.
-
-Then we actually measured lead time: tasks spent 95% of their life idling in queues waiting for human triage (10.4 hours average).
-
-Here is why AI autonomy crashes without OS file locks, and how we fixed it 🧵👇
-
-2/8 Running a fleet of 5 autonomous AI factories (handling 1,000+ daily events across GitHub, Telegram, and Docker), we kept hitting the same illusion:
-
-Everyone measures LLM generation speed.
-Nobody measures Queue Dwell Time.
-
-Active coding took 25 mins. Lead time was 10.4 hours.
-
-3/8 Fix #1: Autonomous Continuous Dispatch.
-We built a background scanner to automatically match open issues to persistent worker lanes every hour.
-
-Result: Queue dwell time dropped from 10.4 hours to minutes.
-The problem? Everything immediately caught fire. 🔥
-
-4/8 The Concurrency Paradox:
-The instant you remove human dispatch, autonomous agents race for the same issues.
-Two agents claim Issue #62 simultaneously, fork branches, clobber git trees, and overwrite state files.
-
-"Just prompt them not to collide" does not work.
-
-5/8 The Breakthrough: OS-Level Atomic Locking.
-Software engineering basics matter more than prompt engineering.
-We introduced an immutable ledger backed by `fcntl.flock(LOCK_EX)` and `os.fsync`.
-
-Every state transition (intake → claim → run → close) is an atomic append. No lock = no work.
-
-6/8 Fix #2: The Inspector's Trap (ISO 9001 for AI Agents).
-We tried using a centralized "Auditor Agent" to inspect all repos.
-It burned $100s in tokens, parsed regexes shallowly, and hallucinated false defects.
-
-So we flipped the model: We gave every factory a Self-Audit Kit (`tools/audit.py`).
-
-7/8 Each factory now measures its own:
-• First-pass yield (runs accepted / total runs)
-• Rework rate (defects logged / tasks closed)
-• Average task lead time
-
-The central meta-factory only audits the *integrity* of their audit (is the ledger monotonic? did gates run?).
-
-8/8 Autonomous AI isn't a single clever prompt. It's an industrial assembly line:
-1. Continuous intake
-2. Atomic concurrency locks
-3. Self-auditing quality loops
-
-We open-sourced the template and factory growth map: github.com/leshchenko1979/agent-factories
-```
+### 4. Topic binding requires native substrate support (`substrate-topic-binding`)
+* **Initial expectation:** Standard messaging interfaces like Telegram topics work out of the box for multi-agent coordination.
+* **Observed data:** Autonomous worker lanes deadlocked because the platform required an inbound user message before a session could bind to a forum topic.
+* **Working solution:** A direct feedback loop between the factories and the OpenCrabs harness maintainers, resulting in native topic auto-binding on message ingestion (`telegram_send action: "bind_topic"`, Issue `#170`).
 
 ---
 
-### Asset B: Russian Article / Post (Telegram / Miidas Channel)
+## Evolution of Factory Architecture
 
-```text
-Анатомия AI-фабрики: почему скорость LLM — это иллюзия?
+Factory tooling requirements change as throughput increases:
 
-В большинстве демонстраций автономных агентов показывают красивый спринт: «Агент написал сервис за 120 секунд». Но в промышленной эксплуатации на парке из 5 работающих фабрик (тысячи событий в сутки, десятки репозиториев) реальность выглядит иначе.
+* **Stage 0 (1–5 tasks/week):** Single prompt sessions with an operator. Bottleneck is operator attention.
+* **Stage 1 (5–50 tasks/week):** Scheduled issue polling. Bottleneck is queue dwell time and task claiming collisions.
+* **Stage 2 (50–200 events/day):** Single-writer state ledgers and atomic OS file locks. Bottleneck is untracked rework and silent test failures.
+* **Stage 3 (200–1,000 events/day):** Local self-audit tooling tracking lead time and first-pass yield. Bottleneck is runtime harness limitations and token cost.
+* **Stage 4 (1,000+ events/day):** Multi-factory networks with shared feedback loops into core tooling and inference providers.
 
-Вот три главных инженерных парадокса, с которыми мы столкнулись, и как мы их решили:
+---
 
-1. Ловушка очереди: 10.4 часа простоя
-Когда мы впервые измерили сквозное время задачи (Task Lead Time), оказалось, что активная работа LLM и прогон тестов занимают 20–30 минут. При этом среднее время от заведения issue до релиза составляло 10.4 часа. 
-95% жизненного цикла задача просто лежала в очереди в ожидании, пока живо�� оператор зайдет в репозиторий, заметит тикет и назначит агента. 
+## Publication Drafts
 
-2. Парадокс параллелизма и fcntl.flock
-Первая очевидная реакция: поставить крон, который сканирует открытые issue и автоматически запускает воркеров.
-Именно здесь фабрика моментально ломается. 
-Без человека агенты начинают конкурировать за одни и те же задачи: два воркера одновременно берут issue #62, создают конфликтующие ветки в git и перезаписывают файлы состояний. Промпты здесь бессильны.
-Решение пришло из классических ОС: строго однопоточный журнал состояний (single-writer ledger) с эксклюзивной блокировкой на уровне ядра Linux (`fcntl.flock`) и сбросом буфера на диск (`os.fsync`). Агент физически не может прикоснуться к задаче, пока атомарно не заблокирует строку в реестре.
+### English Post / Thread
 
-3. Ловушка внешнего инспектора (ISO 9001 для AI)
-Сначала мы пытались запустить одного «агента-аудитора», который ходил по чужим репозиториям и проверял чужой код. Это привело к сжиганию тысяч токенов на поверхностный парсинг и ложным срабатываниям.
-Мы перешли на промышленную модель ISO 9001: каждая фабрика получает собственный набор инструментов самоаудита (`tools/audit.py`). Она сама на каждом цикле считает свой First-Pass Yield (долю релизов без доработок), Rework Rate и Lead Time. А мета-уровень проверяет только математическую целостность их доказательной базы.
+We run five software projects almost entirely on autonomous AI agents. For a long time we assumed throughput was high because code generation takes under a minute and unit tests pass quickly.
 
-Главный вывод: 
-Автономия фабрик упирается не в размер контекстного окна и не в сообразительность модели. Она упирается в классическую теорию ограничений систем, непрерывный конвейер и строгую механику блокировок.
+Then we started measuring real timestamps from issue creation to merge.
 
-Архитек��ура и карта этапов роста фабрик доступны в репозитории проекта:
+The average task took 10.4 hours.
+Active agent coding was around 25 minutes.
+
+For the other ten hours, the issue simply sat in GitHub waiting for someone to open a laptop, triage the ticket, and start an agent session. 95% of the lifecycle was queue wait time.
+
+The obvious fix was automated dispatch: run a background process that checks for open issues and hands them to persistent worker agents automatically.
+
+Queue wait time dropped from ten hours to minutes.
+Immediately after that, we hit concurrency collisions.
+
+Without human coordination, two agents waking up at the same time would grab the same issue, create conflicting git branches, and overwrite each other's commits. Telling them in a prompt not to touch tasks assigned to others failed whenever both read the issue list at the same moment.
+
+The fix was standard systems programming: an OS-level file lock (`fcntl.flock`) on an immutable single-writer ledger. If an agent cannot acquire an exclusive lock and atomically record its claim on disk, it is not allowed to touch git.
+
+Our second mistake was trying to enforce standards with an external "inspector" agent that reviewed other repositories. It burned tokens, misunderstood repo layouts, and hallucinated false issues.
+
+We switched to a self-audit model: each factory repository runs its own measurement script (`audit.py`) tracking first-pass yield, rework rate, and task lead time. The central layer only verifies ledger sequence integrity and gate exit codes.
+
+Autonomous agent fleets hit the exact same bottlenecks as traditional software engineering: queue dwell time, shared resource locking, and verifiable telemetry.
+
+Repository and architecture notes: github.com/leshchenko1979/agent-factories
+
+---
+
+### Russian Article / Post (Telegram / Miidas)
+
+Заметки о работе пяти автономных AI-фабрик: где на самом деле теряется время
+
+У нас сейчас пять проектов работают почти полностью на автономных агентах: движок OpenCrabs, аналитика InferHub Watch, боты модерации, инфраструктура. Со стороны кажется, что общую скорость определяет модель: как быстро она генерирует код и проходит тесты. LLM выдает функцию за двадцать секунд, тесты отрабатывают за минуту. Кажется, что разработка идет с предельной скоростью.
+
+Потом мы написали скрипт аудита и посчитали реальный lead time — время от момента, когда в GitHub заводится issue, до момента, когда готовый коммит оказывается в мастере.
+
+Оказалось, средняя задача живет 10,4 часа. При этом модель пишет код и гоняет тесты от силы минут двадцать пять. Все остальные десять часов тикет просто лежит в репозитории и ждет, пока кто-то из нас зайдет в GitHub, разберется в контексте и запустит агента руками. Вся скорость уходила в ожидание в очереди.
+
+Логичный шаг — убрать человека из диспетчеризации. Мы поставили фоновый процесс, который раз в час сканирует новые тикеты и сам передает их свободным воркерам.
+
+Очередь сократилась с десяти часов до нескольких минут. Но следом вылезла проблема параллелизма: аг��нты начали конкурировать за задачи.
+
+Когда человек распределяет работу руками, он держит контекст в голове: этот тикет делает один агент, тот — другой. Автономные агенты о существовании друг друга не знают. Если два воркера проснулись одновременно, они оба видят первый открытый issue, делают две разные ветки от одного коммита, параллельно пушат и ломают репозиторий. Попытки решить это промптами вроде «проверь, не делает ли эту задачу кто-то еще» не работают, если оба агента прочитали список тикетов в одну и ту же секунду.
+
+Пришлось вернуться к базовым вещам из системного программирования. Мы сделали единый журнал состояний (`ledger.jsonl`), куда последовательно пишутся все этапы задачи: регистрация, взятие в работу, запуск тестов, закрытие. И закрыли его блокировкой на уровне операционной системы через `fcntl.flock` со сбросом буфера на диск (`os.fsync`). Если агент не смог захватить эксклюзивный лок на файл и атомарно записать строчку о том, что задача взята, он к коду и веткам вообще не прикасается.
+
+Второй вопрос, с которым мы столкнулись — контроль качества. Сначала мы попробовали сделать отдельного агента-инспектора, который ходил по репозиториям всех пяти фабрик снаружи, смотрел коммиты и проверял соблюдение правил.
+
+Это оказалось неэффективно. Внешний агент сжигал массу токенов на чтение чужих файлов, регулярно путался в незнакомой структуре папок и придумывал ошибки там, где их не было. А главное — команды проектов просто не следили за качеством до тех пор, пока инспектор не прих��дил с проверкой.
+
+Мы перешли на схему внутреннего контроля. Вместо внешнего проверяющего каждый проект получил свой скрипт самоаудита (`tools/audit.py`). Проект сам на каждом цикле считает свой процент задач без доработок, частоту возвратов и реальное время выполнения. А центральный уровень проверяет только технические инварианты: что журнал событий не переписан задним числом, блокировки работают, а тесты действительно запускались, а не просто отмечены в отчете.
+
+Когда один агент помогает писать код в редакторе, о таких вещах не задумываешься. Но когда агентов становится много и они работают сутками без присмотра, узкие места оказываются ровно там же, где и в обычной разработке: в очередях задач, блокировках общих ресурсов и надежности метр��к.
+
+Код шаблона, скрипты блокировок и описание стадий роста фабрик лежат в открытом репозитории:
 https://github.com/leshchenko1979/agent-factories
-```
