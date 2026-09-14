@@ -1,2 +1,4 @@
+.*.lock
 .ledger.lock
+.insights.lock
 __pycache__/
