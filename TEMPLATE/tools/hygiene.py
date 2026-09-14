@@ -18,7 +18,7 @@ import time
 SCRATCH_PATTERNS = [
     "/tmp/oc-*",
     "/tmp/test-*",
-    "/tmp/tmp.*",
+    "/tmp/vds-*",
 ]
 
 MAX_AGE_HOURS = 24
