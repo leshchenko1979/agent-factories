@@ -28,6 +28,7 @@ PAIRS = [
     ("tests/test_ledger.py", "TEMPLATE/tests/test_ledger.py"),
     ("tests/test_rework.py", "TEMPLATE/tests/test_rework.py"),
     ("tests/test_single_writer.py", "TEMPLATE/tests/test_single_writer.py"),
+    ("tests/test_ledger_schema.py", "TEMPLATE/tests/test_ledger_schema.py"),
     ("tools/hygiene.py", "TEMPLATE/tools/hygiene.py"),
     ("tools/audit.py", "TEMPLATE/tools/audit.py"),
 ]

@@ -229,11 +229,15 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_single_writer.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_single_writer.py"])
 
-    # 5. Template sync gate
+    # 5. Ledger schema & domain invariant gate
+    if (repo_root / "tests/test_ledger_schema.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_schema.py"])
+
+    # 6. Template sync gate
     if (repo_root / "tests/test_template_sync.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_template_sync.py"])
 
-    # 6. Workspace hygiene audit
+    # 7. Workspace hygiene audit
     if (repo_root / "tools/hygiene.py").is_file():
         gates_to_run.append([sys.executable, "tools/hygiene.py", "--audit"])
 
