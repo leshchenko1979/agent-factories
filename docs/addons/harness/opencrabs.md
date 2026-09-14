@@ -219,6 +219,21 @@ scheduled job without the `cron_manage` result that created it** — a described
 job that was never created runs never, and the failure is silent until someone
 asks why nothing happened.
 
+### The 4-step cron execution loop (Mechanical pre-flight & goal convergence)
+
+To eliminate idle token waste and prevent conversational stopping, recurring
+processes follow the 4-step execution architecture (`PROP-01-CRON-GATED-GOAL-PIPELINE`):
+
+1. **Mechanical pre-flight check (`trigger_cmd`):** Execute a host CLI probe
+   first (0 LLM tokens). If exit code is 0 / output is empty (no work / no drift),
+   the job short-circuits immediately.
+2. **Modal evaluation turn:** If work is detected, a lightweight model turn
+   evaluates the trigger output and formulates a structured task brief.
+3. **Goal notification dispatch:** `session_notify` delivers the goal and
+   checkable acceptance criteria to the persistent worker lane.
+4. **Inner Ralph convergence loop:** The worker lane converges against the
+   goal criteria until mechanically verified, preventing premature one-shot stopping.
+
 ---
 
 ## Mechanical gates

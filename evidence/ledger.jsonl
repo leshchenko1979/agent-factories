@@ -38,3 +38,4 @@
 {"n": 38, "ts": "2026-09-14T10:12:29Z", "event": "dispatch", "actor": "delegate", "subject": "miidas-self-audit-pilot-advisory", "detail": "target=miidas-hq lane=e4f96a33-45ac-412e-8788-1b678cf2addb topic=4 task=advisory-tier-1-self-audit-kit status=delivered"}
 {"n": 39, "ts": "2026-09-14T16:16:35Z", "event": "run", "actor": "hq", "subject": "audit-and-hygiene-sweep", "detail": "duration=2s turns=0 outcome=accepted gate=all-pass reaped_stale=62 healthy=true"}
 {"n": 40, "ts": "2026-09-14T16:45:02Z", "event": "run", "actor": "hq", "subject": "insight-codification", "detail": "action=appended-insight-6 id=cron-gated-goal-loop topic=4-step-autonomous-execution-loop"}
+{"n": 41, "ts": "2026-09-14T17:26:03Z", "event": "run", "actor": "hq", "subject": "proposal-cron-pipeline", "detail": "proposal=PROP-01 file=docs/proposals/01-cron-gated-goal-pipeline.md outcome=accepted gates=all-pass"}
