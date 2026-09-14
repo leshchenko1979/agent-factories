@@ -40,3 +40,4 @@
 {"n": 40, "ts": "2026-09-14T16:45:02Z", "event": "run", "actor": "hq", "subject": "insight-codification", "detail": "action=appended-insight-6 id=cron-gated-goal-loop topic=4-step-autonomous-execution-loop"}
 {"n": 41, "ts": "2026-09-14T17:26:03Z", "event": "run", "actor": "hq", "subject": "proposal-cron-pipeline", "detail": "proposal=PROP-01 file=docs/proposals/01-cron-gated-goal-pipeline.md outcome=accepted gates=all-pass"}
 {"n": 42, "ts": "2026-09-14T17:46:42Z", "event": "dispatch", "actor": "hq", "subject": "opencrabs-dev-hq", "detail": "action=filed-proposal issue=233 target_session=d72bd52d-42aa-4dbd-ac99-5b5300770019 fidelity=low-to-medium"}
+{"n": 43, "ts": "2026-09-14T18:31:31Z", "event": "run", "actor": "hq", "subject": "infra-factory-bootstrap", "detail": "status=infra-factory-bootstrapped repo=/root/vds-servers gates=5/5-pass"}
