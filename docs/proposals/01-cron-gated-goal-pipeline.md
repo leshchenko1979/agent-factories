@@ -59,7 +59,19 @@ flowchart TD
 
 ---
 
-## 4. Proposed Specification for `cron_manage`
+## 4. The Trigger & Payload Matrix
+
+The enhanced `cron_manage` architecture cleanly unifies 3 operating patterns:
+
+| Pattern | `trigger_cmd` | `eval_model` | Execution Path | Token Cost |
+|---|---|---|---|---|
+| **1. Direct Shell Pass-Through** | Configured (e.g. `gh issue list`, `host-diag`) | Omitted / `"none"` | If trigger fires (`rc > 0` / non-empty), harness sends `trigger stdout + stderr` directly to `deliver_to` session. If clean (`rc == 0`), short-circuits. | **0 tokens** until worker wakes |
+| **2. Pure Scheduled Ping (No Trigger)** | Omitted / `""` | Omitted / `"none"` | Fires unconditionally on schedule; delivers the static `prompt` / cron text directly to `deliver_to` session. | **0 tokens** on cron layer |
+| **3. Modal Triage Pipeline** | Configured | Configured (e.g. `ag/gemini-3.7-flash-high`) | Trigger fires → Intermediate model evaluates output & formulates structured brief → Notifies target session with goal. | Lightweight triage tokens |
+
+---
+
+## 5. Proposed Specification for `cron_manage`
 
 Enhance the `cron_manage` tool and daemon scheduler with the following parameters:
 
@@ -69,24 +81,21 @@ name = "autonomous-issue-dispatcher"
 cron = "0 * * * *"
 tz = "UTC"
 
-# Step 1: Mechanical Pre-Flight Check (0 LLM Tokens)
+# Step 1: Mechanical Pre-Flight Trigger (Optional)
+# If omitted: fires unconditionally and sends `prompt` text to `deliver_to`
 trigger_cmd = "gh issue list --repo $REPO --label unclaimed --json number,title"
 trigger_on = "non_empty" # Options: "non_empty", "exit_non_zero", "regex:<pattern>"
 
-# Step 2: Modal Evaluation (Executed ONLY if Step 1 triggers)
-model = "ag/gemini-3.7-flash-high" # Optional override for evaluation turn
-prompt = """
-You are the intake dispatcher. Unclaimed issues detected:
-{{TRIGGER_OUTPUT}}
+# Step 2: Intermediate Model Turn (Optional)
+# If omitted / "none": passes trigger stdout+stderr directly to `deliver_to` without intermediate model cost
+eval_model = "none" # or "ag/gemini-3.7-flash-high"
+prompt = "Default cron prompt text (used if trigger_cmd is omitted, or as framing template if eval_model is set)"
 
-Evaluate priority and formulate a concrete task goal with runnable acceptance criteria for the worker lane.
-"""
-
-# Step 3: Structured Goal Dispatch
+# Step 3: Target Session Delivery
 deliver_to = "session://2646d31a-71ee-49f0-be81-9c8dc32d32fa" # Or topic URI
 set_goal = true
 goal_template = """
-Title: Fix {{ISSUE_TITLE}} (#{{ISSUE_NUMBER}})
+Title: Fix Anomaly / Work Unit
 Acceptance Criteria:
 1. pytest tests/test_feature.py exits 0
 2. git status is clean
@@ -96,7 +105,7 @@ Acceptance Criteria:
 
 ---
 
-## 5. Concrete Fleet Use Cases
+## 6. Concrete Fleet Use Cases
 
 | Factory | Trigger Command (`trigger_cmd`) | Trigger Condition | Target Action |
 |---|---|---|---|
@@ -107,7 +116,7 @@ Acceptance Criteria:
 
 ---
 
-## 6. Expected Fleet Impact
+## 7. Expected Fleet Impact
 
 1. **Economic Efficiency:** 80%–95% reduction in cron token consumption during idle periods across the 5 factories.
 2. **Deterministic Completion:** Eliminates conversational "one-shot stopping" by coupling scheduled triggers directly to Ralph convergence loops.
@@ -115,7 +124,7 @@ Acceptance Criteria:
 
 ---
 
-## 7. Submission & Routing
+## 8. Submission & Routing
 
 - **Tracking:** Filed in `docs/proposals/01-cron-gated-goal-pipeline.md` in `agent-factories`.
 - **Target Dispatch:** OpenCrabs Factory HQ via `session_notify` (topic `OC DEV HQ`) and fork issue on `leshchenko1979/opencrabs`.
