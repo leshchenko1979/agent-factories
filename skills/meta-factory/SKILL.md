@@ -257,6 +257,10 @@ repo, on a surface with **one named writer**. Every other path to it is read-onl
 | `docs/processes.md` | the canonical process register | `HQ` | read-only |
 | `skills/meta-factory/SKILL.md` | this law | `HQ` | read-only |
 
+**The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate (`tools/audit.py`). A rule without an upholding mechanism is dead text and will be removed.
+
+**The Single Ownership Principle (P30):** Every declared process has exactly one named process owner role. Shared ownership is zero ownership.
+
 **The actor set is the roles the law names, and it is closed.** A role that is not listed
 cannot write a row, so adding one is a law change rather than a convenience. The core set
 is the template's four role cards plus `owner`, who directs without being a lane; a factory

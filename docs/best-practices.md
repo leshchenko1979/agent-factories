@@ -441,6 +441,74 @@ lane, establishes a claim record, and runs an automated watchdog to monitor exec
 
 ---
 
+## P28 — Every periodic process is driven by a thin nudging cron
+
+Every declared periodic process in a factory's process register must be driven
+by an active, scheduled pacemaker job waking its session UUID. Without an
+automated heartbeat trigger, conversational bias halts periodic execution the
+moment human attention leaves.
+
+- *Proven:* meta-factory (daily measurement pacemaker), inferhub-watch
+  (HQ hourly pacemaker), miidas (HQ daily pacemaker).
+- *Mechanism:*
+  1. A scheduled job acts as a thin pacemaker, sending a direct message to
+     the persistent session identifier of the process owner.
+  2. The process runs in that persistent session, under the current law,
+     preserving lane memory and single-writer locks.
+  3. No throwaway heavy runners: a job does not duplicate execution out-of-band;
+     it wakes the lane that owns the process.
+- *Prevents:* "Dead text" schedules where a daily or hourly cadence is declared
+  in documentation but silently stalls because no mechanical trigger wakes the session.
+- *Boundary:* The cron trigger initiates the turn; it does not embed mutable
+  procedure in its payload.
+
+---
+
+## P29 — Every law needs an active process or mechanical gate upholding it
+
+A rule written in a skill or process law that has no automated mechanical gate,
+no CI test, and no scheduled audit process is dead text. It will be forgotten
+across context compactions and ignored in production.
+
+- *Proven:* meta-factory (vocabulary gated by `tests/test_ontology.py`, rework
+  gated by `tests/test_rework.py`, single-writer state gated by
+  `tests/test_single_writer.py`, template sync gated by `tests/test_template_sync.py`).
+- *Mechanism:*
+  1. When a new law, invariant, or constraint is codified, its author must
+     simultaneously ship the mechanical gate (test script / CLI validator) or
+     register the recurring audit process that enforces it.
+  2. The gate must return a deterministic exit code (`0` for pass, non-zero for
+     violation) and be wired into the build/verification suite (`tools/audit.py`).
+  3. Un-upheld rules are flagged during periodic governance audits and either
+     mechanized or struck from the law.
+- *Prevents:* "Law rot" — accumulation of aspirational prose, unenforced rules,
+  and dead guidelines that agents ignore.
+- *Boundary:* If a property cannot be checked mechanically by a deterministic
+  script, it must be assigned to an explicit human or agent audit process with a
+  declared cadence.
+
+---
+
+## P30 — Every process has exactly one named owner
+
+Every declared process has exactly one named process owner role. Shared
+ownership is zero ownership.
+
+- *Proven:* meta-factory (`docs/processes.md` assigning HQ, Triage, and Surveys
+  as exclusive owners of their respective value streams).
+- *Mechanism:*
+  1. The process register maps each process to exactly one role card.
+  2. The process owner is solely accountable for the design, health, SLA, and
+     quality criteria of the process.
+  3. The process owner delegates execution steps to process implementers, but
+     accountability cannot be delegated or split between roles.
+- *Prevents:* Ambiguous accountability, finger-pointing during stalls, and
+  orphaned workflows where multiple roles assume the other is monitoring the pipeline.
+- *Boundary:* Multiple implementers may execute subprocesses, but only the
+  single process owner answers to the process client for the end-to-end outcome.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

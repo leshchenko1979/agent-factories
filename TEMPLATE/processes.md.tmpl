@@ -13,7 +13,7 @@ processes, and these processes are audited.** A process is a recurring act that
 keeps a property true. A property is a state; a process is the act that holds the
 state up, and only the act can silently stop.
 
-Every process in this register adheres to five structural laws:
+Every process in this register adheres to seven structural laws:
 
 1. **The Client Principle:** Every process runs for a **process client**. The client
    decides why the process runs, sets its trigger condition or cadence expectation,
@@ -22,15 +22,18 @@ Every process in this register adheres to five structural laws:
    fires or the declared interval passes, failure to start is recorded as a
    failure (`outcome = failed`). It directly lowers **first-pass yield** and
    depresses **Stability (O2)**.
-3. **Accountability cannot be delegated:** The **process owner** is accountable
-   for the design, health, specification, and SLA of the process. The process
-   owner delegates execution to **process implementers** (lanes, tools, or
-   automated runners). If a run fails or stalls, the process owner remains
-   accountable to the client.
-4. **Subprocesses recurse:** When an implementer's execution consists of distinct
+3. **Single Process Ownership (P30):** Every declared process has exactly one named
+   **process owner** role. Shared ownership is zero ownership. Accountability cannot
+   be split or delegated; execution alone is delegated to **process implementers**.
+4. **Law-Upholding Law (P29):** Every codified law in this factory must be upheld by
+   an active process registered here or a deterministic mechanical gate. A rule without
+   an upholding mechanism is dead text.
+5. **The Pacemaker Law (P28):** Every periodic process declared here must have an active
+   scheduled thin pacemaker job waking the persistent session UUID of the process owner.
+6. **Subprocesses recurse:** When an implementer's execution consists of distinct
    stages, each stage is a **subprocess** with its own `(Process Client, Process
    Owner, Delegated Implementers, Process Quality Criteria)` triad.
-5. **Quality criteria reflect client and stakeholder value:** Each process defines
+7. **Quality criteria reflect client and stakeholder value:** Each process defines
    explicit quality criteria framed around the value delivered to the client,
    not internal mechanical chores.
 

@@ -42,3 +42,4 @@
 {"n": 42, "ts": "2026-09-14T17:46:42Z", "event": "dispatch", "actor": "hq", "subject": "opencrabs-dev-hq", "detail": "action=filed-proposal issue=233 target_session=d72bd52d-42aa-4dbd-ac99-5b5300770019 fidelity=low-to-medium"}
 {"n": 43, "ts": "2026-09-14T18:31:31Z", "event": "run", "actor": "hq", "subject": "infra-factory-bootstrap", "detail": "status=infra-factory-bootstrapped repo=/root/vds-servers gates=5/5-pass"}
 {"n": 44, "ts": "2026-09-14T21:49:23Z", "event": "run", "actor": "hq", "subject": "pacemaker-law-codification", "detail": "action=codified-p7-and-wired-pacemakers audit=PASS gates=6/6"}
+{"n": 45, "ts": "2026-09-14T23:15:08Z", "event": "ruling", "actor": "hq", "subject": "p29-p30-codification", "detail": "codified P29 (law upholding law) and P30 (single process ownership) across best practices, processes.md, and template"}
