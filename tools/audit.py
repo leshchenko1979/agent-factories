@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def parse_ledger(ledger_path: Path) -> dict[str, Any]:
-    """Parse ledger.jsonl and calculate operational delivery metrics."""
+    """Parse ledger.jsonl and calculate operational delivery metrics, including token/cost economics."""
     if not ledger_path.is_file():
         return {
             "exists": False,
@@ -41,6 +41,11 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
             "first_pass_yield": 1.0,
             "lead_times_sec": [],
             "avg_lead_time_sec": 0.0,
+            "total_cost_usd": 0.0,
+            "avg_cost_per_closed_task_usd": 0.0,
+            "total_tokens_in": 0,
+            "total_tokens_out": 0,
+            "total_turns": 0,
             "latest_closed_subject": None,
             "spot_check": None,
         }
@@ -68,12 +73,42 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         "abandoned": 0,
     }
     total_runs = 0
+    total_cost_usd = 0.0
+    total_tokens_in = 0
+    total_tokens_out = 0
+    total_turns = 0
 
     for ev in events:
         ev_type = ev.get("event", "unknown")
         event_counts[ev_type] = event_counts.get(ev_type, 0) + 1
         subj = ev.get("subject", "")
         ts = ev.get("ts", "")
+        detail = ev.get("detail", "")
+
+        # Parse key-value metadata from detail
+        for part in detail.split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                if k in ("cost_usd", "cost"):
+                    try:
+                        total_cost_usd += float(v.rstrip("$"))
+                    except ValueError:
+                        pass
+                elif k in ("tokens_in", "in_tokens"):
+                    try:
+                        total_tokens_in += int(v)
+                    except ValueError:
+                        pass
+                elif k in ("tokens_out", "out_tokens"):
+                    try:
+                        total_tokens_out += int(v)
+                    except ValueError:
+                        pass
+                elif k == "turns":
+                    try:
+                        total_turns += int(v)
+                    except ValueError:
+                        pass
 
         if ev_type == "intake" and subj and subj not in subjects_intake:
             subjects_intake[subj] = ts
@@ -93,7 +128,6 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
 
         elif ev_type == "run":
             total_runs += 1
-            detail = ev.get("detail", "")
             outcome = "accepted"
             for part in detail.split():
                 if part.startswith("outcome="):
@@ -108,6 +142,8 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         yield_val = 1.0
 
     avg_lead_time = (sum(lead_times_sec) / len(lead_times_sec)) if lead_times_sec else 0.0
+    closed_count = len(subjects_close)
+    avg_cost_per_closed_task = (total_cost_usd / closed_count) if closed_count > 0 else 0.0
 
     # Spot check the latest closed subject
     latest_closed = None
@@ -132,13 +168,18 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         "exists": True,
         "total_events": len(events),
         "event_counts": event_counts,
-        "closed_tasks": len(subjects_close),
+        "closed_tasks": closed_count,
         "intake_tasks": len(subjects_intake),
         "run_events": total_runs,
         "runs_by_outcome": runs_by_outcome,
         "first_pass_yield": round(yield_val, 4),
         "lead_times_sec": lead_times_sec,
         "avg_lead_time_sec": round(avg_lead_time, 1),
+        "total_cost_usd": round(total_cost_usd, 4),
+        "avg_cost_per_closed_task_usd": round(avg_cost_per_closed_task, 4),
+        "total_tokens_in": total_tokens_in,
+        "total_tokens_out": total_tokens_out,
+        "total_turns": total_turns,
         "latest_closed_subject": latest_closed,
         "spot_check": spot_check,
     }
@@ -241,6 +282,10 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tools/hygiene.py").is_file():
         gates_to_run.append([sys.executable, "tools/hygiene.py", "--audit"])
 
+    # 8. Visual roadmap and process-to-product matrix audit
+    if (repo_root / "tools/roadmap.py").is_file():
+        gates_to_run.append([sys.executable, "tools/roadmap.py", "--audit"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
@@ -310,6 +355,9 @@ def format_report_markdown(
         f"| **Rework Entries** | `{rework_stats.get('total_entries', 0)}` | Defect count recorded in rework.md |",
         f"| **Rework Rate** | `{round(rework_stats.get('rework_rate', 0.0) * 100, 1)}%` | Rework entries ÷ closed tasks |",
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Average duration from intake to close |",
+        f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry |",
+        f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | Total cost ÷ closed tasks |",
+        f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
         f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago |",
         "",
         "---",

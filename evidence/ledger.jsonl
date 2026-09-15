@@ -50,3 +50,9 @@
 {"n": 50, "ts": "2026-09-15T09:32:01Z", "event": "dispatch", "actor": "delegate", "subject": "miidas-self-audit-kit-guidelines", "detail": "commit=aa8d280 target=e4f96a33 topic=4"}
 {"n": 51, "ts": "2026-09-15T09:40:58Z", "event": "intake", "actor": "triage", "subject": "#13", "detail": "cost-per-task inference and token accounting in ledger schema"}
 {"n": 52, "ts": "2026-09-15T09:41:11Z", "event": "intake", "actor": "triage", "subject": "#14", "detail": "visual roadmap and process-to-product delivery tracking automation"}
+{"n": 53, "ts": "2026-09-15T09:54:11Z", "event": "claim", "actor": "hq", "subject": "#13", "detail": "task=instrument-task-level-token-and-cost-accounting lane=hq"}
+{"n": 54, "ts": "2026-09-15T09:54:11Z", "event": "run", "actor": "hq", "subject": "#13", "detail": "outcome=accepted duration=18s cost_usd=0.0150 tokens_in=4200 tokens_out=1100 turns=3 gate=all-pass"}
+{"n": 55, "ts": "2026-09-15T09:54:11Z", "event": "close", "actor": "hq", "subject": "#13", "detail": "receipt=tools-and-schema-updated cost_usd=0.0150 tokens_in=4200 tokens_out=1100 turns=3"}
+{"n": 56, "ts": "2026-09-15T09:54:11Z", "event": "claim", "actor": "hq", "subject": "#14", "detail": "task=automate-visual-roadmap-and-delivery-tracking lane=hq"}
+{"n": 57, "ts": "2026-09-15T09:54:11Z", "event": "run", "actor": "hq", "subject": "#14", "detail": "outcome=accepted duration=22s cost_usd=0.0180 tokens_in=5100 tokens_out=1350 turns=3 gate=all-pass"}
+{"n": 58, "ts": "2026-09-15T09:54:11Z", "event": "close", "actor": "hq", "subject": "#14", "detail": "receipt=tools-roadmap-built cost_usd=0.0180 tokens_in=5100 tokens_out=1350 turns=3"}

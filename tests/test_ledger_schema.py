@@ -100,6 +100,25 @@ def validate_row_schema(row: dict[str, Any], line_num: int, known_actors: set[st
     detail_val = row.get("detail")
     if not isinstance(detail_val, str) or not detail_val.strip():
         errors.append(f"line {line_num}: 'detail' must be a non-empty string, got {detail_val!r}")
+    else:
+        # Validate structured telemetry formats if present in detail
+        for part in detail_val.split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                if k in ("cost_usd", "cost"):
+                    try:
+                        val = float(v.rstrip("$"))
+                        if val < 0:
+                            errors.append(f"line {line_num}: cost cannot be negative: {v!r}")
+                    except ValueError:
+                        errors.append(f"line {line_num}: invalid numeric format for cost: {v!r}")
+                elif k in ("tokens_in", "tokens_out", "in_tokens", "out_tokens", "turns"):
+                    try:
+                        val = int(v)
+                        if val < 0:
+                            errors.append(f"line {line_num}: count {k} cannot be negative: {v!r}")
+                    except ValueError:
+                        errors.append(f"line {line_num}: invalid integer format for {k}: {v!r}")
 
     return errors
 
@@ -209,6 +228,12 @@ def run_self_probes() -> bool:
         "unauthorized ruling actor",
         {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "ruling", "actor": "worker", "subject": "#1", "detail": "d"},
         "unauthorized actor 'worker' for event 'ruling'",
+    )
+    # Probe 6: Invalid cost format
+    assert_probe(
+        "bad cost format",
+        {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "intake", "actor": "triage", "subject": "#1", "detail": "cost_usd=invalid"},
+        "invalid numeric format for cost",
     )
 
     return probes_passed
