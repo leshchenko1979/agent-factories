@@ -46,3 +46,4 @@
 {"n": 46, "ts": "2026-09-14T23:21:08Z", "event": "run", "actor": "hq", "subject": "ledger-schema-gate", "detail": "duration=2s turns=0 outcome=accepted gate=7-all-pass schema=validated-45-rows"}
 {"n": 47, "ts": "2026-09-15T01:35:08Z", "event": "run", "actor": "hq", "subject": "process-product-codification", "detail": "products=4 processes=4 product_column_added ontology_product_term"}
 {"n": 48, "ts": "2026-09-15T03:55:03Z", "event": "score", "actor": "surveys", "subject": "survey-2026-09-15", "detail": "fleet_size=6 top=opencrabs:43/52 inferhub:41/52 meta:32/52 antispam:30/52 miidas:27/52 infra:26/52"}
+{"n": 49, "ts": "2026-09-15T04:43:47Z", "event": "run", "actor": "hq", "subject": "docs-product-mapping", "detail": "action=codified-4-products-to-processes outcome=accepted gate=all-pass"}

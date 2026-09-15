@@ -1,19 +1,38 @@
-# Product: the factory template and consulting practice
+# Product: the four products of the meta-factory
 
-**What this is.** Two things in one project:
-1. **The template product:** A working structure an operator (or an agent) copies
+**What this is.** Four complementary products produced and maintained by this meta-factory:
+1. **The Factory Template & Add-on Packs:** A working structure an operator (or an agent) copies
    and instantiates to create a new agent factory, plus the rules that make it work
    and the domain add-ons that adapt it to a particular kind of work.
-2. **The consulting practice:** An active process-consultancy to the surveyed
+2. **The Consulting Practice & Advisories:** An active process-consultancy to the surveyed
    member factories — diagnosing operational bottlenecks, surfacing stopped or
    low-yield processes, recommending hardened gates and practices, and helping their
    HQs measurably increase their efficiency (throughput, cadence, yield, waste reduction).
+3. **The Factory Growth & Maturity Map:** A blueprint mapping how an agent factory evolves across
+   throughput stages (Stage 0 to Stage 4), predicting the exact roadblocks that emerge at each scale
+   and specifying the transition mechanics to cross them.
+4. **The Empirical Insights Story (Public Narrative):** A battle-tested engineering narrative
+   drawn directly from live fleet telemetry (lead time reality, atomic concurrency locks, self-auditing quality loops)
+   published for technical operators and communities.
 
 **What it is not.** Not a framework, not a runtime, not a library. There is no
 code to import. The template product is a set of files plus an ordered procedure,
 and it is complete when a new factory can be stood up in an afternoon without the
 operator re-deriving any of the decisions. The consulting practice advises and
 diagnoses — it never seizes the tools or writes code in a member factory's repository.
+
+---
+
+## Product-to-Process Mapping
+
+Every product is produced and maintained by recurring operational processes in this factory:
+
+| Product | Primary Producing Process | Process Owner | Process Client | Client Value Delivered | Key Artifacts |
+|---|---|---|---|---|---|
+| **1. Factory Template & Add-ons** | Process 1: Work Delivery Pipeline *(hardened by P2 & P3)* | HQ | New Factory Operators & Fleet Developers | Bootstraps production-ready autonomous factory with built-in quality gates | `TEMPLATE/`, `docs/addons/` |
+| **2. Consulting Practice & Advisories** | Process 3: Operational Measurement & Consulting | Surveys | Member Factory HQs | Objective bottleneck visibility, reduced lead time, higher operational yield | `evidence/scores/<date>.md`, advisories via Delegate |
+| **3. Factory Growth & Maturity Map** | Process 1 (Work Delivery) *(calibrated by P3)* | HQ | Factory Owners & Technical Leadership | Predicts scale roadblocks (Stages 0–4) and provides transition mechanics | `docs/growth-stages.md` |
+| **4. Empirical Insights Story** | Process 3 (Measurement) *(harvesting fleet telemetry)* | Surveys / HQ | Public Engineering Audience & Operators | Battle-tested engineering case studies for building in public | `evidence/insights.jsonl`, `docs/stories/` |
 
 ---
 

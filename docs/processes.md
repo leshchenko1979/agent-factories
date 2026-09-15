@@ -88,10 +88,25 @@ automated **hygiene process** upholding workspace resource safety:
 
 | Process | Process Owner | Process Client | Delegated Implementers | Product & Client Value | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
 |---|---|---|---|---|---|---|---|---|
-| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | **Verified release** (Client Value: Zero regressions, new capabilities shipped, fast lead time) | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
+| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | **Verified release & Template artifacts** (Client Value: Zero regressions, new capabilities shipped, fast lead time) | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
 | **2. Rework Prevention & Learning Loop** | Triage | HQ (owner of Process 1) + Factory Owner | Triage lane, defect resolving lane | **Prevention gate** (Client Value: Defect family permanently eliminated, rework rate reduced, token waste averted) | on defect resolution | Root mechanism (not symptom) identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
-| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | **Score diff + advisory** (Client Value: Objective bottleneck visibility, prioritized actionable fixes, predictable growth trajectory) | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
+| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | **Score diff, Consulting advisory, & Insights entries** (Client Value: Objective bottleneck visibility, prioritized actionable fixes, predictable growth trajectory) | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, `evidence/insights.jsonl`, ledger `score` row | cadence · duration · resources consumed · throughput |
 | **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | **Clean tree** (Client Value: Zero runaway storage, zero stale scratch interference, reproducible builds) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
+
+---
+
+## 3.1 Product-to-Process Synthesis
+
+Every deliverable product of the meta-factory maps directly to its producing process(es):
+
+| Product | Producing Process | Lifecycle & Maintenance |
+|---|---|---|
+| **1. The Factory Template & Add-on Packs** | **Process 1 (Work Delivery)** *(hardened by P2 & P3)* | Versioned in `TEMPLATE/`, verified by `test_template_sync.py` |
+| **2. The Consulting Practice & Advisories** | **Process 3 (Measurement & Consulting)** | Generated daily during surveys, delivered via Delegate lane |
+| **3. The Factory Growth & Maturity Map** | **Process 1 (Work Delivery)** *(calibrated by P3)* | Maintained in `docs/growth-stages.md`, updated upon fleet discoveries |
+| **4. The Empirical Insights Story** | **Process 3 (Measurement & Surveys)** | Appended to `evidence/insights.jsonl`, compiled to `docs/stories/` |
+
+---
 
 ---
 
