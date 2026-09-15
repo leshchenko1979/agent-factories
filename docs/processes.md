@@ -18,7 +18,10 @@ Every process in this register adheres to seven structural laws:
 1. **The Client Principle (Ruling 4, 2026-09-13):** Every process runs for a
    **process client**. The client decides why the process runs, sets its trigger
    condition or cadence expectation, and consumes its value.
-2. **Failure to start is an execution failure:** When the client's trigger condition
+2. **Every process delivers a product:** One run of a process delivers one
+   verifiable **product** — the result the process client consumes. A process with
+   no product has no client value to score; the register names each process's product.
+3. **Failure to start is an execution failure:** When the client's trigger condition
    fires or the declared interval passes, failure to start is recorded as a
    failure (`outcome = failed`). It directly lowers **first-pass yield** and
    depresses **Stability (O2)**.
@@ -78,12 +81,12 @@ The meta-factory organizes its work into **three primary operational processes**
 value stream, the quality feedback loop, and the measurement/governance loop) plus an
 automated **hygiene process** upholding workspace resource safety:
 
-| Process | Process Owner | Process Client | Delegated Implementers | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
-|---|---|---|---|---|---|---|---|
-| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
-| **2. Rework Prevention & Learning Loop** | Triage | Factory Stability / Governance | Triage lane, defect resolving lane | on defect resolution | Root mechanism (not symptom) identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
-| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
-| **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
+| Process | Process Owner | Process Client | Delegated Implementers | Product (what the client consumes) | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
+|---|---|---|---|---|---|---|---|---|
+| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | **Verified release** — merged change with all gates green | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
+| **2. Rework Prevention & Learning Loop** | Triage | HQ (owner of Process 1) + Factory Owner | Triage lane, defect resolving lane | **Prevention gate** — `rework.md` entry whose `Prevented by` mechanism stops the defect family recurring | on defect resolution | Root mechanism (not symptom) identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
+| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | **Score diff + advisory** — reproducible score and actionable guidance the member HQ consumes | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
+| **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | **Clean tree** — zero stale scratch, zero untracked clutter | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
 ---
 
@@ -92,6 +95,7 @@ automated **hygiene process** upholding workspace resource safety:
 ### 4.1 Work Delivery Pipeline (Value Stream)
 - **Process Owner:** HQ
 - **Process Client:** Factory Owner / Requester
+- **Product:** Verified release — the merged change with all gates green the client consumes
 - **Subprocesses:**
   1. *Intake & Specification (Implementer: Triage)*: Converts findings into board issues with clear scope and verifiable acceptance criteria. Emits ledger `intake` event.
   2. *Assignment & Briefing (Implementer: Triage)*: Checks claims, acquires lock, and emits ledger `claim` event with direct session briefing.
@@ -107,7 +111,8 @@ automated **hygiene process** upholding workspace resource safety:
 
 ### 4.2 Rework Prevention & Learning Loop (Feedback Loop)
 - **Process Owner:** Triage
-- **Process Client:** Factory Stability / Governance
+- **Process Client:** HQ (owner of Process 1) + Factory Owner
+- **Product:** Prevention gate — a `rework.md` entry whose `Prevented by` mechanism the client consumes as fewer repeat defects and lower waste
 - **Subprocesses:**
   1. *Defect Mechanism Extraction (Implementer: Triage)*: Isolates the structural flaw rather than narrative blame.
   2. *Mechanized Prevention (Implementer: Fixing Lane)*: Adds an automated test, gate, or codified rule preventing the defect.
@@ -117,6 +122,7 @@ automated **hygiene process** upholding workspace resource safety:
 ### 4.3 Operational Measurement & Consulting (Governance Loop)
 - **Process Owner:** Surveys
 - **Process Client:** Factory Owner & Member Factory HQs
+- **Product:** Score diff + advisory — the reproducible score and actionable guidance the member HQ consumes
 - **Subprocesses:**
   1. *Internal Self-Audit (Implementer: tools/audit.py)*: Executes automated verification of meta-factory ledger sequence, rework rates, lead times, and the 6 mechanical gates.
   2. *Meta-Audit of Member Factories (Implementer: Surveys)*: Audits the integrity of member self-audits:
@@ -130,6 +136,7 @@ automated **hygiene process** upholding workspace resource safety:
 ### 4.4 Workspace Hygiene Sweep (Hygiene Loop)
 - **Process Owner:** HQ
 - **Process Client:** Host Environment / Operators
+- **Product:** Clean tree — zero stale scratch, zero untracked clutter the operators consume
 - **Subprocesses:**
   1. *Scratch Script Audit (Implementer: tools/hygiene.py)*: Detects `/tmp/oc-*` scripts older than 24 hours.
   2. *Garbage Collection (Implementer: tools/hygiene.py)*: Safely reaps orphaned scratch files to prevent inode/space exhaustion.

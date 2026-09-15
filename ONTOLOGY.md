@@ -35,12 +35,13 @@ defect to fix, not a synonym to tolerate.
 | `rubric` | The 13 quality criteria | scorecard, checklist, matrix |
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
 | `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
-| `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, and a run that leaves a trace | workflow, routine, procedure, pipeline |
+| `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, a product it delivers to its client, and a run that leaves a trace | workflow, routine, procedure, pipeline |
 | `subprocess` | A nested process delegated by a parent process owner, with its own process owner, process client, and process implementers | sub-routine, step, stage |
 | `process owner` | The role accountable for the design, health, and SLA of a process. Delegates execution to implementers | owner, lead, pipeline owner |
 | `process client` | The party who triggers a process, sets its acceptance criteria, and consumes its output | client, requester, customer, upstream |
 | `process implementer` | The actor (lane, tool, subagent, automated script) executing a run of a process and spending its resources | worker, executor, runner, actor |
 | `process quality criteria` | The explicit standards a process must meet, defined in terms of client and stakeholder value | quality gate, acceptance criteria, standards |
+| `product` | What one run of a process delivers to its process client, in verifiable form | output, deliverable, result |
 | `run` | One execution of a process, recorded as a state transition | execution, invocation |
 | `throughput` | What a process produces per period — units reaching done | volume, productivity |
 | `cadence` | How often a process actually runs, against how often it is declared to run | frequency, interval, periodicity |
@@ -85,6 +86,8 @@ classDiagram
     class Rubric
     class Score
     class Band
+    class Process
+    class Product
     class Receipt
     class Evidence
     class Subagent
@@ -111,6 +114,7 @@ classDiagram
     Score --> Band : falls into
     WorkUnit --> Receipt : closed with
     Receipt --> Evidence : written into
+    Process "1" --> "1" Product : delivers to client
     Subagent ..> Lane : never a lane
 ```
 
@@ -236,6 +240,16 @@ classDiagram
         +string label
         +string range
     }
+    class Process {
+        +string owner
+        +string client
+        +string cadence
+        +deliver()
+    }
+    class Product {
+        +string form
+        +consume()
+    }
     class Surface {
         +string product
         +deliver()
@@ -315,6 +329,7 @@ Every process has:
 - A **process client** who triggers it and consumes its value.
 - A **process owner** accountable for its design and health.
 - Delegated **process implementers** who execute the runs.
+- A **product** — the verifiable result one run delivers to its process client.
 - Explicit **process quality criteria** defined in terms of client and stakeholder value.
 
 ```mermaid
