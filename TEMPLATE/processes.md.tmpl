@@ -90,34 +90,68 @@ prevention loop, and the self-audit governance loop) plus an automated **hygiene
 
 ---
 
-## 4. Process Specifications and Subprocesses
+## 4. Process Specifications, Atomic Subprocesses & Custom Acceptance Criteria
 
-### 4.1 Work Delivery Pipeline (Value Stream)
+Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with strict input/output contracts, and must declare **custom acceptance criteria** (`custom_acceptance_criteria`) defining domain correctness.
+
+---
+
+### 4.1 Work Delivery Pipeline (Process 1: Value Stream)
 - **Process Owner:** HQ
 - **Process Client:** Factory Owner / Requester
-- **Subprocesses:**
-  1. *Intake & Specification (Implementer: Triage)*: Converts requests into issues with clear scope and acceptance criteria. Emits ledger `intake` event.
-  2. *Assignment & Briefing (Implementer: Triage)*: Checks claims, acquires lock, and emits ledger `claim` event with direct session briefing.
-  3. *Implementation & Self-Verification (Implementer: Worker)*: Writes code and runs the verification suite.
-  4. *The Verification Gates (Implementer: Automated test suite)*: Runs ontology conformance, rework consistency, single-writer state checks, and ledger sequence verification.
-  5. *Ship & Release (Implementer: Carrier)*: Merges verified change, validates artifact identity, and emits ledger `close` event.
-- **Quality Criteria:** Verified delivery with zero rollbacks and all gates green in <10s.
+- **Product:** Verified release — the merged change with all gates green the client consumes
+- **Custom Acceptance Criteria:**
+  1. Complete pipeline cycle delivers verified change with zero rollbacks and all mechanical gates passing in <10s.
+  2. First-pass yield on closed tasks $\ge 90\%$.
+  3. Average task execution lead time $\le 30$ minutes with queue dwell time $< 20\%$.
 
-### 4.2 Rework Prevention & Learning Loop (Feedback Loop)
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Intake & Calibration** | Triage | Raw request / issue | Calibrated task with custom acceptance criteria | Ambiguous goal / stalled queue | Queue dwell time |
+| **2. Lock & Claim** | Triage / Worker | Intake issue on board | `claim` row in ledger under `fcntl.flock` | Double-claim / race condition | Monotonicity & sequence validity |
+| **3. Feedforward Context Assembly** | Worker | Task spec + `SKILL.md` + `rework.md` | Grounded context window with rules & criteria | Missing constraint / prompt amnesia | First-token prompt size & rule hit |
+| **4. Implementation Loop (Ralph)** | Worker | Grounded context | Candidate code diff / artifact | Logic defect / hallucination | Turn count per task & token cost |
+| **5. Multi-Criteria Gate Evaluation** | Automated Gates | Candidate artifact | Deterministic score vector & error trace | Silent pass / false positive | Gate execution duration & exit code |
+| **6. Settlement & Release** | Carrier / HQ | All gates green | Fast-forward commit on main + `close` row | Stale sha / broken remote push | Commit sha identity & delivery trace |
+
+---
+
+### 4.2 Rework Prevention & Learning Loop (Process 2: Feedback Loop)
 - **Process Owner:** Triage
 - **Process Client:** Factory Stability / Governance
-- **Subprocesses:**
-  1. *Defect Mechanism Extraction (Implementer: Triage)*: Isolates the structural flaw rather than narrative blame.
-  2. *Mechanized Prevention (Implementer: Fixing Lane)*: Adds an automated test, gate, or codified rule preventing the defect.
-  3. *Audit & Entry Gate (Implementer: Triage)*: Appends contiguous entry to `evidence/rework.md` passing `tests/test_rework.py` invariants.
-- **Quality Criteria:** Zero defect recurrences; 100% of rework entries carry audited `Prevented by` mechanisms.
+- **Product:** Prevention gate — a `rework.md` entry whose `Prevented by` mechanism the client consumes as fewer repeat defects and lower waste
+- **Custom Acceptance Criteria:**
+  1. Zero defect recurrences in tracked defect families.
+  2. 100% of rework entries carry audited, non-placeholder `Prevented by` mechanisms validated by `test_rework.py`.
 
-### 4.3 Internal Self-Audit (Governance Loop)
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Defect Mechanism Extraction** | Triage | Observed failure or escaped defect | Isolated structural root cause | Blame narrative / symptom focus | Extraction lead time |
+| **2. Mechanized Gate Construction** | Fixing Lane | Isolated root cause | New test in `tests/` or rule in `SKILL.md` | Non-biting gate / dead test | Probe test verification |
+| **3. Entry Gate Audit** | Triage | Candidate rework row | Appended row in `evidence/rework.md` | Fragmented table / blank line | `tests/test_rework.py` pass |
+
+---
+
+### 4.3 Internal Self-Audit (Process 3: Governance Loop)
 - **Process Owner:** Surveys (or HQ)
 - **Process Client:** Factory Owner & Governance
-- **Subprocesses:**
-  1. *Ledger & Evidence Verification (Implementer: tools/audit.py)*: Validates ledger sequence monotonicity and single-writer locking.
-  2. *Metric Calculation (Implementer: tools/audit.py)*: Computes first-pass yield, rework rate, average lead time, and cadence integrity.
+- **Product:** Score + self-audit report
+- **Custom Acceptance Criteria:**
+  1. Automated audit executes clean via `tools/audit.py` in $<5$s.
+  2. 100% of mechanical gates pass with zero unprevented regressions.
+  3. Spot-check verifies unbroken intake $\to$ claim $\to$ close lifecycle.
+
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Ledger & Evidence Verification** | `tools/audit.py` | Local ledger & test suite | Sequence integrity receipt | Stale scratch / corrupted row | Exit code & duration |
+| **2. Metric Calculation** | `tools/audit.py` | Ledger state rows | First-pass yield, lead time, cost/task | Mental math / ungrounded metrics | Computed yield & dwell |
+| **3. Report Emission** | `tools/audit.py` | Calculated metrics | `evidence/scores/<date>.md` diff | Missing report / stale score | File write receipt |
   3. *Gate Suite Execution (Implementer: tools/audit.py)*: Runs mechanical gates (ontology, rework, single-writer, hygiene, template sync).
   4. *Calibration Spot-Check (Implementer: tools/audit.py)*: Samples the latest closed task and verifies unbroken intake -> claim -> close sequence.
   5. *Report Generation & Stamping (Implementer: tools/audit.py)*: Writes dated `evidence/scores/<date>.md` and records telemetry `run` event.

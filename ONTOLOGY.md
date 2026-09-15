@@ -52,6 +52,11 @@ defect to fix, not a synonym to tolerate.
 | `receipt` | Tool output, produced in the same turn, that proves a claim | proof, log, trace |
 | `evidence` | The dated file a receipt is written into | proof, receipt, log |
 | `subagent` | A one-shot spawned session with no channel binding. **Never a lane** | lane, worker |
+| `atomic_subprocess` | A single, non-decomposable stage in a process pipeline with explicit input/output contracts and failure modes | step, micro-process |
+| `custom_acceptance_criteria` | The domain-specific quality standards that define acceptable product delivery for a particular process | domain criteria, custom rules |
+| `documentation_class` | Documentation as a first-class scored operational artifact evaluated against a 0–4 rubric | doc object, docs |
+| `methodology_core` | The foundational guidance on LLM cognition, weakness counters, quality loops, and substrate bindings | factory handbook, core docs |
+| `onboarding_interview` | The structured dialogue loop that calibrates a new factory's documentation to survey baseline (≥2/4) | gap-closing session, intake chat |
 
 <!--
 Rules for a good entry:

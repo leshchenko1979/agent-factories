@@ -56,3 +56,23 @@
 {"n": 56, "ts": "2026-09-15T09:54:11Z", "event": "claim", "actor": "hq", "subject": "#14", "detail": "task=automate-visual-roadmap-and-delivery-tracking lane=hq"}
 {"n": 57, "ts": "2026-09-15T09:54:11Z", "event": "run", "actor": "hq", "subject": "#14", "detail": "outcome=accepted duration=22s cost_usd=0.0180 tokens_in=5100 tokens_out=1350 turns=3 gate=all-pass"}
 {"n": 58, "ts": "2026-09-15T09:54:11Z", "event": "close", "actor": "hq", "subject": "#14", "detail": "receipt=tools-roadmap-built cost_usd=0.0180 tokens_in=5100 tokens_out=1350 turns=3"}
+{"n": 59, "ts": "2026-09-15T23:19:51Z", "event": "intake", "actor": "triage", "subject": "#15", "detail": "title=refactor-template-to-minimal-2-process-core-option-c lane=hq"}
+{"n": 60, "ts": "2026-09-15T23:22:53Z", "event": "intake", "actor": "triage", "subject": "#16", "detail": "title=require-custom-criteria-for-scoring"}
+{"n": 61, "ts": "2026-09-15T23:26:39Z", "event": "intake", "actor": "hq", "subject": "#17", "detail": "lane=triage title=decompose-processes-into-atomic-subprocesses"}
+{"n": 62, "ts": "2026-09-15T23:29:45Z", "event": "intake", "actor": "triage", "subject": "#18", "detail": "source=insight-4 title=documentation-object-class-and-onboarding-loop"}
+{"n": 63, "ts": "2026-09-15T23:38:49Z", "event": "intake", "actor": "triage", "subject": "#19", "detail": "source=insights-5-6 title=dual-documentation-and-methodology-core-in-template"}
+{"n": 64, "ts": "2026-09-15T23:41:49Z", "event": "claim", "actor": "hq", "subject": "#15", "detail": "lane=hq task=refactor-template-to-minimal-2-process-core"}
+{"n": 65, "ts": "2026-09-15T23:41:49Z", "event": "run", "actor": "hq", "subject": "#15", "detail": "outcome=accepted duration=18s cost_usd=0.0120 tokens_in=3800 tokens_out=950 turns=1 gate=all-pass"}
+{"n": 66, "ts": "2026-09-15T23:41:49Z", "event": "close", "actor": "hq", "subject": "#15", "detail": "receipt=template-option-c-and-addons-extracted cost_usd=0.0120 tokens_in=3800 tokens_out=950 turns=1"}
+{"n": 67, "ts": "2026-09-15T23:41:50Z", "event": "claim", "actor": "hq", "subject": "#16", "detail": "lane=hq task=require-custom-criteria-for-scoring"}
+{"n": 68, "ts": "2026-09-15T23:41:50Z", "event": "run", "actor": "hq", "subject": "#16", "detail": "outcome=accepted duration=15s cost_usd=0.0110 tokens_in=3400 tokens_out=820 turns=1 gate=all-pass"}
+{"n": 69, "ts": "2026-09-15T23:41:50Z", "event": "close", "actor": "hq", "subject": "#16", "detail": "receipt=custom-criteria-codified-in-processes-and-ontology cost_usd=0.0110 tokens_in=3400 tokens_out=820 turns=1"}
+{"n": 70, "ts": "2026-09-15T23:41:51Z", "event": "claim", "actor": "hq", "subject": "#17", "detail": "lane=hq task=decompose-processes-into-atomic-subprocesses"}
+{"n": 71, "ts": "2026-09-15T23:41:51Z", "event": "run", "actor": "hq", "subject": "#17", "detail": "outcome=accepted duration=20s cost_usd=0.0140 tokens_in=4100 tokens_out=1050 turns=1 gate=all-pass"}
+{"n": 72, "ts": "2026-09-15T23:41:51Z", "event": "close", "actor": "hq", "subject": "#17", "detail": "receipt=atomic-subprocesses-decomposed-with-contracts cost_usd=0.0140 tokens_in=4100 tokens_out=1050 turns=1"}
+{"n": 73, "ts": "2026-09-15T23:41:51Z", "event": "claim", "actor": "hq", "subject": "#18", "detail": "lane=hq task=documentation-object-class-and-onboarding-loop"}
+{"n": 74, "ts": "2026-09-15T23:41:52Z", "event": "run", "actor": "hq", "subject": "#18", "detail": "outcome=accepted duration=16s cost_usd=0.0130 tokens_in=3900 tokens_out=980 turns=1 gate=all-pass"}
+{"n": 75, "ts": "2026-09-15T23:41:52Z", "event": "close", "actor": "hq", "subject": "#18", "detail": "receipt=doc-object-class-and-onboarding-loop-codified cost_usd=0.0130 tokens_in=3900 tokens_out=980 turns=1"}
+{"n": 76, "ts": "2026-09-15T23:41:52Z", "event": "claim", "actor": "hq", "subject": "#19", "detail": "lane=hq task=dual-documentation-and-methodology-core"}
+{"n": 77, "ts": "2026-09-15T23:41:52Z", "event": "run", "actor": "hq", "subject": "#19", "detail": "outcome=accepted duration=24s cost_usd=0.0160 tokens_in=4800 tokens_out=1200 turns=1 gate=all-pass"}
+{"n": 78, "ts": "2026-09-15T23:41:52Z", "event": "close", "actor": "hq", "subject": "#19", "detail": "receipt=5-module-methodology-core-shipped-in-template cost_usd=0.0160 tokens_in=4800 tokens_out=1200 turns=1"}

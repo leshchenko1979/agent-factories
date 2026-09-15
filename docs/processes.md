@@ -110,55 +110,88 @@ Every deliverable product of the meta-factory maps directly to its producing pro
 
 ---
 
-## 4. Process Specifications and Subprocesses
+## 4. Process Specifications, Atomic Subprocesses & Custom Acceptance Criteria
 
-### 4.1 Work Delivery Pipeline (Value Stream)
+Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with strict input/output contracts, and must declare **custom acceptance criteria** (`custom_acceptance_criteria`) defining domain correctness.
+
+---
+
+### 4.1 Work Delivery Pipeline (Process 1: Value Stream)
 - **Process Owner:** HQ
 - **Process Client:** Factory Owner / Requester
 - **Product:** Verified release — the merged change with all gates green the client consumes
-- **Subprocesses:**
-  1. *Intake & Specification (Implementer: Triage)*: Converts findings into board issues with clear scope and verifiable acceptance criteria. Emits ledger `intake` event.
-  2. *Assignment & Briefing (Implementer: Triage)*: Checks claims, acquires lock, and emits ledger `claim` event with direct session briefing.
-  3. *Implementation & Self-Verification (Implementer: Worker)*: Writes code and runs the verification suite.
-  4. *The Verification Gates (Implementer: Automated test suite)*:
-     - `test_ontology.py` (vocabulary conformance)
-     - `test_rework.py` (contiguous rework logging)
-     - `test_template_sync.py` (template sync pair identity)
-     - `test_single_writer.py` (single-writer state surface audit & lock verification)
-     - `tools/ledger.py verify` (ledger sequence & monotonicity)
-  5. *Ship & Release (Implementer: Carrier)*: Fast-forward merges to main, verifies artifact identity, and emits ledger `close` event.
-- **Quality Criteria:** Complete pipeline cycle delivers verified change with zero rollbacks and all gates green in <10s.
+- **Custom Acceptance Criteria:**
+  1. Complete pipeline cycle delivers verified change with zero rollbacks and all 8 mechanical gates passing in <10s.
+  2. First-pass yield on closed tasks $\ge 90\%$.
+  3. Average task execution lead time $\le 30$ minutes with queue dwell time $< 20\%$.
+  4. Byte-for-byte synchronization of all template pairs verified by `test_template_sync.py`.
 
-### 4.2 Rework Prevention & Learning Loop (Feedback Loop)
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Intake & Calibration** | Triage | Raw finding, issue, or request | Scored issue with verified custom acceptance criteria | Ambiguous goal / stalled queue | Queue dwell time ($t_{\text{claim}} - t_{\text{intake}}$) |
+| **2. Lock & Claim** | Triage / Worker | Intake issue on board | `claim` row in ledger under `fcntl.flock` | Double-claim / race condition | Monotonicity & sequence validity |
+| **3. Feedforward Context Assembly** | Worker | Task spec + `SKILL.md` + `rework.md` | Grounded context window with rules & criteria | Missing constraint / prompt amnesia | First-token prompt size & rule hit |
+| **4. Implementation Loop (Ralph)** | Worker | Grounded context | Candidate code diff / artifact | Logic defect / hallucination | Turn count per task & token cost |
+| **5. Multi-Criteria Gate Evaluation** | Automated Gates | Candidate artifact | Deterministic score vector & error trace | Silent pass / false positive | Gate execution duration & exit code |
+| **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row | Stale sha / broken remote push | Commit sha identity & delivery trace |
+
+---
+
+### 4.2 Rework Prevention & Learning Loop (Process 2: Feedback Loop)
 - **Process Owner:** Triage
 - **Process Client:** HQ (owner of Process 1) + Factory Owner
 - **Product:** Prevention gate — a `rework.md` entry whose `Prevented by` mechanism the client consumes as fewer repeat defects and lower waste
-- **Subprocesses:**
-  1. *Defect Mechanism Extraction (Implementer: Triage)*: Isolates the structural flaw rather than narrative blame.
-  2. *Mechanized Prevention (Implementer: Fixing Lane)*: Adds an automated test, gate, or codified rule preventing the defect.
-  3. *Audit & Entry Gate (Implementer: Triage)*: Appends contiguous entry to `evidence/rework.md` passing `tests/test_rework.py` invariants.
-- **Quality Criteria:** Zero defect recurrences; 100% of rework entries carry audited, non-placeholder `Prevented by` mechanisms.
+- **Custom Acceptance Criteria:**
+  1. Zero defect recurrences in tracked defect families.
+  2. 100% of rework entries carry audited, non-placeholder `Prevented by` mechanisms validated by `test_rework.py`.
+  3. Root mechanism (not human/lane narrative blame) isolated in $<1$ turn.
 
-### 4.3 Operational Measurement & Consulting (Governance Loop)
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Defect Mechanism Extraction** | Triage | Observed failure or escaped defect | Isolated structural root cause | Blame narrative / symptom focus | Extraction lead time |
+| **2. Mechanized Gate Construction** | Fixing Lane | Isolated root cause | New test in `tests/` or rule in `SKILL.md` | Non-biting gate / dead test | Probe test verification |
+| **3. Entry Gate Audit** | Triage | Candidate rework row | Appended row in `evidence/rework.md` | Fragmented table / blank line | `tests/test_rework.py` pass |
+
+---
+
+### 4.3 Operational Measurement & Consulting (Process 3: Governance Loop)
 - **Process Owner:** Surveys
 - **Process Client:** Factory Owner & Member Factory HQs
-- **Product:** Score diff + advisory — the reproducible score and actionable guidance the member HQ consumes
-- **Subprocesses:**
-  1. *Internal Self-Audit (Implementer: tools/audit.py)*: Executes automated verification of meta-factory ledger sequence, rework rates, lead times, and the 6 mechanical gates.
-  2. *Meta-Audit of Member Factories (Implementer: Surveys)*: Audits the integrity of member self-audits:
-     - *Cadence Verification*: Checks whether member self-audits fired on declared schedule (Client Principle).
-     - *Structural Invariants*: Audits member ledger monotonicity and single-writer locking.
-     - *Calibration Spot-Check*: Samples one recently closed task and verifies unbroken intake -> claim -> close sequence.
-  3. *Consulting Diagnostics & Advisory (Implementer: Surveys & Delegate)*: Synthesizes fleet patterns, identifies stopped processes or harness friction, and dispatches actionable advisories to member HQs.
-  4. *Ledger Telemetry (Implementer: Surveys)*: Appends ledger `score` or `run` rows and commits score diffs.
-- **Quality Criteria:** Self-audit automated via `tools/audit.py`; meta-audit spot-checks prevent grade inflation; advisories measurably increase member factory yield.
+- **Product:** Score diff, consulting advisory, & documentation calibration report
+- **Custom Acceptance Criteria:**
+  1. Self-audit automated via `tools/audit.py`; meta-audit spot-checks prevent grade inflation.
+  2. Documentation class (`documentation_class`) evaluated across all 4 dimensions ($\ge 2/4$ baseline).
+  3. Surveys cite member custom acceptance criteria; surveys without custom criteria cap at score 1/4.
+  4. Advisories measurably reduce member factory queue dwell time and increase first-pass yield.
 
-### 4.4 Workspace Hygiene Sweep (Hygiene Loop)
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Internal Self-Audit** | `tools/audit.py` | Local ledger, rework log, and test suite | Automated score diff & telemetry JSON | Stale scratch files / gate failure | 8-gate pass rate & duration |
+| **2. Documentation Calibration** | Surveys / Delegate | Target factory repo | 0–4 Documentation score vector | Cold-start survey blindness | Documentation baseline score ($\ge 2/4$) |
+| **3. Onboarding Interview Loop** | Delegate | Factory operator | Minimal `ONTOLOGY.md`, `SKILL.md`, `processes.md` | Vague domain requirements | Interview turns to baseline |
+| **4. Member Self-Audit Meta-Audit** | Surveys | Member factory `evidence/scores/` | Verified cadence & spot-checked receipts | Superficial checklist audit | Dwell ratio & yield delta |
+| **5. Advisory Dispatch & Telemetry** | Delegate / Surveys | Synthesized fleet findings | Briefing to member HQ + `score` row | Unactionable advice / noise | Member adoption rate |
+
+---
+
+### 4.4 Workspace Hygiene Sweep (Process 4: Hygiene Loop)
 - **Process Owner:** HQ
 - **Process Client:** Host Environment / Operators
-- **Product:** Clean tree — zero stale scratch, zero untracked clutter the operators consume
-- **Subprocesses:**
-  1. *Scratch Script Audit (Implementer: tools/hygiene.py)*: Detects `/tmp/oc-*` scripts older than 24 hours.
-  2. *Garbage Collection (Implementer: tools/hygiene.py)*: Safely reaps orphaned scratch files to prevent inode/space exhaustion.
-  3. *Git Status Verification (Implementer: tools/hygiene.py)*: Asserts working tree is free of untracked clutter.
-- **Quality Criteria:** Host storage remains unexhausted; zero orphaned scratch scripts >24h.
+- **Product:** Clean tree — zero runaway storage, zero stale scratch interference
+- **Custom Acceptance Criteria:**
+  1. Host storage remains unexhausted; zero orphaned scratch scripts $>24$h.
+  2. Clean git status with zero untracked artifacts.
+
+- **Atomic Subprocesses (`atomic_subprocess`):**
+
+| Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
+|---|---|---|---|---|---|
+| **1. Scratch File Sweep** | `tools/hygiene.py` | `/tmp/oc-*` filesystem paths | List of aged scratch files ($>24$h) | Missed rogue scratch processes | Reaped item count |
+| **2. Garbage Collection** | `tools/hygiene.py` | Aged file list | Clean filesystem & reaped files | Permission error / incomplete wipe | Reaped bytes & exit code |
+| **3. Git Workspace Audit** | `tools/hygiene.py` | Working directory status | Clean tree verification receipt | Untracked clutter accumulation | Git status exit code |
