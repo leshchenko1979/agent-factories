@@ -45,3 +45,4 @@
 {"n": 45, "ts": "2026-09-14T23:15:08Z", "event": "ruling", "actor": "hq", "subject": "p29-p30-codification", "detail": "codified P29 (law upholding law) and P30 (single process ownership) across best practices, processes.md, and template"}
 {"n": 46, "ts": "2026-09-14T23:21:08Z", "event": "run", "actor": "hq", "subject": "ledger-schema-gate", "detail": "duration=2s turns=0 outcome=accepted gate=7-all-pass schema=validated-45-rows"}
 {"n": 47, "ts": "2026-09-15T01:35:08Z", "event": "run", "actor": "hq", "subject": "process-product-codification", "detail": "products=4 processes=4 product_column_added ontology_product_term"}
+{"n": 48, "ts": "2026-09-15T03:55:03Z", "event": "score", "actor": "surveys", "subject": "survey-2026-09-15", "detail": "fleet_size=6 top=opencrabs:43/52 inferhub:41/52 meta:32/52 antispam:30/52 miidas:27/52 infra:26/52"}
