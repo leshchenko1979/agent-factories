@@ -48,3 +48,5 @@
 {"n": 48, "ts": "2026-09-15T03:55:03Z", "event": "score", "actor": "surveys", "subject": "survey-2026-09-15", "detail": "fleet_size=6 top=opencrabs:43/52 inferhub:41/52 meta:32/52 antispam:30/52 miidas:27/52 infra:26/52"}
 {"n": 49, "ts": "2026-09-15T04:43:47Z", "event": "run", "actor": "hq", "subject": "docs-product-mapping", "detail": "action=codified-4-products-to-processes outcome=accepted gate=all-pass"}
 {"n": 50, "ts": "2026-09-15T09:32:01Z", "event": "dispatch", "actor": "delegate", "subject": "miidas-self-audit-kit-guidelines", "detail": "commit=aa8d280 target=e4f96a33 topic=4"}
+{"n": 51, "ts": "2026-09-15T09:40:58Z", "event": "intake", "actor": "triage", "subject": "#13", "detail": "cost-per-task inference and token accounting in ledger schema"}
+{"n": 52, "ts": "2026-09-15T09:41:11Z", "event": "intake", "actor": "triage", "subject": "#14", "detail": "visual roadmap and process-to-product delivery tracking automation"}
