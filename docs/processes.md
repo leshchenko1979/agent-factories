@@ -13,32 +13,37 @@ processes, and these processes are audited.** A process is a recurring act that
 keeps a property true. A property is a state; a process is the act that holds the
 state up, and only the act can silently stop.
 
-Every process in this register adheres to seven structural laws:
+Every process in this register adheres to eight structural laws:
 
 1. **The Client Principle (Ruling 4, 2026-09-13):** Every process runs for a
    **process client**. The client decides why the process runs, sets its trigger
    condition or cadence expectation, and consumes its value.
-2. **Every process delivers a product:** One run of a process delivers one
-   verifiable **product** — the result the process client consumes. A process with
-   no product has no client value to score; the register names each process's product.
-3. **Failure to start is an execution failure:** When the client's trigger condition
+2. **Every process delivers a product with explicit client value:** A process
+   delivers verifiable **product(s)** to its client(s). Every product must carry
+   an explicit statement of the **client value** it provides (e.g. fewer repeat
+   defects, zero operator toil, lower waste). A product without recorded client
+   value is an unverified output.
+3. **Many-to-many process-to-product relationship:** One process can deliver
+   multiple distinct products (e.g. Process 3 delivers scores, advisories, and
+   insight stories), and one product can be produced or hardened by multiple
+   processes (e.g. the template product is built by Process 1, hardened by
+   Process 2, and calibrated by Process 3).
+4. **Failure to start is an execution failure:** When the client's trigger condition
    fires or the declared interval passes, failure to start is recorded as a
    failure (`outcome = failed`). It directly lowers **first-pass yield** and
    depresses **Stability (O2)**.
-3. **Single Process Ownership (P30):** Every declared process has exactly one named
+5. **Single Process Ownership (P30):** Every declared process has exactly one named
    **process owner** role. Shared ownership is zero ownership. Accountability cannot
    be split or delegated; execution alone is delegated to **process implementers**.
-4. **Law-Upholding Law (P29):** Every codified law in this factory must be upheld by
+6. **Law-Upholding Law (P29):** Every codified law in this factory must be upheld by
    an active process registered here or a deterministic mechanical gate. A rule without
    an upholding mechanism is dead text.
-5. **The Pacemaker Law (P28):** Every periodic process declared here must have an active
+7. **The Pacemaker Law (P28):** Every periodic process declared here must have an active
    scheduled thin pacemaker job waking the persistent session UUID of the process owner.
-6. **Subprocesses recurse:** When an implementer's execution consists of distinct
+8. **Subprocesses recurse:** When an implementer's execution consists of distinct
    stages, each stage is a **subprocess** with its own `(Process Client, Process
-   Owner, Delegated Implementers, Process Quality Criteria)` triad.
-7. **Quality criteria reflect client and stakeholder value:** Each process defines
-   explicit quality criteria framed around the value delivered to the client,
-   not internal mechanical chores.
+   Owner, Delegated Implementers, Process Quality Criteria, Product & Client Value)`
+   tuple.
 
 ---
 
@@ -81,12 +86,12 @@ The meta-factory organizes its work into **three primary operational processes**
 value stream, the quality feedback loop, and the measurement/governance loop) plus an
 automated **hygiene process** upholding workspace resource safety:
 
-| Process | Process Owner | Process Client | Delegated Implementers | Product (what the client consumes) | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
+| Process | Process Owner | Process Client | Delegated Implementers | Product & Client Value | Declared cadence / trigger | Quality Criteria (Stakeholder Value) | Trace / Evidence | Applicable measures |
 |---|---|---|---|---|---|---|---|---|
-| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | **Verified release** — merged change with all gates green | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
-| **2. Rework Prevention & Learning Loop** | Triage | HQ (owner of Process 1) + Factory Owner | Triage lane, defect resolving lane | **Prevention gate** — `rework.md` entry whose `Prevented by` mechanism stops the defect family recurring | on defect resolution | Root mechanism (not symptom) identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
-| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | **Score diff + advisory** — reproducible score and actionable guidance the member HQ consumes | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
-| **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | **Clean tree** — zero stale scratch, zero untracked clutter | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
+| **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | **Verified release** (Client Value: Zero regressions, new capabilities shipped, fast lead time) | on finding, gap, or task | Zero regressions, rapid cycle time, verified release without rollback | Board issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
+| **2. Rework Prevention & Learning Loop** | Triage | HQ (owner of Process 1) + Factory Owner | Triage lane, defect resolving lane | **Prevention gate** (Client Value: Defect family permanently eliminated, rework rate reduced, token waste averted) | on defect resolution | Root mechanism (not symptom) identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
+| **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | **Score diff + advisory** (Client Value: Objective bottleneck visibility, prioritized actionable fixes, predictable growth trajectory) | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, ledger `score` row | cadence · duration · resources consumed · throughput |
+| **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | **Clean tree** (Client Value: Zero runaway storage, zero stale scratch interference, reproducible builds) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
 ---
 

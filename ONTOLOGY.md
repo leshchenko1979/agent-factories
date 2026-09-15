@@ -35,13 +35,13 @@ defect to fix, not a synonym to tolerate.
 | `rubric` | The 13 quality criteria | scorecard, checklist, matrix |
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
 | `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
-| `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, a product it delivers to its client, and a run that leaves a trace | workflow, routine, procedure, pipeline |
+| `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, product(s) it delivers to its client(s), and a run that leaves a trace | workflow, routine, procedure, pipeline |
 | `subprocess` | A nested process delegated by a parent process owner, with its own process owner, process client, and process implementers | sub-routine, step, stage |
 | `process owner` | The role accountable for the design, health, and SLA of a process. Delegates execution to implementers | owner, lead, pipeline owner |
 | `process client` | The party who triggers a process, sets its acceptance criteria, and consumes its output | client, requester, customer, upstream |
 | `process implementer` | The actor (lane, tool, subagent, automated script) executing a run of a process and spending its resources | worker, executor, runner, actor |
 | `process quality criteria` | The explicit standards a process must meet, defined in terms of client and stakeholder value | quality gate, acceptance criteria, standards |
-| `product` | What one run of a process delivers to its process client, in verifiable form | output, deliverable, result |
+| `product` | What a process delivers to its process client, in verifiable form, carrying explicit client value | output, deliverable, result |
 | `run` | One execution of a process, recorded as a state transition | execution, invocation |
 | `throughput` | What a process produces per period — units reaching done | volume, productivity |
 | `cadence` | How often a process actually runs, against how often it is declared to run | frequency, interval, periodicity |
@@ -114,18 +114,24 @@ classDiagram
     Score --> Band : falls into
     WorkUnit --> Receipt : closed with
     Receipt --> Evidence : written into
-    Process "1" --> "1" Product : delivers to client
+    Process "*" --> "*" Product : delivers to client / produced by
     Subagent ..> Lane : never a lane
 ```
 
 Class names are the canonical terms written as one word: `MetaFactory` is
-`meta-factory`, `WorkUnit` is `work unit`, `AddOn` is `add-on`. Three edges
+`meta-factory`, `WorkUnit` is `work unit`, `AddOn` is `add-on`. Four edges
 carry the load:
 
 - **`Factory <|-- MetaFactory` and `Factory <|-- MemberFactory`** — both are
   factories. They differ in what they produce, not in what they are made of.
 - **`AddOn <|-- Binding`** — every binding is an add-on; not every add-on is a
   binding.
+- **`Process "*" --> "*" Product`** — the relationship is **many-to-many**:
+  one process can deliver multiple distinct products (e.g. measurement yields
+  score diffs, consulting advisories, and insight entries), and one product can
+  be produced or refined by multiple processes (e.g. the template product is
+  produced by work delivery, hardened by rework prevention, and shaped by survey
+  findings).
 - **`Subagent ..> Lane : never a lane`** — the dashed edge *is* the constraint.
   A subagent has no named place and does not persist, which is exactly what a
   lane is.
@@ -248,6 +254,7 @@ classDiagram
     }
     class Product {
         +string form
+        +string client_value
         +consume()
     }
     class Surface {
@@ -261,6 +268,7 @@ classDiagram
 
     WorkUnit --> Receipt : closes with
     Receipt --> Evidence : written into
+    Process "*" --> "*" Product : delivers / produced by
     Rubric --> Score : rates with
     Score --> Band : reads as
     Law ..> WorkUnit : governs
