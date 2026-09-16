@@ -97,3 +97,4 @@
 {"n": 97, "ts": "2026-09-16T18:25:44Z", "event": "run", "actor": "hq", "subject": "opencrabs-v0.5.1-binding", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.010 tokens_in=1200 tokens_out=300"}
 {"n": 98, "ts": "2026-09-16T18:47:16Z", "event": "dispatch", "actor": "hq", "subject": "delegate-cron-advisories", "detail": "action=advise-member-hqs topic=v0.5.1-cron-pacemaker-upgrades targets=inferhub,miidas,infra,antispam"}
 {"n": 99, "ts": "2026-09-16T18:48:13Z", "event": "dispatch", "actor": "delegate", "subject": "v0.5.1-cron-pacemaker-advisories", "detail": "targets=inferhub,miidas,infra,antispam;status=dispatched;capabilities=set_goal,0-token-triggers"}
+{"n": 100, "ts": "2026-09-16T18:49:41Z", "event": "run", "actor": "delegate", "subject": "miidas-pacemaker-upgrade-complete", "detail": "job=miidas-hq-daily-trigger,session=e4f96a33,set_goal=true,status=applied,audit=8/8_pass"}
