@@ -93,3 +93,4 @@
 {"n": 93, "ts": "2026-09-16T15:35:30Z", "event": "claim", "actor": "hq", "subject": "#22", "detail": "lane=hq task=codify-autonomy-criteria-A1-A2"}
 {"n": 94, "ts": "2026-09-16T15:40:30Z", "event": "run", "actor": "hq", "subject": "#22", "detail": "outcome=accepted duration=12s cost_usd=0.0110 tokens_in=3100 tokens_out=780 turns=1 gate=all-pass"}
 {"n": 95, "ts": "2026-09-16T15:40:34Z", "event": "close", "actor": "hq", "subject": "#22", "detail": "receipt=autonomy-family-A1-A2-codified-in-quality-criteria"}
+{"n": 96, "ts": "2026-09-16T17:16:35Z", "event": "run", "actor": "delegate", "subject": "opencrabs-v051-capability-notice", "detail": "Issue #237 landed (e367824d): session_notify goal dispatch, A2A goal parity, standalone 0-token bash crons, ExitZero/Regex trigger conditions"}
