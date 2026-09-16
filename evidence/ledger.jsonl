@@ -88,3 +88,4 @@
 {"n": 88, "ts": "2026-09-16T14:51:01Z", "event": "score", "actor": "surveys", "subject": "survey-2026-09-16", "detail": "rubric=v0.4 max_score=68 fleet_count=6 scores=[meta=65,opencrabs=56,inferhub=53,miidas=53,infra=50,antispam=35]"}
 {"n": 89, "ts": "2026-09-16T14:57:58Z", "event": "dispatch", "actor": "hq", "subject": "ai-antispam", "detail": "target=delegate task=self-audit-kit-advisory"}
 {"n": 90, "ts": "2026-09-16T14:59:32Z", "event": "dispatch", "actor": "delegate", "subject": "antispam-self-audit-core-advisory", "detail": "target=cb06a94a commit=2592069 gate=D3"}
+{"n": 91, "ts": "2026-09-16T15:05:58Z", "event": "run", "actor": "delegate", "subject": "antispam-self-audit-core-ack", "detail": "session=cb06a94a;ack=minimal-2-process-core;gate=D3;status=scheduled"}
