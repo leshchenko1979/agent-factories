@@ -95,3 +95,4 @@
 {"n": 95, "ts": "2026-09-16T15:40:34Z", "event": "close", "actor": "hq", "subject": "#22", "detail": "receipt=autonomy-family-A1-A2-codified-in-quality-criteria"}
 {"n": 96, "ts": "2026-09-16T17:16:35Z", "event": "run", "actor": "delegate", "subject": "opencrabs-v051-capability-notice", "detail": "Issue #237 landed (e367824d): session_notify goal dispatch, A2A goal parity, standalone 0-token bash crons, ExitZero/Regex trigger conditions"}
 {"n": 97, "ts": "2026-09-16T18:25:44Z", "event": "run", "actor": "hq", "subject": "opencrabs-v0.5.1-binding", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.010 tokens_in=1200 tokens_out=300"}
+{"n": 98, "ts": "2026-09-16T18:47:16Z", "event": "dispatch", "actor": "hq", "subject": "delegate-cron-advisories", "detail": "action=advise-member-hqs topic=v0.5.1-cron-pacemaker-upgrades targets=inferhub,miidas,infra,antispam"}
