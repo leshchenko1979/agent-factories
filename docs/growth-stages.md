@@ -119,3 +119,50 @@ Every factory bootstrapped from the template starts with the architectural found
 - `tools/hygiene.py` (garbage collection)
 
 A new factory operates in **Stage 0 or 1** mode initially, but inherits the guardrails so it does not suffer the concurrency crashes and rework blindness when throughput accelerates.
+
+---
+
+## 4. Bi-Weekly Fleet Calibration & Maturity Verification (2026-09-16)
+
+> **Pacemaker Cadence:** Bi-Weekly (1st & 15th) · `factory-growth-map-biweekly`  
+> **Evaluation Rubric:** Quality Criteria v0.4 (17 criteria across 5 families, max 68)  
+> **Telemetry Source:** Live state across 6 fleet factories (`evidence/scores/2026-09-16.md`, `evidence/ledger.jsonl`, git trees, and CI/audit receipts)
+
+### Fleet Maturity Census
+
+| Factory | Score (v0.4/68) | Maturity Band | Active Stage | Target Stage | Breakthrough Mechanism Deployed | Primary Health Metric Status |
+|---|:---:|:---:|:---:|:---:|---|---|
+| **Meta-factory** | **65** (96%) | **Optimizing** | **Stage 3** | Stage 4 | Tier-1 Self-Audit Kit (8 green gates), single-writer `fcntl.flock`, automated RCA (`rework.md`) | First-pass yield: 100%, rework rate: 77.8%, avg cost/task: $0.0138 |
+| **OpenCrabs dev** | **56** (82%) | **Optimizing** | **Stage 3** | Stage 4 | 4-leg smoke rubric, atomic `workers-ledger.json` (`fcntl.flock`), fast-swap rollback journal | Smoke pass rate: 100% on 850+ runs; throughput: 480+ events/day |
+| **InferHub Watch** | **53** (78%) | **Optimizing** | **Stage 3** | Stage 3 | Tier-1 Self-Audit Kit, 762 automated pytests, hourly cron pacemaker | 100% self-audit yield; True TPS & latency telemetry active |
+| **Miidas** | **53** (78%) | **Optimizing** | **Stage 3** | Stage 3 | Tier-1 Self-Audit Kit (8 green gates), single-writer `fcntl.flock`, `rework.md` | 100% self-audit yield; 337 pytests passing clean |
+| **Infra Factory** | **50** (74%) | **Scalable** | **Stage 2** | Stage 3 | Single-writer ledger (`fcntl.flock`), 5 mechanical audit gates, topic-based coordination | 100% yield on 5 gates; first closed end-to-end task lead time met |
+| **AI AntiSpam** | **35** (51%) | **Scalable** | **Stage 1** | Stage 2 | 0-token preflight cron pacemakers (`trigger_cmd`), Postgres single-writer | 500+ tests pass; blocked on D3 until file-level ledger & audit kit adopted |
+
+### Stage-by-Stage Verification Summary
+
+1. **Stage 0 (Interactive Prototype): 100% Graduated (0/6 active).**
+   - No fleet factory relies on prompt-by-prompt human operator guidance.
+   - All 6 factories intake tasks from persistent surfaces (GitHub boards, topic backlogs, or structured sweep epochs).
+
+2. **Stage 1 (Autonomous Intake & The Pacemaker Law): 100% Conformance.**
+   - All factories operate scheduled cron pacemakers waking persistent session UUIDs.
+   - OpenCrabs v0.5.1 thin cron spec with zero-token pre-flight checks (`trigger_cmd`) and `set_goal: true` successfully rolled out to AI AntiSpam (`cfb86dc5`), Infra Factory (`d6119dbc`), and Miidas (`a2936da9`).
+   - 1 factory (AI AntiSpam) currently resides at Stage 1, actively working on Stage 2 concurrency mechanisms.
+
+3. **Stage 2 (Single-Writer & Concurrency Locking): 83.3% Deployed (5/6 active).**
+   - Meta-factory, OpenCrabs dev, InferHub Watch, Miidas, and Infra Factory enforce immutable, append-only ledgers guarded by `fcntl.flock` with closed actor sets.
+   - Concurrency collisions eliminated across multi-lane sessions.
+   - AI AntiSpam has Postgres transaction safety for outreach, but requires the repo-level single-writer ledger to complete Stage 2 transition.
+
+4. **Stage 3 (Self-Auditing Quality Loops): 66.7% Active / Piloted (4/6 active).**
+   - **Meta-factory & OpenCrabs dev:** Full Stage 3 maturity. Meta-factory runs 8 deterministic gates via `tools/audit.py`, measuring lead times, yields, and automated issue generation (P1/P27). OpenCrabs dev enforces a 4-leg smoke verification rubric before any harvest PR.
+   - **Miidas & InferHub Watch:** Piloting Stage 3. Miidas runs 8 green audit gates and maintains `rework.md`; InferHub Watch runs 762 automated pytests and hourly self-audits.
+   - **Infra Factory:** Initial Stage 3 loops deployed with 5 mechanical audit gates.
+
+5. **Stage 4 (Fleet Ecosystem & Value Optimization): 33.3% In Progress (2/6 pioneering).**
+   - Meta-factory and OpenCrabs dev have established active supplier-client fleet loops.
+   - Meta-factory reports substrate friction directly to OpenCrabs (e.g. Issue #170 forum topic auto-binding) and inference telemetry to InferHub.
+   - OpenCrabs dev operates as the upstream engine supplying the runtime binary.
+   - Next milestone: value-weighted task routing and cross-factory token economics.
+

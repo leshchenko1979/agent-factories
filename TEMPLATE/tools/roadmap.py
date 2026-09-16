@@ -59,7 +59,7 @@ CANONICAL_PRODUCTS = [
         "artifacts": ["docs/growth-stages.md"],
         "cadence": "Bi-Weekly (1st & 15th)",
         "pacemaker_job": "factory-growth-map-biweekly",
-        "last_receipt": "docs/growth-stages.md v0.4 (5 maturity levels calibrated)",
+        "last_receipt": "docs/growth-stages.md calibrated 2026-09-16 against 6 fleet factories (Stages 0–4 verified)",
     },
     {
         "id": "insights",
