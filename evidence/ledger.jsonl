@@ -121,3 +121,7 @@
 {"n": 121, "ts": "2026-09-16T23:14:02Z", "event": "run", "actor": "hq", "subject": "pacemaker-template-weekly", "detail": "action=executed-test-template-sync-packaged-core-and-addons-audited-delivery audit=8/8_pass"}
 {"n": 122, "ts": "2026-09-16T23:14:44Z", "event": "run", "actor": "hq", "subject": "factory-growth-map-biweekly", "detail": "action=calibrated-growth-stages-against-fleet-telemetry stages=0-4 status=PASS factories=6 audit=8/8_pass"}
 {"n": 123, "ts": "2026-09-16T23:19:33Z", "event": "run", "actor": "hq", "subject": "weekly-insight-synthesis-pacemaker", "detail": "action=executed-telemetry-mining-and-insight-synthesis patterns=1 insights=17 audit=8/8_pass status=HEALTHY"}
+{"n": 124, "ts": "2026-09-16T23:25:01Z", "event": "claim", "actor": "triage", "subject": "#22", "detail": "triage duplicate resolution"}
+{"n": 125, "ts": "2026-09-16T23:25:01Z", "event": "close", "actor": "triage", "subject": "#22", "detail": "duplicate of #23"}
+{"n": 126, "ts": "2026-09-16T23:25:02Z", "event": "claim", "actor": "triage", "subject": "#25", "detail": "triage duplicate resolution"}
+{"n": 127, "ts": "2026-09-16T23:25:02Z", "event": "close", "actor": "triage", "subject": "#25", "detail": "duplicate of #24"}
