@@ -159,7 +159,17 @@ The law must state, at minimum:
 Version it. Mirror it to a repo so the law is diffable and survives the
 session that wrote it.
 
-**Evidence:** the skill file path, and the version string in it.
+**Harness link (OpenCrabs profile symlink):**
+If running under OpenCrabs, the active profile's skill loader resolves role cards
+from `~/.opencrabs/profiles/<profile>/skills/<name>`. Create an explicit symlink from
+the profile directory to the repo skill directory during bootstrap:
+```bash
+ln -s /path/to/repo/skills/{{NAME}} ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}}
+```
+
+**Evidence:**
+- the skill file path, and the version string in it;
+- for OpenCrabs: `test -L ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}} && test -d ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}}`.
 
 ---
 

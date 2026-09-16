@@ -298,6 +298,22 @@ are never the same output. An exemption nobody would defend in that output is on
 fixed instead. Nothing is ever backfilled: an intake row written today for work filed before
 the gate is a falsified record, not a repair.
 
+---
+
+## 12. Autonomous incident remediation & template self-healing (P30)
+
+When an incident, regression, or defect report from any factory identifies an ambiguity,
+missing instruction, or absent mechanical gate in the template or process law:
+
+1. **Do NOT pause, narrate, wait for a prompt, or ask for operator approval.**
+2. **In the same turn:**
+   - Patch `TEMPLATE/` directly (e.g. `BOOTSTRAP.md`, `roles/`, `SKILL.md.tmpl`) to close the gap.
+   - Add or sharpen the mechanical verification gate in `TEMPLATE/tools/` or `TEMPLATE/tests/`.
+   - Record the defect, root cause, resolution, and `Prevented by` gate in `evidence/rework.md`.
+   - Stamp `evidence/ledger.jsonl`, run `tools/ledger.py verify`, and commit/push to `origin/main`.
+3. **Report the shipped remediation directly in the completion summary.**
+
+
 **What this does not give you.** The ledger is append-only by construction — the tool has
 no rewrite command — but it is still a file, and a file can be edited. That is what
 version control is for: a rewrite shows up as a diff, and the history is the audit. The

@@ -109,3 +109,5 @@
 {"n": 109, "ts": "2026-09-16T22:25:01Z", "event": "intake", "actor": "hq", "subject": "#22", "detail": "title=survey-resolution-law-and-htn-swarms"}
 {"n": 110, "ts": "2026-09-16T22:35:01Z", "event": "intake", "actor": "triage", "subject": "#23", "detail": "title=survey-resolution-ratio-q issue=23"}
 {"n": 111, "ts": "2026-09-16T22:37:56Z", "event": "run", "actor": "delegate", "subject": "infra-factory-incident-report-logged", "detail": "Incidents: tg-scanner-hub queue consumer parity, skill symlink, Process 3 self-audit regressions"}
+{"n": 112, "ts": "2026-09-16T22:43:14Z", "event": "intake", "actor": "hq", "subject": "#24", "detail": "task=distributed-subprocess-ledgers-and-focus-conservation"}
+{"n": 113, "ts": "2026-09-16T22:47:23Z", "event": "run", "actor": "delegate", "subject": "template-healing-symlink-bootstrap", "detail": "Codified P30, updated TEMPLATE/BOOTSTRAP.md Step 3 with profile symlink, logged rework RCA"}

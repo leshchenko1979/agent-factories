@@ -489,6 +489,32 @@ across context compactions and ignored in production.
 
 ---
 
+## P30 — Autonomous incident remediation & template self-healing
+
+When an incident, regression, or defect report from any factory identifies an ambiguity,
+missing instruction, or absent mechanical gate in the template or process law, the
+meta-factory does not narrate the fix, wait for a prompt, or ask for operator permission.
+It patches the canonical template, updates the mechanical gates, logs the rework RCA,
+and stamps the ledger autonomously in the same turn.
+
+- *Proven:* meta-factory (Infra Factory bootstrap symlink incident, 2026-09-16).
+- *Mechanism:*
+  1. **Immediate Template Patch:** Directly update `TEMPLATE/BOOTSTRAP.md`, `TEMPLATE/roles/`,
+     or `TEMPLATE/SKILL.md.tmpl` to close the instructional gap.
+  2. **Mechanical Gate Hardening:** Add or sharpen the verification gate in `TEMPLATE/tools/hygiene.py`,
+     `TEMPLATE/tools/audit.py`, or `TEMPLATE/tests/`.
+  3. **RCA Logging:** Record the defect, root cause, resolution, and `Prevented by` gate in
+     `evidence/rework.md`.
+  4. **Ledger Stamp & Commit:** Stamp `evidence/ledger.jsonl`, run `tools/ledger.py verify`,
+     and commit/push to `origin/main`.
+- *Prevents:* "Advisory idling" — where an agent diagnoses a clear systemic defect but pauses
+  to ask the operator "should I fix this?", creating unnecessary human bottleneck and stalling
+  self-improvement.
+- *Boundary:* Governs template hygiene and mechanical defect remediation. Substantive product
+  pivot decisions or external resource allocation remain owner-gated.
+
+---
+
 ## P30 — Every process has exactly one named owner
 
 Every declared process has exactly one named process owner role. Shared
