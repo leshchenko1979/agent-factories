@@ -106,3 +106,5 @@
 {"n": 106, "ts": "2026-09-16T21:41:22Z", "event": "run", "actor": "delegate", "subject": "pacemaker-v051-status-probe", "detail": "verified-opencrabs-dev-probed-inferhub-and-antispam"}
 {"n": 107, "ts": "2026-09-16T21:42:24Z", "event": "run", "actor": "delegate", "subject": "antispam-pacemaker-probe-ack", "detail": "prepared-queued-pending-operator-review"}
 {"n": 108, "ts": "2026-09-16T22:03:33Z", "event": "run", "actor": "delegate", "subject": "antispam-pacemaker-migration-completed", "detail": "job_id=cfb86dc5-4be4-4984-8331-d682504d2d1f trigger_cmd=watch_poll.py trigger_on=non_empty 0-token preflight active"}
+{"n": 109, "ts": "2026-09-16T22:25:01Z", "event": "intake", "actor": "hq", "subject": "#22", "detail": "title=survey-resolution-law-and-htn-swarms"}
+{"n": 110, "ts": "2026-09-16T22:35:01Z", "event": "intake", "actor": "triage", "subject": "#23", "detail": "title=survey-resolution-ratio-q issue=23"}
