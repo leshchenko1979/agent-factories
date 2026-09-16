@@ -31,8 +31,9 @@ defect to fix, not a synonym to tolerate.
 | `surface` | The chat product a factory runs on | chat, channel, platform, messenger |
 | `binding` | An add-on that names the substrate. Exactly one of each kind | link, mapping, connection, integration |
 | `add-on` | A pack of extra structure on top of the core | plugin, extension, module, adapter |
-| `law` | A factory's versioned process rules | policy, guidelines, SOP, playbook, rules doc |
-| `rubric` | The 13 quality criteria | scorecard, checklist, matrix |
+| `law` | A factory's versioned, prescriptive process rules that bind agent execution (a normative specialization of documentation artifact) | policy, guidelines, SOP, playbook, rules doc |
+| `documentation_artifact` | Any codified, versioned knowledge asset of the factory (law, subject docs, methodology core, process register, ontology spec) | document, doc, file, manual |
+| `rubric` | The 17 quality criteria across 5 families | scorecard, checklist, matrix |
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
 | `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
 | `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, product(s) it delivers to its client(s), and a run that leaves a trace | workflow, routine, procedure, pipeline |
@@ -87,7 +88,12 @@ classDiagram
     class Surface
     class Binding
     class AddOn
+    class DocumentationArtifact
     class Law
+    class SubjectDocumentation
+    class MethodologyDocumentation
+    class ProcessRegister
+    class OntologySpec
     class Rubric
     class Score
     class Band
@@ -101,6 +107,12 @@ classDiagram
     Factory <|-- MemberFactory
     MetaFactory "1" --> "*" MemberFactory : surveys
     Owner "1" --> "*" Factory : approves and directs
+    Factory "1" *-- "1..*" DocumentationArtifact : maintains
+    DocumentationArtifact <|-- Law : normative / binding
+    DocumentationArtifact <|-- SubjectDocumentation : descriptive / domain
+    DocumentationArtifact <|-- MethodologyDocumentation : foundational / mechanics
+    DocumentationArtifact <|-- ProcessRegister : operational / contracts
+    DocumentationArtifact <|-- OntologySpec : lexical / specification
     Factory "1" *-- "1" Law : is governed by
     Factory "1" *-- "1" Surface : runs on
     Factory "1" *-- "1..*" Lane : runs
@@ -234,9 +246,33 @@ classDiagram
         +string date
         +record()
     }
+    class DocumentationArtifact {
+        +string path
+        +string version
+        +score()
+        +verifyConsistency()
+    }
     class Law {
+        +string skillPath
         +string version
         +state()
+        +enforce()
+    }
+    class SubjectDocumentation {
+        +string domainSpecs
+        +list apiSchemas
+    }
+    class MethodologyDocumentation {
+        +string corePrinciples
+        +list weaknessCounters
+    }
+    class ProcessRegister {
+        +list declaredProcesses
+        +list customCriteria
+    }
+    class OntologySpec {
+        +list canonicalTerms
+        +list bannedSynonyms
     }
     class Rubric {
         +list criteria
@@ -306,6 +342,10 @@ instances of them. A class is what a thing is; an object is the thing.
 | Operational | `Band` | the label that score falls into |
 | `evidence/ledger.jsonl` | `Evidence` | where state transitions are written |
 | `evidence/rework.md` | `Evidence` | where defects and their prevention are written |
+| `docs/subject/` | `SubjectDocumentation` | domain specs and client deliverable schemas |
+| `docs/methodology/` | `MethodologyDocumentation` | the 5-module factory methodology core |
+| `docs/processes.md` | `ProcessRegister` | process register with atomic subprocess contracts |
+| `ONTOLOGY.md` | `OntologySpec` | canonical vocabulary and syntax graph |
 
 `Subagent` has no object in this table, and that is the point: a subagent does
 not persist, so there is nothing to list. An id recorded as a lane is a defect

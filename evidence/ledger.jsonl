@@ -81,3 +81,7 @@
 {"n": 81, "ts": "2026-09-16T14:00:20Z", "event": "claim", "actor": "hq", "subject": "#20", "detail": "lane=hq task=codify-subject-matter-docs-gate"}
 {"n": 82, "ts": "2026-09-16T14:04:07Z", "event": "run", "actor": "hq", "subject": "#20", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.012 tokens_in=1500 tokens_out=350"}
 {"n": 83, "ts": "2026-09-16T14:04:07Z", "event": "close", "actor": "hq", "subject": "#20", "detail": "receipt=subject-matter-docs-gate-and-rubric-v0.3-live"}
+{"n": 84, "ts": "2026-09-16T14:20:25Z", "event": "intake", "actor": "triage", "subject": "#21", "detail": "origin=owner title=documentation-consistency-and-taxonomy"}
+{"n": 85, "ts": "2026-09-16T14:20:26Z", "event": "claim", "actor": "hq", "subject": "#21", "detail": "lane=hq task=codify-d4-and-doc-taxonomy"}
+{"n": 86, "ts": "2026-09-16T14:28:15Z", "event": "run", "actor": "hq", "subject": "#21", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.010 tokens_in=1200 tokens_out=350"}
+{"n": 87, "ts": "2026-09-16T14:28:16Z", "event": "close", "actor": "hq", "subject": "#21", "detail": "receipt=d4-criteria-and-doc-taxonomy-live"}
