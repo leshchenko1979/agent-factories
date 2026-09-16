@@ -33,7 +33,7 @@ defect to fix, not a synonym to tolerate.
 | `add-on` | A pack of extra structure on top of the core | plugin, extension, module, adapter |
 | `law` | A factory's versioned, prescriptive process rules that bind agent execution (a normative specialization of documentation artifact) | policy, guidelines, SOP, playbook, rules doc |
 | `documentation_artifact` | Any codified, versioned knowledge asset of the factory (law, subject docs, methodology core, process register, ontology spec) | document, doc, file, manual |
-| `rubric` | The 17 quality criteria across 5 families | scorecard, checklist, matrix |
+| `rubric` | The 19 quality criteria across 6 families | scorecard, checklist, matrix |
 | `score` | A factory's rating against the rubric on a stated date | grade, rating, mark |
 | `band` | The coarse label a score falls into — Provisional, Operational, Scalable, Optimizing. The score is the measurement; the band is the reading of it | tier, level, category |
 | `process` | A recurring act that keeps a property true. It has an owner, a declared cadence, product(s) it delivers to its client(s), and a run that leaves a trace | workflow, routine, procedure, pipeline |

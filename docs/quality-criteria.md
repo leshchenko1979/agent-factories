@@ -1,6 +1,6 @@
 # Quality criteria for an agent factory
 
-**Status: v0.4 — ADOPTED 2026-09-16 (owner order).** The 17 criteria across 5 families
+**Status: v0.5 — ADOPTED 2026-09-16 (owner order).** The 19 criteria across 6 families
 and the 0–4 scale are the standing measurement system; factory-specific measures will be
 added on top. Each criterion is either derived from published research or
 extracted from a factory that runs today. The scale is still young, the
@@ -62,7 +62,7 @@ Two of these findings shape the whole rubric:
 
 ## The scale
 
-Each criterion is scored 0–4. Seventeen criteria across 5 families, so the maximum is **68**.
+Each criterion is scored 0–4. Nineteen criteria across 6 families, so the maximum is **76**.
 
 | Score | Level | What it means |
 |---|---|---|
@@ -74,10 +74,10 @@ Each criterion is scored 0–4. Seventeen criteria across 5 families, so the max
 
 | Band | Score | Reading |
 |---|---|---|
-| **Provisional** | 0–25% (0–17) | The factory runs on the founder's head. It works; it is not transferable. |
-| **Operational** | 26–50% (18–34) | Written down. A stranger could follow it. Baseline calibration achieved. |
-| **Scalable** | 51–75% (35–51) | Measured. You can tell whether it is getting better. |
-| **Optimizing** | 76–100% (52–68) | Thresholds fire by themselves. The factory corrects without being asked. |
+| **Provisional** | 0–25% (0–19) | The factory runs on the founder's head. It works; it is not transferable. |
+| **Operational** | 26–50% (20–38) | Written down. A stranger could follow it. Baseline calibration achieved. |
+| **Scalable** | 51–75% (39–57) | Measured. You can tell whether it is getting better. |
+| **Optimizing** | 76–100% (58–76) | Thresholds fire by themselves. The factory corrects without being asked. |
 
 **Do not treat 4 as the target.** Most factories should stop at *Defined* on
 criteria their volume does not justify measuring. A criterion with no decisions
@@ -131,8 +131,8 @@ what must be in place before the first task runs versus what is earned over time
 | Tier | Criteria | Why |
 |---|---|---|
 | **Day-1 Mandatory** (Foundation) | **Documentation:** Subject matter specification (D1), Process specification & criteria (D2), Documentation consistency (D4)<br/>**Law:** Law freshness (L1), Vocabulary conformance (L2), Single-writer state (L3)<br/>**Machine:** Specification clarity (M1), Boundary clarity (M4) | Without domain grounding, written law, controlled vocabulary, documentation consistency, and clear boundaries, early work immediately compounds errors and creates unrecoverable state drift. |
-| **Early Operational** (Process) | **Documentation:** Methodology core conformance (D3)<br/>**Machine:** Verification depth (M2), Coordination integrity (M3)<br/>**Stewardship:** Recoverability (S2), Human cognitive load (S1) | Handoffs must be direct, verification must have receipts, and recovery steps must be documented as soon as multiple lanes collaborate. |
-| **Volume-Earned** (Maturity) | **Output:** Throughput (O1), Stability (O2), Cost per successful task (O3)<br/>**Stewardship:** Improvement loop (S3) | Meaningful rates and stability statistics require historical sample size. Prematurely tracking throughput or cost before standard execution patterns exist produces noise instead of control. |
+| **Early Operational** (Process) | **Documentation:** Methodology core conformance (D3)<br/>**Machine:** Verification depth (M2), Coordination integrity (M3)<br/>**Stewardship:** Recoverability (S2), Human cognitive load (S1)<br/>**Autonomy:** Cadence autonomy (A2) | Handoffs must be direct, verification must have receipts, scheduled pacemakers must trigger cadences without human nudging, and recovery steps must be documented as soon as multiple lanes collaborate. |
+| **Volume-Earned** (Maturity) | **Output:** Throughput (O1), Stability (O2), Cost per successful task (O3)<br/>**Stewardship:** Improvement loop (S3)<br/>**Autonomy:** Work unit autonomy (A1) | Meaningful rates, stability statistics, and end-to-end zero-touch task execution ratios require historical sample size. Prematurely tracking throughput or autonomy ratios before standard execution patterns exist produces noise instead of control. |
 
 ---
 
@@ -231,6 +231,25 @@ time, promoted to the throughput group precisely because fast recovery is what
 keeps delivery moving. The improvement loop is Anthropic's eval practice:
 failures become test cases, capability evals start at a low pass rate to give a
 hill to climb, and regression evals protect what already works.
+
+---
+
+## Autonomy — does the factory run itself?
+
+Autonomous operation is the central raison d'être of an agent factory. Autonomy is neither
+a philosophical aspiration nor an all-or-nothing binary flag: it is a measurable ratio
+across both discrete deliverables and recurring operational processes.
+
+| Criterion | What it measures | What it prevents |
+|---|---|---|---|
+| **Work unit autonomy** (A1) | **Zero-touch task execution ratio:** The share of discrete tasks (issues / work units) that navigate from `intake` through `claim`, `run`, verification gates, and `close` with zero human intervention. Scored by: (0) Every task requires human triage, mid-flight debugging, or manual merges; (1) Execution runs autonomously once manually triaged and assigned; (2) Autonomous intake and execution for well-specified tasks, human fallback for edge cases; (3) >80% of closed tasks require zero human touches, with automated queue dwell under 5% of lead time; (4) Fully self-directed: backlog intake, decomposition, inner eval loop, and settlement proceed autonomously without operator prompts. | The supervised sweatshop. A factory that boasts high velocity and 100% test pass rates while requiring an operator to manually triage issues, prompt lanes, unstick blocked sessions, and approve every diff. |
+| **Cadence autonomy** (A2) | **Pacemaker-driven execution ratio:** The share of declared recurring processes (Process 2 health audits, Process 3 daily surveys, Process 4 workspace hygiene sweeps) triggered and completed via scheduled pacemakers (P28) versus human "run this" prompts. Scored by: (0) No pacemakers; processes run only when the operator types a command in chat; (1) Cron pacemakers declared, but frequently stall or require manual session wake-ups; (2) Core monitoring pacemakers run reliably on schedule; (3) All declared periodic processes run via zero-token trigger probes and session notifies without human intervention; (4) Fully autonomous pacemaker loops with self-tuning cadences and automated issue generation on regressions (P1/P27). | The idling factory. An autonomous machine that grinds to a complete halt the moment the operator stops chatting. |
+
+*Evidence:* Control theory (feedforward vs feedback loops) and operational AI research
+(Google Cloud, Pan et al.) establish that measuring cycle time without isolating human
+queue dwell time hides operational friction. A factory where autonomous coding takes 25
+minutes but human triage waits 10.4 hours is an un-automated queue with a fast compiler.
+Explicit autonomy scoring measures the automation of the *workflow*, not merely the *coder*.
 
 ---
 

@@ -89,3 +89,7 @@
 {"n": 89, "ts": "2026-09-16T14:57:58Z", "event": "dispatch", "actor": "hq", "subject": "ai-antispam", "detail": "target=delegate task=self-audit-kit-advisory"}
 {"n": 90, "ts": "2026-09-16T14:59:32Z", "event": "dispatch", "actor": "delegate", "subject": "antispam-self-audit-core-advisory", "detail": "target=cb06a94a commit=2592069 gate=D3"}
 {"n": 91, "ts": "2026-09-16T15:05:58Z", "event": "run", "actor": "delegate", "subject": "antispam-self-audit-core-ack", "detail": "session=cb06a94a;ack=minimal-2-process-core;gate=D3;status=scheduled"}
+{"n": 92, "ts": "2026-09-16T15:35:25Z", "event": "intake", "actor": "triage", "subject": "#22", "detail": "title=codify-explicit-autonomy-quality-criteria"}
+{"n": 93, "ts": "2026-09-16T15:35:30Z", "event": "claim", "actor": "hq", "subject": "#22", "detail": "lane=hq task=codify-autonomy-criteria-A1-A2"}
+{"n": 94, "ts": "2026-09-16T15:40:30Z", "event": "run", "actor": "hq", "subject": "#22", "detail": "outcome=accepted duration=12s cost_usd=0.0110 tokens_in=3100 tokens_out=780 turns=1 gate=all-pass"}
+{"n": 95, "ts": "2026-09-16T15:40:34Z", "event": "close", "actor": "hq", "subject": "#22", "detail": "receipt=autonomy-family-A1-A2-codified-in-quality-criteria"}
