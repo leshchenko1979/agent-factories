@@ -1,7 +1,7 @@
 # Quality criteria for an agent factory
 
-**Status: v0.2 — ADOPTED 2026-09-11 (owner order).** The 13 criteria and the
-0–4 scale are the standing measurement system; factory-specific measures will be
+**Status: v0.3 — ADOPTED 2026-09-16 (owner order).** The 16 criteria across 5 families
+and the 0–4 scale are the standing measurement system; factory-specific measures will be
 added on top. Each criterion is either derived from published research or
 extracted from a factory that runs today. The scale is still young, the
 thresholds are hypotheses, and the first factory scored against it is the one
@@ -62,7 +62,7 @@ Two of these findings shape the whole rubric:
 
 ## The scale
 
-Each criterion is scored 0–4. Thirteen criteria, so the maximum is **52**.
+Each criterion is scored 0–4. Sixteen criteria across 5 families, so the maximum is **64**.
 
 | Score | Level | What it means |
 |---|---|---|
@@ -74,10 +74,10 @@ Each criterion is scored 0–4. Thirteen criteria, so the maximum is **52**.
 
 | Band | Score | Reading |
 |---|---|---|
-| **Provisional** | 0–25% | The factory runs on the founder's head. It works; it is not transferable. |
-| **Operational** | 26–50% | Written down. A stranger could follow it. Nothing is measured. |
-| **Scalable** | 51–75% | Measured. You can tell whether it is getting better. |
-| **Optimizing** | 76–100% | Thresholds fire by themselves. The factory corrects without being asked. |
+| **Provisional** | 0–25% (0–16) | The factory runs on the founder's head. It works; it is not transferable. |
+| **Operational** | 26–50% (17–32) | Written down. A stranger could follow it. Baseline calibration achieved. |
+| **Scalable** | 51–75% (33–48) | Measured. You can tell whether it is getting better. |
+| **Optimizing** | 76–100% (49–64) | Thresholds fire by themselves. The factory corrects without being asked. |
 
 **Do not treat 4 as the target.** Most factories should stop at *Defined* on
 criteria their volume does not justify measuring. A criterion with no decisions
@@ -88,12 +88,12 @@ hanging off it is a dashboard, not a control.
 ## How to read the criterion names
 
 Each criterion has a **plain name**. That name is its identity, and it is what a
-report must use. The short codes in brackets — `O1`, `M2`, `L3` — exist only as
+report must use. The short codes in brackets — `O1`, `M2`, `L3`, `D1` — exist only as
 stable handles for cross-referencing between documents.
 
-**Never cite a criterion by its code alone in anything a human reads.** "13/52,
-weakest on L2 and L3" is unreadable to the person it is reported to; "weakest on
-vocabulary conformance and single-writer state" is the same sentence, and it is
+**Never cite a criterion by its code alone in anything a human reads.** "13/64,
+weakest on L2 and D1" is unreadable to the person it is reported to; "weakest on
+vocabulary conformance and subject matter specification" is the same sentence, and it is
 the one that gets acted on. The codes are internal shorthand, and they leaked
 into an operator-facing report once. That is why this paragraph exists.
 
@@ -116,18 +116,39 @@ audit is the calibration check: comparing the factory's self-score with an outsi
 blind spots and unevidenced assumptions. But the standing operational heartbeat relies on
 self-scoring.
 
+### The Subject Matter Consulting Gate (Hard Rule)
+> **A factory is strictly barred from receiving substantive consulting, diagnostic audits, or bottleneck recommendations until its Documentation Quality achieves baseline calibration ($\ge 2/4$ across D1, D2, D3).**
+
+Consulting on process without knowing what the process builds produces ungrounded bureaucracy. An auditor cannot diagnose whether a defect was caused by an ambiguous prompt, a broken model, or a domain misunderstanding if the domain requirements and schemas (`docs/subject/`) are not codified.
+
 ---
 
 ## Mandatory at bootstrap vs. volume-earned criteria
 
-Not all 13 criteria are day-one requirements. Bootstrapping a factory requires distinguishing
+Not all 16 criteria are day-one requirements. Bootstrapping a factory requires distinguishing
 what must be in place before the first task runs versus what is earned over time.
 
 | Tier | Criteria | Why |
 |---|---|---|
-| **Day-1 Mandatory** (Foundation) | **Law:** Law freshness (L1), Vocabulary conformance (L2), Single-writer state (L3)<br/>**Machine:** Specification clarity (M1), Boundary clarity (M4) | Without written law, controlled vocabulary, and clear boundaries, early work immediately compounds errors and creates unrecoverable state drift. |
-| **Early Operational** (Process) | **Machine:** Verification depth (M2), Coordination integrity (M3)<br/>**Stewardship:** Recoverability (S2), Human cognitive load (S1) | Handoffs must be direct, verification must have receipts, and recovery steps must be documented as soon as multiple lanes collaborate. |
+| **Day-1 Mandatory** (Foundation) | **Documentation:** Subject matter specification (D1), Process specification & criteria (D2)<br/>**Law:** Law freshness (L1), Vocabulary conformance (L2), Single-writer state (L3)<br/>**Machine:** Specification clarity (M1), Boundary clarity (M4) | Without domain grounding, written law, controlled vocabulary, and clear boundaries, early work immediately compounds errors and creates unrecoverable state drift. |
+| **Early Operational** (Process) | **Documentation:** Methodology core conformance (D3)<br/>**Machine:** Verification depth (M2), Coordination integrity (M3)<br/>**Stewardship:** Recoverability (S2), Human cognitive load (S1) | Handoffs must be direct, verification must have receipts, and recovery steps must be documented as soon as multiple lanes collaborate. |
 | **Volume-Earned** (Maturity) | **Output:** Throughput (O1), Stability (O2), Cost per successful task (O3)<br/>**Stewardship:** Improvement loop (S3) | Meaningful rates and stability statistics require historical sample size. Prematurely tracking throughput or cost before standard execution patterns exist produces noise instead of control. |
+
+---
+
+## Documentation — is the factory grounded and transferable?
+
+| Criterion | What it measures | What it prevents |
+|---|---|---|---|
+| **Subject matter specification** (D1) | Presence and completeness of `docs/subject/` (domain entities, API schemas, business logic, client deliverables, and SLAs) | The factory that builds the wrong thing. An agent that generates syntactically valid pipelines that solve non-existent domain problems or hallucinate API structures |
+| **Process specification & criteria** (D2) | All declared processes have atomic subprocess decompositions, explicit input/output contracts, and measurable custom acceptance criteria | The un-auditable monolith. Cascading failures where spec ambiguity is falsely diagnosed as model hallucination |
+| **Methodology core conformance** (D3) | Documentation of LLM weakness counters (amnesia, concurrency, locking, receipts) and substrate/harness bindings (`docs/methodology/`) | Repeating generic AI failure modes. A factory that loses state on compaction, hangs on stdin, or suffers race conditions |
+
+*Evidence:* Research across production agent systems (Google Cloud, MAP, MAST)
+proves that >70% of agent failures stem from specification gaps and ungrounded
+domain context rather than model intelligence. Codifying subject matter and
+methodology into explicit, scored documents eliminates cold-start drift and enables
+meaningful consulting.
 
 ---
 

@@ -19,7 +19,7 @@ diagnose bottlenecks and measurably increase their operational efficiency.
 |---|---|---|
 | **Template** | [`TEMPLATE/`](TEMPLATE/) | The instantiable skeleton — bootstrap checklist, process-law skeleton, ontology, role cards |
 | **Best practices** | [docs/best-practices.md](docs/best-practices.md) | The laws the template encodes, each with the factory that proves it |
-| **Quality criteria** | [docs/quality-criteria.md](docs/quality-criteria.md) | The adopted measurement system: 13 criteria in 4 families, scored 0–4, re-scored on a cadence — with this factory scored against itself |
+| **Quality criteria** | [docs/quality-criteria.md](docs/quality-criteria.md) | The adopted measurement system: 16 criteria in 5 families, scored 0–4, re-scored on a cadence — with this factory scored against itself |
 | **Add-ons** | [docs/addons.md](docs/addons.md) | Two mandatory **bindings** (chat surface, agent harness) plus optional **domain** packs |
 | **Product spec** | [docs/product.md](docs/product.md) | What the product is, who it is for, what v1 covers, and what it deliberately does not |
 | **Evidence** | [evidence/](evidence/) | The four real factories, surveyed — the receipts behind every practice |

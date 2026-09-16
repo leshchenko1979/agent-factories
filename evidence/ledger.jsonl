@@ -78,3 +78,6 @@
 {"n": 78, "ts": "2026-09-15T23:41:52Z", "event": "close", "actor": "hq", "subject": "#19", "detail": "receipt=5-module-methodology-core-shipped-in-template cost_usd=0.0160 tokens_in=4800 tokens_out=1200 turns=1"}
 {"n": 79, "ts": "2026-09-16T06:17:43Z", "event": "run", "actor": "surveys", "subject": "factory-measurement-daily", "detail": "duration=25s turns=1 outcome=accepted gate=all-pass score_mf=41/52"}
 {"n": 80, "ts": "2026-09-16T13:58:22Z", "event": "intake", "actor": "triage", "subject": "#20", "detail": "Codify hard gate: No consulting without subject matter documentation (docs/subject/)"}
+{"n": 81, "ts": "2026-09-16T14:00:20Z", "event": "claim", "actor": "hq", "subject": "#20", "detail": "lane=hq task=codify-subject-matter-docs-gate"}
+{"n": 82, "ts": "2026-09-16T14:04:07Z", "event": "run", "actor": "hq", "subject": "#20", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.012 tokens_in=1500 tokens_out=350"}
+{"n": 83, "ts": "2026-09-16T14:04:07Z", "event": "close", "actor": "hq", "subject": "#20", "detail": "receipt=subject-matter-docs-gate-and-rubric-v0.3-live"}

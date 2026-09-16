@@ -168,7 +168,7 @@ neither read the surface. Find the substrate's repo, read its tool list, probe t
 
 ## 6. Measurement and self-improvement loop
 
-This factory is scored against `docs/quality-criteria.md` — 13 criteria, 4 families, 0–4 each.
+This factory is scored against `docs/quality-criteria.md` — 16 criteria across 5 families, 0–4 each.
 
 | Requirement | Detail |
 |---|---|
@@ -179,6 +179,7 @@ This factory is scored against `docs/quality-criteria.md` — 13 criteria, 4 fam
 | Automated self-improvement conversion | Score regressions (score < 3 or negative deltas) are automatically converted into board issues by Triage (P1, P27) |
 | Autonomous assignment & monitoring | Triage scans open intake issues, checks claims, assigns persistent worker lanes, and runs periodic execution sweeps (P27) |
 | **The Pacemaker Requirement** | Every periodic process owner (Surveys, Triage, HQ) must have an active thin cron pacemaker waking its session UUID |
+| **The Subject Matter Consulting Gate** | Substantive consulting & diagnostic audits strictly require baseline Subject Matter Documentation (`docs/subject/` >= 2/4) |
 
 The surveyed factories are measured on the same cadence. A factory's **own HQ owns its
 domain detail**; what travels back is the score and the template law it implies.

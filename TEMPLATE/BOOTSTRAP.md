@@ -189,6 +189,21 @@ enforcement is deferred and why.
 
 ---
 
+## Step 4a — Write baseline Subject Matter Documentation
+
+Populate `docs/subject/` with two core files:
+- `docs/subject/domain-model.md`: Domain entities, data structures, external APIs, and business logic.
+- `docs/subject/client-requirements.md`: Expected deliverables, quality thresholds, client SLAs, and acceptance criteria.
+
+**The Hard Consulting Gate:** A factory without `docs/subject/` is barred from
+receiving substantive consulting, diagnostic audits, and root-cause analysis.
+Auditing a process without knowing what the process builds produces ungrounded
+bureaucracy.
+
+**Evidence:** the committed `docs/subject/` files with domain entities and client specs defined.
+
+---
+
 ## Step 4b — Stand up the state surface
 
 Copy [`tools/ledger.py`](tools/ledger.py) and

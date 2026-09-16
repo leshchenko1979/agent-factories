@@ -301,7 +301,7 @@ instances of them. A class is what a thing is; an object is the thing.
 | the binding in force | `Binding` | the mechanics that name that place |
 | issues #6 to #12 | `WorkUnit` | the work units this factory has run |
 | `skills/meta-factory/SKILL.md` | `Law` | the process law, versioned in git |
-| `docs/quality-criteria.md` | `Rubric` | the 13 criteria and the scale |
+| `docs/quality-criteria.md` | `Rubric` | the 16 criteria across 5 families and the scale |
 | 2026-09-12, 14 of 52 | `Score` | the latest reading of this factory |
 | Operational | `Band` | the label that score falls into |
 | `evidence/ledger.jsonl` | `Evidence` | where state transitions are written |
