@@ -105,3 +105,4 @@
 {"n": 105, "ts": "2026-09-16T21:40:07Z", "event": "dispatch", "actor": "hq", "subject": "pacemaker-fleet-check", "detail": "target=delegate lane=23549292 task=verify-v051-cron-upgrades-across-members"}
 {"n": 106, "ts": "2026-09-16T21:41:22Z", "event": "run", "actor": "delegate", "subject": "pacemaker-v051-status-probe", "detail": "verified-opencrabs-dev-probed-inferhub-and-antispam"}
 {"n": 107, "ts": "2026-09-16T21:42:24Z", "event": "run", "actor": "delegate", "subject": "antispam-pacemaker-probe-ack", "detail": "prepared-queued-pending-operator-review"}
+{"n": 108, "ts": "2026-09-16T22:03:33Z", "event": "run", "actor": "delegate", "subject": "antispam-pacemaker-migration-completed", "detail": "job_id=cfb86dc5-4be4-4984-8331-d682504d2d1f trigger_cmd=watch_poll.py trigger_on=non_empty 0-token preflight active"}
