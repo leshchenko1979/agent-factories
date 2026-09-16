@@ -33,12 +33,16 @@ go in *your* skill, in *your* repo. See `TEMPLATE/SKILL.md.tmpl` §17.
 
 ## 1. What this factory is
 
-**Purpose.** Two complementary purposes:
-1. **The product:** Produce and maintain the factory template + rulebook, deriving laws
-   that hold for every factory of a given shape.
+**Purpose.** To build, measure, and evolve **Autonomously Self-Improving Factories (ASIF)** across two complementary pillars:
+1. **The product:** Produce and maintain the factory template + rulebook, deriving laws and mechanical gates that enable any repository to run autonomous task eval loops and closed-loop self-improvement.
 2. **The consulting practice:** Act as a process consultant to surveyed member factories,
    diagnosing bottlenecks, surfacing stopped processes, and actively helping their HQs
-   increase their operational efficiency (throughput, cadence, yield, waste reduction).
+   increase their operational efficiency (throughput, cadence, yield, waste reduction, and autonomy).
+
+**The Core Triad of an Autonomously Self-Improving Factory:**
+- **Autonomous (The Momentum):** Outer cron pacemakers (P28) wake persistent session UUIDs without token waste; inner eval loops (Ralph) converge tasks against deterministic gates with zero human prompt dependence.
+- **Self-Improving (The Compound Engine):** Runtime defects are codified into `evidence/rework.md` (`Prevented by`), and score regressions automatically trigger backlog issues (P1/P27) that upgrade prompt laws and mechanical test gates permanently.
+- **Factory (The Industrial Discipline):** Strict single-writer concurrency (`fcntl.flock`), atomic subprocess contracts with measurable lead times, and verifiable product delivery.
 
 **The three legs.**
 

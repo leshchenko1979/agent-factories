@@ -18,8 +18,9 @@ defect to fix, not a synonym to tolerate.
 
 | Term | Definition | Contextual synonyms (avoid when meaning this term) |
 |---|---|---|
-| `factory` | A versioned process law, a chat surface whose place names carry state, and a repo whose issues are the task list — all three, or it is not a factory | bot, agent, team, department, project |
-| `meta-factory` | This project: the factory whose output is factories | meta-layer, the factory, main factory, mother factory |
+| `factory` | An autonomously self-improving delivery system consisting of versioned process laws, a chat surface whose place names carry state, and a repo whose issues are the task list | bot, agent, team, department, project |
+| `autonomously_self_improving_factory` | A factory engineered with outer pacemaker loops, inner task eval loops, and automated defect-to-gate RSI loops that execute and improve without human prompt dependence | autonomous agent, self-healing bot, auto-coder |
+| `meta-factory` | This project: the factory whose output is autonomously self-improving factories | meta-layer, the factory, main factory, mother factory |
 | `member factory` | A factory this project surveys and converses with | client, tenant, subject, target, downstream |
 | `owner` | The party accountable for a thing. When unqualified, refers to the human who approves and directs the factory. Not a lane, not a role | boss, admin, user, client, customer |
 | `HQ` | The lane that rules, holds the owner relationship, and owns law authorship | supervisor, lead, manager, boss, admin |

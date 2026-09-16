@@ -1,12 +1,16 @@
-# Agent Factories
+# Agent Factories — Autonomously Self-Improving Factories
 
-**A template for creating a new agent factory** — plus the best practices it
-encodes, and add-ons for the domains a factory works in.
+**The meta-factory for building, measuring, and evolving Autonomously Self-Improving Factories (ASIF).**
 
 An *agent factory* is the structure that turns a repository plus a chat group
 into a self-driving delivery line: AI agents do the work, a human supervises
 through the chat, and the process itself is a versioned file rather than
 something living in someone's head.
+
+**Our Core Purpose:** We build **Autonomously Self-Improving Factories**:
+1. **Autonomous:** Driven by outer-loop pacemakers and inner task eval loops that execute, converge, and settle with zero human prompt dependence or manual hand-holding.
+2. **Self-Improving:** Operating closed-loop Recursive Self-Improvement (RSI) that captures runtime failures, codifies defect memory (`rework.md`), and permanently upgrades mechanical test gates and prompt laws.
+3. **Factory:** Industrial software discipline over conversational vibes — strict single-writer concurrency (`fcntl.flock`), atomic subprocess contracts, and verifiable client deliverables.
 
 This repo holds **the product and the consulting practice**: the template you
 copy when you want to stand up a new factory, the rulebook that explains why each

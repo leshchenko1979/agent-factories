@@ -1,18 +1,18 @@
 # Product: the four products of the meta-factory
 
-**What this is.** Four complementary products produced and maintained by this meta-factory:
+**What this is.** Four complementary products produced and maintained by this meta-factory to build and operate **Autonomously Self-Improving Factories (ASIF)**:
 1. **The Factory Template & Add-on Packs:** A working structure an operator (or an agent) copies
-   and instantiates to create a new agent factory, plus the rules that make it work
+   and instantiates to create a new autonomously self-improving factory, plus the rules that make it work
    and the domain add-ons that adapt it to a particular kind of work.
 2. **The Consulting Practice & Advisories:** An active process-consultancy to the surveyed
    member factories — diagnosing operational bottlenecks, surfacing stopped or
    low-yield processes, recommending hardened gates and practices, and helping their
-   HQs measurably increase their efficiency (throughput, cadence, yield, waste reduction).
-3. **The Factory Growth & Maturity Map:** A blueprint mapping how an agent factory evolves across
+   HQs measurably increase their efficiency and autonomy (throughput, cadence, yield, waste reduction, self-improvement).
+3. **The Factory Growth & Maturity Map:** A blueprint mapping how an autonomously self-improving factory evolves across
    throughput stages (Stage 0 to Stage 4), predicting the exact roadblocks that emerge at each scale
    and specifying the transition mechanics to cross them.
 4. **The Empirical Insights Story (Public Narrative):** A battle-tested engineering narrative
-   drawn directly from live fleet telemetry (lead time reality, atomic concurrency locks, self-auditing quality loops)
+   drawn directly from live fleet telemetry (lead time reality, atomic concurrency locks, self-auditing quality loops, autonomous RSI)
    published for technical operators and communities.
 
 **What it is not.** Not a framework, not a runtime, not a library. There is no
