@@ -120,3 +120,4 @@
 {"n": 120, "ts": "2026-09-16T23:13:36Z", "event": "run", "actor": "hq", "subject": "weekly-insight-synthesis-pacemaker", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.012 tokens_in=1500 tokens_out=380 insight_appended=survey-requisite-variety issue=26"}
 {"n": 121, "ts": "2026-09-16T23:14:02Z", "event": "run", "actor": "hq", "subject": "pacemaker-template-weekly", "detail": "action=executed-test-template-sync-packaged-core-and-addons-audited-delivery audit=8/8_pass"}
 {"n": 122, "ts": "2026-09-16T23:14:44Z", "event": "run", "actor": "hq", "subject": "factory-growth-map-biweekly", "detail": "action=calibrated-growth-stages-against-fleet-telemetry stages=0-4 status=PASS factories=6 audit=8/8_pass"}
+{"n": 123, "ts": "2026-09-16T23:19:33Z", "event": "run", "actor": "hq", "subject": "weekly-insight-synthesis-pacemaker", "detail": "action=executed-telemetry-mining-and-insight-synthesis patterns=1 insights=17 audit=8/8_pass status=HEALTHY"}
