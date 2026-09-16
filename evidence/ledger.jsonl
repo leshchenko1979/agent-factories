@@ -76,3 +76,4 @@
 {"n": 76, "ts": "2026-09-15T23:41:52Z", "event": "claim", "actor": "hq", "subject": "#19", "detail": "lane=hq task=dual-documentation-and-methodology-core"}
 {"n": 77, "ts": "2026-09-15T23:41:52Z", "event": "run", "actor": "hq", "subject": "#19", "detail": "outcome=accepted duration=24s cost_usd=0.0160 tokens_in=4800 tokens_out=1200 turns=1 gate=all-pass"}
 {"n": 78, "ts": "2026-09-15T23:41:52Z", "event": "close", "actor": "hq", "subject": "#19", "detail": "receipt=5-module-methodology-core-shipped-in-template cost_usd=0.0160 tokens_in=4800 tokens_out=1200 turns=1"}
+{"n": 79, "ts": "2026-09-16T06:17:43Z", "event": "run", "actor": "surveys", "subject": "factory-measurement-daily", "detail": "duration=25s turns=1 outcome=accepted gate=all-pass score_mf=41/52"}
