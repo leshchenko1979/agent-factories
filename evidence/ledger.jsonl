@@ -116,3 +116,5 @@
 {"n": 116, "ts": "2026-09-16T23:00:03Z", "event": "claim", "actor": "hq", "subject": "#26", "detail": "lane=hq task=synthesize-insights-and-cadenced-delivery"}
 {"n": 117, "ts": "2026-09-16T23:00:03Z", "event": "run", "actor": "hq", "subject": "#26", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.015 tokens_in=1800 tokens_out=420"}
 {"n": 118, "ts": "2026-09-16T23:00:03Z", "event": "close", "actor": "hq", "subject": "#26", "detail": "receipt=tools/synthesize_insights.py-and-cadenced-pacemakers-live"}
+{"n": 119, "ts": "2026-09-16T23:13:36Z", "event": "intake", "actor": "hq", "subject": "#26", "detail": "task=feedforward-prompt-constraints-and-local-test-gates-jidoka-yield-recovery"}
+{"n": 120, "ts": "2026-09-16T23:13:36Z", "event": "run", "actor": "hq", "subject": "weekly-insight-synthesis-pacemaker", "detail": "outcome=accepted gate=all-pass turns=1 cost_usd=0.012 tokens_in=1500 tokens_out=380 insight_appended=survey-requisite-variety issue=26"}
