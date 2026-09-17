@@ -136,3 +136,4 @@
 {"n": 136, "ts": "2026-09-17T00:47:33Z", "event": "close", "actor": "hq", "subject": "#24", "detail": "duration=240s turns=3 cost_usd=0.018 outcome=accepted gate=all-pass yield=100% distributed-subprocess-ledgers-and-focus-conservation-implemented"}
 {"n": 137, "ts": "2026-09-17T00:54:50Z", "event": "dispatch", "actor": "delegate", "subject": "inferhub-2process-hq-role-advisory", "detail": "delivered-to=359fe71b"}
 {"n": 138, "ts": "2026-09-17T00:58:02Z", "event": "dispatch", "actor": "delegate", "subject": "inferhub-2process-hq-role-advisory-direct", "detail": "delivered canonical 2-process setup and 4 scenario verdicts to 359fe71b"}
+{"n": 139, "ts": "2026-09-17T01:03:50Z", "event": "run", "actor": "delegate", "subject": "inferhub-2process-hq-adoption-confirmed", "detail": "InferHub Watch HQ confirmed adoption of 2-process setup and 4 HQ boundary rules in skills/inferhub/SKILL.md"}
