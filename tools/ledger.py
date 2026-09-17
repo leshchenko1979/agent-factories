@@ -46,6 +46,7 @@ REPO = Path(__file__).resolve().parent.parent
 # write the real state surface are how a probe becomes permanent corruption.
 LEDGER = Path(os.environ.get("OC_LEDGER_PATH", REPO / "evidence" / "ledger.jsonl"))
 LOCK = LEDGER.parent / ".ledger.lock"
+SUBPROCESSES_DIR = Path(os.environ.get("OC_SUBPROCESS_DIR", REPO / "evidence" / "subprocesses"))
 
 # The closed set of event types. An open set is not a schema — it is a diary.
 # claim     work taken by a lane
@@ -119,12 +120,20 @@ def cmd_append(args: argparse.Namespace) -> int:
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
 
-    LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    target_ledger = LEDGER
+    target_lock = LOCK
+    if getattr(args, "subprocess", None):
+        sub_name = args.subprocess.strip()
+        SUBPROCESSES_DIR.mkdir(parents=True, exist_ok=True)
+        target_ledger = SUBPROCESSES_DIR / f"{sub_name}.jsonl"
+        target_lock = SUBPROCESSES_DIR / f".{sub_name}.lock"
+
+    target_ledger.parent.mkdir(parents=True, exist_ok=True)
     # The lock is what makes this the single writer. Read-last + write-next
     # happens entirely inside it, so concurrent appends cannot collide on `n`.
-    with open(LOCK, "w") as lock:
+    with open(target_lock, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        rows = read_rows(LEDGER)
+        rows = read_rows(target_ledger)
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,
             "ts": now_iso(),
@@ -133,16 +142,22 @@ def cmd_append(args: argparse.Namespace) -> int:
             "subject": args.subject,
             "detail": args.detail,
         }
-        with open(LEDGER, "a", encoding="utf-8") as fh:
+        with open(target_ledger, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
 
-    print(f"n={row['n']} {row['event']} {row['subject']} — {row['detail']}")
+    prefix = f"[{args.subprocess}] " if getattr(args, "subprocess", None) else ""
+    print(f"{prefix}n={row['n']} {row['event']} {row['subject']} — {row['detail']}")
     return 0
 
 def cmd_tail(args: argparse.Namespace) -> int:
-    rows = read_rows(LEDGER)
+    target_ledger = LEDGER
+    if getattr(args, "subprocess", None):
+        sub_name = args.subprocess.strip()
+        target_ledger = SUBPROCESSES_DIR / f"{sub_name}.jsonl"
+
+    rows = read_rows(target_ledger)
     for row in rows[-args.n :]:
         print(
             f"{row.get('n'):>4}  {row.get('ts')}  {row.get('event'):<8} "
@@ -151,7 +166,7 @@ def cmd_tail(args: argparse.Namespace) -> int:
     print(f"\n{len(rows)} row(s)")
     return 0
 
-def cmd_verify(_: argparse.Namespace) -> int:
+def cmd_verify(args: argparse.Namespace) -> int:
     """Read-only integrity check — the ledger's own gate.
 
     Two jobs: the file's structure (monotonic `n`, known event and actor, the
@@ -159,7 +174,12 @@ def cmd_verify(_: argparse.Namespace) -> int:
     one a row count cannot see — a ledger can be perfectly numbered and still
     say that something was closed without ever saying who took it.
     """
-    rows = read_rows(LEDGER)
+    target_ledger = LEDGER
+    if getattr(args, "subprocess", None):
+        sub_name = args.subprocess.strip()
+        target_ledger = SUBPROCESSES_DIR / f"{sub_name}.jsonl"
+
+    rows = read_rows(target_ledger)
     problems: list[str] = []
     for i, row in enumerate(rows, 1):
         if row.get("n") != i:
@@ -238,13 +258,16 @@ def main() -> int:
     ap.add_argument("--actor", required=True)
     ap.add_argument("--subject", required=True)
     ap.add_argument("--detail", required=True)
+    ap.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
     ap.set_defaults(func=cmd_append)
 
     tp = sub.add_parser("tail", help="read-only")
     tp.add_argument("--n", type=int, default=20)
+    tp.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
     tp.set_defaults(func=cmd_tail)
 
     vp = sub.add_parser("verify", help="read-only integrity check")
+    vp.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
     vp.set_defaults(func=cmd_verify)
 
     args = parser.parse_args()

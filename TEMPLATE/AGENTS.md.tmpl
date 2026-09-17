@@ -65,6 +65,16 @@ passes, and the output of that run is in the issue.
 
 ---
 
+## Feedforward constraints & Jidoka test gates
+
+To prevent rework loops and maximize first-pass yield ($\ge 90\%$):
+
+1. **Feedforward Context Assembly:** Before starting code generation, identify domain constraints, relevant historical defects from `evidence/rework.md`, and active role boundaries.
+2. **Deterministic Pre-Flight Checks:** Run local tests and mechanical gates (`{{TEST_COMMAND}}`) incrementally after every discrete file modification rather than waiting until turn completion.
+3. **Automated Stop-on-Defect (Jidoka / Autonomation):** If any mechanical gate or unit test fails, halt new feature generation immediately, isolate root cause, and resolve before proceeding. Do not build new code on top of a failing test.
+
+---
+
 ## Branches and other agents
 
 Other sessions may be working in this repository at the same time.

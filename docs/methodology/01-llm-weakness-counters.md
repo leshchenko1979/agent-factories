@@ -40,3 +40,11 @@ with open("evidence/ledger.jsonl", "a+") as f:
 1. **Feedforward Constraints (`SKILL.md`):** Injected into the model's context window before generation begins. Prevents known bugs before token 1.
 2. **Deterministic Feedback (Mechanical Gates):** Linters, schema tests, and audit scripts (`tools/audit.py`) return exact error deltas if generation violates constraints.
 3. **The Learning Accumulator (`rework.md`):** Every defect caught by feedback must record a `Prevented by` rule that permanently updates the feedforward prompt.
+
+---
+
+## 4. Jidoka & First-Pass Yield Recovery
+
+1. **Jidoka (Autonomation / Stop-on-Defect):** In the Toyota Production System, line workers halt the assembly line immediately upon detecting an anomaly. In AI multi-agent factories, any gate failure in `tools/audit.py` or unit test suite requires immediate halt and root cause isolation before additional turns or features are written.
+2. **Deterministic Pre-Flight Gates:** Before declaring a work unit complete, all mechanical gates must pass locally in sub-second execution time.
+3. **Yield Telemetry:** First-pass yield is computed as `accepted_runs / total_runs`. Defect clusters trigger automatic remediation issues on the board via autonomous telemetry mining (`tools/synthesize_insights.py`).

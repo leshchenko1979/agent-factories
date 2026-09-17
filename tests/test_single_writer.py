@@ -93,6 +93,9 @@ def verify_evidence_directory(declared_surfaces: dict[str, str]) -> list[str]:
             if "evidence/scores/" in decl and rel.startswith("evidence/scores/") and rel.endswith(".md"):
                 matched = True
                 break
+            if "evidence/subprocesses/" in decl and rel.startswith("evidence/subprocesses/") and rel.endswith(".jsonl"):
+                matched = True
+                break
 
         if not matched:
             errors.append(f"un-declared state surface in evidence/: {rel}")
