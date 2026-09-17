@@ -150,3 +150,4 @@
 {"n": 150, "ts": "2026-09-17T09:55:07Z", "event": "run", "actor": "delegate", "subject": "opencrabs-dev-management-exchange-received", "detail": "verified formal top-3 management breakthroughs synthesis from opencrabs dev hq"}
 {"n": 151, "ts": "2026-09-17T10:01:01Z", "event": "close", "actor": "hq", "subject": "#29", "detail": "task=automated-telemetry-extraction-and-deterministic-cost-per-success-derivation cost_usd=0.0223 tokens_in=70677 tokens_out=320917 turns=6 duration=351s outcome=accepted gate=all-pass"}
 {"n": 152, "ts": "2026-09-17T10:02:17Z", "event": "dispatch", "actor": "delegate", "subject": "opencrabs-dev-generic-methodology-inquiry", "detail": "inquired on anti-hallucination, law evolution, cross-lane comms, compaction resilience"}
+{"n": 153, "ts": "2026-09-17T10:18:01Z", "event": "run", "actor": "delegate", "subject": "port-11-lens-review-to-template", "detail": "P32 codified, review.py, review-lenses.md, and test_review.py added"}

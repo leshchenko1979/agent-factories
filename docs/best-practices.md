@@ -535,6 +535,35 @@ ownership is zero ownership.
 
 ---
 
+## P32 — Periodic multi-lens review of factory law and operations
+
+Laws, instructions, and tools drift over time: rules accumulate bloat, procedures become no-ops, tools duplicate interfaces, and dead references survive context compactions.
+
+To prevent process decay, the factory executes a periodic multi-lens review (e.g. after every $N$ shipped increments or on a regular cadence) across distinct, non-overlapping quality dimensions:
+
+1. **Docs & Language Lenses:**
+   - **Redundancy & Ontology:** Strip duplicate rules across files; enforce single-concept-single-name glossary adherence; eliminate provenance sediment (dates, historical anecdotes belong in changelogs, not live rules).
+   - **LLM Efficiency & Responsibility Creep:** Minimize token weight; enforce progressive disclosure; convert prose into tables; prune subsumed rituals when composite tools ship; remove no-op rules that models follow by default.
+   - **Role File Structure:** Verify each step ends with a checkable completion criterion; maintain cohesive sections; verify load paths survive context compactions.
+2. **Mechanical Enforcement Lens:**
+   - **Law-to-Tool Migration:** Audit every rule asking: *Is this decision a pure function of state on disk?* If yes, the rule is an unwritten tool spec. Move deterministic decisions from prose instructions into deterministic CLI scripts and gates.
+3. **Tools & Interface Lenses:**
+   - **Automation Gaps:** Identify recurring multi-step manual rituals that should collapse into a single CLI tool command.
+   - **Interface Topology:** Identify tools whose invocations are chained; merge duplicate flags, verbs, and redundant interfaces.
+   - **Tool Code Quality:** Audit shell quoting, deterministic exit codes (`0` vs `1`), pre-step journaling, and flag contracts.
+4. **State & Artifacts Lenses:**
+   - **Artifact Lifecycle & Deletion Safety:** Enumerate stale, retired, or orphaned files, markers, and state directories. Verify zero references across the tree before deletion.
+   - **Ledger Invariants & Monotonicity:** Audit lifecycle sequences (`intake` → `claim` → `close`), verify monotonic numbering, and detect unresolved claims or phantom citations.
+5. **Meta-Review Lens:**
+   - **Lens Brief Integrity:** Audit the review catalog itself for scope drift, overlapping coverage, and unquoted findings. Ensure every review finding carries a verifiable locator and verbatim quote.
+
+- *Proven:* OpenCrabs Dev Factory Duty 4+6 review rotation; meta-factory lens catalog.
+- *Mechanism:* Independent read-only reviewer lenses execute on cadence, compiling quote-anchored findings into an immutable review manifest. HQ validates and codifies accepted findings in a single versioned batch.
+- *Prevents:* Silent law drift, prompt token bloat, zombie artifacts, unwritten tool specs lingering as prose, and author-blindness.
+- *Boundary:* Reviewers inspect and recommend; they never edit process laws directly. Only HQ codifies accepted findings.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

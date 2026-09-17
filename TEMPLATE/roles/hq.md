@@ -16,6 +16,9 @@ of the factory's own repo when `ROLES` is `HQ` alone.
 - Implements, when there is no lane to delegate to. If `ROLES` is `HQ` alone,
   HQ is also the factory's implementer: the factory's own repo is its to
   change, and its own issues are its to close.
+- Governs periodic process evolution: orchestrates periodic multi-lens reviews
+  (the 11-lens review, **P32** / `docs/review-lenses.md`), triple-checks findings,
+  and codifies accepted amendments in a single versioned batch.
 
 ## What HQ does not do
 
