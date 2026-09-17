@@ -63,6 +63,9 @@ defect to fix, not a synonym to tolerate.
 | `push_handoff` | Direct peer-to-peer event and goal dispatch from upstream to downstream implementer upon completing a state transition | direct handoff, instant dispatch |
 | `queue_dwell_tax` | The latency penalty ($T_{\text{dwell}} = \frac{\Delta t}{2}$) imposed on tasks by polling-based state consumption | polling delay, queue latency |
 | `fast_path` | Zero-latency peer-to-peer transport plane for task signaling and autonomous goal dispatch | push rail, signal rail |
+| `survey_resolution_ratio` | The ratio $Q = \frac{N_{\text{leaf}}}{S} = \frac{N_{\text{total}} - N_{\text{coord}}}{S}$ measuring the inspection granularity across a system's atomic subprocesses | audit depth ratio, inspection coverage |
+| `leaf_auditor` | A dedicated, non-overlapping inspection session evaluating a discrete atomic subprocess or state endpoint without context cross-contamination | sub-auditor, worker auditor |
+| `coordinating_auditor` | The root session (Surveys lane) orchestrating hierarchical survey fan-out, synthesizing leaf audit receipts, and computing scores | audit lead, survey orchestrator |
 
 <!--
 Rules for a good entry:

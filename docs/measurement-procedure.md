@@ -141,8 +141,8 @@ flowchart TD
    - **Gate Verification:** Check whether mechanical gates ran and passed with live rc=0 receipts.
    *Rule: Never score from memory, narrative claims, or the previous report.*
 
-3. **Audit against the 13 Quality Criteria:**
-   Score each criterion (0–4) against [quality-criteria.md](quality-criteria.md).
+3. **Audit against the 19 Quality Criteria:**
+   Score each criterion (0–4) against [quality-criteria.md](quality-criteria.md) across all 6 families (Documentation, Output, Machine, Law, Stewardship, Autonomy).
    Evaluate whether capabilities are *Absent* (0), *Ad-hoc* (1), *Defined* (2),
    *Measured* (3), or *Self-correcting* (4).
 
@@ -169,6 +169,51 @@ flowchart TD
 8. **Report to Operator & Member HQs:**
    - Present summary, score movements, and fleet patterns to the Factories analysis topic.
    - Deliver consulting advisories to member factory HQs via direct communication channels.
+
+---
+
+## 6. Cognitive Bounds & Survey Resolution Ratio (Q = N_leaf / S)
+
+### 6.1 The Mathematical Model
+When inspecting a multi-agent factory or an entire fleet, a single context window cannot maintain high fidelity across hundreds of files, execution logs, and live state ledgers. Under **Ashby's Law of Requisite Variety (1956)**, the variety of the auditor must match or exceed the variety of the system being audited.
+
+We define the **Survey Quality Resolution Ratio ($Q$)**:
+
+$$Q = \frac{N_{\text{leaf}}}{S} = \frac{N_{\text{total}} - N_{\text{coord}}}{S}$$
+
+Where:
+* **$S$:** The total number of atomic subprocesses, distinct state surfaces, and endpoints in the target system.
+* **$N_{\text{leaf}}$:** The number of independent, non-overlapping leaf auditor sessions inspecting distinct subsystems.
+* **$N_{\text{coord}}$:** The coordinating auditor sessions orchestrating the survey and aggregating findings ($N_{\text{coord}} \ge 1$).
+* **$N_{\text{total}}$:** The total session capacity allocated to the survey ($N_{\text{total}} = N_{\text{leaf}} + N_{\text{coord}}$).
+
+### 6.2 Resolution Thresholds & Audit Fidelity
+
+```mermaid
+flowchart TD
+    classDef low fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c;
+    classDef med fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
+    classDef high fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+
+    A["Target Factory Complexity: S atomic subprocesses"] --> B{"Survey Allocation Q = N_leaf / S"}
+    B -->|Q < 0.20| R1["❌ Superficial Audit (Context Overload & Hallucinated Passes)"]:::low
+    B -->|0.20 <= Q < 0.50| R2["⚠️ Sampled Audit (Spot-Checks across Key Streams)"]:::med
+    B -->|0.50 <= Q < 1.00| R3["✅ High-Fidelity Audit (Dedicated Value Stream Auditors)"]:::high
+    B -->|Q >= 1.00| R4["🛡️ Exhaustive Audit (1:1 Leaf Auditor per Atomic Subprocess)"]:::high
+```
+
+| Resolution Band | Ratio Range | Audit Granularity | Risk & Error Profile |
+|---|:---:|---|---|
+| **Superficial (Low)** | $Q < 0.20$ | Monolithic single-session scan of entire factory. | **Severe:** Context amnesia forces the agent to judge from README summaries rather than raw ledger receipts. |
+| **Sampled (Medium)** | $0.20 \le Q < 0.50$ | Single auditor spot-checking 1–2 sampled tasks. | **Moderate:** Catches obvious broken files but misses silent deadlocks in edge subprocesses. |
+| **High-Fidelity (High)** | $0.50 \le Q < 1.00$ | Dedicated leaf auditors assigned per value stream. | **Low:** Deep inspection of intake, claim, execution, and verification pipelines. |
+| **Exhaustive (Full)** | $Q \ge 1.00$ | 1:1 leaf auditor per atomic subprocess with zero overlap. | **Zero:** Mathematically complete state and receipt coverage; zero context cross-contamination. |
+
+### 6.3 Hierarchical Survey Fan-Out Procedure
+For complex multi-factory fleets ($S \gg 10$), the **Surveys lane** acts as the coordinating auditor ($N_{\text{coord}}$):
+1. **Decomposition:** Breaks the target factory into its canonical atomic subprocesses (Intake $\to$ Claim $\to$ Feedforward $\to$ Eval $\to$ Settlement).
+2. **Leaf Auditor Dispatch:** Dispatches parallel leaf sessions via push handoff (`session_notify` with discrete goal and target subprocess scope).
+3. **Receipt Aggregation:** Collects deterministic exit receipts, verifies proof artifacts (`cmp -s`, checksums, ledger monotonicity), and computes the composite quality score.
 
 ---
 

@@ -128,3 +128,5 @@
 {"n": 128, "ts": "2026-09-17T00:16:08Z", "event": "intake", "actor": "hq", "subject": "#27", "detail": "task=formalize-push-based-handoff-dual-rail-architecture"}
 {"n": 129, "ts": "2026-09-17T00:18:56Z", "event": "claim", "actor": "hq", "subject": "#27", "detail": "lane=hq task=formalize-push-based-handoff-dual-rail-architecture"}
 {"n": 130, "ts": "2026-09-17T00:23:00Z", "event": "close", "actor": "hq", "subject": "#27", "detail": "dual-rail push-based handoff codified in methodology, processes register, roles, and ontology"}
+{"n": 131, "ts": "2026-09-17T00:28:49Z", "event": "claim", "actor": "hq", "subject": "#23", "detail": "task=formalize-survey-resolution-ratio-q"}
+{"n": 132, "ts": "2026-09-17T00:28:50Z", "event": "close", "actor": "hq", "subject": "#23", "detail": "receipt=19-criteria-and-resolution-q-adopted outcome=accepted"}
