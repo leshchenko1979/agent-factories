@@ -515,7 +515,7 @@ and stamps the ledger autonomously in the same turn.
 
 ---
 
-## P30 — Every process has exactly one named owner
+## P31 — Every process has exactly one named owner
 
 Every declared process has exactly one named process owner role. Shared
 ownership is zero ownership.

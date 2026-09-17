@@ -134,3 +134,4 @@
 {"n": 134, "ts": "2026-09-17T00:41:10Z", "event": "claim", "actor": "hq", "subject": "#26", "detail": "lane=hq task=feedforward-prompt-constraints-and-local-test-gates-jidoka-yield-recovery"}
 {"n": 135, "ts": "2026-09-17T00:47:28Z", "event": "close", "actor": "hq", "subject": "#26", "detail": "duration=210s turns=3 cost_usd=0.015 outcome=accepted gate=all-pass yield=100% feedforward-prompt-constraints-and-local-test-gates-implemented"}
 {"n": 136, "ts": "2026-09-17T00:47:33Z", "event": "close", "actor": "hq", "subject": "#24", "detail": "duration=240s turns=3 cost_usd=0.018 outcome=accepted gate=all-pass yield=100% distributed-subprocess-ledgers-and-focus-conservation-implemented"}
+{"n": 137, "ts": "2026-09-17T00:54:50Z", "event": "dispatch", "actor": "delegate", "subject": "inferhub-2process-hq-role-advisory", "detail": "delivered-to=359fe71b"}
