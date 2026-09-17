@@ -125,3 +125,4 @@
 {"n": 125, "ts": "2026-09-16T23:25:01Z", "event": "close", "actor": "triage", "subject": "#22", "detail": "duplicate of #23"}
 {"n": 126, "ts": "2026-09-16T23:25:02Z", "event": "claim", "actor": "triage", "subject": "#25", "detail": "triage duplicate resolution"}
 {"n": 127, "ts": "2026-09-16T23:25:02Z", "event": "close", "actor": "triage", "subject": "#25", "detail": "duplicate of #24"}
+{"n": 128, "ts": "2026-09-17T00:16:08Z", "event": "intake", "actor": "hq", "subject": "#27", "detail": "task=formalize-push-based-handoff-dual-rail-architecture"}
