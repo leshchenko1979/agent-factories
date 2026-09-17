@@ -66,6 +66,10 @@ defect to fix, not a synonym to tolerate.
 | `survey_resolution_ratio` | The ratio $Q = \frac{N_{\text{leaf}}}{S} = \frac{N_{\text{total}} - N_{\text{coord}}}{S}$ measuring the inspection granularity across a system's atomic subprocesses | audit depth ratio, inspection coverage |
 | `leaf_auditor` | A dedicated, non-overlapping inspection session evaluating a discrete atomic subprocess or state endpoint without context cross-contamination | sub-auditor, worker auditor |
 | `coordinating_auditor` | The root session (Surveys lane) orchestrating hierarchical survey fan-out, synthesizing leaf audit receipts, and computing scores | audit lead, survey orchestrator |
+| `epistemic_failure` | An agent defect caused by autoregressive token generation ungrounded in physical facts, receipts, or execution results | hallucination, confabulation |
+| `context_capacity_failure` | An agent defect caused by attention dilution across large token windows or state obliteration during context compaction | amnesia, context bloat, lost in the middle |
+| `behavioral_bias_failure` | An agent defect caused by conversational fine-tuning (RLHF) favoring politeness and premature turn yielding over task convergence | chat reflex, premature yield, early quit |
+| `operational_friction_failure` | An agent defect caused by over-generalization and unbounded search depth resulting in scope creep or repetitive tool thrashing | thrashing, scope creep, rabbit hole |
 
 <!--
 Rules for a good entry:

@@ -152,3 +152,6 @@
 {"n": 152, "ts": "2026-09-17T10:02:17Z", "event": "dispatch", "actor": "delegate", "subject": "opencrabs-dev-generic-methodology-inquiry", "detail": "inquired on anti-hallucination, law evolution, cross-lane comms, compaction resilience"}
 {"n": 153, "ts": "2026-09-17T10:18:01Z", "event": "run", "actor": "delegate", "subject": "port-11-lens-review-to-template", "detail": "P32 codified, review.py, review-lenses.md, and test_review.py added"}
 {"n": 154, "ts": "2026-09-17T10:59:05Z", "event": "run", "actor": "delegate", "subject": "expand-review-lenses-to-14-and-add-law-gates", "detail": "Added Lenses P, M, T across 6 families; wired P29 test_law_coverage and test_session_bindings gates"}
+{"n": 155, "ts": "2026-09-17T11:19:40Z", "event": "intake", "actor": "triage", "subject": "methodology-agent-failure-taxonomy", "detail": "formalize-4-part-agent-failure-taxonomy-and-memory-layers"}
+{"n": 156, "ts": "2026-09-17T11:19:50Z", "event": "claim", "actor": "hq", "subject": "methodology-agent-failure-taxonomy", "detail": "formalize-4-part-agent-failure-taxonomy-and-memory-layers"}
+{"n": 157, "ts": "2026-09-17T11:20:00Z", "event": "close", "actor": "hq", "subject": "methodology-agent-failure-taxonomy", "detail": "formalize-4-part-agent-failure-taxonomy-and-memory-layers duration=4s outcome=accepted gate=all-pass"}
