@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Workspace hygiene tool — upholds the Cleanliness & Garbage Collection Law (P20).
 
-Prevents host resource exhaustion by auditing and reaping stale scratch
-scripts, temporary run artifacts, and untracked repository clutter.
+Prevents host resource exhaustion and recovery failures by auditing and reaping
+stale scratch scripts, temporary run artifacts, untracked repository clutter,
+and modified tracked working-tree files.
 """
 
 from __future__ import annotations
@@ -51,8 +52,12 @@ def reap_stale_scratch(dry_run: bool = False) -> tuple[int, list[str]]:
     return (len(found) if dry_run else reaped), found
 
 
-def audit_git_clutter() -> list[str]:
-    """Check if repository working tree has untracked clutter or temp files."""
+def inspect_git_working_tree() -> tuple[list[str], list[str], list[str]]:
+    """Inspect repository working tree for modified tracked files, untracked clutter, and untracked files.
+
+    Returns:
+        (modified_tracked, untracked_clutter, untracked_other)
+    """
     try:
         repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         res = subprocess.run(
@@ -64,15 +69,27 @@ def audit_git_clutter() -> list[str]:
             check=True,
         )
     except Exception as e:
-        return [f"git status failed: {e}"]
+        return ([f"git status failed: {e}"], [], [])
 
-    clutter = []
+    modified_tracked: list[str] = []
+    untracked_clutter: list[str] = []
+    untracked_other: list[str] = []
+
     for line in res.stdout.splitlines():
-        if line.startswith("??"):
-            path = line[3:].strip()
+        if not line:
+            continue
+        status_code = line[:2]
+        path = line[3:].strip()
+        if status_code == "??":
             if path.endswith((".bak", ".tmp", ".log", ".orig")):
-                clutter.append(path)
-    return clutter
+                untracked_clutter.append(path)
+            else:
+                untracked_other.append(path)
+        else:
+            # Any non-?? status code represents staged, modified, or deleted tracked files
+            modified_tracked.append(f"[{status_code}] {path}")
+
+    return modified_tracked, untracked_clutter, untracked_other
 
 
 def main() -> int:
@@ -86,24 +103,34 @@ def main() -> int:
 
     dry_run = args.audit and not args.clean
     count, items = reap_stale_scratch(dry_run=dry_run)
-    clutter = audit_git_clutter()
+    modified_tracked, untracked_clutter, untracked_other = inspect_git_working_tree()
 
     if dry_run:
-        if items or clutter:
-            print(f"hygiene audit found {len(items) + len(clutter)} item(s):", file=sys.stderr)
+        # Audit mode: any stale scratch items, modified tracked files, or untracked clutter fail the gate
+        total_violations = len(items) + len(modified_tracked) + len(untracked_clutter) + len(untracked_other)
+        if total_violations > 0:
+            print(f"hygiene audit found {total_violations} issue(s):", file=sys.stderr)
             for item in items:
                 print(f"  - stale scratch file: {os.path.basename(item)}", file=sys.stderr)
-            for c in clutter:
+            for m in modified_tracked:
+                print(f"  - modified tracked file: {m}", file=sys.stderr)
+            for c in untracked_clutter:
                 print(f"  - untracked git clutter: {c}", file=sys.stderr)
+            for u in untracked_other:
+                print(f"  - untracked file: {u}", file=sys.stderr)
             return 1
-        print("hygiene audit clean: 0 stale scratch items, clean git tree")
+        print("hygiene audit clean: 0 stale scratch items, 0 untracked clutter, working tree clean (0 modified tracked files)")
         return 0
 
-    print(f"hygiene cleanup complete: {count} item(s) reaped")
-    if clutter:
-        print(f"warning: {len(clutter)} untracked git clutter item(s) remain:", file=sys.stderr)
-        for c in clutter:
+    print(f"hygiene cleanup complete: {count} scratch item(s) reaped")
+    if untracked_clutter:
+        print(f"warning: {len(untracked_clutter)} untracked git clutter item(s) remain:", file=sys.stderr)
+        for c in untracked_clutter:
             print(f"  - {c}", file=sys.stderr)
+    if modified_tracked:
+        print(f"warning: {len(modified_tracked)} modified tracked file(s) in working tree:", file=sys.stderr)
+        for m in modified_tracked:
+            print(f"  - {m}", file=sys.stderr)
     return 0
 
 
