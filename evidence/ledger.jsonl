@@ -167,3 +167,4 @@
 {"n": 167, "ts": "2026-09-17T13:15:41Z", "event": "intake", "actor": "triage", "subject": "#30", "detail": "task=codify-section-10-context-manifest-curation"}
 {"n": 168, "ts": "2026-09-17T13:15:41Z", "event": "claim", "actor": "hq", "subject": "#30", "detail": "task=codify-section-10-context-manifest-curation"}
 {"n": 169, "ts": "2026-09-17T13:15:45Z", "event": "close", "actor": "hq", "subject": "#30", "detail": "task=codify-section-10-context-manifest-curation outcome=accepted gate=all-pass"}
+{"n": 170, "ts": "2026-09-17T13:17:09Z", "event": "dispatch", "actor": "delegate", "subject": "ack-opencrabs-dev-context-manifest", "detail": "delivered ack of empirical 778 compactions dataset to OpenCrabs Dev HQ"}
