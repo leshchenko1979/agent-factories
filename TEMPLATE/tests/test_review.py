@@ -29,7 +29,7 @@ def test_review_lifecycle(tmp_path: Path) -> None:
             state = json.load(f)
         assert state["cycle_id"] == cycle_id
         assert state["status"] == "IN_PROGRESS"
-        assert len(state["lenses"]) == 11
+        assert len(state["lenses"]) == 14
 
         # 2. Record Lens A
         report_text = "# Lens A Review\nVerbatim quote found in role file: 'foo'\n"
@@ -45,8 +45,8 @@ def test_review_lifecycle(tmp_path: Path) -> None:
         res = subprocess.run(cmd_base + ["status", cycle_id], cwd=REPO_ROOT, capture_output=True, text=True)
         assert res.returncode == 1  # non-zero because pending > 0
 
-        # 4. Waive the remaining 10 lenses
-        for lens in ["B", "G", "J", "C", "E", "F", "D", "H", "I", "S"]:
+        # 4. Waive the remaining 13 lenses
+        for lens in ["B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I", "S"]:
             res = subprocess.run(
                 cmd_base + ["waive", cycle_id, lens, "--reason", "Test waiver"],
                 cwd=REPO_ROOT,

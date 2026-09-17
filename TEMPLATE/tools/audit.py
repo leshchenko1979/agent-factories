@@ -299,6 +299,14 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tools/roadmap.py").is_file():
         gates_to_run.append([sys.executable, "tools/roadmap.py", "--audit"])
 
+    # 9. Best practice law-to-gate coverage audit (P29)
+    if (repo_root / "tests/test_law_coverage.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_law_coverage.py"])
+
+    # 10. Session binding and UUID integrity audit
+    if (repo_root / "tests/test_session_bindings.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_session_bindings.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

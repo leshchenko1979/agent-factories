@@ -1,9 +1,9 @@
-# review-lenses.md — The Generic 11-Lens Factory Review Catalog
+# review-lenses.md — The Generic 14-Lens Factory Review Catalog
 
-> **Owns:** Canonical catalog of the 11 review lenses for periodic factory quality reviews (Duty 4+6 review rotation / **P32**).
+> **Owns:** Canonical catalog of the 14 review lenses for periodic factory quality reviews (Duty 4+6 review rotation / **P32**).
 > **Methodology Reference:** `docs/methodology/02-quality-management.md` §4.
 
-Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledger drift. Independent read-only reviewers evaluate the factory across five families and eleven distinct dimensions.
+Periodic multi-lens reviews prevent process decay, law bloat, tool rot, ledger drift, and token waste. Independent read-only reviewers evaluate the factory across six families and fourteen distinct dimensions.
 
 ---
 
@@ -40,7 +40,7 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledg
 
 ---
 
-## ⚙️ Family 2: MECHANICAL ENFORCEMENT (Law That Should Be a Tool)
+## ⚙️ Family 2: MECHANICAL & PROTOCOL (Law Migration & Dispatch)
 
 ### Lens J — Law-to-Tool Migration (The Pure Function Test)
 - **Scope:** The entire corpus of written factory law and directives.
@@ -53,6 +53,14 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledg
   - **Verdict:** If T1–T3 hold, the rule is an **unwritten tool specification**. Prose instructions must be migrated into a deterministic tool, hook, or unit test.
 - **Exclusions:** Irreversible human gates (P14), approval checkpoints, and client subjective decisions belong in prose/gates.
 - **Evidence Format:** Verbatim rule quote + state read on disk + proposed tool command/test.
+
+### Lens P — Pacemaker & Autonomous Convergence
+- **Scope:** Cron configuration, outer heartbeat loops, and autonomous task convergence.
+- **Core Checks:**
+  1. **0-Token Quiescence (P28):** Pacemaker crons on quiescent/idle queues must use `trigger_cmd` short-circuits (`trigger_on=non_empty` or `exit_zero`) to wake sessions only when work is pending. Zero LLM tokens may be billed for empty checks.
+  2. **Goal State Convergence:** Sessions waking under automated crons must run against explicit deterministic goal conditions (`set_goal: true`), converging to terminal exit without human nudges.
+  3. **Dead Session Detection:** Verify crons target live session UUIDs and do not push into dead subagent queues or unbound topics.
+- **Evidence Format:** Cron identifier + trigger command exit analysis + token billing log confirmation.
 
 ---
 
@@ -80,10 +88,6 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledg
   3. **Atomic Journaling:** Tools performing state changes must write their journal or ledger entry atomically before or alongside the mutation.
 - **Evidence Format:** Script file:line locator + defect analysis + proposed patch.
 
----
-
-## 📦 Family 4: ARTIFACTS & STATE (Files, Directories, Ledgers)
-
 ### Lens D — Deletion Safety & YAGNI Pruning
 - **Scope:** File tree, state directories, scratch files, and legacy configurations.
 - **Core Checks:**
@@ -95,6 +99,10 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledg
   3. **Guard:** "Looks stale" is a hypothesis, never a verdict. Removal requires verified zero references.
 - **Evidence Format:** Target file path + search query used + reference verification proof.
 
+---
+
+## 📦 Family 4: ARTIFACTS, STATE & FLOW (Files, Ledgers, WIP)
+
 ### Lens H — Ledger Health & Lifecycle Invariants
 - **Scope:** `evidence/ledger.jsonl` (or factory work state store).
 - **Core Checks:**
@@ -104,9 +112,30 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledg
   4. **Lesson Extraction Parity:** Confirm that major incidents noted in ledger rows have corresponding codified entries in `evidence/rework.md`.
 - **Evidence Format:** Ledger row number $n$ + violated invariant + verifying command output.
 
+### Lens M — Value Stream, WIP Stagnation & Lead Time
+- **Scope:** Active work items, backlog turnover, and work-in-progress (WIP) age.
+- **Core Checks:**
+  1. **WIP Stagnation:** Detect tasks parked in `intake` or `claim` without closing for >24 hours.
+  2. **Lead Time Drift:** Track mean lead time ($T_{\text{intake}} \to T_{\text{close}}$) over successive cycles; flag upward trends indicating pipeline bottlenecks.
+  3. **Batch Size Control (P11):** Enforce small task batching. Flag tasks touching >3 files or >200 lines without explicit architectural decomposition.
+- **Evidence Format:** Task identifier + timestamp delta ($T_{\text{dwell}}$) + bottleneck diagnosis.
+
 ---
 
-## 🔍 Family 5: META & GOVERNANCE (Review Mechanics, Scope Cleanliness)
+## 💰 Family 5: ECONOMICS & TELEMETRY (Cost, Context, Models)
+
+### Lens T — Token Economics & Cost-Per-Success
+- **Scope:** Model usage, token consumption logs, prompt caching efficiency, and operational expenditure.
+- **Core Checks:**
+  1. **Unit Cost Analysis:** Compute and track unit cost-per-successful-task ($\text{USD}/\text{task}$) across workflows.
+  2. **Model Tier Right-Sizing:** Verify that heavy reasoning models (high cost) are not assigned to mechanical triage or deterministic formatting tasks where lightweight models suffice.
+  3. **Prompt Cache Efficiency:** Audit static instruction prefixes to ensure high prompt cache hit rates (>80%) and eliminate cache-busting dynamic timestamps in primary system prompts.
+  4. **Context Inflation Guard:** Audit turn context growth; trigger compaction or subagent delegation before context sizes exceed cost-effective thresholds.
+- **Evidence Format:** Workflow name + token breakdown (input/output/cache) + unit cost vs. budget target.
+
+---
+
+## 🔍 Family 6: META & GOVERNANCE (Review Mechanics, Scope Cleanliness)
 
 ### Lens I — Meta-Review of the Lens Catalog
 - **Scope:** This catalog (`review-lenses.md`) and historical review cycle outputs.
@@ -131,7 +160,7 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, and ledg
 ```
 [Trigger Cadence] → [HQ Inits reviews/<cycle-id>/state.json]
        ↓
-[Spawn Independent Read-Only Reviewers across 11 Lenses]
+[Spawn Independent Read-Only Reviewers across 14 Lenses]
        ↓
 [Persist Reports to reviews/<cycle-id>/reports/lens-<X>.md]
        ↓

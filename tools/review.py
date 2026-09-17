@@ -30,8 +30,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Standard 11 Lenses across 5 families (A, B, G, J, C, E, F, D, H, I, S)
-CATALOG_LENSES = ["A", "B", "G", "J", "C", "E", "F", "D", "H", "I", "S"]
+# Standard 14 Lenses across 6 families:
+# Docs: A, B, G; Mechanical: J, P; Tools: C, E, F, D; State/Flow: H, M; Economics: T; Meta: I, S
+CATALOG_LENSES = ["A", "B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I", "S"]
 
 
 def get_cycle_dir(cycle_id: str) -> Path:
