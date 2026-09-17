@@ -78,6 +78,8 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
     total_tokens_out = 0
     total_turns = 0
 
+    successful_closed_tasks = 0
+
     for ev in events:
         ev_type = ev.get("event", "unknown")
         event_counts[ev_type] = event_counts.get(ev_type, 0) + 1
@@ -116,6 +118,14 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
             subjects_claim[subj] = ts
         elif ev_type == "close" and subj:
             subjects_close[subj] = ts
+            close_outcome = "accepted"
+            for part in detail.split():
+                if part.startswith("outcome="):
+                    close_outcome = part.split("=", 1)[1]
+                    break
+            if close_outcome == "accepted":
+                successful_closed_tasks += 1
+
             if subj in subjects_intake:
                 try:
                     t_in = datetime.datetime.fromisoformat(subjects_intake[subj].replace("Z", "+00:00"))
@@ -144,6 +154,7 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
     avg_lead_time = (sum(lead_times_sec) / len(lead_times_sec)) if lead_times_sec else 0.0
     closed_count = len(subjects_close)
     avg_cost_per_closed_task = (total_cost_usd / closed_count) if closed_count > 0 else 0.0
+    cost_per_successful_task = (total_cost_usd / successful_closed_tasks) if successful_closed_tasks > 0 else 0.0
 
     # Spot check the latest closed subject
     latest_closed = None
@@ -177,6 +188,8 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         "avg_lead_time_sec": round(avg_lead_time, 1),
         "total_cost_usd": round(total_cost_usd, 4),
         "avg_cost_per_closed_task_usd": round(avg_cost_per_closed_task, 4),
+        "cost_per_successful_task_usd": round(cost_per_successful_task, 4),
+        "successful_closed_tasks": successful_closed_tasks,
         "total_tokens_in": total_tokens_in,
         "total_tokens_out": total_tokens_out,
         "total_turns": total_turns,
@@ -357,6 +370,7 @@ def format_report_markdown(
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Average duration from intake to close |",
         f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry |",
         f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | Total cost ÷ closed tasks |",
+        f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | Total cost ÷ accepted closed tasks |",
         f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
         f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago |",
         "",

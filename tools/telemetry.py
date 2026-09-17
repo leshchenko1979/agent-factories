@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""Telemetry & Cost Extraction Tool.
+
+Extracts token and dollar cost economics from the agent runtime substrate
+(OpenCrabs SQLite database or usage ledger) for precise task attribution
+and deterministic derivation of unit economics (cost per successful task).
+
+Usage:
+  python3 tools/telemetry.py --subject "#29"
+  python3 tools/telemetry.py --start 2026-09-17T09:00:00Z
+  python3 tools/telemetry.py --session 2646d31a-71ee-49f0-be81-9c8dc32d32fa --start-epoch 1789632000
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import os
+import sqlite3
+import sys
+from pathlib import Path
+from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def find_database_path() -> Path | None:
+    """Locate the active OpenCrabs SQLite database."""
+    env_db = os.environ.get("OPENCRABS_DB_PATH")
+    if env_db:
+        p = Path(env_db)
+        if p.is_file():
+            return p
+
+    profile = os.environ.get("OPENCRABS_PROFILE", "ops")
+    candidates = [
+        Path.home() / f".opencrabs/profiles/{profile}/opencrabs.db",
+        Path.home() / ".opencrabs/profiles/ops/opencrabs.db",
+        Path.home() / ".opencrabs/opencrabs.db",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return None
+
+
+def parse_timestamp_to_epoch(ts: str | int | float | None) -> int:
+    """Convert ISO timestamp string or epoch number to integer epoch seconds."""
+    if ts is None:
+        return 0
+    if isinstance(ts, (int, float)):
+        return int(ts)
+    ts_str = str(ts).strip()
+    if ts_str.isdigit():
+        return int(ts_str)
+    try:
+        # Replace Z with +00:00 for ISO parsing
+        dt = datetime.datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    except Exception:
+        return 0
+
+
+def extract_window_telemetry(
+    db_path: Path | None = None,
+    session_id: str | None = None,
+    start_epoch: int = 0,
+    end_epoch: int | None = None,
+) -> dict[str, Any]:
+    """Query telemetry incurred between start_epoch and end_epoch from SQLite."""
+    if end_epoch is None:
+        end_epoch = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+
+    if db_path is None:
+        db_path = find_database_path()
+
+    default_result: dict[str, Any] = {
+        "cost_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "turns": 0,
+        "duration_sec": max(0, end_epoch - start_epoch),
+        "db_found": False,
+        "session_id": session_id,
+        "start_epoch": start_epoch,
+        "end_epoch": end_epoch,
+    }
+
+    if not db_path or not db_path.is_file():
+        return default_result
+
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        cur = conn.cursor()
+
+        # Query messages table for assistant turns
+        where_clauses = ["created_at >= ?", "created_at <= ?"]
+        params: list[Any] = [start_epoch, end_epoch]
+
+        if session_id:
+            where_clauses.append("session_id = ?")
+            params.append(session_id)
+
+        # Check if messages table exists
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'")
+        has_messages = cur.fetchone() is not None
+
+        cost = 0.0
+        tokens_in = 0
+        tokens_out = 0
+        turns = 0
+
+        if has_messages:
+            msg_query = f"""
+                SELECT 
+                    COALESCE(SUM(cost), 0.0),
+                    COALESCE(SUM(input_tokens), 0),
+                    COALESCE(SUM(token_count), 0),
+                    COUNT(*)
+                FROM messages 
+                WHERE {' AND '.join(where_clauses)} AND role = 'assistant'
+            """
+            cur.execute(msg_query, params)
+            row = cur.fetchone()
+            if row:
+                cost = float(row[0] or 0.0)
+                tokens_in = int(row[1] or 0)
+                tokens_out = int(row[2] or 0)
+                turns = int(row[3] or 0)
+
+        # Fallback / cross-check with usage_ledger table if messages cost is 0
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='usage_ledger'")
+        has_usage = cur.fetchone() is not None
+        if has_usage and cost == 0.0:
+            usage_query = f"""
+                SELECT 
+                    COALESCE(SUM(cost), 0.0),
+                    COALESCE(SUM(token_count), 0)
+                FROM usage_ledger 
+                WHERE {' AND '.join(where_clauses)}
+            """
+            cur.execute(usage_query, params)
+            urow = cur.fetchone()
+            if urow and urow[0]:
+                cost = float(urow[0] or 0.0)
+                if tokens_out == 0:
+                    tokens_out = int(urow[1] or 0)
+
+        conn.close()
+
+        return {
+            "cost_usd": round(cost, 4),
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "turns": turns,
+            "duration_sec": max(0, end_epoch - start_epoch),
+            "db_found": True,
+            "session_id": session_id,
+            "start_epoch": start_epoch,
+            "end_epoch": end_epoch,
+        }
+    except Exception as e:
+        default_result["error"] = str(e)
+        return default_result
+
+
+def extract_task_telemetry(
+    subject: str,
+    ledger_path: Path | None = None,
+    session_id: str | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Find claim time for subject in ledger and compute delta telemetry to now."""
+    if ledger_path is None:
+        ledger_path = REPO_ROOT / "evidence/ledger.jsonl"
+
+    start_epoch = 0
+    if ledger_path.is_file():
+        try:
+            with open(ledger_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                        if row.get("subject") == subject and row.get("event") == "claim":
+                            start_epoch = parse_timestamp_to_epoch(row.get("ts"))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # If no claim found, default to start of current turn / 5 minutes ago
+    if start_epoch == 0:
+        start_epoch = int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - 300
+
+    return extract_window_telemetry(
+        db_path=db_path,
+        session_id=session_id,
+        start_epoch=start_epoch,
+    )
+
+
+def format_detail_string(telemetry: dict[str, Any], outcome: str = "accepted", gate: str = "all-pass") -> str:
+    """Format key-value detail string suitable for ledger close rows."""
+    duration = telemetry.get("duration_sec", 0)
+    turns = telemetry.get("turns", 0)
+    cost = telemetry.get("cost_usd", 0.0)
+    t_in = telemetry.get("tokens_in", 0)
+    t_out = telemetry.get("tokens_out", 0)
+
+    parts = [
+        f"duration={duration}s",
+        f"turns={turns}",
+        f"cost_usd={cost:.4f}",
+        f"tokens_in={t_in}",
+        f"tokens_out={t_out}",
+        f"outcome={outcome}",
+        f"gate={gate}",
+    ]
+    return " ".join(parts)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--subject", help="Task subject (e.g. '#29') to compute delta since claim")
+    parser.add_argument("--session", help="Filter by session UUID")
+    parser.add_argument("--start", help="Start ISO timestamp (e.g. 2026-09-17T09:00:00Z)")
+    parser.add_argument("--end", help="End ISO timestamp")
+    parser.add_argument("--start-epoch", type=int, help="Start epoch timestamp in seconds")
+    parser.add_argument("--end-epoch", type=int, help="End epoch timestamp in seconds")
+    parser.add_argument("--format", choices=["json", "detail"], default="json", help="Output format")
+    parser.add_argument("--outcome", default="accepted", help="Outcome for detail format")
+    parser.add_argument("--gate", default="all-pass", help="Gate summary for detail format")
+
+    args = parser.parse_args()
+
+    start_epoch = args.start_epoch or parse_timestamp_to_epoch(args.start)
+    end_epoch = args.end_epoch or (parse_timestamp_to_epoch(args.end) if args.end else None)
+
+    if args.subject:
+        res = extract_task_telemetry(args.subject, session_id=args.session)
+    else:
+        res = extract_window_telemetry(
+            session_id=args.session,
+            start_epoch=start_epoch,
+            end_epoch=end_epoch,
+        )
+
+    if args.format == "detail":
+        print(format_detail_string(res, outcome=args.outcome, gate=args.gate))
+    else:
+        print(json.dumps(res, indent=2))
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

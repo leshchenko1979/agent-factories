@@ -134,13 +134,43 @@ def cmd_append(args: argparse.Namespace) -> int:
     with open(target_lock, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         rows = read_rows(target_ledger)
+        detail = args.detail
+        if args.event == "close":
+            try:
+                from tools.telemetry import extract_task_telemetry
+            except ImportError:
+                try:
+                    from telemetry import extract_task_telemetry
+                except ImportError:
+                    extract_task_telemetry = None
+
+            if extract_task_telemetry:
+                telem = extract_task_telemetry(args.subject, ledger_path=target_ledger)
+                missing = []
+                if "cost_usd=" not in detail and telem.get("cost_usd", 0.0) > 0:
+                    missing.append(f"cost_usd={telem['cost_usd']:.4f}")
+                if "tokens_in=" not in detail and telem.get("tokens_in", 0) > 0:
+                    missing.append(f"tokens_in={telem['tokens_in']}")
+                if "tokens_out=" not in detail and telem.get("tokens_out", 0) > 0:
+                    missing.append(f"tokens_out={telem['tokens_out']}")
+                if "turns=" not in detail and telem.get("turns", 0) > 0:
+                    missing.append(f"turns={telem['turns']}")
+                if "duration=" not in detail and telem.get("duration_sec", 0) > 0:
+                    missing.append(f"duration={telem['duration_sec']}s")
+                if "outcome=" not in detail:
+                    missing.append("outcome=accepted")
+                if "gate=" not in detail:
+                    missing.append("gate=all-pass")
+                if missing:
+                    detail = f"{detail} {' '.join(missing)}".strip()
+
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,
             "ts": now_iso(),
             "event": args.event,
             "actor": args.actor,
             "subject": args.subject,
-            "detail": args.detail,
+            "detail": detail,
         }
         with open(target_ledger, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")

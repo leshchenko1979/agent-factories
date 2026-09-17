@@ -148,3 +148,4 @@
 {"n": 148, "ts": "2026-09-17T09:55:06Z", "event": "intake", "actor": "hq", "subject": "#29", "detail": "task=automated-telemetry-extraction-and-deterministic-cost-per-success-derivation"}
 {"n": 149, "ts": "2026-09-17T09:55:06Z", "event": "claim", "actor": "hq", "subject": "#29", "detail": "lane=hq task=automated-telemetry-extraction-and-deterministic-cost-per-success-derivation"}
 {"n": 150, "ts": "2026-09-17T09:55:07Z", "event": "run", "actor": "delegate", "subject": "opencrabs-dev-management-exchange-received", "detail": "verified formal top-3 management breakthroughs synthesis from opencrabs dev hq"}
+{"n": 151, "ts": "2026-09-17T10:01:01Z", "event": "close", "actor": "hq", "subject": "#29", "detail": "task=automated-telemetry-extraction-and-deterministic-cost-per-success-derivation cost_usd=0.0223 tokens_in=70677 tokens_out=320917 turns=6 duration=351s outcome=accepted gate=all-pass"}
