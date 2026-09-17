@@ -87,3 +87,32 @@ git fetch origin main && [ $(git rev-parse HEAD) != $(git rev-parse origin/main)
 Context compaction wipes conversation history. To prevent amnesia:
 1. Every profile injects an always-loaded recovery anchor pointing to the factory's `SKILL.md`.
 2. The agent's mandatory first action post-compaction is to reload `SKILL.md` before executing turns or asserting status claims.
+
+---
+
+## 5. Task-State Memory Binding (`plan` vs `session_context`)
+
+A durable task contract and ephemeral in-flight variables are **two different memory needs**, satisfied by two different substrates. Using one for the other is the defect.
+
+| Memory Need | Substrate | Persistence | Correct Use |
+|---|---|---|---|
+| **Macroscopic task contract** | `plan` tool | Disk JSON (`.opencrabs_plan_<session-id>.json`) | Ordered steps, dependencies, and checkable acceptance criteria. Re-surfaced verbatim by `plan(operation="show_plan")`. |
+| **Ephemeral in-flight variables** | `session_context` tool | Session store | Intermediate calculation state, resolved identifiers, decisions taken mid-task — values that must cross a compaction but do not deserve a durable artifact. |
+| **Conversation history** | Message window | None (lossy) | **Never** a carrier for task state: it is summarized lossily at compaction. |
+
+The `plan` card tracks **coarse task boundaries**; it does not carry fine-grained calculation state. A factory lane must pair both: the plan anchors *what remains to be done*, `session_context` anchors *what has already been computed*.
+
+## 6. The Pre-Compaction Flush Protocol
+
+The runtime emits an explicit **warning when context consumption approaches the compaction threshold**. This is a deterministic boundary signal, not an unpredictable crash, and it defines a mandatory state-flush step:
+
+1. **On warning:** flush any un-persisted in-flight variable into `session_context`, and ensure every remaining step and acceptance criterion is written into the `plan` card.
+2. **After compaction:** the first action is to reload the always-loaded recovery anchor (`SKILL.md`), then call `plan(operation="show_plan")` to re-anchor ground truth from disk before executing any further turn or asserting any status.
+3. **Never** rely on pre-compaction *instructions* surviving compaction: in-context instructions are summarized away. Only what is written to an always-injected file or a durable substrate survives.
+
+## 7. Working Directory Control
+
+The session working directory is persistent state, not a per-command detail:
+
+- `config_manager(operation="set_working_directory", path="...")` mutates it for the session across turns. A `cd` inside one `bash` call does **not** persist to the next call — chaining `cd <dir> && <cmd>` only scopes that single invocation.
+- A lane must set its working directory explicitly at the start of a work unit rather than relying on an inherited default.
