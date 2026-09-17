@@ -137,3 +137,4 @@
 {"n": 137, "ts": "2026-09-17T00:54:50Z", "event": "dispatch", "actor": "delegate", "subject": "inferhub-2process-hq-role-advisory", "detail": "delivered-to=359fe71b"}
 {"n": 138, "ts": "2026-09-17T00:58:02Z", "event": "dispatch", "actor": "delegate", "subject": "inferhub-2process-hq-role-advisory-direct", "detail": "delivered canonical 2-process setup and 4 scenario verdicts to 359fe71b"}
 {"n": 139, "ts": "2026-09-17T01:03:50Z", "event": "run", "actor": "delegate", "subject": "inferhub-2process-hq-adoption-confirmed", "detail": "InferHub Watch HQ confirmed adoption of 2-process setup and 4 HQ boundary rules in skills/inferhub/SKILL.md"}
+{"n": 140, "ts": "2026-09-17T01:44:14Z", "event": "dispatch", "actor": "delegate", "subject": "miidas-subject-matter-docs-advisory", "detail": "consulting advisory on Module 03 and Dimension 1 subject matter docs alignment to 4/4 standard"}
