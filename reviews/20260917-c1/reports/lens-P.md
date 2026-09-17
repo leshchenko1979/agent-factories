@@ -1,0 +1,1 @@
+Audited live cron pacemakers in /root/.opencrabs/profiles/ops/opencrabs.db. Confirmed 0-token trigger_cmd short-circuits (exit_zero / non_empty) and set_goal: 1 autonomous convergence on factory-triage-hourly, factory-insights-weekly, factory-template-weekly, oc-roster-detached-sweep, and infra-triage-hourly.

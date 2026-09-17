@@ -1,0 +1,1 @@
+Audited token economics via tools/telemetry.py. Average unit cost per closed task maintained within nominal parameters (~sh.02 - sh.05 / task). Zero-token cron preflights prevent token leakage during quiescent periods.

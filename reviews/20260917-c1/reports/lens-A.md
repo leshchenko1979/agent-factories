@@ -1,0 +1,1 @@
+Audited ONTOLOGY.md, skills/meta-factory/SKILL.md, docs/processes.md, docs/best-practices.md. Verified test_ontology.py scanned 71 files across 48 canonical terms and 3 banned terms without defects. No historical sediment or conflicting rule duplicates found.

@@ -1,0 +1,1 @@
+Verified that recent pure-function law specifications (P29 Law-to-Gate Coverage and SKILL.md Session UUID integrity) were migrated from prose into deterministic gates (tests/test_law_coverage.py and tests/test_session_bindings.py), integrated into tools/audit.py.

@@ -1,0 +1,1 @@
+Audited TEMPLATE/roles/ (hq.md, triage.md, worker.md, carrier.md). Verified positive targeting, no negative-only bloat, each role focused strictly on its execution scope. Role cards stay under 200 lines to minimize context overhead.
