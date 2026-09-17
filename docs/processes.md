@@ -44,6 +44,12 @@ Every process in this register adheres to eight structural laws:
    stages, each stage is a **subprocess** with its own `(Process Client, Process
    Owner, Delegated Implementers, Process Quality Criteria, Product & Client Value)`
    tuple.
+9. **The Dual-Rail Architecture (Fast Path vs Durable Ledger):** Multi-agent
+   handoffs must decouple Fast Path execution signaling (Rail 1: direct peer-to-peer
+   `session_notify` goal push) from the Durable State of Record (Rail 2:
+   `evidence/ledger.jsonl` under `fcntl.flock`) and the Safety Net (Rail 3:
+   scheduled watchdog pacemakers for stalled tasks $>30\text{m}$). Polling-based
+   handoffs are prohibited due to the $\frac{\Delta t}{2}$ queue dwell tax.
 
 ---
 
@@ -123,7 +129,7 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 - **Custom Acceptance Criteria:**
   1. Complete pipeline cycle delivers verified change with zero rollbacks and all 8 mechanical gates passing in <10s.
   2. First-pass yield on closed tasks $\ge 90\%$.
-  3. Average task execution lead time $\le 30$ minutes with queue dwell time $< 20\%$.
+  3. Average task execution lead time $\le 30$ minutes with queue dwell time $< 5\%$ of lead time achieved via Dual-Rail push handoffs.
   4. Byte-for-byte synchronization of all template pairs verified by `test_template_sync.py`.
 
 - **Atomic Subprocesses (`atomic_subprocess`):**
@@ -131,11 +137,11 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 | Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
 |---|---|---|---|---|---|
 | **1. Intake & Calibration** | Triage | Raw finding, issue, or request | Scored issue with verified custom acceptance criteria | Ambiguous goal / stalled queue | Queue dwell time ($t_{\text{claim}} - t_{\text{intake}}$) |
-| **2. Lock & Claim** | Triage / Worker | Intake issue on board | `claim` row in ledger under `fcntl.flock` | Double-claim / race condition | Monotonicity & sequence validity |
-| **3. Feedforward Context Assembly** | Worker | Task spec + `SKILL.md` + `rework.md` | Grounded context window with rules & criteria | Missing constraint / prompt amnesia | First-token prompt size & rule hit |
+| **2. Lock & Claim** | Triage / Worker | Intake issue on board | `claim` row in ledger under `fcntl.flock` (Rail 2) + Rail 1 push goal via `session_notify` | Double-claim / race condition / dropped dispatch | Monotonicity, sequence validity & push dispatch latency ($\approx 0\text{s}$) |
+| **3. Feedforward Context Assembly** | Worker | Push-dispatched task contract + `SKILL.md` + `rework.md` | Grounded context window with rules & criteria | Missing constraint / prompt amnesia | First-token prompt size & rule hit |
 | **4. Implementation Loop (Ralph)** | Worker | Grounded context | Candidate code diff / artifact | Logic defect / hallucination | Turn count per task & token cost |
 | **5. Multi-Criteria Gate Evaluation** | Automated Gates | Candidate artifact | Deterministic score vector & error trace | Silent pass / false positive | Gate execution duration & exit code |
-| **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row | Stale sha / broken remote push | Commit sha identity & delivery trace |
+| **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row (Rail 2) + Rail 1 ack | Stale sha / broken remote push | Commit sha identity & delivery trace |
 
 ---
 

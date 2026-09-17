@@ -13,12 +13,13 @@
 - **Intake.** Turns a report, an alert or a score regression into an issue
   with a goal, an owner and done-criteria.
 - **Routing & Automated Assignment.** Scans unassigned issues, checks claims,
-  selects the appropriate worker lane, and delivers the brief directly to that session.
+  selects the appropriate worker lane, and delivers the brief directly to that session
+  via Rail 1 push handoff (`session_notify` with `goal` and `goal_max_turns`).
 - **Claim checking.** Before any dispatch, confirms the issue is unclaimed on the board
   and in the ledger. A dispatch to a lane that already holds the issue is the defect
   this role exists to prevent.
-- **Execution Watchdog.** Periodically sweeps active assignments:
-  - Detects stalled or unresponsive workers (no progress/update after *N* cycles).
+- **Execution Watchdog (Rail 3).** Periodically sweeps active assignments:
+  - Detects stalled or unresponsive workers (no progress/update after *N* cycles or $>30\text{m}$).
   - Confirms completed tasks carry verified receipts before closing.
   - Escalates blocked or failing tasks to `HQ` or re-dispatches to an available worker.
 - **Enforcement.** Watches for work that bypassed the process: uncommitted
@@ -35,22 +36,23 @@
 - **Re-role into a relay.** Verify, assign, and monitor stay; re-sending a lane's message
   onward does not.
 
-## The claim and dispatch loop
+## The claim and dispatch loop (Dual-Rail Push Handoff)
 
 ```
 1. Scan for open, unassigned issues on the board.
 2. Grep the ledger for open claims on that issue number.
 3. If held  → verify worker activity; if dead/stalled, trigger escalation/reclaim.
-   If free  → select persistent worker lane, stamp claim in ledger, dispatch brief.
+   If free  → select persistent worker lane, stamp claim in ledger (Rail 2),
+              immediately dispatch push goal via session_notify (Rail 1).
 ```
 
-## The watchdog sweep
+## The watchdog sweep (Rail 3 Safety Net)
 
 ```
 1. List all active claimed tasks.
 2. Check last update / heartbeat of the assigned worker lane.
 3. If active & progress verified → maintain claim.
-   If stalled (> threshold)      → notify worker / escalate to HQ.
+   If stalled (> 30m SLA)        → notify worker / escalate to HQ.
    If finished with receipts     → verify done-criteria, close issue, release claim.
 4. If the close resolved a defect → the rework entry is written BEFORE the close.
 ```

@@ -59,6 +59,10 @@ defect to fix, not a synonym to tolerate.
 | `documentation_class` | Documentation as a first-class scored operational artifact evaluated against a 0–4 rubric | doc object, docs |
 | `methodology_core` | The foundational guidance on LLM cognition, weakness counters, quality loops, and substrate bindings | factory handbook, core docs |
 | `onboarding_interview` | The structured dialogue loop that calibrates a new factory's documentation to survey baseline (≥2/4) | gap-closing session, intake chat |
+| `dual_rail_architecture` | Multi-agent coordination model decoupling fast-path execution signaling from durable state ledgers and watchdog pacemakers | hybrid architecture, decoupled sync |
+| `push_handoff` | Direct peer-to-peer event and goal dispatch from upstream to downstream implementer upon completing a state transition | direct handoff, instant dispatch |
+| `queue_dwell_tax` | The latency penalty ($T_{\text{dwell}} = \frac{\Delta t}{2}$) imposed on tasks by polling-based state consumption | polling delay, queue latency |
+| `fast_path` | Zero-latency peer-to-peer transport plane for task signaling and autonomous goal dispatch | push rail, signal rail |
 
 <!--
 Rules for a good entry:

@@ -19,7 +19,48 @@ In OpenCrabs, agent sessions are identified by immutable **Session UUIDs**.
 
 ---
 
-## 2. Standalone Zero-Token Pacemaker Crons (`trigger_cmd`)
+## 2. The Dual-Rail Architecture: Fast-Path Push Handoff vs Durable Ledger
+
+A multi-agent factory must decouple its **State of Record** from its **Execution Transport Plane** to prevent the queue dwell tax from dominating task cycle time.
+
+```
++--------------------------------------------------------------------------------+
+| DUAL-RAIL MULTI-AGENT EXECUTION ARCHITECTURE                                  |
+|                                                                                |
+|  [ Rail 1: Fast Path (Execution Transport Plane) ]                             |
+|    Upstream Lane (Triage) === session_notify(push goal) ===> Downstream Lane  |
+|    - Push-based event signaling (0s queue dwell)                              |
+|    - Wakes target session UUID immediately with goal & turn budget             |
+|                                                                                |
+|  [ Rail 2: State of Record (Durable Ledger Plane) ]                            |
+|    Upstream Lane (Triage) ---> fcntl.flock append (claim)                     |
+|    Downstream Lane (Worker) -> fcntl.flock append (close)                      |
+|    - Single-writer append-only sequence (evidence/ledger.jsonl)               |
+|    - Guarantees recovery checkpoints, monotonicity, and audit integrity        |
+|                                                                                |
+|  [ Rail 3: Safety Net (Reconciliation / Watchdog Plane) ]                      |
+|    Cron Pacemaker (e.g. factory-triage-hourly) -- sweeps ledger claims > 30m   |
+|    - Catches dropped messages, crashed workers, or stalled turns               |
+|    - Does NOT act as the primary conveyor belt                                 |
++--------------------------------------------------------------------------------+
+```
+
+### 2.1 The Queue Dwell Tax ($T_{\text{dwell}} = \frac{\Delta t}{2}$)
+If downstream workers poll a shared ledger or issue board on an hourly cron ($\Delta t = 60\text{m}$), the average work unit sits idle in the queue for **30 minutes** before execution begins ($T_{\text{dwell}} = 30\text{m}$). If coding takes 2 minutes, **idle queue dwell constitutes 94% of the entire task lead time**.
+
+Push-based handoffs eliminate polling dwell entirely ($T_{\text{dwell}} \approx 0\text{s}$), enabling true single-piece flow.
+
+### 2.2 Subprocess Handoff Protocol
+When an upstream lane (e.g. Triage in Subprocess 1.2) completes its stage and hands over to a downstream lane (e.g. Worker in Subprocess 1.3/1.4):
+1. **Durable Lock (Rail 2):** Append the state transition to `evidence/ledger.jsonl` under `fcntl.flock` (e.g. `event: claim`).
+2. **Immediate Push Dispatch (Rail 1):** Dispatch `session_notify` directly to the target worker session UUID with `goal`, `goal_max_turns`, and the calibrated task contract.
+3. **Execution (Worker Inner Loop):** Target session wakes immediately on the next tool loop boundary, loads feedforward constraints, and runs the Ralph evaluation loop against mechanical test gates.
+4. **Completion Settlement:** Worker passes all test gates, appends `event: close` under `fcntl.flock` (Rail 2), and pushes an acknowledgment receipt back to Triage/HQ (Rail 1).
+5. **Watchdog Reconciliation (Rail 3):** If a worker crashes or exceeds the 30-minute lead time SLA, the scheduled cron pacemaker detects the stale claim and triggers recovery.
+
+---
+
+## 3. Standalone Zero-Token Pacemaker Crons (`trigger_cmd`)
 
 To eliminate token waste on idle heartbeat turns, OpenCrabs crons support **headless 0-token trigger probes** where the `prompt` parameter is omitted:
 
@@ -41,7 +82,7 @@ git fetch origin main && [ $(git rev-parse HEAD) != $(git rev-parse origin/main)
 
 ---
 
-## 3. Post-Compaction Recovery Anchors
+## 4. Post-Compaction Recovery Anchors
 
 Context compaction wipes conversation history. To prevent amnesia:
 1. Every profile injects an always-loaded recovery anchor pointing to the factory's `SKILL.md`.

@@ -8,10 +8,10 @@
 ## The loop
 
 ```
-1. Receive the brief        issue number, goal, done-criteria, evidence expected
-2. Work                     in your own topic; receipts as you go
-3. Verify                   run the gate that decides; paste its output
-4. Report                   what changed, the evidence, how to re-check
+1. Receive push brief       dispatched via Rail 1 push goal (session_notify): issue number, goal, done-criteria
+2. Work                     assemble feedforward constraints, iterate Ralph eval loop; receipts as you go
+3. Verify                   run the mechanical gate that decides; paste its output
+4. Report & Stamp           what changed, evidence, stamp ledger close (Rail 2) + ack back (Rail 1)
 5. Close                    HQ or Triage renames your topic `Done — #N <title>`
 ```
 
