@@ -220,10 +220,17 @@ leaning on shared memory rather than on what it said.
 
 The law lives in message history, and compaction clears it.
 
-> **First action after any compaction, before any ruling, dispatch or status claim:
-> reload this skill.**
+The runtime warns the session when context consumption approaches the compaction threshold. That warning is a **deterministic boundary signal**, and it defines a two-sided protocol:
 
-The shared brain file carries a one-line pointer here for exactly this reason.
+> **On the pre-compaction warning:** flush in-flight state into durable substrates — un-persisted
+> intermediate variables into `session_context`, every remaining step and acceptance criterion
+> into the `plan` card. In-context instructions do not survive compaction; only what is written
+> to an always-injected file or a durable substrate does.
+
+> **First action after any compaction, before any ruling, dispatch or status claim:
+> reload this skill, then re-anchor the task contract from disk with `plan(operation="show_plan")`.**
+
+The shared brain file carries a one-line pointer here for exactly this reason. Mechanics: `docs/methodology/04-harness-binding.md` §5–6.
 
 ---
 
@@ -358,7 +365,25 @@ the gates have had time to bite. Report it as a direction, not a verdict.
 
 ---
 
-## 12. Boundaries
+## 13. The agent failure taxonomy — one pointer, no copy
+
+Four orthogonal failure families, each with its own generative mechanism and its own substrate
+counter. The canonical statement lives in `docs/methodology/01-llm-weakness-counters.md`; this
+section is a pointer, never a second copy.
+
+| Family | Generative mechanism | Substrate counter |
+|---|---|---|
+| **Epistemic** (true hallucination) | Probabilistic generation ungrounded in facts | Deterministic exit codes and same-turn receipts — no receipt, no verdict |
+| **Context-capacity** (attention dispersion, compaction amnesia) | Attention dilution over large windows; lossy history summarization | Pre-compaction flush into `session_context` + `plan` card; `plan(show_plan)` after compaction |
+| **Behavioral bias** (chat reflex, premature yield) | Conversational fine-tuning rewarding politeness over convergence | `GoalManager` (`set_goal`) and outer cron pacemakers driving the Ralph loop |
+| **Operational friction** (scope creep, tool thrashing) | Unbounded search depth and cascading errors | Single-entry single-exit atomic subprocesses; Jidoka stop-on-defect |
+
+The point of the split: each family takes a *different* remedy. Treating a capacity failure as
+an epistemic one produces prompt-bloat that cannot work.
+
+---
+
+## 14. Boundaries
 
 | Neighbour | Mode | What crosses |
 |---|---|---|
