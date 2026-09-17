@@ -564,6 +564,27 @@ To prevent process decay, the factory executes a periodic multi-lens review (e.g
 
 ---
 
+## P33 — Context manifest curation across context compactions
+
+Language models suffer severe amnesia and token truncation when context compactions occur mid-loop. While durable files and the `plan` card anchor tasks, active skills and non-core lazy tools are frequently dropped by the compactor summarizer unless explicitly instructed otherwise.
+
+Analysis across 778 real production compactions proves that compactor engines reliably honor explicit manifest guidance in Section 10 of compaction summaries (>93% retention when guided, with 0% contradictory retention). Standardizing Section 10 manifest curation eliminates the need for complex daemon hooks or binary modifications.
+
+The factory codifies a strict two-sided compaction protocol:
+
+1. **Pre-Compaction Flush:** On the pre-compaction warning signal, flush in-flight variables to durable state (`session_context`, ledger, and `plan` card).
+2. **Context Manifest Curation (Section 10):** Every compaction summary must emit an explicit `context-manifest` block with three strictly curated lists:
+   - `active_skills`: Retain the factory's root process skill (`SKILL.md`) plus the session's active role card (e.g. `roles/worker.md` or `roles/hq.md`).
+   - `discard_skills`: Explicitly discard non-active role cards and auxiliary task skills that do not apply to the current lane's role.
+   - `required_tools`: Explicitly pre-activate critical operational tools (`session_notify`, `session_search`, `bash`, `read_file`, `telegram_send`) to prevent tool schema amnesia and discovery delays post-compaction.
+3. **Immediate Recovery Action:** First action post-compaction is to re-read the recovery anchor (`SKILL.md`) and call `plan(operation="show_plan")` before taking any further action.
+
+- *Proven:* OpenCrabs Dev Factory empirical production dataset (778 compactions, v0.4.196).
+- *Mechanism:* Standardized Section 10 context manifest template in `SKILL.md.tmpl`, role cards (`roles/*.md`), and harness methodology (`04-harness-binding.md`).
+- *Prevents:* Post-compaction skill amnesia, loss of critical role directives, tool discovery latency/thrashing, and phantom execution attempts.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

@@ -164,3 +164,6 @@
 {"n": 164, "ts": "2026-09-17T11:29:13Z", "event": "close", "actor": "hq", "subject": "template-distill-failure-taxonomy", "detail": "distill-agent-failure-taxonomy-and-memory-tiers-into-template duration=7s outcome=accepted gate=all-pass"}
 {"n": 165, "ts": "2026-09-17T11:43:15Z", "event": "run", "actor": "delegate", "subject": "adversarial-subagent-lens-isolation", "detail": "Codified adversarial subagent requirement in P32, 02-quality-management.md, review-lenses.md, and added tools/review.py brief command"}
 {"n": 166, "ts": "2026-09-17T11:51:47Z", "event": "dispatch", "actor": "delegate", "subject": "advise-meta-hq-14-lens-adversarial-review", "detail": "Dispatched 14-lens and adversarial sub-agent isolation advisory to Meta-Factory HQ (2646d31a)"}
+{"n": 167, "ts": "2026-09-17T13:15:41Z", "event": "intake", "actor": "triage", "subject": "#30", "detail": "task=codify-section-10-context-manifest-curation"}
+{"n": 168, "ts": "2026-09-17T13:15:41Z", "event": "claim", "actor": "hq", "subject": "#30", "detail": "task=codify-section-10-context-manifest-curation"}
+{"n": 169, "ts": "2026-09-17T13:15:45Z", "event": "close", "actor": "hq", "subject": "#30", "detail": "task=codify-section-10-context-manifest-curation outcome=accepted gate=all-pass"}

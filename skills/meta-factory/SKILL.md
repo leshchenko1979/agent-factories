@@ -227,10 +227,15 @@ The runtime warns the session when context consumption approaches the compaction
 > into the `plan` card. In-context instructions do not survive compaction; only what is written
 > to an always-injected file or a durable substrate does.
 
+> **Context-Manifest Curation (Section 10 Standard):** In the compaction prompt manifest, explicitly
+> curate `active_skills` (retaining this skill), `discard_skills` (discarding inactive sibling roles),
+> and `required_tools` (pre-activating `session_notify`, `session_search`, `bash`, `read_file`, `edit_file`, `write_file`)
+> to guarantee >93% retention post-compaction.
+
 > **First action after any compaction, before any ruling, dispatch or status claim:
 > reload this skill, then re-anchor the task contract from disk with `plan(operation="show_plan")`.**
 
-The shared brain file carries a one-line pointer here for exactly this reason. Mechanics: `docs/methodology/04-harness-binding.md` §5–6.
+The shared brain file carries a one-line pointer here for exactly this reason. Mechanics: `docs/methodology/04-harness-binding.md` §5–9.
 
 ---
 

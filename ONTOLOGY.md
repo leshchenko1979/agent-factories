@@ -70,6 +70,7 @@ defect to fix, not a synonym to tolerate.
 | `context_capacity_failure` | An agent defect caused by attention dilution across large token windows or state obliteration during context compaction | amnesia, context bloat, lost in the middle |
 | `behavioral_bias_failure` | An agent defect caused by conversational fine-tuning (RLHF) favoring politeness and premature turn yielding over task convergence | chat reflex, premature yield, early quit |
 | `operational_friction_failure` | An agent defect caused by over-generalization and unbounded search depth resulting in scope creep or repetitive tool thrashing | thrashing, scope creep, rabbit hole |
+| `context_manifest_curation` | Explicit pre-compaction prompt declaration of active and discarded skills and required tools to guarantee post-compaction state retention | manifest tagging, context filtering |
 
 <!--
 Rules for a good entry:
