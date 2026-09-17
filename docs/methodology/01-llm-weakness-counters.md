@@ -75,21 +75,7 @@ flowchart TD
 
 ---
 
-## 2. The 5 OpenCrabs Memory Layers in Architecture
-
-In an ASIF, memory is structured into five distinct operational tiers:
-
-| Memory Tier | Substrate Mechanism | Location / Scope | Operational Role |
-|---|---|---|---|
-| **Tier 0: Structural Invariants** | Core Brain Files | `SOUL.md`, `USER.md`, `AGENTS.md` (injected last) | Unconditional behavioral constraints and security boundaries. |
-| **Tier 1: Passive In-Flight Recall** | `memory_recall.rs` (BM25) | User prompt envelope (matches `MEMORY.md`, active skills, directives) | Automatic, zero-effort contextual conditioning before turn 1. |
-| **Tier 2: Active Multi-Corpus Retrieval** | `memory_search` (Hybrid RRF) | Scopes: `brain` (rules), `memory` (logs), `external` (code graph) | Deliberate research and prior precedent lookups. |
-| **Tier 3: Substrate Task State** | `plan` tool & `session_context` | Persistent disk JSON (`.opencrabs_plan_*.json`) & session DB | Durable task contracts, dependencies, and variables surviving compaction. |
-| **Tier 4: Durable Fleet History** | `evidence/ledger.jsonl` & `rework.md` | Single-writer disk files (`fcntl.flock`) | Monotonic state transitions and defect root-cause preventions. |
-
----
-
-## 3. The Single-Writer Locking Principle (P26)
+## 2. The Single-Writer Locking Principle (P26)
 
 State that lives only in chat is a memory of a conversation. Durable state lives in files on disk with **exactly one named writer**.
 
@@ -108,7 +94,7 @@ with open("evidence/ledger.jsonl", "a+") as f:
 
 ---
 
-## 4. Jidoka & First-Pass Yield Recovery
+## 3. Jidoka & First-Pass Yield Recovery
 
 1. **Jidoka (Autonomation / Stop-on-Defect):** In the Toyota Production System, line workers halt the assembly line immediately upon detecting an anomaly. In AI multi-agent factories, any gate failure in `tools/audit.py` or unit test suite requires an immediate halt and root-cause isolation before additional turns or code generation occur.
 2. **Deterministic Pre-Flight Gates:** Before declaring a work unit complete, all mechanical gates must pass locally in sub-second execution time.

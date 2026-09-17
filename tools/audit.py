@@ -306,6 +306,9 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     # 10. Session binding and UUID integrity audit
     if (repo_root / "tests/test_session_bindings.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_session_bindings.py"])
+    # 11. Law structure audit: numbered sections contiguous in every law file
+    if (repo_root / "tests/test_law_structure.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_law_structure.py"])
 
     results = []
     for cmd in gates_to_run:

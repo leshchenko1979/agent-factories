@@ -89,32 +89,6 @@ if __name__ == "__main__":
     print("ALL BEST PRACTICE LAWS (P1..PN) HAVE VERIFIED UPHOLDING GATES.")
 
 
-def test_law_sections_are_numbered_contiguously() -> None:
-    """Every numbered section in a law file must be contiguous: 0, 1, 2, ... N.
-
-    A duplicate number means a section was clobbered or two sections claim the same
-    slot; a gap means a section was lost. Both are structural defects in the law and
-    both are invisible to a plain read — the file still renders. Origin: a hashline
-    replace anchored on a stale hash replaced the "## 10. Add-ons in force" heading
-    and left the file with two "## 12" headings and no section 10.
-    """
-    law_files = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
-    assert law_files, "no law files found under skills/*/SKILL.md"
-
-    problems: list[str] = []
-    for law_file in law_files:
-        rel = law_file.relative_to(REPO_ROOT)
-        content = law_file.read_text(encoding="utf-8")
-        numbers = [int(m) for m in re.findall(r"^##\s+(\d+)\.", content, re.MULTILINE)]
-        if not numbers:
-            problems.append(f"{rel}: no numbered sections found")
-            continue
-        if numbers != list(range(len(numbers))):
-            problems.append(f"{rel}: section numbers {numbers} are not contiguous from 0")
-
-    assert not problems, "law files with broken section numbering: " + "; ".join(problems)
-
-
 if __name__ == "__main__":
     test_all_declared_best_practices_have_upholding_gates()
     print("ALL BEST PRACTICE LAWS (P1..PN) HAVE VERIFIED UPHOLDING GATES.")

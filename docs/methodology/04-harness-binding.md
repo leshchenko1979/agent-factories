@@ -90,7 +90,25 @@ Context compaction wipes conversation history. To prevent amnesia:
 
 ---
 
-## 5. Task-State Memory Binding (`plan` vs `session_context`)
+## 5. The Five Memory Tiers of the Runtime
+
+The runtime does not have "memory"; it has five distinct tiers, each with its own persistence
+guarantee. A lane that conflates them either loses state or wastes context.
+
+| Memory Tier | Substrate Mechanism | Location / Scope | Operational Role |
+|---|---|---|---|
+| **Tier 0: Structural Invariants** | Core brain files | `SOUL.md`, `USER.md`, `AGENTS.md` (injected last, nearest the generation point) | Unconditional behavioural constraints and security boundaries. |
+| **Tier 1: Passive In-Flight Recall** | `memory_recall.rs` (length-normalised BM25) | Rides along in the user prompt envelope | Automatic, zero-effort contextual conditioning before turn 1. A model that never volunteers a search still receives the match. |
+| **Tier 2: Active Multi-Corpus Retrieval** | `memory_search` (hybrid RRF: FTS5 BM25 + vector) | Scopes: `brain` (rules), `memory` (history), `external` (code graph) | Deliberate research and prior-precedent lookups. |
+| **Tier 3: Substrate Task State** | `plan` tool and `session_context` | Disk JSON (`.opencrabs_plan_<session-id>.json`) and the session store | Durable task contracts and in-flight variables that survive compaction. |
+| **Tier 4: Durable Factory History** | `evidence/ledger.jsonl` and `evidence/rework.md` | Single-writer disk files (`fcntl.flock`) | Monotonic state transitions and defect root-cause preventions. |
+
+Tier 0 is unconditional, Tier 1 is automatic, Tier 2 is deliberate, Tier 3 is written by the
+lane itself, Tier 4 is written by the factory. Anything a lane needs after a compaction must
+already be in Tier 0 or Tier 3 — Tiers 1 and 2 are lookups the lane may or may not make, and
+the message window is not a tier at all.
+
+## 6. Task-State Memory Binding (`plan` vs `session_context`)
 
 A durable task contract and ephemeral in-flight variables are **two different memory needs**, satisfied by two different substrates. Using one for the other is the defect.
 
@@ -102,7 +120,7 @@ A durable task contract and ephemeral in-flight variables are **two different me
 
 The `plan` card tracks **coarse task boundaries**; it does not carry fine-grained calculation state. A factory lane must pair both: the plan anchors *what remains to be done*, `session_context` anchors *what has already been computed*.
 
-## 6. The Pre-Compaction Flush Protocol
+## 7. The Pre-Compaction Flush Protocol
 
 The runtime emits an explicit **warning when context consumption approaches the compaction threshold**. This is a deterministic boundary signal, not an unpredictable crash, and it defines a mandatory state-flush step:
 
@@ -110,7 +128,7 @@ The runtime emits an explicit **warning when context consumption approaches the 
 2. **After compaction:** the first action is to reload the always-loaded recovery anchor (`SKILL.md`), then call `plan(operation="show_plan")` to re-anchor ground truth from disk before executing any further turn or asserting any status.
 3. **Never** rely on pre-compaction *instructions* surviving compaction: in-context instructions are summarized away. Only what is written to an always-injected file or a durable substrate survives.
 
-## 7. Working Directory Control
+## 8. Working Directory Control
 
 The session working directory is persistent state, not a per-command detail:
 

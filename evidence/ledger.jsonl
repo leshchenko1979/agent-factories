@@ -159,3 +159,5 @@
 {"n": 159, "ts": "2026-09-17T11:25:33Z", "event": "intake", "actor": "hq", "subject": "law-section-numbering-gate", "detail": "contiguous-section-numbering-gate-for-law-files"}
 {"n": 160, "ts": "2026-09-17T11:25:33Z", "event": "claim", "actor": "hq", "subject": "law-section-numbering-gate", "detail": "contiguous-section-numbering-gate-for-law-files"}
 {"n": 161, "ts": "2026-09-17T11:25:46Z", "event": "close", "actor": "hq", "subject": "law-section-numbering-gate", "detail": "contiguous-section-numbering-gate-for-law-files duration=7s outcome=accepted gate=all-pass"}
+{"n": 162, "ts": "2026-09-17T11:29:02Z", "event": "intake", "actor": "hq", "subject": "template-distill-failure-taxonomy", "detail": "distill-agent-failure-taxonomy-and-memory-tiers-into-template"}
+{"n": 163, "ts": "2026-09-17T11:29:02Z", "event": "claim", "actor": "hq", "subject": "template-distill-failure-taxonomy", "detail": "distill-agent-failure-taxonomy-and-memory-tiers-into-template"}

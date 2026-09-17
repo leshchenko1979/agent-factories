@@ -35,6 +35,7 @@ PAIRS = [
     ("tools/telemetry.py", "TEMPLATE/tools/telemetry.py"),
     ("tools/review.py", "TEMPLATE/tools/review.py"),
     ("tests/test_review.py", "TEMPLATE/tests/test_review.py"),
+    ("tests/test_law_structure.py", "TEMPLATE/tests/test_law_structure.py"),
 ]
 
 
