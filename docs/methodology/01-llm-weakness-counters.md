@@ -56,11 +56,12 @@ flowchart TD
 
 ### 1.2 Context-Capacity Failures (Attention Dispersion & Compaction Amnesia)
 * **Generative Mechanism:** Attention dilution over massive contexts ("Lost in the Middle") and lossy semantic compression when context compaction triggers.
-* **Manifestations:** Ignoring negative prompt constraints after 50k tokens; waking up post-compaction having forgotten pending sub-tasks and acceptance criteria.
+* **Manifestations:** Ignoring negative prompt constraints after 50k tokens; waking up post-compaction having forgotten pending sub-tasks, active intermediate variables, and acceptance criteria.
+* **The Harness Pre-Compaction Warning:** The OpenCrabs runtime provides explicit pre-compaction warnings when context consumption approaches compaction limits. Rather than treating compaction as an unpredictable crash, an agent must treat this boundary signal as a deterministic trigger to flush in-flight ephemeral state into durable substrates (`plan` card on disk, `session_context` KV store) before history is summarized.
 * **Substrate Counter:** **The `plan` Tool (Durable Disk Plan Card) + `session_context`.** 
-  * The `plan` tool persists coarse task state and checkable criteria to disk (`.opencrabs_plan_<id>.json`), surviving history summarization.
+  * The `plan` tool persists coarse task state, dependencies, and checkable criteria to disk (`.opencrabs_plan_<id>.json`), surviving history summarization.
   * `session_context` preserves ephemeral, fine-grained calculation variables across turns without polluting message history.
-  * Calling `plan(operation="show_plan")` immediately re-anchors the model to ground truth.
+  * Calling `plan(operation="show_plan")` immediately re-anchors the model to ground truth upon waking post-compaction.
 
 ### 1.3 Behavioral Bias Failures (RLHF Interactive Conditioning)
 * **Generative Mechanism:** Reinforcement learning from human feedback (RLHF) optimizes models to be polite, deferential, single-turn conversationalists.
