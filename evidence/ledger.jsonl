@@ -144,3 +144,4 @@
 {"n": 144, "ts": "2026-09-17T07:04:16Z", "event": "intake", "actor": "triage", "subject": "#28", "detail": "task=hygiene-git-status-inspection-fix-false-green"}
 {"n": 145, "ts": "2026-09-17T07:04:16Z", "event": "claim", "actor": "hq", "subject": "#28", "detail": "lane=hq task=hygiene-git-status-inspection-fix-false-green"}
 {"n": 146, "ts": "2026-09-17T07:06:40Z", "event": "close", "actor": "hq", "subject": "#28", "detail": "duration=180s turns=2 cost_usd=0.012 outcome=accepted gate=all-pass hygiene-audit-tests-modified-tracked-files-and-untracked-clutter"}
+{"n": 147, "ts": "2026-09-17T09:42:02Z", "event": "run", "actor": "delegate", "subject": "opencrabs-dev-management-exchange", "detail": "distilled top 3 breakthroughs: mechanical gates, monotonic ledger, graph soak harvest"}
