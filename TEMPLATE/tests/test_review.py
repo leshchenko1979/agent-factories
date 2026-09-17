@@ -15,6 +15,11 @@ def test_review_lifecycle(tmp_path: Path) -> None:
     cycle_id = "test-cycle-01"
     cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
 
+    # 0. Brief generation (Adversarial auditor prompt)
+    res = subprocess.run(cmd_base + ["brief", "A"], cwd=REPO_ROOT, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert "ADVERSARIAL AUDITOR BRIEF — LENS A" in res.stdout
+
     # 1. Init
     res = subprocess.run(cmd_base + ["init", cycle_id], cwd=REPO_ROOT, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr

@@ -75,6 +75,7 @@ flowchart TD
 ```
 
 ### Review Invariants
+- **Adversarial Sub-Agent Isolation:** Review lenses MUST be executed by dedicated sub-agents spawned with clean context windows and adversarial auditor briefs (`tools/review.py brief <lens>`). The primary authoring agent suffers from conversational self-confirmation bias; an isolated adversarial sub-agent is instructed to actively seek defects, contradictions, and prompt waste.
 - **Quote-Anchored Findings:** Findings without a verifiable file locator and verbatim quote are rejected.
 - **Pure Function Test (Lens J):** Any prose directive whose decision can be settled from disk state is converted into a deterministic CLI script or mechanical test.
 - **Single-Writer Codification:** Reviewer lenses operate read-only. Only HQ codifies findings into process files.

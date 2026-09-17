@@ -3,7 +3,9 @@
 > **Owns:** Canonical catalog of the 14 review lenses for periodic factory quality reviews (Duty 4+6 review rotation / **P32**).
 > **Methodology Reference:** `docs/methodology/02-quality-management.md` §4.
 
-Periodic multi-lens reviews prevent process decay, law bloat, tool rot, ledger drift, and token waste. Independent read-only reviewers evaluate the factory across six families and fourteen distinct dimensions.
+Periodic multi-lens reviews prevent process decay, law bloat, tool rot, ledger drift, and token waste.
+
+**The Adversarial Isolation Requirement:** Review lenses must be executed by **dedicated adversarial sub-agents** spawned with clean, unpolluted context windows and explicit adversarial briefs (`tools/review.py brief <LENS>`). The primary authoring lane naturally suffers from conversational self-confirmation bias; an isolated sub-agent enters without authorial baggage and is primed specifically to detect flaws, prompt bloat, and un-gated rules.
 
 ---
 

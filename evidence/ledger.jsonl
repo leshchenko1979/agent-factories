@@ -162,3 +162,4 @@
 {"n": 162, "ts": "2026-09-17T11:29:02Z", "event": "intake", "actor": "hq", "subject": "template-distill-failure-taxonomy", "detail": "distill-agent-failure-taxonomy-and-memory-tiers-into-template"}
 {"n": 163, "ts": "2026-09-17T11:29:02Z", "event": "claim", "actor": "hq", "subject": "template-distill-failure-taxonomy", "detail": "distill-agent-failure-taxonomy-and-memory-tiers-into-template"}
 {"n": 164, "ts": "2026-09-17T11:29:13Z", "event": "close", "actor": "hq", "subject": "template-distill-failure-taxonomy", "detail": "distill-agent-failure-taxonomy-and-memory-tiers-into-template duration=7s outcome=accepted gate=all-pass"}
+{"n": 165, "ts": "2026-09-17T11:43:15Z", "event": "run", "actor": "delegate", "subject": "adversarial-subagent-lens-isolation", "detail": "Codified adversarial subagent requirement in P32, 02-quality-management.md, review-lenses.md, and added tools/review.py brief command"}

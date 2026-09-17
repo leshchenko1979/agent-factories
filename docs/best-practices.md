@@ -558,8 +558,8 @@ To prevent process decay, the factory executes a periodic multi-lens review (e.g
    - **Lens Brief Integrity:** Audit the review catalog itself for scope drift, overlapping coverage, and unquoted findings. Ensure every review finding carries a verifiable locator and verbatim quote.
 
 - *Proven:* OpenCrabs Dev Factory Duty 4+6 review rotation; meta-factory lens catalog.
-- *Mechanism:* Independent read-only reviewer lenses execute on cadence, compiling quote-anchored findings into an immutable review manifest. HQ validates and codifies accepted findings in a single versioned batch.
-- *Prevents:* Silent law drift, prompt token bloat, zombie artifacts, unwritten tool specs lingering as prose, and author-blindness.
+- *Mechanism:* Multi-lens reviews MUST execute through **isolated adversarial sub-agents** (one sub-agent per lens or lens family). A single primary session suffers from conversational self-confirmation bias and amnesia; an isolated sub-agent enters with a fresh, unpolluted context window and an explicitly adversarial audit prompt (`tools/review.py brief <LENS>`). Findings are recorded on disk (`tools/review.py record`) and compiled into an immutable review manifest. HQ validates and codifies accepted findings in a single versioned batch.
+- *Prevents:* Silent law drift, conversational self-confirmation bias, prompt token bloat, zombie artifacts, unwritten tool specs lingering as prose, and author-blindness.
 - *Boundary:* Reviewers inspect and recommend; they never edit process laws directly. Only HQ codifies accepted findings.
 
 ---
