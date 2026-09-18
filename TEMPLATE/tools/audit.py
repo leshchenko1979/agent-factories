@@ -310,6 +310,14 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_law_structure.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_law_structure.py"])
 
+    # 12. Documentation sync gate: a doc shipped in both trees must not drift
+    if (repo_root / "tests/test_docs_sync.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_docs_sync.py"])
+
+    # 13. Hygiene namespace gate: the scratch audit globs only owned prefixes
+    if (repo_root / "tests/test_hygiene_namespace.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_namespace.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
