@@ -397,8 +397,9 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     # 13. Hygiene namespace gate: the scratch audit globs only owned prefixes
     if (repo_root / "tests/test_hygiene_namespace.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_namespace.py"])
-    # 14. Rework-rate form gate: the rework number is reported in two named forms,
-    #     each carrying its own denominator (issue #31).
+    # 14. Rate gate: the rework number is reported in two named forms and the change
+    #     fail rate with its linkage coverage — each carrying its own denominator, and
+    #     the numerator derived from the log rather than stated (issues #31 and #34).
     if (repo_root / "tests/test_audit_rates.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_audit_rates.py"])
     # 15. Score-gate verdict gate: a measurement run records its closing workspace-gate
