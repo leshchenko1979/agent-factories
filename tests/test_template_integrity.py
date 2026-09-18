@@ -37,15 +37,35 @@ ignored untracked files would miss the opposite defect: a file written and never
 checked too, and the only exclusion is `.gitignore` itself — a `.pyc` is ignored,
 a forgotten `docs/x.md` is not.
 
-Run:  python3 tests/test_template_integrity.py
+**Uncommitted-yet is not unshipped (issue #38).** The working tree is SHARED: several
+lanes edit it at once, so "an untracked file is in `TEMPLATE/`" and "nobody shipped
+it" are different facts, and this gate could not tell them apart — a lane doing
+exactly the right thing (writing its test file before committing it) turned the gate
+RED for the length of its own turn. The discriminator git actually offers is **age**,
+and it is the same one `tools/hygiene.py` uses: a path written minutes ago belongs to
+a lane still working, the same path a day later was written and forgotten. So an
+untracked file inside the window is an **advisory** — printed, not failing — and
+becomes a **violation** once the window passes. The window is the same default (60
+minutes) and the same override (`--grace-minutes` in the audit,
+`OC_INFLIGHT_GRACE_MINUTES` here), so a factory declares it once.
+
+The untracked-file check itself is unchanged and stays load-bearing: a file written
+and never added is invisible to every other gate, which is the defect this gate
+exists to catch. Only the verdict now waits for the lane to finish.
+
+Run:  python3 -m pytest tests/test_template_integrity.py -q
+      python3 tests/test_template_integrity.py        # same checks, script form
 Exit: 0 clean, 1 an unaccounted file or an unregistered pack.
+      An uncommitted path inside the in-flight window warns and does not fail.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -76,6 +96,43 @@ SHARED_DOC_PREFIX = "docs/"
 # a factory chooses its own role set at bootstrap, and `roles/<name>.md` is the
 # core set it chooses from. Classified by directory, paired with nothing.
 ROLE_CARD_PREFIX = "roles/"
+
+# --- in-flight vs stranded ----------------------------------------------------
+# This tree is shared (issue #38). An untracked path younger than the window is a
+# lane's live work; older, it is a file written and forgotten. Same default and
+# same meaning as `tools/hygiene.py --grace-minutes`.
+DEFAULT_GRACE_MINUTES = 60.0
+GRACE_ENV = "OC_INFLIGHT_GRACE_MINUTES"
+
+
+def grace_minutes() -> float:
+    """The in-flight window, in minutes — overridable by env for a slow lane."""
+    raw = os.environ.get(GRACE_ENV, "").strip()
+    if not raw:
+        return DEFAULT_GRACE_MINUTES
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{GRACE_ENV}={raw!r} is not a number of minutes") from exc
+
+
+def classify_inflight(age_minutes: float | None, grace: float) -> str:
+    """'advisory' while a lane may still be working, else 'violation'.
+
+    A path that cannot be stat-ed has no age to excuse it, so it is a violation:
+    silence is not evidence that someone is working on it.
+    """
+    if age_minutes is not None and age_minutes < grace:
+        return "advisory"
+    return "violation"
+
+
+def age_minutes(path: Path, now: float) -> float | None:
+    """Minutes since the path was last written, or None when it cannot be read."""
+    try:
+        return (now - path.stat().st_mtime) / 60.0
+    except OSError:
+        return None
 
 # --- add-on packs -------------------------------------------------------------
 # Both are relative to the template's `docs/`, not to the repo root.
@@ -166,11 +223,20 @@ def classify(rel: str, pairs: set[str]) -> str | None:
         return "declared entry file"
     return None
 
-def check_template(template_root: Path) -> list[str]:
-    """Every shipped file classified, and no file present that is not shipped."""
+def check_template(
+    template_root: Path, now: float | None = None, grace: float | None = None
+) -> tuple[list[str], list[str]]:
+    """(violations, advisories) — a shipped file unclassified, or an unshipped one.
+
+    `now` and `grace` are injectable so the age boundary can be probed with
+    synthetic values instead of waiting out a real clock.
+    """
     shipped, unshipped = _shipped(template_root)
     pairs = _template_pairs()
     problems: list[str] = []
+    advisories: list[str] = []
+    now = time.time() if now is None else now
+    grace = grace_minutes() if grace is None else grace
 
     for rel in sorted(shipped):
         if classify(rel, pairs) is None:
@@ -181,17 +247,35 @@ def check_template(template_root: Path) -> list[str]:
             )
 
     for rel in sorted(unshipped):
-        problems.append(
-            f"{TEMPLATE_DIR}/{rel}: present in the tree but not shipped — `git add` it "
-            f"or remove it. A file that is neither committed nor ignored is invisible "
-            f"to every other gate, so it cannot be reviewed either"
-        )
+        age = age_minutes(template_root / rel, now)
+        if classify_inflight(age, grace) == "advisory":
+            advisories.append(
+                f"{TEMPLATE_DIR}/{rel}: present in the tree but not shipped — "
+                f"{age:.0f}m old, inside the {grace:.0f}m grace window, so a lane may "
+                f"still be writing it; it becomes a violation once the window passes"
+            )
+        else:
+            problems.append(
+                f"{TEMPLATE_DIR}/{rel}: present in the tree but not shipped — `git add` "
+                f"it or remove it. A file that is neither committed nor ignored is "
+                f"invisible to every other gate, so it cannot be reviewed either"
+            )
 
     for rel in sorted(pairs):
         if rel not in shipped:
-            problems.append(f"{TEMPLATE_DIR}/{rel}: listed in PAIRS but not shipped")
+            # The copy is missing. If it exists untracked and young, the lane has
+            # written it and not committed it yet — the same in-flight case.
+            age = age_minutes(template_root / rel, now)
+            if classify_inflight(age, grace) == "advisory":
+                advisories.append(
+                    f"{TEMPLATE_DIR}/{rel}: listed in PAIRS but not shipped — "
+                    f"{age:.0f}m old, inside the {grace:.0f}m grace window; it is "
+                    f"uncommitted-yet, not missing"
+                )
+            else:
+                problems.append(f"{TEMPLATE_DIR}/{rel}: listed in PAIRS but not shipped")
 
-    return problems
+    return problems, advisories
 
 def _headings(path: Path) -> list[str]:
     return [
@@ -263,9 +347,10 @@ def check_addons(template_root: Path) -> list[str]:
 
     return problems
 
-def check(template_root: Path) -> list[str]:
-    """Every problem in the template tree. Empty means clean."""
-    return check_template(template_root) + check_addons(template_root)
+def check(template_root: Path) -> tuple[list[str], list[str]]:
+    """(violations, advisories) in the template tree. No violations means clean."""
+    problems, advisories = check_template(template_root)
+    return problems + check_addons(template_root), advisories
 
 def main() -> int:
     template_root = _template_root()
@@ -273,7 +358,15 @@ def main() -> int:
         print("no TEMPLATE/ tree — the factory is the instantiation, nothing to classify")
         return 0
 
-    problems = check(template_root)
+    problems, advisories = check(template_root)
+    if advisories:
+        print(
+            f"warning: {len(advisories)} uncommitted path(s) inside the "
+            f"{grace_minutes():.0f}m in-flight window (not failing):",
+            file=sys.stderr,
+        )
+        for a in advisories:
+            print(f"  {a}", file=sys.stderr)
     if problems:
         print("template integrity problems:\n", file=sys.stderr)
         for p in problems:
@@ -282,7 +375,9 @@ def main() -> int:
             "\nA file in TEMPLATE/ must be a copy listed in PAIRS, a .tmpl skeleton, a\n"
             "shared document under docs/, a role card under roles/, or a declared entry\n"
             "file with a reason. A pack under docs/addons/ must be listed in\n"
-            "docs/addons.md and carry the headings its class requires.",
+            "docs/addons.md and carry the headings its class requires.\n"
+            "A file written but never committed is a violation once it is older than\n"
+            "the in-flight window — commit it or remove it.",
             file=sys.stderr,
         )
         return 1
@@ -299,8 +394,43 @@ def test_every_shipped_template_file_is_accounted_for() -> None:
     template_root = _template_root()
     if template_root is None:
         return
-    problems = check(template_root)
+    problems, _advisories = check(template_root)
     assert not problems, "unaccounted template files: " + "; ".join(problems)
+
+def test_a_young_uncommitted_path_is_not_yet_a_violation():
+    """The in-flight window, probed at its boundary with synthetic ages."""
+    grace = 60.0
+    assert classify_inflight(0.0, grace) == "advisory"
+    assert classify_inflight(59.9, grace) == "advisory"
+    assert classify_inflight(60.0, grace) == "violation"
+    assert classify_inflight(600.0, grace) == "violation"
+
+def test_a_path_with_no_readable_age_is_a_violation():
+    """Silence is not evidence someone is working on it."""
+    assert classify_inflight(None, 60.0) == "violation"
+
+def test_the_grace_window_is_declarable_not_hidden():
+    """A factory whose lanes hold work longer raises the window; it is not a constant."""
+    import os as _os
+
+    previous = _os.environ.get(GRACE_ENV)
+    try:
+        _os.environ.pop(GRACE_ENV, None)
+        assert grace_minutes() == DEFAULT_GRACE_MINUTES
+        _os.environ[GRACE_ENV] = "180"
+        assert grace_minutes() == 180.0
+        _os.environ[GRACE_ENV] = "not-a-number"
+        try:
+            grace_minutes()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError(f"{GRACE_ENV}=not-a-number was accepted")
+    finally:
+        if previous is None:
+            _os.environ.pop(GRACE_ENV, None)
+        else:
+            _os.environ[GRACE_ENV] = previous
 
 if __name__ == "__main__":
     raise SystemExit(main())

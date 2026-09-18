@@ -413,9 +413,10 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hq_delegation.py"])
     # 17. Template integrity gate: every file the template ships is accounted for by a
     #     pair, a class or a declared entry, and every add-on pack is registered
-    #     (issues #33 and #35).
+    #     (issues #33 and #35). Run under pytest so the in-flight-window probes
+    #     travel with it (issue #38 — an uncommitted-yet file is not unshipped).
     if (repo_root / "tests/test_template_integrity.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_template_integrity.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_template_integrity.py"])
     # 18. Hygiene in-flight gate: the working-tree audit separates a lane's live
     #     work (advisory) from an abandoned path (violation), and the run-scoped
     #     invariant still blocks with no grace (issue #38; #28 stays fixed).
