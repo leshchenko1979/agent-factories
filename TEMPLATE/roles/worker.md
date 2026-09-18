@@ -27,6 +27,7 @@ You do not close your own topic. You report; the rename is the close.
 | **Never assemble an identifier** | Copy issue numbers, session UUIDs, run ids, shas from live output — a guessed tail is a fabrication even when it is right |
 | **Never revert another lane's work** | Other sessions share this repo. Report and wait, or branch off |
 | **Stage only what you changed** | No `git add -A`, no `git commit -a` |
+| **Name your paths at the commit** | `git commit -m <msg> -- <paths>`. A bare `git commit` takes the whole index, including a peer's staged work. Everything after `--` is a path, so `-m` and its message come first |
 | **Commit as you go** | Uncommitted progress is lost when a turn is interrupted |
 | **Reload the law after compaction** | Before any status claim. The law lived in the message history, and compaction cleared it |
 

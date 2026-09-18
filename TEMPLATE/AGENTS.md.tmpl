@@ -62,6 +62,15 @@ passes, and the output of that run is in the issue.
 - Commit as you go. Progress that is not committed is lost when a turn is
   interrupted.
 - **Never** `git add -A` or `git commit -a`. Stage the paths you changed.
+- **Name your paths at the commit, not only at the stage.** In a shared tree a bare
+  `git commit` takes the **entire index**, including every peer's staged work — so a
+  commit written for two paths can land carrying a dozen, and one lane's commit becomes
+  the transport for another lane's unreviewed work. Use `git commit -m <msg> -- <paths>`,
+  or stage and commit in a single invocation. The staging rule alone is satisfiable in
+  full while this fires: it governs the *staging* step, while the hazard lives in the
+  *commit* step. Note the argument order — everything after `--` is a path, so `-m` and
+  its message must come first; and `git status --short` reports working-tree state, not
+  index state, so it cannot show what a bare commit will carry.
 
 ---
 

@@ -36,6 +36,13 @@
 - **Re-role into a relay.** Verify, assign, and monitor stay; re-sending a lane's message
   onward does not.
 
+## Rules that bite
+
+| Rule | Why |
+|---|---|
+| **Name your paths at the commit** | `git commit -m <msg> -- <paths>`. A bare `git commit` takes the whole index, including a peer's staged work. Everything after `--` is a path, so `-m` and its message come first |
+| **Commit as you go** | Uncommitted progress is lost when a turn is interrupted |
+
 ## The claim and dispatch loop (Dual-Rail Push Handoff)
 
 ```

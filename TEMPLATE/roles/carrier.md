@@ -47,6 +47,7 @@ artifact that shipped.
 | **Never force a red gate** | A gate bypassed under deadline is a defect scheduled for later |
 | **Roll back first, diagnose second** | A bad ship is a live problem. Restore service, then find the cause |
 | **Announce the ship with its identity** | Version, commit, artifact hash — so anyone can check what they are running |
+| **Name your paths at the commit** | `git commit -m <msg> -- <paths>`. A bare `git commit` takes the whole index, including a peer's staged work. Everything after `--` is a path, so `-m` and its message come first |
 
 ---
 
