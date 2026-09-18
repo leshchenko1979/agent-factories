@@ -14,8 +14,10 @@ is only written down is a rule that drifts back.
 
 This gate is that mechanism. It reads the law surfaces — the HQ card, the law
 file, the bootstrap, the ontology, the best-practice entry, and each factory's own
-skill — and fails when one of them permits the retired doctrine again, or when a
-law that declares lanes declares none for HQ to delegate to.
+skill — and fails when one of them permits the retired doctrine again, when a
+law that declares lanes declares none for HQ to delegate to, or when a writer
+table is shipped without the authorship/transcription split that keeps the writer
+of a surface's content from also being its only permitted typist.
 
 It resolves its own tree, so one file serves both: run from this repo it checks
 `TEMPLATE/…`; run from `TEMPLATE/` — or from a bootstrapped factory, where the
@@ -222,6 +224,41 @@ def _law_names_a_delegation_lane(path: Path) -> list[str]:
         )
     return problems
 
+TRANSCRIPTION = re.compile(r"\btranscription\b", re.I)
+AUTHORSHIP = re.compile(r"\bauthorship\b", re.I)
+LANE_REF = re.compile(r"implementation lane|\bworker\b", re.I)
+
+def _authorship_split_stated(path: Path) -> list[str]:
+    """The writer table must be paired with the authorship/transcription split.
+
+    A writer that owns a surface's *content* is not thereby its only permitted
+    *typist*. Without this clause the writer table hands `HQ` back every edit
+    inside a law file — the queue the idle-HQ law exists to keep it out of — so
+    the two rules contradict each other in the same file. This asserts the split
+    is stated AND that it names where a decided correction goes: a split with no
+    destination is a rule that cannot be obeyed.
+    """
+    text = read(path)
+    if not TRANSCRIPTION.search(text) or not AUTHORSHIP.search(text):
+        return [
+            f"{_rel(path)}: the writer table carries no authorship/transcription split — "
+            f"the writer of a surface's content would also be its only permitted typist, "
+            f"which contradicts the idle-HQ law"
+        ]
+
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if TRANSCRIPTION.search(line) and LANE_REF.search(line):
+            return []
+        if TRANSCRIPTION.search(line):
+            window = " ".join(lines[max(0, i - 1) : i + 2])
+            if LANE_REF.search(window):
+                return []
+    return [
+        f"{_rel(path)}: the authorship/transcription clause names no lane to apply a "
+        f"decided correction — the split is stated but its destination is not"
+    ]
+
 def check(root: Path) -> list[str]:
     """Every problem in the law tree rooted at `root`. Empty means clean."""
     problems: list[str] = []
@@ -263,6 +300,11 @@ def check(root: Path) -> list[str]:
     lane_laws = {p for p in [law, *factory_laws] if p is not None}
     for path in sorted(lane_laws):
         problems.extend(_law_names_a_delegation_lane(path))
+
+    # 6. A law with a writer table must split authorship from transcription, or the
+    #    writer of a surface's content is also its only permitted typist.
+    for path in sorted({p for p in [law, *factory_laws] if p is not None}):
+        problems.extend(_authorship_split_stated(path))
 
     return problems
 
