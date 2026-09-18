@@ -453,6 +453,14 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_synthesize_interface.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_synthesize_interface.py"])
 
+    # 24. Roadmap-transition gate: the product declaration is factory data, not template
+    #     law, so an un-onboarded factory is RED by design — and the gate asserts the
+    #     correspondence (green iff declared artifacts exist), not a state. It was born
+    #     permanently red because the product list shipped inside the paired tool and one
+    #     entry was an artifact no other factory can have (issue #40, P29).
+    if (repo_root / "tests/test_roadmap_transition.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_roadmap_transition.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
