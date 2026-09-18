@@ -219,6 +219,17 @@ def check_addons(template_root: Path) -> list[str]:
     )
     problems: list[str] = []
 
+    # The reverse direction: a registered pack must actually be shipped. Without
+    # this the registry can name a pack the template does not carry, and the
+    # documented path leads nowhere — the same defect as an unregistered pack,
+    # seen from the other side.
+    for rel in sorted(registered):
+        if not (packs_dir / rel).is_file():
+            problems.append(
+                f"{_rel(registry)}: lists {rel!r} but the template ships no such pack "
+                f"— the documented path leads nowhere"
+            )
+
     for pack in sorted(packs_dir.rglob("*.md")):
         rel = pack.relative_to(packs_dir).as_posix()
         if rel not in registered:

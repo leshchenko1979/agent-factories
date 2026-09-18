@@ -359,6 +359,11 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     "HQ alone is a valid answer" doctrine).
     if (repo_root / "tests/test_hq_delegation.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hq_delegation.py"])
+    # 17. Template integrity gate: every file the template ships is accounted for by a
+    #     pair, a class or a declared entry, and every add-on pack is registered
+    #     (issues #33 and #35).
+    if (repo_root / "tests/test_template_integrity.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_template_integrity.py"])
 
     results = []
     for cmd in gates_to_run:
