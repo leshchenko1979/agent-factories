@@ -447,6 +447,12 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_criteria_count.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_criteria_count.py"])
 
+    # 23. Synthesizer interface gate: the tool's usage block advertises exactly the
+    #     flags argparse defines, and its rework parser is width-safe and reads the
+    #     Defect column rather than the Source column beside it (issue #42).
+    if (repo_root / "tests/test_synthesize_interface.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_synthesize_interface.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
