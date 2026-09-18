@@ -184,9 +184,11 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 |---|---|---|---|---|---|
 | **1. Internal Self-Audit** | `tools/audit.py` | Local ledger, rework log, and test suite | Automated score diff & telemetry JSON | Stale scratch files / gate failure | 8-gate pass rate & duration |
 | **2. Documentation Calibration** | Surveys / Delegate | Target factory repo | 0–4 Documentation score vector | Cold-start survey blindness | Documentation baseline score ($\ge 2/4$) |
-| **3. Onboarding Interview Loop** | Delegate | Factory operator | Minimal `ONTOLOGY.md`, `SKILL.md`, `processes.md` | Vague domain requirements | Interview turns to baseline |
+| **3. Onboarding Interview Loop** | Delegate | Factory operator | Minimal `ONTOLOGY.md`, `SKILL.md`, `processes.md`, `docs/products.json` | Vague domain requirements | Interview turns to baseline |
 | **4. Member Self-Audit Meta-Audit** | Surveys | Member factory `evidence/scores/` | Verified cadence & spot-checked receipts | Superficial checklist audit | Dwell ratio & yield delta |
 | **5. Advisory Dispatch & Telemetry** | Delegate / Surveys | Synthesized fleet findings | Briefing to member HQ + `score` row | Unactionable advice / noise | Member adoption rate |
+
+> **Defined exit from the RED roadmap gate.** The loop's output includes `docs/products.json` — this factory's own product declaration. Until that file declares this factory's products, `tools/roadmap.py` reports RED with the reason *"no product declaration at docs/products.json"*. A newly bootstrapped factory is therefore **specified to be red, not broken**: the red state is the honest reading of "this factory has not said what it produces yet", and the onboarding interview is the documented way out. Copy `docs/products.example.json` to `docs/products.json` and replace every placeholder.
 
 ---
 

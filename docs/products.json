@@ -1,0 +1,71 @@
+{
+  "_note": "This factory OWN product declaration. Not shipped by the template: a new factory fills its own during onboarding (see docs/processes.md, subprocess 3). The skeleton lives at docs/products.example.json.",
+  "products": [
+    {
+      "id": "template",
+      "name": "Factory Template & Add-on Packs",
+      "process": "Process 1: Work Delivery Pipeline",
+      "owner": "hq",
+      "client": "New Factory Operators & Fleet Developers",
+      "client_value": "Bootstraps production-ready autonomous factories in minutes with built-in quality gates",
+      "artifacts": [
+        "TEMPLATE/",
+        "docs/addons/"
+      ],
+      "cadence": "Weekly (Mon 09:00 MSK)",
+      "pacemaker_job": "factory-template-weekly",
+      "last_receipt": "TEMPLATE/ synchronized with 9 verified byte-identical test pairs"
+    },
+    {
+      "id": "consulting",
+      "name": "Consulting Practice & Advisories",
+      "process": "Process 3: Operational Measurement & Consulting",
+      "owner": "surveys",
+      "client": "Member Factory HQs (InferHub, Miidas, AntiSpam, Infra, OpenCrabs)",
+      "client_value": "Objective bottleneck visibility, reduced lead time, higher operational yield",
+      "artifacts": [
+        "evidence/scores/",
+        "docs/measurement-procedure.md"
+      ],
+      "cadence": "Daily (Daily 09:00 MSK)",
+      "pacemaker_job": "factory-measurement-daily",
+      "last_receipt": "evidence/scores/2026-09-16.md scored across 6 member factories"
+    },
+    {
+      "id": "growth_map",
+      "name": "Factory Growth & Maturity Map",
+      "process": "Process 1 (Work Delivery) + Process 3 (Measurement)",
+      "owner": "hq",
+      "client": "Factory Owners & Technical Leadership",
+      "client_value": "Predicts scale roadblocks (Stages 0–4) and specifies exact transition mechanics",
+      "artifacts": [
+        "docs/growth-stages.md"
+      ],
+      "cadence": "Bi-Weekly (1st & 15th)",
+      "pacemaker_job": "factory-growth-map-biweekly",
+      "last_receipt": "docs/growth-stages.md calibrated 2026-09-16 against 6 fleet factories (Stages 0–4 verified)"
+    },
+    {
+      "id": "insights",
+      "name": "Empirical Insights Story (Public Narrative)",
+      "process": "Process 3: Operational Measurement",
+      "owner": "surveys",
+      "client": "Public Engineering Audience & Operators",
+      "client_value": "Battle-tested engineering case studies on queue dwell time, fcntl.flock, and ISO 9001 self-auditing",
+      "artifacts": [
+        "evidence/insights.jsonl",
+        "docs/stories/"
+      ],
+      "cadence": "Weekly (Fri 18:00 MSK)",
+      "pacemaker_job": "factory-insights-weekly",
+      "last_receipt": "evidence/insights.jsonl (9 verified empirical insights)"
+    }
+  ],
+  "growth_status": {
+    "Stage 0": "COMPLETED",
+    "Stage 1": "COMPLETED",
+    "Stage 2": "COMPLETED",
+    "Stage 3": "ACTIVE / PILOTED",
+    "Stage 4": "IN PROGRESS"
+  }
+}

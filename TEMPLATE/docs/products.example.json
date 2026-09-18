@@ -1,0 +1,27 @@
+{
+  "_note": "SKELETON — copy this to docs/products.json and replace every value with this factory own. Until you do, tools/roadmap.py reports RED with reason \"no product declaration\". See docs/processes.md, subprocess 3 (Onboarding Interview Loop), and docs/methodology/03-documentation-standards.md.",
+  "_why": "The product list is factory data, not template law: what a factory sells, to whom, and which artifacts prove it differs per factory and is decided during onboarding. The tool ships in the template; this declaration does not.",
+  "products": [
+    {
+      "id": "REPLACE-ME",
+      "name": "REPLACE: the product name an outsider would use",
+      "process": "REPLACE: which process in docs/processes.md produces it",
+      "owner": "REPLACE: the single role that owns it (see tools/actors.txt)",
+      "client": "REPLACE: who receives it",
+      "client_value": "REPLACE: the value they get, in their words",
+      "artifacts": [
+        "REPLACE/with/a/path/that/this/factory/produces/"
+      ],
+      "cadence": "REPLACE: e.g. Weekly (Mon 09:00 MSK), or Never if it is one-off",
+      "pacemaker_job": "REPLACE: the cron job name, or none",
+      "last_receipt": "REPLACE: the most recent delivery evidence, or nothing delivered yet"
+    }
+  ],
+  "growth_status": {
+    "Stage 0": "NOT STARTED",
+    "Stage 1": "NOT STARTED",
+    "Stage 2": "NOT STARTED",
+    "Stage 3": "NOT STARTED",
+    "Stage 4": "NOT STARTED"
+  }
+}

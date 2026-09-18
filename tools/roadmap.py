@@ -2,9 +2,22 @@
 """Visual Roadmap, Process-to-Product Delivery Status, and Cadence Verification.
 
 Upholds Process 1 & Process 3 visibility by auditing and rendering:
-1. The 4 canonical factory products and their producing processes.
+1. The canonical factory products and their producing processes.
 2. The 5-stage factory growth & maturity progress.
 3. Live operational status, quality gates, and delivery cadence receipts.
+
+**Where the product list comes from.** The canonical products are *factory data*,
+not template law: what a factory sells, to whom, and which artifacts prove it
+differs per factory and is decided during onboarding. The declaration therefore
+lives in `docs/products.json` — a factory-owned file — and this tool only reads
+it. The tool ships in the template; the declaration does not, so a freshly
+bootstrapped factory has no declaration and is **RED until its onboarding
+interview fills one in** (the defined exit: `docs/processes.md`, subprocess 3
+*Onboarding Interview Loop*). The skeleton to copy is
+`docs/products.example.json`.
+
+A missing declaration is a *specified* state, never a crash: `healthy: False`
+with a reason naming the fix, and exit code 1.
 
 Usage:
   python3 tools/roadmap.py              # Generate visual markdown roadmap
@@ -24,76 +37,103 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-CANONICAL_PRODUCTS = [
-    {
-        "id": "template",
-        "name": "Factory Template & Add-on Packs",
-        "process": "Process 1: Work Delivery Pipeline",
-        "owner": "hq",
-        "client": "New Factory Operators & Fleet Developers",
-        "client_value": "Bootstraps production-ready autonomous factories in minutes with built-in quality gates",
-        "artifacts": ["TEMPLATE/", "docs/addons/"],
-        "cadence": "Weekly (Mon 09:00 MSK)",
-        "pacemaker_job": "factory-template-weekly",
-        "last_receipt": "TEMPLATE/ synchronized with 9 verified byte-identical test pairs",
-    },
-    {
-        "id": "consulting",
-        "name": "Consulting Practice & Advisories",
-        "process": "Process 3: Operational Measurement & Consulting",
-        "owner": "surveys",
-        "client": "Member Factory HQs (InferHub, Miidas, AntiSpam, Infra, OpenCrabs)",
-        "client_value": "Objective bottleneck visibility, reduced lead time, higher operational yield",
-        "artifacts": ["evidence/scores/", "docs/measurement-procedure.md"],
-        "cadence": "Daily (Daily 09:00 MSK)",
-        "pacemaker_job": "factory-measurement-daily",
-        "last_receipt": "evidence/scores/2026-09-16.md scored across 6 member factories",
-    },
-    {
-        "id": "growth_map",
-        "name": "Factory Growth & Maturity Map",
-        "process": "Process 1 (Work Delivery) + Process 3 (Measurement)",
-        "owner": "hq",
-        "client": "Factory Owners & Technical Leadership",
-        "client_value": "Predicts scale roadblocks (Stages 0–4) and specifies exact transition mechanics",
-        "artifacts": ["docs/growth-stages.md"],
-        "cadence": "Bi-Weekly (1st & 15th)",
-        "pacemaker_job": "factory-growth-map-biweekly",
-        "last_receipt": "docs/growth-stages.md calibrated 2026-09-16 against 6 fleet factories (Stages 0–4 verified)",
-    },
-    {
-        "id": "insights",
-        "name": "Empirical Insights Story (Public Narrative)",
-        "process": "Process 3: Operational Measurement",
-        "owner": "surveys",
-        "client": "Public Engineering Audience & Operators",
-        "client_value": "Battle-tested engineering case studies on queue dwell time, fcntl.flock, and ISO 9001 self-auditing",
-        "artifacts": ["evidence/insights.jsonl", "docs/stories/"],
-        "cadence": "Weekly (Fri 18:00 MSK)",
-        "pacemaker_job": "factory-insights-weekly",
-        "last_receipt": "evidence/insights.jsonl (9 verified empirical insights)",
-    },
+#: The factory-owned declaration this tool reads. Absent in the template tree:
+#: a bootstrapped factory starts RED and its onboarding interview fills this in.
+DECLARATION = "docs/products.json"
+
+#: The skeleton a factory copies. Ships in both trees (gate 12 pairs it).
+EXAMPLE = "docs/products.example.json"
+
+#: Stage definitions are template law — the maturity ladder is the same for every
+#: factory. Only the *status* of each stage is factory data, and that lives in the
+#: declaration's `growth_status` map.
+GROWTH_STAGES = [
+    {"stage": "Stage 0", "name": "Interactive Prototype", "throughput": "1–5 tasks/wk"},
+    {"stage": "Stage 1", "name": "Autonomous Intake", "throughput": "5–50 tasks/wk"},
+    {"stage": "Stage 2", "name": "Single-Writer & Locking", "throughput": "50–200 events/day"},
+    {"stage": "Stage 3", "name": "Self-Auditing Quality Loops", "throughput": "200–1000 events/day"},
+    {"stage": "Stage 4", "name": "Fleet Ecosystem & Value Optimization", "throughput": "1000+ events/day"},
 ]
 
-GROWTH_STAGES = [
-    {"stage": "Stage 0", "name": "Interactive Prototype", "throughput": "1–5 tasks/wk", "status": "COMPLETED"},
-    {"stage": "Stage 1", "name": "Autonomous Intake", "throughput": "5–50 tasks/wk", "status": "COMPLETED"},
-    {"stage": "Stage 2", "name": "Single-Writer & Locking", "throughput": "50–200 events/day", "status": "COMPLETED"},
-    {"stage": "Stage 3", "name": "Self-Auditing Quality Loops", "throughput": "200–1000 events/day", "status": "ACTIVE / PILOTED"},
-    {"stage": "Stage 4", "name": "Fleet Ecosystem & Value Optimization", "throughput": "1000+ events/day", "status": "IN PROGRESS"},
-]
+#: The fields every declared product must carry. A declaration missing one is a
+#: broken declaration, and saying so is more useful than a KeyError traceback.
+PRODUCT_FIELDS = (
+    "id",
+    "name",
+    "process",
+    "owner",
+    "client",
+    "client_value",
+    "artifacts",
+    "cadence",
+    "pacemaker_job",
+    "last_receipt",
+)
+
+
+def load_declaration(repo_root: Path) -> tuple[dict[str, Any], str]:
+    """(declaration, reason) — reason is empty when the declaration is usable.
+
+    Every failure mode here is a *reported* state, not an exception: a factory
+    that has not onboarded yet, a declaration with no products, a declaration
+    that does not parse. All three are RED with a reason naming the fix.
+    """
+    path = repo_root / DECLARATION
+    if not path.is_file():
+        return {}, (
+            f"no product declaration at {DECLARATION} — this factory has not been "
+            f"onboarded. Copy {EXAMPLE} to {DECLARATION} and declare this factory's "
+            f"products (docs/processes.md, subprocess 3: Onboarding Interview Loop)"
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, f"{DECLARATION} could not be read as JSON: {exc}"
+    if not isinstance(data, dict):
+        return {}, f"{DECLARATION} must be a JSON object, got {type(data).__name__}"
+    products = data.get("products")
+    if not isinstance(products, list) or not products:
+        return {}, (
+            f"{DECLARATION} declares no products — an empty declaration is not an "
+            f"onboarded factory (docs/processes.md, subprocess 3)"
+        )
+    for i, p in enumerate(products):
+        if not isinstance(p, dict):
+            return {}, f"{DECLARATION}: products[{i}] must be an object"
+        missing = [f for f in PRODUCT_FIELDS if f not in p]
+        if missing:
+            return {}, f"{DECLARATION}: products[{i}] ({p.get('id', '?')}) is missing {', '.join(missing)}"
+        if not isinstance(p["artifacts"], list) or not p["artifacts"]:
+            return {}, f"{DECLARATION}: products[{i}] ({p.get('id', '?')}) declares no artifacts"
+    return data, ""
 
 
 def audit_products(repo_root: Path) -> dict[str, Any]:
     """Audit existence and integrity of canonical product artifacts and cadences."""
+    declaration, reason = load_declaration(repo_root)
+    growth_status = declaration.get("growth_status") or {}
+
+    growth_stages = [
+        {**s, "status": growth_status.get(s["stage"], "NOT STARTED")}
+        for s in GROWTH_STAGES
+    ]
+
+    if reason:
+        return {
+            "healthy": False,
+            "reason": reason,
+            "declared": False,
+            "products": [],
+            "growth_stages": growth_stages,
+        }
+
     results = []
     all_ok = True
 
-    for p in CANONICAL_PRODUCTS:
+    for p in declaration["products"]:
         art_status = []
         for art in p["artifacts"]:
-            art_path = repo_root / art
-            exists = art_path.exists()
+            exists = (repo_root / art).exists()
             if not exists:
                 all_ok = False
             art_status.append({"path": art, "exists": exists})
@@ -113,19 +153,23 @@ def audit_products(repo_root: Path) -> dict[str, Any]:
 
     return {
         "healthy": all_ok,
+        "reason": "" if all_ok else "some declared product artifacts are missing",
+        "declared": True,
         "products": results,
-        "growth_stages": GROWTH_STAGES,
+        "growth_stages": growth_stages,
     }
 
 
 def generate_roadmap_markdown(repo_root: Path, show_cadence: bool = False) -> str:
     """Render markdown visual roadmap and process delivery matrix."""
     audit_data = audit_products(repo_root)
+    healthy = audit_data["healthy"]
 
     lines = [
         "# Factory Visual Roadmap & Process-to-Product Matrix",
         "",
-        "> **Operational Status:** `HEALTHY` · Multi-Factory Fleet Alignment",
+        f"> **Operational Status:** `{'HEALTHY' if healthy else 'INCOMPLETE'}` · "
+        f"Multi-Factory Fleet Alignment",
         "",
         "---",
         "",
@@ -134,6 +178,13 @@ def generate_roadmap_markdown(repo_root: Path, show_cadence: bool = False) -> st
         "| Product | Producing Process | Owner | Client & Delivered Value | Status |",
         "|---|---|---|---|:---:|",
     ]
+
+    if not audit_data["declared"]:
+        # The un-onboarded state renders as itself, not as an empty table.
+        lines.append(
+            f"| *no products declared* | — | — | **RED:** {audit_data['reason']} | "
+            f"🔴 NOT ONBOARDED |"
+        )
 
     for p in audit_data["products"]:
         status_icon = "🟢 HEALTHY" if p["healthy"] else "🔴 INCOMPLETE"
@@ -152,7 +203,7 @@ def generate_roadmap_markdown(repo_root: Path, show_cadence: bool = False) -> st
         "|:---:|---|---|:---:|",
     ])
 
-    for s in GROWTH_STAGES:
+    for s in audit_data["growth_stages"]:
         icon = "✅" if "COMPLETED" in s["status"] else ("🔄" if "ACTIVE" in s["status"] else "⏳")
         lines.append(f"| `{s['stage']}` | **{s['name']}** | `{s['throughput']}` | {icon} {s['status']} |")
 
@@ -165,6 +216,11 @@ def generate_roadmap_markdown(repo_root: Path, show_cadence: bool = False) -> st
         "| Product | Cadence Schedule | Pacemaker Job | Latest Delivery Receipt | Status |",
         "|---|---|---|---|:---:|",
     ])
+
+    if not audit_data["declared"]:
+        lines.append(
+            "| *no products declared* | — | — | *nothing to deliver yet* | 🔴 MISSING |"
+        )
 
     for p in audit_data["products"]:
         mark = "🟢 ACTIVE" if p["healthy"] else "🔴 MISSING"
@@ -190,7 +246,7 @@ def main() -> int:
 
     if args.audit or args.cadence:
         if not data["healthy"]:
-            print("Product artifact audit FAILED: some canonical product artifacts are missing", file=sys.stderr)
+            print(f"Product artifact audit FAILED: {data['reason']}", file=sys.stderr)
             return 1
         print(f"Product & cadence roadmap clean: {len(data['products'])} canonical products healthy and cadenced")
         return 0

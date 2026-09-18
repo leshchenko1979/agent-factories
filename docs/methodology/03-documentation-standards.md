@@ -37,7 +37,7 @@ When bootstrapping a new factory or onboarding a legacy codebase:
 ```mermaid
 flowchart TD
     NewRepo["Un-onboarded Factory<br/>(Documentation Score < 2/4)"] --> Interview["Onboarding Interview Session<br/>(Structured Dialogue with Operator)"]
-    Interview --> DraftDocs["Generates: docs/subject/, ONTOLOGY.md, SKILL.md, docs/processes.md"]
+    Interview --> DraftDocs["Generates: docs/subject/, ONTOLOGY.md, SKILL.md, docs/processes.md, docs/products.json"]
     DraftDocs --> AuditDocs["Documentation Score Gate<br/>(Requires docs/subject/ >= 2/4)"]
     
     AuditDocs -->|Score < 2/4| Interview
@@ -48,3 +48,4 @@ flowchart TD
 - **Stop Condition:** Terminates when all 5 documentation dimensions score $\ge 2/4$.
 - **Hard Prerequisite:** Baseline Subject Matter Documentation (`docs/subject/`) must be verified before the factory is admitted to substantive consulting or diagnostic audits.
 - **Outcome:** The factory is baseline calibrated, enabling meaningful consulting, precise root-cause analysis, and automated audits.
+- **Roadmap gate exit:** the loop also produces `docs/products.json` — this factory's own product declaration. `tools/roadmap.py` reads that file and reports RED with the reason *"no product declaration"* until it declares this factory's products. A newly bootstrapped factory is therefore **specified to be red, not broken**: the red state is the honest reading of "this factory has not said what it produces yet", and this interview is the documented way out. Copy `docs/products.example.json` to `docs/products.json` and replace every placeholder.
