@@ -100,6 +100,9 @@ command.
 | [`outreach`](addons/domain/outreach.md) | The factory contacts people outside the team and must track replies | AI AntiSpam |
 | [`watch`](addons/domain/watch.md) | The factory's job is periodic probing and ranking | InferHub Watch |
 | [`platform`](addons/domain/platform.md) | The factory runs a service for clients, not just for itself | Miidas |
+| [`consulting`](addons/domain/consulting.md) | The factory's output is advice to other factories — surveying their process and recommending fixes | The meta-factory |
+| [`roadmap`](addons/domain/roadmap.md) | The factory must show which process serves which client product, and at what stage | The meta-factory |
+| [`stories`](addons/domain/stories.md) | The factory's operational history is worth publishing as case studies | The meta-factory |
 
 They compose. A platform factory that also ships code takes `platform` +
 `ship`. A factory that watches its own product takes `watch` + `ship`.
