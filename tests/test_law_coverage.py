@@ -24,7 +24,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P3": ["tools/audit.py", "tools/ledger.py"],  # Issue board / ledger is task list
     "P4": ["tests/test_session_bindings.py", "skills/meta-factory/SKILL.md"],  # Direct message to session UUID
     "P5": ["evidence/ledger.jsonl"],  # Named place carries state
-    "P6": ["TEMPLATE/roles/hq.md", "skills/meta-factory/SKILL.md"],  # HQ works on process, not in it
+    "P6": ["TEMPLATE/roles/hq.md", "skills/meta-factory/SKILL.md", "tests/test_hq_delegation.py"],  # HQ works on process, not in it
     "P7": ["tools/hygiene.py"],  # Cron is thin pacemaker trigger
     "P8": ["tests/test_ontology.py"],  # Codify vocabulary with a test
     "P9": ["tools/audit.py"],  # Mechanical gates beat prose judgment

@@ -354,6 +354,11 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     verdict and the HEAD sha it committed at (issue #32).
     if (repo_root / "tests/test_score_gate_recorded.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_score_gate_recorded.py"])
+    # 16. HQ delegation gate: HQ implements nothing, and every law that declares lanes
+    #     declares one for HQ to delegate to (owner order 2026-09-18 — retires the
+    #     "HQ alone is a valid answer" doctrine).
+    if (repo_root / "tests/test_hq_delegation.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hq_delegation.py"])
 
     results = []
     for cmd in gates_to_run:
