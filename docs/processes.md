@@ -127,7 +127,11 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 - **Process Client:** Factory Owner / Requester
 - **Product:** Verified release — the merged change with all gates green the client consumes
 - **Custom Acceptance Criteria:**
-  1. Complete pipeline cycle delivers verified change with zero rollbacks and all 8 mechanical gates passing in <10s.
+  1. Complete pipeline cycle delivers verified change with zero rollbacks and **every**
+     mechanical gate passing (`python3 tools/audit.py` rc=0). The gate list, its count and
+     its runtime are read live from that surface, never restated here: a hardcoded figure
+     drifts the moment a gate is added, and nothing prints the stale one (this line read
+     "all 8 mechanical gates passing in <10s" while the suite was 15 gates and ~25s).
   2. First-pass yield on closed tasks $\ge 90\%$.
   3. Average task execution lead time $\le 30$ minutes with queue dwell time $< 5\%$ of lead time achieved via Dual-Rail push handoffs.
   4. Byte-for-byte synchronization of all template pairs verified by `test_template_sync.py`.
