@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.1
+version: 0.1.2
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -279,6 +279,17 @@ repo, on a surface with **one named writer**. Every other path to it is read-onl
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
 | `docs/processes.md` | the canonical process register | `HQ` | read-only |
 | `skills/meta-factory/SKILL.md` | this law | `HQ` | read-only |
+
+**Authorship is not transcription.** The writer named above decides what a surface
+*says*; applying a correction already decided is **transcription**, and transcription is
+work — it goes to the implementation lane. So `ONTOLOGY.md`, `docs/processes.md` and this
+file have one author of their *content* (`HQ`) and may be *edited* by the `Worker` lane
+whenever the change is already decided. Without this split the table contradicts the
+idle-HQ law above: a lane that owns a surface's content would also be its only permitted
+typist, which is precisely the queue that law exists to keep `HQ` out of. The writer still
+gates the result — the lane applies the correction, and the writer verifies it landed
+before the item closes. Deciding content is never delegated; typing a decision is never
+`HQ`'s.
 
 **The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate (`tools/audit.py`). A rule without an upholding mechanism is dead text and will be removed.
 
