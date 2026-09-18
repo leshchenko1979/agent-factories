@@ -41,6 +41,7 @@ PAIRS = [
     ("tests/test_audit_rates.py", "TEMPLATE/tests/test_audit_rates.py"),
     ("tests/test_hq_delegation.py", "TEMPLATE/tests/test_hq_delegation.py"),
     ("tests/test_template_integrity.py", "TEMPLATE/tests/test_template_integrity.py"),
+    ("tests/test_hygiene_inflight.py", "TEMPLATE/tests/test_hygiene_inflight.py"),
 ]
 
 

@@ -416,6 +416,11 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     (issues #33 and #35).
     if (repo_root / "tests/test_template_integrity.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_template_integrity.py"])
+    # 18. Hygiene in-flight gate: the working-tree audit separates a lane's live
+    #     work (advisory) from an abandoned path (violation), and the run-scoped
+    #     invariant still blocks with no grace (issue #38; #28 stays fixed).
+    if (repo_root / "tests/test_hygiene_inflight.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_inflight.py"])
 
     results = []
     for cmd in gates_to_run:
