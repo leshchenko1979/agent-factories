@@ -37,6 +37,7 @@ flowchart TD
 | **Queue Dwell Ratio** | Proportion of lead time spent idling in queues vs. active execution. | $\frac{t_{\text{claim}} - t_{\text{intake}}}{t_{\text{close}} - t_{\text{intake}}}$ | $< 20\%$ |
 | **Rework Share** | Rework entries as a share of all work accounted for — the closed work units plus the rework itself. The form that compares across factories of different size. | $\frac{\text{Rework Entries}}{\text{Closed Work Units} + \text{Rework Entries}}$ | Decreasing |
 | **Rework per Close** | Rework entries paid per unit of planned work closed. The form that says how much repair this factory pays for each unit it intended to deliver. | $\frac{\text{Rework Entries}}{\text{Closed Work Units}}$ | Decreasing |
+| **Change Fail Rate** | Closes whose change actually failed, as a share of closed work units. The Stability form (O2): it asks *how often a change fails*, which is a different question from how much repair is paid — see the coverage note below, without which the number is unreadable. | $\frac{\text{Closes with a Rework Entry}}{\text{Closed Work Units}}$ | Decreasing |
 | **Unit Cost per Task** | Average dollar token cost per closed deliverable. | $\frac{\text{Total USD Cost}}{\text{Closed Tasks}}$ | Tracked |
 
 > **One name, one number.** The two forms above are never both called "the rework rate":
@@ -52,6 +53,27 @@ flowchart TD
 > unit of closed work. The audit therefore reports `closed_subjects` (the denominator) and
 > `close_events` (the rows) side by side, so the denominator is reconciled rather than
 > assumed.
+>
+> **Change fail rate is a third metric, not a third form of the rework rate.** Both rework
+> forms above divide the *same* numerator — every rework entry — by a denominator they each
+> name. The change fail rate divides a **different** numerator: only those closes whose
+> change actually failed, read from the `Subject` column of `evidence/rework.md`. A defect
+> caught before any change landed carries `none` — a rework entry, but not a failed change.
+> An entry written before the column existed carries `not recorded (pre-column)` and cannot
+> be attributed either way, so it is an absence of evidence and never evidence of no
+> failure. A `#<n>` naming a work unit that never closed is likewise not a failed change.
+>
+> **The coverage is mandatory and travels with the rate.** The numerator is only as complete
+> as that column, so a bare rate is forbidden: an under-linked numerator of 0 reads as
+> "nothing ever failed" when the truth is "nothing is linked". `tools/audit.py` therefore
+> emits the rate and its linkage coverage in the same payload — `change_fail_rate`,
+> `change_fail_rate_numerator`, `change_fail_rate_denominator` (always
+> `closed_subjects`), `subject_coverage`, `subject_coverage_numerator` and
+> `subject_coverage_denominator` (always the rework entry count) — and prints them on one
+> report line, e.g. `2.9% = 1 ÷ 34 closed work units (linkage coverage: 3/22 entries carry a
+> determinate Subject)`. `tests/test_audit_rates.py` fails if the coverage is missing from
+> the payload or the report, if the numerator is stated rather than re-derived from the log,
+> or if the denominator drifts off `closed_subjects`.
 
 ---
 
