@@ -22,6 +22,16 @@ carries the date it was taken *and* names which of the two forms it is: the
 share of work, or rework per close. Two different numbers travel under one name
 otherwise, which is exactly how the wrong one gets quoted.
 
+The fourth property is the coverage figure, and it is the one figure in that
+section whose inputs no other lane can move. The rate reads the ledger's
+closed-subject set, so any lane that closes a work unit moves it — asserting it
+live would fail on someone else's commit, which is the false-RED shape this
+repo has already paid for. The coverage counts `Subject` cells against entry
+rows, and both are properties of this file alone, so the gate can assert it
+against the live measurement and mean it. It is measured through the audit's own
+predicate rather than re-derived here, so one number cannot have two
+implementations free to disagree.
+
 Run:  python3 tests/test_rework.py
 Exit: 0 all entries complete and contiguous, 1 otherwise.
 """
@@ -34,6 +44,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REWORK = REPO / "evidence" / "rework.md"
+
+# The coverage predicate lives in `tools/audit.py`, which reads the same file this
+# gate reads. It is imported rather than re-implemented so that one number cannot
+# have two implementations free to drift apart.
+sys.path.insert(0, str(REPO / "tools"))
+import audit  # noqa: E402 — the path above is set deliberately before this line
 
 COLUMNS = ["Date", "Source", "Defect", "Root cause", "Resolution", "Prevented by", "Subject"]
 PLACEHOLDERS = {"tbd", "todo", "n/a", "-", "?", "unknown", "none"}
@@ -85,6 +101,53 @@ def rate_claim_problems(text: str) -> list[str]:
             problems.append(
                 "the Rates section states a rate without " + " and ".join(missing)
                 + f": {claim[:90]!r}"
+            )
+    return problems
+
+# The coverage claim — `N of M entries carry a subject` — is the one figure in the
+# Rates section whose inputs no other lane can move: N counts the `Subject` cells
+# that are determinate (`#<n>` or `none`) and M counts entry rows, so both are
+# properties of THIS FILE. The rate and the closed-work-unit denominator are the
+# opposite case: they read the ledger's closed-subject set, which every lane moves
+# when it closes a work unit, so asserting them live would fail on another lane's
+# commit — the false-RED class #41 names. That asymmetry is why only the coverage
+# is gated, and why the measurement passes an EMPTY closed set: the value is
+# invariant to it, which is the property that makes a live assertion safe.
+COVERAGE_CLAIM = re.compile(r"(\d+)\s+of\s+(\d+)\s+entr", re.I)
+
+def measure_coverage() -> tuple[int, int]:
+    """(determinate, entries) for evidence/rework.md — the audit's own predicate.
+
+    Imported from `tools/audit.py` rather than re-derived, so the two surfaces
+    cannot drift apart about one number.
+    """
+    stats = audit.parse_rework(REWORK, set())
+    return stats["subject_coverage_numerator"], stats["subject_coverage_denominator"]
+
+def coverage_claim_problems(text: str) -> list[str]:
+    """The Rates section's coverage claim must equal the coverage measured live."""
+    body = rates_body(text)
+    if body is None:
+        return ["no '## Rates' section — a coverage claim with no section cannot be checked"]
+    # Emphasis is stripped before matching: the live sentence reads
+    # `**8 of 27** entries carry`, and a pattern requiring whitespace right after
+    # the number silently matches nothing there — which would read as "no claim
+    # stated" and pass a document whose figure is wrong. Markup must not be able
+    # to hide a claim from the gate.
+    claims = COVERAGE_CLAIM.findall(body.replace("*", ""))
+    if not claims:
+        return [
+            "the Rates section states no coverage claim — a figure that can be "
+            "deleted to dodge the gate is not gated"
+        ]
+    measured = measure_coverage()
+    problems: list[str] = []
+    for n_str, m_str in claims:
+        if (int(n_str), int(m_str)) != measured:
+            problems.append(
+                f"the Rates section claims {n_str} of {m_str} entries carry a "
+                f"subject; measured from evidence/rework.md it is "
+                f"{measured[0]} of {measured[1]}"
             )
     return problems
 
@@ -166,6 +229,7 @@ def check_text(text: str) -> tuple[list[str], int]:
 
     problems.extend(contiguity_problems(body, len(rows)))
     problems.extend(rate_claim_problems(text))
+    problems.extend(coverage_claim_problems(text))
     return problems, len(rows)
 
 def probe(name: str, text: str, want_problems: bool, failures: list[str]) -> None:
@@ -181,6 +245,25 @@ def good_row(n: int, subject: str | None = None) -> str:
     return (
         f"| 2026-09-12 | probe {n} | defect {n} | cause {n} | fix {n} | gate {n} "
         f"| {subj} |"
+    )
+
+def coverage_line(claim: str | None = None) -> str:
+    """A coverage sentence that matches the live measurement unless told otherwise.
+
+    Generated rather than typed: a hardcoded probe figure would itself go stale as
+    the log grows, and the probe would then fail the gate it exists to test.
+    """
+    if claim is None:
+        n, m = measure_coverage()
+        claim = f"**{n} of {m}** entries carry a determinate Subject"
+    return claim + "\n\n"
+
+def dated_rates(claim: str | None = None) -> str:
+    """A Rates section that satisfies every Rates rule — the probes' base document."""
+    return (
+        "## Rates\n\n"
+        "At 2026-09-12 this factory had 4 closes against 11 rework entries — "
+        "a share of 73%, or 2.75 entries per close.\n\n" + coverage_line(claim)
     )
 
 def main() -> int:
@@ -202,72 +285,114 @@ def main() -> int:
     failures: list[str] = []
     # A Rates section has to be present for the probes to be about the entries
     # table, so each document carries one that passes.
-    dated_rates = (
-        "## Rates\n\n"
-        "At 2026-09-12 this factory had 4 closes against 11 rework entries — "
-        "a share of 73%, or 2.75 entries per close.\n\n"
-    )
     entries = f"## Entries\n\n{HEADER}\n{SEPARATOR}\n"
-    two_rows = dated_rates + entries + f"{good_row(1)}\n{good_row(2)}\n"
+    two_rows = dated_rates() + entries + f"{good_row(1)}\n{good_row(2)}\n"
     probe("a well-formed two-row table passes", two_rows, False, failures)
     probe(
         "a blank line after the header is caught",
-        dated_rates + entries + f"\n{good_row(1)}\n",
+        dated_rates() + entries + f"\n{good_row(1)}\n",
         True, failures,
     )
     probe(
         "a blank line between two rows is caught",
-        dated_rates + entries + f"{good_row(1)}\n\n{good_row(2)}\n",
+        dated_rates() + entries + f"{good_row(1)}\n\n{good_row(2)}\n",
         True, failures,
     )
     probe(
         "a duplicated header is caught",
-        dated_rates + entries + f"{good_row(1)}\n{HEADER}\n{SEPARATOR}\n{good_row(2)}\n",
+        dated_rates() + entries + f"{good_row(1)}\n{HEADER}\n{SEPARATOR}\n{good_row(2)}\n",
         True, failures,
     )
     probe(
         "an undated rate claim is caught",
         "## Rates\n\nThis factory has 17 rework entries against 29 closes — "
-        "a share of 37%.\n\n" + entries + f"{good_row(1)}\n",
+        "a share of 37%.\n\n" + coverage_line() + entries + f"{good_row(1)}\n",
         True, failures,
     )
     probe(
         "a dated rate claim that names no form is caught",
         "## Rates\n\nAt 2026-09-18 the rework rate was 59%.\n\n"
-        + entries + f"{good_row(1)}\n",
+        + coverage_line() + entries + f"{good_row(1)}\n",
         True, failures,
     )
     probe(
         "prose naming the forms without a number is not a claim",
         "## Rates\n\nThe share of work and rework per close are reported "
-        "separately.\n\n" + entries + f"{good_row(1)}\n",
+        "separately.\n\n" + coverage_line() + entries + f"{good_row(1)}\n",
         False, failures,
     )
     probe(
         "a Subject naming a work unit passes",
-        dated_rates + entries + f"{good_row(1, '#31')}\n",
+        dated_rates() + entries + f"{good_row(1, '#31')}\n",
         False, failures,
     )
     probe(
         "a Subject of 'none' passes — caught before a change landed",
-        dated_rates + entries + f"{good_row(1, 'none')}\n",
+        dated_rates() + entries + f"{good_row(1, 'none')}\n",
         False, failures,
     )
     probe(
         "the pre-column marker passes",
-        dated_rates + entries + f"{good_row(1, SUBJECT_LEGACY)}\n",
+        dated_rates() + entries + f"{good_row(1, SUBJECT_LEGACY)}\n",
         False, failures,
     )
     probe(
         "a Subject that is a placeholder is caught",
-        dated_rates + entries + f"{good_row(1, 'n/a')}\n",
+        dated_rates() + entries + f"{good_row(1, 'n/a')}\n",
         True, failures,
     )
     probe(
         "an empty Subject cell is caught",
-        dated_rates + entries + f"{good_row(1, '')}\n",
+        dated_rates() + entries + f"{good_row(1, '')}\n",
         True, failures,
     )
+
+    # The coverage predicate. A predicate that has only ever seen good input has
+    # not been shown to reject bad input, so each way the claim can be wrong is
+    # probed against the live measurement.
+    live_n, live_m = measure_coverage()
+    probe(
+        "a coverage claim matching the live measurement passes",
+        dated_rates() + entries + f"{good_row(1)}\n",
+        False, failures,
+    )
+    probe(
+        "a coverage claim with the wrong numerator is caught",
+        dated_rates(f"**{live_n + 1} of {live_m}** entries carry a determinate Subject")
+        + entries + f"{good_row(1)}\n",
+        True, failures,
+    )
+    probe(
+        "a coverage claim with the wrong denominator is caught",
+        dated_rates(f"**{live_n} of {live_m + 1}** entries carry a determinate Subject")
+        + entries + f"{good_row(1)}\n",
+        True, failures,
+    )
+    probe(
+        "a Rates section with no coverage claim at all is caught",
+        dated_rates("The coverage is reported in the daily score file.")
+        + entries + f"{good_row(1)}\n",
+        True, failures,
+    )
+
+    # The property that makes a live assertion safe at all: the coverage figure is
+    # invariant to the ledger's closed-subject set, which every lane moves when it
+    # closes a work unit. If it were not, this gate would go RED on another lane's
+    # commit — the false-RED class #41 names, and the reason the *rate* is
+    # deliberately NOT gated here.
+    empty = audit.parse_rework(REWORK, set())
+    populated = audit.parse_rework(REWORK, {"#40", "#50"})
+    invariant = (
+        empty["subject_coverage_numerator"] == populated["subject_coverage_numerator"]
+        and empty["subject_coverage_denominator"]
+        == populated["subject_coverage_denominator"]
+    )
+    print(
+        f"  {'PASS' if invariant else 'FAIL'}  the coverage figure does not move "
+        f"with the closed-subject set — {live_n} of {live_m}"
+    )
+    if not invariant:
+        failures.append("the coverage figure moves with the closed-subject set")
 
     print()
     if failures:
