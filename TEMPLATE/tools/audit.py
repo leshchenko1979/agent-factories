@@ -350,6 +350,10 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     each carrying its own denominator (issue #31).
     if (repo_root / "tests/test_audit_rates.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_audit_rates.py"])
+    # 15. Score-gate verdict gate: a measurement run records its closing workspace-gate
+    #     verdict and the HEAD sha it committed at (issue #32).
+    if (repo_root / "tests/test_score_gate_recorded.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_score_gate_recorded.py"])
 
     results = []
     for cmd in gates_to_run:

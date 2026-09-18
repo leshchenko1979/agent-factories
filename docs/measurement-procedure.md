@@ -165,8 +165,10 @@ flowchart TD
    - Write dated report to `evidence/scores/<YYYY-MM-DD>.md`.
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
      carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
-     the run committed at — so the run is *recorded* as gated, not merely asserted to be
-     (§2), and the verdict is checkable after the fact by anyone reading the ledger.
+     the run committed at (`head=<full-sha>`) — those two tokens are read by
+     `tests/test_score_gate_recorded.py`, so the run is *recorded* as gated rather than
+     asserted to be (§2), and the verdict is checkable after the fact by anyone reading
+     the ledger.
    - Commit cleanly to the repository.
    - **Closing invariant — the run is not finished until the workspace gate is clean.**
      Execute `python3 tools/hygiene.py --audit` and require **rc=0** before step 8. Any
