@@ -44,6 +44,7 @@ PAIRS = [
     ("tests/test_hygiene_inflight.py", "TEMPLATE/tests/test_hygiene_inflight.py"),
     ("tests/test_close_board_recorded.py", "TEMPLATE/tests/test_close_board_recorded.py"),
     ("tests/test_ledger_commit_cites_no_rows.py", "TEMPLATE/tests/test_ledger_commit_cites_no_rows.py"),
+    ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),
 ]
 
 

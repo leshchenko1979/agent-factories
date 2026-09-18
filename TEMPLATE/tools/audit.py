@@ -434,6 +434,12 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_ledger_commit_cites_no_rows.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_commit_cites_no_rows.py"])
 
+    # 21. Commit pathspec law gate: the shared-tree rule is stated on the repo law and on
+    #     every card that commits, and it names the invocation rather than only the flags
+    #     it forbids — the shape the defect slipped past (issue #47, clause 1, P29).
+    if (repo_root / "tests/test_commit_pathspec_law.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_commit_pathspec_law.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
