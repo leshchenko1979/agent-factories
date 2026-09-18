@@ -585,6 +585,51 @@ The factory codifies a strict two-sided compaction protocol:
 
 ---
 
+## P34 — The mirror test: diagnose the mechanism before prescribing the counter
+
+An agent failure has four possible generative mechanisms — epistemic, context-capacity,
+behavioral, operational — and each one takes a different remedy. Calling them all
+"hallucination" produces the wrong prescription: prompt-bloat for what is actually a
+capacity failure, more rules for what is actually a compaction failure, or a plea to
+"be careful" for what is actually a training-induced bias. The wrong remedy does not
+merely fail; it consumes the attention budget that the right remedy needed.
+
+The mirror test is the diagnostic step that prevents this. Before designing a counter,
+ask the same question of yourself: do you forget? Have you ever "remembered" something
+that never happened? Have you lost the thread in a flood of information? Have you lost
+focus under bombardment? Every answer lands in a family, because the mechanism is the
+same one — a probabilistic memory that degrades under load.
+
+The management analogy follows, and it is the design method rather than a metaphor: a
+factory is a department. Sessions message each other, ask each other questions, hand
+work over, contend for shared resources, and complain upward. So the counters are the
+standard instruments of managing work, re-expressed in substrate — a written checklist,
+external notes, standard work, a shift handover note, peer review, single accountability,
+an escalation path, a defect log with root cause, stop-the-line authority. Two of those
+collapse into one mechanism here: peer review and job rotation both put a *different*
+reader on the work, which is why the multi-lens review law requires an isolated session
+rather than a re-read by the author.
+
+The analogy has limits, and they are load-bearing:
+
+- **A similar symptom is not the same cause.** A person who forgets may be tired; an
+  agent that forgets has had its history summarized. Choose the remedy from the
+  mechanism, not from the resemblance.
+- **Self-reported confidence carries no independent information.** An agent's statement
+  that it is sure is produced by the same process that produced the error. This is why
+  every counter is external and mechanical — receipts, gates and durable state — and
+  none of them is introspection.
+
+- *Proven:* the mirror test is the diagnostic that produced the four-family split; the
+  analogy is what maps human remedies onto substrate counters.
+- *Mechanism:* `docs/methodology/01-llm-weakness-counters.md` §4–§7 (reasoning), and the
+  cognitive-traps table in `AGENTS.md` (the short form an agent acts on).
+- *Prevents:* misdiagnosis, prompt-bloat remedies aimed at the wrong mechanism,
+  anthropomorphic remedies that ask the agent to introspect, and counters that are
+  designed from how a failure looks rather than from how it is generated.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that
