@@ -71,6 +71,8 @@ defect to fix, not a synonym to tolerate.
 | `behavioral_bias_failure` | An agent defect caused by conversational fine-tuning (RLHF) favoring politeness and premature turn yielding over task convergence | chat reflex, premature yield, early quit |
 | `operational_friction_failure` | An agent defect caused by over-generalization and unbounded search depth resulting in scope creep or repetitive tool thrashing | thrashing, scope creep, rabbit hole |
 | `context_manifest_curation` | Explicit pre-compaction prompt declaration of active and discarded skills and required tools to guarantee post-compaction state retention | manifest tagging, context filtering |
+| `cognitive_trap` | A failure mode a person and an agent share, where the counter is a practice rather than a stronger generator. Naming it a trap keeps the remedy in view | human error, mistake, quirk, weakness |
+| `mirror_test` | The diagnostic that asks whether a person fails the same way, and which of the four failure families the defect belongs to, before any counter is designed | analogy check, sanity check, gut check |
 
 <!--
 Rules for a good entry:
@@ -440,7 +442,7 @@ keep their own band — and the register itself is not yet written.
 
 ### Terms that are not synonyms
 
-Three pairs look interchangeable and are not. Conflating them is how work gets
+Four pairs look interchangeable and are not. Conflating them is how work gets
 duplicated and claims get filed against the wrong object:
 
 | Pair | The difference |
@@ -448,6 +450,7 @@ duplicated and claims get filed against the wrong object:
 | `receipt` vs `evidence` | A receipt is one tool result in one turn. Evidence is the dated file receipts are written into. A receipt that was never written down is not evidence |
 | `binding` vs `add-on` | Every binding is an add-on; not every add-on is a binding. A binding names the substrate and there is exactly one of each kind; a domain add-on is optional and plural |
 | `subagent` vs `lane` | A subagent has no channel binding and finishes. A lane is bound to a place and persists. A subagent id recorded as a lane is a defect — six member-HQ replies parked against one on 2026-09-11 |
+| `epistemic_failure` vs `context_capacity_failure` | Both leave a wrong statement behind, and only one is a hallucination. The first is generation ungrounded in facts — the fact was never in context. The second is a fact that *was* in context and is gone. The counters differ (a receipt vs a flush), so calling a lost fact a hallucination prescribes prompt-bloat that cannot work. Run the `mirror_test` before naming either |
 
 ---
 
