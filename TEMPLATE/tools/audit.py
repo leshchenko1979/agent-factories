@@ -19,6 +19,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +27,24 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# The `Subject` column's vocabulary, named once. `tests/test_rework.py` enforces the
+# same three values on the document; they live here as well because the audit *reads*
+# the column to derive a numerator, and a second hand-written pattern would let the
+# gate and the reader disagree about what a determinate link looks like.
+SUBJECT_NONE = "none"
+SUBJECT_PRE_COLUMN = "not recorded (pre-column)"
+SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
 
-def parse_ledger(ledger_path: Path) -> dict[str, Any]:
-    """Parse ledger.jsonl and calculate operational delivery metrics, including token/cost economics."""
+
+
+def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
+    """Parse ledger.jsonl and calculate operational delivery metrics, including token/cost economics.
+
+    Returns the metrics payload *and* the set of distinct closed work units. The set
+    travels beside the numbers rather than being re-derived per consumer, because it
+    IS the denominator every per-task rate names: handing each rate its own copy of
+    the count is how two rates come to state different populations (#34).
+    """
     if not ledger_path.is_file():
         return {
             "exists": False,
@@ -50,7 +66,7 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
             "total_turns": 0,
             "latest_closed_subject": None,
             "spot_check": None,
-        }
+        }, set()
 
     events: list[dict[str, Any]] = []
     with open(ledger_path, "r", encoding="utf-8") as f:
@@ -206,10 +222,10 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         "total_turns": total_turns,
         "latest_closed_subject": latest_closed,
         "spot_check": spot_check,
-    }
+    }, set(subjects_close)
 
 
-def parse_rework(rework_path: Path, closed_subjects: int) -> dict[str, Any]:
+def parse_rework(rework_path: Path, closed_subject_set: set[str]) -> dict[str, Any]:
     """Parse rework.md for defects, unprevented items, and both rework rates.
 
     Two forms are returned, each named with its own denominator, because two
@@ -222,8 +238,19 @@ def parse_rework(rework_path: Path, closed_subjects: int) -> dict[str, Any]:
                            planned work.
 
     The denominator is distinct closed SUBJECTS, never close rows: a subject
-    re-closed after a re-open must not inflate it.
+    re-closed after a re-open must not inflate it. It arrives as the ledger's own
+    closed-subject SET rather than as a count, so the population cannot drift between
+    this function and its caller.
+
+    A third metric is returned: **change fail rate** (O2 Stability) — closes that
+    produced a rework entry ÷ closed work units — with its linkage coverage. The
+    numerator is DERIVED from the `Subject` column, never stated: an entry counts only
+    when its Subject names a work unit that actually closed, so a `#N` pointing at
+    something that never landed is not a failed change. Coverage is mandatory and
+    travels in the same payload, because an under-linked numerator of 0 reads as
+    "nothing ever failed" when the truth is "nothing is linked".
     """
+    closed_subjects = len(closed_subject_set)
     if not rework_path.is_file():
         return {
             "exists": False,
@@ -232,10 +259,18 @@ def parse_rework(rework_path: Path, closed_subjects: int) -> dict[str, Any]:
             "closed_subjects": closed_subjects,
             "rework_share": 0.0,
             "rework_per_close": 0.0,
+            "change_fail_rate": 0.0,
+            "change_fail_rate_numerator": 0,
+            "change_fail_rate_denominator": closed_subjects,
+            "subject_coverage": 0.0,
+            "subject_coverage_numerator": 0,
+            "subject_coverage_denominator": 0,
         }
 
     entries = 0
     unprevented = 0
+    determinate = 0
+    change_failures = 0
     with open(rework_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -246,9 +281,19 @@ def parse_rework(rework_path: Path, closed_subjects: int) -> dict[str, Any]:
                     prevented_col = parts[6].lower()
                     if "nothing yet" in prevented_col or not prevented_col:
                         unprevented += 1
+                    subject_col = parts[7] if len(parts) > 7 else ""
+                    if SUBJECT_WORK_UNIT_RE.fullmatch(subject_col):
+                        determinate += 1
+                        if subject_col in closed_subject_set:
+                            change_failures += 1
+                    elif subject_col == SUBJECT_NONE:
+                        # Caught before any change landed: determinate, not a failure.
+                        determinate += 1
 
     rework_share = (entries / (closed_subjects + entries)) if (closed_subjects + entries) > 0 else 0.0
     rework_per_close = (entries / closed_subjects) if closed_subjects > 0 else 0.0
+    change_fail_rate = (change_failures / closed_subjects) if closed_subjects > 0 else 0.0
+    subject_coverage = (determinate / entries) if entries > 0 else 0.0
 
     return {
         "exists": True,
@@ -257,6 +302,12 @@ def parse_rework(rework_path: Path, closed_subjects: int) -> dict[str, Any]:
         "closed_subjects": closed_subjects,
         "rework_share": round(rework_share, 4),
         "rework_per_close": round(rework_per_close, 4),
+        "change_fail_rate": round(change_fail_rate, 4),
+        "change_fail_rate_numerator": change_failures,
+        "change_fail_rate_denominator": closed_subjects,
+        "subject_coverage": round(subject_coverage, 4),
+        "subject_coverage_numerator": determinate,
+        "subject_coverage_denominator": entries,
     }
 
 
@@ -434,6 +485,7 @@ def format_report_markdown(
         f"| **Rework Entries** | `{rework_stats.get('total_entries', 0)}` | Defect count recorded in rework.md |",
         f"| **Rework Share** | `{round(rework_stats.get('rework_share', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ ({rework_stats.get('closed_subjects', 0)} closed subjects + {rework_stats.get('total_entries', 0)} rework entries) |",
         f"| **Rework per Close** | `{round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ {rework_stats.get('closed_subjects', 0)} closed subjects |",
+        f"| **Change Fail Rate** | `{round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}%` | {rework_stats.get('change_fail_rate_numerator', 0)} closes that produced a rework entry ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units — **linkage coverage `{rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)}`** entries carry a determinate Subject ({round(rework_stats.get('subject_coverage', 0.0) * 100, 1)}%); read the rate only against this coverage |",
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Mean intake→close duration over {len(ledger_stats.get('lead_times_sec', []))} sampled subjects |",
         f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry |",
         f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
@@ -497,8 +549,8 @@ def main() -> int:
     ledger_file = REPO_ROOT / "evidence/ledger.jsonl"
     rework_file = REPO_ROOT / "evidence/rework.md"
 
-    ledger_stats = parse_ledger(ledger_file)
-    rework_stats = parse_rework(rework_file, ledger_stats.get("closed_subjects", 0))
+    ledger_stats, closed_subject_set = parse_ledger(ledger_file)
+    rework_stats = parse_rework(rework_file, closed_subject_set)
     cadence_stats = check_cadence_integrity(ledger_file)
     gate_results = [] if args.no_gates else execute_mechanical_gates(REPO_ROOT)
 
@@ -532,6 +584,7 @@ def main() -> int:
     print(f"  - First-Pass Yield: {round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}% ({ledger_stats.get('runs_by_outcome', {}).get('accepted', 0)} accepted runs ÷ {ledger_stats.get('run_events', 0)} total runs)")
     print(f"  - Closed Subjects: {ledger_stats.get('closed_tasks', 0)} (close rows: {ledger_stats.get('close_events', 0)}) | Intake Subjects: {ledger_stats.get('intake_tasks', 0)}")
     print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (share: {round(rework_stats.get('rework_share', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ ({rework_stats.get('closed_subjects', 0)} + {rework_stats.get('total_entries', 0)}) | per close: {round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ {rework_stats.get('closed_subjects', 0)})")
+    print(f"  - Change Fail Rate: {round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}% = {rework_stats.get('change_fail_rate_numerator', 0)} ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units (linkage coverage: {rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)} entries carry a determinate Subject — a bare rate is never read alone)")
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
