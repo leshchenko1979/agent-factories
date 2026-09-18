@@ -8,11 +8,10 @@ Mines operational friction clusters across:
   4. Member factory incident notifications
 
 Synthesizes structured architectural insights grounded in literature
-(VSM, IDEF0, TPS/Kaizen, Requisite Variety) and optionally files GitHub issues
-and appends to evidence/insights.jsonl.
+(VSM, IDEF0, TPS/Kaizen, Requisite Variety) and appends them to evidence/insights.jsonl.
 
 Usage:
-  python3 tools/synthesize_insights.py [--audit] [--json] [--file-issue]
+  python3 tools/synthesize_insights.py [--audit] [--json]
 """
 
 from __future__ import annotations
@@ -83,21 +82,27 @@ def mine_rework_defects() -> list[FrictionPattern]:
             continue
         if in_table and line.startswith("|") and not line.startswith("|---"):
             cols = [c.strip() for c in line.split("|")[1:-1]]
-            if len(cols) >= 4:
-                defect, cause, fix, prevented_by = cols[1], cols[2], cols[3], cols[4]
-                text = f"{defect} {cause} {prevented_by}".lower()
-                if "lock" in text or "concurr" in text or "flock" in text or "race" in text:
-                    categories["concurrency_locking"].append(defect)
-                elif "symlink" in text or "role" in text or "skill" in text:
-                    categories["symlink_role_resolution"].append(defect)
-                elif "schema" in text or "detail" in text:
-                    categories["schema_drift"].append(defect)
-                elif "vocab" in text or "leak" in text or "synonym" in text:
-                    categories["vocabulary_leak"].append(defect)
-                elif "cadence" in text or "cron" in text or "pacemaker" in text:
-                    categories["cadence_pacemaker_stall"].append(defect)
-                else:
-                    categories["generic"].append(defect)
+            # Rework schema: Date | Source | Defect | Root cause | Resolution |
+            # Prevented by | Subject. The guard used to admit 4 columns and then read
+            # index 4, so it mis-mapped every field (Source was mined as the defect)
+            # and raised IndexError on a short row — aborting the whole synthesis pass
+            # instead of skipping the one row.
+            if len(cols) < 7:
+                continue
+            defect, cause, fix, prevented_by = cols[2], cols[3], cols[4], cols[5]
+            text = f"{defect} {cause} {prevented_by}".lower()
+            if "lock" in text or "concurr" in text or "flock" in text or "race" in text:
+                categories["concurrency_locking"].append(defect)
+            elif "symlink" in text or "role" in text or "skill" in text:
+                categories["symlink_role_resolution"].append(defect)
+            elif "schema" in text or "detail" in text:
+                categories["schema_drift"].append(defect)
+            elif "vocab" in text or "leak" in text or "synonym" in text:
+                categories["vocabulary_leak"].append(defect)
+            elif "cadence" in text or "cron" in text or "pacemaker" in text:
+                categories["cadence_pacemaker_stall"].append(defect)
+            else:
+                categories["generic"].append(defect)
 
     for cat, items in categories.items():
         if len(items) >= 2:
