@@ -35,11 +35,17 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 REWORK = REPO / "evidence" / "rework.md"
 
-COLUMNS = ["Date", "Source", "Defect", "Root cause", "Resolution", "Prevented by"]
+COLUMNS = ["Date", "Source", "Defect", "Root cause", "Resolution", "Prevented by", "Subject"]
 PLACEHOLDERS = {"tbd", "todo", "n/a", "-", "?", "unknown", "none"}
 
-HEADER = "| Date | Source | Defect | Root cause | Resolution | Prevented by |"
-SEPARATOR = "|---|---|---|---|---|---|"
+# `Subject` is the one column where `none` is a *defined answer* rather than a
+# dodge: it means the defect was caught before any change landed. So the column
+# is exempt from PLACEHOLDERS and carries its own vocabulary instead.
+SUBJECT_LEGACY = "not recorded (pre-column)"
+SUBJECT_RE = re.compile(r"#\d+")
+
+HEADER = "| Date | Source | Defect | Root cause | Resolution | Prevented by | Subject |"
+SEPARATOR = "|---|---|---|---|---|---|---|"
 
 def section_body(text: str) -> str | None:
     """The body of the `## Entries` section, or None when it is absent."""
@@ -143,6 +149,15 @@ def check_text(text: str) -> tuple[list[str], int]:
         for label, value in zip(COLUMNS[1:], cells[1:]):
             if not value:
                 problems.append(f"row {n} ({date}): '{label}' is empty")
+            elif label == "Subject":
+                # The Subject column's own vocabulary — see SUBJECT_LEGACY.
+                if value not in ("none", SUBJECT_LEGACY) and not SUBJECT_RE.fullmatch(value):
+                    problems.append(
+                        f"row {n} ({date}): 'Subject' is {value!r} — expected "
+                        "'#<n>' (the work unit whose change failed), 'none' "
+                        "(caught before any change landed), or "
+                        f"{SUBJECT_LEGACY!r}"
+                    )
             elif value.strip("`").strip().lower() in PLACEHOLDERS:
                 problems.append(
                     f"row {n} ({date}): '{label}' is a placeholder ({value!r}) — "
@@ -161,8 +176,12 @@ def probe(name: str, text: str, want_problems: bool, failures: list[str]) -> Non
     if not ok:
         failures.append(name)
 
-def good_row(n: int) -> str:
-    return f"| 2026-09-12 | probe {n} | defect {n} | cause {n} | fix {n} | gate {n} |"
+def good_row(n: int, subject: str | None = None) -> str:
+    subj = f"#{n}" if subject is None else subject
+    return (
+        f"| 2026-09-12 | probe {n} | defect {n} | cause {n} | fix {n} | gate {n} "
+        f"| {subj} |"
+    )
 
 def main() -> int:
     if not REWORK.is_file():
@@ -223,6 +242,31 @@ def main() -> int:
         "## Rates\n\nThe share of work and rework per close are reported "
         "separately.\n\n" + entries + f"{good_row(1)}\n",
         False, failures,
+    )
+    probe(
+        "a Subject naming a work unit passes",
+        dated_rates + entries + f"{good_row(1, '#31')}\n",
+        False, failures,
+    )
+    probe(
+        "a Subject of 'none' passes — caught before a change landed",
+        dated_rates + entries + f"{good_row(1, 'none')}\n",
+        False, failures,
+    )
+    probe(
+        "the pre-column marker passes",
+        dated_rates + entries + f"{good_row(1, SUBJECT_LEGACY)}\n",
+        False, failures,
+    )
+    probe(
+        "a Subject that is a placeholder is caught",
+        dated_rates + entries + f"{good_row(1, 'n/a')}\n",
+        True, failures,
+    )
+    probe(
+        "an empty Subject cell is caught",
+        dated_rates + entries + f"{good_row(1, '')}\n",
+        True, failures,
     )
 
     print()
