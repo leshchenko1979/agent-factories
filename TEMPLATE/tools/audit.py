@@ -440,6 +440,13 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_commit_pathspec_law.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_commit_pathspec_law.py"])
 
+    # 22. Criteria-count gate: every stated quality-criteria/family count on a scanned law
+    #     or doc surface matches the live rubric, with a labelled historical reference
+    #     excused — the number was stated in twelve places and checked in none, so it
+    #     drifted silently (issue #43, P29).
+    if (repo_root / "tests/test_criteria_count.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_criteria_count.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
