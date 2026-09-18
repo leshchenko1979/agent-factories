@@ -35,11 +35,16 @@ recalled from the last report.
 |---|---|---|
 | **Rework Share** (share of work) | rework entries ÷ (closed work units + rework entries) | `tools/ledger.py` — `closed_subjects` (distinct work units; **not** `close_events`, which counts rows — a re-opened subject carries two) |
 | **Rework per Close** | rework entries ÷ closed work units | `tools/ledger.py` — `closed_subjects` (distinct work units; **not** `close_events`, which counts rows — a re-opened subject carries two) |
-| **Change fail rate** | rework entries caused by a landed change ÷ changes landed | `git rev-list --count HEAD` |
+| **Change fail rate** | closes that produced a rework entry ÷ closed work units | `tools/ledger.py` — `closed_subjects` (distinct work units; the same denominator as Rework per Close — **not** `git rev-list --count HEAD`, which counts every commit ever made, nor `close_events`, which counts rows) |
 
 Two forms of the rework number are reported because they answer different
 questions: the *share* is comparable across factories, and *per close* is the
 one that tells this factory how much repair it pays per unit of planned work.
+
+**Change fail rate belongs to O2 Stability** (`docs/quality-criteria.md`), not to
+the rework family: a *landed change* is a closed work unit, and a change
+*needing immediate intervention* is one whose close produced a rework entry. The
+audit field is pending in #34; until it lands the rate is computed from the ledger.
 
 **Read the first readings with care.** At 2026-09-12 this factory had 4 closes
 against 11 rework entries — a share of 73%, or 2.75 entries per close, which is
