@@ -376,16 +376,18 @@ process, while **process implementers** execute the runs.
 | Participant | Owns | Duties | Does not do |
 |---|---|---|---|
 | **Owner** | the direction | approves, directs, rules on policy | is not a lane and not a role |
-| **HQ** | the process | rules, dispatches, authors the law, runs the gates | implements a member's work, or work it has already dispatched |
+| **HQ** | the process | rules, dispatches, authors the law, runs the gates; kept idle for incoming managerial work | implements anything — every work item goes to a lane |
 | **Triage** | intake and routing | files work units, checks claims, assigns, watches execution, closes, records rework | decides direction; implements |
 | **Surveys** | measurement | runs the measurement, reads the band, audits the processes | adjudicates a member's product decisions |
 | **Delegate** | member conversation | converses with member HQs and their delegates | does a member's work |
-| **Worker** *(template card)* | one work unit | executes, verifies, reports | closes its own place; widens scope |
+| **Worker** | one work unit | executes, verifies, reports | closes its own place; widens scope |
 | **Carrier** *(template card)* | the ship chain | merges, verifies the artifact, records the ship, rolls back | decides whether the change was right |
 
-This factory runs no `Worker` and no `Carrier` lane: with `ROLES` set to `HQ`
-alone there is no lane to delegate to, so HQ implements its own repo. The two
-rows are the template's cards, not this factory's lanes.
+This factory runs a `Worker` lane — the implementation lane `HQ` delegates work
+items to — and no `Carrier` lane. The `Worker` row is this factory's lane, not
+only the template's card: `HQ` implements nothing, so without it a work item
+would have nowhere to go. `Carrier` stays a template card, since nothing here
+ships a binary.
 
 ### The processes
 

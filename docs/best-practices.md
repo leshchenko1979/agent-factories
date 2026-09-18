@@ -92,14 +92,21 @@ is on that surface and how the name changes.
 
 ## P6 — HQ works *on* the process, not *in* it
 
-The HQ role dispatches; it does not implement work it has dispatched. Hands-on
-work goes to a lane — unless `ROLES` is `HQ` alone, where there is no lane and
-HQ is the factory's implementer. Sub-agents are reserved for **review** tasks,
-where fresh context without session bias is the whole point.
+The HQ role dispatches; it implements nothing. Every work item — including work on
+the factory's own repo — goes to a lane, so HQ stays idle for the incoming
+managerial work that is its job: a new finding, ruling or owner order never waits
+behind a diff HQ is in the middle of writing. A factory whose `ROLES` is `HQ`
+alone has no implementer, and that is a **missing lane**, not a role HQ absorbs —
+create the `Worker` lane before the first work item, not after. Sub-agents are
+reserved for **review** tasks, where fresh context without session bias is the
+whole point.
 
-- *Proven:* inferhub-watch (delegation law, owner order).
-- *Prevents:* HQ becoming the bottleneck and the single point of
-  failure, and review being done by the author of the thing under review.
+- *Proven:* inferhub-watch (delegation law, owner order); agent-factories (owner
+  order 2026-09-18 — the HQ lane was implementing its own repo, and stood up a
+  `Worker` lane to delegate to).
+- *Prevents:* HQ becoming the bottleneck and the single point of failure, a work
+  item queueing behind HQ's own diff, and review being done by the author of the
+  thing under review.
 
 ## P7 — Cron is a thin pacemaker trigger, not the worker
 

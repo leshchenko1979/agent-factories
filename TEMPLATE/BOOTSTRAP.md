@@ -17,7 +17,7 @@ Write down, before creating anything:
 |---|---|
 | One sentence: what does this factory deliver? | `PURPOSE` |
 | What is the smallest thing that proves it works? | the first issue |
-| Which roles does it need? (`HQ` alone is a valid answer) | `ROLES` |
+| Which roles does it need? (`HQ` **plus at least one lane to delegate to** — `HQ` alone is not a valid answer) | `ROLES` |
 | Which domain topics does it need? | `DOMAINS` |
 | Which add-ons? | `ADDONS` → [docs/addons.md](../docs/addons.md) |
 | What command can decide "done"? | `GATES` |
@@ -78,11 +78,17 @@ Create the spine topics, in this order:
 | Topic | Purpose |
 |---|---|
 | `HQ` | The HQ lane: process work, rulings, gates |
-| `Triage` | Intake, routing, enforcement — omit only if `ROLES` is `HQ` alone |
+| `Triage` | Intake, routing, enforcement |
 | `{{DOMAIN}}` … | One per domain topic, in the order the factory will use them |
 
 Do **not** create work-unit topics now. They are created at spawn time, named
 `Worker — #N <title>`, and renamed to `Done — #N <title>` on close.
+
+`Worker` is nevertheless a **required** member of `ROLES`. `HQ` implements
+nothing — it is kept idle for incoming managerial work — so a factory without an
+implementation lane has nowhere to put its first work item. The lane is created
+with the work unit, not with the spine; what must exist from the start is the
+role, so the first dispatch has a destination.
 
 Promote the factory bot to admin with `manage_topics`. Without it the bot
 cannot create or rename the work-unit topics, and the whole naming law is
@@ -150,6 +156,7 @@ role in `ROLES`.
 The law must state, at minimum:
 
 - the three legs (law, chat, board) and where each lives;
+- that `HQ` implements nothing and delegates every work item to a lane;
 - how a lane is briefed (a session notification to the session UUID — never a
   chat post);
 - how a work unit closes (rename the topic, evidence in the topic);

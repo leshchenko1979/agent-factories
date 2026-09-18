@@ -62,10 +62,17 @@ is a leak: move it to the binding.
 
 | Role | Owns | Card |
 |---|---|---|
-| `HQ` | The process: dispatch, rulings, gates. Does not implement a member's work; implements its own repo when `ROLES` is `HQ` alone. | [`roles/hq.md`](roles/hq.md) |
+| `HQ` | The process: dispatch, rulings, gates. Implements nothing — kept idle for incoming managerial work; every work item goes to a lane. | [`roles/hq.md`](roles/hq.md) |
 | `Triage` | Intake, routing, enforcement | [`roles/triage.md`](roles/triage.md) |
 | `Worker` | One work unit, start to close | [`roles/worker.md`](roles/worker.md) |
 | `Carrier` | Merge and release chain (add-on `ship`) | [`roles/carrier.md`](roles/carrier.md) |
+
+**The minimum role set is `HQ` plus at least one lane it can delegate to.** `HQ` is
+kept idle for incoming managerial work — dispatch, rulings, gates, owner conversation —
+and implements nothing, so a factory whose `ROLES` is `HQ` alone has no implementer and
+no factory: its first work item has nowhere to go. Set `ROLES` to `HQ` and a `Worker`
+before the first issue, not after. The cards below are the core set; a factory that needs
+a lane the core set does not name declares it in `tools/actors.txt`.
 
 A session loads **its own card and this file** — not the other cards.
 
