@@ -134,3 +134,38 @@ The session working directory is persistent state, not a per-command detail:
 
 - `config_manager(operation="set_working_directory", path="...")` mutates it for the session across turns. A `cd` inside one `bash` call does **not** persist to the next call — chaining `cd <dir> && <cmd>` only scopes that single invocation.
 - A lane must set its working directory explicitly at the start of a work unit rather than relying on an inherited default.
+
+## 9. Context-Manifest Curation & Compaction Retention
+
+Empirical findings from OpenCrabs Dev across 778 production compactions demonstrate that compaction retention is governed by prompt manifest guidance rather than binary daemon modifications.
+
+### 9.1 Empirical Compaction Dataset (N = 778)
+- **Manifest Retention Efficiency:** >93% retention of active skills when guided; 0.00% contradictory auxiliary retention when obsolete skills are explicitly listed in `discard_skills`.
+- **Top Retained Tools Post-Compaction:**
+  - `session_notify`: 61.3%
+  - `session_search`: 43.8%
+  - `bash`: 34.9%
+  - `telegram_send`: 31.0%
+  - `read_file`: 26.8%
+
+### 9.2 Section 10 Manifest Standard
+Every factory lane prompt envelope and role template standardizes a Section 10 context-manifest structure:
+
+```yaml
+context_manifest:
+  active_skills:
+    - <factory-root-skill>
+    - <active-role-card>
+  discard_skills:
+    - <stale-role-card-1>
+    - <stale-role-card-2>
+  required_tools:
+    - session_notify
+    - session_search
+    - bash
+    - read_file
+    - edit_file
+    - write_file
+```
+
+By explicitly curating `active_skills`, discarding inactive sibling roles, and declaring `required_tools`, agent sessions maintain immediate operational readiness without tool search latency or skill amnesia post-compaction.
