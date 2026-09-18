@@ -291,6 +291,20 @@ gates the result — the lane applies the correction, and the writer verifies it
 before the item closes. Deciding content is never delegated; typing a decision is never
 `HQ`'s.
 
+**A commit message names the concern; it does not cite row numbers.** A ledger row's
+number is assigned *inside* the append lock, so it cannot be known before the append —
+and by the time the commit runs, another lane may have appended further rows. Three
+instances in one day carried the same shape: `d763277` named `n=211` and added
+`211/212/213`; `d75b19a` named `212/213` and added `214/215`; `b12047e` named `n=259`
+and added `n=261`. That is structural, not carelessness. Where a row must be cited,
+cite it in the ledger's own `detail` text — written after the append, where the real
+number can be read — or read it back before committing. This follows from the ruling
+that the commit is **transport, not identity**: the row's identity is its `n`, so a
+message asserting row numbers is a claim that can be wrong, and obeying this clause
+removes the claim rather than policing it. It is upheld forward-only by
+`tests/test_ledger_commit_cites_no_rows.py` — a history-wide form would be permanently
+red, since 55 of 146 historical ledger commits cite row numbers in their subject.
+
 **The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate (`tools/audit.py`). A rule without an upholding mechanism is dead text and will be removed.
 
 **The Single Ownership Principle (P30):** Every declared process has exactly one named process owner role. Shared ownership is zero ownership.

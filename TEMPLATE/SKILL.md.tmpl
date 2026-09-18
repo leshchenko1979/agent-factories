@@ -258,6 +258,17 @@ still gates the result — the lane applies the correction, and the writer verif
 landed before the item closes. Deciding content is never delegated; typing a decision is
 never `HQ`'s.
 
+**A commit message names the concern; it does not cite row numbers.** A ledger row's
+number is assigned *inside* the append lock, so it cannot be known before the append —
+and by the time the commit runs, another lane may have appended further rows. A message
+asserting row numbers is therefore a claim that can be wrong; obeying this clause removes
+the claim rather than policing it. Where a row must be cited, cite it in the ledger's own
+`detail` text — written after the append, where the real number can be read — or read it
+back before committing. This follows from the ruling that the commit is **transport, not
+identity**: the row's identity is its `n`. It is upheld **forward-only**, bounded by a
+marker commit recorded in the gate — a history-wide form would be permanently red in any
+factory where the rule landed after the habit did.
+
 **The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate. A rule without an upholding mechanism is dead text.
 
 **The Single Ownership Principle (P30):** Every declared process has exactly one named process owner role. Shared ownership is zero ownership.
