@@ -428,6 +428,12 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_close_board_recorded.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_board_recorded.py"])
 
+    # 20. Ledger clause gate: a commit carrying the ledger names the concern and cites no
+    #     row numbers — forward-only, bounded by a marker commit, because a history-wide
+    #     form would be permanently red (issue #47, clause 4).
+    if (repo_root / "tests/test_ledger_commit_cites_no_rows.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_commit_cites_no_rows.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
