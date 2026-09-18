@@ -35,6 +35,8 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
             "total_events": 0,
             "event_counts": {},
             "closed_tasks": 0,
+            "closed_subjects": 0,
+            "close_events": 0,
             "intake_tasks": 0,
             "run_events": 0,
             "runs_by_outcome": {},
@@ -78,7 +80,8 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
     total_tokens_out = 0
     total_turns = 0
 
-    successful_closed_tasks = 0
+    successful_closed_subjects: set[str] = set()
+    close_events = 0
 
     for ev in events:
         ev_type = ev.get("event", "unknown")
@@ -118,13 +121,14 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
             subjects_claim[subj] = ts
         elif ev_type == "close" and subj:
             subjects_close[subj] = ts
+            close_events += 1
             close_outcome = "accepted"
             for part in detail.split():
                 if part.startswith("outcome="):
                     close_outcome = part.split("=", 1)[1]
                     break
             if close_outcome == "accepted":
-                successful_closed_tasks += 1
+                successful_closed_subjects.add(subj)
 
             if subj in subjects_intake:
                 try:
@@ -152,7 +156,12 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         yield_val = 1.0
 
     avg_lead_time = (sum(lead_times_sec) / len(lead_times_sec)) if lead_times_sec else 0.0
+    # The work unit is a distinct closed SUBJECT, never a close ROW: a subject that is
+    # re-opened and closed again carries two close rows, and counting rows would inflate
+    # every per-task denominator. `close_events` travels beside it so the two are
+    # reconcilable rather than silently disagreeing.
     closed_count = len(subjects_close)
+    successful_closed_tasks = len(successful_closed_subjects)
     avg_cost_per_closed_task = (total_cost_usd / closed_count) if closed_count > 0 else 0.0
     cost_per_successful_task = (total_cost_usd / successful_closed_tasks) if successful_closed_tasks > 0 else 0.0
 
@@ -180,6 +189,8 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
         "total_events": len(events),
         "event_counts": event_counts,
         "closed_tasks": closed_count,
+        "closed_subjects": closed_count,
+        "close_events": close_events,
         "intake_tasks": len(subjects_intake),
         "run_events": total_runs,
         "runs_by_outcome": runs_by_outcome,
@@ -198,14 +209,29 @@ def parse_ledger(ledger_path: Path) -> dict[str, Any]:
     }
 
 
-def parse_rework(rework_path: Path, closed_tasks: int) -> dict[str, Any]:
-    """Parse rework.md to extract defects, unprevented items, and rework rate."""
+def parse_rework(rework_path: Path, closed_subjects: int) -> dict[str, Any]:
+    """Parse rework.md for defects, unprevented items, and both rework rates.
+
+    Two forms are returned, each named with its own denominator, because two
+    different numbers travel under the name "rework rate" and the wrong one gets
+    quoted:
+
+      * rework_share     — entries ÷ (closed subjects + entries): how much of the
+                           work done was repair. The form comparable across factories.
+      * rework_per_close — entries ÷ closed subjects: repair paid per unit of
+                           planned work.
+
+    The denominator is distinct closed SUBJECTS, never close rows: a subject
+    re-closed after a re-open must not inflate it.
+    """
     if not rework_path.is_file():
         return {
             "exists": False,
             "total_entries": 0,
             "unprevented_entries": 0,
-            "rework_rate": 0.0,
+            "closed_subjects": closed_subjects,
+            "rework_share": 0.0,
+            "rework_per_close": 0.0,
         }
 
     entries = 0
@@ -221,13 +247,16 @@ def parse_rework(rework_path: Path, closed_tasks: int) -> dict[str, Any]:
                     if "nothing yet" in prevented_col or not prevented_col:
                         unprevented += 1
 
-    rework_rate = (entries / max(1, closed_tasks)) if closed_tasks > 0 else 0.0
+    rework_share = (entries / (closed_subjects + entries)) if (closed_subjects + entries) > 0 else 0.0
+    rework_per_close = (entries / closed_subjects) if closed_subjects > 0 else 0.0
 
     return {
         "exists": True,
         "total_entries": entries,
         "unprevented_entries": unprevented,
-        "rework_rate": round(rework_rate, 4),
+        "closed_subjects": closed_subjects,
+        "rework_share": round(rework_share, 4),
+        "rework_per_close": round(rework_per_close, 4),
     }
 
 
@@ -317,6 +346,10 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     # 13. Hygiene namespace gate: the scratch audit globs only owned prefixes
     if (repo_root / "tests/test_hygiene_namespace.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_namespace.py"])
+    # 14. Rework-rate form gate: the rework number is reported in two named forms,
+    #     each carrying its own denominator (issue #31).
+    if (repo_root / "tests/test_audit_rates.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_audit_rates.py"])
 
     results = []
     for cmd in gates_to_run:
@@ -382,14 +415,15 @@ def format_report_markdown(
         "| Metric | Value | Reference / Derivation |",
         "|---|---|---|",
         f"| **Total Ledger Events** | `{ledger_stats.get('total_events', 0)}` | Continuous ledger sequence |",
-        f"| **Closed Tasks** | `{ledger_stats.get('closed_tasks', 0)}` | Tasks reaching verified close |",
-        f"| **First-Pass Yield** | `{round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}%` | Accepted runs ÷ total runs |",
+        f"| **Closed Tasks** | `{ledger_stats.get('closed_tasks', 0)}` | Distinct closed subjects; `{ledger_stats.get('close_events', 0)}` close rows ({ledger_stats.get('close_events', 0) - ledger_stats.get('closed_tasks', 0)} re-close of a re-opened subject) |",
+        f"| **First-Pass Yield** | `{round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}%` | {ledger_stats.get('runs_by_outcome', {}).get('accepted', 0)} accepted runs ÷ {ledger_stats.get('run_events', 0)} total runs |",
         f"| **Rework Entries** | `{rework_stats.get('total_entries', 0)}` | Defect count recorded in rework.md |",
-        f"| **Rework Rate** | `{round(rework_stats.get('rework_rate', 0.0) * 100, 1)}%` | Rework entries ÷ closed tasks |",
-        f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Average duration from intake to close |",
+        f"| **Rework Share** | `{round(rework_stats.get('rework_share', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ ({rework_stats.get('closed_subjects', 0)} closed subjects + {rework_stats.get('total_entries', 0)} rework entries) |",
+        f"| **Rework per Close** | `{round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ {rework_stats.get('closed_subjects', 0)} closed subjects |",
+        f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Mean intake→close duration over {len(ledger_stats.get('lead_times_sec', []))} sampled subjects |",
         f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry |",
-        f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | Total cost ÷ closed tasks |",
-        f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | Total cost ÷ accepted closed tasks |",
+        f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
+        f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('successful_closed_tasks', 0)} accepted closed subjects |",
         f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
         f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago |",
         "",
@@ -439,19 +473,28 @@ def main() -> int:
     parser.add_argument("--output", type=str, default="", help="Custom report output file path")
     parser.add_argument("--stamp", action="store_true", help="Record run row into evidence/ledger.jsonl")
     parser.add_argument("--actor", type=str, default="hq", help="Actor role for ledger stamp (default: hq)")
+    parser.add_argument(
+        "--no-gates",
+        action="store_true",
+        help="Emit metrics only, skipping the mechanical gate suite (used by tests/test_audit_rates.py to avoid gate recursion). The verdict fields report null, never a green.",
+    )
     args = parser.parse_args()
 
     ledger_file = REPO_ROOT / "evidence/ledger.jsonl"
     rework_file = REPO_ROOT / "evidence/rework.md"
 
     ledger_stats = parse_ledger(ledger_file)
-    rework_stats = parse_rework(rework_file, ledger_stats.get("closed_tasks", 0))
+    rework_stats = parse_rework(rework_file, ledger_stats.get("closed_subjects", 0))
     cadence_stats = check_cadence_integrity(ledger_file)
-    gate_results = execute_mechanical_gates(REPO_ROOT)
+    gate_results = [] if args.no_gates else execute_mechanical_gates(REPO_ROOT)
 
-    all_gates_pass = all(g["passed"] for g in gate_results)
+    all_gates_pass = None if args.no_gates else all(g["passed"] for g in gate_results)
     cadence_ok = cadence_stats.get("cadence_held", True)
-    healthy = all_gates_pass and cadence_ok
+    gates_ran = not args.no_gates
+    # A skipped gate suite reports no verdict at all. `all([])` is True, so leaving
+    # `healthy` to be computed here would print a green over gates that never ran —
+    # the same silent-green class of defect the hygiene gate carried (#28).
+    healthy = (all_gates_pass and cadence_ok) if gates_ran else None
 
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
@@ -460,20 +503,21 @@ def main() -> int:
             "date": today,
             "healthy": healthy,
             "all_gates_pass": all_gates_pass,
+            "gates_skipped": not gates_ran,
             "cadence": cadence_stats,
             "delivery": ledger_stats,
             "rework": rework_stats,
             "gates": gate_results,
         }
         print(json.dumps(payload, indent=2))
-        return 0 if healthy else 1
+        return 0 if (healthy is None or healthy) else 1
 
     # Text summary output
     print(f"=== Factory Operational Self-Audit ({today}) ===")
-    print(f"Status: {'HEALTHY (PASS)' if healthy else 'DEGRADED (FAIL)'}")
-    print(f"  - First-Pass Yield: {round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}%")
-    print(f"  - Closed Tasks: {ledger_stats.get('closed_tasks', 0)} | Intake Tasks: {ledger_stats.get('intake_tasks', 0)}")
-    print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (Rate: {round(rework_stats.get('rework_rate', 0.0) * 100, 1)}%)")
+    print(f"Status: {'HEALTHY (PASS)' if healthy else ('GATES SKIPPED (metrics only)' if not gates_ran else 'DEGRADED (FAIL)')}")
+    print(f"  - First-Pass Yield: {round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}% ({ledger_stats.get('runs_by_outcome', {}).get('accepted', 0)} accepted runs ÷ {ledger_stats.get('run_events', 0)} total runs)")
+    print(f"  - Closed Subjects: {ledger_stats.get('closed_tasks', 0)} (close rows: {ledger_stats.get('close_events', 0)}) | Intake Subjects: {ledger_stats.get('intake_tasks', 0)}")
+    print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (share: {round(rework_stats.get('rework_share', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ ({rework_stats.get('closed_subjects', 0)} + {rework_stats.get('total_entries', 0)}) | per close: {round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ {rework_stats.get('closed_subjects', 0)})")
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
@@ -488,8 +532,8 @@ def main() -> int:
         print(f"\nAudit report written to: {out_path}")
 
     if args.stamp:
-        outcome = "accepted" if healthy else "failed"
-        gate_summary = "all-pass" if all_gates_pass else "gate-failure"
+        outcome = "accepted" if (healthy is None or healthy) else "failed"
+        gate_summary = "skipped" if not gates_ran else ("all-pass" if all_gates_pass else "gate-failure")
         yield_pct = int(ledger_stats.get("first_pass_yield", 1.0) * 100)
         detail = f"duration=4s turns=0 outcome={outcome} gate={gate_summary} yield={yield_pct}%"
         stamp_cmd = [
@@ -511,7 +555,7 @@ def main() -> int:
         else:
             print(f"Failed to stamp ledger: {res.stderr.strip()}", file=sys.stderr)
 
-    return 0 if healthy else 1
+    return 0 if (healthy is None or healthy) else 1
 
 
 if __name__ == "__main__":
