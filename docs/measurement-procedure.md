@@ -163,8 +163,18 @@ flowchart TD
 
 7. **Record and Commit:**
    - Write dated report to `evidence/scores/<YYYY-MM-DD>.md`.
-   - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`.
+   - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
+     carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
+     the run committed at — so the run is *recorded* as gated, not merely asserted to be
+     (§2), and the verdict is checkable after the fact by anyone reading the ledger.
    - Commit cleanly to the repository.
+   - **Closing invariant — the run is not finished until the workspace gate is clean.**
+     Execute `python3 tools/hygiene.py --audit` and require **rc=0** before step 8. Any
+     re-read correction landing *after* the commit above re-opens this step: commit it and
+     re-run the gate. A gate that exists but is never invoked is dead text (P29), and the
+     run's own artifact is the first thing it must cover — a score file left uncommitted is
+     a claim the repository cannot back, and it strands the run's own Recoverability
+     receipt at the moment that receipt is written.
 
 8. **Report to Operator & Member HQs:**
    - Present summary, score movements, and fleet patterns to the Factories analysis topic.
