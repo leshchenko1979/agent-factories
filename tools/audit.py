@@ -422,6 +422,11 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     invariant still blocks with no grace (issue #38; #28 stays fixed).
     if (repo_root / "tests/test_hygiene_inflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_inflight.py"])
+    # 19. Board-close gate: every close row records that the board issue was closed
+    #     with it, so a subject cannot be complete-by-ledger while still open on the
+    #     board (issue #44).
+    if (repo_root / "tests/test_close_board_recorded.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_board_recorded.py"])
 
     results = []
     for cmd in gates_to_run:
