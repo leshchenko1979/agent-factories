@@ -145,7 +145,7 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 | **3. Feedforward Context Assembly** | Worker | Push-dispatched task contract + `SKILL.md` + `rework.md` | Grounded context window with rules & criteria | Missing constraint / prompt amnesia | First-token prompt size & rule hit |
 | **4. Implementation Loop (Ralph)** | Worker | Grounded context | Candidate code diff / artifact | Logic defect / hallucination | Turn count per task & token cost |
 | **5. Multi-Criteria Gate Evaluation** | Automated Gates | Candidate artifact | Deterministic score vector & error trace | Silent pass / false positive | Gate execution duration & exit code |
-| **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row (Rail 2) + Rail 1 ack | Stale sha / broken remote push | Commit sha identity & delivery trace |
+| **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row (Rail 2) + Rail 1 ack + the board issue closed with its receipt | Stale sha / broken remote push / false open (`close` row written, board issue still open) | Commit sha identity & delivery trace · board/ledger close agreement |
 
 ---
 
