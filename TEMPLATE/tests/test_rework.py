@@ -13,6 +13,15 @@ pass over exactly that shape, because it parsed the rows it expected to find and
 never asked whether they were still contiguous. A check that only looks for what
 its author expected is not a check.
 
+The third property is about the Rates section above the table, and it is the
+same defect shape again. The section's own rule is that the rates are recomputed
+rather than remembered — and that rule had no mechanism behind it. The headline
+figures were published once as a live reading, undated, went stale, and were
+wrong for a day before anyone noticed. A rate claim is only reproducible if it
+carries the date it was taken *and* names which of the two forms it is: the
+share of work, or rework per close. Two different numbers travel under one name
+otherwise, which is exactly how the wrong one gets quoted.
+
 Run:  python3 tests/test_rework.py
 Exit: 0 all entries complete and contiguous, 1 otherwise.
 """
@@ -36,6 +45,42 @@ def section_body(text: str) -> str | None:
     """The body of the `## Entries` section, or None when it is absent."""
     match = re.search(r"^## Entries\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
     return match.group(1) if match else None
+
+def rates_body(text: str) -> str | None:
+    """The body of the `## Rates` section, or None when it is absent."""
+    match = re.search(r"^## Rates\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return match.group(1) if match else None
+
+# A numeric rate claim: a percentage, or a count stated per close. Prose that
+# merely *names* the forms (the formula table, the explanation of why two forms
+# are reported) carries no digits and is deliberately not matched — requiring a
+# date beside it would be noise, and a gate that cries wolf gets deleted.
+RATE_CLAIM = re.compile(r"\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s+(?:entries\s+)?per\s+close")
+RATE_PREDICATES = ("share of", "per close")
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+def rate_claim_problems(text: str) -> list[str]:
+    """Every rate claim in `## Rates` must carry its own date and its predicate."""
+    body = rates_body(text)
+    if body is None:
+        return ["no '## Rates' section — a rate with no stated formula cannot be checked"]
+
+    problems: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", body):
+        claim = " ".join(paragraph.split())
+        if not claim or not RATE_CLAIM.search(claim):
+            continue
+        missing: list[str] = []
+        if not ISO_DATE.search(claim):
+            missing.append("its date")
+        if not any(predicate in claim for predicate in RATE_PREDICATES):
+            missing.append("its predicate ('share of …' or '… per close')")
+        if missing:
+            problems.append(
+                "the Rates section states a rate without " + " and ".join(missing)
+                + f": {claim[:90]!r}"
+            )
+    return problems
 
 def is_header(line: str) -> bool:
     return line.startswith("|") and line.strip("|").split("|")[0].strip().lower().startswith("date")
@@ -105,6 +150,7 @@ def check_text(text: str) -> tuple[list[str], int]:
                 )
 
     problems.extend(contiguity_problems(body, len(rows)))
+    problems.extend(rate_claim_problems(text))
     return problems, len(rows)
 
 def probe(name: str, text: str, want_problems: bool, failures: list[str]) -> None:
@@ -135,22 +181,48 @@ def main() -> int:
     # defect it is testing for.
     print("\nthe gate's own probes")
     failures: list[str] = []
-    two_rows = f"## Entries\n\n{HEADER}\n{SEPARATOR}\n{good_row(1)}\n{good_row(2)}\n"
+    # A Rates section has to be present for the probes to be about the entries
+    # table, so each document carries one that passes.
+    dated_rates = (
+        "## Rates\n\n"
+        "At 2026-09-12 this factory had 4 closes against 11 rework entries — "
+        "a share of 73%, or 2.75 entries per close.\n\n"
+    )
+    entries = f"## Entries\n\n{HEADER}\n{SEPARATOR}\n"
+    two_rows = dated_rates + entries + f"{good_row(1)}\n{good_row(2)}\n"
     probe("a well-formed two-row table passes", two_rows, False, failures)
     probe(
         "a blank line after the header is caught",
-        f"## Entries\n\n{HEADER}\n{SEPARATOR}\n\n{good_row(1)}\n",
+        dated_rates + entries + f"\n{good_row(1)}\n",
         True, failures,
     )
     probe(
         "a blank line between two rows is caught",
-        f"## Entries\n\n{HEADER}\n{SEPARATOR}\n{good_row(1)}\n\n{good_row(2)}\n",
+        dated_rates + entries + f"{good_row(1)}\n\n{good_row(2)}\n",
         True, failures,
     )
     probe(
         "a duplicated header is caught",
-        f"## Entries\n\n{HEADER}\n{SEPARATOR}\n{good_row(1)}\n{HEADER}\n{SEPARATOR}\n{good_row(2)}\n",
+        dated_rates + entries + f"{good_row(1)}\n{HEADER}\n{SEPARATOR}\n{good_row(2)}\n",
         True, failures,
+    )
+    probe(
+        "an undated rate claim is caught",
+        "## Rates\n\nThis factory has 17 rework entries against 29 closes — "
+        "a share of 37%.\n\n" + entries + f"{good_row(1)}\n",
+        True, failures,
+    )
+    probe(
+        "a dated rate claim that names no form is caught",
+        "## Rates\n\nAt 2026-09-18 the rework rate was 59%.\n\n"
+        + entries + f"{good_row(1)}\n",
+        True, failures,
+    )
+    probe(
+        "prose naming the forms without a number is not a claim",
+        "## Rates\n\nThe share of work and rework per close are reported "
+        "separately.\n\n" + entries + f"{good_row(1)}\n",
+        False, failures,
     )
 
     print()
