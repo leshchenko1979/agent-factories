@@ -356,7 +356,7 @@ its own files.
 ## Step 9 — Score the factory, and schedule the re-score
 
 Record a **baseline score** against the
-[quality criteria](../docs/quality-criteria.md) — 13 criteria in 4 families,
+[quality criteria](../docs/quality-criteria.md) — 19 criteria in 6 families,
 0–4 each — in the factory's repo, with the date.
 
 Then make re-scoring a **scheduled job** (§7 of the law): daily to start. A

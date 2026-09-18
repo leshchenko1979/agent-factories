@@ -125,7 +125,7 @@ Consulting on process without knowing what the process builds produces ungrounde
 
 ## Mandatory at bootstrap vs. volume-earned criteria
 
-Not all 16 criteria are day-one requirements. Bootstrapping a factory requires distinguishing
+Not all 19 criteria are day-one requirements. Bootstrapping a factory requires distinguishing
 what must be in place before the first task runs versus what is earned over time.
 
 | Tier | Criteria | Why |
@@ -327,7 +327,7 @@ produces their baseline, and a ranking becomes a fact then, not now.
 |---|---|
 | **The rubric is the measurement system** | Factories are scored against it, 0–4 per criterion |
 | **The surveyed factories are measured on a cadence** | **Daily, for now** — deliberately conservative; the cadence is expected to relax once the numbers are stable and their variance is known |
-| **Factory-specific measures will be added** | The 13 criteria are the floor, not the ceiling. A factory's own domain adds measures — each one naming the decision it informs |
+| **Factory-specific measures will be added** | The 19 criteria are the floor, not the ceiling. A factory's own domain adds measures — each one naming the decision it informs |
 
 **Where the cadence lives.** The recurring measurement is a **scheduled job** —
 in the OpenCrabs harness binding, that is

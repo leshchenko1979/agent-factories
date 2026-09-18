@@ -177,7 +177,7 @@ neither read the surface. Find the substrate's repo, read its tool list, probe t
 
 ## 6. Measurement and self-improvement loop
 
-This factory is scored against `docs/quality-criteria.md` — 16 criteria across 5 families, 0–4 each.
+This factory is scored against `docs/quality-criteria.md` — 19 criteria across 6 families, 0–4 each.
 
 | Requirement | Detail |
 |---|---|

@@ -125,7 +125,7 @@ A new factory operates in **Stage 0 or 1** mode initially, but inherits the guar
 ## 4. Bi-Weekly Fleet Calibration & Maturity Verification (2026-09-16)
 
 > **Pacemaker Cadence:** Bi-Weekly (1st & 15th) · `factory-growth-map-biweekly`  
-> **Evaluation Rubric:** Quality Criteria v0.4 (17 criteria across 5 families, max 68)  
+> **Evaluation Rubric:** Quality Criteria v0.4 (17 criteria across 5 families, max 68) — the rubric this dated run was scored against; superseded by v0.5 (19 criteria across 6 families, max 76)  
 > **Telemetry Source:** Live state across 6 fleet factories (`evidence/scores/2026-09-16.md`, `evidence/ledger.jsonl`, git trees, and CI/audit receipts)
 
 ### Fleet Maturity Census
