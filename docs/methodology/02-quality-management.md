@@ -35,8 +35,23 @@ flowchart TD
 | **First-Pass Yield ($A_0$)** | Share of task runs accepted on turn 1 without rework. | $\frac{\text{Accepted on Turn 1}}{\text{Total Runs}}$ | $\ge 90\%$ |
 | **Average Task Lead Time** | Total duration from `intake` to `close`. | $\frac{1}{N} \sum (t_{\text{close}} - t_{\text{intake}})$ | Monitored |
 | **Queue Dwell Ratio** | Proportion of lead time spent idling in queues vs. active execution. | $\frac{t_{\text{claim}} - t_{\text{intake}}}{t_{\text{close}} - t_{\text{intake}}}$ | $< 20\%$ |
-| **Rework Rate** | Number of rework defects relative to closed tasks. | $\frac{\text{Total Rework Entries}}{\text{Total Closed Tasks}}$ | Decreasing |
+| **Rework Share** | Rework entries as a share of all work accounted for — the closed work units plus the rework itself. The form that compares across factories of different size. | $\frac{\text{Rework Entries}}{\text{Closed Work Units} + \text{Rework Entries}}$ | Decreasing |
+| **Rework per Close** | Rework entries paid per unit of planned work closed. The form that says how much repair this factory pays for each unit it intended to deliver. | $\frac{\text{Rework Entries}}{\text{Closed Work Units}}$ | Decreasing |
 | **Unit Cost per Task** | Average dollar token cost per closed deliverable. | $\frac{\text{Total USD Cost}}{\text{Closed Tasks}}$ | Tracked |
+
+> **One name, one number.** The two forms above are never both called "the rework rate":
+> they answer different questions and differ by a wide margin, so a single name would
+> leave a reader unable to tell which number was meant — and unable to tell a real change
+> from a switch of form. `tools/audit.py` reports them as `rework_share` and
+> `rework_per_close`, each computed from the denominator its own name states, and
+> `tests/test_audit_rates.py` fails if either form is missing or the two collapse onto one
+> value.
+>
+> **Denominator.** "Closed work units" counts distinct work units, never close events: a
+> work unit that is re-opened and closed again carries two `close` rows and is still one
+> unit of closed work. The audit therefore reports `closed_subjects` (the denominator) and
+> `close_events` (the rows) side by side, so the denominator is reconciled rather than
+> assumed.
 
 ---
 
@@ -79,4 +94,3 @@ flowchart TD
 - **Quote-Anchored Findings:** Findings without a verifiable file locator and verbatim quote are rejected.
 - **Pure Function Test (Lens J):** Any prose directive whose decision can be settled from disk state is converted into a deterministic CLI script or mechanical test.
 - **Single-Writer Codification:** Reviewer lenses operate read-only. Only HQ codifies findings into process files.
-

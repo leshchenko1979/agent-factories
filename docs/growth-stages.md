@@ -69,7 +69,7 @@ flowchart TD
 - **Operating Profile:** Multi-lane operations. Persistent topic-bound workers. State transitions recorded in immutable, append-only ledgers (`evidence/ledger.jsonl`).
 - **The Roadblock:** **The Inspector's Trap & Silent Rework.**
   The factory appears busy and commits are landing, but defects are repeatedly caught downstream. Without internal telemetry, the factory cannot distinguish real progress from repetitive churn and rework loops.
-- **Breakthrough Mechanism:** The **Self-Audit Kit** (`tools/audit.py`). Transition from external inspection to internal self-auditing, calculating First-Pass Yield and Rework Rate mechanically.
+- **Breakthrough Mechanism:** The **Self-Audit Kit** (`tools/audit.py`). Transition from external inspection to internal self-auditing, calculating First-Pass Yield, Rework Share, and Rework per Close mechanically.
 - **Primary Metric:** `first_pass_yield` (percentage of tasks completed without requiring rework).
 
 ---
@@ -165,4 +165,3 @@ A new factory operates in **Stage 0 or 1** mode initially, but inherits the guar
    - Meta-factory reports substrate friction directly to OpenCrabs (e.g. Issue #170 forum topic auto-binding) and inference telemetry to InferHub.
    - OpenCrabs dev operates as the upstream engine supplying the runtime binary.
    - Next milestone: value-weighted task routing and cross-factory token economics.
-
