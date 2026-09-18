@@ -16,23 +16,40 @@ import subprocess
 import sys
 import time
 
+# A gate may only glob a namespace this factory OWNS.
+#
+# `/tmp` is shared. Another factory's tooling writes its own prefix there — the
+# OpenCrabs dev tools leave `oc-snap-*` behind by the thousand. Globbing a
+# foreign prefix makes this gate measure someone else's litter: it goes RED for
+# work this factory did not do, the mirror of a false green and just as
+# corrosive, because a gate that cries wolf gets ignored and then reverted.
+#
+# The owned namespace is the repository directory name, so a factory
+# bootstrapped from this template owns its own prefix automatically. Extra owned
+# namespaces are declared with --scratch-glob, never by widening this list to a
+# prefix somebody else already uses.
+NAMESPACE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCRATCH_PATTERNS = [
-    "/tmp/oc-*",
-    "/tmp/test-*",
-    "/tmp/vds-*",
+    f"/tmp/{NAMESPACE}-*",
 ]
 
 MAX_AGE_HOURS = 24
 
 
-def reap_stale_scratch(dry_run: bool = False) -> tuple[int, list[str]]:
-    """Audit and optionally reap scratch artifacts older than MAX_AGE_HOURS."""
+def reap_stale_scratch(
+    dry_run: bool = False, patterns: list[str] | None = None
+) -> tuple[int, list[str]]:
+    """Audit and optionally reap scratch artifacts older than MAX_AGE_HOURS.
+
+    Only the namespaces passed in (default: the ones this factory owns) are
+    inspected; a foreign prefix is never globbed.
+    """
     now = time.time()
     cutoff = now - (MAX_AGE_HOURS * 3600)
     found: list[str] = []
     reaped = 0
 
-    for pattern in SCRATCH_PATTERNS:
+    for pattern in (patterns or SCRATCH_PATTERNS):
         for path in glob.glob(pattern):
             try:
                 mtime = os.path.getmtime(path)
@@ -96,13 +113,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Workspace hygiene and GC audit tool.")
     parser.add_argument("--audit", action="store_true", help="Audit without removing")
     parser.add_argument("--clean", action="store_true", help="Reap stale scratch items")
+    parser.add_argument(
+        "--scratch-glob",
+        action="append",
+        metavar="GLOB",
+        help="Additional scratch namespace this factory owns (repeatable). "
+        "Never pass a prefix another tool already writes to.",
+    )
     args = parser.parse_args()
 
     if not args.audit and not args.clean:
         args.audit = True
 
     dry_run = args.audit and not args.clean
-    count, items = reap_stale_scratch(dry_run=dry_run)
+    patterns = list(SCRATCH_PATTERNS) + list(args.scratch_glob or [])
+    count, items = reap_stale_scratch(dry_run=dry_run, patterns=patterns)
     modified_tracked, untracked_clutter, untracked_other = inspect_git_working_tree()
 
     if dry_run:
@@ -119,7 +144,11 @@ def main() -> int:
             for u in untracked_other:
                 print(f"  - untracked file: {u}", file=sys.stderr)
             return 1
-        print("hygiene audit clean: 0 stale scratch items, 0 untracked clutter, working tree clean (0 modified tracked files)")
+        print(
+            f"hygiene audit clean: 0 stale scratch items in "
+            f"{', '.join(patterns)}, 0 untracked clutter, working tree clean "
+            f"(0 modified tracked files)"
+        )
         return 0
 
     print(f"hygiene cleanup complete: {count} scratch item(s) reaped")
