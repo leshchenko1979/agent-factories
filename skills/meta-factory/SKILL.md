@@ -91,14 +91,15 @@ this factory's own work undone.
 
 **Delegation.** Member-factory conversation is delegated to a separate lane.
 
-**This factory's own lanes.** All four are topic-bound sessions in the Factories group; the
-ids below were read back from `session_bindings` on 2026-09-11 14:2xZ. A lane is addressed by
+**This factory's own lanes.** All five are topic-bound sessions in the Factories group; the
+ids below were read back from `session_bindings` on 2026-09-18 12:20Z. A lane is addressed by
 its **session id**, and that id is re-read from live state before any send — never carried
 over from an earlier turn.
 
 | Topic | `thread_id` | Lane session | Carries |
 |---|---|---|---|
-| HQ | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | analysis, rulings, owner conversation, repo implementation (this factory has no worker lane; its own repo is the artifact) |
+| HQ | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | analysis, rulings, owner conversation. Implements nothing — kept idle for incoming managerial work |
+| Worker | 1271 | `dcd8f7a9-c1e7-48c3-b184-d901dc08eac7` | repo implementation for this factory's own repo — the lane HQ delegates work items to |
 | Delegate | 68 | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | member-factory comms |
 | Triage | 20 | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | intake and routing |
 | Surveys | 19 | `5c99ad51-8889-40cb-b589-fa13fd673c06` | survey and measurement work |
@@ -123,9 +124,13 @@ finished, and the three member HQs' replies — six messages, 11:33Z–11:50Z �
 `notify_queue` with nothing left to read them. A dispatch returned a receipt; nothing consumed
 it. A subagent session has no channel binding, so it cannot be a lane.
 
-- This lane (the HQ topic) owns analysis, rulings and owner conversation **and** repo
-  implementation for this factory's own repo. It still does not do a **member** factory's
-  work — the hard boundary above is unchanged.
+- This lane (the HQ topic) owns analysis, rulings and owner conversation. It implements
+  **nothing** — repo work for this factory's own repo goes to the **Worker** lane, so HQ
+  stays idle for the incoming managerial work that is its job (owner order 2026-09-18).
+  It still does not do a **member** factory's work — the hard boundary above is unchanged.
+- The **Worker** lane is the implementation destination: `session_notify` its UUID with the
+  issue number, the goal and the done-criteria. A work item with no lane to take it is a
+  missing lane, not an item HQ picks up.
 - Member traffic goes to the **Delegate** lane, never into the HQ topic.
 - A topic post is **owner visibility only** — agents do not read topics. Briefing the
   delegate means `session_notify` to its UUID; a topic post does zero work for it.
