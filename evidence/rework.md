@@ -47,7 +47,7 @@ the rework family: a *landed change* is a closed work unit, and a change
 *needing immediate intervention* is one whose close produced a rework entry.
 
 **Its numerator is the `Subject` column, and it is reported with its linkage
-coverage** — measured 2026-09-18 with `tools/audit.py`, **8 of 27** entries carry
+coverage** — measured 2026-09-18 with `tools/audit.py`, **9 of 28** entries carry
 a determinate Subject. The predicate is narrower than "names a work unit": an
 entry counts only when its subject is in the ledger's **closed-subject set**, so a
 `#N` pointing at something that never closed is not a failed change (`#11`,
