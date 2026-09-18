@@ -3,9 +3,10 @@
 
 Origin (issue #44). Process 1 step 6, `Settlement & Release`, named the ledger
 `close` row and treated the board close as optional — so it happened some of the
-time. Measured over one day, three subjects were complete-by-ledger and open-on-board
-at once: `#36` for ~30 min until closed by hand, `#33` and `#35` for ~80 min, `#34`
-for 18 min. A step that does not require the board close gets it remembered, not
+time. Measured over one day, five subjects were complete-by-ledger and open-on-board
+at once: `#36` for 30m26s until closed by hand, `#33` for 79m06s and `#35` for 78m34s,
+`#34` for 18m55s, `#38` for 6m20s. A step that does not require the board close gets it
+remembered, not
 performed; the ledger then says the work is done while the board's own hourly sweep
 re-derives it as outstanding.
 
