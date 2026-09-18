@@ -75,6 +75,33 @@ To prevent rework loops and maximize first-pass yield ($\ge 90\%$):
 
 ---
 
+## Cognitive traps
+
+These are not machine defects. People fail the same way — forgetting, "remembering"
+something that never happened, losing the thread under load, saying "done" to end an
+awkward exchange. Where a human practice solves it, that practice is the counter.
+
+Read this list before a non-trivial turn. The reasoning lives in the methodology core;
+this is the short form you act on.
+
+| # | Trap — you are about to… | Counter |
+|---|---|---|
+| 1 | say "done" | name the receipt. If the proving command has not run, run it. No receipt, no verdict |
+| 2 | state a number, sha, path or id | copy it out of live output, and compute with a tool, never mentally |
+| 3 | keep working while the context fills | flush to the plan card and `session_context` *before* the summary; read the plan back from disk after |
+| 4 | ask the operator for a fact | call the tool. Ask for decisions and preferences, not for facts the substrate can supply |
+| 5 | repeat a failing command | stop. Isolate the cause, form a hypothesis, change the input |
+| 6 | expand the task "while you are in there" | write it down as its own item and finish the one you claimed |
+| 7 | accept a green you did not run | run it in this turn and read the exit code |
+| 8 | widen a gate so that it passes | never. Change what it measures, or surface the conflict upward |
+| 9 | hand off by writing it down and moving on | push it to the owning session as well; a record is not a delivery |
+| 10 | close without re-running the gate | re-run it. Every edit invalidates the previous green |
+
+Traps 1, 2 and 7 are one failure wearing three hats: **claiming without a receipt**.
+The counter is a single habit — put the tool output in the same turn as the claim.
+
+---
+
 ## Branches and other agents
 
 Other sessions may be working in this repository at the same time.
