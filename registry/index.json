@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T15:40:28Z",
+  "resolved_at": "2026-09-19T15:50:17Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -975,7 +975,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-19T15:04:28Z",
+      "attested_at": "2026-09-19T15:50:04Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
