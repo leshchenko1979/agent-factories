@@ -61,6 +61,7 @@ Exit: 0 clean, 1 an unaccounted file or an unregistered pack.
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import subprocess
@@ -193,20 +194,63 @@ def _shipped(template_root: Path) -> tuple[set[str], set[str]]:
         under(_git("ls-files", "--others", "--exclude-standard", "--", rel_root)),
     )
 
+
+def _pair_guard_literal() -> ast.List:
+    """The PAIRS list literal, read as the syntax it is actually written in.
+
+    The registry is Python, so it is read with Python's own parser. A regex over
+    the source is a SECOND parser, and the two agreed only by accident: the
+    pattern closed a tuple on one line, so an entry written with a trailing
+    comma inside a parenthesised tuple was dropped from the set with nothing
+    reported. The gate then accused the correctly-registered file of being
+    unaccounted for, and named the registry — the one object that DID account
+    for it — as the thing that failed (issue #97).
+    """
+    source = (REPO / PAIR_GUARD).read_text(encoding="utf-8")
+    for node in ast.parse(source, filename=str(PAIR_GUARD)).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "PAIRS" for target in node.targets
+        ):
+            if not isinstance(node.value, ast.List):
+                raise RuntimeError(f"{PAIR_GUARD}: PAIRS is not a list literal")
+            return node.value
+    raise RuntimeError(f"{PAIR_GUARD}: no PAIRS list — the copy registry is unreadable")
+
 def _template_pairs() -> set[str]:
     """The copy targets listed in the pair-guard, relative to the template root."""
-    text = (REPO / PAIR_GUARD).read_text(encoding="utf-8")
-    match = re.search(r"^PAIRS = \[(.*?)^\]", text, re.M | re.S)
-    if not match:
-        raise RuntimeError(f"{PAIR_GUARD}: no PAIRS list — the copy registry is unreadable")
+    entries = [ast.literal_eval(element) for element in _pair_guard_literal().elts]
+    declared = len(entries)
 
-    pairs: set[str] = set()
-    for _original, copy in re.findall(r'\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)', match.group(1)):
+    targets: list[str] = []
+    for entry in entries:
+        if not (isinstance(entry, tuple) and len(entry) == 2):
+            raise RuntimeError(f"{PAIR_GUARD}: PAIRS entry {entry!r} is not a 2-tuple")
+        _original, copy = entry
+        if not isinstance(copy, str):
+            raise RuntimeError(f"{PAIR_GUARD}: PAIRS entry {entry!r} has a non-string target")
         if not copy.startswith(TEMPLATE_DIR + "/"):
             raise RuntimeError(f"{PAIR_GUARD}: pair target {copy!r} is not under {TEMPLATE_DIR}/")
-        pairs.add(copy[len(TEMPLATE_DIR) + 1:])
+        targets.append(copy[len(TEMPLATE_DIR) + 1:])
+
+    # COVERAGE, not non-emptiness. A TOTAL parse failure was the only failure the
+    # old guard could see, so a PARTIAL under-read passed in silence and then
+    # converted into a violation naming the wrong file. Every entry the reader
+    # takes must become a copy target, so the set is a faithful reading of the
+    # registry rather than a subset of it. A syntax-aware read makes that
+    # structural; this is the regression guard for any future reader change.
+    pairs = set(targets)
+    if len(pairs) != declared:
+        duplicated = sorted({t for t in targets if targets.count(t) > 1})
+        raise RuntimeError(
+            f"{PAIR_GUARD}: read {declared} PAIRS entr{'y' if declared == 1 else 'ies'} "
+            f"but resolved {len(pairs)} copy target(s)"
+            + (f" — duplicate target(s): {duplicated}" if duplicated else "")
+        )
     if not pairs:
-        raise RuntimeError(f"{PAIR_GUARD}: PAIRS parsed empty — the registry shape changed")
+        raise RuntimeError(
+            f"{PAIR_GUARD}: PAIRS parsed empty (read {declared} entry/entries) — "
+            f"the registry shape changed"
+        )
     return pairs
 
 def classify(rel: str, pairs: set[str]) -> str | None:
@@ -241,7 +285,8 @@ def check_template(
     for rel in sorted(shipped):
         if classify(rel, pairs) is None:
             problems.append(
-                f"{TEMPLATE_DIR}/{rel}: no pair in {PAIR_GUARD}, no {SKELETON_SUFFIX} "
+                f"{TEMPLATE_DIR}/{rel}: no pair in {PAIR_GUARD} "
+                f"({len(pairs)} copy target(s) read from it), no {SKELETON_SUFFIX} "
                 f"suffix, not under {SHARED_DOC_PREFIX} or {ROLE_CARD_PREFIX}, and not "
                 f"a declared entry file — nothing accounts for it"
             )
@@ -408,6 +453,89 @@ def test_a_young_uncommitted_path_is_not_yet_a_violation():
 def test_a_path_with_no_readable_age_is_a_violation():
     """Silence is not evidence someone is working on it."""
     assert classify_inflight(None, 60.0) == "violation"
+
+def test_the_pair_guard_is_read_as_syntax_not_as_a_pattern() -> None:
+    """The exact spelling that broke it: a trailing comma inside a parenthesised tuple.
+
+    The old reader matched a tuple only when both strings sat on one line with no
+    trailing comma, so this entry was dropped from the set in silence and the gate
+    then accused the file it names of being unaccounted for (issue #97). The entry
+    is read from the LIVE registry — so this probe exercises the real spelling
+    rather than a copy of it — and its coverage is asserted against the registry's
+    own element count, not against a remembered number.
+    """
+    # The pair-guard itself is meta-factory-only (it is not shipped into a
+    # bootstrapped factory), so this leg is present only where the registry is.
+    if not (REPO / PAIR_GUARD).is_file():
+        return
+
+    literal = _pair_guard_literal()
+    declared = len(literal.elts)
+
+    # Every element of the literal must become a copy target: the set may not be a
+    # subset of what the registry declares.
+    pairs = _template_pairs()
+    assert len(pairs) == declared, (
+        f"{PAIR_GUARD}: read {declared} entr(ies) but resolved {len(pairs)} target(s) "
+        f"— a partial read is the defect this gate exists to catch"
+    )
+
+    # Non-vacuity: the registry is non-empty, so the assertion above cannot pass by
+    # comparing zero against zero.
+    assert declared > 0, f"{PAIR_GUARD}: PAIRS is empty — the coverage assertion is vacuous"
+
+def test_a_dropped_tuple_is_impossible_to_read_past() -> None:
+    """The trailing-comma and multi-line spellings, probed as source.
+
+    The registry is parsed by Python, so these are the shapes that must all resolve.
+    Each is written the way a lane actually writes it: a reformat, an editor's
+    trailing comma, a wrapped tuple.
+    """
+    spellings = {
+        "single line, no trailing comma": 'PAIRS = [\n    ("a/x.py", "TEMPLATE/a/x.py")\n]',
+        "single line, trailing comma": 'PAIRS = [\n    ("a/x.py", "TEMPLATE/a/x.py"),\n]',
+        "multi-line, no trailing comma": 'PAIRS = [\n    (\n        "a/x.py",\n        "TEMPLATE/a/x.py"\n    )\n]',
+        "multi-line, trailing comma": 'PAIRS = [\n    (\n        "a/x.py",\n        "TEMPLATE/a/x.py",\n    ),\n]',
+    }
+    for name, source in spellings.items():
+        tree = ast.parse(source)
+        literal = next(
+            node.value
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "PAIRS" for t in node.targets)
+        )
+        entries = [ast.literal_eval(element) for element in literal.elts]
+        assert len(entries) == 1, f"{name}: read {len(entries)} entr(ies), expected 1"
+
+def test_a_reader_that_under_reads_is_refused() -> None:
+    """A partial read must fail loudly — that is the property the old guard lacked.
+
+    The old non-vacuity check fired only on a TOTAL parse failure, so a partial
+    under-read passed in silence and surfaced later as a violation naming a file
+    that was correctly registered. Reproduced here with the OLD pattern, so the
+    regression is pinned against the mechanism that caused it.
+    """
+    old_pattern = re.compile(r'\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)')
+    source = (
+        'PAIRS = [\n'
+        '    ("a/x.py", "TEMPLATE/a/x.py"),\n'
+        '    (\n        "b/y.py",\n        "TEMPLATE/b/y.py",\n    ),\n'
+        ']'
+    )
+    body = re.search(r"^PAIRS = \[(.*?)^\]", source, re.M | re.S).group(1)
+    literal = next(
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "PAIRS" for t in node.targets)
+    )
+
+    assert len(old_pattern.findall(body)) == 1, "the old pattern is expected to under-read here"
+    assert len(ast.literal_eval(literal)) == 2, "the syntax-aware read must see both entries"
+    assert len(old_pattern.findall(body)) != len(ast.literal_eval(literal)), (
+        "this probe is vacuous unless the old pattern actually under-reads"
+    )
 
 def test_the_grace_window_is_declarable_not_hidden():
     """A factory whose lanes hold work longer raises the window; it is not a constant."""
