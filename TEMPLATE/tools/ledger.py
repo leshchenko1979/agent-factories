@@ -70,7 +70,7 @@ from ledger_declaration import (
 # The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
-from field_predicate import declares_field
+from field_predicate import declares_field, split_canonical_run
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -426,11 +426,31 @@ def cmd_repair(args: argparse.Namespace) -> int:
         # itself. A check that cannot fail is not a check.
         identity_before = {field: original.get(field) for field in ROW_IDENTITY}
         old_detail = str(original.get("detail", ""))
-        # A separator, always: the caller passes the field alone (`head=<sha>`), and
-        # welding it to the previous token (`turns=36head=…`) makes it unreadable as a
-        # field to every consumer — including the gate this repair exists to satisfy.
-        separator = "" if (not old_detail or old_detail[-1].isspace()) else " "
-        repaired = {**original, "detail": f"{old_detail}{separator}{appended}"}
+        # The appended text goes BEFORE the canonical run, never after it (#91, ruled at
+        # ledger n=572 PART 3). A row's trailer is POSITIONAL — the run of `key=value`
+        # tokens at the END of the detail — so text placed after the run TERMINATES it
+        # and the row's declared telemetry silently leaves the trailing run that every
+        # trailer-scoped reader stops at. Measured on n=303: its telemetry was canonical
+        # when the row was written, and a repair note appended after it displaced
+        # cost_usd=2.7719 out of the fleet total. A `key=value` append EXTENDS the run
+        # safely; a prose append does not, and the tool cannot know which it was given.
+        # Inserting before the run is correct for both, so no judgement is required.
+        head, run = split_canonical_run(old_detail)
+        if run:
+            # `rstrip`/`lstrip` normalise only the DELIMITERS at the insertion point —
+            # the author's interior spacing, punctuation and the run itself are carried
+            # through verbatim, so the repaired detail re-reads as the original with one
+            # token-sequence inserted ahead of its trailer.
+            repaired_detail = f"{head.rstrip()} {appended} {run}".lstrip()
+        else:
+            # No run to protect: the detail has no canonical trailer, so appending at the
+            # end displaces nothing and the historic behaviour stands. A separator is
+            # still owed — the caller passes the field alone (`head=<sha>`), and welding
+            # it to the previous token (`turns=36head=…`) makes it unreadable as a field
+            # to every consumer, including the gate this repair exists to satisfy.
+            separator = "" if (not old_detail or old_detail[-1].isspace()) else " "
+            repaired_detail = f"{old_detail}{separator}{appended}"
+        repaired = {**original, "detail": repaired_detail}
 
         for field in ROW_IDENTITY:
             if repaired.get(field) != identity_before[field]:

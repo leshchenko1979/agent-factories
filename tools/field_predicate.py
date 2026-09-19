@@ -64,7 +64,13 @@ site imports it, so a further site cannot invent a further reading.
 
 from __future__ import annotations
 
+import re
 from typing import Iterator
+
+# How a token is delimited: any run of non-whitespace. Named once because two readers
+# need it and they must agree — `trailer_tokens` counts tokens from the end, and
+# `split_canonical_run` locates the same token by character offset.
+_NON_SPACE = re.compile(r"\S+")
 
 # The keys `tools/ledger.py` supplies and the gates validate. `cost_usd`/`cost` are
 # floats, the rest are non-negative integers. Named once, so a key added here is
@@ -118,6 +124,29 @@ def trailer_tokens(detail: str) -> list[str]:
         run.append(token)
     run.reverse()
     return run
+
+def split_canonical_run(detail: str) -> tuple[str, str]:
+    """`(head, run)` — the detail split at the START of its canonical trailing run.
+
+    The inverse of `trailer_tokens`, and the operation a WRITER needs: text added to a
+    detail must go BEFORE the run, because text placed after it TERMINATES the run and
+    the row's declared telemetry leaves the trailing run that every trailer-scoped
+    reader stops at. Measured on `n=303`, whose telemetry was canonical when the row was
+    written and fell outside the trailer the day a repair note was appended after it
+    (#91, ruled at ledger `n=572` PART 3).
+
+    `run` is the verbatim tail of the input, from the first run token's first character
+    to the end of the string, so the caller can re-join without normalising anything:
+    interior spacing, punctuation and any trailing whitespace are the author's and stay
+    untouched. A detail with an empty run returns `(detail, "")` — there is nothing to
+    displace, and the caller appends as it always did.
+    """
+    run = trailer_tokens(detail)
+    if not run:
+        return detail, ""
+    tokens = list(_NON_SPACE.finditer(detail))
+    start = tokens[len(tokens) - len(run)].start()
+    return detail[:start], detail[start:]
 
 def declared_telemetry(detail: str) -> list[tuple[str, str]]:
     """`(key, value)` for every telemetry field DECLARED in the canonical trailer.

@@ -230,6 +230,15 @@ leaning on shared memory rather than on what it said.
   REQUIRED — most closes resolve no defect, and a required field degrades to boilerplate — and
   nothing is backfilled, because a disposition reconstructed after the fact is a falsified
   record, not a repair (n=386 clauses 3/5/6; #53 clause 7).
+- **A repair must not terminate the canonical run.** The trailer is POSITIONAL, so text
+  appended AFTER it ends the run and every trailer-scoped reader stops seeing the row's
+  declared telemetry — the repair silently REMOVES a measurement from the fleet total.
+  `tools/ledger.py repair` therefore inserts its appended text BEFORE the run, so a prose
+  note lands in the head and the run stays terminal; a `key=value` append EXTENDS the run
+  itself and is safe either way. Measured precedent: n=303's two parenthetical `REPAIR NOTE`
+  sentences displaced its own canonical `cost_usd=2.7719 tokens_out=9956523 turns=1 …`, which
+  was canonical when the row was written. n=303 is **not** backfilled — the law above bars it
+  — and stands as the measured precedent (#91, ruling n=572 PART 3).
 
 ---
 

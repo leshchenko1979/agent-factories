@@ -190,6 +190,15 @@ archive.
   AUTHOR states it. ABSENCE stays `unstated`, never read as `none`: an unrecorded verdict is
   UNKNOWN, never a value. The marker is AVAILABLE, not REQUIRED — most closes resolve no
   defect, and a required field degrades to boilerplate — and nothing is backfilled.
+- **A repair must not terminate the canonical run.** The trailer is POSITIONAL, so text
+  appended AFTER it ends the run and every trailer-scoped reader stops seeing the row's
+  declared telemetry — the repair silently REMOVES a measurement from the fleet total.
+  `tools/ledger.py repair` therefore inserts its appended text BEFORE the run, so a prose
+  note lands in the head and the run stays terminal; a `key=value` append EXTENDS the run
+  itself and is safe either way. Measured precedent: a repaired close row whose two appended
+  `REPAIR NOTE` sentences displaced its own canonical run, which was canonical when the row
+  was written. That row is **not** backfilled — the law above bars it — and stands as the
+  measured precedent.
 
 ---
 

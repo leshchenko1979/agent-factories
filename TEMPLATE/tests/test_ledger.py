@@ -418,6 +418,63 @@ def main() -> int:
         v = run(ledger, "verify")
         check("verify accepts the repaired ledger", v.returncode == 0, v.stderr.strip()[:90])
 
+        # A repair must not DISPLACE the row's canonical trailer (#91, ruled at ledger
+        # n=572 PART 3). The trailer is POSITIONAL, so text appended AFTER it terminates
+        # the run and the row's declared telemetry leaves the trailing run that every
+        # trailer-scoped reader stops at — measured on the live n=303, whose telemetry
+        # was canonical until a repair note was appended after it. Both append shapes are
+        # probed, because the tool cannot know which it was handed and must be correct
+        # for both: a PROSE note (the shape that broke n=303) and a `key=value` field
+        # (the shape that has always been safe, so a fix that only handled prose would
+        # regress it silently).
+        sys.path.insert(0, str(REPO / "tools"))
+        from field_predicate import declared_telemetry, trailer_tokens  # noqa: E402
+
+        trailer = "cost_usd=1.2500 tokens_out=111 turns=3"
+        for label, append_detail in (
+            ("a PROSE append", "REPAIR NOTE (probe): the row omitted its revision."),
+            ("a key=value append", f"head={probe_sha}"),
+        ):
+            displace = Path(tmp) / f"displace-{label.split()[1]}.jsonl"
+            write_repair_ledger(displace, post_ts)
+            written = rows(displace)
+            written[2]["detail"] = f"Closed. {trailer}"
+            displace.write_text(
+                "\n".join(json.dumps(row) for row in written) + "\n", encoding="utf-8"
+            )
+            r = run(displace, "repair", "--n", "3", "--append-detail", append_detail,
+                    "--note", "probe: the trailer must survive the repair")
+            err = r.stderr.strip()
+            check(f"{label} is accepted", r.returncode == 0, err[:140])
+            detail = rows(displace)[2]["detail"]
+            keys = dict(declared_telemetry(detail))
+            check(f"{label} keeps the telemetry inside the trailing run",
+                  keys == {"cost_usd": "1.2500", "tokens_out": "111", "turns": "3"},
+                  f"declared={keys}")
+            check(f"{label} leaves the run as the detail's tail",
+                  detail.endswith(trailer), detail[-70:])
+            check(f"{label} still lands its text (the probe is not vacuous)",
+                  append_detail in detail, detail[:90])
+            check(f"{label} keeps the original telemetry as a contiguous tail of the run",
+                  " ".join(trailer_tokens(detail)).endswith(trailer),
+                  " ".join(trailer_tokens(detail)))
+
+        # The complementary half: a detail with NO canonical run has nothing to displace,
+        # so the historic append-at-the-end behaviour stands and the field still lands as
+        # its own token. Without this the fix could "protect" an absent trailer by
+        # inserting into the middle of prose.
+        norun = Path(tmp) / "displace-norun.jsonl"
+        write_repair_ledger(norun, post_ts)
+        plain = rows(norun)
+        plain[2]["detail"] = "Closed with no trailer at all"
+        norun.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
+        r = run(norun, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+                "--note", "probe: no run to protect")
+        check("a runless detail still repairs", r.returncode == 0, r.stderr.strip()[:140])
+        check("a runless detail appends at the end, as a separate token",
+              rows(norun)[2]["detail"] == f"Closed with no trailer at all head={probe_sha}",
+              rows(norun)[2]["detail"])
+
         # The single-writer property has to survive a repair running CONCURRENTLY
         # with appends: a repair rewrites the file, so a repair holding a different
         # lock than `append` would interleave with it and re-issue an n.
