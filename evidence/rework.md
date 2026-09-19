@@ -57,15 +57,27 @@ the rework family: a *landed change* is a closed work unit, and a change
 
 **Its numerator is the `Subject` column, and it is reported with its linkage
 coverage** — measured 2026-09-19 with `tools/audit.py`, **19 of 38** entries carry
-a determinate Subject. The predicate is narrower than "names a work unit": an
-entry counts only when its subject is in the ledger's **closed-subject set**, so a
-`#N` pointing at something that never closed is not a failed change (`#11`,
-linked by receipt — `3a15fb7`'s own body and ledger `n=23` — not reconstructed;
-`#35`, the landing this patrol's own commit mis-attributed). Printing the coverage
+a determinate Subject. **Two predicates travel under this one figure and they are
+not the same predicate.** The *coverage* counts determinate cells — a `#N` or
+`none` — and is **invariant** to the ledger's closed-subject set: it reads 19 of 38
+whether that set is empty or live (probed 2026-09-19, both). The *change fail rate*
+numerator is the narrower one: `tools/audit.py` increments it only for a determinate
+`#N` that is **in** the closed set, and it has **no else-branch**, so a `#N`
+pointing at something that never closed is counted by the coverage and contributes
+no failure to the rate at all — the linkage reads complete while a case has fallen
+out of the numerator. That silent drop is why resolution is gated **separately**:
+`tests/test_rework.py` asserts every determinate Subject resolves to a real closed
+work unit — 16 distinct subjects examined, 0 dangling, measured 2026-09-19 against
+a closed set of 53 (17 cells over 16 subjects, because `#42` carries two entries).
+The two assertions run side by side on purpose — the coverage one stays invariant
+to another lane's closes, the resolution leg reads the ledger deliberately — and
+neither softens the other (`#64` clause 4, landed `50ce912`). Printing the coverage
 is what stops an under-linked numerator reading as "nothing ever failed". The
 column was added 2026-09-18 and is populated going forward only: the entries
 written before it carry `not recorded (pre-column)` rather than a link
-reconstructed after the fact, because a guessed link is a falsified record. The
+reconstructed after the fact, because a guessed link is a falsified record — a link
+that *is* carried must be established by receipt (`#11`, via `3a15fb7`'s own body
+and ledger `n=23`; `#35`, the landing this patrol's own commit mis-attributed). The
 audit field landed in #34 (closed 2026-09-18) — read the numerator and its
 denominator from `tools/audit.py --no-gates`, or the day's `evidence/scores/`
 file, never from this paragraph: the denominator is the ledger's closed-subject
