@@ -275,7 +275,7 @@ repo, on a surface with **one named writer**. Every other path to it is read-onl
 | `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling, run | `tools/ledger.py append` | `tail`, `verify` — read-only |
 | `evidence/subprocesses/*.jsonl` | granular domain-specific subprocess event streams | `tools/ledger.py append --subprocess` | `tail`, `verify` — read-only |
 | `evidence/insights.jsonl` | empirical factory insights across growth stages | `tools/insights.py append` | `list`, `verify`, `format` — read-only |
-| `evidence/rework.md` | every defect this factory produced, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only, gated by `tests/test_rework.py` |
+| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity and every rate claim's form — never the completeness of the set |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the daily measurement job (`Surveys`) | read-only |
 | `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
