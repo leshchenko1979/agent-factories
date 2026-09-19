@@ -277,6 +277,20 @@ def test_probe_a_bare_integer_subject_fires_naming_the_row(tmp_path: Path) -> No
     assert len(problems) == 1, problems
     assert "n=900" in problems[0] and "bare integer" in problems[0], problems
 
+def test_probe_a_tree_with_no_skills_directory_is_judged_the_same(tmp_path: Path) -> None:
+    """The tree SHAPE is irrelevant to this invariant, and that is asserted rather than
+    assumed. The subject form is a property of the LEDGER, so a tree carrying a root-level
+    law file and no `skills/` directory at all — the layout a factory bootstrapped from
+    this template has — is judged exactly like any other. A gate that found nothing here
+    would report a clean run over a tree it never read, which is the failure this probe
+    pins: the RED must name the offending row in that layout too."""
+    tree = _probe_tree(tmp_path / "root-level-law", [_row(913, "2026-09-19T14:00:00Z", 79)])
+    (tree / "SKILL.md").write_text("# law\n", encoding="utf-8")
+    assert not (tree / "skills").is_dir(), "the fixture must model the layout it claims"
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert "n=913" in problems[0], problems
+
 def test_probe_a_bare_integer_fires_in_every_event(tmp_path: Path) -> None:
     """The invariant is UNSCOPED, and this is the probe that pins it: a bare integer is
     invisible in an intake row exactly as it is in a close, so the reader is asked for
