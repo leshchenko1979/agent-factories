@@ -179,6 +179,15 @@ archive.
 - **No claim without a check.** Existence, absence and status all require a
   tool call in the same turn. "I have not verified" is an acceptable answer;
   a confident guess is not.
+- **An attribution names an ABSOLUTE revision, never a relative one.** The receipt rule above
+  governs RECEIPTS; this governs INVESTIGATION, which a probe that writes no receipt never
+  reaches. `HEAD~1` means *the parent of whatever HEAD is when the probe runs*, so in a shared
+  worktree where other lanes commit concurrently the revision it resolves is not the revision
+  the author meant, and the verdict describes a commit nobody chose. A claim about which commit
+  introduced a change is established by reading that commit's own blob (`git show <sha>:<path>`),
+  never by a relative revision, and a probe that must compare before and after resolves both
+  sides to named commits. The same binds the RECORD: a rework entry that cites a
+  relative-revision form must name the resolved absolute sha.
 - **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
   run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
   only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,

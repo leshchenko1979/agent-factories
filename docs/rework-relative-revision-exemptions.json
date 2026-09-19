@@ -1,0 +1,19 @@
+{
+  "_note": "Exemptions for tests/test_rework_relative_revision.py, keyed by the three fields the gate matches on: subject, column, form. This is the FACTORY's own data, read by the gate and never inline in it, because the gate is paired byte-identically with TEMPLATE/tests/test_rework_relative_revision.py and a factory subject must not live in a file that ships to every new factory. The skeleton is TEMPLATE/docs/rework-relative-revision-exemptions.example.json. Absent or empty means no exemptions. Every matching citation is printed as an 'excused:' line on EVERY gate run, and the closing line distinguishes clean from excused, so 'clean' and 'excused' are never the same output. A malformed entry, or one that matches no citation, is a gate ERROR rather than a silent pass. An exemption is admitted ONLY where the citation is LAWFUL IN PLACE — the case here is a rework entry that QUOTES the moving-HEAD form as the MECHANISM of the very defect #86 was filed for, which is a record to preserve rather than a claim to correct. Both entries below are on one row, #80, and both were read off the gate's own first run, not retyped.",
+  "exemptions": [
+    {
+      "subject": "#80",
+      "column": "Root cause",
+      "form": "HEAD~1",
+      "date": "2026-09-19",
+      "reason": "PERMANENT — the cell NARRATES the investigative defect #86 was filed for: this lane's stash-then-checkout probe ran the gate at HEAD~1 and read the docs/ drift as PRE-EXISTING, when a peer lane's commit landing between the stash and the checkout had made HEAD~1 this lane's OWN commit rather than its parent. The moving-HEAD form is therefore the MECHANISM of the defect, quoted, not an attribution anyone is asserting — rewriting it would falsify the record of what happened, and evidence/rework.md is Triage's single-writer surface, so the quotation is not this lane's to change. Measured at the gate's first run: this cell carries the form twice, which is why one exemption covers two citations."
+    },
+    {
+      "subject": "#80",
+      "column": "Prevented by",
+      "form": "HEAD~",
+      "date": "2026-09-19",
+      "reason": "TRANSIENT — the cell states that a grep for HEAD~ over the law surfaces returns 0 hits, and that claim is FALSE by measurement: the gate's own first run found 3 governed citations, all of them inside this single entry, so ruling n=558's calibration was never re-measured against the log. The claim is preserved rather than corrected because the cell belongs to Triage, and this exemption is to be DELETED in the same change that corrects the claim — the gate errors on an exemption that matches nothing, so the record and its exemption cannot drift apart."
+    }
+  ]
+}

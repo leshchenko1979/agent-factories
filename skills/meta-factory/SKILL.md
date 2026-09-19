@@ -217,6 +217,19 @@ leaning on shared memory rather than on what it said.
   same turn. "I have not verified" is acceptable; a confident guess is not.
 - **Verification is scoped by load-bearing.** Verify what you will act on or report; accept
   receipted facts you will not. In a cross-lane pass, the value is the **contradiction** check.
+- **An attribution names an ABSOLUTE sha, never a relative revision.** The receipt rule above
+  governs RECEIPTS; this governs INVESTIGATION, which a probe that writes no receipt never
+  reaches. `HEAD~1` means *the parent of whatever HEAD is when the probe runs*, so in a shared
+  worktree where other lanes commit concurrently the revision it resolves is not the revision
+  the author meant, and the verdict describes a commit nobody chose. Measured 2026-09-19: a
+  stash-then-checkout probe read a `docs/` drift as PRE-EXISTING because a peer lane's commit
+  landed between the stash and the checkout, so `HEAD~1` was this lane's OWN commit rather than
+  its parent; the drift was attributed correctly only by reading both blobs at the NAMED
+  commits. A claim about which commit introduced a change is established by reading that
+  commit's own blob (`git show <sha>:<path>`), never by a relative revision, and a probe that
+  must compare before and after resolves both sides to named commits. The same binds the
+  RECORD: an `evidence/rework.md` entry that cites a relative-revision form must name the
+  resolved absolute sha, upheld by `tests/test_rework_relative_revision.py` (#86, ruling n=558).
 - **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
   run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
   only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,

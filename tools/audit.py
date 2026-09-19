@@ -800,6 +800,28 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_patrol_host_state.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_patrol_host_state.py"])
 
+    # 36. Rework relative-revision gate: an attribution names an ABSOLUTE sha, never a
+    #     moving-HEAD-relative form. The receipt rule above (gate 29) governs RECEIPTS,
+    #     which is a claim a lane writes down; this governs INVESTIGATION, which a probe
+    #     that writes no receipt never reaches. `HEAD~1` means *the parent of whatever HEAD
+    #     is when the probe runs*, so in a shared worktree where other lanes commit
+    #     concurrently the revision it resolves is not the revision the author meant — and
+    #     the verdict is wrong in the direction that EXONERATES the change under
+    #     investigation. Measured at landing (2026-09-19, issue #86, ruling n=558): a
+    #     stash-then-checkout probe ran a gate at `HEAD~1` and read a docs/ drift as
+    #     PRE-EXISTING because a peer lane's commit landed between the stash and the
+    #     checkout. The durable trace of an investigation is evidence/rework.md, so the
+    #     predicate reads THAT log: the probe is transient, its record is not. It is a
+    #     REVISION-CITATION predicate, never a bare tilde match — the live log carries 4
+    #     tildes and 7 carets and only 6 sit in a citation, the rest being a
+    #     home-directory path and four regex anchors, so a character match would red the
+    #     audit on its first run while reporting nothing true. Exemptions are factory data
+    #     in docs/rework-relative-revision-exemptions.json, and the gate prints its
+    #     population on every run so a clean run and an unexamined one are never the same
+    #     output (issue #86, ruling n=558, P29).
+    if (repo_root / "tests/test_rework_relative_revision.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_rework_relative_revision.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
