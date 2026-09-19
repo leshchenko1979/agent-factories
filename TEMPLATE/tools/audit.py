@@ -842,6 +842,22 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_ledger_close_preflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_close_preflight.py"])
 
+    # 38. Telemetry-reader registry gate: a telemetry field read out of a row's `detail`
+    #     must go through the shared predicate in `tools/field_predicate.py`, because a
+    #     free-prose `detail` QUOTES trailers as evidence and a private scan takes a
+    #     quotation for a measurement — `n=586` over-reported cost 16x by aggregating
+    #     `n=303`'s quoted trailer. Four call sites were repaired one at a time before the
+    #     CLASS was seen (#88, n=405 clause 5), and the class moves to the next module
+    #     after each repair, so the mechanism is a registry rather than a fifth repair.
+    #     The predicate is AST-shaped, never a substring scan: `telemetry.py` CONSTRUCTS
+    #     the tokens (a declared writer, allow-listed and printed every run) and
+    #     `patrol_host_state.py` carries the word `turns` inside "re-turns" — a blunt scan
+    #     reported both and would have needed a permanent exemption for a non-defect.
+    #     Measured: 14 modules in the live tree, 0 private readers (issue #99, ruling
+    #     n=599, P29).
+    if (repo_root / "tests/test_telemetry_reader_registry.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_telemetry_reader_registry.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

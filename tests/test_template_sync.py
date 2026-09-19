@@ -77,6 +77,10 @@ PAIRS = [
     ("tests/test_registry.py", "TEMPLATE/tests/test_registry.py"),
     ("tests/test_registry_render.py", "TEMPLATE/tests/test_registry_render.py"),
     ("tests/test_ledger_close_preflight.py", "TEMPLATE/tests/test_ledger_close_preflight.py"),
+    # The telemetry-reader registry gate (#99). It classifies the tools the template
+    # SHIPS, so its allow-list is structural and must travel byte-identically with the
+    # code it describes — a factory that adds its own writer edits its own copy.
+    ("tests/test_telemetry_reader_registry.py", "TEMPLATE/tests/test_telemetry_reader_registry.py"),
 ]
 
 
