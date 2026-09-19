@@ -246,19 +246,25 @@ template law it implies.
 ## 13. State — every surface has one writer
 
 State that lives only in chat is not state. It is a memory of a conversation,
-and it survives exactly as long as the context does. Every durable fact lives in
-the repo, on a surface with **one named writer**; every other path to it is
-read-only.
+State that lives only in chat is not state. It is a memory of a conversation,
+and it survives exactly as long as the context does. Every durable fact lives on
+a surface with **one named writer** — in the repo, or in the one surface this
+factory keeps outside it, the issue board. Every other path to it is read-only.
 
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
+| the issue board (`{{REPO}}` issues) | the work itself — intake, state, and the receipt that resolved it | the lane that files or settles the item (`Triage` owns intake) | read-only, via `gh` |
 | `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling, run | `tools/ledger.py append` | `tail`, `verify` — read-only |
 | `evidence/insights.jsonl` | empirical factory insights across growth stages | `tools/insights.py append` | `list`, `verify`, `format` — read-only |
-| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity and every rate claim's form — never the completeness of the set |
+| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity, every rate claim's form, and that each determinate `Subject` resolves to a closed work unit; the share of closes declaring a disposition is printed, never gated — never the completeness of the set |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the measurement job | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated |
 | `processes.md` | the canonical process register | `HQ` | read-only |
 | this law | the process rules | `HQ` | read-only |
+
+**A close and its board are coupled in three directions.** (1) A close row must name the board state it observed — gated by `tests/test_close_board_recorded.py`; the gate cannot call `gh`, so the settling lane records what it saw and the gate asserts the record. (2) A close must be preceded by its own intake and claim — gated by `tools/ledger.py verify`. (3) A closed board item must have a close row — no offline gate can reach it (a gate cannot call `gh`; `verify` visits only subjects that already have a close row), so its mechanism is a PROCESS: a standing patrol cross-reads the board against the ledger. P29 admits a process as readily as a gate.
+
+A patrol claim names the time it read the board — an untimed claim about a live board cannot be re-checked. A committed board snapshot was rejected: its freshness dimension is unattributable, so a stale file would read as a board/ledger mismatch.
 
 **Authorship is not transcription.** The writer named above decides what a surface
 *says*; applying a correction already decided is **transcription**, and transcription is

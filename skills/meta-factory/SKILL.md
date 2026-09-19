@@ -280,20 +280,28 @@ several, or none.
 ## 11. State — every surface has one writer
 
 State that lives only in chat is not state. It is a memory of a conversation, and it
-survives exactly as long as the context does. Every durable fact therefore lives in the
-repo, on a surface with **one named writer**. Every other path to it is read-only.
+survives exactly as long as the context does. Every durable fact therefore lives on a
+surface with **one named writer** — in the repo, or in the one surface this factory keeps
+outside it, the issue board. Every other path to it is read-only.
 
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
+| the issue board (`leshchenko1979/agent-factories` issues) | the work itself — intake, state, and the receipt that resolved it | the lane that files or settles the item (`Triage` owns intake) | read-only, via `gh` |
 | `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling, run | `tools/ledger.py append` | `tail`, `verify` — read-only |
 | `evidence/subprocesses/*.jsonl` | granular domain-specific subprocess event streams | `tools/ledger.py append --subprocess` | `tail`, `verify` — read-only |
 | `evidence/insights.jsonl` | empirical factory insights across growth stages | `tools/insights.py append` | `list`, `verify`, `format` — read-only |
-| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity and every rate claim's form — never the completeness of the set |
+| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity, every rate claim's form, and that every determinate `Subject` resolves to a real closed work unit (each unresolvable one reported by name); the share of closes DECLARING a rework disposition is PRINTED, never gated — never the completeness of the set |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the daily measurement job (`Surveys`) | read-only |
 | `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
 | `docs/processes.md` | the canonical process register | `HQ` | read-only |
 | `skills/meta-factory/SKILL.md` | this law | `HQ` | read-only |
+
+**A close and its board are coupled in three directions, and each one has its own mechanism.** (1) A close ROW must name the board state it observed — gated by `tests/test_close_board_recorded.py`. That gate cannot call `gh`: the mechanical suite runs offline and against a tree, not a live board, so the settling lane records the board state it saw and the gate asserts the record exists. (2) A close must be preceded by its own intake and claim — gated by `tools/ledger.py verify`, which reads a subject's rows as a sequence and names the subject and the missing leg. (3) A CLOSED board item must have a close row — **no offline gate can reach this direction**, and each mechanism says why in its own code: a gate cannot call `gh` (1 above), and `verify` builds its sequence check by iterating close rows, so a subject with no close row is never visited. Its upholding mechanism is therefore a PROCESS: a standing patrol cross-reads the board against the ledger. P29 admits a process as readily as a gate — a rule needs one or the other, not specifically a gate.
+
+**A patrol claim about the board names the time it read it.** A claim like "no closed item lacks a close row" describes a live board at an instant; without the instant it cannot be re-checked, and by §8's own rule an uncheckable receipt is testimony, not evidence. So the patrol states its read time beside its finding.
+
+**A committed board snapshot was considered for direction (3) and rejected.** It would make the comparison offline and gate-able, but a snapshot carries a freshness dimension the gate cannot attribute: a stale snapshot REDs for a subject whose close row landed after it was taken, and passes for one closed since — the gate would name a board/ledger mismatch when the real cause is a stale file. A detector that cannot name its cause is worse than a process that can, because it fails in a way that reads as a finding.
 
 **Authorship is not transcription.** The writer named above decides what a surface
 *says*; applying a correction already decided is **transcription**, and transcription is
