@@ -595,9 +595,19 @@ def render_markdown(ctx: dict) -> str:
     out.append("")
     out.append(
         "CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead "
-        "uuid · `3` refused mid-turn · `4` transport (A2A disabled or unreachable). "
-        "The CLI's `--mode` default is `now`, which **fails** delivery under the "
-        "fleet's delivery-discipline law — pass `turn-end` explicitly."
+        "uuid · `4` transport — which now carries **two** causes, the A2A gateway "
+        "being unreachable and `--mode now` being refused as retired. Exit `3` is "
+        "retained as a constant but is **unreachable**: no CLI flag produces it, "
+        "because a mid-turn target queues rather than refusing."
+    )
+    out.append("")
+    out.append(
+        "**Omit `--mode` entirely.** The flag's own help still reads "
+        "`now (default)`, but the runtime's default is `turn-end` — verified by "
+        "probe against a live target: no `--mode` at all → rc 0 `delivered`; "
+        "`--mode turn-end` → rc 0 `delivered`; `--mode now` → rc 4 "
+        "`delivery.mode 'now' is retired`. A route documented from the help text "
+        "would hand the reader the one value that cannot work."
     )
     out.append("")
 

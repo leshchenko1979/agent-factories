@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T15:50:17Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T15:54:30Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T15:50:17Z` |
+| generated | live reads | resolved `2026-09-19T15:54:30Z` |
 
 ## Announcements
 
@@ -52,7 +52,9 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
 | factory -> factory, other profile | `opencrabs -p <profile> session notify <uuid>` | works — the CLI posts over that profile's own A2A gateway, so it crosses a process boundary the in-session tool cannot |
 | owner -> factory | Telegram topic | works — human surface only; agents do not read topics |
 
-CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid · `3` refused mid-turn · `4` transport (A2A disabled or unreachable). The CLI's `--mode` default is `now`, which **fails** delivery under the fleet's delivery-discipline law — pass `turn-end` explicitly.
+CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid · `4` transport — which now carries **two** causes, the A2A gateway being unreachable and `--mode now` being refused as retired. Exit `3` is retained as a constant but is **unreachable**: no CLI flag produces it, because a mid-turn target queues rather than refusing.
+
+**Omit `--mode` entirely.** The flag's own help still reads `now (default)`, but the runtime's default is `turn-end` — verified by probe against a live target: no `--mode` at all → rc 0 `delivered`; `--mode turn-end` → rc 0 `delivered`; `--mode now` → rc 4 `delivery.mode 'now' is retired`. A route documented from the help text would hand the reader the one value that cannot work.
 
 ## Factories
 
