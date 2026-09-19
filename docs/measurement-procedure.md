@@ -163,6 +163,39 @@ flowchart TD
 
 7. **Record and Commit:**
    - Write dated report to `evidence/scores/<YYYY-MM-DD>.md`.
+   - **The artifact's REQUIRED SECTIONS — the run's own output is gated too.** The dated
+     file must carry, at minimum, these headings:
+     - `## Executive Summary & Movements`, with the `### Family-level fleet view`
+       subsection (mean score per family, out of 4 per criterion);
+     - `## Subject Matter Consulting Gate Status`;
+     - `## Detailed Factory Scorecards`, carrying one numbered per-factory criterion
+       scorecard heading per surveyed factory, written `### <n>. <factory> — <score> / 76`;
+     - `## Consulting Advisories (prioritised)`;
+     - a `## Method` section stating the run's limits;
+     - `## Run Self-Audit Verdict` — the run's own gate verdict, so the artifact states the
+       machine's condition beside the fleet's;
+     - `## Pacemaker Verification` — the pacemaker-thinness result described below.
+
+     Seven of those nine entries are DERIVED: each is present in BOTH committed artifacts
+     (`evidence/scores/2026-09-17.md` and `2026-09-18.md`), which is what makes them this
+     artifact's actual shape rather than a preference. The remaining two are MANDATED by
+     ruling and cannot be derived, because neither committed artifact carries them as a
+     section. Two entries are matched by family rather than by a fixed string, and the
+     artifacts are why: the method-note heading is not identical across the two runs, and
+     the per-family scorecards are numbered — requiring either as an exact string would
+     invent a form the artifacts do not have. `tests/test_score_artifact_sections.py`
+     asserts each named section is present, forward-only from **2026-09-20**. The landing
+     day's artifact is already written and is reported as `excused:`, never backfilled: a
+     section reconstructed after the fact is fabricated provenance, the same no-backfill
+     law as the close trailer's.
+   - **Pacemaker thinness — P7's upholding mechanism.** The run verifies that the pacemaker
+     crons it relies on are THIN (`deliver_to` NULL, `set_goal` 0, a one-command wake
+     prompt) and records the result in the artifact's `## Pacemaker Verification` section.
+     This is an OPERATIONAL check, not a repo gate: cron state lives in the harness
+     database, not in the tree, so a gate reading it would red in every bootstrapped
+     factory that has no such table. `tests/test_law_coverage.py` therefore maps P7 to the
+     section gate above rather than to `tools/hygiene.py`, which mentioned the pacemaker
+     only in prose and upheld nothing.
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
      carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
      the run committed at (`head=<full-sha>`) — those two tokens are read by

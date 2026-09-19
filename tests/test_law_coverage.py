@@ -44,7 +44,13 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P4": ["tests/test_session_bindings.py", "skills/meta-factory/SKILL.md"],  # Direct message to session UUID
     "P5": ["evidence/ledger.jsonl"],  # Named place carries state
     "P6": ["TEMPLATE/roles/hq.md", "skills/meta-factory/SKILL.md", "tests/test_hq_delegation.py"],  # HQ works on process, not in it
-    "P7": ["tools/hygiene.py"],  # Cron is thin pacemaker trigger
+    # P7's mechanism is a DECLARED OPERATIONAL PROCESS, not a repo gate: cron state lives
+    # in the harness database, not in the tree, so a gate reading it would red in every
+    # bootstrapped factory that has no such table (#68's failure). The measurement run
+    # verifies the pacemaker crons are thin and the RESULT is a required artifact section,
+    # which tests/test_score_artifact_sections.py asserts. It mapped to tools/hygiene.py
+    # before, which mentioned the pacemaker only in prose and upheld nothing (#69).
+    "P7": ["tests/test_score_artifact_sections.py", "docs/measurement-procedure.md"],
     "P8": ["tests/test_ontology.py"],  # Codify vocabulary with a test
     "P9": ["tools/audit.py"],  # Mechanical gates beat prose judgment
     "P10": ["tests/test_template_sync.py", "tests/test_ledger_schema.py"],  # Verification in repo instruction

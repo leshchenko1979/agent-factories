@@ -667,6 +667,19 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_close_row_revision.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_row_revision.py"])
 
+    # 30. Score-artifact section gate: the day's score artifact carries every section step 7
+    #     requires. The run's own output was the one surface no gate covered, so a
+    #     restructure dropped the per-family criterion scorecards while every gate still
+    #     read rc=0. Forward-only from 2026-09-20, with the landing day's artifact excused
+    #     and never backfilled. The same gate is P7's upholding mechanism: the pacemaker
+    #     thinness the run verifies is a required section of that artifact, because cron
+    #     state lives in the harness database rather than in the tree, so a gate reading it
+    #     would red in every bootstrapped factory (issue #69, P29).
+    if (repo_root / "tests/test_score_artifact_sections.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_score_artifact_sections.py"]
+        )
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

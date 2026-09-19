@@ -52,6 +52,7 @@ PAIRS = [
     ("tests/test_criteria_count.py", "TEMPLATE/tests/test_criteria_count.py"),
     ("tests/test_roadmap_transition.py", "TEMPLATE/tests/test_roadmap_transition.py"),
     ("tests/test_board_intake_recorded.py", "TEMPLATE/tests/test_board_intake_recorded.py"),
+    ("tests/test_score_artifact_sections.py", "TEMPLATE/tests/test_score_artifact_sections.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
 ]
 
