@@ -254,6 +254,12 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_rework.py",
     "test_rework_relative_revision.py",
     "test_registry.py",
+    # Added with its registration (issue #107, ruling n=639). It was ALREADY shipped by
+    # the template — byte-paired at `tests/test_template_sync.py` — while no runner ran it
+    # and no manifest named it, so every factory carried the file and none executed it.
+    # REQUIRED is the correct grain and OPTIONAL is not: a manifest that omitted a paired
+    # gate would let a factory drop the runner and keep the file.
+    "test_registry_render.py",
     "test_roadmap_transition.py",
     "test_score_artifact_sections.py",
     "test_score_gate_recorded.py",

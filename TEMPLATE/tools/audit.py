@@ -876,6 +876,25 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_commit_pair_hook.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_commit_pair_hook.py"])
 
+    # 40. Registry-render gate: the renderer's own rules — dedupe, freshness and render
+    #     determinism — asserted over SYNTHETIC contexts, so the suite is hermetic and
+    #     offline. It was written as `#102`'s prevention and `evidence/rework.md` names it
+    #     in that entry's Prevented-by cell, yet NO RUNNER RAN IT until issue #107 (ruling
+    #     n=639): its only executions in this factory's history were manual, inside the
+    #     closing-turn prose of two close rows. A gate that never runs is
+    #     indistinguishable from a gate that passes, and because the file is byte-paired
+    #     into TEMPLATE the false prevention shipped to every factory.
+    #     THE FORM IS PYTEST, AND THAT IS NOT A STYLE CHOICE. The file defines `def test_*`
+    #     at module level and has NO `__main__` block, so `python3 tests/test_registry_render.py`
+    #     binds 29 test functions and EXECUTES NONE — it exits 0 with empty output. The
+    #     script form would therefore register a gate that prints PASS while running
+    #     nothing, which is the exact class this registration exists to close. Measured
+    #     both ways at landing: script form rc=0 with no output, pytest form 29 passed.
+    #     `tests/gate_registry.py` direction 4 now asserts this pairing mechanically, so
+    #     the form cannot silently regress.
+    if (repo_root / "tests/test_registry_render.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_registry_render.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

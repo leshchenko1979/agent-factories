@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for tools/registry_render.py — dedupe, freshness, and render determinism.
+"""Gate: the renderer's own rules — dedupe, freshness, and render determinism.
 
 These are the rules the renderer owns, and each is probed with a SYNTHETIC context
 rather than the live box: `build_context` reads every profile database and every
@@ -10,6 +10,26 @@ which is exactly why they can be probed at all.
 The one live-ish path is `run_check`, and the only case reached here is an UNKNOWN
 predicate name — which short-circuits before any connect, so the test stays
 hermetic while still proving a bad `check:` name cannot take a render down.
+
+Why this file declares itself a gate, and why it says so HERE (issue #107, ruling
+n=639). It was written as `#102`'s prevention and `evidence/rework.md` names it in
+that entry's Prevented-by cell — so a codified law surface already cited it as the
+mechanism upholding the renderer's determinism, while `tools/gate_registry.py`'s
+predicate states in its own words that ONLY THE DECLARATION discriminates. This
+file declared nothing, so it was a declared gate to one law and invisible to the
+other: a P29 breach reached by the one path the `#59` fix cannot see — a file that
+does not declare itself. The mechanism's only execution in this factory's history
+was manual, inside a close row's prose (`n=618`, `n=627`), which is the shape of a
+prevention nobody will run again. It is byte-paired into `TEMPLATE/`, so the false
+prevention shipped to every factory.
+
+THE RUNNER FORM IS LOAD-BEARING. This file is pytest-style — `def test_*` at module
+level and NO `__main__` block — so `python3 tests/test_registry_render.py` DEFINES
+its 29 test functions and EXECUTES NONE: it exits 0 with no output. It must
+therefore be registered as `[sys.executable, "-m", "pytest", ...]` and never in the
+script form, because the script form would add a gate that prints PASS while running
+nothing, which is the class this factory already names. `tests/gate_registry.py`
+asserts that pairing (direction 4).
 """
 
 from __future__ import annotations
