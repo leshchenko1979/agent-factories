@@ -55,6 +55,9 @@ PAIRS = [
     ("tests/test_score_artifact_sections.py", "TEMPLATE/tests/test_score_artifact_sections.py"),
     ("tests/test_duplicate_prose.py", "TEMPLATE/tests/test_duplicate_prose.py"),
     ("tests/test_ledger_no_shrink.py", "TEMPLATE/tests/test_ledger_no_shrink.py"),
+    ("tests/ledger_boundary.py", "TEMPLATE/tests/ledger_boundary.py"),
+    ("tests/test_close_row_revision.py", "TEMPLATE/tests/test_close_row_revision.py"),
+    ("tests/test_score_gate_recorded.py", "TEMPLATE/tests/test_score_gate_recorded.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
 ]
 

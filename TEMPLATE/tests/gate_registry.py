@@ -232,6 +232,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_audit_rates.py",
     "test_board_intake_recorded.py",
     "test_close_board_recorded.py",
+    "test_close_row_revision.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
     "test_docs_sync.py",
@@ -250,6 +251,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_rework.py",
     "test_roadmap_transition.py",
     "test_score_artifact_sections.py",
+    "test_score_gate_recorded.py",
     "test_single_writer.py",
     "test_template_integrity.py",
 )
@@ -258,20 +260,12 @@ REQUIRED_GATES: tuple[str, ...] = (
 # than merely omitted — the discipline `TOOL_INVOCATION_NOTE` already applies, so the
 # optional set is PRINTED WITH ITS REASON and an omission is never implied away (Part 4).
 #
-# The first two entries are a held order, not a settled classification, and they say so:
-# HQ ruling n=432 Part 5 orders them propagated, and this tree has not propagated them.
-# See `docs/` / the ledger row for #68 for the conflict and the recommendation.
+# `test_close_row_revision.py` and `test_score_gate_recorded.py` were the first two entries
+# here, held against n=432 Part 5's propagation order. That order is now EXECUTED: ruled at
+# n=515 clause 4 in its DECLARED-factory-parameter form, both files moved into
+# REQUIRED_GATES and gained their TEMPLATE twins in one change (issue #78). Nothing is
+# held here any more, so every entry below is a settled classification.
 OPTIONAL_GATES: dict[str, str] = {
-    "test_close_row_revision.py": (
-        "propagation ORDERED at n=432 Part 5 but HELD — the file's own committed docstring "
-        "argues against pairing: it hardcodes a meta-factory INVARIANT_LANDED boundary, "
-        "which the ruling's stated reason ('reads only REPO/evidence and git') does not "
-        "address. Recommend propagating WITH that boundary parameterized."
-    ),
-    "test_score_gate_recorded.py": (
-        "same class as test_close_row_revision.py — hardcodes a meta-factory "
-        "INVARIANT_LANDED boundary; its propagation is held on the same open question."
-    ),
     "test_law_coverage.py": (
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md and "
         "would RED in a bootstrapped factory."
