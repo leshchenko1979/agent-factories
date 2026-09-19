@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -194,6 +195,86 @@ def main() -> int:
                  (("intake", "#3"), ("claim", "#3"), ("close", "#3")), 0, ())
         seq_case("P4 a claim before its intake is refused",
                  (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 1, ("#4", "precedes"))
+        print("\nthe append-time guard — a revert is loud, not silent")
+        # The lock serialises the appenders, not the file they append to. A
+        # revert lowers the working file OUTSIDE the lock and the next lawful
+        # append re-issues a committed `n`. The guard reads the COMMITTED
+        # lineage, so this probe needs a real repository: a copy of the tool
+        # inside a throwaway git repo, where the tool's REPO resolves to that
+        # repo's root and the live surface is never touched.
+        guard_repo = Path(tmp) / "guardrepo"
+        (guard_repo / "tools").mkdir(parents=True)
+        (guard_repo / "evidence").mkdir()
+        shutil.copy2(TOOL, guard_repo / "tools" / "ledger.py")
+        guard_tool = guard_repo / "tools" / "ledger.py"
+        guard_ledger = guard_repo / "evidence" / "ledger.jsonl"
+
+        def git(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["git", "-c", "user.email=probe@factory", "-c", "user.name=probe",
+                 "-c", "commit.gpgsign=false", *args],
+                cwd=guard_repo, capture_output=True, text=True,
+            )
+
+        def guard_run(*args: str) -> subprocess.CompletedProcess:
+            env = {**os.environ, "OC_LEDGER_PATH": str(guard_ledger)}
+            env["OC_ACTORS_PATH"] = str(guard_repo / "no-actors.txt")
+            return subprocess.run(
+                [sys.executable, str(guard_tool), *args],
+                capture_output=True, text=True, env=env, cwd=guard_repo,
+            )
+
+        write_ledger(guard_ledger, ("intake", "#1"), ("claim", "#1"), ("close", "#1"))
+        git("init", "-q")
+        git("add", "-A")
+        git("commit", "-q", "-m", "three rows")
+
+        # The revert, in the #57 shape exactly: three rows committed, two in the
+        # working file, so the next append would re-issue n=3.
+        lines = guard_ledger.read_text(encoding="utf-8").splitlines(keepends=True)
+        guard_ledger.write_text("".join(lines[:2]), encoding="utf-8")
+        r = guard_run("append", "--event", "run", "--actor", "hq",
+                      "--subject", "after-revert", "--detail", "probe")
+        err = r.stderr.strip()
+        check("a reverted working file refuses the append", r.returncode != 0, err[:90])
+        check("the refusal names the first divergent row",
+              "row 3" in err and "'#1'" in err, err[:140])
+        check("the refused append wrote nothing",
+              len(rows(guard_ledger)) == 2, f"{len(rows(guard_ledger))} row(s)")
+
+        # Editing already-committed history is the other fatal shape.
+        guard_ledger.write_text("".join(lines), encoding="utf-8")
+        mutated = rows(guard_ledger)
+        mutated[1]["subject"] = "#tampered"
+        guard_ledger.write_text(
+            "\n".join(json.dumps(row) for row in mutated) + "\n", encoding="utf-8")
+        r = guard_run("append", "--event", "run", "--actor", "hq",
+                      "--subject", "after-edit", "--detail", "probe")
+        err = r.stderr.strip()
+        check("an edited committed row refuses the append", r.returncode != 0, err[:90])
+        check("the refusal names the edited row",
+              "row 2" in err and "#tampered" in err, err[:140])
+
+        # Fail-open: no committed lineage to read must never block a factory.
+        fresh = Path(tmp) / "freshfactory"
+        (fresh / "tools").mkdir(parents=True)
+        (fresh / "evidence").mkdir()
+        shutil.copy2(TOOL, fresh / "tools" / "ledger.py")
+        fresh_ledger = fresh / "evidence" / "ledger.jsonl"
+        r = subprocess.run(
+            [sys.executable, str(fresh / "tools" / "ledger.py"), "append",
+             "--event", "genesis", "--actor", "owner",
+             "--subject", "genesis", "--detail", "the surface came into existence"],
+            capture_output=True, text=True, cwd=fresh,
+            env={**os.environ, "OC_LEDGER_PATH": str(fresh_ledger),
+                 "OC_ACTORS_PATH": str(fresh / "no-actors.txt")},
+        )
+        check("no committed lineage: the append proceeds (fail-open)",
+              r.returncode == 0, r.stderr.strip()[:90])
+        check("no committed lineage: the guard warns",
+              "fail-open" in r.stderr, r.stderr.strip()[:90])
+        check("the fail-open append landed",
+              len(rows(fresh_ledger)) == 1, f"{len(rows(fresh_ledger))} row(s)")
 
     print()
     if failures:

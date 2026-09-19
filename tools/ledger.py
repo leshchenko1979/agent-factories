@@ -10,6 +10,17 @@ read the same last row, both write `n+1`, and the ledger silently acquires two
 row 41s. The rubric's Single-writer state criterion (L3) counts a *named*
 authoritative writer per surface — this is that name.
 
+The lock serialises appenders, but it cannot vouch for the file they append to.
+A revert — `git checkout -- evidence/ledger.jsonl`, `git restore`, a stale-copy
+overwrite — lowers the working file WITHOUT taking the lock, and the next lawful
+append then re-issues a row number already committed. So `append` also compares
+the working file against the COMMITTED lineage (`origin/main`, degrading to
+`HEAD`) and refuses, writing nothing, when the working file is shorter than what
+is committed or when any shared row differs. The refusal names the first
+divergence. Where no committed lineage is readable at all — a fresh factory, no
+remote, an untracked file — the guard warns and proceeds: the guard exists to make
+a revert loud, never to block a factory that has nothing to compare against.
+
 Commands
 --------
   append --event E --actor A --subject S --detail D   the only write
@@ -37,6 +48,7 @@ import argparse
 import fcntl
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,6 +126,92 @@ def read_rows(path: Path) -> list[dict]:
             sys.exit(f"ledger line {n} is not JSON: {exc}")
     return rows
 
+def _git_show(ref: str, rel_path: str) -> str | None:
+    """The committed bytes of `rel_path` at `ref`, or None when unreadable."""
+    try:
+        proc = subprocess.run(
+            ["git", "show", f"{ref}:{rel_path}"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
+    """The rows the repository has COMMITTED for `path`, and the ref they came from.
+
+    (None, None) means no committed lineage was readable — a fresh factory with
+    no commits, no remote, or a file that is not tracked. The caller treats that
+    as fail-open: the guard makes a revert loud, it never blocks a factory that
+    has nothing to compare against.
+    """
+    try:
+        rel_path = path.resolve().relative_to(REPO).as_posix()
+    except ValueError:
+        sys.stderr.write(
+            "warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n"
+        )
+        return None, None
+    for ref in ("origin/main", "HEAD"):
+        text = _git_show(ref, rel_path)
+        if text is None:
+            continue
+        rows: list[dict] = []
+        parsed = True
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                parsed = False
+                break
+        if parsed:
+            return rows, ref
+        break
+    sys.stderr.write(
+        "warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n"
+    )
+    return None, None
+
+def lineage_divergence(
+    rows: list[dict], committed_rows: list[dict], ref_name: str
+) -> str | None:
+    """The first way the working file diverges from the committed lineage, else None.
+
+    Two shapes, both fatal. The working file is SHORTER than what is committed:
+    a revert, and the next append would re-issue a committed `n`. Or a shared row
+    differs: already-committed history was edited. The message names the row and
+    the subject, because "the ledger is inconsistent" is not actionable.
+    """
+    if len(rows) < len(committed_rows):
+        i = len(rows)
+        c = committed_rows[i]
+        return (
+            f"working file has {len(rows)} row(s), but committed lineage "
+            f"({ref_name}) has {len(committed_rows)} row(s). First divergence at "
+            f"row {i + 1}: committed is n={c.get('n')} subject={c.get('subject')!r}"
+        )
+    for i, (w, c) in enumerate(zip(rows, committed_rows), 1):
+        if (
+            w.get("n") != c.get("n")
+            or w.get("subject") != c.get("subject")
+            or w.get("event") != c.get("event")
+        ):
+            return (
+                f"row {i} diverges from committed lineage ({ref_name}): working "
+                f"has n={w.get('n')} subject={w.get('subject')!r} "
+                f"event={w.get('event')!r}, committed has n={c.get('n')} "
+                f"subject={c.get('subject')!r} event={c.get('event')!r}"
+            )
+    return None
+
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
@@ -134,6 +232,15 @@ def cmd_append(args: argparse.Namespace) -> int:
     with open(target_lock, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         rows = read_rows(target_ledger)
+        # The lock vouches for the appenders, not for the file. A revert
+        # lowers the working file outside the lock, and the next lawful
+        # append would re-issue a committed `n`. Compare against the
+        # committed lineage first, and refuse before anything is written.
+        committed_rows, ref_name = read_committed_rows(target_ledger)
+        if committed_rows is not None:
+            divergence = lineage_divergence(rows, committed_rows, ref_name)
+            if divergence:
+                sys.exit(f"ledger append refused: {divergence}")
         detail = args.detail
         if args.event == "close":
             try:
