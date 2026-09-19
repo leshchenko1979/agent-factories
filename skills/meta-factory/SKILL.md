@@ -193,9 +193,6 @@ This factory is scored against `docs/quality-criteria.md` — 19 criteria across
 The surveyed factories are measured on the same cadence. A factory's **own HQ owns its
 domain detail**; what travels back is the score and the template law it implies.
 
-The surveyed factories are measured on the same cadence. A factory's **own HQ owns its
-domain detail**; what travels back is the score and the template law it implies.
-
 ---
 
 ## 7. Reporting language

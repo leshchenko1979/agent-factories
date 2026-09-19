@@ -682,6 +682,17 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
             [sys.executable, "-m", "pytest", "tests/test_score_artifact_sections.py"]
         )
 
+    # 31. Duplicate-prose gate: a law file must not state the same prose claim twice.
+    #     Two live instances were found in shipped law and no gate read prose structure
+    #     at all — the structure gate reads heading numbers, and the profile and template
+    #     copies are not paired because they differ by design — so the audit sat rc=0
+    #     HEALTHY with the duplication in place. Two arms, because the class took two
+    #     shapes and neither arm covers the other: consecutive identical lines are one
+    #     block repeating inside itself, which the block arm cannot see, and a repeated
+    #     paragraph block is invisible to a line-granular scan (issue #73, P29).
+    if (repo_root / "tests/test_duplicate_prose.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_duplicate_prose.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
