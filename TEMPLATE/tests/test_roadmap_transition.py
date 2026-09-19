@@ -52,6 +52,12 @@ DECLARATION = "docs/products.json"
 EXAMPLE = "docs/products.example.json"
 TIMEOUT = 60
 
+# The throwaway tree is built by the shared helper, so it stages the tool AND its
+# local imports. Staging the tool alone models a tree that stops existing the
+# moment the tool gains a neighbour import (P35, #60).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gate_fixtures import stage_tool  # noqa: E402
+
 
 def run_tool(root: Path) -> tuple[int, str]:
     """Run the real CLI inside `root`; return (exit code, stderr-or-stdout)."""
@@ -85,7 +91,7 @@ def tree(root: Path, declaration: object = None, artifacts: tuple[str, ...] = ()
     """A template-shaped tree: the shipped tool, the shipped skeleton, optionally a declaration."""
     (root / "tools").mkdir(parents=True, exist_ok=True)
     (root / "docs").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / TOOL_REL, root / TOOL_REL)
+    stage_tool(REPO_ROOT / TOOL_REL, root / "tools", REPO_ROOT / "tools")
     shutil.copy2(REPO_ROOT / EXAMPLE, root / EXAMPLE)
     for art in artifacts:
         (root / art).mkdir(parents=True, exist_ok=True)

@@ -24,6 +24,10 @@ REPO = Path(__file__).resolve().parent.parent
 
 PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
+    ("tests/gate_fixtures.py", "TEMPLATE/tests/gate_fixtures.py"),
+    ("tests/gate_registry.py", "TEMPLATE/tests/gate_registry.py"),
+    ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
+    ("tests/test_gate_fixtures_closure.py", "TEMPLATE/tests/test_gate_fixtures_closure.py"),
     ("tests/test_ontology.py", "TEMPLATE/tests/test_ontology.py"),
     ("tests/test_ledger.py", "TEMPLATE/tests/test_ledger.py"),
     ("tests/test_rework.py", "TEMPLATE/tests/test_rework.py"),

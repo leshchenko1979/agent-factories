@@ -28,6 +28,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 TOOL = REPO / "tools" / "ledger.py"
+LOCAL_TOOLS = REPO / "tools"
+
+# A throwaway tree must model the tree the tool actually runs in. Copying the tool
+# alone reds the probe the moment it gains a neighbour import, and this gate's
+# append-guard probe needs a real repository, so that failure would read as a
+# ledger defect rather than a fixture one.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gate_fixtures import stage_tool  # noqa: E402
 
 failures: list[str] = []
 
@@ -82,7 +90,20 @@ def write_ledger(path: Path, *events: tuple[str, str]) -> None:
         encoding="utf-8",
     )
 
+def check_registered_in_the_audit() -> None:
+    """An unregistered gate never runs — assert this one is wired (P29, issue #59)."""
+    audit = (REPO / "tools" / "audit.py").read_text(encoding="utf-8")
+    check(
+        "this gate is registered in tools/audit.py",
+        "tests/test_ledger.py" in audit,
+        "an unregistered gate never runs (P29)",
+    )
+
+
 def main() -> int:
+    print("registration — an unregistered gate never runs (P29)")
+    check_registered_in_the_audit()
+
     with tempfile.TemporaryDirectory() as tmp:
         ledger = Path(tmp) / "ledger.jsonl"
 
@@ -205,7 +226,7 @@ def main() -> int:
         guard_repo = Path(tmp) / "guardrepo"
         (guard_repo / "tools").mkdir(parents=True)
         (guard_repo / "evidence").mkdir()
-        shutil.copy2(TOOL, guard_repo / "tools" / "ledger.py")
+        stage_tool(TOOL, guard_repo / "tools", LOCAL_TOOLS)
         guard_tool = guard_repo / "tools" / "ledger.py"
         guard_ledger = guard_repo / "evidence" / "ledger.jsonl"
 
@@ -259,7 +280,7 @@ def main() -> int:
         fresh = Path(tmp) / "freshfactory"
         (fresh / "tools").mkdir(parents=True)
         (fresh / "evidence").mkdir()
-        shutil.copy2(TOOL, fresh / "tools" / "ledger.py")
+        stage_tool(TOOL, fresh / "tools", LOCAL_TOOLS)
         fresh_ledger = fresh / "evidence" / "ledger.jsonl"
         r = subprocess.run(
             [sys.executable, str(fresh / "tools" / "ledger.py"), "append",

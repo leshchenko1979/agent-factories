@@ -37,6 +37,117 @@ SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
 
 
 
+# The `outcome` field's domain, named once (`docs/processes.md`: accepted · reworked ·
+# abandoned · failed). Anything outside it is not an outcome, it is a typo.
+OUTCOME_DOMAIN = ("accepted", "reworked", "abandoned", "failed")
+
+def declared_outcome(detail: str) -> tuple[str, str | None]:
+    """What the row DECLARES about its outcome: (bucket, problem).
+
+    The bucket is one of the four domain values, or `"unstated"` when the row
+    declares no outcome at all, or `"invalid:<value>"` when it declares one outside
+    the domain. `problem` is a readable report for the two non-domain cases.
+
+    Two rules, both from #53 (ruling n=333 clause 4):
+
+    * **Read a FIELD, not the first `outcome=` substring in free prose.** The writer
+      appends its trailer at the END of the detail, so the LAST `outcome=` token is
+      the canonical one and an earlier mention is prose that happens to contain the
+      word. The old reader took the FIRST substring and stripped nothing, so a close
+      row whose prose ended `outcome=accepted.` yielded the value `accepted.` — the
+      sentence's full stop travelling inside the value.
+    * **Validate the value against the domain.** The old reader did not, so a typo
+      read as a failure — it fabricated a non-success as readily as a success. The
+      live instance was a close row whose prose read `outcome=accepted.`, with the
+      sentence's full stop inside the value, which dropped a genuinely accepted
+      work unit out of the success set.
+
+    An unstated outcome is UNKNOWN. It is never `accepted`: that default is the
+    defect this clause removes, and it is why the two headline rates could only
+    report success.
+    """
+    value = None
+    for part in str(detail).split():
+        if part.startswith("outcome="):
+            value = part.split("=", 1)[1]
+    if value is None:
+        return "unstated", None
+    if value in OUTCOME_DOMAIN:
+        return value, None
+    return (
+        f"invalid:{value}",
+        f"outcome value {value!r} is outside the domain {OUTCOME_DOMAIN} — "
+        f"reported, never bucketed as a verdict",
+    )
+
+def format_yield_rate(stats: dict[str, Any]) -> str:
+    """The yield as a percentage, or `n/a` when no run row states an outcome."""
+    value = stats.get("first_pass_yield")
+    return "n/a" if value is None else f"{round(value * 100, 1)}%"
+
+def format_yield_note(stats: dict[str, Any]) -> str:
+    """The yield's population and coverage, as the note column states it (clause 5)."""
+    accepted = stats.get("runs_by_outcome", {}).get("accepted", 0)
+    population = stats.get("first_pass_yield_population", 0)
+    total = stats.get("run_events", 0)
+    return (
+        f"{accepted} accepted runs ÷ {population} runs stating an outcome "
+        f"(coverage: {population} of {total} run rows)"
+    )
+
+def format_yield_text(stats: dict[str, Any]) -> str:
+    """First-Pass Yield with its population and its coverage (clause 5).
+
+    A rate is never printed alone. The undeclared rows are excluded from the ratio
+    and COUNTED BESIDE IT, because counting them as accepted is the defect and
+    counting them as failures would be a second fabrication in the other direction.
+    The coverage is a printed disclosure, never a gate (clause 6): against
+    append-only historical rows a threshold would be permanently RED with no lawful
+    repair, which is the empty-repair-space defect ruled at n=328.
+    """
+    value = stats.get("first_pass_yield")
+    population = stats.get("first_pass_yield_population", 0)
+    total = stats.get("run_events", 0)
+    accepted = stats.get("runs_by_outcome", {}).get("accepted", 0)
+    rate = "n/a — no run row states an outcome" if value is None else f"{round(value * 100, 1)}%"
+    return (
+        f"{rate} ({accepted} accepted runs ÷ {population} runs stating an outcome "
+        f"— coverage: {population} of {total} run rows)"
+    )
+
+def format_cost_per_success_text(stats: dict[str, Any]) -> str:
+    """Cost / Successful Task with its population and its coverage (clause 5)."""
+    return (
+        f"${stats.get('cost_per_successful_task_usd', 0.0):.4f} "
+        f"(${stats.get('total_cost_usd', 0.0):.4f} total cost ÷ "
+        f"{stats.get('successful_closed_tasks', 0)} accepted closed subjects "
+        f"— coverage: {stats.get('close_rows_stating_outcome', 0)} of "
+        f"{stats.get('close_events', 0)} close rows state an outcome)"
+    )
+
+def format_cost_note(stats: dict[str, Any]) -> str:
+    """Cost / Successful Task's population and coverage, for the note column."""
+    return (
+        f"${stats.get('total_cost_usd', 0.0):.4f} total cost ÷ "
+        f"{stats.get('successful_closed_tasks', 0)} accepted closed subjects "
+        f"(coverage: {stats.get('close_rows_stating_outcome', 0)} of "
+        f"{stats.get('close_events', 0)} close rows state an outcome)"
+    )
+
+def format_undeclared_text(stats: dict[str, Any]) -> str:
+    """What the ledger does NOT say, reported rather than absorbed (clause 4)."""
+    reports = stats.get("invalid_outcome_reports", []) or []
+    invalid = (
+        f"; {len(reports)} invalid value(s) reported"
+        if reports
+        else "; no invalid value reported"
+    )
+    return (
+        f"{stats.get('unstated_run_rows', 0)} run rows and "
+        f"{stats.get('unstated_close_rows', 0)} close rows state none — UNKNOWN, "
+        f"never accepted{invalid}"
+    )
+
 def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
     """Parse ledger.jsonl and calculate operational delivery metrics, including token/cost economics.
 
@@ -56,7 +167,15 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
             "intake_tasks": 0,
             "run_events": 0,
             "runs_by_outcome": {},
+            "close_rows_by_outcome": {},
+            "run_rows_stating_outcome": 0,
+            "close_rows_stating_outcome": 0,
+            "unstated_run_rows": 0,
+            "unstated_close_rows": 0,
+            "invalid_outcome_reports": [],
             "first_pass_yield": 1.0,
+            "first_pass_yield_population": 0,
+            "first_pass_yield_coverage": [0, 0],
             "lead_times_sec": [],
             "avg_lead_time_sec": 0.0,
             "total_cost_usd": 0.0,
@@ -90,6 +209,10 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         "reworked": 0,
         "abandoned": 0,
     }
+    close_rows_by_outcome: dict[str, int] = {}
+    run_rows_stating_outcome = 0
+    close_rows_stating_outcome = 0
+    invalid_outcome_reports: list[str] = []
     total_runs = 0
     total_cost_usd = 0.0
     total_tokens_in = 0
@@ -138,11 +261,12 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         elif ev_type == "close" and subj:
             subjects_close[subj] = ts
             close_events += 1
-            close_outcome = "accepted"
-            for part in detail.split():
-                if part.startswith("outcome="):
-                    close_outcome = part.split("=", 1)[1]
-                    break
+            close_outcome, close_problem = declared_outcome(detail)
+            close_rows_by_outcome[close_outcome] = close_rows_by_outcome.get(close_outcome, 0) + 1
+            if close_problem:
+                invalid_outcome_reports.append(f"n={ev.get('n')} close {subj}: {close_problem}")
+            if close_outcome in OUTCOME_DOMAIN:
+                close_rows_stating_outcome += 1
             if close_outcome == "accepted":
                 successful_closed_subjects.add(subj)
 
@@ -158,16 +282,34 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
 
         elif ev_type == "run":
             total_runs += 1
-            outcome = "accepted"
-            for part in detail.split():
-                if part.startswith("outcome="):
-                    outcome = part.split("=", 1)[1]
-                    break
+            outcome, outcome_problem = declared_outcome(detail)
             runs_by_outcome[outcome] = runs_by_outcome.get(outcome, 0) + 1
+            if outcome_problem:
+                invalid_outcome_reports.append(f"n={ev.get('n')} run {subj}: {outcome_problem}")
+            if outcome in OUTCOME_DOMAIN:
+                run_rows_stating_outcome += 1
 
-    # First-pass yield: accepted runs / total runs
-    if total_runs > 0:
-        yield_val = runs_by_outcome.get("accepted", 0) / total_runs
+    # First-pass yield: accepted runs ÷ the run rows that STATE an outcome.
+    #
+    # Not ÷ every run row. A row declaring no outcome is UNKNOWN, not a success
+    # (#53, ruling n=333 clause 2): counting it as accepted is the defect, and
+    # counting it as a failure would be a second fabrication in the other
+    # direction. So it is excluded from the ratio and COUNTED BESIDE IT — the
+    # printed coverage is what tells a reader how much of the ledger the number
+    # speaks for (clause 5). No gate rides on the coverage (clause 6): against
+    # append-only historical rows a threshold would be permanently RED with no
+    # lawful repair, the empty-repair-space defect ruled at n=328.
+    #
+    # With runs present and not one stating an outcome the ratio is UNDEFINED, and
+    # 1.0 would be exactly the favourable fabrication this clause removes.
+    unstated_run_rows = runs_by_outcome.get("unstated", 0)
+    unstated_close_rows = close_rows_by_outcome.get("unstated", 0)
+    if run_rows_stating_outcome > 0:
+        yield_val: float | None = (
+            runs_by_outcome.get("accepted", 0) / run_rows_stating_outcome
+        )
+    elif total_runs > 0:
+        yield_val = None
     else:
         yield_val = 1.0
 
@@ -210,7 +352,15 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         "intake_tasks": len(subjects_intake),
         "run_events": total_runs,
         "runs_by_outcome": runs_by_outcome,
-        "first_pass_yield": round(yield_val, 4),
+        "close_rows_by_outcome": close_rows_by_outcome,
+        "run_rows_stating_outcome": run_rows_stating_outcome,
+        "close_rows_stating_outcome": close_rows_stating_outcome,
+        "unstated_run_rows": unstated_run_rows,
+        "unstated_close_rows": unstated_close_rows,
+        "invalid_outcome_reports": invalid_outcome_reports,
+        "first_pass_yield": round(yield_val, 4) if yield_val is not None else None,
+        "first_pass_yield_population": run_rows_stating_outcome,
+        "first_pass_yield_coverage": [run_rows_stating_outcome, total_runs],
         "lead_times_sec": lead_times_sec,
         "avg_lead_time_sec": round(avg_lead_time, 1),
         "total_cost_usd": round(total_cost_usd, 4),
@@ -470,6 +620,38 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_board_intake_recorded.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_board_intake_recorded.py"])
 
+    # 26. Gate-fixture closure gate: a fixture that runs a tool inside a throwaway tree
+    #     must stage the tool's import CLOSURE, not the file alone. Copying the file alone
+    #     encodes an unstated assumption of self-containment, so it holds silently until
+    #     the tool gains a lawful intra-repo import — and then the gate reds on a correct
+    #     change and the red misreads as the tool's fault. The predicate resolves
+    #     module-level path constants, because the fourth site stages its tool as
+    #     `copy2(REPO_ROOT / TOOL_REL, ...)` and a literal-only match reports it clean
+    #     (issue #60, P35, P29).
+    if (repo_root / "tests/test_gate_fixtures_closure.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_gate_fixtures_closure.py"])
+
+    # 27. Ledger gate: the single-writer claim, tested rather than asserted — twenty
+    #     concurrent appends keep the row numbers 1..N, the append-time guard refuses a
+    #     reverted working file, and the refusal names the first divergent row. The law
+    #     cites this file as the PROOF of the property, yet nothing registered it, so the
+    #     probes ran nowhere while the audit printed HEALTHY over them. Its absence is
+    #     itself probed from inside the file (issue #59, P29).
+    if (repo_root / "tests/test_ledger.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger.py"])
+
+
+    # 28. Gate-registry gate: every file that declares itself a gate must be REGISTERED
+    #     in this file, and declare itself CANONICALLY. A gate that never runs is
+    #     indistinguishable from a gate that passes — that was #59, and the proof it is a
+    #     CLASS and not one file is that tests/test_gate_fixtures_closure.py was born
+    #     unregistered during #59's own fix window. A self-check closes the carrier only,
+    #     so the scan extracts LOOSELY (any tests/test_*.py whose opening docstring line
+    #     contains "gate") and asserts STRICTLY on top, so a departure from the canonical
+    #     opener is loud rather than invisible (issue #59, P29).
+    if (repo_root / "tests/test_gate_registration.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_gate_registration.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
@@ -535,7 +717,7 @@ def format_report_markdown(
         "|---|---|---|",
         f"| **Total Ledger Events** | `{ledger_stats.get('total_events', 0)}` | Continuous ledger sequence |",
         f"| **Closed Tasks** | `{ledger_stats.get('closed_tasks', 0)}` | Distinct closed subjects; `{ledger_stats.get('close_events', 0)}` close rows ({ledger_stats.get('close_events', 0) - ledger_stats.get('closed_tasks', 0)} re-close of a re-opened subject) |",
-        f"| **First-Pass Yield** | `{round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}%` | {ledger_stats.get('runs_by_outcome', {}).get('accepted', 0)} accepted runs ÷ {ledger_stats.get('run_events', 0)} total runs |",
+        f"| **First-Pass Yield** | `{format_yield_rate(ledger_stats)}` | {format_yield_note(ledger_stats)} |",
         f"| **Rework Entries** | `{rework_stats.get('total_entries', 0)}` | Defect count recorded in rework.md |",
         f"| **Rework Share** | `{round(rework_stats.get('rework_share', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ ({rework_stats.get('closed_subjects', 0)} closed subjects + {rework_stats.get('total_entries', 0)} rework entries) |",
         f"| **Rework per Close** | `{round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ {rework_stats.get('closed_subjects', 0)} closed subjects |",
@@ -543,7 +725,7 @@ def format_report_markdown(
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Mean intake→close duration over {len(ledger_stats.get('lead_times_sec', []))} sampled subjects |",
         f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry |",
         f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
-        f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('successful_closed_tasks', 0)} accepted closed subjects |",
+        f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | {format_cost_note(ledger_stats)} |",
         f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
         f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago |",
         "",
@@ -635,7 +817,9 @@ def main() -> int:
     # Text summary output
     print(f"=== Factory Operational Self-Audit ({today}) ===")
     print(f"Status: {'HEALTHY (PASS)' if healthy else ('GATES SKIPPED (metrics only)' if not gates_ran else 'DEGRADED (FAIL)')}")
-    print(f"  - First-Pass Yield: {round(ledger_stats.get('first_pass_yield', 1.0) * 100, 1)}% ({ledger_stats.get('runs_by_outcome', {}).get('accepted', 0)} accepted runs ÷ {ledger_stats.get('run_events', 0)} total runs)")
+    print(f"  - First-Pass Yield: {format_yield_text(ledger_stats)}")
+    print(f"  - Cost / Successful Task: {format_cost_per_success_text(ledger_stats)}")
+    print(f"  - Undeclared Outcomes: {format_undeclared_text(ledger_stats)}")
     print(f"  - Closed Subjects: {ledger_stats.get('closed_tasks', 0)} (close rows: {ledger_stats.get('close_events', 0)}) | Intake Subjects: {ledger_stats.get('intake_tasks', 0)}")
     print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (share: {round(rework_stats.get('rework_share', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ ({rework_stats.get('closed_subjects', 0)} + {rework_stats.get('total_entries', 0)}) | per close: {round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ {rework_stats.get('closed_subjects', 0)})")
     print(f"  - Change Fail Rate: {round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}% = {rework_stats.get('change_fail_rate_numerator', 0)} ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units (linkage coverage: {rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)} entries carry a determinate Subject — a bare rate is never read alone)")
@@ -655,8 +839,9 @@ def main() -> int:
     if args.stamp:
         outcome = "accepted" if (healthy is None or healthy) else "failed"
         gate_summary = "skipped" if not gates_ran else ("all-pass" if all_gates_pass else "gate-failure")
-        yield_pct = int(ledger_stats.get("first_pass_yield", 1.0) * 100)
-        detail = f"duration=4s turns=0 outcome={outcome} gate={gate_summary} yield={yield_pct}%"
+        _yield = ledger_stats.get("first_pass_yield")
+        yield_pct = "n/a" if _yield is None else f"{int(_yield * 100)}%"
+        detail = f"duration=4s turns=0 outcome={outcome} gate={gate_summary} yield={yield_pct}"
         stamp_cmd = [
             sys.executable,
             "tools/ledger.py",

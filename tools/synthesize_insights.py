@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+import audit as _audit  # noqa: E402  — the ONE yield implementation (#53 clause 8)
 REWORK_PATH = REPO / "evidence" / "rework.md"
 SCORES_DIR = REPO / "evidence" / "scores"
 LEDGER_PATH = REPO / "evidence" / "ledger.jsonl"
@@ -138,13 +140,19 @@ def mine_rework_defects() -> list[FrictionPattern]:
 
 
 def mine_ledger_telemetry() -> list[FrictionPattern]:
-    """Mines queue dwell time, turn count distributions, and yield drops from ledger."""
+    """Mines queue dwell time, turn count distributions, and yield drops from ledger.
+
+    The yield is NOT recomputed here. #53 clause 8 (ruling n=333) requires #53 and
+    #41 to share ONE implementation: the audit computes the population and the
+    coverage once, and this alarm CONSUMES them. Two yields under one name is the
+    failure n=306 names, and the alarm's own version divided accepted runs by every
+    run row — a permanent false RED, because a row declaring no outcome is UNKNOWN
+    and was being counted as a failure (#41).
+    """
     if not LEDGER_PATH.is_file():
         return []
 
     lines = [l.strip() for l in LEDGER_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
-    runs = 0
-    accepted = 0
     high_turns = 0
     total_cost = 0.0
 
@@ -155,10 +163,7 @@ def mine_ledger_telemetry() -> list[FrictionPattern]:
             continue
 
         if d.get("event") == "run":
-            runs += 1
             detail = d.get("detail", "")
-            if "outcome=accepted" in detail:
-                accepted += 1
             turns_m = re.search(r"turns=(\d+)", detail)
             if turns_m and int(turns_m.group(1)) > 3:
                 high_turns += 1
@@ -166,13 +171,22 @@ def mine_ledger_telemetry() -> list[FrictionPattern]:
             if cost_m:
                 total_cost += float(cost_m.group(1))
 
+    stats, _closed = _audit.parse_ledger(LEDGER_PATH)
+    accepted = stats.get("runs_by_outcome", {}).get("accepted", 0)
+    population = stats.get("run_rows_stating_outcome", 0)
+    coverage_total = stats.get("run_events", 0)
+
     patterns = []
-    if runs > 0 and (accepted / runs) < 0.90:
+    if population > 0 and (accepted / population) < 0.90:
         patterns.append(FrictionPattern(
             source="evidence/ledger.jsonl",
             category="yield_drop",
-            description=f"First-pass acceptance yield dropped to {accepted/runs:.1%}.",
-            occurrences=runs - accepted,
+            description=(
+                f"First-pass acceptance yield dropped to {accepted/population:.1%} "
+                f"({accepted} accepted ÷ {population} run rows stating an outcome; "
+                f"coverage: {population} of {coverage_total} run rows)."
+            ),
+            occurrences=population - accepted,
             literature_grounding="First-Time Yield & Jidoka (Ohno, 1988; Toyota Production System)",
             suggested_mechanism="Inject stricter feedforward prompt constraints and local test gates."
         ))

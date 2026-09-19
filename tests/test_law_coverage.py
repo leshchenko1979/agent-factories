@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for Best Practice Law-to-Gate Coverage (P29).
+"""Gate: every declared best practice has an upholding gate (P29).
 
 Principle P29 states:
   "Every law needs an active process or mechanical gate upholding it.
@@ -53,6 +53,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P32": ["tools/review.py", "tests/test_review.py", "docs/review-lenses.md"],  # Multi-lens review rotation
     "P33": ["docs/methodology/04-harness-binding.md", "TEMPLATE/SKILL.md.tmpl", "skills/meta-factory/SKILL.md"],  # Context manifest curation
     "P34": ["docs/methodology/01-llm-weakness-counters.md", "TEMPLATE/AGENTS.md.tmpl"],  # Mirror test: diagnose mechanism before counter
+    "P35": ["tests/test_gate_fixtures_closure.py", "tests/gate_fixtures.py"],  # A fixture must model the tree its tool runs in
 }
 
 

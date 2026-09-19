@@ -637,6 +637,39 @@ The analogy has limits, and they are load-bearing:
 
 ---
 
+## P35 — A gate fixture must model the tree its tool runs in, and name the cause it actually found
+
+A gate that runs a tool inside a throwaway tree is a *model* of the real tree, and
+the model is valid only if it stages everything the tool needs to start. The
+tempting shortcut — copy the tool file alone — encodes an unstated assumption of
+self-containment. Nothing states it and nothing checks it, so it holds silently
+until the tool gains a lawful intra-repo import. Then the fixture breaks while the
+tool is correct: the gate reds on the next lawful commit, and the red reads as the
+tool's fault.
+
+- *Proven:* meta-factory #60. `tests/test_synthesize_interface.py` staged the tool
+  alone; #53 clause 8 gave that tool a deliberate `import audit as _audit` (the DRY
+  mandate), and the gate red on a change that was correct. Three further sites —
+  `tests/test_ledger.py:208`, `:262`, `tests/test_roadmap_transition.py:88` — were
+  latent, stdlib-only at the time and one import away from the same break.
+- *Mechanism:*
+  1. **Stage the closure, not the file.** A tool's local imports are computed
+     transitively, never assumed — a shared, paired helper stages the tool and its
+     closure into the tree.
+  2. **Name the cause.** A fixture distinguishes "the tool could not start" (a
+     non-zero exit carrying an import error) from "the tool ran and reported a
+     problem", and its failure message states the cause its own evidence supports.
+     A headline that blames the parser while the traceback shows an import sends the
+     next reader into the wrong file.
+  3. **Gate it** (P29). A deterministic check reds when a fixture stages a tool file
+     into a throwaway tree without its closure, so the property is upheld rather
+     than remembered.
+- *Prevents:* a correct refactor read as a defect; a reader sent to repair the
+  parser when the fixture was at fault; a latent site that passes until the day it
+  matters and then misattributes.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

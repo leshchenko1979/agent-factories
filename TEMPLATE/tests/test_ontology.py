@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vocabulary gate for the agent-factories repo.
+"""Gate: the repo prose uses no banned synonym from ONTOLOGY.md.
 
 Parses the banned-synonyms table out of ONTOLOGY.md and fails when the repo's
 own prose uses a banned word. The table is the source of truth, so the ban list

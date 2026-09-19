@@ -48,6 +48,21 @@ The invariant is factored into `rate_form_problems()` so it can be probed with
 synthetic payloads as well as the live one: a rule that only ever sees good input has
 not been shown to reject bad input.
 
+7. **An outcome is a FIELD, read from the canonical trailer and validated.** Absent is
+   UNKNOWN, never `accepted` (issue #53). The old reader scanned free prose for the first
+   `outcome=` substring and never checked the value against the domain, so a sentence
+   containing the word read as a verdict and a typo read as a failure. Two live shapes:
+   `outcome=` alone in a claim row's prose parsed as the empty string, and a close row
+   whose sentence's full stop sat inside the value — `outcome=accepted.` — silently
+   dropped a genuinely accepted work unit out of the success set. A bucket key must
+   therefore be a domain value, `unstated`, or an explicitly `invalid:` bucket.
+8. **The population travels with the rate.** The yield is divided by the rows that STATE
+   an outcome, and its coverage says how much of the ledger it speaks for. With rows
+   present and none stating an outcome the ratio is null, not 1.0 — the favourable
+   fabrication this clause removes. No gate rides on the coverage figure itself (clause
+   6): against append-only rows a threshold would be permanently RED with no lawful
+   repair.
+
 Run:  python3 -m pytest tests/test_audit_rates.py -q
 Exit: 0 clean, non-zero on any rate regression.
 """
@@ -65,6 +80,12 @@ AUDIT = REPO / "tools" / "audit.py"
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 REWORK = REPO / "evidence" / "rework.md"
 GATE_CMD = "tests/test_audit_rates.py"
+
+# The reader under test, imported rather than re-implemented: rule 7 is about what
+# THIS function does with a detail string, so the probes call it. Its own copy of
+# the domain lives below, and the two are compared.
+sys.path.insert(0, str(REPO / "tools"))
+import audit as audit_reader  # noqa: E402
 
 FORBIDDEN = "rework_rate"
 REQUIRED_FORMS = ("rework_share", "rework_per_close")
@@ -399,10 +420,175 @@ def test_synthetic_probes_reject_each_regression():
     bad_math["rework"]["change_fail_rate"] = 0.9
     assert any("numerator / denominator" in p for p in rate_form_problems(bad_math))
 
+
+# ---------------------------------------------------------------------------
+# Rule 7/8 — the outcome reader (#53). The gate states its OWN copy of the domain:
+# a gate that borrows the reader's tuple cannot notice the tuple being widened.
+# ---------------------------------------------------------------------------
+
+OUTCOME_DOMAIN = ("accepted", "reworked", "abandoned", "failed")
+
+def outcome_reader_problems() -> list[str]:
+    """The reader must read a FIELD, validate the value, and default to UNKNOWN."""
+    problems: list[str] = []
+
+    if tuple(audit_reader.OUTCOME_DOMAIN) != OUTCOME_DOMAIN:
+        problems.append(
+            f"the reader's outcome domain is {tuple(audit_reader.OUTCOME_DOMAIN)!r}, "
+            f"this gate states {OUTCOME_DOMAIN!r}"
+        )
+
+    # An unstated outcome is UNKNOWN — never `accepted`. That default is the defect.
+    bucket, problem = audit_reader.declared_outcome("HQ closes #50, verified complete.")
+    if bucket != "unstated":
+        problems.append(f"a row stating no outcome was bucketed {bucket!r}, expected 'unstated'")
+    if problem is not None:
+        problems.append("a row stating no outcome was reported as malformed; absence is not a bad value")
+
+    # A malformed value is REPORTED, never bucketed as a verdict.
+    for malformed in ("outcome=accepted.", "outcome=", "outcome=Accepted", "outcome=done"):
+        bucket, problem = audit_reader.declared_outcome(f"work landed. {malformed} board=closed")
+        if bucket in OUTCOME_DOMAIN:
+            problems.append(f"{malformed!r} was bucketed as the verdict {bucket!r}")
+        if not problem:
+            problems.append(f"{malformed!r} was not reported")
+
+    # A mention in prose is not the declaration: the writer appends its trailer LAST, so
+    # the last token is canonical. The old reader took the first and parsed `and` out of
+    # a dispatch row's sentence.
+    bucket, _ = audit_reader.declared_outcome(
+        "the outcome=accepted substring was the old reader's bug. cost_usd=1.0 outcome=failed"
+    )
+    if bucket != "failed":
+        problems.append(
+            f"the reader took an earlier prose mention over the canonical trailer: {bucket!r}"
+        )
+
+    # Every domain value must round-trip.
+    for value in OUTCOME_DOMAIN:
+        bucket, problem = audit_reader.declared_outcome(f"done. outcome={value} gate=all-pass")
+        if bucket != value or problem:
+            problems.append(f"the domain value {value!r} did not round-trip: {bucket!r} {problem!r}")
+
+    return problems
+
+def outcome_population_problems(payload: dict) -> list[str]:
+    """The populations must reconcile, and no bucket may be a verdict nobody stated."""
+    problems: list[str] = []
+    delivery = payload.get("delivery", {})
+
+    def invalid_rows(by_outcome: dict) -> int:
+        return sum(n for key, n in by_outcome.items() if key.startswith("invalid:"))
+
+    legs = (
+        ("run", delivery.get("runs_by_outcome", {}), "run_events",
+         "run_rows_stating_outcome", "unstated_run_rows"),
+        ("close", delivery.get("close_rows_by_outcome", {}), "close_events",
+         "close_rows_stating_outcome", "unstated_close_rows"),
+    )
+    for label, by_outcome, total_key, stated_key, unstated_key in legs:
+        total = delivery.get(total_key, 0)
+        stated = delivery.get(stated_key, 0)
+        unstated = delivery.get(unstated_key, 0)
+        if sum(by_outcome.values()) != total:
+            problems.append(
+                f"{label} buckets sum to {sum(by_outcome.values())}, but {total_key} is {total}"
+            )
+        if stated + unstated + invalid_rows(by_outcome) != total:
+            problems.append(
+                f"{label} rows do not partition: {stated} stating + {unstated} unstated + "
+                f"{invalid_rows(by_outcome)} invalid != {total} {total_key}"
+            )
+        if by_outcome.get("unstated", 0) != unstated:
+            problems.append(f"{label} unstated bucket {by_outcome.get('unstated', 0)} != {unstated_key} {unstated}")
+        # A verdict bucket nobody stated is how the favourable default returns.
+        for key in by_outcome:
+            if key not in OUTCOME_DOMAIN and key != "unstated" and not key.startswith("invalid:"):
+                problems.append(
+                    f"{label} bucket {key!r} is neither a domain value, 'unstated', nor an invalid: bucket"
+                )
+
+    population = delivery.get("first_pass_yield_population", 0)
+    if population != delivery.get("run_rows_stating_outcome", 0):
+        problems.append(
+            f"the yield's population {population} is not the rows stating an outcome "
+            f"({delivery.get('run_rows_stating_outcome', 0)})"
+        )
+    coverage = delivery.get("first_pass_yield_coverage", [])
+    if coverage != [population, delivery.get("run_events", 0)]:
+        problems.append(
+            f"the yield's coverage {coverage!r} does not state the population and the run rows"
+        )
+    yield_val = delivery.get("first_pass_yield")
+    if population == 0 and delivery.get("run_events", 0) > 0 and yield_val is not None:
+        problems.append(
+            f"no run row states an outcome, yet the yield is published as {yield_val!r} — "
+            "an undefined ratio must be null, never 1.0"
+        )
+
+    # The ratio must FOLLOW from the buckets the payload itself reports. Trusting the
+    # published number would let a reader that divided by every run row pass every
+    # structural check above while publishing a number no bucket supports.
+    accepted = delivery.get("runs_by_outcome", {}).get("accepted", 0)
+    if population > 0 and yield_val is not None:
+        expected = round(accepted / population, 4)
+        if yield_val != expected:
+            problems.append(
+                f"the published yield {yield_val} does not follow from {accepted} accepted "
+                f"÷ {population} runs stating an outcome (expected {expected})"
+            )
+
+    # A work unit cannot succeed without a close row saying so: this is the invariant the
+    # favourable default broke, and it is why a per-subject count is bounded by a row count.
+    successful = delivery.get("successful_closed_tasks", 0)
+    accepted_rows = delivery.get("close_rows_by_outcome", {}).get("accepted", 0)
+    if successful > accepted_rows:
+        problems.append(
+            f"successful_closed_tasks {successful} exceeds the {accepted_rows} close rows "
+            "that state an accepted outcome — a subject cannot succeed without a row saying so"
+        )
+
+    # And the cost ratio is re-derived the same way.
+    if successful > 0:
+        expected_cost = round(delivery.get("total_cost_usd", 0.0) / successful, 4)
+        if delivery.get("cost_per_successful_task_usd") != expected_cost:
+            problems.append(
+                f"the published cost per successful task "
+                f"{delivery.get('cost_per_successful_task_usd')} does not follow from "
+                f"{delivery.get('total_cost_usd')} ÷ {successful} (expected {expected_cost})"
+            )
+    return problems
+
+def test_the_outcome_reader_reads_a_field_and_validates_it():
+    problems = outcome_reader_problems()
+    assert not problems, "; ".join(problems)
+
+def test_the_outcome_populations_reconcile():
+    problems = outcome_population_problems(load_audit())
+    assert not problems, "; ".join(problems)
+
+def test_a_doctored_outcome_bucket_is_rejected():
+    """The invariant must reject bad input, not merely accept good input."""
+    payload = load_audit()
+    assert outcome_population_problems(payload) == [], "the live payload must reconcile"
+
+    # The favourable default, restored by hand: a verdict bucket no row stated.
+    doctored = json.loads(json.dumps(payload))
+    doctored["delivery"]["runs_by_outcome"]["accepted"] += 1
+    assert outcome_population_problems(doctored), "a hand-raised accepted bucket survived"
+
+    # A published ratio with no population behind it.
+    doctored = json.loads(json.dumps(payload))
+    doctored["delivery"]["first_pass_yield_population"] = 0
+    doctored["delivery"]["first_pass_yield"] = 1.0
+    assert outcome_population_problems(doctored), "a yield with no population survived"
+
 def main() -> int:
     payload = load_audit()
     problems = rate_form_problems(payload)
     problems += derivation_problems(payload, derive_fail_linkage())
+    problems += outcome_reader_problems()
+    problems += outcome_population_problems(payload)
     if problems:
         print("rate gate FAILED:", file=sys.stderr)
         for p in problems:
@@ -421,6 +607,13 @@ def main() -> int:
         f"({round(rw['subject_coverage'] * 100, 1)}%) — derived, not stated"
     )
     print(f"denominators reconciled — {rows} close rows over {subjects} distinct closed subjects")
+    dl = payload["delivery"]
+    print(
+        f"outcomes read as fields — yield population {dl['first_pass_yield_population']} of "
+        f"{dl['run_events']} run rows, coverage {dl['first_pass_yield_coverage']}; "
+        f"{dl['unstated_run_rows']} run and {dl['unstated_close_rows']} close rows state none "
+        f"(UNKNOWN, never accepted); {len(dl['invalid_outcome_reports'])} invalid value(s) reported"
+    )
     return 0
 
 if __name__ == "__main__":

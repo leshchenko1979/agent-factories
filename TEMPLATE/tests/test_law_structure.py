@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Law structure gate: numbered sections in a law file must be contiguous.
+"""Gate: numbered sections in a law file must be contiguous.
 
 A law file (`skills/<name>/SKILL.md`, or the template's `SKILL.md.tmpl`) numbers its
 sections so that prose can reference them — "see §7", "per §11". That reference scheme

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for Session Binding and UUID Integrity.
+"""Gate: session bindings and UUID integrity hold across the factory's lanes.
 
 Verifies:
   1. SKILL.md declares session bindings for each lane.

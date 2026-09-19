@@ -57,7 +57,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 TOOL = REPO / "tools" / "synthesize_insights.py"
+LOCAL_TOOLS = REPO / "tools"
 
+# The fixture that builds the throwaway tree, shared with the other gates that
+# copy a tool into one: three sites cannot drift apart if there is one helper.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gate_fixtures import stage_tool  # noqa: E402
 # `[--flag]` in the usage block, and `add_argument("--flag"` in the parser.
 DOCSTRING_FLAG = re.compile(r"\[(--[a-z][a-z-]*)\]")
 PARSER_FLAG = re.compile(r'add_argument\(\s*"(--[a-z][a-z-]*)"')
@@ -97,7 +102,7 @@ def mining_problems() -> tuple[list[str], list[str]]:
         root = Path(tmp)
         (root / "tools").mkdir()
         (root / "evidence").mkdir()
-        shutil.copy2(TOOL, root / "tools" / TOOL.name)
+        stage_tool(TOOL, root / "tools", LOCAL_TOOLS)
         (root / "evidence" / "rework.md").write_text(
             "\n".join((HEADER, SEPARATOR, *PROBE_ROWS)) + "\n", encoding="utf-8"
         )
@@ -108,11 +113,25 @@ def mining_problems() -> tuple[list[str], list[str]]:
             timeout=180,
         )
         if proc.returncode != 0:
+            stderr = proc.stderr.strip()
+            if "ModuleNotFoundError" in stderr or "ImportError" in stderr:
+                # The tool never ran, so nothing about its parsing is under test:
+                # the FIXTURE's tree is incomplete. Saying so plainly keeps the next
+                # reader out of the wrong file — the message below blamed the
+                # four-cell row while the cause was a missing neighbour import.
+                return (
+                    [
+                        f"the tool could not be imported in the throwaway tree — the "
+                        f"fixture does not model its import closure "
+                        f"(stderr: {stderr[:200]!r})"
+                    ],
+                    notes,
+                )
             return (
                 [
                     f"the tool exited {proc.returncode} on a rework log holding a "
                     f"four-cell row — a short row must be skipped, not abort the pass"
-                    f" (stderr: {proc.stderr.strip()[:200]!r})"
+                    f" (stderr: {stderr[:200]!r})"
                 ],
                 notes,
             )

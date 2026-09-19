@@ -264,10 +264,14 @@ def cmd_append(args: argparse.Namespace) -> int:
                     missing.append(f"turns={telem['turns']}")
                 if "duration=" not in detail and telem.get("duration_sec", 0) > 0:
                     missing.append(f"duration={telem['duration_sec']}s")
-                if "outcome=" not in detail:
-                    missing.append("outcome=accepted")
-                if "gate=" not in detail:
-                    missing.append("gate=all-pass")
+                # `outcome=` and `gate=` are VERDICTS, and this trailer used to write
+                # `outcome=accepted` and `gate=all-pass` whenever the author stated
+                # neither. A verdict nobody recorded must not be written as one, and
+                # the default here was the FAVOURABLE value, so First-Pass Yield and
+                # Cost / Successful Task could only ever report success (#53, ruling
+                # n=333 clause 1). The measurement fields above stay: cost_usd,
+                # tokens_in, tokens_out, turns and duration are numbers the tool
+                # genuinely took, and taking them is not a judgement.
                 if missing:
                     detail = f"{detail} {' '.join(missing)}".strip()
 
