@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T14:59:52Z",
+  "resolved_at": "2026-09-19T15:03:39Z",
   "counts": {
     "factories": 6,
     "attested": 0,
@@ -100,7 +100,7 @@
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.29",
+      "skill_revision": "1.0.30",
       "purpose": null,
       "zone": {
         "owns": null,

@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T14:59:52Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T15:03:39Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 0 attested, 6 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T14:59:52Z` |
+| generated | live reads | resolved `2026-09-19T15:03:39Z` |
 
 ## Announcements
 
@@ -87,7 +87,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 | purpose | — |
 | profile | `ops` |
 | repo | `/root/inferhub-watch` |
-| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.29 |
+| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.30 |
 | owns | — |
 | does not own | — |
 | substrates owned | — |
