@@ -182,7 +182,7 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 
 | Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
 |---|---|---|---|---|---|
-| **1. Internal Self-Audit** | `tools/audit.py` | Local ledger, rework log, and test suite | Automated score diff & telemetry JSON | Stale scratch files / gate failure | 8-gate pass rate & duration |
+| **1. Internal Self-Audit** | `python3 tools/audit.py --report` | Local ledger, rework log, and test suite | `evidence/scores/<date>-self-audit.md` + ledger run row | Stale scratch files / gate failure | Gate pass rate & duration |
 | **2. Documentation Calibration** | Surveys / Delegate | Target factory repo | 0–4 Documentation score vector | Cold-start survey blindness | Documentation baseline score ($\ge 2/4$) |
 | **3. Onboarding Interview Loop** | Delegate | Factory operator | Minimal `ONTOLOGY.md`, `SKILL.md`, `processes.md`, `docs/products.json` | Vague domain requirements | Interview turns to baseline |
 | **4. Member Self-Audit Meta-Audit** | Surveys | Member factory `evidence/scores/` | Verified cadence & spot-checked receipts | Superficial checklist audit | Dwell ratio & yield delta |
