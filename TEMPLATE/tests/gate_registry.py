@@ -4,7 +4,7 @@
 This module is a PURE predicate over a tree, so a synthetic tree can probe it: a rule
 that has only ever seen good input has not been shown to reject bad input.
 
-Two directions, because either one alone leaves a hole
+Three directions, because any one alone leaves a hole
 -----------------------------------------------------
 **declared -> registered.** A file that declares itself a gate must actually be run. An
 earlier probe protected only the gate that carried it — a file asserting its own name
@@ -18,6 +18,18 @@ themselves. Measured live, that cell is not empty: `tests/test_session_bindings.
 registered in both audit copies and its opening docstring contains no word "gate" at all,
 so a declared->registered-only predicate stays GREEN if it is unregistered tomorrow —
 #62's family one level deeper (HQ ruling n=376).
+
+**required -> present.** The two directions above ask whether the gates a tree HAS are
+wired up. Neither asks whether the gates it SHOULD have are there at all, and that is the
+hole issue #68 measured: `tools/audit.py` registers every gate behind an `is_file()` guard,
+so a factory that never adopted a gate file runs a shorter suite and still prints HEALTHY.
+A gate that is absent is not a gate that passes, and nothing asserted the difference — the
+printed count was the only signal and no gate read it. So a DECLARED manifest names the
+gates every bootstrapped factory must carry, and each absent one FAILS naming it. The
+manifest is DERIVED from what the template ships (HQ ruling n=432, Part 1): the template is
+the artifact every factory inherits, so what it ships every factory must carry. The
+coupling leg asserts manifest and template cannot drift — a leg only the meta-factory can
+carry, because a bootstrapped factory has no `TEMPLATE/` to compare against.
 
 Why LOOSE-then-STRICT rather than a strict match alone
 ------------------------------------------------------
@@ -201,3 +213,156 @@ def gate_registration_problems(tests_dir: Path, audit_path: Path) -> tuple[list[
         "non_canonical": non_canonical,
     }
     return problems, report
+
+# --- direction 3: required -> present ------------------------------------------------
+
+# The DECLARED manifest: the gates every bootstrapped factory must carry.
+#
+# DERIVED from the template (HQ ruling n=432 Part 1), never hand-invented — the template is
+# the artifact every factory inherits, so what it ships every factory must carry, and what
+# it does not ship is that factory's own. `manifest_drift_problems` asserts the two cannot
+# drift apart, so this list is a transcription that is CHECKED rather than trusted.
+#
+# Scoped to DECLARED GATES, never raw files. Triage's reconciliation of #68 measured why:
+# `TEMPLATE/tests/test_review.py` is a raw file that is NOT a gate — this module's own scope
+# statement names it as a false positive, and neither audit copy registers it. A manifest
+# defined by file-shipping would demand it, and could then never equal the registered set.
+# Part 1's derivation and Part 3's equality leg meet only at the declared-gate grain.
+REQUIRED_GATES: tuple[str, ...] = (
+    "test_audit_rates.py",
+    "test_board_intake_recorded.py",
+    "test_close_board_recorded.py",
+    "test_commit_pathspec_law.py",
+    "test_criteria_count.py",
+    "test_docs_sync.py",
+    "test_duplicate_prose.py",
+    "test_gate_fixtures_closure.py",
+    "test_gate_registration.py",
+    "test_hq_delegation.py",
+    "test_hygiene_inflight.py",
+    "test_hygiene_namespace.py",
+    "test_law_structure.py",
+    "test_ledger.py",
+    "test_ledger_commit_cites_no_rows.py",
+    "test_ledger_schema.py",
+    "test_ontology.py",
+    "test_rework.py",
+    "test_roadmap_transition.py",
+    "test_score_artifact_sections.py",
+    "test_single_writer.py",
+    "test_template_integrity.py",
+)
+
+# Gates the template does NOT ship, each with the reason it is not required. Stated rather
+# than merely omitted — the discipline `TOOL_INVOCATION_NOTE` already applies, so the
+# optional set is PRINTED WITH ITS REASON and an omission is never implied away (Part 4).
+#
+# The first two entries are a held order, not a settled classification, and they say so:
+# HQ ruling n=432 Part 5 orders them propagated, and this tree has not propagated them.
+# See `docs/` / the ledger row for #68 for the conflict and the recommendation.
+OPTIONAL_GATES: dict[str, str] = {
+    "test_close_row_revision.py": (
+        "propagation ORDERED at n=432 Part 5 but HELD — the file's own committed docstring "
+        "argues against pairing: it hardcodes a meta-factory INVARIANT_LANDED boundary, "
+        "which the ruling's stated reason ('reads only REPO/evidence and git') does not "
+        "address. Recommend propagating WITH that boundary parameterized."
+    ),
+    "test_score_gate_recorded.py": (
+        "same class as test_close_row_revision.py — hardcodes a meta-factory "
+        "INVARIANT_LANDED boundary; its propagation is held on the same open question."
+    ),
+    "test_law_coverage.py": (
+        "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md and "
+        "would RED in a bootstrapped factory."
+    ),
+    "test_session_bindings.py": (
+        "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md, and "
+        "additionally requires >=4 lane rows the template's SKILL.md.tmpl does not carry."
+    ),
+    "test_synthesize_interface.py": (
+        "meta-factory-only (n=432 Part 5) — its subject tool tools/synthesize_insights.py "
+        "is live-only and does not ship."
+    ),
+    "test_template_sync.py": (
+        "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "
+        "need its own pair-guard."
+    ),
+}
+
+REQUIRED_PREDICATE = (
+    "every gate in REQUIRED_GATES — the manifest derived from what the template ships as a "
+    "declared gate — must be PRESENT as a file in the tree, and each absent one FAILS naming "
+    "it. The manifest must also EQUAL the template's declared-gate inventory, so the two "
+    "cannot drift; that leg is meta-factory-only and skips where no TEMPLATE/ tree exists."
+)
+
+def required_gate_problems(
+    tests_dir: Path, required: tuple[str, ...] = REQUIRED_GATES
+) -> tuple[list[str], dict]:
+    """Direction 3: every gate in the manifest must be PRESENT in this tree.
+
+    The audit is fail-soft by construction — it registers a gate only when its file exists,
+    so an absent gate is invisible to it and the run reads HEALTHY over a shrunken suite
+    (issue #68; measured at /root/inferhub-watch, where 2 gates ran and the verdict was
+    still `rc=0 HEALTHY`). This predicate makes the absence LOUD, and it fails NAMING the
+    file so the reader does not have to diff two inventories to find it.
+    """
+    problems: list[str] = []
+    present: list[str] = []
+    absent: list[str] = []
+    for name in required:
+        if (tests_dir / name).is_file():
+            present.append(name)
+        else:
+            absent.append(name)
+            problems.append(
+                f"required gate tests/{name} is ABSENT — the template ships it, so every "
+                f"bootstrapped factory must carry it, and an absent gate is not a passing "
+                f"gate (P29, issue #68)"
+            )
+    report = {"required": list(required), "present": present, "absent": absent}
+    return problems, report
+
+def manifest_drift_problems(
+    template_tests_dir: Path, required: tuple[str, ...] = REQUIRED_GATES
+) -> tuple[list[str], dict]:
+    """The coupling leg: the manifest must EQUAL the template's declared-gate inventory.
+
+    META-FACTORY ONLY, and SKIPPED rather than failed when there is no template tree to
+    compare against — a bootstrapped factory has no `TEMPLATE/`, which is exactly why
+    n=432 Part 3 makes this leg the meta-factory's. The TEMPLATE copy of this module
+    resolves its own repo root to `TEMPLATE/`, so the path it would look for does not exist
+    there and the leg skips itself without special-casing.
+    """
+    if not template_tests_dir.is_dir():
+        return [], {
+            "skipped": True,
+            "reason": "no TEMPLATE tree — this leg is meta-factory-only (n=432 Part 3)",
+            "manifest": sorted(required),
+        }
+    shipped = sorted(path.name for path, _ in declared_gates(template_tests_dir))
+    manifest = sorted(required)
+    problems: list[str] = []
+    for name in sorted(set(shipped) - set(manifest)):
+        problems.append(
+            f"the template ships tests/{name} as a declared gate but the manifest omits it "
+            f"— every factory inherits it, so derivation makes it required (n=432 Part 1)"
+        )
+    for name in sorted(set(manifest) - set(shipped)):
+        problems.append(
+            f"the manifest requires tests/{name} but the template does not ship it as a "
+            f"declared gate — a required gate the template omits is unadoptable (P29)"
+        )
+    report = {
+        "skipped": False,
+        "manifest": manifest,
+        "template_shipped": shipped,
+    }
+    return problems, report
+
+def optional_gate_lines() -> list[str]:
+    """The optional set with its reasons, ready to print (n=432 Part 4)."""
+    return [
+        f"not required: tests/{name} — {reason}"
+        for name, reason in sorted(OPTIONAL_GATES.items())
+    ]
