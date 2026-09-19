@@ -244,6 +244,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_law_structure.py",
     "test_ledger.py",
     "test_ledger_commit_cites_no_rows.py",
+    "test_ledger_no_shrink.py",
     "test_ledger_schema.py",
     "test_ontology.py",
     "test_rework.py",

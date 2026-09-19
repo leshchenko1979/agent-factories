@@ -54,7 +54,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P8": ["tests/test_ontology.py"],  # Codify vocabulary with a test
     "P9": ["tools/audit.py"],  # Mechanical gates beat prose judgment
     "P10": ["tests/test_template_sync.py", "tests/test_ledger_schema.py"],  # Verification in repo instruction
-    "P11": ["tools/ledger.py", "tests/test_single_writer.py"],  # Single writer per surface (flock)
+    "P11": ["tools/ledger.py", "tests/test_single_writer.py", "tests/test_ledger_no_shrink.py"],  # Single writer per surface (flock)
     "P12": ["tools/ledger.py", "evidence/ledger.jsonl"],  # Every task leaves a trace
     "P13": ["evidence/ledger.jsonl"],  # Durable state off working box
     "P14": ["TEMPLATE/roles/hq.md"],  # Approval gates for irreversible acts

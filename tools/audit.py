@@ -693,6 +693,18 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_duplicate_prose.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_duplicate_prose.py"])
 
+    # 32. Ledger no-shrink gate: a row present in the pushed lineage is never removed by a
+    #     lawful path — a retired identity is restored by APPENDING a row naming it, never
+    #     by deleting it from the file. Detection, not prevention: a writer that never
+    #     calls tools/ledger.py takes no lock and leaves no reflog trace, and once its
+    #     shrink is COMMITTED the append guard compares working against committed, goes
+    #     self-consistent, and verify reads clean too. So the ARTIFACT is read instead of
+    #     the code, and the predicate is a set difference over the #52 identity tuple
+    #     (n, ts, event, actor, subject) — a keyword search finds nothing (issue #58,
+    #     ruling n=354 clause 4, P11).
+    if (repo_root / "tests/test_ledger_no_shrink.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_no_shrink.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
