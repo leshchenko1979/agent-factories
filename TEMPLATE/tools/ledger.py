@@ -67,6 +67,11 @@ from ledger_declaration import (
     parse_ts,
 )
 
+# The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
+# same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
+# a neighbour by that name when it stages a throwaway tree.
+from field_predicate import declares_field
+
 REPO = Path(__file__).resolve().parent.parent
 
 # The fields that make a row what it is. `detail` is deliberately absent: it is the ONE
@@ -280,15 +285,20 @@ def cmd_append(args: argparse.Namespace) -> int:
             if extract_task_telemetry:
                 telem = extract_task_telemetry(args.subject, ledger_path=target_ledger)
                 missing = []
-                if "cost_usd=" not in detail and telem.get("cost_usd", 0.0) > 0:
+                # A substring test here is what made this the third site of the
+                # prose-as-data class (#88, n=405 clause 5): a close row whose PROSE
+                # mentioned `tokens_out=` suppressed the measurement the tool had
+                # genuinely taken, so the row shipped with no telemetry and nothing
+                # said so. Test for a DECLARED field, never a mention.
+                if not declares_field(detail, "cost_usd") and telem.get("cost_usd", 0.0) > 0:
                     missing.append(f"cost_usd={telem['cost_usd']:.4f}")
-                if "tokens_in=" not in detail and telem.get("tokens_in", 0) > 0:
+                if not declares_field(detail, "tokens_in") and telem.get("tokens_in", 0) > 0:
                     missing.append(f"tokens_in={telem['tokens_in']}")
-                if "tokens_out=" not in detail and telem.get("tokens_out", 0) > 0:
+                if not declares_field(detail, "tokens_out") and telem.get("tokens_out", 0) > 0:
                     missing.append(f"tokens_out={telem['tokens_out']}")
-                if "turns=" not in detail and telem.get("turns", 0) > 0:
+                if not declares_field(detail, "turns") and telem.get("turns", 0) > 0:
                     missing.append(f"turns={telem['turns']}")
-                if "duration=" not in detail and telem.get("duration_sec", 0) > 0:
+                if not declares_field(detail, "duration") and telem.get("duration_sec", 0) > 0:
                     missing.append(f"duration={telem['duration_sec']}s")
                 # `outcome=` and `gate=` are VERDICTS, and this trailer used to write
                 # `outcome=accepted` and `gate=all-pass` whenever the author stated

@@ -83,22 +83,34 @@ from ledger_boundary import (  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
+# The ONE field predicate, shared with `tests/test_ledger_schema.py` and
+# `tools/ledger.py`. Imported by module name so a staged throwaway `tools/` resolves it
+# the same way — see tools/field_predicate.py.
+sys.path.insert(0, str(REPO / "tools"))
+from field_predicate import keyed_value  # noqa: E402
+
 # The key this gate's boundary is declared under, in the factory's own
 # `docs/ledger-invariants.json`. The key is the gate's own name, so the declaration says
 # which invariant each date belongs to.
 INVARIANT_KEY = "close_row_revision"
 
-REVISION_KEY = "head="
+REVISION_FIELD = "head"
+REVISION_KEY = f"{REVISION_FIELD}="
 _HEX = set("0123456789abcdef")
 _MIN_SHA = 7
 
 def _declared_revision(detail: str) -> str | None:
     """The `head=<sha>` value, or None when no readable field is present.
 
-    A FIELD, not a prose mention: the token must start with `head=`, and its value must
-    be hex of at least `_MIN_SHA` chars. Both halves are probed, because a predicate that
-    only checked "is a sha present somewhere" would pass a row whose revision is merely
-    cited in a sentence — the pattern-inflated shape #63 measured at 30 of 54.
+    A FIELD, not a prose mention: the token must DECLARE `head` — the shared
+    `keyed_value` predicate in `tools/field_predicate.py`, which requires the key, then
+    `=`, then a NON-EMPTY value — and that value must be hex of at least `_MIN_SHA`
+    chars. Both halves are probed, because a predicate that only checked "is a sha
+    present somewhere" would pass a row whose revision is merely cited in a sentence —
+    the pattern-inflated shape #63 measured at 30 of 54. The shape half is the same
+    predicate the telemetry gates use; only the type half is this gate's own, which is
+    what makes it one class with one remedy rather than three readers (#88, n=405
+    clause 5).
 
     The scan CONTINUES past an unreadable `head=` token rather than stopping at it, the
     shape `tests/test_score_gate_recorded.py::_has_head_sha` uses. Stopping at the first
@@ -111,9 +123,10 @@ def _declared_revision(detail: str) -> str | None:
     which `test_probe_rejects_an_unreadable_revision` pins.
     """
     for token in str(detail).replace(",", " ").replace(";", " ").split():
-        if not token.startswith(REVISION_KEY):
+        value = keyed_value(token, REVISION_FIELD)
+        if value is None:
             continue
-        sha = token[len(REVISION_KEY):].strip(").`")
+        sha = value.strip(").`")
         if len(sha) >= _MIN_SHA and all(c in _HEX for c in sha):
             return sha
     return None
@@ -413,6 +426,27 @@ def test_probe_rejects_a_telemetry_trailer_match() -> None:
                             "tokens_out=16830682 turns=5 duration=308s"}
     problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
     assert problems, "the telemetry trailer must not satisfy the revision field"
+
+def test_probe_the_field_predicate_is_shared_not_reimplemented() -> None:
+    """The scan's SHAPE half is the shared predicate, not a private copy (#88).
+
+    Ledger `n=405` clause 5 ruled the class as ONE field predicate at three call sites,
+    because three readings is how the class recurs: this file's own first version read
+    `token.startswith("head=")` while the schema gate read every `k=v` token and the
+    append guard read a substring. So the binding the scan calls must BE the shared
+    function — a lookalike defined here would satisfy every behavioural probe above and
+    still leave the class unfixed.
+    """
+    import field_predicate
+
+    assert keyed_value is field_predicate.keyed_value, (
+        "the scan must call the shared predicate, not a local re-implementation"
+    )
+    # And the shape the shared predicate changes at this site: a bare `head=` is a
+    # MENTION. It names the field and states no value, so it declares no revision.
+    row = {**_OK, "detail": "Closed. The head= field is read from the trailer; it is absent here."}
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    assert problems, "a bare head= mention must not satisfy the revision field"
 
 def test_probe_rejects_an_unparseable_timestamp() -> None:
     row = {**_OK, "ts": "not-a-timestamp"}

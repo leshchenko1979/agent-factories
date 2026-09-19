@@ -27,6 +27,13 @@ REPO = Path(__file__).resolve().parent.parent
 LEDGER_PATH = Path(os.environ.get("OC_LEDGER_PATH", REPO / "evidence" / "ledger.jsonl"))
 ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", REPO / "tools" / "actors.txt"))
 
+# The ONE field predicate, shared with the other two call sites of this class
+# (`tests/test_close_row_revision.py`, `tools/ledger.py`). Imported by module name, not
+# by package path, so a tree that stages the tool into a throwaway `tools/` resolves it
+# the same way — the shape `tools/ledger.py` already uses for `telemetry`.
+sys.path.insert(0, str(REPO / "tools"))
+from field_predicate import telemetry_problems  # noqa: E402
+
 CORE_ACTORS = ("hq", "triage", "worker", "carrier", "owner")
 EVENT_TYPES = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", "run")
 REQUIRED_FIELDS = {"n", "ts", "event", "actor", "subject", "detail"}
@@ -101,24 +108,14 @@ def validate_row_schema(row: dict[str, Any], line_num: int, known_actors: set[st
     if not isinstance(detail_val, str) or not detail_val.strip():
         errors.append(f"line {line_num}: 'detail' must be a non-empty string, got {detail_val!r}")
     else:
-        # Validate structured telemetry formats if present in detail
-        for part in detail_val.split():
-            if "=" in part:
-                k, v = part.split("=", 1)
-                if k in ("cost_usd", "cost"):
-                    try:
-                        val = float(v.rstrip("$"))
-                        if val < 0:
-                            errors.append(f"line {line_num}: cost cannot be negative: {v!r}")
-                    except ValueError:
-                        errors.append(f"line {line_num}: invalid numeric format for cost: {v!r}")
-                elif k in ("tokens_in", "tokens_out", "in_tokens", "out_tokens", "turns"):
-                    try:
-                        val = int(v)
-                        if val < 0:
-                            errors.append(f"line {line_num}: count {k} cannot be negative: {v!r}")
-                    except ValueError:
-                        errors.append(f"line {line_num}: invalid integer format for {k}: {v!r}")
+        # Validate the telemetry this row DECLARES, never what it merely MENTIONS. A
+        # row that QUOTES a trailer as evidence is prose about a field, not a statement
+        # of one, and the old reader parsed the whole detail so a quotation could red
+        # the audit (n=561). Scoped to the canonical trailer by the shared predicate
+        # (#88; ledger n=405 clause 5) — see tools/field_predicate.py.
+        errors.extend(
+            f"line {line_num}: {problem}" for problem in telemetry_problems(detail_val)
+        )
 
     return errors
 
@@ -198,6 +195,19 @@ def run_self_probes() -> bool:
             print(f"  FAIL self-probe '{name}': expected error containing {expected_err_substr!r}, got: {errs}")
             probes_passed = False
 
+    def assert_clean(name: str, row: dict, line_no: int = 1):
+        """The inverse probe: a row declaring nothing malformed must produce NO error.
+
+        The class's first direction needs this shape. Its measured defect was a FALSE
+        RED — a row quoting a trailer was read as declaring it — and a probe that can
+        only assert an error cannot catch a false red (#88, ledger n=405 clause 5).
+        """
+        nonlocal probes_passed
+        errs = validate_row_schema(row, line_no, known_actors) + validate_domain_invariants(row, line_no)
+        if errs:
+            print(f"  FAIL self-probe '{name}': expected no error, got: {errs}")
+            probes_passed = False
+
     # Probe 1: Missing required field
     assert_probe(
         "missing field",
@@ -234,6 +244,40 @@ def run_self_probes() -> bool:
         "bad cost format",
         {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "intake", "actor": "triage", "subject": "#1", "detail": "cost_usd=invalid"},
         "invalid numeric format for cost",
+    )
+    # Probes 7-9: the prose-as-data class (#88, ledger n=405 clause 5). A row's
+    # telemetry is what it DECLARES in its canonical trailer — the run of `key=value`
+    # tokens at the END of the detail (SKILL.md section 11) — never what it MENTIONS
+    # elsewhere. The old reader parsed the whole detail, so prose could satisfy a field.
+    #
+    # Probe 7: the live FALSE RED. n=561 is an intake row that QUOTES n=554's trailer as
+    # evidence; the old reader validated the quotation and reddened the audit on a row
+    # that declares nothing malformed. Prose must not SATISFY a field.
+    assert_clean(
+        "a quoted trailer is prose, not a declaration",
+        {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "intake", "actor": "triage",
+         "subject": "#88",
+         "detail": "the row's trailer ends '...board=closed; rework=unstated cost_usd=1.9225 "
+                   "tokens_in=... turns=36' with NO head= field, and the gate names the row"},
+    )
+    # Probe 8: the gate must still BITE. The same malformed value in TRAILER position is
+    # a declaration, and a declaration that does not parse is reported.
+    assert_probe(
+        "a malformed value in the trailer is still reported",
+        {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "close", "actor": "worker",
+         "subject": "#88",
+         "detail": "Closed. Receipts taken at head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e "
+                   "outcome=accepted turns=abc"},
+        "invalid integer format for turns",
+    )
+    # Probe 9: a bare key in TRAILER position is still a MENTION, not a declaration. This
+    # is the shape that reddened the audit before the shared predicate existed —
+    # `'line 399: invalid integer format for tokens_out: ""'` — because an empty value was
+    # read as a malformed one rather than as no value at all.
+    assert_clean(
+        "an empty value is a mention, not a malformed declaration",
+        {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "close", "actor": "worker",
+         "subject": "#88", "detail": "Closed. gate=all-pass outcome=accepted tokens_out="},
     )
 
     return probes_passed

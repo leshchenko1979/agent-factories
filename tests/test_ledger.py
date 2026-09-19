@@ -45,21 +45,65 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     if not ok:
         failures.append(name)
 
-def run(ledger: Path, *args: str, actors: Path | None = None) -> subprocess.CompletedProcess:
+def run(
+    ledger: Path,
+    *args: str,
+    actors: Path | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
     """Run the tool against a throwaway ledger.
 
     `OC_ACTORS_PATH` is pinned to a throwaway path as well unless a probe brings
     its own. Without that pin a probe would read the live `tools/actors.txt` and
     pass or fail on this factory's own declared lanes instead of on the code.
+
+    `extra_env` exists for the same reason one layer down: the append guard's
+    telemetry comes from the runtime substrate, so a probe that did not pin the
+    database would read the LIVE one and its verdict would depend on the box.
     """
     env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
     env["OC_ACTORS_PATH"] = str(actors if actors is not None else ledger.parent / "no-actors.txt")
+    env.update(extra_env or {})
     return subprocess.run(
         [sys.executable, str(TOOL), *args],
         capture_output=True,
         text=True,
         env=env,
     )
+
+def seed_telemetry_db(path: Path, *, cost: float = 1.25, tokens_in: int = 111,
+                      tokens_out: int = 222, turns: int = 3) -> Path:
+    """A throwaway telemetry source: `turns` assistant messages, inside any live window.
+
+    `tools/telemetry.py` reads the OpenCrabs database through `OPENCRABS_DB_PATH` and
+    takes `cost`/`input_tokens`/`token_count` as SUMs over `role = 'assistant'` rows
+    while `turns` is that query's COUNT(*) — so the three totals and the turn count come
+    from DIFFERENT aggregates and cannot be set by one row. The seed therefore writes one
+    row carrying the totals and `turns - 1` further assistant rows worth zero, which move
+    the count without moving the sums. A seed that got this wrong would make a probe
+    assert a number the tool never produces, which is how the first version of the
+    prose-as-data probe failed.
+    """
+    import sqlite3
+
+    now = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE messages (created_at INTEGER, cost REAL, input_tokens INTEGER, "
+        "token_count INTEGER, role TEXT, session_id TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO messages VALUES (?, ?, ?, ?, 'assistant', 'probe')",
+        (now, cost, tokens_in, tokens_out),
+    )
+    for _ in range(max(0, turns - 1)):
+        conn.execute(
+            "INSERT INTO messages VALUES (?, 0.0, 0, 0, 'assistant', 'probe')",
+            (now,),
+        )
+    conn.commit()
+    conn.close()
+    return path
 
 def rows(ledger: Path) -> list[dict]:
     if not ledger.exists():
@@ -427,6 +471,92 @@ def main() -> int:
         check("the staged tool carries its declaration reader",
               (bare / "tools" / "ledger_declaration.py").is_file(),
               "stage_tool must copy the new neighbour import")
+
+    print("\nprose-as-data — a mention must not suppress a field (#88, ledger n=405 clause 5)")
+    # The class's third direction. `cmd_append` used to test `"tokens_out=" not in
+    # detail` — a SUBSTRING test — so a close row whose PROSE mentioned the key
+    # suppressed the measurement the tool had genuinely taken, and the row shipped with
+    # no telemetry while nothing said so. The probe runs the REAL command against a
+    # throwaway ledger AND a throwaway telemetry source: a probe that read the live
+    # database would pass or fail on this box's traffic rather than on the code.
+    with tempfile.TemporaryDirectory() as tmp:
+        tdir = Path(tmp)
+        actors = tdir / "actors.txt"
+        actors.write_text("worker\n", encoding="utf-8")
+        db = seed_telemetry_db(tdir / "telemetry.db")
+
+        prose = tdir / "prose.jsonl"
+        prose.write_text("", encoding="utf-8")
+        r = run(
+            prose, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
+            "--detail",
+            "Closed. The writer tested whether tokens_out= was absent before appending, "
+            "and cost_usd= was read from the same sentence.",
+            actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)},
+        )
+        check("a close row whose prose mentions the keys is accepted",
+              r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
+        detail = (rows(prose) or [{}])[-1].get("detail", "")
+        for key, want in (("cost_usd", "1.2500"), ("tokens_in", "111"),
+                          ("tokens_out", "222"), ("turns", "3")):
+            check(f"a prose mention did not suppress {key}",
+                  f"{key}={want}" in detail, detail[-100:])
+
+        # The control: the guard still exists, it just reads a field now instead of a
+        # substring. A measurement the author DID state is not duplicated, and one they
+        # did not state is still appended beside it. Both stated tokens stand alone, so
+        # both parse — the punctuation case is the boundary pinned below.
+        stated = tdir / "stated.jsonl"
+        stated.write_text("", encoding="utf-8")
+        run(stated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
+            "--detail", "Closed. The author stated turns=7 and cost_usd=9.99 before the append",
+            actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
+        detail = (rows(stated) or [{}])[-1].get("detail", "")
+        check("a DECLARED measurement is not duplicated",
+              detail.count("cost_usd=") == 1 and "cost_usd=9.99" in detail, detail[-100:])
+        check("a declared count is not replaced by the tool's own",
+              "turns=7" in detail and "turns=3" not in detail, detail[-100:])
+        check("a key the author did not state is still appended",
+              "tokens_out=222" in detail, detail[-100:])
+
+        # The measured BOUNDARY of the suppression leg, pinned rather than assumed. The
+        # law requires the value to PARSE for the key's type, so a stated measurement
+        # carrying trailing sentence punctuation is not a declaration and the tool appends
+        # its own beside it. That is reachable, and the probe takes its receipt from the
+        # schema gate rather than describing the outcome: the row then carries both
+        # tokens, and the punctuated one fails that gate's trailer check. The boundary is
+        # pinned instead of narrowed because stripping sentence punctuation from the value
+        # would re-open the quotation hole (`turns=36'`) this class exists to close.
+        punctuated = tdir / "punctuated.jsonl"
+        punctuated.write_text("", encoding="utf-8")
+        run(punctuated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
+            "--detail", "Closed. The author stated turns=7.",
+            actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
+        detail = (rows(punctuated) or [{}])[-1].get("detail", "")
+        check("a punctuated stated value does not suppress the append (pinned boundary)",
+              "turns=7." in detail and "turns=3" in detail, detail[-100:])
+        gate = subprocess.run(
+            [sys.executable, str(REPO / "tests" / "test_ledger_schema.py")],
+            capture_output=True, text=True,
+            env={**os.environ, "OC_LEDGER_PATH": str(punctuated),
+                 "OC_ACTORS_PATH": str(actors)},
+        )
+        check("and the punctuated token is refused by the schema gate",
+              gate.returncode != 0 and "invalid integer format for turns" in gate.stdout + gate.stderr,
+              (gate.stdout + gate.stderr).strip().splitlines()[-1][:90])
+
+        # The under-scope this probe closes: a value that does NOT parse is not a
+        # measurement, so a quotation of another row's trailer (`turns=36'`) must not
+        # suppress the count the tool took. Reading only "is the key named with
+        # something after the `=`" would leave this half of the class live.
+        quoted = tdir / "quoted.jsonl"
+        quoted.write_text("", encoding="utf-8")
+        run(quoted, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
+            "--detail", "Closed. The quoted trailer read turns=36' before the repair.",
+            actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
+        detail = (rows(quoted) or [{}])[-1].get("detail", "")
+        check("a quoted unparseable value does not suppress the measurement",
+              "turns=3" in detail, detail[-100:])
 
     print()
     if failures:
