@@ -318,6 +318,34 @@ taken from the file is wrong from then on — in a way that looks fine.
 `tools/ledger.py` takes an exclusive lock and computes the next row number
 *inside* it, so the collision cannot happen. Ship its test with it.
 
+**One field, one predicate — the read-side mirror of the rule above.** A telemetry field
+read out of a row's `detail` has exactly ONE predicate, and it lives in
+`tools/field_predicate.py`. A module that reads such a field IMPORTS that predicate; a
+private parse of the same field is the defect this rule names, not a style preference. The
+helper was built as *one field predicate, shared by all call sites* — and the class
+recurred anyway, twice, each time at a site nobody had enumerated, and both instances were
+found by symptom (a measured over-report) rather than by a rule, because no rule was
+readable until this one. The predicate is scoped to the canonical trailer for a reason a
+repair has to state: `detail` is free prose that QUOTES trailers as evidence, so a private
+scan takes a quotation for a measurement.
+
+The gate that enforces it ships with this template as
+`tests/test_telemetry_reader_registry.py`, and it must distinguish a READER from a WRITER,
+must name the modules it permits in a stated allow-list, and must PRINT that allow-list on
+every run — an unprinted allow-list is an exempt-by-silence surface. Both halves are
+load-bearing together: the writer CONSTRUCTS the tokens it does not read, so a scan that
+cannot tell construction from reading would need an exemption for a non-defect, and an
+exemption granted to something that is not a defect is a permanent weakening. A module you
+add that builds trailers is declared in the allow-list with its reason; the list is source
+rather than factory data, because it classifies the tools the template ships.
+
+**What that buys is the SYMBOL, not the semantics.** The rule binds every reader to one
+function; it does not promise that function reads correctly, and no probe over a shared
+binding can show more than the binding. A lookalike that re-implements the predicate and is
+imported under its name satisfies an identity probe of the imported name and leaves the
+class open. Identity of the function is what is codified; correctness of the reading is the
+predicate module's own gate.
+
 **A row is retired by naming it, never by deleting it.** The lock above binds the code,
 not the artifact: a writer that never calls `tools/ledger.py` takes no lock and leaves no
 trace, and once its removal is *committed* the append guard compares working against

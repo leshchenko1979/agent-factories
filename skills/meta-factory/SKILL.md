@@ -370,6 +370,42 @@ number *inside* it, and fsyncs before releasing. `tests/test_ledger.py` runs twe
 concurrent appends and asserts the row numbers are still `1..N`: the property is tested,
 not asserted.
 
+**One field, one predicate — the read-side mirror of the rule above.** A telemetry field
+read out of a row's `detail` has exactly ONE predicate, and it lives in
+`tools/field_predicate.py` (`keyed_value`, `declared_field`, `trailer_tokens`,
+`split_canonical_run`, `declared_telemetry`, `mentioned_telemetry`,
+`telemetry_value_problem`, `telemetry_problems`). A module that reads such a field IMPORTS
+that predicate; a private parse of the same field is the defect this law names, not a style
+preference. The evidence is this factory's own record rather than a principle: the helper
+was built at `n=405` PART 5 as "ONE field predicate, shared by all three call sites", and
+the class recurred anyway — the aggregator, ruled a fourth site at `n=572` PART 2 and fixed
+under #90, and `tools/synthesize_insights.py`, the fifth, under #99. Both were found by
+SYMPTOM, a measured over-report, and neither by a rule, because until this sentence no rule
+was readable. The predicate is scoped to the canonical trailer because `detail` is free
+prose that QUOTES trailers as evidence, and a private scan takes a quotation for a
+measurement: `n=586` aggregates `n=303`'s quoted trailer and over-reported cost 16x.
+
+The gate that enforces it is `tests/test_telemetry_reader_registry.py`, and it must
+distinguish a READER from a WRITER, must name the modules it permits in a stated
+allow-list, and must PRINT that allow-list on every run — an unprinted allow-list is an
+exempt-by-silence surface, the class ruled at `n=571`. Both halves are load-bearing
+together: a blunt scan for telemetry-shaped strings reports three modules under `tools/`
+that carry no predicate and only ONE is a genuine call site (`telemetry.py` is the WRITER,
+and constructing a token is the opposite of reading one; `patrol_host_state.py`'s only hit
+is the word `turns` inside a prose message), so a gate without the distinction would need
+an exemption for a non-defect — and an exemption granted to something that is not a defect
+is a permanent weakening.
+
+**What that buys is the SYMBOL, not the semantics.** The law binds every reader to one
+function; it does not promise that function reads correctly, and no probe over a shared
+binding can show more than the binding. `tests/test_close_row_revision.py` states the bound
+of its own probe — "a lookalike defined here would satisfy every behavioural probe above
+and still leave the class unfixed" — and the same holds here: a lookalike that
+re-implements the predicate and is imported under its name satisfies an identity probe of
+the imported name and leaves the class open. Stated so the rule is not oversold: identity
+of the function is what is codified, correctness of the reading is
+`tools/field_predicate.py`'s own gate (#99, ruling n=599).
+
 **A row is retired by naming it, never by deleting it.** The single-writer lock above binds the code, not the artifact: a writer that never calls `tools/ledger.py` takes no lock and leaves no trace, and once its removal is *committed* the append guard compares working against committed, goes self-consistent, and every gate reads green over a ledger that has lost committed history. So no row identity — the `(n, ts, event, actor, subject)` tuple a row is known by — is ever removed: a row that must not stand is retired by appending a row that names it, and the original stays. `tests/test_ledger_no_shrink.py` walks the committed history and reports every commit whose diff removes a row identity, which is why the check is a set difference over identities and not a text search — the one measured case removes a row whose surviving neighbours still contain every word it carried. Its exemptions are factory data in `docs/ledger-no-shrink-exemptions.json`, keyed by full sha and never inline in the gate, and every run prints them so "clean" and "excused" are never the same output; a gate that examines zero commits fails loudly rather than passing vacuously.
 
 **A row count is not an integrity check.** The ledger is read as a *sequence*: a subject
