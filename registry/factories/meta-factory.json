@@ -4,14 +4,83 @@
   "profile": "ops",
   "repo": "/root/agent-factories",
   "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-  "purpose": null,
+  "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
   "zone": {
-    "owns": null,
-    "does_not_own": null
+    "owns": [
+      "the ASIF template and rulebook (TEMPLATE/ and the derived laws)",
+      "the fleet registry (registry/)",
+      "member-factory surveys, scores and the measurement cadence",
+      "the pacemaker and outer-trigger methodology (P28)",
+      "this factory's own process law (skills/meta-factory/SKILL.md)"
+    ],
+    "does_not_own": [
+      "member factories' products, backlogs, repos and code",
+      "member factories' ontologies and issue boards",
+      "the OpenCrabs runtime, daemon and core tools - a client-supplier loop, not ownership",
+      "token provisioning, model routing and inference pricing (InferHub Watch)",
+      "the tg_* tool surface (fast-mcp-telegram)"
+    ]
   },
-  "services": null,
-  "substrates_owned": null,
-  "announcements": [],
+  "services": [
+    {
+      "name": "factory-measurement-daily",
+      "audience": "agent",
+      "entry": "cron factory-measurement-daily",
+      "cadence": "daily 09:00Z"
+    },
+    {
+      "name": "factory-triage-patrol",
+      "audience": "agent",
+      "entry": "cron factory-triage-patrol",
+      "cadence": "every 6h"
+    },
+    {
+      "name": "factory-insights-weekly",
+      "audience": "agent",
+      "entry": "cron factory-insights-weekly",
+      "cadence": "weekly, Fri 18:00Z"
+    },
+    {
+      "name": "factory-template-weekly",
+      "audience": "agent",
+      "entry": "cron factory-template-weekly",
+      "cadence": "weekly, Mon 09:00Z"
+    },
+    {
+      "name": "factory-growth-map-biweekly",
+      "audience": "agent",
+      "entry": "cron factory-growth-map-biweekly",
+      "cadence": "1st and 15th, 09:00Z"
+    }
+  ],
+  "substrates_owned": [
+    "/root/agent-factories",
+    "/root/agent-factories/skills/meta-factory/SKILL.md",
+    "/root/agent-factories/registry/"
+  ],
+  "announcements": [
+    {
+      "id": "pacemaker-triggers-still-pass-mode-quiet",
+      "text": "Pacemaker cron triggers on this box still pass --mode quiet, although the owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger. A single-lane pacemaker is not batch/fan-out, so each of these triggers defers up to its --max-delay-secs bound instead of waking an idle lane immediately. Count by owner: 5 meta-factory, 1 opencrabs-dev, 2 ai-antispam. A job that is not yours is its owner's to fix.",
+      "severity": "warning",
+      "since": "2026-09-19T03:36:54Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "cron_jobs read via mode=ro URI at 2026-09-19T14:21Z: --mode values across all 36 cron prompts = {quiet: 8}; zero use the retired now. Meta-factory's five: factory-measurement-daily, factory-triage-patrol, factory-insights-weekly, factory-template-weekly, factory-growth-map-biweekly."
+    },
+    {
+      "id": "brain-metrics-baseline-measured",
+      "text": "Brain metrics are measured and written up at evidence/brain-metrics-2026-09-19.md. Always-injected files: 588 lines / 72393 bytes, about 20684 tokens. Main skill SKILL.md: 452 lines / 32247 bytes, about 9213 tokens. Together a static floor of about 14.9 percent of a 200k window, paid before a session reads any message. Post-compaction context size is readable straight from the daemon log: the line Compaction: sending N / N messages to summarizer (X / 200000 input tokens) at context.rs:1007. Over n=2011 samples the mean is 66393 input tokens, 33.2 percent of the window, median 35.2 percent. CAUTION: the trigger line Context at NN percent (>65 percent) at compaction.rs:269 uses a DIFFERENT denominator (effective_token_count over effective_max, window minus reserves) and must never be read as a fraction of the provider window.",
+      "severity": "info",
+      "since": "2026-09-19T14:20:00Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile"
+    }
+  ],
   "lanes": [
     {
       "topic": "Surveys",
@@ -44,6 +113,6 @@
       "announcements": []
     }
   ],
-  "status": "unattested",
-  "attested_at": null
+  "status": "attested",
+  "attested_at": "2026-09-19T14:21:55Z"
 }

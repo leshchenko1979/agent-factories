@@ -4,14 +4,100 @@
   "profile": "ops",
   "repo": "/root/vds-servers",
   "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
-  "purpose": null,
+  "purpose": "Keep the VDS fleet (vpn, apps, agents) and the services it hosts observable, healthy and self-healing: intake Gatus alerts, diagnose hosts, apply safe remediation, and own the fleet infrastructure source repo.",
   "zone": {
-    "owns": null,
-    "does_not_own": null
+    "owns": [
+      "Fleet host operations on vpn, apps and agents - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation",
+      "Gatus monitoring: endpoint configuration, alert intake and recovery routing (gatus-notify on vpn)",
+      "The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger",
+      "Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation",
+      "The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC",
+      "Infra Factory process law and its own lanes (HQ, Triage, Surveys)"
+    ],
+    "does_not_own": [
+      "OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev",
+      "The factory template, cross-factory laws and fleet measurement - that is meta-factory",
+      "ai-antispam business logic, its outreach campaign and its Postgres state - that is ai-antispam",
+      "Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers",
+      "InferHub model routing, pricing and token economics - that is inferhub-watch",
+      "Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos",
+      "Other profiles' brain files and configuration (default, family)"
+    ]
   },
-  "services": null,
-  "substrates_owned": null,
-  "announcements": [],
+  "services": [
+    {
+      "name": "Gatus fleet monitoring and alert intake",
+      "audience": "owner",
+      "entry": "vpn: vpn/services/gatus/config/config.yaml, delivered by gatus-notify.service (active)",
+      "cadence": "continuous; alerts on endpoint failure"
+    },
+    {
+      "name": "infra-triage-patrol",
+      "audience": "agent",
+      "entry": "cron d6119dbc-95d2-4341-aeb5-dc1c839cc9ed to the Triage lane; gate /root/vds-servers/tools/triage_preflight.py",
+      "cadence": "6-hourly (0 */6 * * *)"
+    },
+    {
+      "name": "infra-surveys-daily",
+      "audience": "agent",
+      "entry": "cron 73e9a3d0-8dfe-48db-a169-3fae3d2a0405 to the Surveys topic (thread 7)",
+      "cadence": "daily 09:00 MSK (0 9 * * *)"
+    },
+    {
+      "name": "infra-sender-logs-check",
+      "audience": "agent",
+      "entry": "cron 8198815c-45e0-40ff-87d1-bfa19d038c5b to the Triage topic (thread 5)",
+      "cadence": "daily 18:05 (05 18 * * *)"
+    },
+    {
+      "name": "host-diag",
+      "audience": "agent",
+      "entry": "/usr/local/bin/host-diag on vpn, apps and agents (source vpn/services/gatus/scripts/host-diag)",
+      "cadence": "on demand - alert or patrol"
+    },
+    {
+      "name": "Fleet disk cleanup",
+      "audience": "owner",
+      "entry": "/usr/local/bin/vds-cleanup.sh on vpn, apps and agents; delegates to /root/vds-servers/scripts/cleanup-unified.sh",
+      "cadence": "weekly, Sun 03:00 (root crontab) - plus on demand at disk >=89%"
+    },
+    {
+      "name": "Scratch hygiene reaper",
+      "audience": "agent",
+      "entry": "root crontab on agents: python3 /root/vds-servers/tools/hygiene.py --clean",
+      "cadence": "hourly - a host script, not a lane wake"
+    }
+  ],
+  "substrates_owned": [
+    "/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)",
+    "The fleet hosts vpn, apps and agents - host-level state: systemd units, containers, disk, /usr/local/bin scripts",
+    "Gatus monitoring configuration and alert routing on vpn",
+    "The Mac access path (vpn/mac-access: CDP tunnel and route pin)"
+  ],
+  "announcements": [
+    {
+      "id": "cron-result-lost-on-restart",
+      "scope": "profile",
+      "severity": "warning",
+      "text": "A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-09-19",
+      "review_by": "2026-09-26",
+      "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md"
+    },
+    {
+      "id": "vds-servers-single-writer-route",
+      "scope": "profile",
+      "severity": "info",
+      "text": "/root/vds-servers is single-writer and commit-gated: peers must not commit to it, and fleet changes (host config, Gatus, cleanup, host-diag) are routed to Infra Factory HQ rather than edited in place.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-09-19"
+    }
+  ],
   "lanes": [
     {
       "topic": "HQ",
@@ -44,6 +130,6 @@
       "announcements": []
     }
   ],
-  "status": "unattested",
-  "attested_at": null
+  "status": "attested",
+  "attested_at": "2026-09-19T14:22:25Z"
 }

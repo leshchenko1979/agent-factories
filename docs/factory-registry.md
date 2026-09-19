@@ -2,20 +2,40 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T15:03:39Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T15:06:18Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
-| declared | 6 fragment(s) | 0 attested, 6 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T15:03:39Z` |
+| declared | 6 fragment(s) | 5 attested, 1 awaiting an answer |
+| generated | live reads | resolved `2026-09-19T15:06:18Z` |
 
 ## Announcements
 
 Deduplicated by `id` across every fragment: several lanes noticing one fact is one statement with several declarers. An entry naming a `check` is mechanically verified; the rest rest on `review_by` alone.
 
-_None declared. Every field is a question until an HQ answers it._
+### 🟡 warning (4)
+
+- 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet, although the owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger. A single-lane pacemaker is not batch/fan-out, so each of these triggers defers up to its --max-delay-secs bound instead of waking an idle lane immediately. Count by owner: 5 meta-factory, 1 opencrabs-dev, 2 ai-antispam. A job that is not yours is its owner's to fix.
+  - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
+- 🟡 **`cron-result-lost-on-restart`** — A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.
+  - affects: profile · since: 2026-09-19 · review by: 2026-09-26 · declared by: infra-factory
+- 🟡 **`notify-now-mode-retired`** — session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.
+  - affects: profile · since: 2026-09-19 · review by: 2026-12-19 · declared by: opencrabs-dev
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
+  - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
+
+### 🔵 info (4)
+
+- 🔵 **`brain-metrics-baseline-measured`** — Brain metrics are measured and written up at evidence/brain-metrics-2026-09-19.md. Always-injected files: 588 lines / 72393 bytes, about 20684 tokens. Main skill SKILL.md: 452 lines / 32247 bytes, about 9213 tokens. Together a static floor of about 14.9 percent of a 200k window, paid before a session reads any message. Post-compaction context size is readable straight from the daemon log: the line Compaction: sending N / N messages to summarizer (X / 200000 input tokens) at context.rs:1007. Over n=2011 samples the mean is 66393 input tokens, 33.2 percent of the window, median 35.2 percent. CAUTION: the trigger line Context at NN percent (>65 percent) at compaction.rs:269 uses a DIFFERENT denominator (effective_token_count over effective_max, window minus reserves) and must never be read as a fraction of the provider window.
+  - affects: profile · since: 2026-09-19T14:20:00Z · declared by: meta-factory
+- 🔵 **`vds-servers-single-writer-route`** — /root/vds-servers is single-writer and commit-gated: peers must not commit to it, and fleet changes (host config, Gatus, cleanup, host-diag) are routed to Infra Factory HQ rather than edited in place.
+  - affects: profile · since: 2026-09-19 · declared by: infra-factory
+- 🔵 **`llm-gateway-per-service-user`** — The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.
+  - affects: profile · since: 2026-09-18T01:53:06Z · declared by: miidas
+- 🔵 **`miidas-hq-daily-trigger-is-ours`** — cron miidas-hq-daily-trigger (0 9 * * *, enabled, delivers to session e4f96a33-45ac-412e-8788-1b678cf2addb, the HQ topic) is the MIIDAS factory's own pacemaker. Peers must not disable, repace or repoint it.
+  - affects: profile · since: 2026-09-11T00:00:00Z · declared by: miidas
 
 ## Reachability
 
@@ -34,19 +54,28 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 | Field | Value |
 |---|---|
-| freshness | ⛔ INCOMPLETE — no declared half yet |
-| purpose | — |
+| freshness | ✅ attested 2026-09-19T14:23:42Z |
+| purpose | Run the ai-antispam AI spam-blocker bot service (Telegram + MAX) and the outreach campaign that recruits channel owners to install it. |
 | profile | `ops` |
 | repo | `/root/ai-antispam` |
 | law | `/root/ai-antispam/SKILL.md` — revision 0.1.0 |
-| owns | — |
-| does not own | — |
-| substrates owned | — |
-| attested at | — |
+| owns | ['the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)', 'the outreach campaign repo /root/ai-antispam-outreach and its Postgres state', 'Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)', 'the MAX domain - API surface, webhook ingress, subscription, moderation port', "this factory's own chat (-1003993000918), its topics and its 12 crons"] |
+| does not own | ['the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory', 'VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory', 'token provisioning, model routing, inference pricing - inferhub-watch', 'the factory template and meta-factory law - meta-factory', 'Miidas accounting - miidas', 'tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)'] |
+| substrates owned | ['/root/ai-antispam - public repo alexeyleshchenko/ai-antispam (git via SSH alias github.com-alexey)', '/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach', 'Postgres ai_spam_bot on apps - single writer outreach/lib/db.py', 'the bot container and MAX webhook route on apps'] |
+| attested at | 2026-09-19T14:23:42Z |
 
 **Services**
 
-_None declared._
+| name | audience | entry | cadence |
+|---|---|---|---|
+| ai-spam-blocker bot (Telegram + MAX moderation) | owner | apps host: /process-tg-updates and /process-max-updates webhooks | continuous, event-driven |
+| ai-antispam-self-audit-daily | agent | cron f5256d96-3d12-47f7-95ab-082d8db4d741 | daily 08:50 MSK |
+| ai-antispam-triage-sweep | agent | cron e1588fe5-ddbb-4f4f-84f4-b6e06513683c | every 6h |
+| ai-antispam-owner-digest | owner | cron a3a292e7-4c14-401e-8095-02e86f5530ea | daily 09:30 MSK |
+| ai-antispam-outreach-watch-poll | agent | cron cfb86dc5-4be4-4984-8331-d682504d2d1f | every 6h |
+| ai-antispam-outreach-db-sync | agent | cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4 | daily 09:00 MSK |
+| ai-antispam-bot-service-health | owner | cron d2c7e157-9370-4752-a054-c853b4bb2d3c | daily 09:00 MSK |
+| ai-antispam-wave0-reply-sweep | agent | cron 5e515bac-fb81-41c6-b1e2-603ab824ad90 | daily 12:00 MSK |
 
 **Lanes**
 
@@ -123,19 +152,34 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ⛔ INCOMPLETE — no declared half yet |
-| purpose | — |
+| freshness | ✅ attested 2026-09-19T14:22:25Z |
+| purpose | Keep the VDS fleet (vpn, apps, agents) and the services it hosts observable, healthy and self-healing: intake Gatus alerts, diagnose hosts, apply safe remediation, and own the fleet infrastructure source repo. |
 | profile | `ops` |
 | repo | `/root/vds-servers` |
 | law | `/root/vds-servers/skills/infra-factory/SKILL.md` — revision 0.1.0 |
-| owns | — |
-| does not own | — |
-| substrates owned | — |
-| attested at | — |
+| owns | ['Fleet host operations on vpn, apps and agents - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation', 'Gatus monitoring: endpoint configuration, alert intake and recovery routing (gatus-notify on vpn)', 'The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger', 'Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation', 'The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC', 'Infra Factory process law and its own lanes (HQ, Triage, Surveys)'] |
+| does not own | ['OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev', 'The factory template, cross-factory laws and fleet measurement - that is meta-factory', 'ai-antispam business logic, its outreach campaign and its Postgres state - that is ai-antispam', 'Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers', 'InferHub model routing, pricing and token economics - that is inferhub-watch', 'Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos', "Other profiles' brain files and configuration (default, family)"] |
+| substrates owned | ['/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)', 'The fleet hosts vpn, apps and agents - host-level state: systemd units, containers, disk, /usr/local/bin scripts', 'Gatus monitoring configuration and alert routing on vpn', 'The Mac access path (vpn/mac-access: CDP tunnel and route pin)'] |
+| attested at | 2026-09-19T14:22:25Z |
 
 **Services**
 
-_None declared._
+| name | audience | entry | cadence |
+|---|---|---|---|
+| Gatus fleet monitoring and alert intake | owner | vpn: vpn/services/gatus/config/config.yaml, delivered by gatus-notify.service (active) | continuous; alerts on endpoint failure |
+| infra-triage-patrol | agent | cron d6119dbc-95d2-4341-aeb5-dc1c839cc9ed to the Triage lane; gate /root/vds-servers/tools/triage_preflight.py | 6-hourly (0 */6 * * *) |
+| infra-surveys-daily | agent | cron 73e9a3d0-8dfe-48db-a169-3fae3d2a0405 to the Surveys topic (thread 7) | daily 09:00 MSK (0 9 * * *) |
+| infra-sender-logs-check | agent | cron 8198815c-45e0-40ff-87d1-bfa19d038c5b to the Triage topic (thread 5) | daily 18:05 (05 18 * * *) |
+| host-diag | agent | /usr/local/bin/host-diag on vpn, apps and agents (source vpn/services/gatus/scripts/host-diag) | on demand - alert or patrol |
+| Fleet disk cleanup | owner | /usr/local/bin/vds-cleanup.sh on vpn, apps and agents; delegates to /root/vds-servers/scripts/cleanup-unified.sh | weekly, Sun 03:00 (root crontab) - plus on demand at disk >=89% |
+| Scratch hygiene reaper | agent | root crontab on agents: python3 /root/vds-servers/tools/hygiene.py --clean | hourly - a host script, not a lane wake |
+
+**Announcements reaching this factory**
+
+- 🟡 **`cron-result-lost-on-restart`** — A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.
+  - affects: profile · since: 2026-09-19 · review by: 2026-09-26 · declared by: infra-factory
+- 🔵 **`vds-servers-single-writer-route`** — /root/vds-servers is single-writer and commit-gated: peers must not commit to it, and fleet changes (host config, Gatus, cleanup, host-diag) are routed to Infra Factory HQ rather than edited in place.
+  - affects: profile · since: 2026-09-19 · declared by: infra-factory
 
 **Lanes**
 
@@ -151,7 +195,7 @@ _None declared._
 
 | job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|
-| `infra-sender-logs-check` | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-19T15:05:00+00:00 | telegram:-1004486255170:5 | — |
+| `infra-sender-logs-check` | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T15:05:00+00:00 | telegram:-1004486255170:5 | — |
 | `infra-surveys-daily` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1004486255170:7 | — |
 | `infra-triage-patrol` | `0 */6 * * *` | UTC | yes | 1 | present | 2026-09-19T18:00:00+00:00 | session:fb67ca75-8735-4c39-80be-06b59bd4365f | /root/vds-servers/tools/triage_preflight.py |
 
@@ -162,19 +206,32 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane.
 
 | Field | Value |
 |---|---|
-| freshness | ⛔ INCOMPLETE — no declared half yet |
-| purpose | — |
+| freshness | ✅ attested 2026-09-19T14:21:55Z |
+| purpose | Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy. |
 | profile | `ops` |
 | repo | `/root/agent-factories` |
 | law | `/root/agent-factories/skills/meta-factory/SKILL.md` — revision 0.1.3 |
-| owns | — |
-| does not own | — |
-| substrates owned | — |
-| attested at | — |
+| owns | ['the ASIF template and rulebook (TEMPLATE/ and the derived laws)', 'the fleet registry (registry/)', 'member-factory surveys, scores and the measurement cadence', 'the pacemaker and outer-trigger methodology (P28)', "this factory's own process law (skills/meta-factory/SKILL.md)"] |
+| does not own | ["member factories' products, backlogs, repos and code", "member factories' ontologies and issue boards", 'the OpenCrabs runtime, daemon and core tools - a client-supplier loop, not ownership', 'token provisioning, model routing and inference pricing (InferHub Watch)', 'the tg_* tool surface (fast-mcp-telegram)'] |
+| substrates owned | ['/root/agent-factories', '/root/agent-factories/skills/meta-factory/SKILL.md', '/root/agent-factories/registry/'] |
+| attested at | 2026-09-19T14:21:55Z |
 
 **Services**
 
-_None declared._
+| name | audience | entry | cadence |
+|---|---|---|---|
+| factory-measurement-daily | agent | cron factory-measurement-daily | daily 09:00Z |
+| factory-triage-patrol | agent | cron factory-triage-patrol | every 6h |
+| factory-insights-weekly | agent | cron factory-insights-weekly | weekly, Fri 18:00Z |
+| factory-template-weekly | agent | cron factory-template-weekly | weekly, Mon 09:00Z |
+| factory-growth-map-biweekly | agent | cron factory-growth-map-biweekly | 1st and 15th, 09:00Z |
+
+**Announcements reaching this factory**
+
+- 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet, although the owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger. A single-lane pacemaker is not batch/fan-out, so each of these triggers defers up to its --max-delay-secs bound instead of waking an idle lane immediately. Count by owner: 5 meta-factory, 1 opencrabs-dev, 2 ai-antispam. A job that is not yours is its owner's to fix.
+  - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
+- 🔵 **`brain-metrics-baseline-measured`** — Brain metrics are measured and written up at evidence/brain-metrics-2026-09-19.md. Always-injected files: 588 lines / 72393 bytes, about 20684 tokens. Main skill SKILL.md: 452 lines / 32247 bytes, about 9213 tokens. Together a static floor of about 14.9 percent of a 200k window, paid before a session reads any message. Post-compaction context size is readable straight from the daemon log: the line Compaction: sending N / N messages to summarizer (X / 200000 input tokens) at context.rs:1007. Over n=2011 samples the mean is 66393 input tokens, 33.2 percent of the window, median 35.2 percent. CAUTION: the trigger line Context at NN percent (>65 percent) at compaction.rs:269 uses a DIFFERENT denominator (effective_token_count over effective_max, window minus reserves) and must never be read as a fraction of the provider window.
+  - affects: profile · since: 2026-09-19T14:20:00Z · declared by: meta-factory
 
 **Lanes**
 
@@ -204,19 +261,35 @@ Attribution basis: name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ⛔ INCOMPLETE — no declared half yet |
-| purpose | — |
+| freshness | ✅ attested 2026-09-19T14:21:30Z |
+| purpose | MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them. |
 | profile | `ops` |
 | repo | `/root/miidas` |
 | law | `/root/miidas/SKILL.md` — revision 1.1.7 |
-| owns | — |
-| does not own | — |
-| substrates owned | — |
-| attested at | — |
+| owns | ['/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps', 'leshchenko1979/miidas and leshchenko1979/miidas-template', 'per-client slot state: pool/slots/miidas-*.env on apps, plus the miidas-* container and miidas_* volume namespaces', 'the Miidas Factory Telegram chat (-1003996392908) and its topics', '/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer', 'cron miidas-hq-daily-trigger', 'the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle'] |
+| does not own | ['client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface', "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle", "the apps host beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows", "other factories' repos, chats and processes", 'OpenCrabs core and the dev process'] |
+| substrates owned | ['leshchenko1979/miidas', 'leshchenko1979/miidas-template', '/root/miidas/SKILL.md (live skill path is a symlink to it)', 'apps: pool/slots/miidas-*.env and the miidas-* compose stack'] |
+| attested at | 2026-09-19T14:21:30Z |
 
 **Services**
 
-_None declared._
+| name | audience | entry | cadence |
+|---|---|---|---|
+| miidas-manager | agent | ./manager/deploy.sh | always-on; slot projection into Postgres every 60s |
+| miidas-cdp | agent | ./cdp/deploy.sh | always-on (shared headless Chrome) |
+| miidas-ru-proxy | agent | docker compose, miidas-pool network port 8888 | always-on (WireGuard egress for RU portals) |
+| miidas-<slug> | owner | ./agent/deploy.sh then restart.sh --slug <slug> | always-on, one per bound slot |
+| miidas landing | owner | ./landing/deploy.sh | request-driven (nginx on miidas.l1979.ru) |
+| miidas-hq-daily-trigger | owner | cron 0 9 * * * | daily 09:00 UTC |
+
+**Announcements reaching this factory**
+
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
+  - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
+- 🔵 **`llm-gateway-per-service-user`** — The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.
+  - affects: profile · since: 2026-09-18T01:53:06Z · declared by: miidas
+- 🔵 **`miidas-hq-daily-trigger-is-ours`** — cron miidas-hq-daily-trigger (0 9 * * *, enabled, delivers to session e4f96a33-45ac-412e-8788-1b678cf2addb, the HQ topic) is the MIIDAS factory's own pacemaker. Peers must not disable, repace or repoint it.
+  - affects: profile · since: 2026-09-11T00:00:00Z · declared by: miidas
 
 **Lanes**
 
@@ -239,19 +312,30 @@ Attribution basis: deliver_to -> lane.
 
 | Field | Value |
 |---|---|
-| freshness | ⛔ INCOMPLETE — no declared half yet |
-| purpose | — |
+| freshness | ✅ attested 2026-09-19T15:04:28Z |
+| purpose | Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what. |
 | profile | `ops` |
 | repo | `/root/opencrabs` |
 | law | `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md` — revision 0.4.217 |
-| owns | — |
-| does not own | — |
-| substrates owned | — |
-| attested at | — |
+| owns | ['the OpenCrabs source fork leshchenko1979/opencrabs and its carrier build and swap pipeline', 'the opencrabs-dev skill set: SKILL.md, the four role files, fleet-directives.md and the runbooks', 'the workers-ledger and skill-version consensus', 'the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory', 'the fork issue board on leshchenko1979/opencrabs'] |
+| does not own | ['the fast-mcp-telegram substrate and its tg_* tool family', 'the meta-factory registry, its surveys and its scoring surface', 'the live daemon configuration on this box: config.toml, keys.toml and the running units', "member factories' own process law, repos and backlogs", 'upstream adolfousier/opencrabs, which receives PRs only and never issues'] |
+| substrates owned | ['the OpenCrabs source fork and its carrier build pipeline', 'the opencrabs-dev skill set and the workers-ledger'] |
+| attested at | 2026-09-19T15:04:28Z |
 
 **Services**
 
-_None declared._
+| name | audience | entry | cadence |
+|---|---|---|---|
+| Build and swap a new daemon binary | agent | the Editor lane's oc-deploy ship <full-sha> | on request |
+| Process-law amendment | agent | session_notify to the HQ lane | on request |
+| CLI tool defect intake and fix | agent | session_notify to the Toolsmith lane | on request |
+| Version release and ledger consensus | agent | oc-ledger sync --version <v> | per skill version bump |
+| Fork issue intake and triage | agent | the Triage lane on leshchenko1979/opencrabs | on request |
+
+**Announcements reaching this factory**
+
+- 🟡 **`notify-now-mode-retired`** — session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.
+  - affects: profile · since: 2026-09-19 · review by: 2026-12-19 · declared by: opencrabs-dev
 
 **Lanes**
 
@@ -271,7 +355,7 @@ _None declared._
 | Issue #234: Review Implementation Button | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Issue #234: Review Implementation Button | resolved | telegram | 2026-09-19T09:45:50Z | — |
 | Memory: Compaction & Context | 34653 | _unstated_ | `d5863180-017d-4646-82a7-19be145e4974` | Telegram: Opencrabs Dev Factory / Memory: Compaction & Context [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-09-19T11:13:00Z | — |
 | Vector memory | 36841 | _unstated_ | `212b3c83-6659-49c8-9984-0cf849f769c1` | Telegram: Opencrabs Dev Factory / Vector memory [chat:-1003936827469:topic:36841] | resolved | telegram | 2026-09-19T04:02:09Z | — |
-| Toolsmith Issue 255 and PR Dependency Laws | 39171 | _unstated_ | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-09-19T02:50:51Z | — |
+| Toolsmith Issue 255 and PR Dependency Laws | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-09-19T02:50:51Z | — |
 | Harvesting upstream PRs into OpenCrabs | 39218 | _unstated_ | `4b0990b7-aff8-4744-8de5-e38e54de7693` | Harvesting upstream PRs into OpenCrabs | resolved | telegram | 2026-09-16T00:10:47Z | — |
 | Rich resume wire | 39862 | _unstated_ | `c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1` | Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862] | resolved | telegram | 2026-09-18T10:34:37Z | — |
 | Loop guard | 39883 | _unstated_ | `40427d4f-af4a-48ba-993f-f5f0b21916c0` | Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883] | resolved | telegram | 2026-09-19T01:43:01Z | — |

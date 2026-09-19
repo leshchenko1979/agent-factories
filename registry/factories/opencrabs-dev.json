@@ -4,14 +4,73 @@
   "profile": "ops",
   "repo": "/root/opencrabs",
   "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-  "purpose": null,
+  "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
   "zone": {
-    "owns": null,
-    "does_not_own": null
+    "owns": [
+      "the OpenCrabs source fork leshchenko1979/opencrabs and its carrier build and swap pipeline",
+      "the opencrabs-dev skill set: SKILL.md, the four role files, fleet-directives.md and the runbooks",
+      "the workers-ledger and skill-version consensus",
+      "the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory",
+      "the fork issue board on leshchenko1979/opencrabs"
+    ],
+    "does_not_own": [
+      "the fast-mcp-telegram substrate and its tg_* tool family",
+      "the meta-factory registry, its surveys and its scoring surface",
+      "the live daemon configuration on this box: config.toml, keys.toml and the running units",
+      "member factories' own process law, repos and backlogs",
+      "upstream adolfousier/opencrabs, which receives PRs only and never issues"
+    ]
   },
-  "services": null,
-  "substrates_owned": null,
-  "announcements": [],
+  "services": [
+    {
+      "name": "Build and swap a new daemon binary",
+      "audience": "agent",
+      "entry": "the Editor lane's oc-deploy ship <full-sha>",
+      "cadence": "on request"
+    },
+    {
+      "name": "Process-law amendment",
+      "audience": "agent",
+      "entry": "session_notify to the HQ lane",
+      "cadence": "on request"
+    },
+    {
+      "name": "CLI tool defect intake and fix",
+      "audience": "agent",
+      "entry": "session_notify to the Toolsmith lane",
+      "cadence": "on request"
+    },
+    {
+      "name": "Version release and ledger consensus",
+      "audience": "agent",
+      "entry": "oc-ledger sync --version <v>",
+      "cadence": "per skill version bump"
+    },
+    {
+      "name": "Fork issue intake and triage",
+      "audience": "agent",
+      "entry": "the Triage lane on leshchenko1979/opencrabs",
+      "cadence": "on request"
+    }
+  ],
+  "substrates_owned": [
+    "the OpenCrabs source fork and its carrier build pipeline",
+    "the opencrabs-dev skill set and the workers-ledger"
+  ],
+  "announcements": [
+    {
+      "id": "notify-now-mode-retired",
+      "scope": "profile",
+      "severity": "warning",
+      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-09-19",
+      "review_by": "2026-12-19",
+      "evidence": "fork issue #373; commits 9dffa5632 + 6db34e1fd, deployed. notify_policy.rs returns Err for mode=now; the session_notify schema's delivery.mode enum is exactly [turn-end, quiet]."
+    }
+  ],
   "lanes": [
     {
       "topic": "bash guard forced-variation design",
@@ -100,7 +159,7 @@
     {
       "topic": "Toolsmith Issue 255 and PR Dependency Laws",
       "thread_id": 39171,
-      "role": null,
+      "role": "toolsmith",
       "announcements": []
     },
     {
@@ -218,13 +277,13 @@
       "announcements": []
     },
     {
-      "topic": "FlowLine::System split \u2014 #291 header fix",
+      "topic": "FlowLine::System split — #291 header fix",
       "thread_id": 51188,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "\ud83d\udd0d PROBE review-155",
+      "topic": "🔍 PROBE review-155",
       "thread_id": 51714,
       "role": null,
       "announcements": []
@@ -236,6 +295,6 @@
       "announcements": []
     }
   ],
-  "status": "unattested",
-  "attested_at": null
+  "status": "attested",
+  "attested_at": "2026-09-19T15:04:28Z"
 }

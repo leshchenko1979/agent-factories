@@ -4,14 +4,102 @@
   "profile": "ops",
   "repo": "/root/miidas",
   "skill": "/root/miidas/SKILL.md",
-  "purpose": null,
+  "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
   "zone": {
-    "owns": null,
-    "does_not_own": null
+    "owns": [
+      "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps",
+      "leshchenko1979/miidas and leshchenko1979/miidas-template",
+      "per-client slot state: pool/slots/miidas-*.env on apps, plus the miidas-* container and miidas_* volume namespaces",
+      "the Miidas Factory Telegram chat (-1003996392908) and its topics",
+      "/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer",
+      "cron miidas-hq-daily-trigger",
+      "the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle"
+    ],
+    "does_not_own": [
+      "client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface",
+      "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle",
+      "the apps host beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows",
+      "other factories' repos, chats and processes",
+      "OpenCrabs core and the dev process"
+    ]
   },
-  "services": null,
-  "substrates_owned": null,
-  "announcements": [],
+  "services": [
+    {
+      "name": "miidas-manager",
+      "audience": "agent",
+      "entry": "./manager/deploy.sh",
+      "cadence": "always-on; slot projection into Postgres every 60s"
+    },
+    {
+      "name": "miidas-cdp",
+      "audience": "agent",
+      "entry": "./cdp/deploy.sh",
+      "cadence": "always-on (shared headless Chrome)"
+    },
+    {
+      "name": "miidas-ru-proxy",
+      "audience": "agent",
+      "entry": "docker compose, miidas-pool network port 8888",
+      "cadence": "always-on (WireGuard egress for RU portals)"
+    },
+    {
+      "name": "miidas-<slug>",
+      "audience": "owner",
+      "entry": "./agent/deploy.sh then restart.sh --slug <slug>",
+      "cadence": "always-on, one per bound slot"
+    },
+    {
+      "name": "miidas landing",
+      "audience": "owner",
+      "entry": "./landing/deploy.sh",
+      "cadence": "request-driven (nginx on miidas.l1979.ru)"
+    },
+    {
+      "name": "miidas-hq-daily-trigger",
+      "audience": "owner",
+      "entry": "cron 0 9 * * *",
+      "cadence": "daily 09:00 UTC"
+    }
+  ],
+  "substrates_owned": [
+    "leshchenko1979/miidas",
+    "leshchenko1979/miidas-template",
+    "/root/miidas/SKILL.md (live skill path is a symlink to it)",
+    "apps: pool/slots/miidas-*.env and the miidas-* compose stack"
+  ],
+  "announcements": [
+    {
+      "id": "miidas-volume-namespace-on-apps",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
+      "severity": "warning",
+      "since": "2026-09-13T09:56:00Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "2026-09-13 volume purge reclaimed 33 volumes / 1.167 GiB (8 decommissioned slot volumes plus 25 slot-less orphans), filtered on the ^miidas_ prefix only, with miidas-pixel-data deliberately preserved. Runbook: /root/miidas/SKILL.md"
+    },
+    {
+      "id": "llm-gateway-per-service-user",
+      "text": "The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.",
+      "severity": "info",
+      "since": "2026-09-18T01:53:06Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile"
+    },
+    {
+      "id": "miidas-hq-daily-trigger-is-ours",
+      "text": "cron miidas-hq-daily-trigger (0 9 * * *, enabled, delivers to session e4f96a33-45ac-412e-8788-1b678cf2addb, the HQ topic) is the MIIDAS factory's own pacemaker. Peers must not disable, repace or repoint it.",
+      "severity": "info",
+      "since": "2026-09-11T00:00:00Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "factory"
+    }
+  ],
   "lanes": [
     {
       "topic": "HQ",
@@ -26,7 +114,7 @@
       "announcements": []
     },
     {
-      "topic": "Worker \u2014 #25 CLIENT_KIND backfill + telemetry projection",
+      "topic": "Worker — #25 CLIENT_KIND backfill + telemetry projection",
       "thread_id": 56,
       "role": "worker",
       "announcements": []
@@ -38,6 +126,6 @@
       "announcements": []
     }
   ],
-  "status": "unattested",
-  "attested_at": null
+  "status": "attested",
+  "attested_at": "2026-09-19T14:21:30Z"
 }

@@ -4,13 +4,80 @@
   "profile": "ops",
   "repo": "/root/ai-antispam",
   "skill": "/root/ai-antispam/SKILL.md",
-  "purpose": null,
+  "purpose": "Run the ai-antispam AI spam-blocker bot service (Telegram + MAX) and the outreach campaign that recruits channel owners to install it.",
   "zone": {
-    "owns": null,
-    "does_not_own": null
+    "owns": [
+      "the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)",
+      "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
+      "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
+      "the MAX domain - API surface, webhook ingress, subscription, moderation port",
+      "this factory's own chat (-1003993000918), its topics and its 12 crons"
+    ],
+    "does_not_own": [
+      "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
+      "VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory",
+      "token provisioning, model routing, inference pricing - inferhub-watch",
+      "the factory template and meta-factory law - meta-factory",
+      "Miidas accounting - miidas",
+      "tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)"
+    ]
   },
-  "services": null,
-  "substrates_owned": null,
+  "services": [
+    {
+      "name": "ai-spam-blocker bot (Telegram + MAX moderation)",
+      "audience": "owner",
+      "entry": "apps host: /process-tg-updates and /process-max-updates webhooks",
+      "cadence": "continuous, event-driven"
+    },
+    {
+      "name": "ai-antispam-self-audit-daily",
+      "audience": "agent",
+      "entry": "cron f5256d96-3d12-47f7-95ab-082d8db4d741",
+      "cadence": "daily 08:50 MSK"
+    },
+    {
+      "name": "ai-antispam-triage-sweep",
+      "audience": "agent",
+      "entry": "cron e1588fe5-ddbb-4f4f-84f4-b6e06513683c",
+      "cadence": "every 6h"
+    },
+    {
+      "name": "ai-antispam-owner-digest",
+      "audience": "owner",
+      "entry": "cron a3a292e7-4c14-401e-8095-02e86f5530ea",
+      "cadence": "daily 09:30 MSK"
+    },
+    {
+      "name": "ai-antispam-outreach-watch-poll",
+      "audience": "agent",
+      "entry": "cron cfb86dc5-4be4-4984-8331-d682504d2d1f",
+      "cadence": "every 6h"
+    },
+    {
+      "name": "ai-antispam-outreach-db-sync",
+      "audience": "agent",
+      "entry": "cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4",
+      "cadence": "daily 09:00 MSK"
+    },
+    {
+      "name": "ai-antispam-bot-service-health",
+      "audience": "owner",
+      "entry": "cron d2c7e157-9370-4752-a054-c853b4bb2d3c",
+      "cadence": "daily 09:00 MSK"
+    },
+    {
+      "name": "ai-antispam-wave0-reply-sweep",
+      "audience": "agent",
+      "entry": "cron 5e515bac-fb81-41c6-b1e2-603ab824ad90",
+      "cadence": "daily 12:00 MSK"
+    }
+  ],
+  "substrates_owned": [
+    "/root/ai-antispam - public repo alexeyleshchenko/ai-antispam (git via SSH alias github.com-alexey)",
+    "/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach",
+    "Postgres ai_spam_bot on apps - single writer outreach/lib/db.py",
+    "the bot container and MAX webhook route on apps"
+  ],
   "announcements": [],
   "lanes": [
     {
@@ -38,18 +105,18 @@
       "announcements": []
     },
     {
-      "topic": "Bot lane \u2014 ai-antispam service (Bot topic)",
+      "topic": "Bot lane — ai-antispam service (Bot topic)",
       "thread_id": 10784,
       "role": "bot",
       "announcements": []
     },
     {
-      "topic": "MAX domain \u2014 lane acceptance &amp; verification",
+      "topic": "MAX domain — lane acceptance &amp; verification",
       "thread_id": 11156,
       "role": null,
       "announcements": []
     }
   ],
-  "status": "unattested",
-  "attested_at": null
+  "status": "attested",
+  "attested_at": "2026-09-19T14:23:42Z"
 }
