@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -27,6 +26,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 import audit as _audit  # noqa: E402  — the ONE yield implementation (#53 clause 8)
+import field_predicate as _fields  # noqa: E402  — the ONE field predicate (#99)
 REWORK_PATH = REPO / "evidence" / "rework.md"
 SCORES_DIR = REPO / "evidence" / "scores"
 LEDGER_PATH = REPO / "evidence" / "ledger.jsonl"
@@ -148,13 +148,18 @@ def mine_ledger_telemetry() -> list[FrictionPattern]:
     failure n=306 names, and the alarm's own version divided accepted runs by every
     run row — a permanent false RED, because a row declaring no outcome is UNKNOWN
     and was being counted as a failure (#41).
+
+    `total_cost` was REMOVED here rather than migrated (#99). It was accumulated from
+    every run row and read by NOTHING — a dead aggregate is a second reading of a field
+    `tools/audit.py` already owns from the same trailer scope, and a dead one is the
+    kind that gets wired up by mistake. `high_turns` stays: it is read, by the
+    `high_turn_convergence` alarm below.
     """
     if not LEDGER_PATH.is_file():
         return []
 
     lines = [l.strip() for l in LEDGER_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
     high_turns = 0
-    total_cost = 0.0
 
     for line in lines:
         try:
@@ -163,13 +168,17 @@ def mine_ledger_telemetry() -> list[FrictionPattern]:
             continue
 
         if d.get("event") == "run":
-            detail = d.get("detail", "")
-            turns_m = re.search(r"turns=(\d+)", detail)
-            if turns_m and int(turns_m.group(1)) > 3:
-                high_turns += 1
-            cost_m = re.search(r"cost_usd=([\d\.]+)", detail)
-            if cost_m:
-                total_cost += float(cost_m.group(1))
+            # Telemetry is read through the ONE shared predicate (#99), which scopes a
+            # field to the row's canonical TRAILER. The private scan this replaces read
+            # the WHOLE detail, so it took a QUOTATION for a measurement: `n=586` is a
+            # run row that quotes `n=303`'s trailer as evidence, and the quoted
+            # `cost_usd=2.7719` was aggregated as a cost that row took.
+            for key, value in _fields.declared_telemetry(d.get("detail", "")):
+                try:
+                    if key == "turns" and int(value) > 3:
+                        high_turns += 1
+                except ValueError:
+                    pass
 
     stats, _closed = _audit.parse_ledger(LEDGER_PATH)
     accepted = stats.get("runs_by_outcome", {}).get("accepted", 0)
