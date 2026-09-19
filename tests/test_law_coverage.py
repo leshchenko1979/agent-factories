@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PRACTICE_GATES: dict[str, list[str]] = {
     "P1": ["tests/test_ontology.py", "skills/meta-factory/SKILL.md"],  # Process law is a versioned file
     "P2": ["TEMPLATE/roles/hq.md", "TEMPLATE/roles/triage.md", "TEMPLATE/roles/worker.md"],  # One file per role
-    "P3": ["tools/audit.py", "tools/ledger.py"],  # Issue board / ledger is task list
+    "P3": ["tools/audit.py", "tools/ledger.py", "tests/test_board_intake_recorded.py"],  # Issue board / ledger is task list
     "P4": ["tests/test_session_bindings.py", "skills/meta-factory/SKILL.md"],  # Direct message to session UUID
     "P5": ["evidence/ledger.jsonl"],  # Named place carries state
     "P6": ["TEMPLATE/roles/hq.md", "skills/meta-factory/SKILL.md", "tests/test_hq_delegation.py"],  # HQ works on process, not in it

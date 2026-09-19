@@ -461,6 +461,15 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_roadmap_transition.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_roadmap_transition.py"])
 
+    # 25. Board-intake gate: a board issue and its ledger `intake` row are two records
+    #     of one act, so the predicate reads both and reports each direction under its
+    #     own soundness condition — forward over the open set, reverse only over the
+    #     FULL board, with a pre-gate subject excused rather than backfilled. Nothing
+    #     read the board against the ledger, so an owner-filed issue could sit open with
+    #     no intake row while each surface stayed internally consistent (issue #56, P29).
+    if (repo_root / "tests/test_board_intake_recorded.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_board_intake_recorded.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

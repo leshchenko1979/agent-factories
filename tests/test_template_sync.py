@@ -47,6 +47,7 @@ PAIRS = [
     ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),
     ("tests/test_criteria_count.py", "TEMPLATE/tests/test_criteria_count.py"),
     ("tests/test_roadmap_transition.py", "TEMPLATE/tests/test_roadmap_transition.py"),
+    ("tests/test_board_intake_recorded.py", "TEMPLATE/tests/test_board_intake_recorded.py"),
 ]
 
 
