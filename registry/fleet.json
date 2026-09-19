@@ -1,0 +1,60 @@
+{
+  "profile_root": "/root/.opencrabs/profiles",
+  "profile": "ops",
+  "factories": [
+    {
+      "slug": "ai-antispam",
+      "display_name": "AI AntiSpam",
+      "chat_id": -1003993000918,
+      "repo": "/root/ai-antispam",
+      "skill": "/root/ai-antispam/SKILL.md",
+      "job_prefixes": ["ai-antispam-"],
+      "aliases": ["ai-antispam", "ai antispam", "antispam"]
+    },
+    {
+      "slug": "infra-factory",
+      "display_name": "Infra Factory",
+      "chat_id": -1004486255170,
+      "repo": "/root/vds-servers",
+      "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
+      "job_prefixes": ["infra-"],
+      "aliases": ["infra-factory", "infra factory"]
+    },
+    {
+      "slug": "inferhub-watch",
+      "display_name": "InferHub Watch",
+      "chat_id": -1004379632866,
+      "repo": "/root/inferhub-watch",
+      "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
+      "job_prefixes": ["inferhub-"],
+      "aliases": ["inferhub"]
+    },
+    {
+      "slug": "meta-factory",
+      "display_name": "Meta-Factory",
+      "chat_id": -1004497192134,
+      "repo": "/root/agent-factories",
+      "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
+      "job_prefixes": ["factory-"],
+      "aliases": ["meta-factory", "meta factory"]
+    },
+    {
+      "slug": "miidas",
+      "display_name": "Miidas",
+      "chat_id": -1003996392908,
+      "repo": "/root/miidas",
+      "skill": "/root/miidas/SKILL.md",
+      "job_prefixes": ["miidas-"],
+      "aliases": ["miidas", "миидас"]
+    },
+    {
+      "slug": "opencrabs-dev",
+      "display_name": "OpenCrabs Dev",
+      "chat_id": -1003936827469,
+      "repo": "/root/opencrabs",
+      "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
+      "job_prefixes": ["oc-"],
+      "aliases": ["opencrabs-dev", "opencrabs dev", "crabs kanban", "oc dev"]
+    }
+  ]
+}

@@ -27,12 +27,17 @@ import registry_render as rr  # noqa: E402
 
 
 def _fragment(slug: str, announcements=None, lanes=None, **over) -> dict:
+    # The fixtures are SYNTHETIC on purpose — `alpha`/`beta`, and paths under a neutral
+    # `/factories/` root rather than this box's `/root/`. The renderer never resolves a
+    # fragment's `factory` against the manifest, so a fixture is free to name a factory
+    # that does not exist; borrowing the fleet's own layout would only make the test look
+    # like it were asserting something about this box's factories.
     fragment = {
         "factory": slug,
         "display_name": slug.title(),
         "profile": "ops",
-        "repo": f"/root/{slug}",
-        "skill": f"/root/{slug}/SKILL.md",
+        "repo": f"/factories/{slug}",
+        "skill": f"/factories/{slug}/SKILL.md",
         "purpose": f"{slug} purpose",
         "zone": {"owns": ["x"], "does_not_own": ["y"]},
         "services": [],

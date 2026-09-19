@@ -38,9 +38,10 @@ from pathlib import Path
 from registry import (
     CHECKS,
     FACTORY_CHATS,
-    PROFILE_ROOT,
+    NAME_PREFIXES as REGISTRY_NAME_PREFIXES,
     REPO_ROOT,
     SEVERITIES,
+    FleetManifestError,
     all_bindings,
     live_fragment_paths,
     load_fragment,
@@ -80,14 +81,12 @@ SEVERITY_DISPLAY_ORDER = tuple(reversed(SEVERITIES))
 # name. The prefixes are the fleet's naming law made mechanical — every job on
 # this box is `<factory>-<what-it-does>` — and the render STATES which basis it
 # used, because a name is a label and not an identity field.
-NAME_PREFIXES = (
-    ("ai-antispam", ("ai-antispam-",)),
-    ("inferhub-watch", ("inferhub-",)),
-    ("infra-factory", ("infra-",)),
-    ("meta-factory", ("factory-",)),
-    ("miidas", ("miidas-",)),
-    ("opencrabs-dev", ("oc-",)),
-)
+#
+# The prefixes are IMPORTED, not restated: they are declared per factory in
+# `registry/fleet.json` and derived once in `registry.py`. A second copy here was
+# the defect this module's own docstring warns about — two declared surfaces that
+# can disagree, with the renderer's copy silently winning every attribution.
+NAME_PREFIXES = REGISTRY_NAME_PREFIXES
 
 CRON_COLUMNS = (
     "id",
@@ -292,10 +291,19 @@ def run_check(name: object, cache: dict) -> tuple[bool | None, str]:
 # pair is what renders.
 
 def cron_rows() -> tuple[list[dict], list[str]]:
-    """Every cron row on the box, read in place from each profile's DB."""
+    """Every cron row on the box, read in place from each profile's DB.
+
+    An undeclared `profile_root` is reported as an ERROR rather than yielding no
+    rows: the renderer would otherwise publish a fleet with zero jobs, which
+    reads as a clean box rather than as an unread one.
+    """
     rows: list[dict] = []
     errors: list[str] = []
-    for db in profile_dbs():
+    try:
+        dbs = profile_dbs()
+    except FleetManifestError as exc:
+        return [], [str(exc)]
+    for db in dbs:
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
         except sqlite3.Error as exc:

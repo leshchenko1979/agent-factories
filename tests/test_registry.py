@@ -52,14 +52,24 @@ substitution is proven by the probes and the live path is proven deterministic b
 
 Two scope statements this gate carries, because its report is wrong without them:
 
-  (i)  Checks 2, 3 and 5 are META-FACTORY-scoped. `registry.KNOWN_FACTORY_SLUGS` and
-       `FACTORY_CHATS` name the six factories on THIS box, so the TEMPLATE copy of this
-       gate must parameterize them before it can be required there (n=432 Part 5) —
-       which is why the file is listed in `gate_registry.OPTIONAL_GATES` until then.
+  (i)  Checks 2, 3 and 5 are scoped to the DECLARED fleet, not to this box. They read
+       `registry.KNOWN_FACTORY_SLUGS` and `FACTORY_CHATS`, both of which are derived from
+       `registry/fleet.json` — the manifest a factory's HQ writes. So a bootstrapped
+       factory that has declared its own factories passes, and one that has declared none
+       FAILS naming the undeclared manifest rather than reporting empty coverage. This
+       parameterisation is what moved the file out of `gate_registry.OPTIONAL_GATES` and
+       into `REQUIRED_GATES`; the gate is now required in the template too.
   (ii) Check 4 renders the fresh side AT THE COMMITTED INSTANT, so a badge that would
        have crossed its own staleness boundary since the commit is not caught here. It
        is rendered in the Freshness table, and check 6 gates the stamp it is measured
        from; the choice is stated, not implied away.
+
+The announcement probes take their slugs from the manifest rather than naming a pair:
+`validate_fragment` resolves `factory` against `KNOWN_FACTORY_SLUGS`, so the probe needs
+two slugs that are genuinely declared — and which two those are is the box's fact, not
+this gate's. `probe_slugs()` refuses a manifest with fewer than two factories instead of
+synthesizing one, because a synthesized slug would be rejected by the validator and would
+prove the merge while skipping the declaration.
 
 Run:  python3 tests/test_registry.py
 Exit: 0 clean, 1 on any failed check.
@@ -439,14 +449,31 @@ def _announcement(ident: str, text: str, **over) -> dict:
 # `factory` against `KNOWN_FACTORY_SLUGS`, so a pair named "alpha"/"beta" is rejected by
 # the validator and would prove the MERGE while skipping the DECLARATION — the half a peer
 # actually writes, and the half a schema can reject.
-PROBE_SLUGS = ("ai-antispam", "inferhub-watch")
+#
+# WHICH slugs those are is the box's own declaration, read from the fleet manifest, not a
+# fact this gate may restate. A hardcoded pair REDs on a bootstrapped factory before it has
+# enrolled anything, and the failure would name a factory that box does not have.
+def probe_slugs() -> tuple[str, str]:
+    """Two declared slugs, in manifest order — a probe needs a peer to merge with."""
+    ordered = [record["slug"] for record in reg.MANIFEST["factories"]]
+    if len(ordered) < 2:
+        raise SystemExit(
+            f"this gate probes a merge between two factories; the fleet manifest declares "
+            f"{len(ordered)} ({', '.join(ordered) or 'none'}) — declare a second factory, or "
+            f"the probe has nothing to merge"
+        )
+    return (ordered[0], ordered[1])
+
+
 def _fragment(slug: str, announcements: list[dict]) -> dict:
+    # The repo and skill come from the manifest too: they are DECLARED paths, and a
+    # synthesized `/root/<slug>` would be a second, wrong declaration of the same fact.
     return {
         "factory": slug,
-        "display_name": slug,
-        "profile": "ops",
-        "repo": f"/root/{slug}",
-        "skill": f"/root/{slug}/SKILL.md",
+        "display_name": reg.FACTORY_DISPLAY_NAMES[slug],
+        "profile": reg.FACTORY_PROFILE,
+        "repo": reg.FACTORY_REPOS[slug],
+        "skill": reg.FACTORY_SKILLS[slug],
         "purpose": f"{slug} purpose",
         "zone": {"owns": ["x"], "does_not_own": ["y"]},
         "services": [],
@@ -508,9 +535,10 @@ def _render_for(fragments: list[dict]) -> str:
 def probe_same_id_same_text_is_one_entry() -> None:
     """Several lanes observing ONE fact is a legitimate duplicate, not a conflict."""
     note = "The registry renders one entry per `id`, with every declarer named."
+    pair = probe_slugs()
     loaded, errors, tmp = _fragments_on_disk([
-        _fragment(PROBE_SLUGS[0], [_announcement("shared-fact", note)]),
-        _fragment(PROBE_SLUGS[1], [_announcement("shared-fact", note)]),
+        _fragment(pair[0], [_announcement("shared-fact", note)]),
+        _fragment(pair[1], [_announcement("shared-fact", note)]),
     ])
     check(
         "both duplicate declarations are VALID fragments, loaded from disk",
@@ -521,7 +549,7 @@ def probe_same_id_same_text_is_one_entry() -> None:
     check(
         "same `id` + same `text` merges to ONE entry naming BOTH origins",
         len(merged) == 1 and conflicts == []
-        and sorted(merged[0]["origins"]) == sorted(PROBE_SLUGS),
+        and sorted(merged[0]["origins"]) == sorted(pair),
         f"entries={len(merged)} origins={merged[0]['origins'] if merged else []} "
         f"conflicts={len(conflicts)}",
     )
@@ -535,9 +563,10 @@ def probe_same_id_same_text_is_one_entry() -> None:
 
 def probe_differing_text_under_one_id_fails() -> None:
     """Two lanes publishing contradictory guidance under one name must fail, named."""
+    pair = probe_slugs()
     loaded, errors, tmp = _fragments_on_disk([
-        _fragment(PROBE_SLUGS[0], [_announcement("contested", "Read the DB with the mode=ro URI.")]),
-        _fragment(PROBE_SLUGS[1], [_announcement("contested", "Copy the DB to /tmp and read that.")]),
+        _fragment(pair[0], [_announcement("contested", "Read the DB with the mode=ro URI.")]),
+        _fragment(pair[1], [_announcement("contested", "Copy the DB to /tmp and read that.")]),
     ])
     check(
         "each side of the contradiction is a VALID fragment alone — the conflict is not a schema fault",
@@ -552,7 +581,7 @@ def probe_differing_text_under_one_id_fails() -> None:
     )
     check(
         "...naming BOTH origins",
-        bool(conflicts) and all(slug in conflicts[0] for slug in PROBE_SLUGS),
+        bool(conflicts) and all(slug in conflicts[0] for slug in pair),
         conflicts[0][:110] if conflicts else "no conflict reported",
     )
     check(
@@ -569,8 +598,9 @@ def probe_differing_text_under_one_id_fails() -> None:
 
 def probe_a_warning_without_evidence_fails() -> None:
     """Severity `warning`/`critical` demands evidence, and the LOADER is where it lands."""
+    pair = probe_slugs()
     _loaded, errors, tmp = _fragments_on_disk([
-        _fragment(PROBE_SLUGS[0], [
+        _fragment(pair[0], [
             _announcement("unevidenced", "Peers act on this.", severity="warning", evidence="")
         ]),
     ])
@@ -580,7 +610,7 @@ def probe_a_warning_without_evidence_fails() -> None:
         errors[0][:110] if errors else "no error reported",
     )
     _ok, ok_errors, ok_tmp = _fragments_on_disk([
-        _fragment(PROBE_SLUGS[0], [_announcement("evidenced", "Peers act on this.", severity="warning")]),
+        _fragment(pair[0], [_announcement("evidenced", "Peers act on this.", severity="warning")]),
     ])
     check(
         "...and the same entry carrying evidence passes",

@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import re
 import shutil
 import socket
@@ -58,29 +59,156 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 FRAGMENT_STORE = REPO_ROOT / "registry" / "factories"
 FIXTURE_STORE = REPO_ROOT / "tests" / "fixtures"
 
-# The six factories on this profile. A slug is what `affects` entries resolve
-# against and what a fragment's `factory` field must name, so the set is a
-# constant rather than a directory listing: an empty `registry/factories/` must
-# not read as "no factory exists", which is the declared-not-derived rule again.
-KNOWN_FACTORY_SLUGS = frozenset(
-    {
-        "ai-antispam",
-        "infra-factory",
-        "inferhub-watch",
-        "meta-factory",
-        "miidas",
-        "opencrabs-dev",
-    }
+# ---------------------------------------------------------------------------
+# The fleet manifest: the one DECLARED surface this tool reads.
+#
+# Everything below that names a factory — its slug, its chat, its repo, its law
+# file, its display name, its aliases, its cron prefixes — is DATA, not code. It
+# was six dicts and a frozenset until this section existed, and that shape had
+# exactly one defect: it could not be a template artifact. A template that
+# hardcodes `ai-antispam` ships one factory's fleet to every factory that copies
+# it, and the copy is then wrong in a way no gate can see, because the gate reads
+# the same hardcoded set it is checking.
+#
+# The split is the registry's own law applied to the registry: a generator can
+# read what EXISTS (a live binding, a repo, a skill file), and it can read nothing
+# about WHICH factories the box is meant to carry. That is a declaration, so it is
+# declared — in `registry/fleet.json`, written by the factory's HQ, read here.
+#
+# **The names are kept.** `KNOWN_FACTORY_SLUGS`, `FACTORY_CHATS`, `FACTORY_REPOS`,
+# `FACTORY_SKILLS`, `FACTORY_DISPLAY_NAMES`, `FACTORY_NAME_ALIASES` and
+# `PROFILE_ROOT` are still module-level, so every call site and both sibling
+# modules keep working unchanged; they are now DERIVED from the manifest rather
+# than restated beside it. A second copy of a factory list is the defect, not the
+# constant.
+# ---------------------------------------------------------------------------
+
+MANIFEST_PATH = REPO_ROOT / "registry" / "fleet.json"
+MANIFEST_ENV = "OC_FLEET_MANIFEST"
+# The keys a record must carry, and the type each one must have. A manifest that
+# is missing a key is not a smaller fleet — it is an unanswered question, and it
+# fails naming the record and the key rather than defaulting to something.
+MANIFEST_RECORD_KEYS = (
+    ("slug", str),
+    ("display_name", str),
+    ("chat_id", int),
+    ("repo", str),
+    ("skill", str),
+    ("job_prefixes", list),
+    ("aliases", list),
 )
+
+
+class FleetManifestError(Exception):
+    """The fleet manifest is absent, unparseable, or incomplete."""
+
+
+def manifest_path() -> Path:
+    """Where the manifest is read from: the environment override, else the default.
+
+    The override exists so a probe or a fixture can point the tool at a manifest
+    it built, without writing into the live store — the same reason the fragment
+    commands take explicit paths.
+    """
+    override = os.environ.get(MANIFEST_ENV)
+    return Path(override) if override else MANIFEST_PATH
+
+
+def load_fleet_manifest(path: Path | None = None) -> dict:
+    """Read and validate the fleet manifest. Raises `FleetManifestError` on any defect.
+
+    Every failure is named with the path and the reason, because the caller that
+    most needs this message is a bootstrapped factory whose manifest was never
+    written — and "no such file" alone does not tell it what to write.
+    """
+    target = path or manifest_path()
+    try:
+        raw = target.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise FleetManifestError(
+            f"{target}: cannot read the fleet manifest — {exc}. This file declares which "
+            f"factories the registry covers; copy `registry/fleet.example.json` and fill "
+            f"it in, or point {MANIFEST_ENV} at one."
+        ) from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise FleetManifestError(f"{target}: does not parse as JSON — {exc}") from exc
+    if not isinstance(data, dict):
+        raise FleetManifestError(f"{target}: the manifest must be a JSON object")
+    for key in ("profile_root", "profile", "factories"):
+        if key not in data:
+            raise FleetManifestError(f"{target}: no `{key}` key")
+    records = data["factories"]
+    if not isinstance(records, list) or not records:
+        raise FleetManifestError(
+            f"{target}: `factories` must be a non-empty list — an empty manifest reads as "
+            f"`no factory exists`, which is the declared-not-derived defect it exists to fix"
+        )
+    seen: set[str] = set()
+    for index, record in enumerate(records):
+        where = f"{target}: factories[{index}]"
+        if not isinstance(record, dict):
+            raise FleetManifestError(f"{where} is not an object")
+        for key, kind in MANIFEST_RECORD_KEYS:
+            if key not in record:
+                raise FleetManifestError(f"{where} has no `{key}` key")
+            value = record[key]
+            # `bool` is a subclass of `int`, and a chat id of `true` is not a chat id.
+            if kind is int and (isinstance(value, bool) or not isinstance(value, int)):
+                raise FleetManifestError(f"{where}.{key} must be an integer, not {value!r}")
+            if kind is not int and not isinstance(value, kind):
+                raise FleetManifestError(
+                    f"{where}.{key} must be a {kind.__name__}, not {value!r}"
+                )
+        slug = record["slug"]
+        if slug in seen:
+            raise FleetManifestError(f"{where}.slug `{slug}` is declared twice")
+        seen.add(slug)
+    return data
+
+
+def _manifest_or_empty() -> tuple[dict, str | None]:
+    """Load the manifest, and on failure return an empty one plus the reason.
+
+    Module import must not raise: a gate that cannot import its own subject
+    reports a traceback, which reads as a broken gate rather than as the missing
+    declaration it is. So the failure is CARRIED and reported by the commands and
+    by the gate, while the derived collections come back empty — and an empty
+    `KNOWN_FACTORY_SLUGS` rejects every fragment loudly, which is the correct
+    reading of "no factory is declared".
+    """
+    try:
+        return load_fleet_manifest(), None
+    except FleetManifestError as exc:
+        return {"profile_root": "", "profile": "", "factories": []}, str(exc)
+
+
+MANIFEST, MANIFEST_ERROR = _manifest_or_empty()
+MANIFEST_RECORDS = {record["slug"]: record for record in MANIFEST["factories"]}
+
+# A slug is what `affects` entries resolve against and what a fragment's `factory`
+# field must name, so the set is the DECLARED set rather than a directory listing:
+# an empty `registry/factories/` must not read as "no factory exists".
+KNOWN_FACTORY_SLUGS = frozenset(MANIFEST_RECORDS)
+
 PROFILE_SCOPE = "profile"  # the literal that `affects` uses for box-wide notices
-# The profile field is a DIFFERENT question from the `affects` sentinel above, and
-# the two shared one constant until this line existed: every enrolled stub declared
-# its profile as the literal string `profile`, which is not a profile name. The
-# collision was invisible because both are the word "profile" — one is a scope
-# keyword, the other is a name. Every factory on this box runs under `ops`
-# (AGENTS.md §Session naming convention: no lane is prefixed "ops" because it
-# distinguishes nothing).
-FACTORY_PROFILE = "ops"
+# The profile field is a DIFFERENT question from the `affects` sentinel above: one
+# is a scope keyword, the other is a profile NAME. Every factory on this box runs
+# under `ops` (AGENTS.md §Session naming convention: no lane is prefixed "ops"
+# because it distinguishes nothing), so the name is declared in the manifest.
+FACTORY_PROFILE = MANIFEST["profile"]
+
+FACTORY_CHATS = {slug: r["chat_id"] for slug, r in MANIFEST_RECORDS.items()}
+FACTORY_REPOS = {slug: r["repo"] for slug, r in MANIFEST_RECORDS.items()}
+FACTORY_SKILLS = {slug: r["skill"] for slug, r in MANIFEST_RECORDS.items()}
+FACTORY_DISPLAY_NAMES = {slug: r["display_name"] for slug, r in MANIFEST_RECORDS.items()}
+FACTORY_NAME_ALIASES = {slug: tuple(r["aliases"]) for slug, r in MANIFEST_RECORDS.items()}
+# Ordered, and the order is the manifest's: the renderer resolves a job's owner by
+# testing prefixes in turn, and `oc-` before `ocx-` is a real precedence.
+NAME_PREFIXES = tuple(
+    (slug, tuple(r["job_prefixes"])) for slug, r in MANIFEST_RECORDS.items()
+)
 
 SEVERITIES = ("info", "warning", "critical")
 SEVERITY_ORDER = {s: i for i, s in enumerate(SEVERITIES)}
@@ -420,8 +548,12 @@ def live_fragment_paths(explicit: list[str]) -> list[Path]:
 # resource or read a file unbounded.
 # ---------------------------------------------------------------------------
 
-PROFILE_ROOT = Path("/root/.opencrabs/profiles")
-A2A_CONFIG = PROFILE_ROOT / "ops" / "config.toml"
+# The box's profile root, from the manifest. An empty value is not a default: the
+# predicates below glob it, and a glob over `""` silently matches nothing — which
+# reads as "no profile has a DB", the shape of a check that cannot fail. So the
+# empty case is named at the call site rather than allowed to answer.
+PROFILE_ROOT = Path(MANIFEST["profile_root"]) if MANIFEST["profile_root"] else None
+A2A_CONFIG = (PROFILE_ROOT / FACTORY_PROFILE / "config.toml") if PROFILE_ROOT else None
 CGROUP_UNITS = ("opencrabs", "opencrabs-ops", "opencrabs-family")
 MIN_CRON_GAP_MINUTES = 360  # owner order 2026-09-18: nothing wakes a lane < 6 h
 
@@ -562,12 +694,32 @@ def check_sqlite3_present() -> tuple[bool, str]:
     return (bool(path), path or "sqlite3 not on PATH")
 
 
+def profile_db_glob() -> list[Path]:
+    """The per-profile daemon DBs, or a refusal when the root was never declared.
+
+    A `Path("").glob("*/opencrabs.db")` returns the empty list, so an undeclared
+    profile root would make every predicate built on this read `no DB, nothing to
+    check` and PASS — the exact shape of a check that cannot fail. Returning the
+    empty list here is therefore not an option; the caller must be told.
+    """
+    if PROFILE_ROOT is None:
+        raise FleetManifestError(
+            "the fleet manifest declares no `profile_root`, so no profile's daemon DB can "
+            "be located — a predicate over an unknown root would answer `nothing to check`"
+        )
+    return sorted(PROFILE_ROOT.glob("*/opencrabs.db"))
+
+
 def check_cron_min_gap_ge_6h() -> tuple[bool, str]:
     """No ENABLED job on the box may have a minimum gap below 6 h."""
     offenders: list[str] = []
     unreadable: list[str] = []
     checked = 0
-    for db in sorted(PROFILE_ROOT.glob("*/opencrabs.db")):
+    try:
+        dbs = profile_db_glob()
+    except FleetManifestError as exc:
+        return (False, str(exc))
+    for db in dbs:
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
         except sqlite3.Error as exc:
@@ -630,6 +782,12 @@ def check_cross_profile_cli_route() -> tuple[bool, str]:
 def check_profile_gateway_listening() -> tuple[bool, str]:
     """The declared A2A port must accept a connection."""
     port = None
+    if A2A_CONFIG is None:
+        return (
+            False,
+            "the fleet manifest declares no `profile_root`/`profile`, so no profile config "
+            "names the A2A port — a probe with no port would answer `nothing to check`",
+        )
     try:
         text = A2A_CONFIG.read_text(encoding="utf-8")
     except OSError as exc:
@@ -681,8 +839,13 @@ CHECKS.update(
 
 
 def profile_dbs() -> list[Path]:
-    """Every profile's database, sorted. Read-only, never copied."""
-    return sorted(PROFILE_ROOT.glob("*/opencrabs.db"))
+    """Every profile's database, sorted. Read-only, never copied.
+
+    Raises rather than returning `[]` when the manifest declares no
+    `profile_root`: an empty list here is indistinguishable from a box with no
+    profiles, and every caller would read that as "nothing to check".
+    """
+    return profile_db_glob()
 
 
 def read_bindings(db: Path) -> list[dict]:
@@ -858,7 +1021,12 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     lanes_by_factory, problems = collect_declared_lanes(paths)
     bindings: list[dict] = []
     errors: list[str] = []
-    for db in profile_dbs():
+    try:
+        dbs = profile_dbs()
+    except FleetManifestError as exc:
+        print(f"registry: {exc}", file=sys.stderr)
+        return 1
+    for db in dbs:
         rows = read_bindings(db)
         errors.extend(r["_error"] for r in rows if "_error" in r)
         bindings.extend(r for r in rows if "_error" not in r)
@@ -879,7 +1047,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         "resolved_at": datetime.datetime.now(datetime.timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         ),
-        "profiles_read": [str(db) for db in profile_dbs()],
+        "profiles_read": [str(db) for db in dbs],
         "fragment_sources": [str(p) for p in paths],
         "bindings_seen": len(bindings),
         "factories": resolved,
@@ -927,60 +1095,33 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 # re-delivered brief converges on one fragment instead of writing a second —
 # `session_notify` replay is a verified failure mode on this box (fork #366).
 
-# The factory's own forum chat. An ID and not a name, deliberately: the same
-# chat renders under two names in live binding titles right now ("Opencrabs Dev
-# Factory" and "Crabs Kanban Board"), so a name-keyed lookup would split one
-# chat into two. The box's own law is to identify a surface by its id and treat
-# the name as decoration.
-FACTORY_CHATS = {
-    "ai-antispam": -1003993000918,
-    "infra-factory": -1004486255170,
-    "inferhub-watch": -1004379632866,
-    "meta-factory": -1004497192134,
-    "miidas": -1003996392908,
-    "opencrabs-dev": -1003936827469,
-}
-
-FACTORY_REPOS = {
-    "ai-antispam": "/root/ai-antispam",
-    "infra-factory": "/root/vds-servers",
-    "inferhub-watch": "/root/inferhub-watch",
-    "meta-factory": "/root/agent-factories",
-    "miidas": "/root/miidas",
-    "opencrabs-dev": "/root/opencrabs",
-}
-
-# Where each factory's law file lives, as observed on 2026-09-19. The six are
-# not uniform, and flattening them would hide two real defects: `opencrabs-dev`
-# keeps its law in a repository of its own under the profile (remote
-# `opencrabs-skill`), and `ai-antispam` has a REAL DIRECTORY in the profile
-# skills tree that no bootstrap symlink ever pointed at (issue #79) — so the
-# repo path is what is declared here, because the repo's copy is the one its
-# own law names as authoritative.
-FACTORY_SKILLS = {
-    "ai-antispam": "/root/ai-antispam/SKILL.md",
-    "infra-factory": "/root/vds-servers/skills/infra-factory/SKILL.md",
-    "inferhub-watch": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-    "meta-factory": "/root/agent-factories/skills/meta-factory/SKILL.md",
-    "miidas": "/root/miidas/SKILL.md",
-    "opencrabs-dev": str(PROFILE_ROOT / "ops" / "skills" / "opencrabs-dev" / "SKILL.md"),
-}
-
-# Fallback display names, used only when live bindings name no group for a chat.
-FACTORY_DISPLAY_NAMES = {
-    "ai-antispam": "AI AntiSpam",
-    "infra-factory": "Infra Factory",
-    "inferhub-watch": "InferHub Watch",
-    "meta-factory": "Meta-Factory",
-    "miidas": "Miidas",
-    "opencrabs-dev": "OpenCrabs Dev",
-}
+# The factory's own forum chat, its repo, its law file and its display name are
+# all DECLARED in `registry/fleet.json` and derived at the top of this module —
+# see §The fleet manifest. They were six hardcoded dicts here, which is what made
+# this file un-portable: a template carrying them ships one box's fleet to every
+# factory that copies it.
+#
+# The comment those dicts carried is kept, because it explains the manifest's
+# SHAPE and would otherwise be lost with them: a chat is an ID and not a name,
+# deliberately, because the same chat renders under two names in live binding
+# titles ("Opencrabs Dev Factory" and "Crabs Kanban Board") and a name-keyed
+# lookup would split one chat into two. And the law file is not uniform across
+# factories: `opencrabs-dev` keeps its law in a repository of its own under the
+# profile (remote `opencrabs-skill`), while `ai-antispam` has a REAL DIRECTORY in
+# the profile skills tree that no bootstrap symlink ever pointed at (issue #79) —
+# so the manifest declares a PATH per factory, and the repo's copy is the one the
+# factory's own law names as authoritative.
 
 # A topic is not a lane, and binding alone cannot tell them apart: opencrabs-dev's
 # chat holds 42 bound thread ids of which two name a role. Three named rules
 # narrow the set, and the enrollment summary PRINTS what each one removed — a
 # count taken by a pattern is a count of the pattern, never of the lanes, and
 # the output says which of the two numbers it reports:
+#
+# (The names in this block are the history that produced the rule — one box's
+# evidence, kept because a rule without its counter-example gets "simplified"
+# back into the defect. A factory bootstrapping from this template inherits the
+# three rules and none of these names.)
 #
 #   1. a name that states another factory is a conversation ABOUT a peer — the
 #      OC DEV chat carries `МИИДАС`, `Miidas marketing` and `Inferhub watch`
@@ -1016,15 +1157,9 @@ LANE_ROLE_HINTS = (
 # A chat carries rooms that belong to ANOTHER factory, and such a room is a
 # conversation about a peer rather than a lane of this factory. The test is
 # mechanical — the name states a peer's own name — and it is deliberately
-# narrow: a shared word like "infra" would fire on half the fleet.
-FACTORY_NAME_ALIASES = {
-    "ai-antispam": ("ai-antispam", "ai antispam", "antispam"),
-    "infra-factory": ("infra-factory", "infra factory"),
-    "inferhub-watch": ("inferhub",),
-    "meta-factory": ("meta-factory", "meta factory"),
-    "miidas": ("miidas", "миидас"),
-    "opencrabs-dev": ("opencrabs-dev", "opencrabs dev", "crabs kanban", "oc dev"),
-}
+# narrow: a shared word like "infra" would fire on half the fleet. The aliases
+# are declared per factory in `registry/fleet.json`; the rule is stated here and
+# the vocabulary is data, because the vocabulary is the part that differs per box.
 
 SKILL_VERSION_RE = re.compile(r"^version:\s*(\S+)\s*$", re.MULTILINE)
 # `Telegram: <group> / <topic> [chat:...]` — the topic segment, and only that
@@ -1117,10 +1252,19 @@ def names_other_factory(name: str, slug: str) -> str | None:
 
 
 def all_bindings() -> tuple[list[dict], list[str]]:
-    """Every binding row from every profile DB, read in place via mode=ro."""
+    """Every binding row from every profile DB, read in place via mode=ro.
+
+    An undeclared `profile_root` comes back as an ERROR, never as an empty
+    result: the callers of this function write a resolved registry, and "no
+    profile was readable" must not render as "no lane is bound".
+    """
     rows: list[dict] = []
     errors: list[str] = []
-    for db in profile_dbs():
+    try:
+        dbs = profile_dbs()
+    except FleetManifestError as exc:
+        return [], [str(exc)]
+    for db in dbs:
         found = read_bindings(db)
         errors.extend(r["_error"] for r in found if "_error" in r)
         rows.extend(r for r in found if "_error" not in r)
