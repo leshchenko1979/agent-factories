@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T17:00:41Z",
+  "resolved_at": "2026-09-19T17:12:38Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -429,7 +429,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T12:14:31Z",
+          "bound_at": "2026-09-19T17:07:57Z",
           "announcements": []
         },
         {
