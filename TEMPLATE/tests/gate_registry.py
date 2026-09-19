@@ -233,6 +233,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_board_intake_recorded.py",
     "test_close_board_recorded.py",
     "test_close_row_revision.py",
+    "test_commit_pair_hook.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
     "test_docs_sync.py",

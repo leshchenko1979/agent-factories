@@ -249,24 +249,35 @@ law names a lane beyond them — a member-comms lane, a survey lane — writes i
 cannot record its rows, so this is the difference between a lane and a name the ledger
 refuses to hear from.
 
-**Install the commit-msg hook that refuses a citing subject.** The ledger clause — a
-commit carrying the ledger names the concern, not a row number — is enforced twice:
-`tests/test_ledger_commit_cites_no_rows.py` reports a violation after the fact, and
-`tools/hooks/commit-msg` refuses it at the only point where the pending subject
-exists. A `pre-commit` hook cannot do this job: at pre-commit time the subject does
-not exist yet, so there is nothing to test.
+**Install the versioned hooks.** Two refusal points live in `tools/hooks/`, each
+enforcing at commit time a law that a gate can otherwise only report after the fact:
 
-The hook is **versioned in the repo** rather than written into `.git/hooks`, which is
+- **`commit-msg` — the ledger clause.** A commit carrying the ledger names the
+  concern, not a row number. `tests/test_ledger_commit_cites_no_rows.py` reports a
+  violation after the fact, and this hook refuses it at the only point where the
+  pending subject exists. A `pre-commit` hook cannot do *that* job: at pre-commit
+  time the subject does not exist yet, so there is nothing to test.
+- **`pre-commit` — the byte-pair clause.** A declared pair staged on ONE side only.
+  `tests/test_template_sync.py` has always caught this, but only AFTER the commit
+  landed, leaving a red on `main` until the next audit. This hook reads the INDEX
+  (`git diff --cached`), never the working tree — a hook that read the working tree
+  would PASS a commit that staged one side and fixed the other side on disk without
+  staging it, which is a green light on the exact defect it exists to catch. It loads
+  the pair table from `tests/test_template_sync.py` rather than keeping a copy, so a
+  pair declared there is enforced here with no second edit.
+
+Both are **versioned in the repo** rather than written into `.git/hooks`, which is
 not tracked and so would never reach a bootstrapped factory:
 
 ```sh
 git config core.hooksPath tools/hooks
 ```
 
-`core.hooksPath` lives in `.git/config`, so run this once per clone. The gate asserts
-the hook is present, executable and reachable through that setting: an uninstalled
-hook is silent, which is the vacuous-pass shape this factory forbids, so absence is a
-RED gate rather than an advisory.
+`core.hooksPath` lives in `.git/config`, so run this once per clone — one setting
+wires BOTH hooks, and a hook added to that directory later is wired by the same line.
+Each hook's gate asserts it is present, executable and reachable through that
+setting: an uninstalled hook is silent, which is the vacuous-pass shape this factory
+forbids, so absence is a RED gate rather than an advisory.
 
 **Why this is a step and not a habit.** State kept only in chat is a memory of a
 conversation: it survives exactly as long as the context does. The ledger is the

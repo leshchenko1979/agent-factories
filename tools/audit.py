@@ -858,6 +858,24 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_telemetry_reader_registry.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_telemetry_reader_registry.py"])
 
+    # 39. Commit-pair hook gate: the refusal point for a one-sided byte pair (#92, ruled
+    #     at n=630). `tests/test_template_sync.py` has always caught the class, but only
+    #     AFTER the commit lands — it recurred (#80, then c3b60d5) with a red on `main`
+    #     until the next audit. `tools/hooks/pre-commit` refuses it at the only moment it
+    #     is refusable, and it reads the INDEX rather than the working tree: a hook that
+    #     read the working tree would PASS a commit that staged one side and fixed the
+    #     other side on disk without staging it, i.e. a green light on the exact defect
+    #     it exists to catch, which is worse than no hook at all.
+    #     This gate is the offline half, because an uninstalled hook is SILENT and so
+    #     absence must be RED rather than an advisory. Its installation predicate is
+    #     SHARED with gate 20's hook through `tests/hook_installation.py` — one
+    #     predicate, two call sites, since two implementations of one predicate drift.
+    #     The hook's pair table IS `PAIRS` in `tests/test_template_sync.py`, loaded
+    #     rather than copied and asserted BEHAVIOURALLY, because a lookalike table under
+    #     the same name would satisfy a textual probe (P29).
+    if (repo_root / "tests/test_commit_pair_hook.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_commit_pair_hook.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

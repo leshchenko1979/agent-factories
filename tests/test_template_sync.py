@@ -65,6 +65,11 @@ PAIRS = [
     ("tests/test_subject_form.py", "TEMPLATE/tests/test_subject_form.py"),
     ("tests/test_rework_relative_revision.py", "TEMPLATE/tests/test_rework_relative_revision.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
+    # The commit-time index check (#92). The hook refuses a staged set that names
+    # one side of a declared pair without its twin, and its table is THIS one — it
+    # loads `PAIRS` from this file rather than keeping a copy, so a pair added here
+    # is enforced at commit time with no second edit.
+    ("tools/hooks/pre-commit", "TEMPLATE/tools/hooks/pre-commit"),
     # The factory registry. Its three tools and two gates ship whole: a
     # bootstrapped factory declares its own fleet in `registry/fleet.json` and
     # gets the same renderer, the same drift gate and the same attest pacemaker.
@@ -81,6 +86,12 @@ PAIRS = [
     # SHIPS, so its allow-list is structural and must travel byte-identically with the
     # code it describes — a factory that adds its own writer edits its own copy.
     ("tests/test_telemetry_reader_registry.py", "TEMPLATE/tests/test_telemetry_reader_registry.py"),
+    # The commit-time pair check's own gate, and the shared installation predicate it
+    # reads. The predicate is a library, not a gate — it declares nothing — but it is
+    # paired because both hook gates import it and a factory must inherit the same
+    # implementation rather than a drifting second copy.
+    ("tests/hook_installation.py", "TEMPLATE/tests/hook_installation.py"),
+    ("tests/test_commit_pair_hook.py", "TEMPLATE/tests/test_commit_pair_hook.py"),
 ]
 
 

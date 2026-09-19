@@ -80,6 +80,13 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P34": ["docs/methodology/01-llm-weakness-counters.md", "TEMPLATE/AGENTS.md.tmpl"],  # Mirror test: diagnose mechanism before counter
     "P35": ["tests/test_gate_fixtures_closure.py", "tests/gate_fixtures.py"],  # A fixture must model the tree its tool runs in
     "P36": ["registry/fleet.json", "tests/test_registry.py", "tests/gate_registry.py"],  # A box-describing surface is declared, and its gate must pass where it is copied
+    # P37's three clauses each name their own mechanism rather than a shared one: the
+    # commit arm is the index-reading hook and the gate whose synthetic probes prove it
+    # reads the index (a working-tree read would pass the one-sided case), the live-state
+    # arm is the patrol runner plus the offline gate over its logic, and the render arm is
+    # the generator paired with the gate that compares its output. All five ship in
+    # TEMPLATE/, so the mapping holds in a bootstrapped factory.
+    "P37": ["tests/test_commit_pair_hook.py", "tools/hooks/pre-commit", "tools/patrol_host_state.py", "tests/test_patrol_host_state.py", "tools/registry_render.py"],  # A commit check reads the index; a live-state check says so
 }
 
 

@@ -88,6 +88,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# The installation predicate is shared with `tests/test_commit_pair_hook.py` (#92),
+# which asserts the same three facts about a DIFFERENT hook. Two implementations of
+# one predicate drift, and the drift is silent — the same class this repo forbids for
+# a byte pair, applied to a predicate.
+from hook_installation import (  # noqa: E402
+    hook_state_problems as shared_hook_state_problems,
+)
+
 REPO = Path(__file__).resolve().parent.parent
 LEDGER_PATH = "evidence/ledger.jsonl"
 EXEMPTIONS_PATH = "docs/ledger-commit-exemptions.json"
@@ -96,6 +106,13 @@ EXEMPTIONS_PATH = "docs/ledger-commit-exemptions.json"
 # commit-msg hook, at the only point where the pending subject exists to be refused.
 HOOK_PATH = "tools/hooks/commit-msg"
 HOOKS_PATH_CONFIG = "tools/hooks"
+
+# The wording this law owns. The shared predicate cannot know which law lost its
+# refusal point, so the gate that owns the law supplies the sentence.
+MISSING_REASON = (
+    f"{HOOK_PATH} is missing — the commit-msg refusal point the ledger clause "
+    "makes its remedy (issue #47, ruled at n=405) is not shipped"
+)
 
 # The first commit touching the ledger whose subject obeys the clause. Commits at or
 # before it predate the rule and are not examined. See the docstring: a missing marker
@@ -136,23 +153,20 @@ def hook_state_problems(*, exists: bool, executable: bool, configured: str) -> l
     is SILENT, which is the vacuous-pass shape this repo forbids — the same reason a
     missing marker fails loudly rather than examining zero commits. So absence is a
     gate failure, never an advisory.
+
+    The predicate itself lives in `tests/hook_installation.py`: `tests/test_commit_pair_hook.py`
+    (#92) asserts the same three facts about the `pre-commit` hook, and two
+    implementations of one predicate drift. This binding keeps the signature its own
+    probes drive and supplies the wording this law owns.
     """
-    problems: list[str] = []
-    if not exists:
-        problems.append(
-            f"{HOOK_PATH} is missing — the commit-msg refusal point the ledger clause "
-            "makes its remedy (issue #47, ruled at n=405) is not shipped"
-        )
-    elif not executable:
-        problems.append(f"{HOOK_PATH} is not executable — git will not run it")
-    shown = configured or "unset"
-    if configured != HOOKS_PATH_CONFIG:
-        problems.append(
-            f"core.hooksPath is {shown!r} — the hook is versioned but not wired, so "
-            "it never runs. Install it: "
-            f"git config core.hooksPath {HOOKS_PATH_CONFIG}"
-        )
-    return problems
+    return shared_hook_state_problems(
+        hook_path=HOOK_PATH,
+        hooks_path_config=HOOKS_PATH_CONFIG,
+        exists=exists,
+        executable=executable,
+        configured=configured,
+        missing_reason=MISSING_REASON,
+    )
 
 def hook_installation_problems(top: Path) -> list[str]:
     """Read the installation state off the tree and git config, then judge it."""

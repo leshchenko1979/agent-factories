@@ -725,6 +725,57 @@ on coverage for factories it did not have.
 
 ---
 
+## P37 — A check that judges a commit reads the index; a check that judges live state says so
+
+A check is only as sound as the surface it reads, and two surfaces are routinely
+confused. When a commit lands, what it carries is the **index** — the staged tree —
+and nothing else. The working tree beside it may hold anything at all: a fix that
+was made but never staged, a half-finished edit, another lane's in-flight work. A
+check that reads the working tree therefore answers a different question from the
+one it was asked, and answers it GREEN.
+
+The measured case is issue **#92**. `tests/test_template_sync.py` has always caught
+a declared byte pair changed on one side only, but only *after* the commit, so the
+defect landed on `main` and sat there until an audit noticed. The obvious repair —
+run that same gate from a `pre-commit` hook — is **unsound**: it reads the working
+tree, so a lane that staged one side and fixed the other side on disk without
+staging it gets a PASS and the one-sided commit goes through. That is a green light
+on the exact defect the hook exists to catch. The hook that shipped reads
+`git diff --cached`, and its gate proves the difference with synthetic probes
+rather than asserting it.
+
+- *Mechanism:*
+  1. **A check that judges a COMMIT reads the INDEX, or a recorded artifact.**
+     Staged paths, never the working tree; a committed ledger row, never the file
+     on disk. If the index cannot be read, the check says so and refuses — a check
+     that silently falls back to the working tree is a false green, not a degraded
+     one.
+  2. **A check that judges LIVE state says so, and stays out of the correctness
+     pass.** Live state — a running process, a cron table, a session binding, a
+     remote board — cannot be read in a bootstrapped factory or in a detached
+     worktree, so a reader of it is a *runner*, P29's process arm: it prints what
+     it did and did not read, states the instant it read, and refuses a verdict
+     when its source is unreachable. What belongs in the correctness pass is the
+     offline gate over that runner's logic, which can pass anywhere. Enrolling the
+     live read itself is the worse failure of the two, because it reds every tree
+     that legitimately lacks that state.
+  3. **A generator rendering a committed artifact must be runnable from the
+     index.** A rendered artifact is a function of its source, and if the
+     generator reads the working tree then a dirty tree cancels the drift — the
+     render reports a difference that is not in the commit, or hides one that is.
+     Reading the index makes the output a function of the commit and nothing else.
+- *Proven:* issue **#92** — the unsound naive hook, and the index-reading one that
+  shipped in its place; the same class earlier in **#80** and `c3b60d5`, where the
+  pair guard fired only after the bytes had landed. The live-state arm is
+  `tools/patrol_host_state.py`: a runner that exits 2 with no verdict on an
+  unreadable board and is invoked on a cadence, while the correctness pass carries
+  only `tests/test_patrol_host_state.py`, the offline gate over its logic.
+- *Prevents:* a gate that passes a one-sided commit because the working tree
+  happened to agree; a live-state check enrolled in the offline suite, red-ing
+  every bootstrapped factory; a render whose output depends on uncommitted bytes.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that
