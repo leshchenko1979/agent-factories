@@ -336,11 +336,16 @@ that examines zero commits fails loudly rather than passing vacuously.
 subject that reaches `close` must have been filed (`intake`) before it and taken
 (`claim`) after that intake, and `verify` fails naming the subject and the missing
 leg. A ledger can be perfectly numbered and still say that something was closed
-without ever saying who took it. The only exemptions are closes written before
-the gate existed, listed explicitly by subject, leg and date in `EXEMPTIONS` in
-`tools/ledger.py`, and printed as `excused:` whenever one is used — so "clean"
-and "excused" are never the same output. An exemption nobody would defend in
-that output is one that gets fixed instead.
+without ever saying who took it. Exemptions are listed explicitly by subject, leg,
+date and PROOF in `EXEMPTIONS` in `tools/ledger.py`, and printed as `excused:`
+whenever one is used — so "clean" and "excused" are never the same output. An
+exemption nobody would defend in that output is one that gets fixed instead. Two
+kinds are admittable, and the boundary between them is the PROOF: a leg missing on
+a close written BEFORE the gate existed is excused by the boundary itself, while a
+leg missing on a close written AFTER it is admitted only by an external receipt —
+never by a restatement of the omission it excuses. An entry carrying no proof
+therefore excuses nothing: the omission stays a problem and the refusal names the
+entry that failed to excuse it.
 
 **A close row is refused at the write path when its subject has no preceding
 intake and claim.** `tools/ledger.py append --event close` runs the same

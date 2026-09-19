@@ -126,18 +126,32 @@ def known_actors() -> tuple[str, ...]:
     return ACTORS + tuple(role for role in extra if role not in ACTORS)
 
 # Closes written before the sequence check existed, keyed by (subject, leg).
-# An exemption is a dated, attributed admission, never a convenience: it may
-# only name a close that predates this gate, it carries the date it was granted
-# and the reason, and `verify` prints it whenever it is used — so a reader can
-# always tell a clean ledger from an excused one, and an entry nobody would
+# An exemption is a dated, attributed admission, never a convenience: it names
+# the subject, the leg, the date it was granted, the reason, and the PROOF — an
+# EXTERNAL RECEIPT the reader can check without trusting this file, never a
+# restatement of the omission. `verify` prints every entry it uses, so a reader
+# can always tell a clean ledger from an excused one, and an entry nobody would
 # defend in that output is one that gets fixed instead.
-EXEMPTIONS: list[tuple[str, str, str, str]] = [
+#
+# PROOF IS REQUIRED, and it is what admits a POST-gate entry (#52 clause 3,
+# ledger n=318). The two cases are not the same question: a leg missing on a
+# close written BEFORE the gate existed is excused by the boundary itself, while
+# a leg missing on a close written AFTER it is excused only by a receipt that
+# establishes why no lawful repair was available — a pushed row cannot be
+# renumbered (clause 1), and a missing leg cannot be appended, because order is
+# what is broken. An entry with no proof is NOT ADMITTABLE: `verify` refuses it
+# at the point it would excuse an omission, so the omission stays a problem. That
+# is the doctrine above made mechanical rather than a rule a lane must remember.
+EXEMPTIONS: list[tuple[str, str, str, str, str]] = [
     ("#6", "claim", "2026-09-12",
-     "close written before the gate existed; no claim row was ever written"),
+     "close written before the gate existed; no claim row was ever written",
+     "the ruling that granted it: ledger n=15, which records the boundary fact"),
     ("#8", "intake", "2026-09-12",
-     "close written before the gate existed; no intake row was ever written"),
+     "close written before the gate existed; no intake row was ever written",
+     "the ruling that granted it: ledger n=14, which records the boundary fact"),
     ("#8", "claim", "2026-09-12",
-     "close written before the gate existed; no claim row was ever written"),
+     "close written before the gate existed; no claim row was ever written",
+     "the ruling that granted it: ledger n=14, which records the boundary fact"),
 ]
 
 def now_iso() -> str:
@@ -622,11 +636,26 @@ def cmd_verify(args: argparse.Namespace) -> int:
             continue
         seq_problems.extend(sequence_problems(by_subject, row.get("subject"), i))
 
-    exempt = {(s, leg): (granted, reason) for s, leg, granted, reason in EXEMPTIONS}
+    # PROOF is what ADMITS a POST-gate entry (#52 clause 3), so a proofless entry is
+    # not admittable and is refused HERE — at the point it would excuse an omission —
+    # which leaves the omission a problem naming the entry that failed to excuse it.
+    # Refusing on the USED path rather than at load keeps a fresh factory's dead
+    # entries invisible, exactly as the printed-only-when-used rule below does, and it
+    # keeps the refusal where the reader is already looking. This is the doctrine at
+    # the top of this module made mechanical: an exemption is a visible debt, and a
+    # debt nobody would defend in the output below is one that gets fixed instead.
+    exempt = {(s, leg): (granted, reason, proof)
+              for s, leg, granted, reason, proof in EXEMPTIONS}
     excused: list[tuple[str, str, str, str]] = []
     for subject, leg, message in seq_problems:
         if (subject, leg) in exempt:
-            granted, reason = exempt[(subject, leg)]
+            granted, reason, proof = exempt[(subject, leg)]
+            if not proof.strip():
+                problems.append(
+                    f"{message} — the EXEMPTIONS entry for {subject}/{leg} is not "
+                    f"admittable: it carries no proof, and an exemption is admitted "
+                    f"by an external receipt, never by the omission it excuses")
+                continue
             excused.append((subject, leg, granted, reason))
         else:
             problems.append(message)

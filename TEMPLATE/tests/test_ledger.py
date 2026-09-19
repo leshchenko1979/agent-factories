@@ -13,6 +13,11 @@ declare themselves reconstructions (`claim=reconstructed`), beside its `excused:
 lines, so clean, excused and reconstructed are never the same output (#98, ruling
 n=602 PART 5).
 
+And a fourth closes the exemption's own boundary: an entry that would excuse a
+POST-gate omission is ADMITTED only by its PROOF, so an entry carrying none is
+refused at the point it would excuse something and the omission stays a problem
+(#52 clause 3, ruling n=318).
+
 This runs the probes against throwaway ledgers (`OC_LEDGER_PATH`) and throwaway
 actor declarations (`OC_ACTORS_PATH`), never the live ones: a test that writes
 the real state surface is how a probe becomes permanent corruption.
@@ -321,6 +326,69 @@ def main() -> int:
               and next((i for i, l in enumerate(lines) if "excused:" in l), 99)
                   < next((i for i, l in enumerate(lines) if "reconstructed claim:" in l), -1),
               " | ".join(l.strip() for l in lines))
+
+        print("\nthe exemption's PROOF — an entry with none is not admittable")
+        # #52 clause 3: EXEMPTIONS admits a POST-gate entry, and what ADMITS it is the
+        # PROOF — an external receipt, never a restatement of the omission it excuses.
+        # The rule is mechanical, so a proofless entry must excuse nothing: the omission
+        # stays a problem and the refusal names the entry that failed to excuse it. Both
+        # directions are probed, because a one-sided probe passes on a list that refuses
+        # everything exactly as happily as on one that excuses everything.
+        #
+        # The seam is a staged COPY of the tool: EXEMPTIONS is a module constant, so
+        # rewriting the constant in a throwaway tree varies it without giving production
+        # code a test-only switch, and the live surface is never touched.
+        def stage_with_exemptions(name: str, entries: str) -> Path:
+            tree = Path(tmp) / name
+            (tree / "tools").mkdir(parents=True)
+            (tree / "evidence").mkdir()
+            stage_tool(TOOL, tree / "tools", LOCAL_TOOLS)
+            tool = tree / "tools" / "ledger.py"
+            src = tool.read_text(encoding="utf-8")
+            head = "EXEMPTIONS: list[tuple[str, str, str, str, str]] = ["
+            start = src.index(head)
+            tool.write_text(
+                src[:start] + entries + src[src.index("\n]", start) + 2:],
+                encoding="utf-8")
+            return tool
+
+        def exempt_run(tool: Path) -> subprocess.CompletedProcess:
+            """Verify a ledger whose ONLY defect is a missing claim leg on #7."""
+            tree = tool.parent.parent
+            ledger = tree / "evidence" / "ledger.jsonl"
+            write_ledger(ledger, ("intake", "#7"), ("close", "#7"))
+            return subprocess.run(
+                [sys.executable, str(tool), "verify"],
+                capture_output=True, text=True, cwd=tree,
+                env={**os.environ, "OC_LEDGER_PATH": str(ledger),
+                     "OC_ACTORS_PATH": str(tree / "no-actors.txt")},
+            )
+
+        # The subject is this probe's own, so the entry it exercises can never be a
+        # live one; the omission is the #6 shape — a close with no claim before it.
+        proofless = stage_with_exemptions("exempt-proofless", (
+            'EXEMPTIONS: list[tuple[str, str, str, str, str]] = [\n'
+            '    ("#7", "claim", "2026-09-19",\n'
+            '     "post-gate omission; the leg was never written", ""),\n'
+            ']'))
+        r = exempt_run(proofless)
+        check("a proofless entry excuses nothing",
+              r.returncode != 0 and "excused:" not in r.stdout,
+              (r.stdout + r.stderr).strip().splitlines()[-1][:100])
+        check("and the refusal names the entry that failed to excuse it",
+              "not admittable" in r.stdout and "#7/claim" in r.stdout,
+              next((l.strip() for l in r.stdout.splitlines() if "admittable" in l), "")[:110])
+
+        proven = stage_with_exemptions("exempt-proven", (
+            'EXEMPTIONS: list[tuple[str, str, str, str, str]] = [\n'
+            '    ("#7", "claim", "2026-09-19",\n'
+            '     "post-gate omission; the leg was never written",\n'
+            '     "the ruling that granted it: ledger n=318"),\n'
+            ']'))
+        r = exempt_run(proven)
+        check("a proof-bearing entry excuses the omission and still prints it",
+              r.returncode == 0 and "excused: #7 missing claim" in r.stdout,
+              (r.stdout + r.stderr).strip().splitlines()[-1][:100])
 
         print("\nthe append-time guard — a revert is loud, not silent")
         # The lock serialises the appenders, not the file they append to. A

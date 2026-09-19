@@ -378,11 +378,16 @@ that intake, and `verify` fails naming the subject and the missing leg. A ledger
 perfectly numbered and still say that work was closed without ever saying who took it. Each
 missing leg is reported independently, so one pass says everything that is absent, and the
 order leg is evaluated only when both legs are present — bounded by the latest intake before
-the close, so a re-opened subject must be re-claimed. The only exemptions are closes written
-before the gate existed, listed explicitly by subject, leg and date in `EXEMPTIONS` inside
-`tools/ledger.py`, and printed as `excused:` whenever one is used, so "clean" and "excused"
-are never the same output. An exemption nobody would defend in that output is one that gets
-fixed instead. Nothing is ever backfilled: an intake row written today for work filed before
+the close, so a re-opened subject must be re-claimed. Exemptions are listed explicitly by
+subject, leg, date and PROOF in `EXEMPTIONS` inside `tools/ledger.py`, and printed as
+`excused:` whenever one is used, so "clean" and "excused" are never the same output. An
+exemption nobody would defend in that output is one that gets fixed instead. Two kinds are
+admittable, and the boundary between them is the PROOF: a leg missing on a close written
+BEFORE the gate existed is excused by the boundary itself, while a leg missing on a close
+written AFTER it is admitted only by an external receipt — never by a restatement of the
+omission it excuses. An entry carrying no proof therefore excuses nothing: the omission
+stays a problem and the refusal names the entry that failed to excuse it (#52 clause 3,
+ruling n=318). Nothing is ever backfilled: an intake row written today for work filed before
 the gate is a falsified record, not a repair.
 
 **"A close row is refused at the write path when its subject has no preceding intake and claim."** `tools/ledger.py append --event close` runs the same sequence predicate `verify` runs — one predicate, two call sites — and exits non-zero, naming the subject and the missing leg, without writing anything. The refusal carries no exemption surface and needs none: a close appended now can never predate the gate. EXEMPTIONS governs `verify`'s reading of history only, and stays printed there. This does not replace `verify`: the order leg (a claim after its close) and any row written around the append path remain `verify`'s. §11's guarantee is one append path, not tamper-proof (#98, ruling n=596).
