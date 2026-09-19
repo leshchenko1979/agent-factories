@@ -5,8 +5,9 @@ The anti-rot engine for the DECLARED half. `render` keeps the generated half tru
 construction (it reads live state at run time) and the drift gate keeps the committed
 render equal to a fresh one, but nothing about a fragment changes when the factory
 behind it changes: `attested_at` is a human saying "this still describes us", and only a
-clock can ask. That clock is this pacemaker, installed as the namespaced cron
-`meta-factory-registry-attest`.
+clock can ask. That clock is this pacemaker, installed as a namespaced cron —
+`<factory>-registry-attest`, per the box's cron-naming law (a bare `registry-attest`
+is a claim on a namespace no factory owns alone).
 
 **The brief carries TWO questions, not one.** *Confirm or amend your fragment* keeps the
 identity card honest; *confirm or expire your announcements* keeps the peer-facing field
@@ -22,8 +23,8 @@ rebound — 2026-09-19: the opencrabs-dev HQ topic changed hands and a notify ad
 the previous holder was accepted and queued rather than refused, and stranded unread.
 
 **Fail-open, and it says so.** A factory whose HQ cannot be resolved is reported by name
-and the other five are still dispatched: one factory's missing lane must not silence the
-rest of the fleet's attestation. The failure is loud in this run's output, which is what
+and the rest of the fleet is still dispatched: one factory's missing lane must not silence
+the others' attestation. The failure is loud in this run's output, which is what
 the pacemaker's own report carries.
 
 Run:  python3 tools/registry_attest.py --check          # resolve and print targets
