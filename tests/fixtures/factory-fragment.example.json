@@ -1,0 +1,62 @@
+{
+  "factory": "ai-antispam",
+  "display_name": "AI AntiSpam",
+  "profile": "ops",
+  "repo": "/root/ai-antispam",
+  "skill": "skills/ai-antispam/SKILL.md",
+  "purpose": "Keep the monoforum free of spam and run the outreach campaign that recruits its first wave of members.",
+  "zone": {
+    "owns": [
+      "the ai_spam_bot schema on apps",
+      "the outreach campaign state and its reply sweep",
+      "the monoforum moderation surface"
+    ],
+    "does_not_own": [
+      "the Telegram transport (fast-mcp-telegram)",
+      "the daemon and its core tools (OpenCrabs)"
+    ]
+  },
+  "services": [
+    {
+      "name": "spam-dataset export",
+      "audience": "agent",
+      "entry": "session_notify to the Outreach lane",
+      "cadence": "on request"
+    }
+  ],
+  "substrates_owned": ["the outreach DB schema"],
+  "announcements": [
+    {
+      "id": "sqlite3-cli-installed",
+      "scope": "profile",
+      "severity": "info",
+      "text": "sqlite3 3.45.1 is installed on the HOST at /usr/bin/sqlite3 — read a host DB in place with the mode=ro URI, and never copy one to inspect it. A container read path is a different filesystem: Alpine images ship no CLI, so an exec'd python3-module read stays as it is.",
+      "affects": ["profile"],
+      "since": "2026-09-19",
+      "review_by": "2026-12-19",
+      "evidence": "owner order 2026-09-19 10:52Z -> apt-get install -y sqlite3 -> 3.45.1 at /usr/bin/sqlite3; sqlite3 --version rc=0",
+      "check": "sqlite3_present"
+    }
+  ],
+  "lanes": [
+    {
+      "topic": "HQ",
+      "thread_id": 10782,
+      "role": "hq",
+      "announcements": [
+        {
+          "id": "hq-lane-holds-inbound-advisories",
+          "scope": "lane",
+          "severity": "info",
+          "text": "This lane holds the fleet's inbound advisory traffic; a reply owed to another factory goes here, not to a topic post.",
+          "affects": ["ai-antispam"],
+          "since": "2026-09-19",
+          "review_by": "2026-10-19",
+          "evidence": "session_bindings row, read 2026-09-19T13:00:00Z"
+        }
+      ]
+    }
+  ],
+  "status": "attested",
+  "attested_at": "2026-09-19T13:00:00Z"
+}
