@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T16:50:41Z",
+  "resolved_at": "2026-09-19T17:00:41Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -1291,7 +1291,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:04:50Z",
+          "bound_at": "2026-09-19T16:59:18Z",
           "announcements": []
         },
         {
@@ -1401,7 +1401,7 @@
           "session_id": "ef83024b-90c8-40fc-8490-e8c2879808ab",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T12:38:42Z",
+          "bound_at": "2026-09-19T17:00:22Z",
           "announcements": []
         }
       ],
