@@ -70,7 +70,7 @@ from ledger_declaration import (
 # The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
-from field_predicate import declares_field, split_canonical_run
+from field_predicate import declares_field, declares_token, split_canonical_run
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -642,6 +642,20 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # and so a reader can always tell "clean" from "excused".
     for subject, leg, granted, reason in excused:
         print(f"  excused: {subject} missing {leg} (granted {granted}) — {reason}")
+    # A RECONSTRUCTED claim DECLARES itself with the token `claim=reconstructed`, and
+    # those rows print here, beside the `excused:` lines, for the same reason the
+    # exemptions do: clean, excused and reconstructed must never be the same output
+    # (#98, ruling n=602 PART 5). A declaration that lived only in prose could be
+    # counted only by reading prose — this repo's own ruled class (#88 / n=405
+    # clause 5). The scan is scoped to CLAIM rows, because that is the row the token
+    # describes; a row of another event that merely QUOTES the token is out of the
+    # population before the predicate is asked, which is what keeps a ruling row that
+    # defines the token (measured: n=602) from reading as a reconstruction.
+    for row in rows:
+        if row.get("event") != "claim":
+            continue
+        if declares_token(row.get("detail"), "claim", "reconstructed"):
+            print(f"  reconstructed claim: n={row.get('n')} subject={row.get('subject')}")
     return 0
 
 def main() -> int:

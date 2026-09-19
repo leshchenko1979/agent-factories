@@ -8,6 +8,11 @@ That is a property of the code, and a property nobody tests is a hope.
 It holds a second property too: a subject that reaches `close` must have been
 filed (`intake`) and taken (`claim`) before it. Both are tested here.
 
+A third is a READ path rather than a write one: `verify` must PRINT the rows that
+declare themselves reconstructions (`claim=reconstructed`), beside its `excused:`
+lines, so clean, excused and reconstructed are never the same output (#98, ruling
+n=602 PART 5).
+
 This runs the probes against throwaway ledgers (`OC_LEDGER_PATH`) and throwaway
 actor declarations (`OC_ACTORS_PATH`), never the live ones: a test that writes
 the real state surface is how a probe becomes permanent corruption.
@@ -261,6 +266,62 @@ def main() -> int:
                  (("intake", "#3"), ("claim", "#3"), ("close", "#3")), 0, ())
         seq_case("P4 a claim before its intake is refused",
                  (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 1, ("#4", "precedes"))
+        print("\nreconstructed claims — declared by token, printed, never collapsed")
+        # A claim stamped after the work declares itself with the token
+        # `claim=reconstructed` (#98, ruling n=602 PART 5), and `verify` prints those
+        # rows beside its `excused:` lines. The declaration is MECHANICAL because a
+        # declaration living only in prose can be counted only by reading prose — this
+        # factory's own ruled class (#88 / n=405 clause 5). Three directions, and the
+        # third is the one a one-sided probe misses: the line must APPEAR for a
+        # token-bearing claim row, must be ABSENT without the token, and the verdict
+        # outputs must not collapse into one.
+        def set_detail(path: Path, index: int, detail: str) -> None:
+            got = rows(path)
+            got[index]["detail"] = detail
+            path.write_text(
+                "\n".join(json.dumps(row) for row in got) + "\n", encoding="utf-8")
+
+        rec = Path(tmp) / "reconstructed.jsonl"
+        write_ledger(rec, ("intake", "#98"), ("claim", "#98"), ("close", "#98"))
+        r = run(rec, "verify")
+        check("a ledger with no reconstruction prints no reconstructed line",
+              r.returncode == 0 and "reconstructed claim:" not in r.stdout,
+              r.stdout.strip().splitlines()[-1] if r.stdout else "")
+
+        set_detail(rec, 1, "Taken on acceptance of the dispatch. claim=reconstructed")
+        r = run(rec, "verify")
+        check("a claim row carrying the token prints its reconstructed line",
+              r.returncode == 0 and "reconstructed claim: n=2 subject=#98" in r.stdout,
+              r.stdout.strip().splitlines()[-1] if r.stdout else "")
+
+        # The SCOPE: the token describes a CLAIM row, so a row of another event that
+        # merely QUOTES it is not a reconstruction. Without this leg the predicate
+        # would fire on the ruling row that defines the token (measured: n=602).
+        quote = Path(tmp) / "rec-quoted.jsonl"
+        write_ledger(quote, ("intake", "#98"), ("claim", "#98"), ("close", "#98"))
+        set_detail(quote, 0, "States the token claim=reconstructed that n=602 defines.")
+        r = run(quote, "verify")
+        check("a non-claim row that quotes the token is not a reconstruction",
+              r.returncode == 0 and "reconstructed claim:" not in r.stdout,
+              r.stdout.strip().splitlines()[-1] if r.stdout else "")
+
+        # Not collapsed: one ledger exercising BOTH a pre-gate exemption and a
+        # reconstruction must print both, distinctly, on the clean path.
+        both = Path(tmp) / "rec-both.jsonl"
+        write_ledger(both, ("intake", "#6"), ("close", "#6"),
+                     ("intake", "#98"), ("claim", "#98"), ("close", "#98"))
+        set_detail(both, 3, "Taken on acceptance of the dispatch. claim=reconstructed")
+        r = run(both, "verify")
+        lines = r.stdout.strip().splitlines()
+        check("clean, excused and reconstructed are three distinct outputs",
+              r.returncode == 0
+              and "ledger clean:" in r.stdout
+              and "excused: #6 missing claim" in r.stdout
+              and "reconstructed claim: n=4 subject=#98" in r.stdout
+              and next((i for i, l in enumerate(lines) if "excused:" in l), 99)
+                  < next((i for i, l in enumerate(lines) if "reconstructed claim:" in l), -1),
+              " | ".join(l.strip() for l in lines))
+
         print("\nthe append-time guard — a revert is loud, not silent")
         # The lock serialises the appenders, not the file they append to. A
         # revert lowers the working file OUTSIDE the lock and the next lawful

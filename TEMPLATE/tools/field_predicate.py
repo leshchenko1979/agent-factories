@@ -109,6 +109,32 @@ def declares_field(detail: str, key: str) -> bool:
             return True
     return False
 
+def declares_token(detail: str, key: str, value: str) -> bool:
+    """True when `detail` carries `key=value` exactly — a WORD-valued token.
+
+    `declares_field` answers for a NUMERIC key and type-tests the value it finds;
+    this answers for a token whose value is a word, where the type test would
+    reject the only value the token may carry. Two names rather than one function
+    with a flag, because the questions differ and a reader must be able to tell
+    which one it is asking.
+
+    The scan is LEXICAL, anywhere in the detail, and the CALLER scopes it by the
+    row's own event: the token describes a `claim` row, so a row of another event
+    that merely QUOTES it is out of the population before the predicate is asked —
+    measured need, `n=602`, a ruling row whose detail states the token it defines.
+    Scoping positionally to the canonical trailer was the alternative and is
+    rejected: a token written mid-detail would then be silently invisible, and a
+    declaration no reader can see is worse than one a reader can check.
+
+    The token is read VERBATIM, like every other value here — punctuation is not
+    stripped, so `claim=reconstructed.` is not a declaration of
+    `claim=reconstructed`. The writer states the token as the token.
+    """
+    for token in str(detail).split():
+        if keyed_value(token, key) == value:
+            return True
+    return False
+
 def trailer_tokens(detail: str) -> list[str]:
     """The maximal run of `=`-carrying tokens at the END of `detail`, in order.
 
