@@ -91,7 +91,7 @@ prevention loop, and the self-audit governance loop) plus an automated **hygiene
 |---|---|---|---|---|---|---|---|---|
 | **1. Work Delivery Pipeline** | HQ | Factory Owner / Requester | Triage (intake/assign), Worker (code), CI (gates), Carrier (ship) | **Verified release** (Client Value: Zero regressions, new capabilities shipped, fast lead time) | on task, finding, or request | Zero regressions, rapid cycle time, verified release without rollback | Task issue, ledger intake/claim/close rows, git commit | throughput · duration · first-pass yield · waste |
 | **2. Rework Prevention & Learning Loop** | Triage | HQ (owner of Process 1) + Factory Owner | Triage lane, defect resolving lane | **Prevention gate** (Client Value: Defect family permanently eliminated, rework rate reduced, token waste averted) | on defect resolution | Root mechanism identified; actionable test or gate prevents recurrence | Entry in `evidence/rework.md`, passing `tests/test_rework.py` | throughput · first-pass yield · duration |
-| **3. Internal Self-Audit** | Surveys (or HQ) | Factory Owner & Governance | Automated runner / cron (`python3 tools/audit.py`) | **Score + self-audit report** (Client Value: Objective health verification, uncorrupted ledger evidence, early defect detection) | daily (09:00 MSK) | Objective verification of mechanical gates; unbroken ledger sequence; spot-checked task evidence | `evidence/scores/<date>.md`, ledger `run` row | cadence · duration · first-pass yield · rework rate |
+| **3. Internal Self-Audit** | Surveys (or HQ) | Factory Owner & Governance | Automated runner / cron (`python3 tools/audit.py --report` — one invocation writes the artifact AND records its telemetry `run` row; `--stamp` alone does NOT satisfy this step) | **Score + self-audit report** (Client Value: Objective health verification, uncorrupted ledger evidence, early defect detection) | daily (09:00 MSK) | Objective verification of mechanical gates; unbroken ledger sequence; spot-checked task evidence | `evidence/scores/<date>-self-audit.md`, ledger `run` row | cadence · duration · first-pass yield · rework rate |
 | **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | **Clean tree** (Client Value: Zero runaway storage, zero stale scratch interference, reproducible builds) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
 ---
@@ -157,10 +157,10 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 |---|---|---|---|---|---|
 | **1. Ledger & Evidence Verification** | `tools/audit.py` | Local ledger & test suite | Sequence integrity receipt | Stale scratch / corrupted row | Exit code & duration |
 | **2. Metric Calculation** | `tools/audit.py` | Ledger state rows | First-pass yield, lead time, cost/task | Mental math / ungrounded metrics | Computed yield & dwell |
-| **3. Report Emission** | `tools/audit.py` | Calculated metrics | `evidence/scores/<date>.md` diff | Missing report / stale score | File write receipt |
+| **3. Report Emission** | `tools/audit.py` | Calculated metrics | `evidence/scores/<date>-self-audit.md` diff | Missing report / stale score | File write receipt |
   3. *Gate Suite Execution (Implementer: tools/audit.py)*: Runs mechanical gates (ontology, rework, single-writer, hygiene, template sync).
   4. *Calibration Spot-Check (Implementer: tools/audit.py)*: Samples the latest closed task and verifies unbroken intake -> claim -> close sequence.
-  5. *Report Generation & Stamping (Implementer: tools/audit.py)*: Writes dated `evidence/scores/<date>.md` and records telemetry `run` event.
+  5. *Report Generation & Stamping (Implementer: tools/audit.py --report)*: One invocation writes the dated `evidence/scores/<date>-self-audit.md` artifact AND records the telemetry `run` row. `--stamp` alone records a row and writes no artifact, so it does NOT satisfy this step.
 - **Quality Criteria:** Complete self-audit execution without manual calculation; all metrics derived directly from immutable ledger and rework logs.
 
 ### 4.4 Workspace Hygiene Sweep (Hygiene Loop)

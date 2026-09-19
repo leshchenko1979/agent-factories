@@ -4,13 +4,15 @@
 Upholds Process 3 (Internal Self-Audit / Operational Measurement).
 Reads the evidence chain (ledger.jsonl, rework.md), computes operational
 metrics (yield, rework rate, cadence, lead time), runs mechanical gates,
-and optionally stamps a telemetry run row or generates a scored report.
+and records the run's own receipt: `--report` is ONE invocation that writes the
+dated artifact AND its telemetry run row, while `--stamp` records a row alone and
+writes no artifact, so it does not satisfy the report step.
 
 Usage:
   python3 tools/audit.py              # Run check & print metrics/gates
   python3 tools/audit.py --json       # Output machine-readable JSON
-  python3 tools/audit.py --report     # Generate dated evidence/scores/<date>.md
-  python3 tools/audit.py --stamp      # Record run event in evidence/ledger.jsonl
+  python3 tools/audit.py --report     # Write evidence/scores/<date>-self-audit.md AND its run row
+  python3 tools/audit.py --stamp      # Record a run row only (no artifact)
 """
 
 from __future__ import annotations
@@ -799,9 +801,9 @@ def format_report_markdown(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Operational process audit runner.")
     parser.add_argument("--json", action="store_true", help="Output JSON results to stdout")
-    parser.add_argument("--report", action="store_true", help="Generate dated markdown report in evidence/scores/")
+    parser.add_argument("--report", action="store_true", help="Write the dated report in evidence/scores/ AND record its telemetry run row")
     parser.add_argument("--output", type=str, default="", help="Custom report output file path")
-    parser.add_argument("--stamp", action="store_true", help="Record run row into evidence/ledger.jsonl")
+    parser.add_argument("--stamp", action="store_true", help="Record a run row only (no artifact; does not satisfy the report step)")
     parser.add_argument("--actor", type=str, default="hq", help="Actor role for ledger stamp (default: hq)")
     parser.add_argument(
         "--no-gates",
@@ -864,7 +866,7 @@ def main() -> int:
         out_path.write_text(report_md, encoding="utf-8")
         print(f"\nAudit report written to: {out_path}")
 
-    if args.stamp:
+    if args.stamp or args.report:
         outcome = "accepted" if (healthy is None or healthy) else "failed"
         gate_summary = "skipped" if not gates_ran else ("all-pass" if all_gates_pass else "gate-failure")
         _yield = ledger_stats.get("first_pass_yield")
