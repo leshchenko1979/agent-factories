@@ -432,6 +432,19 @@ the gate is a falsified record, not a repair.
 
 **A ledger subject names an issue or describes the work, and the form says which.** A subject that names a board issue is written `#N` — the hash, the digits, and nothing else. `#N` is the strict form every subject-keyed predicate resolves through, so a near-miss is not a malformed reference to those predicates: it is not a reference at all, and the row silently leaves their population without ever being reported as wrong. A subject that names no issue is a descriptive stem naming the work in words (`pickaxe-attribution-trap`), and a clause label extending a reference (`#31-close-receipt`) is descriptive, not a reference — a mechanism that cannot tell those two apart from a broken reference will either miss the defect or fire on the law. The number a subject names is not bound to this factory's own board: a row may cite another repository's issue, so the form is what is codified and no gate may read `#N` as naming this factory's board without saying so. The gate that upholds this is `tests/test_subject_form.py`, and the instant it governs from is declared in `docs/ledger-invariants.json` like every other ledger invariant.
 
+**A lane's bindings are a SUPERSESSION CHAIN, and the live session is the newest binding within its own profile: a topic re-opened several times carries one binding per generation, and the newest is the lane. Only a match across two PROFILES is ambiguous, because there the registry cannot tell which daemon's session owns the topic; a single-profile chain is resolved by recency and the resolution is reported, never suppressed. The exit code carries the verdict: unbound and no-thread-id mean a declared lane is unreachable and exit non-zero, while a superseded chain is a live lane and does not (#100).**
+
+The `chat_id` narrowing is what makes the PROFILE the partition: `resolve_lane` filters by
+the factory's own chat before it counts matches, so every survivor already shares one chat
+and a set spanning two profiles is the only case left in which the registry cannot tell
+which daemon owns the topic. So `superseded` counts as RESOLVED in the exit predicate
+(`unresolved_total` in `tools/registry.py`) and carries its own counter on `resolve`'s
+summary line — visible without being a verdict — while `unbound`, `ambiguous` and
+`no-thread-id` keep rc=1. The fix does not delete the detector it was built around:
+`tests/test_registry.py` drives both halves over synthetic bindings, one profile to a
+chain and two to `ambiguous`, because a chain-only probe would pass a fix that had removed
+the ambiguity branch entirely.
+
 ---
 
 ## 12. Autonomous incident remediation & template self-healing (P30)

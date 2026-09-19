@@ -407,6 +407,18 @@ n=602).
 **Declare the writer for every surface you add.** A surface with no named writer
 is a surface that will acquire two.
 
+**A lane's bindings are a SUPERSESSION CHAIN, and the live session is the newest binding within its own profile: a topic re-opened several times carries one binding per generation, and the newest is the lane. Only a match across two PROFILES is ambiguous, because there the registry cannot tell which daemon's session owns the topic; a single-profile chain is resolved by recency and the resolution is reported, never suppressed. The exit code carries the verdict: unbound and no-thread-id mean a declared lane is unreachable and exit non-zero, while a superseded chain is a live lane and does not.**
+
+`tools/registry.py` ships with this template and is where the law is mechanical: its
+`chat_id` narrowing runs BEFORE the match count, so every survivor already shares one chat
+and a set spanning two profiles is the only case left in which the registry cannot tell
+which daemon owns the topic. So `superseded` counts as RESOLVED in the exit predicate and
+carries its own counter on `resolve`'s summary line — visible without being a verdict —
+while `unbound`, `ambiguous` and `no-thread-id` keep rc=1. The fix does not delete the
+detector it was built around: the registry's gate drives both halves over synthetic
+bindings, one profile to a chain and two to `ambiguous`, because a chain-only probe would
+pass a fix that had removed the ambiguity branch entirely.
+
 **An append-only surface with no reader is a write-only memory.** Ship the read
 path with the write path — the ledger is what a state claim is checked against.
 
