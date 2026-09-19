@@ -249,6 +249,25 @@ law names a lane beyond them — a member-comms lane, a survey lane — writes i
 cannot record its rows, so this is the difference between a lane and a name the ledger
 refuses to hear from.
 
+**Install the commit-msg hook that refuses a citing subject.** The ledger clause — a
+commit carrying the ledger names the concern, not a row number — is enforced twice:
+`tests/test_ledger_commit_cites_no_rows.py` reports a violation after the fact, and
+`tools/hooks/commit-msg` refuses it at the only point where the pending subject
+exists. A `pre-commit` hook cannot do this job: at pre-commit time the subject does
+not exist yet, so there is nothing to test.
+
+The hook is **versioned in the repo** rather than written into `.git/hooks`, which is
+not tracked and so would never reach a bootstrapped factory:
+
+```sh
+git config core.hooksPath tools/hooks
+```
+
+`core.hooksPath` lives in `.git/config`, so run this once per clone. The gate asserts
+the hook is present, executable and reachable through that setting: an uninstalled
+hook is silent, which is the vacuous-pass shape this factory forbids, so absence is a
+RED gate rather than an advisory.
+
 **Why this is a step and not a habit.** State kept only in chat is a memory of a
 conversation: it survives exactly as long as the context does. The ledger is the
 durable record, and `tools/ledger.py` is its **only** append path — the lock is

@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""commit-msg hook: refuse a commit whose subject cites a ledger row number.
+
+The refusal point for the ledger clause (issue #47), ruled at n=405. A
+`pre-commit` hook cannot do this job: the gate reads `MARKER..HEAD`, and at
+pre-commit time the pending subject does not exist yet, so there is nothing to
+test. `commit-msg` receives the message file, and is the only point at which the
+subject can be REFUSED rather than reported.
+
+**One predicate, two call sites.** This hook does not implement the pattern. It
+loads `subject_cites_rows` from `tests/test_ledger_commit_cites_no_rows.py` —
+the same function the gate calls — because two implementations drift and the
+drift is silent. The word boundary inside that predicate is load-bearing:
+`version=3` and `conversion=2` are not citations.
+
+**Refusal, not rewrite.** The hook prints the remedy and exits non-zero; it
+never edits the message. The clause's doctrine is that the message names the
+concern, so the message stays the author's to fix.
+
+**Fail open, and loudly.** If the predicate cannot be loaded — the gate file is
+absent, or this is not a git work tree — the hook prints a WARNING naming what it
+could not read and exits 0. A hook that refuses every commit on a packaging bug
+blocks the factory's own repair path, and it is not the authority: the audit gate
+(`tools/audit.py`, gate 20) is, and it fails loudly on its own. What this hook
+must never do is pass SILENTLY, which is why the warning is the point.
+
+Install — versioned in the repo, so the template ships the mechanism and not only
+the law:
+
+    git config core.hooksPath tools/hooks
+
+A fresh clone runs it once: `core.hooksPath` lives in `.git/config`, which is not
+tracked. `tests/test_ledger_commit_cites_no_rows.py` asserts the installation, so
+an uninstalled hook is a RED gate rather than a silent one.
+
+Run:  invoked by git, with the message file as $1
+Exit: 0 the subject names the concern; 1 the subject cites a row number.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+
+GATE_RELATIVE = "tests/test_ledger_commit_cites_no_rows.py"
+PREDICATE_NAME = "subject_cites_rows"
+
+REMEDY = """commit-msg: REFUSED — the subject cites a ledger row number.
+
+  subject: {subject}
+
+A ledger row's number is assigned inside the append lock, so it cannot be known
+before the append, and by the time this commit runs another lane may have
+appended further rows. State the concern instead. If a row must be cited, cite
+it in the ledger's own detail text, written after the append, where the real
+number can be read.
+
+The message was NOT rewritten — edit it and commit again."""
+
+
+def repo_toplevel() -> Path | None:
+    """The git top level, so the gate resolves wherever this hook was invoked."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        return None
+    top = proc.stdout.strip()
+    return Path(top) if top else None
+
+
+def subject_of(message_path: Path) -> str:
+    """The first non-empty, non-comment line — the line git reads as the subject."""
+    try:
+        text = message_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        return stripped
+    return ""
+
+
+def load_predicate(top: Path):
+    """`subject_cites_rows` from the gate module, or None if it cannot be read.
+
+    Imported by path rather than by package: this file lives in `tools/hooks/` and
+    the gate in `tests/`, and neither directory is a package.
+    """
+    gate = top / GATE_RELATIVE
+    if not gate.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("oc_ledger_clause_gate", gate)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, PREDICATE_NAME, None)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 2:
+        print(
+            "commit-msg: WARNING — no message file was passed; nothing checked.",
+            file=sys.stderr,
+        )
+        return 0
+
+    top = repo_toplevel()
+    if top is None:
+        print(
+            "commit-msg: WARNING — not inside a git work tree; nothing checked.",
+            file=sys.stderr,
+        )
+        return 0
+
+    predicate = load_predicate(top)
+    if predicate is None:
+        print(
+            f"commit-msg: WARNING — could not load {PREDICATE_NAME} from "
+            f"{GATE_RELATIVE}; the subject was NOT checked against the ledger "
+            "clause. tools/audit.py still carries the gate.",
+            file=sys.stderr,
+        )
+        return 0
+
+    subject = subject_of(Path(argv[1]))
+    if predicate(subject):
+        print(REMEDY.format(subject=subject), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

@@ -68,11 +68,20 @@ passes the ledger and the exemption data as absolute paths.
 Run:  python3 tests/test_ledger_commit_cites_no_rows.py
 Exit: 0 clean, or every violation excused; 1 a post-marker commit cites row numbers
       without an exemption, or the marker is gone, or the exemption data is malformed.
+**The mechanism, and why this gate asserts it.** The clause's remedy for a SECOND
+exemption of the same shape is a mechanism, not a third row (ruled at n=405): a
+versioned `commit-msg` hook that refuses a citing subject before it is recorded. An
+uninstalled hook is SILENT — the vacuous-pass shape this repo forbids — so this gate
+also asserts the hook is present, executable, and reachable through `core.hooksPath`.
+Install it with `git config core.hooksPath tools/hooks`; the config is local, so a
+fresh clone runs it once.
+
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -82,6 +91,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 LEDGER_PATH = "evidence/ledger.jsonl"
 EXEMPTIONS_PATH = "docs/ledger-commit-exemptions.json"
+
+# The mechanism the clause makes its remedy (issue #47, ruled at n=405): a versioned
+# commit-msg hook, at the only point where the pending subject exists to be refused.
+HOOK_PATH = "tools/hooks/commit-msg"
+HOOKS_PATH_CONFIG = "tools/hooks"
 
 # The first commit touching the ledger whose subject obeys the clause. Commits at or
 # before it predate the rule and are not examined. See the docstring: a missing marker
@@ -114,6 +128,41 @@ def repo_toplevel() -> Path | None:
     """The git top level containing this gate, so a copy in a subdirectory still works."""
     rc, out, _ = _git("rev-parse", "--show-toplevel")
     return Path(out.strip()) if rc == 0 and out.strip() else None
+
+def hook_state_problems(*, exists: bool, executable: bool, configured: str) -> list[str]:
+    """The refusal point's three facts, as a PURE predicate.
+
+    Factored so synthetic state can drive every rejection path: an uninstalled hook
+    is SILENT, which is the vacuous-pass shape this repo forbids — the same reason a
+    missing marker fails loudly rather than examining zero commits. So absence is a
+    gate failure, never an advisory.
+    """
+    problems: list[str] = []
+    if not exists:
+        problems.append(
+            f"{HOOK_PATH} is missing — the commit-msg refusal point the ledger clause "
+            "makes its remedy (issue #47, ruled at n=405) is not shipped"
+        )
+    elif not executable:
+        problems.append(f"{HOOK_PATH} is not executable — git will not run it")
+    shown = configured or "unset"
+    if configured != HOOKS_PATH_CONFIG:
+        problems.append(
+            f"core.hooksPath is {shown!r} — the hook is versioned but not wired, so "
+            "it never runs. Install it: "
+            f"git config core.hooksPath {HOOKS_PATH_CONFIG}"
+        )
+    return problems
+
+def hook_installation_problems(top: Path) -> list[str]:
+    """Read the installation state off the tree and git config, then judge it."""
+    hook = top / HOOK_PATH
+    rc, out, _ = _git("config", "--get", "core.hooksPath")
+    return hook_state_problems(
+        exists=hook.is_file(),
+        executable=os.access(hook, os.X_OK),
+        configured=out.strip() if rc == 0 else "",
+    )
 
 def exemptions_file() -> Path:
     """The factory's exemption data, resolved against the git top level.
@@ -279,10 +328,42 @@ def probe() -> list[str]:
         if entries or not problems:
             failures.append("probe: malformed JSON must be an ERROR, not a silent pass")
 
+    # The hook's installation facts — the mechanism the clause's second exemption is
+    # admitted WITH. An uninstalled hook is silent, so every way it can be absent is
+    # exercised here rather than discovered in a factory that had lost the mechanism.
+    if hook_state_problems(exists=True, executable=True, configured=HOOKS_PATH_CONFIG):
+        failures.append("probe: a present, executable, wired hook must report clean")
+    for kwargs, why in (
+        (
+            {"exists": False, "executable": False, "configured": HOOKS_PATH_CONFIG},
+            "a missing hook",
+        ),
+        (
+            {"exists": True, "executable": False, "configured": HOOKS_PATH_CONFIG},
+            "a hook git cannot execute",
+        ),
+        ({"exists": True, "executable": True, "configured": ""}, "an unwired hook"),
+        (
+            {"exists": True, "executable": True, "configured": ".git/hooks"},
+            "a hook reachable only through a foreign hooksPath",
+        ),
+    ):
+        if not hook_state_problems(**kwargs):
+            failures.append(f"probe: {why} must be reported, not passed")
+
     return failures
 
 def main() -> int:
     problems = probe()
+
+    top = repo_toplevel()
+    if top is None:
+        problems.append(
+            f"{REPO} is not inside a git work tree — the hook's installation, and "
+            "the ledger's history, cannot be read"
+        )
+    else:
+        problems.extend(hook_installation_problems(top))
     excused: list[tuple[str, dict]] = []
 
     if not marker_resolves():
