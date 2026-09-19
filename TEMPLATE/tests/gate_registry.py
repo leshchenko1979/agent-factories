@@ -253,6 +253,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_score_artifact_sections.py",
     "test_score_gate_recorded.py",
     "test_single_writer.py",
+    "test_subject_form.py",
     "test_template_integrity.py",
 )
 

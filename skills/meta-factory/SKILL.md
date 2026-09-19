@@ -363,6 +363,8 @@ are never the same output. An exemption nobody would defend in that output is on
 fixed instead. Nothing is ever backfilled: an intake row written today for work filed before
 the gate is a falsified record, not a repair.
 
+**A ledger subject names an issue or describes the work, and the form says which.** A subject that names a board issue is written `#N` — the hash, the digits, and nothing else. `#N` is the strict form every subject-keyed predicate resolves through, so a near-miss is not a malformed reference to those predicates: it is not a reference at all, and the row silently leaves their population without ever being reported as wrong. A subject that names no issue is a descriptive stem naming the work in words (`pickaxe-attribution-trap`), and a clause label extending a reference (`#31-close-receipt`) is descriptive, not a reference — a mechanism that cannot tell those two apart from a broken reference will either miss the defect or fire on the law. The number a subject names is not bound to this factory's own board: a row may cite another repository's issue, so the form is what is codified and no gate may read `#N` as naming this factory's board without saying so. The gate that upholds this is `tests/test_subject_form.py`, and the instant it governs from is declared in `docs/ledger-invariants.json` like every other ledger invariant.
+
 ---
 
 ## 12. Autonomous incident remediation & template self-healing (P30)

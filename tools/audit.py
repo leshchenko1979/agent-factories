@@ -705,6 +705,22 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_ledger_no_shrink.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_no_shrink.py"])
 
+    # 33. Ledger subject-form gate: a subject that APPEARS to name an issue must BE one.
+    #     Every subject-keyed predicate in the repo resolves an issue through `^#(\d+)$`,
+    #     and `issue_reference()` returns None for anything else — so a near-miss is not
+    #     reported as malformed: it is silently reclassified as a DESCRIPTIVE subject and
+    #     leaves the population of every one of those predicates without ever being
+    #     reported as wrong. Measured at landing over the live ledger: 2 bare-integer rows
+    #     (n=516, n=529), both defects, zero false positives on that predicate, and 4
+    #     `#`-prefixed clause labels as the false-positive guard the mechanism must leave
+    #     alone. Pure and offline — no `gh`, no network, no board lookup, because the
+    #     ledger's subject namespace is not bound to this factory's board (n=433 and n=436
+    #     cite another repository's issue). Carries a DECLARED boundary read through
+    #     tests/ledger_boundary.py: pre-invariant rows print as `excused:` and nothing is
+    #     backfilled (issue #80, ruling n=538, P29).
+    if (repo_root / "tests/test_subject_form.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_subject_form.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

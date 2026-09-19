@@ -170,16 +170,24 @@ def boundary_and_rows(repo: Path, key: str) -> tuple[dt.datetime, str, list[dict
     boundary, text = declared_boundary(repo, key)
     return boundary, text, rows
 
-def post_boundary_rows(rows: list[dict], boundary: dt.datetime, event: str) -> list[dict]:
-    """The `event` rows at or after `boundary` whose timestamp is readable.
+def post_boundary_rows(
+    rows: list[dict], boundary: dt.datetime, event: str | None = None
+) -> list[dict]:
+    """The rows at or after `boundary` whose timestamp is readable.
 
     This is the gate's POPULATION: the rows the invariant actually governs. Rows with an
     unparseable timestamp are excluded here and reported by the predicate as problems —
     a row that cannot be dated cannot be excused by its date either.
+
+    `event` scopes the population to one kind of row, which is what the close-row and
+    score invariants need. `event=None` governs EVERY row, which is what an invariant
+    over the ledger as a whole needs — the subject form constrains any row that names an
+    issue, whatever its event. The unscoped form is the default so a caller that names no
+    event gets the whole ledger rather than an empty population.
     """
     population: list[dict] = []
     for row in rows:
-        if row.get("event") != event:
+        if event is not None and row.get("event") != event:
             continue
         try:
             when = parse_ts(row.get("ts", ""))
@@ -190,7 +198,7 @@ def post_boundary_rows(rows: list[dict], boundary: dt.datetime, event: str) -> l
     return population
 
 def population_skip_reason(
-    population: list[dict], boundary_text: str, event: str
+    population: list[dict], boundary_text: str, event: str | None = None
 ) -> str | None:
     """The reason to SKIP when the population is empty, else None (#78 clause c).
 
@@ -199,11 +207,15 @@ def population_skip_reason(
     is younger than 50 closes, so it is not a law a template can ship. The proportional
     form states the same fact about the tree under test: this gate either verifies a
     non-empty population or says, in the output, why it examined nothing.
+
+    `event=None` describes the unscoped population as "row" rather than as an event name,
+    so the reason never claims a scope the caller did not ask for.
     """
     if population:
         return None
+    scope = f"`{event}` row" if event is not None else "row"
     return (
-        f"no `{event}` row at or after the declared boundary {boundary_text} — the "
+        f"no {scope} at or after the declared boundary {boundary_text} — the "
         f"population is empty, so this is a stated skip and not a silent pass"
     )
 
