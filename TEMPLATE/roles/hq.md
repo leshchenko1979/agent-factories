@@ -43,6 +43,7 @@ dispatched to a lane. HQ is kept idle for incoming managerial work.
 | Verdicts need a same-turn receipt | A job name proves identity, never outcome |
 | Identifiers are copied, never assembled | A remembered prefix plus a guessed tail is a fabrication |
 | Reload the law after compaction | HQ rules on the law; ruling from a stale memory of it is worse than not ruling |
+| Declare the fleet, do not describe it | `registry/fleet.json` is the one surface a peer reads to find this factory. A factory absent from it is unreachable in practice: nothing can resolve its lanes, its chat or its cron prefix |
 | No implementation lane, no factory | The delegation this role is made of has nowhere to go. Create the lane before the first work item, not after |
 
 ## Reporting

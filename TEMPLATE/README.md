@@ -14,6 +14,7 @@ checklist.
 | [`topics.md`](topics.md) | **Pointer** — the chat surface is a binding, not core. See the surface add-on. |
 | [`roles/`](roles/) | One card per role. A session loads its own card and the law — not the others. |
 | [`tools/ledger.py`](tools/ledger.py) | The **single writer** for the state ledger. Copy it, keep it as the only append path. |
+| [`registry/`](registry/) | The **fleet declaration** — who this factory is, in a form a peer can read. Ships `fleet.example.json`; the tools that read it are `registry.py` (declare, enroll, render), `registry_render.py` (the generated half) and `registry_attest.py` (the re-attestation brief). |
 | [`tests/`](tests/) | The gates: `test_ontology.py` (vocabulary), `test_ledger.py` (the single-writer property **and the transition sequence**), `test_rework.py` (rework entries are complete **and the table is contiguous**). Copy all three and run them before you commit. |
 
 `.tmpl` files carry `{{PLACEHOLDER}}` markers and are meant to be filled. The

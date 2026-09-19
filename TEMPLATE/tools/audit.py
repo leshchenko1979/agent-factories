@@ -778,9 +778,13 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     about it. `resolved_at` is gated separately on its own terms (present, parseable,
     #     not in the future, agreed by both artifacts) so the normalization can never
     #     smuggle an absent timestamp past the comparison. Checks 2, 3 and 5 read live
-    #     state — session bindings and the known-factory set — which is why the file is
-    #     classified in gate_registry.OPTIONAL_GATES until it is parameterized for the
-    #     template (P29).
+    #     state — session bindings and the DECLARED factory set — which is why the file was
+    #     once classified in gate_registry.OPTIONAL_GATES: it hardcoded this box's six
+    #     factories, so a bootstrapped factory would have RED-ed on coverage before it had
+    #     enrolled anything. That is fixed, not deferred: the fleet is declared in
+    #     `registry/fleet.json`, the probe pair is taken from the manifest in order, and the
+    #     gate now runs REQUIRED in a bootstrapped factory against that factory's own fleet
+    #     (P29 — the rule is upheld by a gate that can pass where it is copied).
     if (repo_root / "tests/test_registry.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_registry.py"])
 

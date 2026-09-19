@@ -251,6 +251,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_patrol_host_state.py",
     "test_rework.py",
     "test_rework_relative_revision.py",
+    "test_registry.py",
     "test_roadmap_transition.py",
     "test_score_artifact_sections.py",
     "test_score_gate_recorded.py",
@@ -268,16 +269,16 @@ REQUIRED_GATES: tuple[str, ...] = (
 # n=515 clause 4 in its DECLARED-factory-parameter form, both files moved into
 # REQUIRED_GATES and gained their TEMPLATE twins in one change (issue #78). Nothing is
 # held here any more, so every entry below is a settled classification.
+#
+# `test_registry.py` was held here for the same reason and has now moved the same way: the
+# fleet it hardcoded is a DECLARED manifest (`registry/fleet.json`) rather than six dicts in
+# the tool, so it passes in a bootstrapped factory that has declared its own fleet and
+# enrolled its own fragment. It moved into REQUIRED_GATES in the change that shipped
+# `TEMPLATE/registry/`, which is the condition its own entry named.
 OPTIONAL_GATES: dict[str, str] = {
     "test_law_coverage.py": (
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md and "
         "would RED in a bootstrapped factory."
-    ),
-    "test_registry.py": (
-        "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes KNOWN_FACTORY_SLUGS and FACTORY_CHATS "
-        "for this box's six factories, so a bootstrapped factory would RED on coverage before "
-        "it had enrolled anything. Moves into REQUIRED_GATES in the same change that ports "
-        "TEMPLATE/registry/ and parameterizes those two sets."
     ),
     "test_session_bindings.py": (
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md, and "

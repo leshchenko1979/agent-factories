@@ -79,6 +79,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P33": ["docs/methodology/04-harness-binding.md", "TEMPLATE/SKILL.md.tmpl", "skills/meta-factory/SKILL.md"],  # Context manifest curation
     "P34": ["docs/methodology/01-llm-weakness-counters.md", "TEMPLATE/AGENTS.md.tmpl"],  # Mirror test: diagnose mechanism before counter
     "P35": ["tests/test_gate_fixtures_closure.py", "tests/gate_fixtures.py"],  # A fixture must model the tree its tool runs in
+    "P36": ["registry/fleet.json", "tests/test_registry.py", "tests/gate_registry.py"],  # A box-describing surface is declared, and its gate must pass where it is copied
 }
 
 

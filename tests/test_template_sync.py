@@ -65,6 +65,17 @@ PAIRS = [
     ("tests/test_subject_form.py", "TEMPLATE/tests/test_subject_form.py"),
     ("tests/test_rework_relative_revision.py", "TEMPLATE/tests/test_rework_relative_revision.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
+    # The factory registry. Its three tools and two gates ship whole: a
+    # bootstrapped factory declares its own fleet in `registry/fleet.json` and
+    # gets the same renderer, the same drift gate and the same attest pacemaker.
+    # `registry/fleet.example.json` ships because the loader's own error message
+    # names it — an error that points at a file nobody ships is a dead end.
+    ("registry/fleet.example.json", "TEMPLATE/registry/fleet.example.json"),
+    ("tools/registry.py", "TEMPLATE/tools/registry.py"),
+    ("tools/registry_render.py", "TEMPLATE/tools/registry_render.py"),
+    ("tools/registry_attest.py", "TEMPLATE/tools/registry_attest.py"),
+    ("tests/test_registry.py", "TEMPLATE/tests/test_registry.py"),
+    ("tests/test_registry_render.py", "TEMPLATE/tests/test_registry_render.py"),
 ]
 
 

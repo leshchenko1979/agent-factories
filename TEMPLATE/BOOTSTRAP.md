@@ -320,6 +320,61 @@ perfect bootstrap, which is not credible, or is not recording.
 
 ---
 
+## Step 4d — Declare the factory, so a peer can find it
+
+Copy [`tools/registry.py`](tools/registry.py),
+[`tools/registry_render.py`](tools/registry_render.py),
+[`tools/registry_attest.py`](tools/registry_attest.py),
+[`tests/test_registry.py`](tests/test_registry.py) and
+[`tests/test_registry_render.py`](tests/test_registry_render.py), then declare
+this factory in `registry/fleet.json`:
+
+```sh
+cp registry/fleet.example.json registry/fleet.json
+# edit: one record — this factory's slug, chat id, repo, skill path, job prefixes, aliases
+python3 tools/registry.py enroll <slug>
+python3 tools/registry.py render
+python3 tools/registry.py validate
+python3 tests/test_registry.py
+```
+
+**`validate` exits 1 until you have declared something, and that is the empty
+state, not a failure.** The loader refuses an empty `factories` list by design —
+*"an empty manifest reads as `no factory exists`, which is the declared-not-derived
+defect it exists to fix"* — so before your manifest exists it reports `no fragments
+found — nothing validated`. That is the correct answer to *what have you declared?*,
+which is nothing. **Do not ship a placeholder `registry/fleet.json` to silence it:**
+a manifest that is present, parseable and rejected is worse than an absent one,
+because it reads as declared.
+
+**`enroll` fills the observed half and nulls the declared half.** It derives your
+lanes from the live bindings in your chat, then writes `purpose: null`,
+`services: null`, `substrates_owned: null` — `null` is a statement (*nobody has
+told us*), while an absent key is indistinguishable from a generator that forgot to
+write it. Fill them in by hand: a fragment with a null zone describes a factory that
+has not said what it owns.
+
+**Re-enroll once a lane is bound** (Step 7). `enroll` is idempotent over the observed
+half and keeps what you wrote in the declared half, so the fragment grows a lane
+rather than starting again. A fragment enrolled before its first lane is honest, and
+says nothing a peer can use.
+
+**The pacemaker is what keeps it true.** Add one job on a **≥6 h** cadence running
+`tools/registry_attest.py`; it wakes each factory's `HQ` with two questions —
+*confirm or amend your fragment*, and *confirm or expire your announcements*. The
+second is what stops the peer-facing field decaying into stale advice, and both ride
+one job rather than two. Nothing on the box wakes a lane more often than every 6 h.
+
+**Name the writer.** `HQ` writes `registry/fleet.json`; the lane that runs `enroll`
+writes its own fragment; `render` writes the generated half. Add both rows to §13 of
+the law — a surface with no named writer is one that will acquire two.
+
+**Evidence:** `python3 tests/test_registry.py` exiting 0 against your own declared
+fleet, and a committed `docs/factory-registry.md` that reproduces from
+`python3 tools/registry.py render` with no diff.
+
+---
+
 ## Step 5 — Wire the board
 
 File the first issues on `{{REPO}}`, using title prefixes that encode kind
@@ -353,6 +408,12 @@ with no channel binding the daemon parks the message
 (`No surface claims session … parking until its channel claims it`). Every
 kickoff needs a second hop: deliver the brief with `send_input` into the
 running session.
+
+**Re-enroll the fragment now** (Step 4d). The lane is bound, so `python3
+tools/registry.py enroll <slug>` grows the fragment a lane row instead of starting
+again, and a peer can finally resolve it. Re-render in the same commit — the
+generated half is a live read, so a binding that moved makes the committed render
+stale until it is re-rendered.
 
 **Evidence:** the brief received in the lane, and the lane's first reply.
 

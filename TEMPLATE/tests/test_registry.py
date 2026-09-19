@@ -1,0 +1,704 @@
+#!/usr/bin/env python3
+"""Gate: the factory registry's declared half is valid, bound and covered, and its
+generated half is byte-reproducible.
+
+Seven checks, each printed with the count it measured:
+
+  1. every fragment validates against the schema — the live store AND the fixtures,
+     because a fixture that stops validating has stopped describing the schema
+  2. every declared `thread_id` resolves to a live `session_bindings` row ON THE
+     DECLARED PROFILE
+  3. every declared lane is BOUND — declared-but-unbound is a failure, not a warning
+  4. the committed `docs/factory-registry.md` and `registry/index.json` are identical to
+     a fresh render over their STATE-BEARING bytes
+  5. coverage — every factory group known to the fleet has a fragment, and every
+     fragment names a known slug
+  6. `resolved_at` is gated on its own terms — present, parseable, not in the future,
+     and the two artifacts agree on it
+  7. every announcement is well-formed and unambiguous
+
+Why the registry needs a gate at all. The document is generated from live state, so it
+is true by construction — and for exactly that reason it rots the moment a topic
+rebinds, a session is recreated or a lane is renamed, while still READING as true. A
+reader cannot tell a stale render from a current binding without the instant it was
+taken, which is what `resolved_at` carries and what check 6 gates.
+
+HOW the timestamp is kept out of check 4 — the one design decision this gate owes, stated
+here rather than assumed, and MEASURED rather than reasoned. The renderer computes its
+freshness badges from the instant it is handed (`_freshness_badge` compares
+`age_hours(attested_at, now)` against the 72 h window), so rendering the fresh side at a
+SENTINEL inverts that test instead of neutralising it: every age becomes NEGATIVE, no
+fragment can render `STALE`, and a genuinely stale attestation would come out reading
+`attested` — the two sides diverge the moment any fragment is stale, in the direction of
+HIDING the failure. Rendering at the committed artifact's OWN instant instead keeps both
+sides on one clock, and the literal stamp is then substituted for the sentinel on both
+sides. So a hand-edit or a moved binding still fails while a fresh timestamp never reads as
+drift, and the probes below prove that by construction rather than asserting it — the first
+version of this paragraph predicted the sentinel would render everything STALE, and the
+probe measured the opposite.
+
+What the substitution does in the LIVE path, measured rather than assumed: it is IDENTITY.
+The fresh side is rendered at the committed stamp, so both texts already carry that exact
+literal and `text.replace(stamp, sentinel)` changes neither. The comparison would pass
+without it. It is kept because `drift_problems()` is the shared comparison and its contract
+is two texts rendered at two instants — that is the shape the probes drive, and the shape
+any caller who renders the fresh side at `utc_now()` would get; the substitution is what
+makes that contract well-defined rather than defensive noise. Rendering the fresh side at
+`utc_now()` instead would make it load-bearing and is deliberately NOT done: the badge text
+is then measured on a different clock from the committed render, so an attestation crossing
+its 72 h boundary between the commit and the gate run would RED a tree nobody touched — a
+time-dependent gate, which is the same defect class as one that cannot fail. So the
+substitution is proven by the probes and the live path is proven deterministic by this note.
+
+Two scope statements this gate carries, because its report is wrong without them:
+
+  (i)  Checks 2, 3 and 5 are scoped to the DECLARED fleet, not to this box. They read
+       `registry.KNOWN_FACTORY_SLUGS` and `FACTORY_CHATS`, both of which are derived from
+       `registry/fleet.json` — the manifest a factory's HQ writes. So a bootstrapped
+       factory that has declared its own factories passes, and one that has declared none
+       FAILS naming the undeclared manifest rather than reporting empty coverage. This
+       parameterisation is what moved the file out of `gate_registry.OPTIONAL_GATES` and
+       into `REQUIRED_GATES`; the gate is now required in the template too.
+  (ii) Check 4 renders the fresh side AT THE COMMITTED INSTANT, so a badge that would
+       have crossed its own staleness boundary since the commit is not caught here. It
+       is rendered in the Freshness table, and check 6 gates the stamp it is measured
+       from; the choice is stated, not implied away.
+
+The announcement probes take their slugs from the manifest rather than naming a pair:
+`validate_fragment` resolves `factory` against `KNOWN_FACTORY_SLUGS`, so the probe needs
+two slugs that are genuinely declared — and which two those are is the box's fact, not
+this gate's. `probe_slugs()` refuses a manifest with fewer than two factories instead of
+synthesizing one, because a synthesized slug would be rejected by the validator and would
+prove the merge while skipping the declaration.
+
+Run:  python3 tests/test_registry.py
+Exit: 0 clean, 1 on any failed check.
+"""
+
+from __future__ import annotations
+
+import datetime
+import difflib
+import json
+import re
+import sys
+import tempfile
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO))
+
+import registry as reg  # noqa: E402
+import registry_render as rr  # noqa: E402
+
+PREDICATE = (
+    "every fragment in the live store and the fixtures validates; every declared lane "
+    "resolves to a live binding on its declared profile; every factory group known to "
+    "the fleet has a fragment; the committed render equals a fresh one over its "
+    "state-bearing bytes; `resolved_at` is present, parseable, not in the future and "
+    "agreed by both artifacts; every announcement is well-formed and no two entries "
+    "sharing an `id` carry differing text."
+)
+
+failures: list[str] = []
+counts: list[str] = []
+
+def check(name: str, ok: bool, detail: str = "") -> None:
+    print(f"  {'PASS' if ok else 'FAIL'}  {name}" + (f" — {detail}" if detail else ""))
+    if not ok:
+        failures.append(name)
+
+def load_live() -> list[tuple[Path, dict]]:
+    """The live fragments, parsed. A file that does not parse is returned as (path, {})."""
+    out: list[tuple[Path, dict]] = []
+    for path in reg.live_fragment_paths([]):
+        data, _error = reg.load_fragment(path)
+        out.append((path, data if isinstance(data, dict) else {}))
+    return out
+
+# --- 1. schema --------------------------------------------------------------
+
+def check_fragments_validate() -> list[str]:
+    paths = reg.fragment_paths([])
+    problems: list[str] = []
+    for path in paths:
+        data, error = reg.load_fragment(path)
+        if error:
+            problems.append(error)
+            continue
+        problems.extend(reg.validate_fragment(data, str(path)))
+    counts.append(f"{len(paths)} fragment(s) validated (live store + fixtures)")
+    return problems
+
+# --- 2 and 3. the declared lanes resolve live -------------------------------
+
+def check_lanes_bound() -> list[str]:
+    """Checks 2 and 3, which are one read of the same rows.
+
+    `resolve_lane` narrows by the factory's OWN chat id, because a thread id is
+    unique only WITHIN a chat — thread 4 exists in both the Miidas and the Infra
+    chat. `ambiguous` is NOT a failure: the lane is bound and the renderer reports
+    the newest of the sessions sharing the topic, which is a live fact this gate
+    states by count rather than silently accepting or silently failing.
+    """
+    bindings, errors = reg.all_bindings()
+    problems: list[str] = list(errors)
+    by_profile: dict[str, list[dict]] = {}
+    for row in bindings:
+        by_profile.setdefault(str(row.get("_profile")), []).append(row)
+
+    declared = 0
+    ambiguous = 0
+    for path, fragment in load_live():
+        profile = str(fragment.get("profile"))
+        scoped = by_profile.get(profile, [])
+        if not scoped:
+            problems.append(
+                f"{path.name}: profile `{profile}` has no readable binding rows — a lane "
+                f"cannot be resolved against a profile this gate cannot read"
+            )
+        chat_id = reg.FACTORY_CHATS.get(str(fragment.get("factory")))
+        for lane in fragment.get("lanes") or []:
+            if not isinstance(lane, dict):
+                problems.append(f"{path.name}: a lane entry is not an object")
+                continue
+            declared += 1
+            resolved = reg.resolve_lane(lane, scoped, {}, chat_id=chat_id)
+            where = f"{fragment.get('factory')}/{lane.get('topic')} (thread {lane.get('thread_id')})"
+            if resolved.get("status") == "resolved":
+                continue
+            if resolved.get("status") == "ambiguous":
+                ambiguous += 1
+                continue
+            problems.append(
+                f"declared lane {where} is {str(resolved.get('status')).upper()} — it "
+                f"resolves to no live `session_bindings` row on profile `{profile}`"
+            )
+    counts.append(
+        f"{declared} declared lane(s) checked against {len(bindings)} binding row(s); "
+        f"{ambiguous} ambiguous (bound, several sessions on one topic — newest renders)"
+    )
+    return problems
+
+# --- 5. coverage ------------------------------------------------------------
+
+def check_coverage() -> list[str]:
+    problems: list[str] = []
+    present = {str(fragment.get("factory")): path for path, fragment in load_live()}
+    for slug in sorted(reg.KNOWN_FACTORY_SLUGS - set(present)):
+        problems.append(
+            f"factory `{slug}` is known to the fleet but has NO fragment in "
+            f"registry/factories/ — an absent declaration is a question, not an answer"
+        )
+    for slug in sorted(set(present) - reg.KNOWN_FACTORY_SLUGS):
+        problems.append(
+            f"fragment {present[slug].name} declares factory `{slug}`, which is not in "
+            f"KNOWN_FACTORY_SLUGS — `affects` entries can never resolve against it"
+        )
+    counts.append(
+        f"coverage {len(set(present) & reg.KNOWN_FACTORY_SLUGS)}/"
+        f"{len(reg.KNOWN_FACTORY_SLUGS)} factory group(s)"
+    )
+    return problems
+
+# --- 4. the committed render reproduces over its state-bearing bytes ---------
+
+def normalize_stamp(text: str, stamp: object) -> str:
+    """Replace the render instant with the sentinel, so the clock is not compared."""
+    if not stamp:
+        return text
+    return text.replace(str(stamp), rr.RESOLVED_SENTINEL)
+
+def first_difference(committed: str, fresh: str) -> str:
+    """Name the first place two rendered texts diverge, for the failure message."""
+    for number, (left, right) in enumerate(
+        zip(committed.splitlines(), fresh.splitlines()), start=1
+    ):
+        if left != right:
+            return f"line {number}: committed={left[:100]!r} fresh={right[:100]!r}"
+    committed_lines = len(committed.splitlines())
+    fresh_lines = len(fresh.splitlines())
+    if committed_lines != fresh_lines:
+        return f"line count differs: committed={committed_lines} fresh={fresh_lines}"
+    return "byte difference inside the final line (a trailing newline)"
+
+def drift_problems(
+    committed_md: str,
+    committed_index: str,
+    fresh_md: str,
+    fresh_index: str,
+    committed_stamp: object,
+    fresh_stamp: object = None,
+) -> list[str]:
+    """The comparison itself, pure — so the acceptance probes can drive it directly.
+
+    Each side is normalized with ITS OWN stamp: the live call passes one stamp for
+    both (check 6 enforces that the two artifacts agree), while the probes pass the
+    advanced stamp on the committed side to prove that moving the clock alone is
+    not read as drift.
+    """
+    problems: list[str] = []
+    fresh_stamp = committed_stamp if fresh_stamp is None else fresh_stamp
+    for label, committed, fresh in (
+        ("docs/factory-registry.md", committed_md, fresh_md),
+        ("registry/index.json", committed_index, fresh_index),
+    ):
+        left = normalize_stamp(committed, committed_stamp)
+        right = normalize_stamp(fresh, fresh_stamp)
+        if left != right:
+            problems.append(
+                f"{label}: committed bytes differ from a fresh render — "
+                f"{first_difference(left, right)}"
+            )
+    return problems
+
+def read_committed() -> tuple[str, str, object]:
+    """The two committed artifacts and the instant the index says they were read."""
+    committed_md = rr.MD_PATH.read_text(encoding="utf-8")
+    committed_index = rr.INDEX_PATH.read_text(encoding="utf-8")
+    stamp = json.loads(committed_index).get("resolved_at")
+    return committed_md, committed_index, stamp
+
+def check_render_reproduces() -> list[str]:
+    try:
+        committed_md, committed_index, stamp = read_committed()
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"the committed artifacts cannot be read — {exc}"]
+    fresh_md, fresh_index, _ctx = rr.render_texts(resolved_at=str(stamp))
+    problems = drift_problems(
+        committed_md, committed_index, fresh_md, fresh_index, stamp
+    )
+    counts.append(
+        f"committed render compared against a fresh one at its own instant {stamp}"
+    )
+    return problems
+
+# --- 6. resolved_at, gated on its own terms ---------------------------------
+
+MD_STAMP = re.compile(r"\*\*resolved at\*\* `([^`]+)`")
+
+def check_resolved_at() -> list[str]:
+    problems: list[str] = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+    stamps: dict[str, str] = {}
+    try:
+        match = MD_STAMP.search(rr.MD_PATH.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return [f"{rr.MD_PATH}: cannot read — {exc}"]
+    if match is None:
+        problems.append(
+            "docs/factory-registry.md: no `**resolved at** <stamp>` line — the generated "
+            "half carries no instant, so a reader cannot re-check any claim in it"
+        )
+    else:
+        stamps["docs/factory-registry.md"] = match.group(1)
+    try:
+        index = json.loads(rr.INDEX_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        problems.append(f"registry/index.json: cannot read or parse — {exc}")
+        index = {}
+    if "resolved_at" not in index:
+        problems.append("registry/index.json: no `resolved_at` key")
+    else:
+        stamps["registry/index.json"] = str(index.get("resolved_at"))
+    for label, stamp in sorted(stamps.items()):
+        parsed = rr.parse_instant(stamp)
+        if parsed is None:
+            problems.append(f"{label}: resolved_at `{stamp}` does not parse as an instant")
+        elif parsed > now:
+            problems.append(
+                f"{label}: resolved_at `{stamp}` is in the FUTURE — a render cannot be "
+                f"dated ahead of the read that produced it"
+            )
+    distinct = sorted(set(stamps.values()))
+    if len(distinct) > 1:
+        problems.append(
+            f"the two artifacts disagree on resolved_at ({distinct}) — they are two "
+            f"renderings of ONE read, so one of them is not from that read"
+        )
+    counts.append(
+        f"resolved_at {distinct[0]}" if len(distinct) == 1 else f"resolved_at {distinct}"
+    )
+    return problems
+
+# --- 7. announcements, well-formed and unambiguous --------------------------
+
+def announcement_problems(merged: list[dict], where: str) -> list[str]:
+    """Re-validate the MERGED view through the schema validator.
+
+    Check 1 already validates every declaration site. This is a second receipt on the
+    thing peers actually ACT on — the deduplicated list — and it reuses the one
+    implementation instead of restating its rules here, so the two cannot drift.
+    """
+    problems: list[str] = []
+    for entry in merged:
+        projected = {k: v for k, v in entry.items() if k in reg.ANNOUNCEMENT_KEYS}
+        errors: list[str] = []
+        reg.validate_announcements(
+            [projected], f"merged announcement `{entry.get('id')}`", reg.SCOPES, errors
+        )
+        problems.extend(errors)
+    return problems
+
+def check_announcements() -> list[str]:
+    fragments = [fragment for _path, fragment in load_live()]
+    merged, conflicts = rr.collect_announcements(fragments)
+    problems = list(conflicts)
+    problems.extend(announcement_problems(merged, "merged"))
+    counts.append(
+        f"{len(merged)} announcement(s) merged from {len(fragments)} fragment(s), "
+        f"{len(conflicts)} conflicting-text case(s)"
+    )
+    return problems
+
+# --- acceptance probes ------------------------------------------------------
+#
+# Each probe drives the SAME function the live check uses, with inputs whose answer
+# is known, so a green live check cannot come from a comparison that never compares.
+
+def probe_a_hand_edit_is_named() -> None:
+    committed_md, committed_index, stamp = read_committed()
+    edited = committed_md.replace(
+        "Generated file.", "Generated file. HAND EDIT.", 1
+    )
+    problems = drift_problems(edited, committed_index, committed_md, committed_index, stamp)
+    check(
+        "a hand-edit to docs/factory-registry.md is NAMED as drift",
+        any("factory-registry.md" in p and "HAND EDIT" in p for p in problems),
+        problems[0][:110] if problems else "no problem reported",
+    )
+    clean = drift_problems(committed_md, committed_index, committed_md, committed_index, stamp)
+    check("...while the unedited pair raises nothing", clean == [], "; ".join(clean)[:90])
+
+def probe_only_the_stamp_advanced_passes() -> None:
+    """A re-render in which ONLY `resolved_at` advanced must still pass.
+
+    The committed bytes are taken as they are and the stamp is moved forward — which is
+    exactly what a re-render over unchanged live state produces — then compared against a
+    fresh render at the committed instant. The normalization is what makes the two equal,
+    so this probe fails if it is ever removed.
+    """
+    committed_md, committed_index, stamp = read_committed()
+    advanced = rr.parse_instant(stamp) + datetime.timedelta(hours=1)
+    later = advanced.strftime("%Y-%m-%dT%H:%M:%SZ")
+    moved_md = committed_md.replace(str(stamp), later)
+    moved_index = committed_index.replace(str(stamp), later)
+    check(
+        "the stamp actually moved in the probe input",
+        later in moved_md and later in moved_index and later != str(stamp),
+        f"{stamp} -> {later}",
+    )
+    problems = drift_problems(
+        moved_md, moved_index, committed_md, committed_index, later, stamp
+    )
+    check(
+        "a re-render in which ONLY resolved_at advanced still PASSES",
+        problems == [],
+        "; ".join(problems)[:110],
+    )
+    unnormalized = drift_problems(
+        moved_md, moved_index, committed_md, committed_index, None, None
+    )
+    check(
+        "...and the same pair WITHOUT normalization is reported, so the probe is not vacuous",
+        len(unnormalized) == 2,
+        f"{len(unnormalized)} problem(s) with the stamp left in place",
+    )
+
+def probe_the_sentinel_would_rewrite_badges() -> None:
+    """Why the fresh side renders at the COMMITTED instant and not at the sentinel.
+
+    A pure-function probe over a STALE attestation, which is the case that diverges: at the
+    sentinel every age is negative, so the staleness branch cannot fire and a genuinely
+    stale fragment renders as freshly attested. The first draft of this probe used a fresh
+    attestation — the one case where both instants agree — and measured that the claim in
+    the docstring was the wrong way round.
+    """
+    stale = "2026-09-01T00:00:00Z"
+    at_commit = rr._freshness_badge("attested", stale, rr.parse_instant("2026-09-19T14:00:00Z"))
+    at_sentinel = rr._freshness_badge("attested", stale, rr.parse_instant(rr.RESOLVED_SENTINEL))
+    check(
+        "a sentinel render would HIDE a stale attestation (so the fresh side renders at the committed instant)",
+        at_sentinel != at_commit and "STALE" in at_commit and "STALE" not in at_sentinel,
+        f"at commit: {at_commit!r} · at sentinel: {at_sentinel!r}",
+    )
+    fresh = "2026-09-19T12:00:00Z"
+    check(
+        "...while a fresh attestation reads the same at both, which is why the claim is stated per case",
+        rr._freshness_badge("attested", fresh, rr.parse_instant("2026-09-19T14:00:00Z"))
+        == rr._freshness_badge("attested", fresh, rr.parse_instant(rr.RESOLVED_SENTINEL)),
+        f"at commit: {rr._freshness_badge('attested', fresh, rr.parse_instant('2026-09-19T14:00:00Z'))!r}",
+    )
+
+def _announcement(ident: str, text: str, **over) -> dict:
+    entry = {
+        "id": ident,
+        "scope": "profile",
+        "severity": "info",
+        "text": text,
+        "affects": ["profile"],
+        "since": "2026-09-19",
+        "review_by": "2026-12-19",
+        "evidence": "probe fixture, never a live declaration",
+    }
+    entry.update(over)
+    return entry
+
+# The probe pair uses REAL factory slugs, not synthetic ones: `validate_fragment` resolves
+# `factory` against `KNOWN_FACTORY_SLUGS`, so a pair named "alpha"/"beta" is rejected by
+# the validator and would prove the MERGE while skipping the DECLARATION — the half a peer
+# actually writes, and the half a schema can reject.
+#
+# WHICH slugs those are is the box's own declaration, read from the fleet manifest, not a
+# fact this gate may restate. A hardcoded pair REDs on a bootstrapped factory before it has
+# enrolled anything, and the failure would name a factory that box does not have.
+def probe_slugs() -> tuple[str, str]:
+    """Two declared slugs, in manifest order — a probe needs a peer to merge with."""
+    ordered = [record["slug"] for record in reg.MANIFEST["factories"]]
+    if len(ordered) < 2:
+        raise SystemExit(
+            f"this gate probes a merge between two factories; the fleet manifest declares "
+            f"{len(ordered)} ({', '.join(ordered) or 'none'}) — declare a second factory, or "
+            f"the probe has nothing to merge"
+        )
+    return (ordered[0], ordered[1])
+
+
+def _fragment(slug: str, announcements: list[dict]) -> dict:
+    # The repo and skill come from the manifest too: they are DECLARED paths, and a
+    # synthesized `/root/<slug>` would be a second, wrong declaration of the same fact.
+    return {
+        "factory": slug,
+        "display_name": reg.FACTORY_DISPLAY_NAMES[slug],
+        "profile": reg.FACTORY_PROFILE,
+        "repo": reg.FACTORY_REPOS[slug],
+        "skill": reg.FACTORY_SKILLS[slug],
+        "purpose": f"{slug} purpose",
+        "zone": {"owns": ["x"], "does_not_own": ["y"]},
+        "services": [],
+        "substrates_owned": ["s"],
+        "announcements": announcements,
+        "lanes": [],
+        "status": "unattested",
+        "attested_at": None,
+    }
+
+def _fragments_on_disk(
+    fragments: list[dict],
+) -> tuple[list[dict], list[str], tempfile.TemporaryDirectory]:
+    """Write fragments as REAL files and read them back through the gate's own loader.
+
+    The announcement probes below drive the clauses through the same path the live check
+    uses — a JSON file on disk, `reg.load_fragment`, `reg.validate_fragment` — rather than
+    through an in-memory dict the loader never sees. A probe that hands the merge function a
+    dict it built itself proves the MERGE and skips the DECLARATION, which is the half a
+    peer actually writes and the half a schema can reject.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    loaded: list[dict] = []
+    errors: list[str] = []
+    for fragment in fragments:
+        path = Path(tmp.name) / f"{fragment['factory']}.json"
+        path.write_text(json.dumps(fragment), encoding="utf-8")
+        data, error = reg.load_fragment(path)
+        if error:
+            errors.append(f"{path.name}: {error}")
+            continue
+        errors.extend(reg.validate_fragment(data, str(path)))
+        loaded.append(data)
+    return loaded, errors, tmp
+
+def _render_for(fragments: list[dict]) -> str:
+    """The document for a synthetic fragment set — the Announcements section only."""
+    merged, _problems = rr.collect_announcements(fragments)
+    ctx = {
+        "resolved_at": "2026-09-19T14:00:00Z",
+        "factories": [
+            {
+                "fragment": fragment,
+                "slug": fragment["factory"],
+                "lanes": [],
+                "skill_version": "0.0.0",
+                "attested_at": None,
+                "status": "unattested",
+            }
+            for fragment in fragments
+        ],
+        "announcements": merged,
+        "jobs": [],
+        "problems": [],
+    }
+    text = rr.render_markdown(ctx)
+    return text.split("## Announcements", 1)[1].split("## Reachability", 1)[0]
+
+def probe_same_id_same_text_is_one_entry() -> None:
+    """Several lanes observing ONE fact is a legitimate duplicate, not a conflict."""
+    note = "The registry renders one entry per `id`, with every declarer named."
+    pair = probe_slugs()
+    loaded, errors, tmp = _fragments_on_disk([
+        _fragment(pair[0], [_announcement("shared-fact", note)]),
+        _fragment(pair[1], [_announcement("shared-fact", note)]),
+    ])
+    check(
+        "both duplicate declarations are VALID fragments, loaded from disk",
+        errors == [] and len(loaded) == 2,
+        "; ".join(errors)[:110] or f"{len(loaded)} fragment(s) loaded",
+    )
+    merged, conflicts = rr.collect_announcements(loaded)
+    check(
+        "same `id` + same `text` merges to ONE entry naming BOTH origins",
+        len(merged) == 1 and conflicts == []
+        and sorted(merged[0]["origins"]) == sorted(pair),
+        f"entries={len(merged)} origins={merged[0]['origins'] if merged else []} "
+        f"conflicts={len(conflicts)}",
+    )
+    rendered = _render_for(loaded)
+    check(
+        "...and it RENDERS once, not twice",
+        rendered.count("**`shared-fact`**") == 1,
+        f"{rendered.count('**`shared-fact`**')} rendering(s) in the Announcements section",
+    )
+    del tmp
+
+def probe_differing_text_under_one_id_fails() -> None:
+    """Two lanes publishing contradictory guidance under one name must fail, named."""
+    pair = probe_slugs()
+    loaded, errors, tmp = _fragments_on_disk([
+        _fragment(pair[0], [_announcement("contested", "Read the DB with the mode=ro URI.")]),
+        _fragment(pair[1], [_announcement("contested", "Copy the DB to /tmp and read that.")]),
+    ])
+    check(
+        "each side of the contradiction is a VALID fragment alone — the conflict is not a schema fault",
+        errors == [] and len(loaded) == 2,
+        "; ".join(errors)[:110] or f"{len(loaded)} fragment(s) loaded",
+    )
+    merged, conflicts = rr.collect_announcements(loaded)
+    check(
+        "same `id` with DIFFERING `text` is reported as a conflict",
+        len(conflicts) == 1,
+        f"{len(conflicts)} conflict(s)",
+    )
+    check(
+        "...naming BOTH origins",
+        bool(conflicts) and all(slug in conflicts[0] for slug in pair),
+        conflicts[0][:110] if conflicts else "no conflict reported",
+    )
+    check(
+        "...and the contradiction is RENDERED, never silently resolved",
+        "CONFLICTING TEXT" in _render_for(loaded),
+        "the render hides which text won",
+    )
+    check(
+        "...while the merged view still carries one entry, so the conflict is the finding",
+        len(merged) == 1 and merged[0]["conflict"] != [],
+        f"entries={len(merged)} conflicts={merged[0]['conflict'] if merged else []}",
+    )
+    del tmp
+
+def probe_a_warning_without_evidence_fails() -> None:
+    """Severity `warning`/`critical` demands evidence, and the LOADER is where it lands."""
+    pair = probe_slugs()
+    _loaded, errors, tmp = _fragments_on_disk([
+        _fragment(pair[0], [
+            _announcement("unevidenced", "Peers act on this.", severity="warning", evidence="")
+        ]),
+    ])
+    check(
+        "a `warning`-severity announcement with empty `evidence` FAILS the fragment loader",
+        any("requires `evidence`" in e for e in errors),
+        errors[0][:110] if errors else "no error reported",
+    )
+    _ok, ok_errors, ok_tmp = _fragments_on_disk([
+        _fragment(pair[0], [_announcement("evidenced", "Peers act on this.", severity="warning")]),
+    ])
+    check(
+        "...and the same entry carrying evidence passes",
+        ok_errors == [],
+        "; ".join(ok_errors)[:90],
+    )
+    del tmp, ok_tmp
+
+def probe_a_command_shaped_check_fails() -> None:
+    """`check` names a predicate; a raw command is rejected rather than executed."""
+    command: list[str] = []
+    reg.validate_announcements(
+        [_announcement("cmd", "text", check="test -x /usr/bin/sqlite3")],
+        "probe",
+        reg.SCOPES,
+        command,
+    )
+    check(
+        "a command-shaped `check` is REJECTED",
+        any("looks like a command" in e for e in command),
+        command[0][:110] if command else "no error reported",
+    )
+    unknown: list[str] = []
+    reg.validate_announcements(
+        [_announcement("typo", "text", check="sqlite3_present_typo")], "probe", reg.SCOPES, unknown
+    )
+    check(
+        "an unknown predicate NAME is rejected too",
+        any("unknown check" in e for e in unknown),
+        unknown[0][:110] if unknown else "no error reported",
+    )
+
+def probe_a_future_review_by_fails() -> None:
+    errors: list[str] = []
+    reg.validate_announcements(
+        [_announcement("backwards", "text", since="2026-09-19", review_by="2026-09-01")],
+        "probe",
+        reg.SCOPES,
+        errors,
+    )
+    check(
+        "a `review_by` that precedes `since` is rejected",
+        any("precedes" in e for e in errors),
+        errors[0][:110] if errors else "no error reported",
+    )
+
+CHECKS = (
+    ("1. every fragment validates against the schema", check_fragments_validate),
+    ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
+    ("4. the committed render reproduces over state-bearing bytes", check_render_reproduces),
+    ("5. every known factory group is covered", check_coverage),
+    ("6. resolved_at is present, parseable, not in the future", check_resolved_at),
+    ("7. every announcement is well-formed and unambiguous", check_announcements),
+)
+
+PROBES = (
+    probe_a_hand_edit_is_named,
+    probe_only_the_stamp_advanced_passes,
+    probe_the_sentinel_would_rewrite_badges,
+    probe_same_id_same_text_is_one_entry,
+    probe_differing_text_under_one_id_fails,
+    probe_a_warning_without_evidence_fails,
+    probe_a_command_shaped_check_fails,
+    probe_a_future_review_by_fails,
+)
+
+def main() -> int:
+    print("Gate: factory registry")
+    print(f"  predicate: {PREDICATE}")
+    print("")
+    for label, function in CHECKS:
+        problems = function()
+        check(label, not problems, problems[0][:120] if problems else "")
+        for extra in problems[1:]:
+            print(f"        - {extra[:160]}")
+    print("")
+    print("Acceptance probes (each drives the live comparison or the validator directly):")
+    for probe in PROBES:
+        probe()
+    print("")
+    for line in counts:
+        print(f"  {line}")
+    print("")
+    if failures:
+        print(f"FAIL — {len(failures)} check(s) failed: {', '.join(failures)}")
+        return 1
+    print(f"OK — {len(CHECKS)} check(s) clean, {len(PROBES)} probe(s) passed")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

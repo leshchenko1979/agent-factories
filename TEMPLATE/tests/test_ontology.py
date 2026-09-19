@@ -28,6 +28,8 @@ ONTOLOGY = REPO / "ONTOLOGY.md"
 # the ontology itself is excluded because it must name every banned word.
 SCAN_SUFFIXES = {".md", ".tmpl"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__"}
+# A document shipped in both trees is one document — see `is_exempt`.
+TEMPLATE_PREFIX = "TEMPLATE/"
 
 # Lines that may use a banned word, each with the substring that justifies it.
 # An entry exempts a line only when the line ALSO contains `substring`, so a
@@ -152,6 +154,19 @@ def tracked_files() -> list[Path]:
 
 
 def is_exempt(rel: str, line: str) -> bool:
+    """Is this line justified? A file shipped in BOTH trees is one document.
+
+    `TEMPLATE/docs/best-practices.md` is the copy of `docs/best-practices.md`,
+    and `tests/test_docs_sync.py` already requires the two to be byte-identical.
+    So a justification that holds for one holds for the other, and keying the
+    list on the exact path would force a duplicate entry per mirrored path —
+    a duplicate that can drift from its twin while both read as justified. The
+    `TEMPLATE/` prefix is therefore stripped before the lookup, which covers
+    every current and future mirror without weakening the list: the exemption
+    still needs its own file, its own substring, and its own reason.
+    """
+    if rel.startswith(TEMPLATE_PREFIX):
+        rel = rel[len(TEMPLATE_PREFIX) :]
     return any(
         rel == path and substring in line for path, substring, _ in EXEMPTIONS
     )
