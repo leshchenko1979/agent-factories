@@ -24,10 +24,19 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# The telemetry reader is the SHARED predicate, never a local re-parse (issue #90).
+# `n=405` PART 5 rules the CLASS — "it is why the class, not the three call sites, is
+# the ruling" — so a fourth site may not carry its own scan. The path insert is the
+# sibling form: this file is run as a script (its own dir is already on the path) and
+# imported by `tests/`, and both must resolve the same reader.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from field_predicate import declared_telemetry, mentioned_telemetry  # noqa: E402
 
 # The `Subject` column's vocabulary, named once. `tests/test_rework.py` enforces the
 # same three values on the document; they live here as well because the audit *reads*
@@ -136,6 +145,22 @@ def format_cost_note(stats: dict[str, Any]) -> str:
         f"{stats.get('close_events', 0)} close rows state an outcome)"
     )
 
+def format_out_of_trailer_note(stats: dict[str, Any]) -> str:
+    """Which rows carry telemetry-shaped tokens the trailer scope EXCLUDED (issue #90).
+
+    The count alone is a number without a referent: a reader cannot tell a census from
+    a measurement without seeing the rows. So the note names them, and says why they
+    are out — an exclusion that cannot be audited is indistinguishable from a loss.
+    """
+    rows = stats.get("out_of_trailer_rows", []) or []
+    if not rows:
+        return "none — every telemetry-shaped token in the ledger sits inside a canonical trailer"
+    named = ", ".join(f"n={row.get('n')} ({row.get('event')})" for row in rows)
+    return (
+        "excluded from the totals above BY DESIGN: these rows carry a telemetry-shaped "
+        f"token outside the canonical trailer — {named}. Read each as prose, not as spend"
+    )
+
 def format_undeclared_text(stats: dict[str, Any]) -> str:
     """What the ledger does NOT say, reported rather than absorbed (clause 4)."""
     reports = stats.get("invalid_outcome_reports", []) or []
@@ -185,6 +210,8 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
             "total_tokens_in": 0,
             "total_tokens_out": 0,
             "total_turns": 0,
+            "out_of_trailer_rows": [],
+            "out_of_trailer_count": 0,
             "latest_closed_subject": None,
             "spot_check": None,
         }, set()
@@ -220,6 +247,10 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
     total_tokens_in = 0
     total_tokens_out = 0
     total_turns = 0
+    # Rows carrying a telemetry-shaped token OUTSIDE the canonical trailer (issue #90).
+    # Recorded, never aggregated: they are the rows the trailer scope deliberately set
+    # aside, and the count is what makes that exclusion auditable.
+    out_of_trailer_rows: list[dict[str, Any]] = []
 
     successful_closed_subjects: set[str] = set()
     close_events = 0
@@ -231,30 +262,40 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         ts = ev.get("ts", "")
         detail = ev.get("detail", "")
 
-        # Parse key-value metadata from detail
-        for part in detail.split():
-            if "=" in part:
-                k, v = part.split("=", 1)
-                if k in ("cost_usd", "cost"):
-                    try:
-                        total_cost_usd += float(v.rstrip("$"))
-                    except ValueError:
-                        pass
-                elif k in ("tokens_in", "in_tokens"):
-                    try:
-                        total_tokens_in += int(v)
-                    except ValueError:
-                        pass
-                elif k in ("tokens_out", "out_tokens"):
-                    try:
-                        total_tokens_out += int(v)
-                    except ValueError:
-                        pass
-                elif k == "turns":
-                    try:
-                        total_turns += int(v)
-                    except ValueError:
-                        pass
+        # Telemetry is read from the canonical TRAILER, by POSITION and never by event
+        # (issue #90 — this is `n=405` PART 5's class at its FOURTH call site). The old
+        # form split the whole detail and took every `key=value` token, so a row that
+        # REPORTED numbers was read as TAKING them: `n=382` is an intake row whose
+        # `cost_usd=26` is a census — "26 close rows carry cost_usd" — and it became
+        # the second-largest single cost in the ledger. Scope spans EVERY event, not
+        # `close` only: 22 `run` rows carry canonical trailer telemetry, so an
+        # event-scoped predicate would drop them.
+        declared = declared_telemetry(detail)
+        for key, value in declared:
+            try:
+                if key in ("cost_usd", "cost"):
+                    total_cost_usd += float(value.rstrip("$"))
+                elif key in ("tokens_in", "in_tokens"):
+                    total_tokens_in += int(value)
+                elif key in ("tokens_out", "out_tokens"):
+                    total_tokens_out += int(value)
+                elif key == "turns":
+                    total_turns += int(value)
+            except ValueError:
+                pass
+
+        # The rows whose telemetry-shaped tokens sit OUTSIDE the trailer, so the scope
+        # above is auditable rather than silent. Visibility ONLY: these tokens are NOT
+        # aggregated — that is the whole point — but a reader must be able to see what
+        # the trailer scope set aside, and where. A multiset difference, so a token
+        # both declared and merely mentioned still reports the mention.
+        leftover = Counter(f"{k}={v}" for k, v in mentioned_telemetry(detail)) - Counter(
+            f"{k}={v}" for k, v in declared
+        )
+        if leftover:
+            out_of_trailer_rows.append(
+                {"n": ev.get("n"), "event": ev_type, "tokens": sorted(leftover)}
+            )
 
         if ev_type == "intake" and subj and subj not in subjects_intake:
             subjects_intake[subj] = ts
@@ -372,6 +413,8 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         "total_tokens_in": total_tokens_in,
         "total_tokens_out": total_tokens_out,
         "total_turns": total_turns,
+        "out_of_trailer_rows": out_of_trailer_rows,
+        "out_of_trailer_count": len(out_of_trailer_rows),
         "latest_closed_subject": latest_closed,
         "spot_check": spot_check,
     }, set(subjects_close)
@@ -812,7 +855,8 @@ def format_report_markdown(
         f"| **Rework per Close** | `{round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ {rework_stats.get('closed_subjects', 0)} closed subjects |",
         f"| **Change Fail Rate** | `{round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}%` | {rework_stats.get('change_fail_rate_numerator', 0)} closes that produced a rework entry ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units — **linkage coverage `{rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)}`** entries carry a determinate Subject ({round(rework_stats.get('subject_coverage', 0.0) * 100, 1)}%); read the rate only against this coverage |",
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Mean intake→close duration over {len(ledger_stats.get('lead_times_sec', []))} sampled subjects |",
-        f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry |",
+        f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry — summed from each row's canonical TRAILER only, by position and across every event (issue #90) |",
+        f"| **Telemetry Outside the Trailer** | `{ledger_stats.get('out_of_trailer_count', 0)}` row(s) | {format_out_of_trailer_note(ledger_stats)} |",
         f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
         f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | {format_cost_note(ledger_stats)} |",
         f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
@@ -908,6 +952,7 @@ def main() -> int:
     print(f"Status: {'HEALTHY (PASS)' if healthy else ('GATES SKIPPED (metrics only)' if not gates_ran else 'DEGRADED (FAIL)')}")
     print(f"  - First-Pass Yield: {format_yield_text(ledger_stats)}")
     print(f"  - Cost / Successful Task: {format_cost_per_success_text(ledger_stats)}")
+    print(f"  - Telemetry Outside the Trailer: {ledger_stats.get('out_of_trailer_count', 0)} row(s) — {format_out_of_trailer_note(ledger_stats)}")
     print(f"  - Undeclared Outcomes: {format_undeclared_text(ledger_stats)}")
     print(f"  - Closed Subjects: {ledger_stats.get('closed_tasks', 0)} (close rows: {ledger_stats.get('close_events', 0)}) | Intake Subjects: {ledger_stats.get('intake_tasks', 0)}")
     print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (share: {round(rework_stats.get('rework_share', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ ({rework_stats.get('closed_subjects', 0)} + {rework_stats.get('total_entries', 0)}) | per close: {round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ {rework_stats.get('closed_subjects', 0)})")

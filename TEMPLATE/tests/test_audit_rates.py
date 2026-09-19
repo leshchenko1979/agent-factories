@@ -73,6 +73,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -583,12 +584,93 @@ def test_a_doctored_outcome_bucket_is_rejected():
     doctored["delivery"]["first_pass_yield"] = 1.0
     assert outcome_population_problems(doctored), "a yield with no population survived"
 
+def telemetry_scope_problems() -> list[str]:
+    """Rule 9 — telemetry is read from the canonical TRAILER, never from prose (#90).
+
+    `n=405` PART 5 rules the CLASS, not the three call sites it named, so the audit's
+    aggregator is in scope as a FOURTH site: it split the whole `detail` and took every
+    `key=value` token, which reads a row that REPORTS numbers as a row that TAKES them.
+    Measured on the live ledger, that over-reported cost by ~20% ($165.9265 against
+    $135.1871) because `n=382`, an INTAKE row, carries `cost_usd=26` meaning "26 close
+    rows carry cost_usd" — a census, and read as a value it was the second-largest
+    single cost in the ledger.
+
+    The probes below run a SYNTHETIC ledger through the real reader, so they pin the
+    reader's behaviour rather than a copy of it, and they assert both directions: prose
+    must not ADD to a total, and a declared trailer must still COUNT wherever it sits
+    (`run` rows carry telemetry too, so an event-scoped scope would drop 22 of them).
+    """
+    problems: list[str] = []
+    trailer = "closed; board=closed cost_usd=1.2500 tokens_in=10 tokens_out=20 turns=2"
+
+    def totals(rows: list[dict]) -> dict:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.jsonl"
+            path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+            stats, _ = audit_reader.parse_ledger(path)
+        return {k: stats[k] for k in (
+            "total_cost_usd", "total_tokens_in", "total_tokens_out", "total_turns",
+            "out_of_trailer_count",
+        )}
+
+    def row(n: int, event: str, detail: str) -> dict:
+        return {
+            "n": n, "ts": "2026-09-19T00:00:00Z", "event": event,
+            "actor": "worker", "subject": "#90", "detail": detail,
+        }
+
+    # (a) A close row DECLARES its telemetry: the total must see it.
+    declared = totals([row(1, "close", trailer)])
+    if declared["total_cost_usd"] != 1.25:
+        problems.append(f"a declared close trailer was not counted: {declared}")
+
+    # (b) A `run` row DECLARES telemetry too. Scope is positional, ALL events — an
+    #     event-scoped scope would report 0 here, and 22 live `run` rows with it.
+    on_run = totals([row(1, "run", trailer)])
+    if on_run["total_cost_usd"] != 1.25:
+        problems.append(f"a declared run trailer was not counted (event-scoped scope?): {on_run}")
+
+    # (c) THE PHANTOM. The same numbers, in an INTAKE row that merely REPORTS them,
+    #     with prose after them so they are not terminal — `n=382`'s real shape. Its
+    #     own detail reads: "field-like tokens over the 52 close rows give outcome=34
+    #     gate=30 cost_usd=26 turns=25 duration=25 tokens_out=23" and then keeps
+    #     talking. A positional reader must see those as a CENSUS, never as spend.
+    census = (
+        "Marker absence: field-like tokens over the 52 close rows give outcome=34 gate=30 "
+        "cost_usd=26 turns=25 duration=25 tokens_out=23, and the marker test is not one "
+        "of them — the census counts rows, it does not measure them."
+    )
+    phantom = totals([row(1, "intake", census)])
+    if phantom["total_cost_usd"] != 0.0:
+        problems.append(f"PROSE WAS READ AS SPEND: a census row added {phantom['total_cost_usd']} USD")
+    if phantom["total_turns"] != 0 or phantom["total_tokens_out"] != 0:
+        problems.append(f"a census row's prose reached the token/turn totals: {phantom}")
+
+    # ...and it is not silently dropped either: the exclusion is VISIBLE, which is the
+    # only way a reader can tell an audited exclusion from an unnoticed loss.
+    if phantom["out_of_trailer_count"] != 1:
+        problems.append(
+            f"the out-of-trailer exclusion is invisible: count={phantom['out_of_trailer_count']}"
+        )
+
+    # (d) A row that QUOTES another row's trailer is the same defect one level down
+    #     (`n=561` quotes `n=554`, and then keeps writing). Quoted telemetry is a
+    #     mention, not a declaration.
+    quoted = totals([
+        row(1, "intake", f"the repaired row ends {trailer}, quoted here as its evidence, and then continues."),
+    ])
+    if quoted["total_cost_usd"] != 0.0:
+        problems.append(f"a QUOTED trailer was read as a declaration: {quoted}")
+
+    return problems
+
 def main() -> int:
     payload = load_audit()
     problems = rate_form_problems(payload)
     problems += derivation_problems(payload, derive_fail_linkage())
     problems += outcome_reader_problems()
     problems += outcome_population_problems(payload)
+    problems += telemetry_scope_problems()
     if problems:
         print("rate gate FAILED:", file=sys.stderr)
         for p in problems:

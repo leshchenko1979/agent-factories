@@ -133,6 +133,29 @@ def declared_telemetry(detail: str) -> list[tuple[str, str]]:
                 found.append((key, value))
     return found
 
+def mentioned_telemetry(detail: str) -> list[tuple[str, str]]:
+    """`(key, value)` for every telemetry-shaped token in `detail`, ANYWHERE.
+
+    A MENTION, never a declaration — and the name carries that, because the two were
+    once the same scan and the confusion IS the defect this module closes. This exists
+    for VISIBILITY alone: a reader that wants to show a human which rows carry
+    telemetry-shaped tokens OUTSIDE the canonical trailer (issue #90's exclusion
+    print) needs the anywhere-scan. A reader that wants a NUMBER must use
+    `declared_telemetry` and get the trailer's.
+
+    Aggregating this list is instance (a) of the class: `n=382` is an intake row whose
+    `cost_usd=26` is a CENSUS — "26 close rows carry cost_usd" — and read as a value
+    it became the second-largest single cost in the ledger.
+    """
+    found: list[tuple[str, str]] = []
+    for token in str(detail).split():
+        for key in TELEMETRY_KEYS:
+            value = keyed_value(token, key)
+            if value is not None:
+                found.append((key, value))
+                break
+    return found
+
 def telemetry_value_problem(key: str, value: str) -> str | None:
     """The readable problem when `value` does not parse for `key`'s type, else None.
 
