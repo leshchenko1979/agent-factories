@@ -229,20 +229,42 @@ def test_age_hours_returns_none_for_unreadable_input():
 
 def test_review_by_in_the_past_renders_review_due():
     past = {"id": "p", "text": "T", "severity": "warning", "review_by": "2020-01-01"}
-    lines = "\n".join(rr._announcement_line(past, {}))
+    lines = "\n".join(rr._announcement_line(past, {}, rr.parse_instant("2021-01-01T00:00:00Z")))
     assert "REVIEW DUE" in lines, lines
 
 
 def test_review_by_in_the_future_does_not_render_review_due():
     future = {"id": "f", "text": "T", "severity": "warning", "review_by": "2099-01-01"}
-    lines = "\n".join(rr._announcement_line(future, {}))
+    lines = "\n".join(rr._announcement_line(future, {}, rr.parse_instant("2026-09-19T00:00:00Z")))
     assert "REVIEW DUE" not in lines, lines
     assert "review by: 2099-01-01" in lines, lines
 
 
+def test_review_due_is_measured_at_the_render_instant_not_the_wall_clock():
+    """The document states its instant, so every comparison inside it uses that instant.
+
+    The defect this pins: `_announcement_line` read `datetime.datetime.now()` for the
+    review-due flag while `render_markdown` measured every other value in the document at
+    `ctx["resolved_at"]`, so ONE RENDER CARRIED TWO CLOCKS. A review date crossing its
+    boundary between the commit and a later re-render then changed the bytes with no input
+    having changed — non-determinism, not drift, and the drift gate compares bytes.
+
+    The probe is date-independent and does NOT rely on the review date being in the past
+    of today: it drives one entry at two instants that straddle the date and asserts the
+    flag MOVES between them. A wall-clock implementation returns the same verdict for both
+    calls — microseconds apart — so `before != after` fails there whatever the date.
+    """
+    entry = {"id": "boundary", "text": "T", "severity": "warning", "review_by": "2026-09-19"}
+    before = "\n".join(rr._announcement_line(entry, {}, rr.parse_instant("2026-09-19T00:00:00Z")))
+    after = "\n".join(rr._announcement_line(entry, {}, rr.parse_instant("2026-09-20T00:00:00Z")))
+    assert "REVIEW DUE" not in before, before
+    assert "REVIEW DUE" in after, after
+    assert before != after, "the flag did not move with the instant it was measured at"
+
+
 def test_unknown_check_name_renders_not_checked_instead_of_crashing():
     entry = {"id": "c", "text": "T", "severity": "warning", "check": "no_such_predicate"}
-    lines = "\n".join(rr._announcement_line(entry, {}))
+    lines = "\n".join(rr._announcement_line(entry, {}, rr.parse_instant("2026-09-19T00:00:00Z")))
     assert "NOT CHECKED" in lines, lines
 
 
@@ -424,6 +446,37 @@ def test_past_review_by_renders_review_due_marker_in_the_document():
     }
     markdown = rr.render_markdown(_ctx([_fragment("alpha", announcements=[notice])]))
     assert "⚠️ REVIEW DUE" in markdown, markdown[:800]
+
+
+def test_the_document_measures_review_due_at_its_own_resolved_at():
+    """Both `_announcement_line` call sites get the RENDER's instant, not the wall clock.
+
+    A probe that drives `_announcement_line` directly proves the helper, not the wiring —
+    and the wiring is where this defect lived: `render_markdown` computes `now` from
+    `ctx["resolved_at"]`, and both call sites inside it have to be handed that value. So
+    the flag is asserted in the DOCUMENT, at two `resolved_at` stamps that straddle the
+    review date. The announcement declares `affects: profile`, which renders it BOTH in
+    the severity band and in the per-fragment "Announcements reaching this factory" block,
+    so the count assertion covers the second call site as well as the first. A wall-clock
+    implementation — or a call site left on the old arity — renders the same document at
+    both stamps, or raises, rather than moving the flag.
+    """
+    notice = {
+        "id": "boundary",
+        "severity": "warning",
+        "text": "T",
+        "since": "2026-09-19",
+        "affects": ["profile"],
+        "review_by": "2026-09-19",
+    }
+    fragment = _fragment("alpha", announcements=[notice])
+    before = rr.render_markdown(_ctx([fragment], at="2026-09-19T00:00:00Z"))
+    after = rr.render_markdown(_ctx([fragment], at="2026-09-20T00:00:00Z"))
+    assert "⚠️ REVIEW DUE" not in before, before[:600]
+    assert "⚠️ REVIEW DUE" in after, after[:600]
+    assert after.count("⚠️ REVIEW DUE") >= 2, (
+        f"the flag reached {after.count('⚠️ REVIEW DUE')} of the two call sites"
+    )
 
 def test_a_shared_id_renders_once_in_the_block_and_once_in_the_index():
     """Two fragments announcing one id = ONE entry carrying both declarers."""

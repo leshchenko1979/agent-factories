@@ -461,8 +461,20 @@ def _fragment_root_announcements(fragment: dict, slug: str) -> list[dict]:
     return out
 
 
-def _announcement_line(entry: dict, check_cache: dict, indent: str = "") -> list[str]:
-    """One announcement, rendered identically wherever it appears."""
+def _announcement_line(
+    entry: dict, check_cache: dict, now: datetime.datetime, indent: str = ""
+) -> list[str]:
+    """One announcement, rendered identically wherever it appears.
+
+    `now` is the RENDER's instant — derived from `ctx["resolved_at"]` — and never
+    the wall clock. This function used to read `datetime.datetime.now()` for the
+    review-due flag while every other measurement in the document came off the
+    stamp, so one render carried TWO clocks: a review date crossing its boundary
+    between the commit and a later re-render changed the bytes with no input
+    having changed, which is non-determinism rather than drift. The document
+    states its instant, so every comparison inside it is measured at that
+    instant.
+    """
     mark = SEVERITY_MARK.get(str(entry.get("severity")), "•")
     lines = [f"{indent}- {mark} **`{entry.get('id')}`** — {entry.get('text')}"]
     meta = [
@@ -472,7 +484,7 @@ def _announcement_line(entry: dict, check_cache: dict, indent: str = "") -> list
     if entry.get("review_by"):
         due = ""
         review = parse_instant(entry.get("review_by"))
-        if review is not None and review < datetime.datetime.now(datetime.timezone.utc):
+        if review is not None and review < now:
             due = " ⚠️ REVIEW DUE"
         meta.append(f"review by: {entry['review_by']}{due}")
     if entry.get("origins"):
@@ -601,7 +613,7 @@ def render_markdown(ctx: dict) -> str:
         out.append(f"### {SEVERITY_MARK.get(severity, '•')} {severity} ({len(band)})")
         out.append("")
         for entry in band:
-            out.extend(_announcement_line(entry, checks))
+            out.extend(_announcement_line(entry, checks, now))
         out.append("")
 
     # --- Reachability ------------------------------------------------------
@@ -702,7 +714,7 @@ def render_markdown(ctx: dict) -> str:
                     (a for a in ctx["announcements"] if a["id"] == notice.get("id")),
                     None,
                 )
-                out.extend(_announcement_line(merged or notice, checks))
+                out.extend(_announcement_line(merged or notice, checks, now))
             out.append("")
 
         out.append("**Lanes**")
