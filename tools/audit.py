@@ -784,6 +784,22 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_registry.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_registry.py"])
 
+    # 35. Patrol host-state gate: the board-intake predicate is fed LIVE host state, so its
+    #     forward leg examines a real open set instead of zero. The predicate itself
+    #     (tests/test_board_intake_recorded.py) is pure and offline by necessity — a repo
+    #     gate cannot call `gh` — so its live test passes an EMPTY board, and a forward leg
+    #     that examines 0 open issues reports the same green as one that passes.
+    #     tools/patrol_host_state.py is part (b), the host-side runner the predicate's own
+    #     docstring defers: it reads the board WHOLE (the reverse leg is sound only over the
+    #     full board), feeds it to board_intake_problems(complete_board=True), and prints
+    #     each leg's own coverage count so "clean" and "not examined" are never the same
+    #     output. A board that could not be read exits 2 and emits NO verdict — a broken
+    #     read rendering as a clean patrol is the one failure mode a patrol cannot survive.
+    #     This gate is OFFLINE: every probe injects a synthetic board, so the audit itself
+    #     never calls `gh` (issue #95, ruling n=580 PART 2).
+    if (repo_root / "tests/test_patrol_host_state.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_patrol_host_state.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

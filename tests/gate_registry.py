@@ -248,6 +248,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_no_shrink.py",
     "test_ledger_schema.py",
     "test_ontology.py",
+    "test_patrol_host_state.py",
     "test_rework.py",
     "test_roadmap_transition.py",
     "test_score_artifact_sections.py",
