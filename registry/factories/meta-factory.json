@@ -51,6 +51,12 @@
       "audience": "agent",
       "entry": "cron factory-growth-map-biweekly",
       "cadence": "1st and 15th, 09:00Z"
+    },
+    {
+      "name": "meta-factory-registry-attest",
+      "audience": "agent",
+      "entry": "cron meta-factory-registry-attest",
+      "cadence": "daily 06:00Z"
     }
   ],
   "substrates_owned": [
@@ -114,5 +120,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-19T14:21:55Z"
+  "attested_at": "2026-09-19T15:39:01Z"
 }

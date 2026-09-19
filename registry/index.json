@@ -1,16 +1,33 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T15:07:58Z",
+  "resolved_at": "2026-09-19T15:40:28Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 61,
-    "announcements": 10,
-    "jobs": 40,
+    "announcements": 11,
+    "jobs": 41,
     "unattributed_jobs": 7
   },
   "announcements": [
+    {
+      "id": "gate-runner-timeout-flake",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.",
+      "since": "2026-09-19T15:37:24Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "Read at source 2026-09-19T15:37Z, three files: /root/agent-factories/tools/audit.py:519 timeout=30 and :533 exit_code 99 with duration_sec 0.0; /root/agent-factories/TEMPLATE/tools/audit.py:519 and :533 byte-identical shape (def run_gate at :509 in both); /root/miidas/tools/audit.py:88 GATE_TIMEOUT_SEC = 180, applied at :286. The TEMPLATE copy is the load-bearing one: every factory bootstrapped from it inherits the defect. Fix landed in miidas commit e4c5ab5.",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "miidas"
+      ],
+      "conflict": []
+    },
     {
       "id": "pacemaker-triggers-still-pass-mode-quiet",
       "severity": "warning",
@@ -83,7 +100,7 @@
       "id": "miidas-volume-namespace-on-apps",
       "severity": "warning",
       "scope": "profile",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
       "since": "2026-09-13T09:56:00Z",
       "review_by": null,
       "check": null,
@@ -639,7 +656,7 @@
       "factory": "meta-factory",
       "display_name": "Factories",
       "status": "attested",
-      "attested_at": "2026-09-19T14:21:55Z",
+      "attested_at": "2026-09-19T15:39:01Z",
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
@@ -696,6 +713,12 @@
           "audience": "agent",
           "entry": "cron factory-growth-map-biweekly",
           "cadence": "1st and 15th, 09:00Z"
+        },
+        {
+          "name": "meta-factory-registry-attest",
+          "audience": "agent",
+          "entry": "cron meta-factory-registry-attest",
+          "cadence": "daily 06:00Z"
         }
       ],
       "lanes": [
@@ -783,7 +806,7 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-19T14:21:30Z",
+      "attested_at": "2026-09-19T15:37:24Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
@@ -897,7 +920,7 @@
         {
           "id": "miidas-volume-namespace-on-apps",
           "severity": "warning",
-          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
+          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
           "scope": "profile",
           "since": "2026-09-13T09:56:00Z",
           "review_by": null,
@@ -932,6 +955,19 @@
             "profile"
           ],
           "evidence": null
+        },
+        {
+          "id": "gate-runner-timeout-flake",
+          "severity": "warning",
+          "text": "The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.",
+          "scope": "profile",
+          "since": "2026-09-19T15:37:24Z",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "Read at source 2026-09-19T15:37Z, three files: /root/agent-factories/tools/audit.py:519 timeout=30 and :533 exit_code 99 with duration_sec 0.0; /root/agent-factories/TEMPLATE/tools/audit.py:519 and :533 byte-identical shape (def run_gate at :509 in both); /root/miidas/tools/audit.py:88 GATE_TIMEOUT_SEC = 180, applied at :286. The TEMPLATE copy is the load-bearing one: every factory bootstrapped from it inherits the defect. Fix landed in miidas commit e4c5ab5."
         }
       ]
     },
@@ -1786,6 +1822,22 @@
       "profile": "ops",
       "owner": "meta-factory",
       "owner_basis": "name prefix"
+    },
+    {
+      "id": "9ec28cec-100c-4325-ba3e-62972351ff0d",
+      "name": "meta-factory-registry-attest",
+      "cron_expr": "0 6 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-20T06:00:00+00:00",
+      "last_run_at": null,
+      "deliver_to": "session:23549292-77ff-40d1-97e3-5aa0bdd19d74",
+      "trigger_cmd": null,
+      "profile": "ops",
+      "owner": "meta-factory",
+      "owner_basis": "deliver_to -> lane"
     },
     {
       "id": "a2936da9-aa98-4b80-b5e8-9a482912f613",

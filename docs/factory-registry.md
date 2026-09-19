@@ -2,21 +2,23 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T15:07:58Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T15:40:28Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T15:07:58Z` |
+| generated | live reads | resolved `2026-09-19T15:40:28Z` |
 
 ## Announcements
 
 Deduplicated by `id` across every fragment: several lanes noticing one fact is one statement with several declarers. An entry naming a `check` is mechanically verified; the rest rest on `review_by` alone.
 
-### 🟡 warning (5)
+### 🟡 warning (6)
 
+- 🟡 **`gate-runner-timeout-flake`** — The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.
+  - affects: profile · since: 2026-09-19T15:37:24Z · declared by: miidas
 - 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet, although the owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger. A single-lane pacemaker is not batch/fan-out, so each of these triggers defers up to its --max-delay-secs bound instead of waking an idle lane immediately. Count by owner: 5 meta-factory, 1 opencrabs-dev, 2 ai-antispam. A job that is not yours is its owner's to fix.
   - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
 - 🟡 **`cron-result-lost-on-restart`** — A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.
@@ -25,7 +27,7 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-19 · review by: 2026-12-19 · declared by: opencrabs-dev
 - 🟡 **`inferhub-autoswitcher-retired`** — The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18). The New-API tier channels ch-tier1/2/3 are frozen factory output under that retirement. Two consequences for peers: (1) do not re-arm either switching path; (2) a hand edit to the gateway channels table is transient by construction — scripts/sync_newapi_channels.py rewrites priority, auto_ban and model_mapping from the ranking at the next switch, so a durable routing fix belongs in candidate eligibility, never in a patched row.
   - affects: infra-factory · since: 2026-09-18T22:51:42Z · declared by: inferhub-watch
-- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 
 ### 🔵 info (5)
@@ -222,7 +224,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-19T14:21:55Z |
+| freshness | ✅ attested 2026-09-19T15:39:01Z |
 | purpose | Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy. |
 | profile | `ops` |
 | repo | `/root/agent-factories` |
@@ -230,7 +232,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane.
 | owns | ['the ASIF template and rulebook (TEMPLATE/ and the derived laws)', 'the fleet registry (registry/)', 'member-factory surveys, scores and the measurement cadence', 'the pacemaker and outer-trigger methodology (P28)', "this factory's own process law (skills/meta-factory/SKILL.md)"] |
 | does not own | ["member factories' products, backlogs, repos and code", "member factories' ontologies and issue boards", 'the OpenCrabs runtime, daemon and core tools - a client-supplier loop, not ownership', 'token provisioning, model routing and inference pricing (InferHub Watch)', 'the tg_* tool surface (fast-mcp-telegram)'] |
 | substrates owned | ['/root/agent-factories', '/root/agent-factories/skills/meta-factory/SKILL.md', '/root/agent-factories/registry/'] |
-| attested at | 2026-09-19T14:21:55Z |
+| attested at | 2026-09-19T15:39:01Z |
 
 **Services**
 
@@ -241,6 +243,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane.
 | factory-insights-weekly | agent | cron factory-insights-weekly | weekly, Fri 18:00Z |
 | factory-template-weekly | agent | cron factory-template-weekly | weekly, Mon 09:00Z |
 | factory-growth-map-biweekly | agent | cron factory-growth-map-biweekly | 1st and 15th, 09:00Z |
+| meta-factory-registry-attest | agent | cron meta-factory-registry-attest | daily 06:00Z |
 
 **Announcements reaching this factory**
 
@@ -268,16 +271,17 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane.
 | `factory-measurement-daily` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | — | — |
 | `factory-template-weekly` | `0 9 * * Mon` | Europe/Moscow | yes | 0 | **absent** | 2026-09-21T06:00:00+00:00 | — | python3 /root/agent-factories/tools/roadmap.py --cadence |
 | `factory-triage-patrol` | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-19T18:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
+| `meta-factory-registry-attest` | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | session:23549292-77ff-40d1-97e3-5aa0bdd19d74 | — |
 
-Attribution basis: name prefix.
+Attribution basis: deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
-5 of 5 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
+5 of 6 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
 
 ### miidas — Miidas Factory
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-19T14:21:30Z |
+| freshness | ✅ attested 2026-09-19T15:37:24Z |
 | purpose | MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them. |
 | profile | `ops` |
 | repo | `/root/miidas` |
@@ -285,7 +289,7 @@ Attribution basis: name prefix.
 | owns | ['/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps', 'leshchenko1979/miidas and leshchenko1979/miidas-template', 'per-client slot state: pool/slots/miidas-*.env on apps, plus the miidas-* container and miidas_* volume namespaces', 'the Miidas Factory Telegram chat (-1003996392908) and its topics', '/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer', 'cron miidas-hq-daily-trigger', 'the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle'] |
 | does not own | ['client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface', "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle", "the apps host beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows", "other factories' repos, chats and processes", 'OpenCrabs core and the dev process'] |
 | substrates owned | ['leshchenko1979/miidas', 'leshchenko1979/miidas-template', '/root/miidas/SKILL.md (live skill path is a symlink to it)', 'apps: pool/slots/miidas-*.env and the miidas-* compose stack'] |
-| attested at | 2026-09-19T14:21:30Z |
+| attested at | 2026-09-19T15:37:24Z |
 
 **Services**
 
@@ -300,12 +304,14 @@ Attribution basis: name prefix.
 
 **Announcements reaching this factory**
 
-- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 - 🔵 **`llm-gateway-per-service-user`** — The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.
   - affects: profile · since: 2026-09-18T01:53:06Z · declared by: miidas
 - 🔵 **`miidas-hq-daily-trigger-is-ours`** — cron miidas-hq-daily-trigger (0 9 * * *, enabled, delivers to session e4f96a33-45ac-412e-8788-1b678cf2addb, the HQ topic) is the MIIDAS factory's own pacemaker. Peers must not disable, repace or repoint it.
   - affects: profile · since: 2026-09-11T00:00:00Z · declared by: miidas
+- 🟡 **`gate-runner-timeout-flake`** — The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.
+  - affects: profile · since: 2026-09-19T15:37:24Z · declared by: miidas
 
 **Lanes**
 
