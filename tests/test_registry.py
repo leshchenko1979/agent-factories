@@ -81,6 +81,7 @@ import datetime
 import difflib
 import json
 import re
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -722,6 +723,82 @@ def probe_a_future_review_by_fails() -> None:
         errors[0][:110] if errors else "no error reported",
     )
 
+def probe_the_box_wide_reader_reaches_the_default_home() -> None:
+    """#102: the box-wide leg is a SUPERSET of the profile glob, and it says so.
+
+    The defect this pins is a claim wider than its reader: `check_cron_min_gap_ge_6h`
+    claims the BOX and read `profile_db_glob()`, so the one job on this box below the
+    6 h floor — in the DEFAULT home — sat outside the population the predicate could
+    see, and the predicate reported HOLDS.
+
+    The fixture is a THROWAWAY root, so no live DB is opened and the offender can be
+    placed exactly where the old reader could not reach it. Both halves of the fix are
+    asserted: the wider reader FINDS it, and a home the enumeration cannot reach is
+    REPORTED as unreached rather than silently dropped — a narrower read that says so
+    is the point, because a narrower read that stays quiet is the defect.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        # Root A carries BOTH a default home and a profile home, plus a directory that
+        # yields no DB at all.
+        root_a = base / "a" / "profiles"
+        (root_a / "ops").mkdir(parents=True)
+        (root_a / "ghost").mkdir()
+        default_db = base / "a" / "opencrabs.db"
+        profile_db = root_a / "ops" / "opencrabs.db"
+        for path, rows in (
+            (default_db, [("default-offender", "0 9,14,19 * * *")]),
+            (profile_db, [("profile-fine", "0 */6 * * *")]),
+        ):
+            conn = sqlite3.connect(path)
+            conn.execute("create table cron_jobs(name text, cron_expr text, enabled integer)")
+            conn.executemany("insert into cron_jobs values (?, ?, 1)", rows)
+            conn.commit()
+            conn.close()
+
+        dbs, unreached = reg.opencrabs_home_dbs(root=root_a)
+        check(
+            "the box-wide reader opens the DEFAULT home the profile glob cannot reach",
+            default_db in dbs and profile_db in dbs,
+            f"{len(dbs)} db(s): {[d.parent.name for d in dbs]}",
+        )
+        offenders, _unreadable, checked = reg.cron_min_gap_problems(dbs)
+        check(
+            "...and the offender in that default home is FOUND, not skipped",
+            any("default-offender" in o and "300 min" in o for o in offenders),
+            f"{checked} job(s) read; offenders: {offenders}",
+        )
+        check(
+            "a home that yields no DB is REPORTED as unreached, never omitted",
+            any("ghost" in u for u in unreached),
+            f"unreached: {unreached}",
+        )
+
+        # Root B has no default home at all. An absent default home must be stated as
+        # absent: "nothing to check there" and "clean there" are different answers.
+        root_b = base / "b" / "profiles"
+        root_b.mkdir(parents=True)
+        _dbs_b, unreached_b = reg.opencrabs_home_dbs(root=root_b)
+        check(
+            "an ABSENT default home is stated as absent, not read as clean",
+            any("default home" in u for u in unreached_b),
+            f"unreached: {unreached_b}",
+        )
+
+        # The widening must NOT have leaked into the profile-scoped reader: its four
+        # consumers resolve declared lanes against ONE manifest's profiles, and adding
+        # another home's bindings to that match set is how a resolver picks the wrong
+        # daemon. A strict subset is the property, not a count — the count moves with
+        # whatever probe profiles happen to exist on the box.
+        box_dbs, _ = reg.opencrabs_home_dbs()
+        globbed = reg.profile_db_glob()
+        check(
+            "profile_db_glob() keeps its profile scope — the box reader is a strict superset",
+            set(globbed) < set(box_dbs)
+            and all(str(p).startswith(str(reg.PROFILE_ROOT)) for p in globbed),
+            f"profile glob {len(globbed)} db(s), box reader {len(box_dbs)} db(s)",
+        )
+
 CHECKS = (
     ("1. every fragment validates against the schema", check_fragments_validate),
     ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
@@ -741,6 +818,7 @@ PROBES = (
     probe_a_warning_without_evidence_fails,
     probe_a_command_shaped_check_fails,
     probe_a_future_review_by_fails,
+    probe_the_box_wide_reader_reaches_the_default_home,
 )
 
 def main() -> int:

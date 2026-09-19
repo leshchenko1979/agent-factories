@@ -719,15 +719,66 @@ def profile_db_glob() -> list[Path]:
     return sorted(PROFILE_ROOT.glob("*/opencrabs.db"))
 
 
-def check_cron_min_gap_ge_6h() -> tuple[bool, str]:
-    """No ENABLED job on the box may have a minimum gap below 6 h."""
+def opencrabs_home_dbs(root: Path | None = None) -> tuple[list[Path], list[str]]:
+    """(DBs, unreached) for every OpenCrabs home reachable from the declared root.
+
+    The population is the BOX, and it is deliberately NOT `profile_db_glob()`'s:
+    that function's four consumers resolve declared lanes against ONE manifest's
+    profiles, and adding another home's bindings to that match set is how a
+    resolver starts picking the wrong daemon. So the box-wide leg reads through
+    THIS function instead, and `profile_db_glob()` keeps its profile scope (#102).
+
+    The box is the default home at `PROFILE_ROOT.parent / "opencrabs.db"` plus
+    every profile home under `PROFILE_ROOT`. That set is a SUPERSET of the live
+    daemons' jobs, which is the conservative side for a floor law. It is
+    deliberately not derived from systemd: a predicate must not gain a new
+    failure mode, and an enumeration that needs a supervisor to answer is one
+    more way to answer "nothing to check".
+
+    `unreached` names every home that yielded no DB, and it is RETURNED rather
+    than dropped: a silently narrower read is exactly the defect this function
+    exists to stop, so a home the enumeration could not reach is stated as
+    unreached and an absent default home is stated as absent. The predicate's
+    VERDICT does not turn on this list — a leftover profile directory is not a
+    daemon — but its evidence does, because "0 offenders" over a population
+    nobody named is the answer this reader was built to stop giving.
+    """
+    if root is None:
+        if PROFILE_ROOT is None:
+            raise FleetManifestError(
+                "the fleet manifest declares no `profile_root`, so no OpenCrabs home can "
+                "be located — a predicate over an unknown root would answer `nothing to check`"
+            )
+        root = PROFILE_ROOT
+    dbs: list[Path] = []
+    unreached: list[str] = []
+    default_db = root.parent / "opencrabs.db"
+    if default_db.is_file():
+        dbs.append(default_db)
+    else:
+        unreached.append(f"default home {root.parent}: no opencrabs.db")
+    if not root.is_dir():
+        unreached.append(f"profile root {root}: not a directory")
+        return dbs, unreached
+    for home in sorted(entry for entry in root.iterdir() if entry.is_dir()):
+        db = home / "opencrabs.db"
+        if db.is_file():
+            dbs.append(db)
+        else:
+            unreached.append(f"profile home {home}: no opencrabs.db")
+    return dbs, unreached
+
+def cron_min_gap_problems(dbs: list[Path]) -> tuple[list[str], list[str], int]:
+    """(offenders, unreadable, enabled jobs checked) over the given DBs.
+
+    Separate from the check that calls it so it can be driven over a THROWAWAY
+    root: a floor law that has only ever run against the live box has not been
+    shown to see a job that breaks it, and the one offender this predicate missed
+    until #102 sat in a home the live reader could not reach.
+    """
     offenders: list[str] = []
     unreadable: list[str] = []
     checked = 0
-    try:
-        dbs = profile_db_glob()
-    except FleetManifestError as exc:
-        return (False, str(exc))
     for db in dbs:
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
@@ -744,13 +795,34 @@ def check_cron_min_gap_ge_6h() -> tuple[bool, str]:
                     unreadable.append(f"{name} ({expr}): {note}")
                 elif gap < MIN_CRON_GAP_MINUTES:
                     offenders.append(f"{name} ({expr}) gap {gap} min")
+        except sqlite3.Error as exc:
+            unreadable.append(f"{db.name}: {exc}")
         finally:
             conn.close()
+    return offenders, unreadable, checked
+
+def check_cron_min_gap_ge_6h() -> tuple[bool, str]:
+    """No ENABLED job in the box's OpenCrabs homes may have a minimum gap below 6 h.
+
+    The claim is about the BOX, so the read is box-wide, and the evidence names
+    the population it read — the job count AND the home count — because the
+    defect this predicate carried until #102 was precisely a box-wide claim over
+    a profile-scoped reader: it answered HOLDS while the only offender on the box
+    sat in the default home that reader could not reach.
+    """
+    try:
+        dbs, unreached = opencrabs_home_dbs()
+    except FleetManifestError as exc:
+        return (False, str(exc))
+    offenders, unreadable, checked = cron_min_gap_problems(dbs)
+    scope = f"{checked} enabled job(s) across {len(dbs)} home(s)"
+    if unreached:
+        scope += f"; {len(unreached)} home(s) unreached: {'; '.join(unreached[:3])}"
     if offenders:
-        return False, "; ".join(offenders[:4])
+        return False, f"{'; '.join(offenders[:4])} — read {scope}"
     if unreadable:
-        return False, f"{len(unreadable)} job(s) unreadable: {'; '.join(unreadable[:3])}"
-    return True, f"{checked} enabled job(s), none below {MIN_CRON_GAP_MINUTES} min"
+        return False, f"{len(unreadable)} job(s) unreadable: {'; '.join(unreadable[:3])} — read {scope}"
+    return True, f"{scope}, none below {MIN_CRON_GAP_MINUTES} min"
 
 
 def check_daemon_cgroup_cap_present() -> tuple[bool, str]:

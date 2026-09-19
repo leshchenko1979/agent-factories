@@ -252,6 +252,12 @@ leaning on shared memory rather than on what it said.
   sentences displaced its own canonical `cost_usd=2.7719 tokens_out=9956523 turns=1 …`, which
   was canonical when the row was written. n=303 is **not** backfilled — the law above bars it
   — and stands as the measured precedent (#91, ruling n=572 PART 3).
+- **A predicate's SCOPE is its reader's population, and the two are stated together.** A
+  predicate that claims the box and reads one profile root answers about the profile root,
+  and its evidence must name the population it read — the count and the homes — so a
+  narrower read is visible as a narrower read rather than as a clean box. An enumeration
+  that cannot name its own population is not allowed to report HOLDS, and a home it could
+  not reach is reported as unreached, never omitted (#102).
 
 ---
 

@@ -261,10 +261,10 @@ def _descending_since(value: object) -> tuple[int, float]:
 def run_check(name: object, cache: dict) -> tuple[bool | None, str]:
     """Run one allowlisted predicate, once per render.
 
-    The cache matters: `cron_min_gap_ge_6h` opens every profile database and
-    `daemon_cgroup_cap_present` shells out to systemd, so six announcements
-    citing one predicate must not run it six times on a box whose daemons live
-    under a 768 MiB cgroup cap.
+    The cache matters: `cron_min_gap_ge_6h` opens every OpenCrabs home's database
+    — the box-wide read #102 widened it to — and `daemon_cgroup_cap_present`
+    shells out to systemd, so six announcements citing one predicate must not run
+    it six times on a box whose daemons live under a 768 MiB cgroup cap.
     """
     if not isinstance(name, str) or not name:
         return None, "no check declared"
@@ -290,25 +290,37 @@ def run_check(name: object, cache: dict) -> tuple[bool | None, str]:
 # three NO_EVIDENCE runs (fork #299/#364). The pair carries the meaning, so the
 # pair is what renders.
 
-def cron_rows() -> tuple[list[dict], list[str]]:
-    """Every cron row on the box, read in place from each profile's DB.
+def cron_rows() -> tuple[list[dict], list[str], list[str]]:
+    """Every cron row in the DECLARED PROFILES, read in place from each profile's DB.
+
+    The population is the declared profile root, NOT the box, and the section that
+    prints these rows states it: the rows are attributed against the factories one
+    manifest declares, so a home outside that root is outside this reader and its
+    jobs are not counted here. The box-wide floor law reads through
+    `registry.opencrabs_home_dbs` instead, which is the population its own claim
+    names — a reader and the claim made over it are one decision, not two (#102).
 
     An undeclared `profile_root` is reported as an ERROR rather than yielding no
     rows: the renderer would otherwise publish a fleet with zero jobs, which
     reads as a clean box rather than as an unread one.
+
+    Returns `(rows, errors, homes)` — `homes` is the population the read actually
+    covered, so the render can NAME it instead of asserting a scope it never read.
     """
     rows: list[dict] = []
     errors: list[str] = []
+    homes: list[str] = []
     try:
         dbs = profile_dbs()
     except FleetManifestError as exc:
-        return [], [str(exc)]
+        return [], [str(exc)], []
     for db in dbs:
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
         except sqlite3.Error as exc:
             errors.append(f"{db}: {exc}")
             continue
+        homes.append(db.parent.name)
         try:
             available = {r[1] for r in conn.execute("PRAGMA table_info(cron_jobs)")}
             if not available:
@@ -323,7 +335,7 @@ def cron_rows() -> tuple[list[dict], list[str]]:
             errors.append(f"{db}: {exc}")
         finally:
             conn.close()
-    return rows, errors
+    return rows, errors, homes
 
 
 def job_owner(job: dict, uuid_owner: dict, chat_owner: dict) -> tuple[str | None, str]:
@@ -417,7 +429,7 @@ def build_context(
     announcements, conflicts = collect_announcements(fragments)
     problems.extend(conflicts)
 
-    jobs, job_errors = cron_rows()
+    jobs, job_errors, job_homes = cron_rows()
     problems.extend(job_errors)
     for job in jobs:
         owner, basis = job_owner(job, uuid_owner, chat_owner)
@@ -430,6 +442,7 @@ def build_context(
             "factories": factories,
             "announcements": announcements,
             "jobs": jobs,
+            "job_homes": job_homes,
             "problems": problems,
         },
         problems,
@@ -741,10 +754,24 @@ def render_markdown(ctx: dict) -> str:
 
     # --- Unattributed jobs -------------------------------------------------
     orphans = [j for j in ctx["jobs"] if not j.get("_owner")]
+    homes = ctx.get("job_homes") or []
     out.append("## Unattributed jobs")
     out.append("")
+    # The population is STATED, never implied. The section's own claim used to read
+    # "every cron row on the box" over a reader that reads the declared profiles,
+    # which is the #102 shape: a claim wider than its reader. The reader keeps its
+    # profile scope (attribution is against one manifest's factories), so the
+    # sentence moves to match the reader instead.
+    population = (
+        f"Read from the declared profile homes: {len(homes)} home(s) opened, "
+        f"{len(ctx['jobs'])} job row(s)."
+    )
+    if homes:
+        population += f" Homes read: {', '.join(sorted(homes))}."
+    out.append(population)
+    out.append("")
     if not orphans:
-        out.append("_Every cron row on the box is attributed to a factory._")
+        out.append("_Every cron row in that population is attributed to a factory._")
     else:
         out.append(
             "These rows name no known factory in their `deliver_to` and match no "

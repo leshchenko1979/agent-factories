@@ -51,7 +51,12 @@ def _fragment(slug: str, announcements=None, lanes=None, **over) -> dict:
     return fragment
 
 
-def _ctx(fragments: list[dict], jobs: list[dict] | None = None, at="2026-09-19T12:00:00Z") -> dict:
+def _ctx(
+    fragments: list[dict],
+    jobs: list[dict] | None = None,
+    at="2026-09-19T12:00:00Z",
+    homes: list[str] | None = None,
+) -> dict:
     entries = []
     for fragment in fragments:
         entries.append(
@@ -70,6 +75,11 @@ def _ctx(fragments: list[dict], jobs: list[dict] | None = None, at="2026-09-19T1
         "factories": entries,
         "announcements": announcements,
         "jobs": jobs or [],
+        # `build_context` always supplies this — the population `cron_rows()` actually
+        # opened. A synthetic context that omitted it would render the section's
+        # population line over an empty list, i.e. the test would be asserting a
+        # sentence about a read that never happened (#102).
+        "job_homes": homes if homes is not None else ["ops"],
         "problems": problems,
     }
 
@@ -300,7 +310,32 @@ def test_unattributed_jobs_are_rendered_not_dropped():
 
 def test_no_unattributed_jobs_states_the_absence_plainly():
     markdown = rr.render_markdown(_ctx([_fragment("alpha")], jobs=[_job("a-x", owner="alpha")]))
-    assert "Every cron row on the box is attributed" in markdown
+    assert "Every cron row in that population is attributed" in markdown
+
+def test_the_unattributed_section_names_its_population_and_claims_no_more():
+    """#102: the section's claim must be no wider than the reader behind it.
+
+    `cron_rows()` reads the DECLARED PROFILE homes. The section used to print
+    "Every cron row on the box is attributed to a factory." — a claim over the whole
+    box, made over a reader that never opened it. That is not a hypothetical: the one
+    job on this box below the 6 h cron floor sat in the DEFAULT home, outside the
+    population the reader could see, while the predicate reported HOLDS.
+
+    Both legs are asserted, because the positive one alone is satisfiable by a sentence
+    that still over-claims: the population is NAMED, and the wider claim is ABSENT. A
+    revert to the old wording fails the negative leg even if the positive one is kept.
+    """
+    markdown = rr.render_markdown(
+        _ctx(
+            [_fragment("alpha")],
+            jobs=[_job("a-x", owner="alpha")],
+            homes=["ops", "family"],
+        )
+    )
+    section = markdown.split("## Unattributed jobs", 1)[1].split("\n---", 1)[0]
+    assert "2 home(s) opened, 1 job row(s)" in section, section
+    assert "Homes read: family, ops." in section, section
+    assert "on the box" not in section, section
 
 
 def test_markdown_lists_every_fragment_as_its_own_section():
