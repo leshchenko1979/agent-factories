@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate: every declared best practice has an upholding gate (P29).
+r"""Gate: every declared best practice has an upholding gate (P29).
 
 Principle P29 states:
   "Every law needs an active process or mechanical gate upholding it.
@@ -8,6 +8,25 @@ Principle P29 states:
 This test parses docs/best-practices.md, extracts all declared best practices (P1..PN),
 and asserts that each practice is mapped to at least one mechanical test file, tool gate,
 or active process validator.
+
+PREDICATE, stated with its count (measured 2026-09-19 at 9c2ed02: 35 loose = 35 strict,
+0 malformed): a practice is DECLARED by a line matching `^##\s+(P\d+)\b` (loose extract),
+and a declared practice is WELL-FORMED only when that same heading continues `\s+—` (the
+em-dash U+2014 separator). Extraction is LOOSE and the separator is ASSERTED, never the
+reverse: a heading written with a hyphen (`## P34 - title`) is not extracted AT ALL by the
+strict pattern, so its PRACTICE_GATES entry is never consulted and the law silently stops
+being checked while this gate still reports clean. That was #62 — the same fail-open family
+as #58.
+
+The predicate is BIDIRECTIONAL, and that is what makes the former
+`assert len(declared_practices) >= 32` floor unnecessary. Forward: every declared practice
+must be mapped in PRACTICE_GATES. Reverse: every key in PRACTICE_GATES must be a declared
+practice. The floor was the only vacuity guard, and a floor is the wrong FORM — it goes
+stale and carries slack (>= 32 against 34 declared is exactly what let #62's drift pass
+unnoticed). The reverse direction carries no number: if the extraction returns nothing,
+every key reads as undeclared and the gate REDs naming all of them; if a single heading
+vanishes, it REDs naming that one. The two sets were measured EQUAL (35 == 35) when this
+landed, so the reverse check introduces zero false reds.
 """
 
 from __future__ import annotations
@@ -62,8 +81,27 @@ def test_all_declared_best_practices_have_upholding_gates() -> None:
     assert best_practices_file.is_file(), f"Missing {best_practices_file}"
 
     content = best_practices_file.read_text(encoding="utf-8")
-    declared_practices = re.findall(r"^##\s+(P\d+)\s+—", content, re.MULTILINE)
-    assert len(declared_practices) >= 32, f"Expected at least 32 practices, found {len(declared_practices)}"
+    # Loose extract, then assert the separator. A malformed heading is REPORTED by
+    # name rather than skipped, because a skipped heading is a law this gate cannot see.
+    declared_practices = re.findall(r"^##\s+(P\d+)\b", content, re.MULTILINE)
+    malformed = [
+        p
+        for p in declared_practices
+        if not re.search(rf"^##\s+{p}\s+—", content, re.MULTILINE)
+    ]
+    assert not malformed, f"law heading lacks the em-dash separator: {malformed}"
+
+    # REVERSE DIRECTION. Every mapping key must be a DECLARED practice. This is what makes
+    # the dropped floor unnecessary, and it is a stronger guard than the floor ever was:
+    # if the extraction returns nothing, every key is undeclared and the gate REDs naming
+    # all of them, where the floor would have passed it. If one heading vanishes, the gate
+    # REDs naming that one. Neither case needs a magic number that can go stale.
+    declared_set = set(declared_practices)
+    dead_entries = sorted(p for p in PRACTICE_GATES if p not in declared_set)
+    assert not dead_entries, (
+        "PRACTICE_GATES maps practices that docs/best-practices.md does not declare "
+        f"(a heading that vanished, or an extraction that failed): {dead_entries}"
+    )
 
     missing_gates: list[str] = []
     unverified_targets: list[str] = []
@@ -89,9 +127,7 @@ def test_all_declared_best_practices_have_upholding_gates() -> None:
 
 if __name__ == "__main__":
     test_all_declared_best_practices_have_upholding_gates()
-    print("ALL BEST PRACTICE LAWS (P1..PN) HAVE VERIFIED UPHOLDING GATES.")
-
-
-if __name__ == "__main__":
-    test_all_declared_best_practices_have_upholding_gates()
-    print("ALL BEST PRACTICE LAWS (P1..PN) HAVE VERIFIED UPHOLDING GATES.")
+    print(
+        f"ALL BEST PRACTICE LAWS (P1..PN) HAVE VERIFIED UPHOLDING GATES "
+        f"({len(PRACTICE_GATES)} mapped)."
+    )

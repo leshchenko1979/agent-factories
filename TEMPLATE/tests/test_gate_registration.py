@@ -51,7 +51,9 @@ from gate_registry import (  # noqa: E402
     PREDICATE,
     TOOL_INVOCATION_NOTE,
     declared_gates,
+    first_docstring_line,
     gate_registration_problems,
+    reads_a_docstring,
 )
 
 TESTS_DIR = REPO / "tests"
@@ -229,6 +231,33 @@ def probe_the_resolver_reads_the_live_declaration() -> None:
           str(sorted(names & {"test_law_coverage.py", "test_law_structure.py",
                               "test_ontology.py", "test_session_bindings.py"})))
 
+def probe_a_string_prefixed_opener_is_read() -> None:
+    """A legal string prefix must not hide the declaration — the #62 regression.
+
+    An r-prefix is REQUIRED whenever the docstring quotes a regex, and it is what #62's
+    own patch put on tests/test_law_coverage.py. A parser demanding a bare triple quote
+    reads that file as having no docstring, so it is neither declared nor non-canonical:
+    it vanishes from the scan, and the reverse direction then reports a live registered
+    gate as silent. This probe is that exact input, at unit level rather than at audit
+    time.
+    """
+    raw_gate = '#!/usr/bin/env python3\nr"""Gate: a raw-prefixed gate.\n\nBody.\n"""\n'
+    check("an r-prefixed opener IS recognised as a docstring",
+          reads_a_docstring(raw_gate), raw_gate.splitlines()[1][:40])
+    check("and its first line is read with the prefix stripped",
+          first_docstring_line(raw_gate) == "Gate: a raw-prefixed gate.",
+          repr(first_docstring_line(raw_gate)))
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(Path(tmp), {"test_raw.py": raw_gate},
+                                       _register("test_raw.py"))
+        problems, report = gate_registration_problems(tests, audit)
+        check("a raw-prefixed gate is DECLARED, so no silent-gate problem is raised",
+              problems == [] and report["declared"] == ["test_raw.py"],
+              f"problems={problems} declared={report['declared']}")
+    plain_gate = '"""Gate: a plain gate.\n\nBody.\n"""\n'
+    check("a bare-quote opener still reads (no regression)",
+          reads_a_docstring(plain_gate), plain_gate.splitlines()[0][:40])
+
 def probe_the_predicate_is_stated_with_its_count() -> None:
     """A number must travel with its predicate — the predicate lives in the module."""
     check("the predicate is a module constant", bool(PREDICATE.strip()), PREDICATE[:70])
@@ -251,6 +280,7 @@ def main() -> int:
     probe_the_scan_is_not_vacuous()
     probe_the_resolver_reads_the_live_declaration()
     probe_the_report_states_the_tool_gap()
+    probe_a_string_prefixed_opener_is_read()
     probe_the_predicate_is_stated_with_its_count()
     probe_the_live_tree_is_clean()
 

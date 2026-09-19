@@ -74,8 +74,14 @@ CANONICAL_OPENER = "Gate"
 # The loose declaration: the opening docstring's first line contains this word.
 DECLARATION_WORD = "gate"
 
-# A test file's opening docstring first line, allowing a shebang and leading space.
-_OPENING = re.compile(r'^\s*(?:#!.*\n)?\s*"""(?P<first>[^\n]*)')
+# A test file's opening docstring first line, allowing a shebang, a leading space, and any
+# legal string prefix. The prefix is not cosmetic: `r"""` is required whenever the docstring
+# quotes a regex, and a parser demanding a bare `"""` reads such a file as having NO
+# docstring at all — which is exactly how tests/test_law_coverage.py stopped declaring
+# itself the moment #62 gave it an r-prefixed opener. A missed declaration is not a
+# near-miss: the file is neither declared nor non-canonical, it is INVISIBLE, and the
+# reverse direction then reports it as a registered gate that stays silent.
+_OPENING = re.compile(r'^\s*(?:#!.*\n)?\s*(?:[rR][bB]?|[bB][rR]?|[uU])?"""(?P<first>[^\n]*)')
 
 # Every append in the audit is a single line with no nested parenthesis, so the argv is
 # taken to the first `)`.
@@ -105,6 +111,16 @@ def first_docstring_line(text: str) -> str | None:
     """The opening docstring's first line, or None when the file has no docstring."""
     match = _OPENING.match(text)
     return match.group("first").strip() if match else None
+
+def reads_a_docstring(text: str) -> bool:
+    """True when the file's opening docstring is RECOGNISED at all.
+
+    This is the distinction a prefix bug erases. A file the parser cannot open is not a
+    near-miss and not a malformed declaration — it is invisible, so every downstream
+    direction is silent about it. #62 put an r-prefix on a live gate and this is what
+    went quiet.
+    """
+    return _OPENING.match(text) is not None
 
 def declared_gates(tests_dir: Path) -> list[tuple[Path, str]]:
     """Every `test_*.py` under `tests_dir` that declares itself a gate (loose pass)."""
