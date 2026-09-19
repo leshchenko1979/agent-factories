@@ -1,7 +1,7 @@
 {
   "factory": "opencrabs-dev",
   "display_name": "Opencrabs Dev Factory",
-  "profile": "profile",
+  "profile": "ops",
   "repo": "/root/opencrabs",
   "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
   "purpose": null,

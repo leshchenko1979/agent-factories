@@ -73,6 +73,14 @@ KNOWN_FACTORY_SLUGS = frozenset(
     }
 )
 PROFILE_SCOPE = "profile"  # the literal that `affects` uses for box-wide notices
+# The profile field is a DIFFERENT question from the `affects` sentinel above, and
+# the two shared one constant until this line existed: every enrolled stub declared
+# its profile as the literal string `profile`, which is not a profile name. The
+# collision was invisible because both are the word "profile" — one is a scope
+# keyword, the other is a name. Every factory on this box runs under `ops`
+# (AGENTS.md §Session naming convention: no lane is prefixed "ops" because it
+# distinguishes nothing).
+FACTORY_PROFILE = "ops"
 
 SEVERITIES = ("info", "warning", "critical")
 SEVERITY_ORDER = {s: i for i, s in enumerate(SEVERITIES)}
@@ -1202,7 +1210,7 @@ def build_stub(slug: str, bindings: list[dict]) -> tuple[dict, dict]:
         # is not its group name, but this field is the label a reader matches
         # against their client, and the client shows the group name.
         "display_name": display_name,
-        "profile": PROFILE_SCOPE,
+        "profile": FACTORY_PROFILE,
         "repo": FACTORY_REPOS[slug],
         "skill": FACTORY_SKILLS[slug],
         # Declared half — `null` is a statement ("nobody has told us"), while an
@@ -1351,6 +1359,35 @@ def cmd_checks(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+def cmd_render(args: argparse.Namespace) -> int:
+    """Render the two artifacts: the document and the machine index.
+
+    Imported INSIDE the function on purpose. `registry_render` imports this
+    module at its top level, so a top-level import here would be a cycle — and
+    the renderer needs this module's predicates and readers, not the other way
+    round.
+    """
+    import registry_render
+
+    resolved_at = args.at or None
+    code, report = registry_render.render_all(
+        explicit=args.paths, resolved_at=resolved_at, write=not args.check
+    )
+    if code != 0:
+        print(f"registry: {report['error']}", file=sys.stderr)
+        return code
+    for problem in report["problems"]:
+        print(f"WARN {problem}", file=sys.stderr)
+    mode = "checked (not written)" if args.check else "wrote"
+    print(
+        f"registry: {mode} {report['markdown']} and {report['index']} — "
+        f"{report['factories']} factory/factories, {report['lanes']} lane(s), "
+        f"{report['announcements']} announcement(s), {report['jobs']} job(s) "
+        f"({report['unattributed_jobs']} unattributed), "
+        f"resolved_at={report['resolved_at']}"
+    )
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="The factory registry.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1381,6 +1418,21 @@ def main(argv: list[str] | None = None) -> int:
         help="print every thread the derivation kept without a role, and every one it dropped",
     )
     p_enroll.set_defaults(func=cmd_enroll)
+    p_render = sub.add_parser(
+        "render", help="write docs/factory-registry.md and registry/index.json"
+    )
+    p_render.add_argument("paths", nargs="*", help="fragment files (default: live store)")
+    p_render.add_argument(
+        "--at",
+        help="the instant to stamp as resolved_at (default: now); the drift gate "
+        "passes a fixed sentinel so a fresh render is not read as drift",
+    )
+    p_render.add_argument(
+        "--check",
+        action="store_true",
+        help="render and report without writing — the drift gate's read path",
+    )
+    p_render.set_defaults(func=cmd_render)
     args = parser.parse_args(argv)
     return args.func(args)
 

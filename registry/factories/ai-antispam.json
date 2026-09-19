@@ -1,7 +1,7 @@
 {
   "factory": "ai-antispam",
   "display_name": "ai-antispam",
-  "profile": "profile",
+  "profile": "ops",
   "repo": "/root/ai-antispam",
   "skill": "/root/ai-antispam/SKILL.md",
   "purpose": null,

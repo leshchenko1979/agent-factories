@@ -1,7 +1,7 @@
 {
   "factory": "meta-factory",
   "display_name": "Factories",
-  "profile": "profile",
+  "profile": "ops",
   "repo": "/root/agent-factories",
   "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
   "purpose": null,

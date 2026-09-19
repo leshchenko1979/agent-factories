@@ -1,7 +1,7 @@
 {
   "factory": "miidas",
   "display_name": "Miidas Factory",
-  "profile": "profile",
+  "profile": "ops",
   "repo": "/root/miidas",
   "skill": "/root/miidas/SKILL.md",
   "purpose": null,

@@ -1,7 +1,7 @@
 {
   "factory": "infra-factory",
   "display_name": "Infra Factory",
-  "profile": "profile",
+  "profile": "ops",
   "repo": "/root/vds-servers",
   "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
   "purpose": null,

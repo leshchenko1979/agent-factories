@@ -1,7 +1,7 @@
 {
   "factory": "inferhub-watch",
   "display_name": "Inferhub watch",
-  "profile": "profile",
+  "profile": "ops",
   "repo": "/root/inferhub-watch",
   "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
   "purpose": null,
