@@ -1,0 +1,15 @@
+{
+  "profile_root": "/root/.opencrabs/profiles",
+  "profile": "ops",
+  "factories": [
+    {
+      "slug": "example-factory",
+      "display_name": "Example Factory",
+      "chat_id": -1000000000000,
+      "repo": "/root/example-factory",
+      "skill": "skills/example-factory/SKILL.md",
+      "job_prefixes": ["example-"],
+      "aliases": ["example-factory", "example factory"]
+    }
+  ]
+}
