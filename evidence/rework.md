@@ -1,7 +1,16 @@
 # Rework log
 
-**Owns:** every defect, regression and law rollback this factory has produced, with its
-root cause and the thing that now prevents it.
+**Owns:** the rework entries this factory has written — each defect, regression and law
+rollback it has *recorded*, with its root cause and the thing that now prevents it.
+
+**What is gated, and what is not.** `tests/test_rework.py` upholds properties of the
+entries that **exist**: each is complete, the table is one table, and every rate claim in
+`## Rates` carries its date and names its form. It cannot uphold the completeness of the
+**set** — a gate can only read a defect somebody wrote down, and the only observer of an
+unrecorded defect is its author. So what this file claims is about its entries, never about
+the factory's defects: an entry that was never written is invisible here. The ledger
+coupling below closes part of that gap, and the two directions still unread — a close that
+owes an entry, and a Subject naming a unit the ledger does not carry — are filed as **#64**.
 
 The rubric's Stability criterion (O2) asks for two rates: **change fail rate** and
 **rework rate**. Neither can be computed from memory, and neither means anything without a
