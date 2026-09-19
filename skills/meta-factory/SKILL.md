@@ -220,6 +220,19 @@ leaning on shared memory rather than on what it said.
   same turn. "I have not verified" is acceptable; a confident guess is not.
 - **Verification is scoped by load-bearing.** Verify what you will act on or report; accept
   receipted facts you will not. In a cross-lane pass, the value is the **contradiction** check.
+- **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
+  run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
+  only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,
+  `duration=`) — taking a number is not a judgement. Every VERDICT in the trailer is the
+  author's, and the tool must never write one: it once appended `outcome=accepted` and
+  `gate=all-pass` for silence, so both headline rates could only ever report success (#53,
+  ruling n=333 clause 1). `rework=` joins that trailer on the same law — `rework=#N` names the
+  rework entry the close produced, `rework=none` states it produced none, and either is
+  legitimate only when the AUTHOR states it. ABSENCE stays `unstated`, never read as `none`:
+  an unrecorded verdict is UNKNOWN, never a value (#53 clause 2). The marker is AVAILABLE, not
+  REQUIRED — most closes resolve no defect, and a required field degrades to boilerplate — and
+  nothing is backfilled, because a disposition reconstructed after the fact is a falsified
+  record, not a repair (n=386 clauses 3/5/6; #53 clause 7).
 
 ---
 

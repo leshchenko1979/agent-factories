@@ -179,6 +179,17 @@ archive.
 - **No claim without a check.** Existence, absence and status all require a
   tool call in the same turn. "I have not verified" is an acceptable answer;
   a confident guess is not.
+- **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
+  run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
+  only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,
+  `duration=`) — taking a number is not a judgement. Every VERDICT in the trailer is the
+  author's, and the tool must never write one: it once appended `outcome=accepted` and
+  `gate=all-pass` for silence, so both headline rates could only ever report success (#53).
+  `rework=` joins that trailer on the same law — `rework=#N` names the rework entry the close
+  produced, `rework=none` states it produced none, and either is legitimate only when the
+  AUTHOR states it. ABSENCE stays `unstated`, never read as `none`: an unrecorded verdict is
+  UNKNOWN, never a value. The marker is AVAILABLE, not REQUIRED — most closes resolve no
+  defect, and a required field degrades to boilerplate — and nothing is backfilled.
 
 ---
 
