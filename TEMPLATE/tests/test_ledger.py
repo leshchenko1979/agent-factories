@@ -390,6 +390,151 @@ def main() -> int:
               r.returncode == 0 and "excused: #7 missing claim" in r.stdout,
               (r.stdout + r.stderr).strip().splitlines()[-1][:100])
 
+        print("\nverify --against — the identity check is a command, not a discipline")
+        # Clause 1 of the #52 ruling: a row's identity is immutable once pushed, because
+        # `n` is what an external citation MEANS. The defence for that was a sentence a
+        # reader had to reconstruct from git log; `--against` reads it. The probe needs a
+        # real repository, because the command reads the committed blob through git —
+        # and it uses a THROWAWAY one, so the live ledger is never the subject.
+        cmp_repo = Path(tmp) / "cmprepo"
+        (cmp_repo / "tools").mkdir(parents=True)
+        (cmp_repo / "evidence").mkdir()
+        stage_tool(TOOL, cmp_repo / "tools", LOCAL_TOOLS)
+        cmp_tool = cmp_repo / "tools" / "ledger.py"
+        cmp_ledger = cmp_repo / "evidence" / "ledger.jsonl"
+
+        def cmp_git(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["git", "-c", "user.email=probe@factory", "-c", "user.name=probe",
+                 "-c", "commit.gpgsign=false", *args],
+                cwd=cmp_repo, capture_output=True, text=True,
+            )
+
+        def cmp_run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [sys.executable, str(cmp_tool), *args],
+                capture_output=True, text=True, cwd=cmp_repo,
+                env={**os.environ, "OC_LEDGER_PATH": str(cmp_ledger),
+                     "OC_ACTORS_PATH": str(cmp_repo / "no-actors.txt")},
+            )
+
+        def commit(text: str, message: str) -> None:
+            cmp_ledger.write_text(text, encoding="utf-8")
+            cmp_git("add", "-A")
+            cmp_git("commit", "-q", "-m", message)
+
+        def render(ledger_rows: list[dict]) -> str:
+            return "".join(json.dumps(r) + "\n" for r in ledger_rows)
+
+        def row(n: int, event: str, subject: str, ts: str = "2026-09-12T00:00:00Z",
+                actor: str = "hq", detail: str = "probe") -> dict:
+            return {"n": n, "ts": ts, "event": event, "actor": actor,
+                    "subject": subject, "detail": detail}
+
+        base = render([row(1, "intake", "#1"), row(2, "claim", "#1"), row(3, "close", "#1")])
+        cmp_git("init", "-q")
+        commit(base, "three rows")
+
+        # (1) The #52 shape: a row KEEPS its number and becomes a different row. Plain
+        # verify cannot see it — every structural property it checks still holds, and the
+        # sequence is intact — which is the whole reason the clause needed a command.
+        cmp_ledger.write_text(render([
+            row(1, "intake", "#1"),
+            row(2, "claim", "#1", ts="2026-09-12T00:00:02Z"),
+            row(3, "close", "#1", ts="2026-09-12T00:00:01Z"),
+        ]), encoding="utf-8")
+        r = cmp_run("verify")
+        check("a row that changed in place is invisible to plain verify",
+              r.returncode == 0, r.stdout.strip().splitlines()[0][:90])
+        r = cmp_run("verify", "--against", "HEAD")
+        check("--against reports the identity change plain verify cannot see",
+              r.returncode != 0 and "IDENTITY" in r.stdout and "n=2" in r.stdout,
+              next((l.strip() for l in r.stdout.splitlines() if "IDENTITY" in l), "")[:110])
+
+        # (2) A PERMUTATION — the shape a renumber actually takes in a ledger that stays
+        # contiguous. Every number still exists, so nothing is added and nothing removed,
+        # and plain verify is clean: two rows have swapped places and each number now
+        # describes the other's work. Reporting that as two ordinary identity changes
+        # would be true and useless; the reader needs to be told the rows MOVED.
+        ordered = render([
+            row(1, "intake", "#1"), row(2, "claim", "#1"),
+            row(3, "intake", "#2"), row(4, "claim", "#2"),
+        ])
+        commit(ordered, "four rows")
+        cmp_ledger.write_text(render([
+            row(1, "intake", "#1"), row(2, "claim", "#1"),
+            row(3, "claim", "#2"), row(4, "intake", "#2"),
+        ]), encoding="utf-8")
+        r = cmp_run("verify")
+        check("a permuted ledger is invisible to plain verify",
+              r.returncode == 0, r.stdout.strip().splitlines()[0][:90])
+        r = cmp_run("verify", "--against", "HEAD")
+        check("--against names permuted rows as RENUMBERED, not as identity changes",
+              r.returncode != 0 and r.stdout.count("RENUMBERED") == 2
+              and "IDENTITY" not in r.stdout,
+              " | ".join(l.strip() for l in r.stdout.splitlines() if "RENUMBERED" in l)[:110])
+
+        # (2b) The other move shape: a number VACATED. The row survives, its old number
+        # does not exist any more, and the report says so instead of describing one fact
+        # as a deletion beside an insertion. (A contiguous ledger cannot produce this —
+        # the tail shifts but every number survives — which is why the branch needs a
+        # probe of its own; plain verify also flags the gap, and the point here is the
+        # SHAPE of the report, not that the file is otherwise clean.)
+        commit(base, "back to the three-row ledger")
+        cmp_ledger.write_text(render([
+            row(1, "intake", "#1"), row(2, "claim", "#1"), row(4, "close", "#1"),
+        ]), encoding="utf-8")
+        r = cmp_run("verify", "--against", "HEAD")
+        check("a vacated number is reported as a move, not as a delete beside an insert",
+              r.returncode != 0 and "RENUMBERED  n=3 -> n=4" in r.stdout
+              and "REMOVED" not in r.stdout,
+              next((l.strip() for l in r.stdout.splitlines() if "RENUMBERED" in l), "")[:110])
+
+        # (3) Content is the OTHER question. Clause 2 admits a correction to a detail,
+        # and the row discloses it with its own REPAIR NOTE — so the command reports the
+        # change and distinguishes a disclosed one from a silent edit.
+        disclosed = base.replace('"detail": "probe"',
+                                 '"detail": "probe. REPAIR NOTE: the token was appended, '
+                                 'identity untouched"', 1)
+        cmp_ledger.write_text(disclosed, encoding="utf-8")
+        r = cmp_run("verify", "--against", "HEAD")
+        check("a disclosed content change is reported and is not fatal",
+              r.returncode == 0 and "CONTENT" in r.stdout and "disclosed by a REPAIR NOTE" in r.stdout,
+              next((l.strip() for l in r.stdout.splitlines() if "CONTENT" in l), "")[:110])
+
+        cmp_ledger.write_text(base.replace('"detail": "probe"', '"detail": "quietly edited"', 1),
+                              encoding="utf-8")
+        r = cmp_run("verify", "--against", "HEAD")
+        check("an undisclosed content change is fatal",
+              r.returncode != 0 and "NO DISCLOSURE" in r.stdout,
+              next((l.strip() for l in r.stdout.splitlines() if "CONTENT" in l), "")[:110])
+
+        # (4) Growth is the ledger's normal state, so an addition is reported, never fatal.
+        cmp_ledger.write_text(base + json.dumps(
+            {"n": 4, "ts": "2026-09-12T00:00:00Z", "event": "run", "actor": "hq",
+             "subject": "#1", "detail": "probe"}) + "\n", encoding="utf-8")
+        r = cmp_run("verify", "--against", "HEAD")
+        check("an added row is reported and is not fatal",
+              r.returncode == 0 and "ADDED" in r.stdout and "n=4" in r.stdout,
+              next((l.strip() for l in r.stdout.splitlines() if "ADDED" in l), "")[:110])
+
+        # (5) Fail LOUD, never open. A revision that cannot be read is not an empty
+        # comparison: reporting "no change" over a population of zero is the shape this
+        # repo has already ruled against (a truncated log window is not an empty one).
+        r = cmp_run("verify", "--against", "no-such-revision")
+        check("an unreadable revision fails loudly instead of comparing nothing",
+              r.returncode != 0 and "no change" not in r.stdout
+              and "cannot read" in (r.stdout + r.stderr),
+              (r.stdout + r.stderr).strip().splitlines()[-1][:110])
+
+        # (6) The clean path still reports its own comparison, so "compared and equal" is
+        # an output rather than a silence.
+        cmp_ledger.write_text(base, encoding="utf-8")
+        r = cmp_run("verify", "--against", "HEAD")
+        check("an unchanged ledger says so, rather than saying nothing",
+              r.returncode == 0 and "no change" in r.stdout,
+              r.stdout.strip().splitlines()[-1][:110])
+
         print("\nthe append-time guard — a revert is loud, not silent")
         # The lock serialises the appenders, not the file they append to. A
         # revert lowers the working file OUTSIDE the lock and the next lawful

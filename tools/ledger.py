@@ -597,6 +597,168 @@ def cmd_tail(args: argparse.Namespace) -> int:
     print(f"\n{len(rows)} row(s)")
     return 0
 
+def _read_rows_at(rev: str, path: Path) -> list[dict]:
+    """The rows committed at `rev` for `path`, or a LOUD exit when unreadable.
+
+    `--against` is asked a question about a REVISION, so a revision that cannot be
+    read is not "no changes" — it is no answer. Failing open here would report a
+    clean comparison over an empty population, which is the shape this repo has
+    already ruled against (a truncated log window is not an empty one).
+    """
+    try:
+        rel_path = path.resolve().relative_to(REPO).as_posix()
+    except ValueError:
+        sys.exit(f"verify --against: {path} is outside {REPO}, so no revision can be read for it")
+    text = _git_show(rev, rel_path)
+    if text is None:
+        sys.exit(
+            f"verify --against: cannot read {rel_path} at {rev!r} — is the revision "
+            f"fetched, and is the file tracked there?"
+        )
+    rows: list[dict] = []
+    for n, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            sys.exit(f"verify --against: {rel_path} at {rev!r} line {n} is not JSON: {exc}")
+    return rows
+
+def _verify_against(rev: str, path: Path, working: list[dict]) -> int:
+    """Compare the working ledger against its committed self at `rev`.
+
+    Clause 1 of the #52 ruling says a row's IDENTITY — `(n, ts, event, actor,
+    subject)` — is immutable once pushed, because `n` is what an external citation
+    means: the same number quietly describing a different row changes what someone
+    else's reference points at. The version-control defence for that was a sentence
+    a reader had to reconstruct from `git log`; this is the command that reads it.
+
+    Identity violations are reported and are FATAL — clause 1 has no exception.
+    Content changes are reported too, and they are a different question: clause 2
+    permits a correction to a row's `detail` when the row itself discloses it, so a
+    changed detail is fatal only when the row does not carry that disclosure. The
+    marker is the row's own `REPAIR NOTE`, the token the ruling names and the rows
+    corrected under it actually carry. It is a DISCLOSURE, not proof the disclosure
+    is true: it makes the edit visible to this command, and the git diff remains the
+    audit of what it says.
+
+    Additions are reported and are NOT fatal. A ledger that grows is the normal
+    state; clause 1 protects the identity of rows already published, not the file's
+    length.
+    """
+    committed = _read_rows_at(rev, path)
+    by_n_working = {row.get("n"): row for row in working}
+    by_n_committed = {row.get("n"): row for row in committed}
+
+    def identity(row: dict) -> tuple:
+        return tuple(row.get(k) for k in ROW_IDENTITY)
+
+    def without_n(row: dict) -> tuple:
+        return tuple(row.get(k) for k in ROW_IDENTITY if k != "n")
+
+    added: list[dict] = []
+    removed: list[dict] = []
+    identity_changes: list[tuple[int, dict, dict]] = []  # (n, working row, committed row)
+    content_changes: list[tuple[dict, bool]] = []
+
+    for n, row in by_n_working.items():
+        other = by_n_committed.get(n)
+        if other is None:
+            added.append(row)
+            continue
+        if identity(row) != identity(other):
+            identity_changes.append((n, row, other))
+        elif row.get("detail") != other.get("detail"):
+            content_changes.append((row, "REPAIR NOTE" in (row.get("detail") or "")))
+
+    # A row that MOVED is reported as a move, not as a delete beside an insert: the
+    # reader asked what happened to the rows, and "removed n=3, added n=4" describes
+    # the same fact twice without saying the row survived.
+    #
+    # The move has TWO shapes, and only the first is visible to a reader who thinks in
+    # terms of the file's length. (i) A number VACATED: a committed row's number is gone
+    # from the working file and its content stands elsewhere. (ii) A PERMUTATION, which
+    # is what a renumber actually looks like in a ledger that stays contiguous — every
+    # number still exists, so nothing is "added" or "removed", yet two rows have swapped
+    # places and each number now describes the other's work. A detector that only knew
+    # shape (i) would report a swapped pair as two ordinary identity changes and never
+    # say the rows MOVED, which is the fact a reader needs; the probe written for this
+    # clause is what surfaced the gap, by failing to reach this branch at all.
+    ident_to_committed: dict[tuple, list[int]] = {}
+    for cn, crow in by_n_committed.items():
+        ident_to_committed.setdefault(without_n(crow), []).append(cn)
+
+    moves: list[tuple[int, int, dict]] = []  # (from n, to n, the row that moved)
+
+    for cn, crow in by_n_committed.items():
+        if cn in by_n_working:
+            continue
+        twin = next((w for w in added if without_n(w) == without_n(crow)), None)
+        if twin is not None:
+            moves.append((cn, twin.get("n"), crow))
+            added.remove(twin)
+        else:
+            removed.append(crow)
+
+    still_changed: list[tuple[int, dict, dict]] = []
+    for n, row, other in identity_changes:
+        elsewhere = [cn for cn in ident_to_committed.get(without_n(row), []) if cn != n]
+        if elsewhere:
+            moves.append((elsewhere[0], n, row))
+        else:
+            still_changed.append((n, row, other))
+    identity_changes = still_changed
+
+    undisclosed = [row for row, disclosed in content_changes if not disclosed]
+    changes = (len(identity_changes) + len(moves) + len(added) + len(removed)
+               + len(content_changes))
+
+    if not changes:
+        print(f"ledger vs {rev}: no change ({len(working)} row(s) compared)")
+        return 0
+
+    print(f"ledger vs {rev}: {changes} change(s)")
+    for row in removed:
+        print(f"  REMOVED     n={row.get('n')} subject={row.get('subject')!r} "
+              f"event={row.get('event')!r}")
+    for line in identity_changes:
+        n, row, other = line
+        diffs = [
+            f"{k} {other.get(k)!r} -> {row.get(k)!r}"
+            for k in ROW_IDENTITY
+            if k != "n" and row.get(k) != other.get(k)
+        ]
+        print(f"  IDENTITY    n={n} subject={row.get('subject')!r}: " + ", ".join(diffs))
+    for from_n, to_n, row in moves:
+        print(f"  RENUMBERED  n={from_n} -> n={to_n} subject={row.get('subject')!r} "
+              f"event={row.get('event')!r}: the row MOVED — a number is a citation, "
+              f"so a row that survives under a different one is reported as a move")
+    for row, disclosed in content_changes:
+        print(f"  CONTENT     n={row.get('n')} subject={row.get('subject')!r}: detail "
+              f"changed ({'disclosed by a REPAIR NOTE' if disclosed else 'NO DISCLOSURE'})")
+    # Additions are bounded in the listing but never in the count: a comparison against a
+    # distant revision can carry hundreds of them, and a report nobody can read is how a
+    # real line in it gets missed. The fatal categories above are printed in full — they
+    # are the ones a reader must act on, and they are rare by construction.
+    for row in added[:20]:
+        print(f"  ADDED       n={row.get('n')} subject={row.get('subject')!r} "
+              f"event={row.get('event')!r}")
+    if len(added) > 20:
+        print(f"  ADDED       … and {len(added) - 20} more")
+
+    fatal = len(identity_changes) + len(moves) + len(removed) + len(undisclosed)
+    if fatal:
+        print(
+            f"ledger vs {rev}: {fatal} fatal change(s) — a row's identity is immutable "
+            f"once pushed, and a content change is admitted only by the row's own "
+            f"disclosure (#52 clauses 1 and 2)"
+        )
+        return 1
+    print(f"ledger vs {rev}: additions and disclosed corrections only")
+    return 0
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """Read-only integrity check — the ledger's own gate.
 
@@ -664,28 +826,38 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(f"ledger problems: {len(problems)}")
         for p in problems:
             print(f"  {p}")
-        return 1
+        rc = 1
+    else:
+        print(f"ledger clean: {len(rows)} row(s), monotonic, all event types known, sequences complete")
+        # Printed only when used, so a fresh factory's dead entries stay invisible —
+        # and so a reader can always tell "clean" from "excused".
+        for subject, leg, granted, reason in excused:
+            print(f"  excused: {subject} missing {leg} (granted {granted}) — {reason}")
+        # A RECONSTRUCTED claim DECLARES itself with the token `claim=reconstructed`, and
+        # those rows print here, beside the `excused:` lines, for the same reason the
+        # exemptions do: clean, excused and reconstructed must never be the same output
+        # (#98, ruling n=602 PART 5). A declaration that lived only in prose could be
+        # counted only by reading prose — this repo's own ruled class (#88 / n=405
+        # clause 5). The scan is scoped to CLAIM rows, because that is the row the token
+        # describes; a row of another event that merely QUOTES the token is out of the
+        # population before the predicate is asked, which is what keeps a ruling row that
+        # defines the token (measured: n=602) from reading as a reconstruction.
+        for row in rows:
+            if row.get("event") != "claim":
+                continue
+            if declares_token(row.get("detail"), "claim", "reconstructed"):
+                print(f"  reconstructed claim: n={row.get('n')} subject={row.get('subject')}")
+        rc = 0
 
-    print(f"ledger clean: {len(rows)} row(s), monotonic, all event types known, sequences complete")
-    # Printed only when used, so a fresh factory's dead entries stay invisible —
-    # and so a reader can always tell "clean" from "excused".
-    for subject, leg, granted, reason in excused:
-        print(f"  excused: {subject} missing {leg} (granted {granted}) — {reason}")
-    # A RECONSTRUCTED claim DECLARES itself with the token `claim=reconstructed`, and
-    # those rows print here, beside the `excused:` lines, for the same reason the
-    # exemptions do: clean, excused and reconstructed must never be the same output
-    # (#98, ruling n=602 PART 5). A declaration that lived only in prose could be
-    # counted only by reading prose — this repo's own ruled class (#88 / n=405
-    # clause 5). The scan is scoped to CLAIM rows, because that is the row the token
-    # describes; a row of another event that merely QUOTES the token is out of the
-    # population before the predicate is asked, which is what keeps a ruling row that
-    # defines the token (measured: n=602) from reading as a reconstruction.
-    for row in rows:
-        if row.get("event") != "claim":
-            continue
-        if declares_token(row.get("detail"), "claim", "reconstructed"):
-            print(f"  reconstructed claim: n={row.get('n')} subject={row.get('subject')}")
-    return 0
+    # The revision comparison runs whatever the structure check found: a ledger that is
+    # internally consistent can still have had a row's identity changed, which is exactly
+    # the case plain `verify` cannot see (the #52 shape — n=302 kept its number and became
+    # a different row). Reporting it only on the clean path would hide it on the path where
+    # a reader most needs it.
+    against = getattr(args, "against", None)
+    if against:
+        rc = max(rc, _verify_against(against, target_ledger, rows))
+    return rc
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -706,6 +878,11 @@ def main() -> int:
 
     vp = sub.add_parser("verify", help="read-only integrity check")
     vp.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
+    vp.add_argument(
+        "--against", required=False, metavar="REV",
+        help="also compare the working ledger against its committed self at REV "
+             "(reports every identity change and every content change)",
+    )
     vp.set_defaults(func=cmd_verify)
 
     # `--append-detail` and `--note` are optional to ARGPARSE and required by the handler,
