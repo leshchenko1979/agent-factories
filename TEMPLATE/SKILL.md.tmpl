@@ -149,6 +149,19 @@ The binding names the mechanism; the requirements are:
 4. **Deliver directly to the owning session UUID**, never to the chat root or via relay hops.
 5. **Creating a job is a write, and a write needs a receipt.** Never announce a
    scheduled job without the tool result that created it.
+6. **Resolve a job's owner before you touch it, and name your own jobs after your factory.**
+   Before disabling, deleting, editing or repacing any cron row, resolve its owner through
+   the registry attribution (`tools/registry.py resolve`, `docs/factory-registry.md`); a job
+   you cannot attribute to your own factory is **reported, never edited**.
+   *Cron names are namespaced per factory. A factory's own jobs are named
+   `{{FACTORY_SLUG}}-<what-it-does>`, and the manifest's `job_prefixes` is that law made
+   mechanical: the prefixes are the only reason a job on a shared box can be attributed to
+   its owner at all, so no two factories may claim the same prefix. Never disable, delete,
+   edit or repace a job that is attributed to another factory — a job you cannot attribute
+   is not yours to touch, and it is reported instead. The naming half is checkable per
+   factory, because a factory can read its own jobs; the edit ban is not, because it governs
+   a cron table no single factory owns, and its upholding mechanism is the process above
+   rather than a gate (#101).*
 
 ---
 

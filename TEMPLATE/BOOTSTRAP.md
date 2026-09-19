@@ -360,10 +360,22 @@ rather than starting again. A fragment enrolled before its first lane is honest,
 says nothing a peer can use.
 
 **The pacemaker is what keeps it true.** Add one job on a **≥6 h** cadence running
-`tools/registry_attest.py`; it wakes each factory's `HQ` with two questions —
-*confirm or amend your fragment*, and *confirm or expire your announcements*. The
-second is what stops the peer-facing field decaying into stale advice, and both ride
-one job rather than two. Nothing on the box wakes a lane more often than every 6 h.
+`tools/registry_attest.py`; it wakes each factory's `HQ` with three questions —
+*confirm or amend your fragment*, *confirm or expire your announcements*, and *confirm
+your job prefix and report any cron row you cannot attribute to your own factory*. The
+second is what stops the peer-facing field decaying into stale advice; all three ride one
+job rather than three. Nothing on the box wakes a lane more often than every 6 h.
+
+**Name your jobs after your factory, and touch nobody else's.** Every job you create is
+named `{{FACTORY_SLUG}}-<what-it-does>`, and the prefix you claim here is the same one
+`registry/fleet.json` declares in `job_prefixes` — the manifest validator refuses an empty
+prefix list, and refuses two factories whose prefixes overlap (one nesting inside another
+included), so attribution is a property of the manifest rather than of the order it happens
+to list them in. The other half of that law cannot be gated, because the cron table is a
+surface no single factory owns: **never disable, delete, edit or repace a job attributed to
+another factory.** Before you touch a cron row, resolve its owner — `python3
+tools/registry.py resolve`, or the Unattributed jobs section of `docs/factory-registry.md` —
+and a job you cannot attribute is **reported, never edited**.
 
 **Name the writer.** `HQ` writes `registry/fleet.json`; the lane that runs `enroll`
 writes its own fragment; `render` writes the generated half. Add both rows to §13 of

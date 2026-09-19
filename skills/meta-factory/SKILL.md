@@ -451,6 +451,22 @@ summary line — visible without being a verdict — while `unbound`, `ambiguous
 chain and two to `ambiguous`, because a chain-only probe would pass a fix that had removed
 the ambiguity branch entirely.
 
+**The cron table is the one surface this factory shares with every other, and sharing is
+why only half of this law can be gated.** A factory's own jobs are named
+`factory-<what-it-does>`, and the fleet manifest's `job_prefixes` is that law made
+mechanical: the prefixes are the only reason a job on a shared box can be attributed to its
+owner at all, so no two factories may claim the same prefix — and `load_fleet_manifest`
+now refuses a manifest where two overlap, **including one prefix nesting inside another**,
+which `str.startswith` cannot tell apart and which would make the OWNER a property of
+manifest ORDER rather than of ownership (`tests/test_registry.py`, probes over synthetic
+manifests). Never disable, delete, edit or repace a job that is attributed to another
+factory — a job you cannot attribute is not yours to touch, and it is reported instead. The
+naming half is checkable per factory, because a factory can read its own jobs; the edit ban
+is not, because it governs a cron table no single factory owns, and its upholding mechanism
+is the process rather than a gate (#101): before touching a cron row, resolve the job's
+owner through the registry attribution, and report a job you cannot attribute. That process
+rides the existing ≥6 h attest pacemaker's question set rather than a new job.
+
 ---
 
 ## 12. Autonomous incident remediation & template self-healing (P30)

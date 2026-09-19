@@ -308,7 +308,25 @@ def test_unattributed_jobs_are_rendered_not_dropped():
     assert "a finding, not an omission" in markdown
 
 
-def test_no_unattributed_jobs_states_the_absence_plainly():
+def test_unattributed_rows_carry_the_home_they_were_read_from():
+    """#101: naming the population is not enough — each ROW must say which home holds it.
+
+    The section states the homes it opened and the row count, which makes the finding
+    actionable only if a reader can tell WHICH home a given orphan lives in. Two
+    orphans in two different homes is the discriminating fixture: a render that dropped
+    the column, or that hard-coded one home, fails on the second row.
+    """
+    one = _job("tmp-probe-a", owner=None, basis="unattributed", _profile="ops")
+    two = _job("tmp-probe-b", owner=None, basis="unattributed", _profile="family")
+    markdown = rr.render_markdown(
+        _ctx([_fragment("alpha")], jobs=[one, two], homes=["ops", "family"])
+    )
+    section = markdown.split("## Unattributed jobs", 1)[1].split("\n---", 1)[0]
+    assert "| job | home |" in section, section[:400]
+    for name, home in (("tmp-probe-a", "ops"), ("tmp-probe-b", "family")):
+        row = next((ln for ln in section.splitlines() if f"`{name}`" in ln), "")
+        assert f"| {home} |" in row, f"{name} does not name its home: {row!r}"
+
     markdown = rr.render_markdown(_ctx([_fragment("alpha")], jobs=[_job("a-x", owner="alpha")]))
     assert "Every cron row in that population is attributed" in markdown
 

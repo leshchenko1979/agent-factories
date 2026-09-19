@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T21:02:29Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T21:48:40Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T21:02:29Z` |
+| generated | live reads | resolved `2026-09-19T21:48:40Z` |
 
 ## Announcements
 
@@ -98,20 +98,20 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 **Pacemakers**
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `ai-antispam-bot-service-health` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1003993000918:10784 | — |
-| `ai-antispam-outreach-auto-kick` | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-db-sync` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-mining-tranche` | `0 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-09-21T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-stream-joins` | `0 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-watch-poll` | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:07:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-owner-digest` | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:30:00+00:00 | — | — |
-| `ai-antispam-self-audit-daily` | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T05:50:00+00:00 | session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 | — |
-| `ai-antispam-triage-sweep` | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:25:00+00:00 | — | — |
-| `ai-antispam-watch-funnel-day7-report` | `0 9 22 9 *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-wave0-reply-sweep` | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-wave0-unactivated-reprobe` | `0 12 * * 2` | Europe/Moscow | yes | 0 | **absent** | 2026-09-21T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `ai-antispam-bot-service-health` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1003993000918:10784 | — |
+| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-db-sync` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-mining-tranche` | ops | `0 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-09-21T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-stream-joins` | ops | `0 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:07:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:30:00+00:00 | — | — |
+| `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T05:50:00+00:00 | session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 | — |
+| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:25:00+00:00 | — | — |
+| `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-wave0-unactivated-reprobe` | ops | `0 12 * * 2` | Europe/Moscow | yes | 0 | **absent** | 2026-09-21T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 2 of 12 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
@@ -157,13 +157,13 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 **Pacemakers**
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `inferhub-auto-switcher` | `33 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:33:00+00:00 | — | — |
-| `inferhub-daily-report` | `0 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T05:00:00+00:00 | telegram:-1004379632866:2 | — |
-| `inferhub-hq-pacemaker` | `0 */6 * * *` | UTC | yes | 1 | **absent** | 2026-09-20T00:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-self-audit-daily` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-usage-logs-sync` | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:23:00+00:00 | — | — |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `inferhub-auto-switcher` | ops | `33 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:33:00+00:00 | — | — |
+| `inferhub-daily-report` | ops | `0 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T05:00:00+00:00 | telegram:-1004379632866:2 | — |
+| `inferhub-hq-pacemaker` | ops | `0 */6 * * *` | UTC | yes | 1 | **absent** | 2026-09-20T00:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
+| `inferhub-self-audit-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
+| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:23:00+00:00 | — | — |
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 2 of 5 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
@@ -178,7 +178,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 | repo | `/root/vds-servers` |
 | law | `/root/vds-servers/skills/infra-factory/SKILL.md` — revision 0.1.0 |
 | owns | ['Fleet host operations on vpn, apps and agents - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation', 'Gatus monitoring: endpoint configuration, alert intake and recovery routing (gatus-notify on vpn)', 'The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger', 'Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation', 'The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC', 'Infra Factory process law and its own lanes (HQ, Triage, Surveys)'] |
-| does not own | ['OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev', 'The factory template, cross-factory laws and fleet measurement - that is meta-factory', 'ai-antispam business logic, its outreach campaign and its Postgres state - that is ai-antispam', 'Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers', 'InferHub model routing, pricing and token economics - that is inferhub-watch', 'Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos', "Other profiles' brain files and configuration (default, family)", 'The OpenCrabs log-guard watchdog and its root-crontab line on agents (/usr/local/bin/opencrabs-log-guard.sh) - host infrastructure operated by the owner (Alexey). Its source exists in no factory repo, so no factory can declare it as code it owns; it mitigates a closed OpenCrabs daemon defect class (leshchenko1979/opencrabs#21).'] |
+| does not own | ['OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev', 'The factory template, cross-factory laws and fleet measurement - that is meta-factory', 'ai-antispam business logic, its outreach campaign and its Postgres state - that is ai-antispam', 'Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers', 'InferHub model routing, pricing and token economics - that is inferhub-watch', 'Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos', "Other profiles' brain files and configuration (default, family)"] |
 | substrates owned | ['/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)', 'The fleet hosts vpn, apps and agents - host-level state: systemd units, containers, disk, /usr/local/bin scripts', 'Gatus monitoring configuration and alert routing on vpn', 'The Mac access path (vpn/mac-access: CDP tunnel and route pin)'] |
 | attested at | 2026-09-19T14:22:25Z |
 
@@ -213,11 +213,11 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 **Pacemakers**
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `infra-sender-logs-check` | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T15:05:00+00:00 | telegram:-1004486255170:5 | — |
-| `infra-surveys-daily` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1004486255170:7 | — |
-| `infra-triage-patrol` | `0 */6 * * *` | UTC | yes | 1 | present | 2026-09-20T00:00:00+00:00 | session:fb67ca75-8735-4c39-80be-06b59bd4365f | /root/vds-servers/tools/triage_preflight.py |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `infra-sender-logs-check` | ops | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T15:05:00+00:00 | telegram:-1004486255170:5 | — |
+| `infra-surveys-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | telegram:-1004486255170:7 | — |
+| `infra-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 1 | present | 2026-09-20T00:00:00+00:00 | session:fb67ca75-8735-4c39-80be-06b59bd4365f | /root/vds-servers/tools/triage_preflight.py |
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -266,14 +266,14 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane.
 
 **Pacemakers**
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `factory-growth-map-biweekly` | `0 9 1,15 * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-01T06:00:00+00:00 | — | — |
-| `factory-insights-weekly` | `0 18 * * Fri` | Europe/Moscow | yes | 0 | **absent** | 2026-09-25T15:00:00+00:00 | — | python3 /root/agent-factories/tools/synthesize_insights.py --audit |
-| `factory-measurement-daily` | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | — | — |
-| `factory-template-weekly` | `0 9 * * Mon` | Europe/Moscow | yes | 0 | **absent** | 2026-09-21T06:00:00+00:00 | — | python3 /root/agent-factories/tools/roadmap.py --cadence |
-| `factory-triage-patrol` | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
-| `meta-factory-registry-attest` | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | session:23549292-77ff-40d1-97e3-5aa0bdd19d74 | — |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `factory-growth-map-biweekly` | ops | `0 9 1,15 * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-01T06:00:00+00:00 | — | — |
+| `factory-insights-weekly` | ops | `0 18 * * Fri` | Europe/Moscow | yes | 0 | **absent** | 2026-09-25T15:00:00+00:00 | — | python3 /root/agent-factories/tools/synthesize_insights.py --audit |
+| `factory-measurement-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | — | — |
+| `factory-template-weekly` | ops | `0 9 * * Mon` | Europe/Moscow | yes | 0 | **absent** | 2026-09-21T06:00:00+00:00 | — | python3 /root/agent-factories/tools/roadmap.py --cadence |
+| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T00:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
+| `meta-factory-registry-attest` | ops | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T06:00:00+00:00 | session:23549292-77ff-40d1-97e3-5aa0bdd19d74 | — |
 
 Attribution basis: deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -326,9 +326,9 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 **Pacemakers**
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `miidas-hq-daily-trigger` | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-09-20T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
 
 Attribution basis: deliver_to -> lane.
 
@@ -405,30 +405,30 @@ Attribution basis: deliver_to -> lane.
 
 **Pacemakers**
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `oc-harvest-18-resume` | `0 7 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T07:00:00+00:00 | session:7e1ebbb6-68b3-478b-abc2-b697e70c2f37 | — |
-| `oc-harvest-225-resume` | `45 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:45:00+00:00 | session:a5b34466-1c14-441f-b2c6-6eaf4f316dde | — |
-| `oc-harvest-250-resume` | `15 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:15:00+00:00 | session:63d775f9-18e2-4097-8696-d9a2ca796f14 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-318-resume` | `15 14 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T14:15:00+00:00 | session:212b3c83-6659-49c8-9984-0cf849f769c1 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-321-resume` | `15 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:15:00+00:00 | session:d5863180-017d-4646-82a7-19be145e4974 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-326-resume` | `30 14 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T14:30:00+00:00 | session:aaa8d8ae-a4be-4b89-9f92-01a317075be3 | — |
-| `oc-harvest-341-resume` | `45 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:45:00+00:00 | session:facd50af-0807-4fee-942b-008bff037f6f | — |
-| `oc-harvest-344-resume` | `45 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:45:00+00:00 | session:127429e6-08de-439c-9162-2c8b0a9f73d9 | — |
-| `oc-harvest-345-resume` | `45 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:45:00+00:00 | session:6630dc9a-0eeb-46c2-95b8-bfae43e0766b | — |
-| `oc-harvest-346-resume` | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:aff7ff41-a3a7-4c53-adc5-80fb7a33ba50 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-348-resume` | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:c78e78e0-099e-455e-8dfb-7e9b8f7d13e5 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-364-resume` | `45 3 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T03:45:00+00:00 | session:9fa7c71a-f009-418a-ac06-d0336efcf491 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-396-resume` | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:1a63f103-b899-4ad2-a5b3-c89f2902bf97 | — |
-| `oc-harvest-402-resume` | `0 18 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T18:00:00+00:00 | session:52058a75-e94b-4400-9e07-aac3a891bb1f | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-403-resume` | `30 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:30:00+00:00 | session:afe476f8-279b-4d54-b628-c9d7e35873c8 | CENSUS=/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harv… |
-| `oc-harvest-421-resume` | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:212b3c83-6659-49c8-9984-0cf849f769c1 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
-| `oc-harvest-dispatch-4h` | `15 3,9,15,21 * * *` | UTC | **no** | 1 | present | 2026-09-19T03:15:00+00:00 | session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870 | — |
-| `oc-health-hourly` | `0 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:00:00+00:00 | — | — |
-| `oc-roster-detached-sweep` | `5 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:05:00+00:00 | — | ROSTER=/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-rost… |
-| `oc-triage-factory-patrol` | `0 */6 * * *` | UTC | yes | 1 | present | 2026-09-20T00:00:00+00:00 | session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870 | — |
-| `oc-triage-owner-digest` | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:30:00+00:00 | — | — |
-| `oc-upstream-delta-watch` | `15 */6 * * *` | UTC | **no** | 1 | present | 2026-09-19T00:15:00+00:00 | session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870 | /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-upstream-de… |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `oc-harvest-18-resume` | ops | `0 7 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T07:00:00+00:00 | session:7e1ebbb6-68b3-478b-abc2-b697e70c2f37 | — |
+| `oc-harvest-225-resume` | ops | `45 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:45:00+00:00 | session:a5b34466-1c14-441f-b2c6-6eaf4f316dde | — |
+| `oc-harvest-250-resume` | ops | `15 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:15:00+00:00 | session:63d775f9-18e2-4097-8696-d9a2ca796f14 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-318-resume` | ops | `15 14 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T14:15:00+00:00 | session:212b3c83-6659-49c8-9984-0cf849f769c1 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-321-resume` | ops | `15 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:15:00+00:00 | session:d5863180-017d-4646-82a7-19be145e4974 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-326-resume` | ops | `30 14 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T14:30:00+00:00 | session:aaa8d8ae-a4be-4b89-9f92-01a317075be3 | — |
+| `oc-harvest-341-resume` | ops | `45 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:45:00+00:00 | session:facd50af-0807-4fee-942b-008bff037f6f | — |
+| `oc-harvest-344-resume` | ops | `45 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:45:00+00:00 | session:127429e6-08de-439c-9162-2c8b0a9f73d9 | — |
+| `oc-harvest-345-resume` | ops | `45 15 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T15:45:00+00:00 | session:6630dc9a-0eeb-46c2-95b8-bfae43e0766b | — |
+| `oc-harvest-346-resume` | ops | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:aff7ff41-a3a7-4c53-adc5-80fb7a33ba50 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-348-resume` | ops | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:c78e78e0-099e-455e-8dfb-7e9b8f7d13e5 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-364-resume` | ops | `45 3 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T03:45:00+00:00 | session:9fa7c71a-f009-418a-ac06-d0336efcf491 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-396-resume` | ops | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:1a63f103-b899-4ad2-a5b3-c89f2902bf97 | — |
+| `oc-harvest-402-resume` | ops | `0 18 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T18:00:00+00:00 | session:52058a75-e94b-4400-9e07-aac3a891bb1f | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-403-resume` | ops | `30 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:30:00+00:00 | session:afe476f8-279b-4d54-b628-c9d7e35873c8 | CENSUS=/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harv… |
+| `oc-harvest-421-resume` | ops | `15 9 20 9 *` | UTC | yes | 0 | **absent** | 2026-09-20T09:15:00+00:00 | session:212b3c83-6659-49c8-9984-0cf849f769c1 | if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-… |
+| `oc-harvest-dispatch-4h` | ops | `15 3,9,15,21 * * *` | UTC | **no** | 1 | present | 2026-09-19T03:15:00+00:00 | session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870 | — |
+| `oc-health-hourly` | ops | `0 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:00:00+00:00 | — | — |
+| `oc-roster-detached-sweep` | ops | `5 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:05:00+00:00 | — | ROSTER=/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-rost… |
+| `oc-triage-factory-patrol` | ops | `0 */6 * * *` | UTC | yes | 1 | present | 2026-09-20T00:00:00+00:00 | session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870 | — |
+| `oc-triage-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T06:30:00+00:00 | — | — |
+| `oc-upstream-delta-watch` | ops | `15 */6 * * *` | UTC | **no** | 1 | present | 2026-09-19T00:15:00+00:00 | session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870 | /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-upstream-de… |
 
 Attribution basis: deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -438,17 +438,17 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 Read from the declared profile homes: 8 home(s) opened, 56 job row(s). Homes read: code-spike, family, oc134probe, oc175probe, oc179probe, ops, smoke300, smoke300neg.
 
-These rows name no known factory in their `deliver_to` and match no naming prefix. They are rendered rather than dropped: a job the registry cannot place is a finding, not an omission.
+These rows name no known factory in their `deliver_to` and match no naming prefix. They are rendered rather than dropped: a job the registry cannot place is a finding, not an omission. Each row carries the profile home it was read from, so a row that should not be here can be found and changed without guessing which home owns it.
 
-| job | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
-|---|---|---|---|---|---|---|---|---|
-| `__opencrabs_dedup_scan__` | `0 4 * * 1` | UTC | yes | — | **absent** | — | telegram:-1002554690655 | — |
-| `__opencrabs_dedup_scan__` | `0 4 * * 1` | UTC | yes | 0 | **absent** | 2026-09-20T04:00:00+00:00 | telegram:-1002554690655 | — |
-| `tamara_accounting_sync` | `0 21 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T18:00:00+00:00 | telegram:-1004286036984 | — |
-| `__opencrabs_dedup_scan__` | `0 4 * * 1` | UTC | yes | 0 | **absent** | 2026-09-20T04:00:00+00:00 | telegram:-1002554690655 | — |
-| `tmp-nulltrigger-probe` | `4 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:04:00+00:00 | — | — |
-| `tmp-trigger-control-neg` | `0 0 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T00:00:00+00:00 | — | printf 'BEHIND\t0\n' |
-| `tmp-trigger-control-pos` | `0 0 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T00:00:00+00:00 | — | printf 'BEHIND\t3\n' |
+| job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
+|---|---|---|---|---|---|---|---|---|---|
+| `__opencrabs_dedup_scan__` | code-spike | `0 4 * * 1` | UTC | yes | — | **absent** | — | telegram:-1002554690655 | — |
+| `__opencrabs_dedup_scan__` | family | `0 4 * * 1` | UTC | yes | 0 | **absent** | 2026-09-20T04:00:00+00:00 | telegram:-1002554690655 | — |
+| `tamara_accounting_sync` | family | `0 21 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-20T18:00:00+00:00 | telegram:-1004286036984 | — |
+| `__opencrabs_dedup_scan__` | oc134probe | `0 4 * * 1` | UTC | yes | 0 | **absent** | 2026-09-20T04:00:00+00:00 | telegram:-1002554690655 | — |
+| `tmp-nulltrigger-probe` | ops | `4 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:04:00+00:00 | — | — |
+| `tmp-trigger-control-neg` | ops | `0 0 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T00:00:00+00:00 | — | printf 'BEHIND\t0\n' |
+| `tmp-trigger-control-pos` | ops | `0 0 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T00:00:00+00:00 | — | printf 'BEHIND\t3\n' |
 
 ---
 

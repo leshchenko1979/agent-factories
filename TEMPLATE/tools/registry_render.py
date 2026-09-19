@@ -512,19 +512,27 @@ def _freshness_badge(status: object, attested_at: object, now: datetime.datetime
 
 
 def _pacemaker_table(jobs: list[dict], basis_filter=None) -> list[str]:
-    """Every job's LIVE row. `set_goal` renders BESIDE `goal_template`, never alone."""
+    """Every job's LIVE row. `set_goal` renders BESIDE `goal_template`, never alone.
+
+    `home` is the profile home the row was READ from. It is carried for every job, not
+    just the unattributed ones (#101): a job on a shared box is only actionable if the
+    reader knows which home holds it, and the index side of the render already carried
+    it per job while the document did not — the same fact, present in one artifact and
+    missing from the other.
+    """
     lines = [
-        "| job | cron_expr | timezone | enabled | set_goal | goal_template | "
+        "| job | home | cron_expr | timezone | enabled | set_goal | goal_template | "
         "next_run_at | deliver_to | trigger_cmd |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for job in jobs:
         if basis_filter is not None and job.get("_basis") not in basis_filter:
             continue
         template = job.get("goal_template")
         lines.append(
-            "| `{}` | `{}` | {} | {} | {} | {} | {} | {} | {} |".format(
+            "| `{}` | {} | `{}` | {} | {} | {} | {} | {} | {} | {} |".format(
                 cell(job.get("name")),
+                cell(job.get("_profile")),
                 cell(job.get("cron_expr")),
                 cell(job.get("timezone")),
                 "yes" if job.get("enabled") else "**no**",
@@ -776,7 +784,9 @@ def render_markdown(ctx: dict) -> str:
         out.append(
             "These rows name no known factory in their `deliver_to` and match no "
             "naming prefix. They are rendered rather than dropped: a job the "
-            "registry cannot place is a finding, not an omission."
+            "registry cannot place is a finding, not an omission. Each row carries "
+            "the profile home it was read from, so a row that should not be here can "
+            "be found and changed without guessing which home owns it."
         )
         out.append("")
         out.extend(_pacemaker_table(orphans))

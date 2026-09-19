@@ -174,6 +174,43 @@ def load_fleet_manifest(path: Path | None = None) -> dict:
         if slug in seen:
             raise FleetManifestError(f"{where}.slug `{slug}` is declared twice")
         seen.add(slug)
+
+    # `job_prefixes` is a required key above; what it can be WRONG about is its
+    # CONTENTS, and that is the part attribution rests on (#101). A factory with no
+    # prefix can never be attributed a job by name — the prefixes are the only reason
+    # a job on a shared box can be placed at all. Two factories sharing a prefix, or
+    # one prefix nesting inside another (which `str.startswith` cannot tell apart),
+    # make attribution depend on the ORDER the manifest happens to list them in: the
+    # same job would name a different owner after a harmless reorder. Both are refused
+    # here rather than left to the renderer's precedence rule, so attribution is a
+    # property of the manifest rather than of its ordering.
+    claimed: list[tuple[str, str]] = []
+    for index, record in enumerate(records):
+        where = f"{target}: factories[{index}]"
+        slug = record["slug"]
+        prefixes = record["job_prefixes"]
+        if not prefixes:
+            raise FleetManifestError(
+                f"{where} (`{slug}`).job_prefixes is empty — a factory with no prefix "
+                f"cannot be attributed a job by name, so an empty list reads as `this "
+                f"factory owns no jobs` for every job it does own"
+            )
+        for prefix in prefixes:
+            if not isinstance(prefix, str) or not prefix:
+                raise FleetManifestError(
+                    f"{where} (`{slug}`).job_prefixes carries {prefix!r} — every prefix "
+                    f"must be a non-empty string"
+                )
+            for other_slug, other_prefix in claimed:
+                if prefix.startswith(other_prefix) or other_prefix.startswith(prefix):
+                    raise FleetManifestError(
+                        f"{where} (`{slug}`) claims prefix `{prefix}` and `{other_slug}` "
+                        f"claims `{other_prefix}` — the two overlap, so a job matching "
+                        f"both would be attributed by manifest ORDER rather than by "
+                        f"ownership; the prefixes must be disjoint"
+                    )
+        for prefix in prefixes:
+            claimed.append((slug, prefix))
     return data
 
 
@@ -213,8 +250,11 @@ FACTORY_REPOS = {slug: r["repo"] for slug, r in MANIFEST_RECORDS.items()}
 FACTORY_SKILLS = {slug: r["skill"] for slug, r in MANIFEST_RECORDS.items()}
 FACTORY_DISPLAY_NAMES = {slug: r["display_name"] for slug, r in MANIFEST_RECORDS.items()}
 FACTORY_NAME_ALIASES = {slug: tuple(r["aliases"]) for slug, r in MANIFEST_RECORDS.items()}
-# Ordered, and the order is the manifest's: the renderer resolves a job's owner by
-# testing prefixes in turn, and `oc-` before `ocx-` is a real precedence.
+# Ordered, and the order is the manifest's. `load_fleet_manifest` now REFUSES two
+# factories whose prefixes overlap (one nesting inside another included), so the order
+# is no longer load-bearing for correctness — no two entries can both match one name,
+# and `oc-` before `ocx-` can only decide the order in which non-matching prefixes are
+# tried. The tuple keeps the manifest's order so a render is stable, not so it is right.
 NAME_PREFIXES = tuple(
     (slug, tuple(r["job_prefixes"])) for slug, r in MANIFEST_RECORDS.items()
 )

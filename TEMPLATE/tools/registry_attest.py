@@ -9,12 +9,16 @@ clock can ask. That clock is this pacemaker, installed as a namespaced cron —
 `<factory>-registry-attest`, per the box's cron-naming law (a bare `registry-attest`
 is a claim on a namespace no factory owns alone).
 
-**The brief carries TWO questions, not one.** *Confirm or amend your fragment* keeps the
+**The brief carries THREE questions, not one.** *Confirm or amend your fragment* keeps the
 identity card honest; *confirm or expire your announcements* keeps the peer-facing field
-honest. The announcements are in the brief deliberately, not as a second job: a notice is
-the one field whose value DECAYS WITHOUT ANYONE EDITING IT — "the auto-switcher is
-retired" stops being useful the day it is re-armed, and no diff marks the moment. It
-needs a clock, and the attest cadence is the clock already being paid for.
+honest; *confirm your job prefix and report any cron row you cannot attribute* carries the
+one half of the cron-naming law no gate can reach (#101). The announcements are in the
+brief deliberately, not as a second job: a notice is the one field whose value DECAYS
+WITHOUT ANYONE EDITING IT — "the auto-switcher is retired" stops being useful the day it is
+re-armed, and no diff marks the moment. It needs a clock, and the attest cadence is the
+clock already being paid for. The third question is here for the same reason: the edit ban
+governs a cron table no single factory owns, so it has no gate and must ride a process — and
+the process is a question asked on a cadence that already exists, not a new job.
 
 **Targets are resolved live, never remembered.** A factory's HQ lane is read from its own
 fragment's `lanes` (role `hq`) against live `session_bindings` on the profile the fragment
@@ -57,7 +61,7 @@ BRIEF = """Registry re-attestation — {slug} ({stamp})
 Your factory is one entry in the fleet registry (docs/factory-registry.md). The
 GENERATED half of that entry is read live from this box every render, so it cannot
 rot. The DECLARED half is yours: it is what you wrote, and only you can say whether
-it still describes you. Two questions, and both need an answer.
+it still describes you. Three questions, and all three need an answer.
 
 QUESTION 1 — YOUR FRAGMENT. Confirm it unchanged, or amend it.
   registry/factories/{slug}.json
@@ -76,11 +80,24 @@ QUESTION 2 — YOUR ANNOUNCEMENTS. Confirm each still holds, or expire it.
   If you have nothing to announce, an empty list is the honest answer — do not
   inflate it.
 
+QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. Confirm the prefix, report what you
+  cannot place. Your factory's jobs are named `<your prefix>-<what-it-does>`, and the
+  prefix is the one your `registry/fleet.json` record declares in `job_prefixes` — the
+  manifest refuses an empty list and refuses two factories whose prefixes overlap, because
+  the prefixes are the only reason a job on a shared box can be attributed to its owner at
+  all. Two answers, both short:
+    (a) PREFIX — your declared prefix, and whether it still matches how you name your jobs.
+    (b) ORPHANS — any cron row you have seen that you cannot attribute to your own factory.
+        The cron table is shared and has no single owner, so the rule is: never disable,
+        delete, edit or repace a job attributed to another factory, and report a job you
+        cannot attribute instead of touching it. Name the job, the profile home you read it
+        from, and what you saw. "None seen" is a complete answer.
+
 Reply on this session. The registry is a collected document: this lane writes your
 declared fields back verbatim, and re-renders. You author the field; you do not need
 to edit the file, though you may.
 
-Nothing else in this message is work. If both answers are "unchanged", reply
+Nothing else in this message is work. If every answer is "unchanged", reply
 CONFIRMED and that is a complete answer.
 """
 

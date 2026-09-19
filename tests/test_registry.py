@@ -799,6 +799,114 @@ def probe_the_box_wide_reader_reaches_the_default_home() -> None:
             f"profile glob {len(globbed)} db(s), box reader {len(box_dbs)} db(s)",
         )
 
+def _manifest_record(slug: str, prefixes: list) -> dict:
+    """One minimal manifest record — every key `MANIFEST_RECORD_KEYS` demands."""
+    return {
+        "slug": slug,
+        "display_name": slug,
+        "chat_id": -1000000000000 - len(slug),
+        "repo": f"owner/{slug}",
+        "skill": f"skills/{slug}/SKILL.md",
+        "job_prefixes": prefixes,
+        "aliases": [],
+    }
+
+def _write_manifest(tmp: Path, records: list[dict]) -> Path:
+    """A throwaway manifest. No live file is read or written by these probes."""
+    path = tmp / "fleet.json"
+    path.write_text(
+        json.dumps(
+            {"profile_root": "/tmp/probe-profiles", "profile": "probe", "factories": records}
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+def _manifest_verdict(records: list[dict]) -> tuple[bool, str]:
+    """Load a fixture manifest. Returns (loaded_clean, message_or_reason)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_manifest(Path(tmp), records)
+        try:
+            reg.load_fleet_manifest(path)
+        except reg.FleetManifestError as exc:
+            return False, str(exc)
+        return True, "loaded clean"
+
+def probe_a_factory_with_no_prefixes_fails() -> None:
+    """#101: `job_prefixes` is required, but an EMPTY one is a manifest that cannot
+    attribute anything — the key is present and the answer is missing.
+
+    Both legs, because the negative alone is satisfiable by a fixture that fails for
+    an unrelated reason: the control record proves the fixture shape loads, so the
+    failure the negative leg reads is the empty list and nothing else.
+    """
+    ok, why = _manifest_verdict(
+        [_manifest_record("beta", ["beta-"]), _manifest_record("alpha", [])]
+    )
+    check(
+        "a factory declaring NO job_prefixes FAILS, naming the record",
+        not ok and "alpha" in why and "job_prefixes" in why,
+        why[:110],
+    )
+
+    ok, why = _manifest_verdict([_manifest_record("beta", ["beta-"])])
+    check("...while the fixture shape itself loads clean", ok, why[:110])
+
+def probe_overlapping_prefixes_fail() -> None:
+    """#101: two factories claiming the same prefix — or one nesting inside another.
+
+    The nesting case is the one that matters, and `str.startswith` is why: a job named
+    `alpha-beta-job` matches BOTH `alpha-` and `alpha-beta-`, so before this check its
+    owner was whichever entry the manifest happened to list first. That makes the OWNER
+    a property of manifest ORDER, and a harmless reorder silently re-attributes jobs.
+
+    The nesting pair is chosen to actually nest. The first draft of this probe used
+    `oc-` against `ocx-` and passed the control leg by accident — `ocx-` does NOT start
+    with `oc-`, so those two were already disjoint and the probe measured nothing.
+    """
+    ok, why = _manifest_verdict(
+        [_manifest_record("alpha", ["oc-"]), _manifest_record("beta", ["cx-"])]
+    )
+    check(
+        "...two prefixes that merely LOOK alike still load (control against over-refusal)",
+        ok,
+        why[:110],
+    )
+
+    ok, why = _manifest_verdict(
+        [_manifest_record("alpha", ["oc-"]), _manifest_record("beta", ["oc-"])]
+    )
+    check(
+        "two factories claiming the SAME prefix FAIL, naming both",
+        not ok and "alpha" in why and "beta" in why and "oc-" in why,
+        why[:110],
+    )
+
+    ok, why = _manifest_verdict(
+        [_manifest_record("alpha", ["alpha-"]), _manifest_record("beta", ["alpha-beta-"])]
+    )
+    check(
+        "a prefix NESTING inside another FAILS — the startswith shape attribution uses",
+        not ok and "overlap" in why,
+        why[:110],
+    )
+
+def probe_the_live_manifest_satisfies_the_prefix_law() -> None:
+    """The shipped `registry/fleet.json` passes the new assertions — and they BITE.
+
+    A validator nobody's data can fail is indistinguishable from no validator, so this
+    probe also reports what it read: the prefixes actually declared, per factory.
+    """
+    data = reg.load_fleet_manifest()
+    declared = {
+        r["slug"]: list(r["job_prefixes"]) for r in data["factories"]
+    }
+    check(
+        "the live manifest loads and every declared factory carries a prefix",
+        bool(declared) and all(v for v in declared.values()),
+        f"{len(declared)} factory(s): {declared}",
+    )
+
 CHECKS = (
     ("1. every fragment validates against the schema", check_fragments_validate),
     ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
@@ -819,6 +927,9 @@ PROBES = (
     probe_a_command_shaped_check_fails,
     probe_a_future_review_by_fails,
     probe_the_box_wide_reader_reaches_the_default_home,
+    probe_a_factory_with_no_prefixes_fails,
+    probe_overlapping_prefixes_fail,
+    probe_the_live_manifest_satisfies_the_prefix_law,
 )
 
 def main() -> int:
