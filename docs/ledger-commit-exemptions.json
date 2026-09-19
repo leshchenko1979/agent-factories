@@ -1,0 +1,10 @@
+{
+  "_note": "Exemptions for tests/test_ledger_commit_cites_no_rows.py, keyed by the FULL 40-character sha. This is the FACTORY's own data, read by the gate — never inline in it, because the gate is paired byte-identically with TEMPLATE/tests/test_ledger_commit_cites_no_rows.py and a factory sha must not live in a file that ships to every new factory. The skeleton is TEMPLATE/docs/ledger-commit-exemptions.example.json. Absent or empty means no exemptions. Every entry that matches is printed as an 'excused:' line on EVERY gate run, and the closing line distinguishes clean from excused, so 'clean' and 'excused' are never the same output. A malformed entry, or one that matches no violation, is a gate ERROR rather than a silent pass. An exemption is a visible debt, not forgiveness; a second entry of the same shape is a process defect, not an exemption.",
+  "exemptions": [
+    {
+      "sha": "697b66085ff8fdb428bfc517418eb5082df1be33",
+      "date": "2026-09-18",
+      "reason": "POST-gate violation with an EMPTY REPAIR SPACE, ruled at n=328. The gate landed as 0f6c351 at 19:26:30Z and this commit came at 23:16:40Z, so it is not one of the historical pre-marker violations the forward-only design leaves alone. Every repair is barred: the commit is pushed (rewriting it is barred by the identity law, and it is not this lane's commit), a revert does not clear the gate because it reads subjects across MARKER..HEAD so the offending subject stays in range, and re-anchoring MARKER past it would make the marker's own definition false and silently convert a live violation into an excused one. The citation is verified CORRECT: n=323 quotes n=290's detail verbatim, so the harm the clause guards against — a wrong row number baked into an immutable message — did not materialise and the violation is FORM only."
+    }
+  ]
+}
