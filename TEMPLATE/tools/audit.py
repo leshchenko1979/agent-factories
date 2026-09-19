@@ -652,6 +652,21 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_gate_registration.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_gate_registration.py"])
 
+    # 29. Close-row revision gate: a close row's receipts describe a TREE, so the row must
+    #     name the revision it measured. Without it the receipt is not false, it is
+    #     UNCHECKABLE — a reader cannot tell whether "27 gates, 0 FAIL" describes the tree
+    #     that shipped or one that has since moved four commits. The value is validated as
+    #     a FIELD (`head=<sha>`), never as prose: measured at landing, a loose hex-shaped
+    #     pattern matches 30 of 54 close rows but only 4 carry the field, and a hex-shaped
+    #     token is not even necessarily a revision — 2 of the 30 match only inside the
+    #     append tool's own telemetry trailer (`tokens_out=`, rows n=349 and n=353) and 7
+    #     more cite a 10-digit GitHub comment id that `git cat-file -t` does not resolve
+    #     (n=10, 303, 341, 368, 370, 372, 374). Carries a boundary —
+    #     pre-invariant rows are excused and reported by count, and nothing is backfilled
+    #     (issue #63, P29).
+    if (repo_root / "tests/test_close_row_revision.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_row_revision.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

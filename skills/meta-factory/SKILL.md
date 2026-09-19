@@ -211,8 +211,10 @@ leaning on shared memory rather than on what it said.
 
 ## 8. Verdicts and claims
 
-- **Verdict verbs need a receipt.** "Green", "passing", "verified", "shipped" only with the
-  same-turn tool output that shows it.
+- **Verdict verbs need a receipt — and the receipt must name the revision it measured.**
+  "Green", "passing", "verified", "shipped" only with the same-turn tool output that shows
+  it, and a receipt about a TREE must name the revision it describes: a gate count or a row
+  count is true of the tree that produced it and unverifiable without the sha (issue #63).
 - **Identifiers are never hand-assembled.** Copy the full value from live output.
 - **No claim without a check.** Existence, absence and status all require a tool call in the
   same turn. "I have not verified" is acceptable; a confident guess is not.

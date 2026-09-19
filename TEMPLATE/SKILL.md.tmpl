@@ -168,9 +168,11 @@ archive.
 
 ## 9. Verdicts and claims
 
-- **Verdict verbs need a receipt.** "Green", "passing", "verified", "shipped"
-  may only be stated when the same turn contains the tool output that shows it.
-  A job name proves identity, never outcome.
+- **Verdict verbs need a receipt — and the receipt must name the revision it measured.**
+  "Green", "passing", "verified", "shipped" may only be stated when the same turn contains
+  the tool output that shows it. A job name proves identity, never outcome. A receipt about
+  a TREE must name the revision it describes: a gate count or a row count is true of the
+  tree that produced it and unverifiable without the sha (issue #63).
 - **Identifiers are never hand-assembled.** Copy the full value from live
   output — issue numbers, session UUIDs, run ids. A remembered prefix plus a
   guessed tail is a fabrication, even when it happens to be right.
