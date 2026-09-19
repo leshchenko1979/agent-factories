@@ -931,6 +931,12 @@ def load_topic_names(path: str | None) -> dict:
     return names
 
 
+def candidate_labels(matches: list[dict]) -> list[str]:
+    """The `profile:chat/thread=session` label of each binding competing for one topic."""
+    return sorted(
+        f"{b['_profile']}:{b['chat_id']}/{b['thread_id']}={b['session_id']}" for b in matches
+    )
+
 def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict, chat_id=None) -> dict:
     """Resolve one declared lane against the live binding rows.
 
@@ -940,6 +946,17 @@ def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict, chat_id=No
     session among the candidates for Infra's HQ lane. Where the factory's chat is
     known and the declared thread is not in it, the lane is `unbound` — the
     honest answer, since the room it names does not exist in that chat.
+
+    The narrowing leaves ONE question open, and the profile answers it. Every
+    surviving match already shares a chat, so a set drawn from more than one
+    PROFILE is the only genuinely unresolved case — there the registry cannot tell
+    which daemon's session owns the topic, and picking one silently is how a
+    registry sends work to the wrong lane. Several bindings within ONE profile are
+    not ambiguity but a SUPERSESSION CHAIN: a topic re-opened several times carries
+    one binding per generation, and the newest is the lane. So the status is
+    `ambiguous` across profiles, `superseded` for a chain of two or more, and
+    `resolved` for a lone binding. The chain's `candidates` are kept either way,
+    because the resolution is reported, never suppressed.
     """
     thread_id = lane.get("thread_id")
     result = {
@@ -966,16 +983,21 @@ def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict, chat_id=No
         matches = [b for b in matches if str(b.get("chat_id")) == str(chat_id)]
     if not matches:
         return result
-    if len(matches) > 1:
-        # A thread id that appears in two chats or two profiles is ambiguous, and
-        # picking one silently is how a registry sends work to the wrong lane.
-        newest = max(matches, key=lambda b: b.get("updated_at") or 0)
+    newest = max(matches, key=lambda b: b.get("updated_at") or 0)
+    if len({str(b.get("_profile")) for b in matches}) > 1:
+        # A match across two PROFILES is ambiguous, and picking one silently is
+        # how a registry sends work to the wrong lane. The narrowing above already
+        # makes every survivor share one chat, so this is the only case left in
+        # which the registry cannot tell which daemon owns the topic.
         result["status"] = "ambiguous"
-        result["candidates"] = sorted(
-            f"{b['_profile']}:{b['chat_id']}/{b['thread_id']}={b['session_id']}" for b in matches
-        )
+        result["candidates"] = candidate_labels(matches)
+    elif len(matches) > 1:
+        # Several bindings within ONE profile are a supersession chain: a topic
+        # re-opened several times carries one binding per generation, the newest
+        # of which is the lane. The chain is resolved and reported, not suppressed.
+        result["status"] = "superseded"
+        result["candidates"] = candidate_labels(matches)
     else:
-        newest = matches[0]
         result["status"] = "resolved"
     result.update(
         {
@@ -1021,6 +1043,17 @@ def collect_declared_lanes(paths: list[Path]) -> tuple[dict, list[str]]:
     return lanes, problems
 
 
+UNRESOLVED_STATUSES = ("unbound", "ambiguous", "no-thread-id")
+
+def unresolved_total(totals: dict) -> int:
+    """The exit-code predicate: which statuses mean a declared lane is unreachable.
+
+    `resolved` and `superseded` are deliberately absent. A supersession chain is a live
+    lane whose newest binding is the owner, so it is resolved by recency and does not
+    make the command fail; only a lane the registry cannot place at all does.
+    """
+    return sum(int(totals.get(status, 0)) for status in UNRESOLVED_STATUSES)
+
 def cmd_resolve(args: argparse.Namespace) -> int:
     paths = live_fragment_paths(args.paths)
     if not paths:
@@ -1041,7 +1074,14 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         bindings.extend(r for r in rows if "_error" not in r)
 
     resolved: dict = {}
-    totals = {"lanes": 0, "resolved": 0, "unbound": 0, "ambiguous": 0, "no-thread-id": 0}
+    totals = {
+        "lanes": 0,
+        "resolved": 0,
+        "superseded": 0,
+        "unbound": 0,
+        "ambiguous": 0,
+        "no-thread-id": 0,
+    }
     for factory, lanes in sorted(lanes_by_factory.items()):
         rows = [
             resolve_lane(lane, bindings, topic_names, FACTORY_CHATS.get(factory))
@@ -1074,14 +1114,18 @@ def cmd_resolve(args: argparse.Namespace) -> int:
                     f"  {row['status']:<10} {factory:<16} {str(row['topic']):<12} "
                     f"thread={row['thread_id']} session={row['session_id']}  {name}"
                 )
+                for candidate in row.get("candidates") or []:
+                    print(f"  {'':<10} {factory:<16} candidate: {candidate}")
         print(
-            "summary: {lanes} lane(s), {resolved} resolved, {unbound} unbound, "
-            "{ambiguous} ambiguous".format(**totals)
+            "summary: {lanes} lane(s), {resolved} resolved, {superseded} superseded, "
+            "{unbound} unbound, {ambiguous} ambiguous, {no-thread-id} no-thread-id".format(
+                **totals
+            )
         )
     if errors or problems:
         for line in errors + problems:
             print(f"resolve: {line}", file=sys.stderr)
-    unresolved = totals["unbound"] + totals["ambiguous"] + totals["no-thread-id"]
+    unresolved = unresolved_total(totals)
     return 1 if unresolved else 0
 
 

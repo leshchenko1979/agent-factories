@@ -138,9 +138,13 @@ def check_lanes_bound() -> list[str]:
 
     `resolve_lane` narrows by the factory's OWN chat id, because a thread id is
     unique only WITHIN a chat — thread 4 exists in both the Miidas and the Infra
-    chat. `ambiguous` is NOT a failure: the lane is bound and the renderer reports
-    the newest of the sessions sharing the topic, which is a live fact this gate
-    states by count rather than silently accepting or silently failing.
+    chat. What survives that narrowing is scoped to ONE profile here (the rows are
+    bucketed by `_profile` before the call), so a lane with several live sessions
+    on its topic comes back `superseded`: a supersession chain, resolved by
+    recency, and NOT a failure. `ambiguous` is the cross-profile case and is not
+    reachable from this check's inputs, but it is counted the same way rather than
+    silently accepted or silently failed. Both are stated by count, which is what
+    this gate owes a reader who cannot see the binding table.
     """
     bindings, errors = reg.all_bindings()
     problems: list[str] = list(errors)
@@ -149,6 +153,7 @@ def check_lanes_bound() -> list[str]:
         by_profile.setdefault(str(row.get("_profile")), []).append(row)
 
     declared = 0
+    superseded = 0
     ambiguous = 0
     for path, fragment in load_live():
         profile = str(fragment.get("profile"))
@@ -165,19 +170,24 @@ def check_lanes_bound() -> list[str]:
                 continue
             declared += 1
             resolved = reg.resolve_lane(lane, scoped, {}, chat_id=chat_id)
+            status = str(resolved.get("status"))
             where = f"{fragment.get('factory')}/{lane.get('topic')} (thread {lane.get('thread_id')})"
-            if resolved.get("status") == "resolved":
+            if status == "resolved":
                 continue
-            if resolved.get("status") == "ambiguous":
+            if status == "superseded":
+                superseded += 1
+                continue
+            if status == "ambiguous":
                 ambiguous += 1
                 continue
             problems.append(
-                f"declared lane {where} is {str(resolved.get('status')).upper()} — it "
+                f"declared lane {where} is {status.upper()} — it "
                 f"resolves to no live `session_bindings` row on profile `{profile}`"
             )
     counts.append(
         f"{declared} declared lane(s) checked against {len(bindings)} binding row(s); "
-        f"{ambiguous} ambiguous (bound, several sessions on one topic — newest renders)"
+        f"{superseded} supersession chain(s) (one profile, several generations — newest "
+        f"renders), {ambiguous} ambiguous (cross-profile, unresolvable)"
     )
     return problems
 
@@ -356,6 +366,61 @@ def check_announcements() -> list[str]:
 #
 # Each probe drives the SAME function the live check uses, with inputs whose answer
 # is known, so a green live check cannot come from a comparison that never compares.
+
+def probe_a_supersession_chain_is_not_ambiguity() -> None:
+    """#100: the multi-match branch splits on PROFILE, and BOTH halves are driven here.
+
+    The defect this pins: the chat narrowing runs BEFORE the length check, so every
+    survivor already shares one chat and the condition the old comment named — "two
+    chats or two profiles" — could not hold where it was tested. Intra-profile matches
+    are a supersession chain (a topic re-opened several times), so the newest binding is
+    the lane and the status says so; only a match across two PROFILES is genuinely
+    unresolved. The cross-profile leg is asserted as well, because the fix was built
+    around that detector and a fix that deleted it would pass the first check alone.
+    """
+    def binding(profile: str, session: str, updated: int) -> dict:
+        return {
+            "_profile": profile,
+            "chat_id": "-100123",
+            "thread_id": 7,
+            "session_id": session,
+            "updated_at": updated,
+        }
+
+    lane = {"topic": "HQ", "role": "hq", "thread_id": 7}
+    chain = [binding("ops", "old", 100), binding("ops", "new", 200)]
+    row = reg.resolve_lane(lane, chain, {}, chat_id="-100123")
+    check(
+        "two bindings in ONE profile are a supersession chain, and the newest wins",
+        row["status"] == "superseded" and row["session_id"] == "new",
+        f"status={row['status']} session={row['session_id']}",
+    )
+    check(
+        "...and the chain is REPORTED: every candidate survives on the row",
+        set(row.get("candidates") or []) == {"ops:-100123/7=old", "ops:-100123/7=new"},
+        str(row.get("candidates")),
+    )
+    cross = [binding("ops", "old", 100), binding("family", "other", 200)]
+    row = reg.resolve_lane(lane, cross, {}, chat_id="-100123")
+    check(
+        "a match across two PROFILES is still AMBIGUOUS — the detector survives the fix",
+        row["status"] == "ambiguous",
+        f"status={row['status']}",
+    )
+    check(
+        "...and the exit predicate fails on it while a chain does not",
+        reg.unresolved_total({"ambiguous": 1}) == 1
+        and reg.unresolved_total({"superseded": 3}) == 0,
+        f"ambiguous={reg.unresolved_total({'ambiguous': 1})} "
+        f"superseded={reg.unresolved_total({'superseded': 3})}",
+    )
+    lone = [binding("ops", "only", 100)]
+    row = reg.resolve_lane(lane, lone, {}, chat_id="-100123")
+    check(
+        "a lone binding is still `resolved`, so the chain branch is not the default",
+        row["status"] == "resolved" and "candidates" not in row,
+        f"status={row['status']} candidates={row.get('candidates')}",
+    )
 
 def probe_a_hand_edit_is_named() -> None:
     committed_md, committed_index, stamp = read_committed()
@@ -667,6 +732,7 @@ CHECKS = (
 )
 
 PROBES = (
+    probe_a_supersession_chain_is_not_ambiguity,
     probe_a_hand_edit_is_named,
     probe_only_the_stamp_advanced_passes,
     probe_the_sentinel_would_rewrite_badges,
