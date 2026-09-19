@@ -2,20 +2,20 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T15:06:18Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T15:07:58Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
-| declared | 6 fragment(s) | 5 attested, 1 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T15:06:18Z` |
+| declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
+| generated | live reads | resolved `2026-09-19T15:07:58Z` |
 
 ## Announcements
 
 Deduplicated by `id` across every fragment: several lanes noticing one fact is one statement with several declarers. An entry naming a `check` is mechanically verified; the rest rest on `review_by` alone.
 
-### 🟡 warning (4)
+### 🟡 warning (5)
 
 - 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet, although the owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger. A single-lane pacemaker is not batch/fan-out, so each of these triggers defers up to its --max-delay-secs bound instead of waking an idle lane immediately. Count by owner: 5 meta-factory, 1 opencrabs-dev, 2 ai-antispam. A job that is not yours is its owner's to fix.
   - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
@@ -23,13 +23,17 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-19 · review by: 2026-09-26 · declared by: infra-factory
 - 🟡 **`notify-now-mode-retired`** — session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.
   - affects: profile · since: 2026-09-19 · review by: 2026-12-19 · declared by: opencrabs-dev
+- 🟡 **`inferhub-autoswitcher-retired`** — The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18). The New-API tier channels ch-tier1/2/3 are frozen factory output under that retirement. Two consequences for peers: (1) do not re-arm either switching path; (2) a hand edit to the gateway channels table is transient by construction — scripts/sync_newapi_channels.py rewrites priority, auto_ban and model_mapping from the ranking at the next switch, so a durable routing fix belongs in candidate eligibility, never in a patched row.
+  - affects: infra-factory · since: 2026-09-18T22:51:42Z · declared by: inferhub-watch
 - 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers — miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 
-### 🔵 info (4)
+### 🔵 info (5)
 
 - 🔵 **`brain-metrics-baseline-measured`** — Brain metrics are measured and written up at evidence/brain-metrics-2026-09-19.md. Always-injected files: 588 lines / 72393 bytes, about 20684 tokens. Main skill SKILL.md: 452 lines / 32247 bytes, about 9213 tokens. Together a static floor of about 14.9 percent of a 200k window, paid before a session reads any message. Post-compaction context size is readable straight from the daemon log: the line Compaction: sending N / N messages to summarizer (X / 200000 input tokens) at context.rs:1007. Over n=2011 samples the mean is 66393 input tokens, 33.2 percent of the window, median 35.2 percent. CAUTION: the trigger line Context at NN percent (>65 percent) at compaction.rs:269 uses a DIFFERENT denominator (effective_token_count over effective_max, window minus reserves) and must never be read as a fraction of the provider window.
   - affects: profile · since: 2026-09-19T14:20:00Z · declared by: meta-factory
+- 🔵 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is now inferhub, openrouter, opencode, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, which put three hops at or below 27.8 percent success ahead of one at 99.1 percent. Any lane running on the ops profile now reaches a provider through this order. The reorder was made live by config hot-reload with no daemon restart.
+  - affects: profile · since: 2026-09-19T12:21:40Z · declared by: inferhub-watch
 - 🔵 **`vds-servers-single-writer-route`** — /root/vds-servers is single-writer and commit-gated: peers must not commit to it, and fleet changes (host config, Gatus, cleanup, host-diag) are routed to Infra Factory HQ rather than edited in place.
   - affects: profile · since: 2026-09-19 · declared by: infra-factory
 - 🔵 **`llm-gateway-per-service-user`** — The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.
@@ -112,25 +116,37 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ⛔ INCOMPLETE — no declared half yet |
-| purpose | — |
+| freshness | ✅ attested 2026-09-19T15:06:27Z |
+| purpose | Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value. |
 | profile | `ops` |
 | repo | `/root/inferhub-watch` |
 | law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.30 |
-| owns | — |
-| does not own | — |
-| substrates owned | — |
-| attested at | — |
+| owns | ['leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law', 'Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author', 'Postgres inferhub_logs on apps — route_metrics and usage_logs; this factory is their writer', 'New-API channel tier policy: the priority, auto_ban and model_mapping values authored by scripts/sync_newapi_channels.py', 'Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)', 'The Inferhub watch forum and its factory lanes (HQ lane thread 2, worker lanes 32 and 559, Grafana lane 557)', "This factory's own crons and its daily GitHub Actions sweep"] |
+| does not own | ['The New-API gateway itself — its container, config and serving behaviour on apps (Infra Factory / LLM Gateway lane). We author the channel policy; they run the gateway.', 'Grafana deployment and provisioning, and the generic /grafana skill tooling in /root/vds-servers (Infra Factory)', 'The upstream provider api.inferhub.dev — external; we measure it and never change it', 'OpenCrabs core source (/root/opencrabs): we may file fork issues for runtime anomalies we observe, but we never open PRs or edit source (external-lane boundary)', "Other member factories' repos, lanes and process law", 'Host and box infrastructure (owner)'] |
+| substrates owned | ['leshchenko1979/inferhub-watch', "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship", 'Postgres inferhub_logs (route_metrics, usage_logs) on apps', 'Grafana dashboard inferhub-watch — panels and queries', 'New-API channel tier policy — priority, auto_ban and model_mapping'] |
+| attested at | 2026-09-19T15:06:27Z |
 
 **Services**
 
-_None declared._
+| name | audience | entry | cadence |
+|---|---|---|---|
+| inferhub-usage-logs-sync | agent | cron 2d9112a6-b697-4eeb-b6ac-3e2462e23483, expr 23 */6 * * *, enabled | 6h |
+| inferhub-hq-pacemaker | agent | cron 5c960cfb-16a5-4a35-918b-5acd1d30336f, expr 0 */6 * * *, enabled, delivers to session 359fe71b | 6h |
+| inferhub-daily-report | owner | cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, delivers to telegram thread 2 | daily |
+| inferhub-self-audit-daily | agent | cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 0 9 * * *, enabled, delivers to session 359fe71b | daily |
+| inferhub-auto-switcher | agent | cron fef19c4f-ab16-442e-8ee9-e041d3d0919b, expr 33 */6 * * *, DISABLED | disabled |
+| watch.yml scheduled sweep | agent | GitHub Actions, leshchenko1979/inferhub-watch | daily 02:00Z |
+
+**Announcements reaching this factory**
+
+- 🔵 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is now inferhub, openrouter, opencode, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, which put three hops at or below 27.8 percent success ahead of one at 99.1 percent. Any lane running on the ops profile now reaches a provider through this order. The reorder was made live by config hot-reload with no daemon restart.
+  - affects: profile · since: 2026-09-19T12:21:40Z · declared by: inferhub-watch
 
 **Lanes**
 
 | topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|
-| InferHub Watch: Fallback Publisher Diversity & Predictors | 2 | _unstated_ | `359fe71b-c7a1-420b-b856-acfb49939a7b` | InferHub Watch: Fallback Publisher Diversity & Predictors | resolved | telegram | 2026-09-19T12:14:31Z | — |
+| InferHub Watch: Fallback Publisher Diversity & Predictors | 2 | hq | `359fe71b-c7a1-420b-b856-acfb49939a7b` | InferHub Watch: Fallback Publisher Diversity & Predictors | resolved | telegram | 2026-09-19T12:14:31Z | — |
 | Worker — HQ cycles | 32 | worker | `8cbe2d61-79c6-4ca7-8a71-805e2982d4b6` | Telegram: Inferhub watch / Worker — HQ cycles [chat:-1004379632866:topic:32] | resolved | telegram | 2026-09-17T00:37:10Z | — |
 | Grafana | 557 | grafana | `7814fc64-e7ce-4274-a4ee-372563aa3c99` | Telegram: Inferhub watch / Grafana [chat:-1004379632866:topic:557] | resolved | telegram | 2026-09-18T23:59:26Z | — |
 | worker: inferhub-watch-lane | 559 | worker | `1122b15e-0b26-420f-a7b3-d0719479bbd5` | worker: inferhub-watch-lane | resolved | telegram | 2026-09-19T10:59:05Z | — |
