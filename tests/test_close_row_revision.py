@@ -73,12 +73,22 @@ def _parse_ts(value: str) -> dt.datetime:
     return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 def _declared_revision(detail: str) -> str | None:
-    """The `head=<sha>` value, or None when the field is absent or unreadable.
+    """The `head=<sha>` value, or None when no readable field is present.
 
     A FIELD, not a prose mention: the token must start with `head=`, and its value must
     be hex of at least `_MIN_SHA` chars. Both halves are probed, because a predicate that
     only checked "is a sha present somewhere" would pass a row whose revision is merely
     cited in a sentence — the pattern-inflated shape #63 measured at 30 of 54.
+
+    The scan CONTINUES past an unreadable `head=` token rather than stopping at it, the
+    shape `tests/test_score_gate_recorded.py::_has_head_sha` uses. Stopping at the first
+    one is a false-RED generator: a row that DESCRIBES the field in prose before naming
+    the revision ("the `head=` field is carried by only 4 rows ... head=02e9597…") does
+    declare a revision, and an early return rejects it. Not hypothetical — it fired on
+    this gate's own author's close row on the day it landed, and it is #53 clause 4's
+    shape one layer up, prose mistaken for a field. The distinction that matters is
+    readable-vs-not, so a row whose only `head=` token is unreadable is still reported,
+    which `test_probe_rejects_an_unreadable_revision` pins.
     """
     for token in str(detail).replace(",", " ").replace(";", " ").split():
         if not token.startswith(REVISION_KEY):
@@ -86,7 +96,6 @@ def _declared_revision(detail: str) -> str | None:
         sha = token[len(REVISION_KEY):].strip(").`")
         if len(sha) >= _MIN_SHA and all(c in _HEX for c in sha):
             return sha
-        return None  # the field is present but unreadable — still a problem
     return None
 
 def close_row_revision_problems(
@@ -186,6 +195,21 @@ def test_probe_rejects_a_prose_mention_without_the_field() -> None:
     row = {**_OK, "detail": "Closed. The fix landed at 9c2ed02 as clause 8 of the stream."}
     problems, _ = close_row_revision_problems([row])
     assert problems, "a sha-shaped prose token must not satisfy the field"
+
+def test_probe_accepts_a_row_that_describes_the_field_before_naming_it() -> None:
+    """The live shape that made this gate reject its own author's close row.
+
+    n=399 read "the head= FIELD is carried by only 4 (n=283, ...)" and only later
+    "head=02e9597…". An early return on the first `head=` token rejected a row that does
+    declare its revision — a false RED, and #53 clause 4's shape (prose read as a field).
+    """
+    row = {**_OK, "detail": (
+        "Closed. The head= FIELD is carried by only 4 rows; the scan must continue past "
+        "this prose to the field that follows. Receipts taken at "
+        "head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e."
+    )}
+    problems, _ = close_row_revision_problems([row])
+    assert problems == [], f"a row naming its revision after describing the field must pass: {problems}"
 
 def test_probe_rejects_a_pure_digit_comment_id() -> None:
     """n=303 cites 5737030289 — a GitHub comment id, which `git cat-file -t` does not
