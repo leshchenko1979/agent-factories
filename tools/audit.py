@@ -802,7 +802,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Operational process audit runner.")
     parser.add_argument("--json", action="store_true", help="Output JSON results to stdout")
     parser.add_argument("--report", action="store_true", help="Write the dated report in evidence/scores/ AND record its telemetry run row")
-    parser.add_argument("--output", type=str, default="", help="Custom report output file path")
+    parser.add_argument("--output", type=str, default="", help="Custom report output path; diagnostic only: records no run row and does not satisfy the report step")
     parser.add_argument("--stamp", action="store_true", help="Record a run row only (no artifact; does not satisfy the report step)")
     parser.add_argument("--actor", type=str, default="hq", help="Actor role for ledger stamp (default: hq)")
     parser.add_argument(
