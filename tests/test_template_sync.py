@@ -63,10 +63,7 @@ PAIRS = [
     ("tests/test_close_row_revision.py", "TEMPLATE/tests/test_close_row_revision.py"),
     ("tests/test_score_gate_recorded.py", "TEMPLATE/tests/test_score_gate_recorded.py"),
     ("tests/test_subject_form.py", "TEMPLATE/tests/test_subject_form.py"),
-    (
-        "tests/test_rework_relative_revision.py",
-        "TEMPLATE/tests/test_rework_relative_revision.py",
-    ),
+    ("tests/test_rework_relative_revision.py", "TEMPLATE/tests/test_rework_relative_revision.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
 ]
 
