@@ -32,6 +32,19 @@ against the live measurement and mean it. It is measured through the audit's own
 predicate rather than re-derived here, so one number cannot have two
 implementations free to disagree.
 
+The fifth property is the one question this file cannot answer about itself:
+whether the work unit a `Subject` names actually EXISTS. Coverage counts
+determinate cells, and a `#N` pointing at something that never closed is still
+determinate — so coverage can read 100% while the change fail rate silently drops
+the case: the entry looks linked and no failure is counted for it. That is why
+the resolution leg takes the ledger's closed-subject set as an INPUT, and it is
+the deliberate exception to the invariance above. The *coverage assertion* is
+invariant to the closed set — probed at the end of `main`, and the property that
+makes its live assertion safe — while the resolution leg is only meaningful
+against it. The two run side by side on purpose: one assertion no other lane can
+move, one that reads exactly what another lane moves, and neither softens the
+other.
+
 Run:  python3 tests/test_rework.py
 Exit: 0 all entries complete and contiguous, 1 otherwise.
 """
@@ -44,6 +57,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REWORK = REPO / "evidence" / "rework.md"
+# Read by the resolution leg only. Everything else in this gate is a property of
+# the rework file alone; the closed set is the one input that arrives from
+# outside, and the leg that takes it says so where it is used.
+LEDGER = REPO / "evidence" / "ledger.jsonl"
 
 # The coverage predicate lives in `tools/audit.py`, which reads the same file this
 # gate reads. It is imported rather than re-implemented so that one number cannot
@@ -56,9 +73,14 @@ PLACEHOLDERS = {"tbd", "todo", "n/a", "-", "?", "unknown", "none"}
 
 # `Subject` is the one column where `none` is a *defined answer* rather than a
 # dodge: it means the defect was caught before any change landed. So the column
-# is exempt from PLACEHOLDERS and carries its own vocabulary instead.
-SUBJECT_LEGACY = "not recorded (pre-column)"
-SUBJECT_RE = re.compile(r"#\d+")
+# is exempt from PLACEHOLDERS and carries its own vocabulary instead — and that
+# vocabulary is BOUND from `tools/audit.py` rather than retyped here, because
+# that module reads the same column to derive the change fail rate numerator: two
+# hand-written patterns is how the gate and the reader come to disagree about
+# which cells name a work unit at all.
+SUBJECT_NONE = audit.SUBJECT_NONE
+SUBJECT_LEGACY = audit.SUBJECT_PRE_COLUMN
+SUBJECT_RE = audit.SUBJECT_WORK_UNIT_RE
 
 HEADER = "| Date | Source | Defect | Root cause | Resolution | Prevented by | Subject |"
 SEPARATOR = "|---|---|---|---|---|---|---|"
@@ -111,8 +133,10 @@ def rate_claim_problems(text: str) -> list[str]:
 # opposite case: they read the ledger's closed-subject set, which every lane moves
 # when it closes a work unit, so asserting them live would fail on another lane's
 # commit — the false-RED class #41 names. That asymmetry is why only the coverage
-# is gated, and why the measurement passes an EMPTY closed set: the value is
-# invariant to it, which is the property that makes a live assertion safe.
+# is gated HERE, and why this measurement passes an EMPTY closed set: the value is
+# invariant to it, which is the property that makes a live assertion safe. The
+# closed set is not ignored — `subject_resolution_problems` below reads it
+# deliberately, and asserts a different property against it.
 COVERAGE_CLAIM = re.compile(r"(\d+)\s+of\s+(\d+)\s+entr", re.I)
 
 def measure_coverage() -> tuple[int, int]:
@@ -150,6 +174,46 @@ def coverage_claim_problems(text: str) -> list[str]:
                 f"{measured[0]} of {measured[1]}"
             )
     return problems
+
+# The resolution leg — the one assertion here that is NOT invariant to another
+# lane's work, and deliberately so. Coverage answers "does this entry name a work
+# unit?" from this file alone; resolution answers "does that work unit exist?",
+# which only the ledger knows. A dangling `#N` is the failure this leg exists to
+# catch: the entry reads as linked, coverage counts it as determinate, and the
+# change fail rate quietly counts no failure for it — the linkage looks complete
+# while a case has fallen out of the numerator.
+#
+# It counts DISTINCT SUBJECTS, never cells: two entries against one work unit
+# (`#42` carries two in this log) are lawful, and the question is how many work
+# units are referenced, not how many rows mention one. The count is returned
+# beside the problems rather than derived by the caller, so the printed figure
+# and the thing that was checked cannot describe different populations.
+def subject_resolution_problems(
+    rows: list[tuple[int, list[str]]], closed_subjects: set[str]
+) -> tuple[list[str], int]:
+    """(problems, distinct determinate subjects) for an entries table.
+
+    A problem names the subject and the row it was first seen on: an unresolvable
+    reference reported as a bare count is a finding nobody can act on.
+    """
+    named: dict[str, int] = {}
+    for n, cells in rows:
+        if len(cells) != len(COLUMNS):
+            continue
+        subject = cells[-1]
+        if not SUBJECT_RE.fullmatch(subject):
+            continue
+        named.setdefault(subject, n)
+
+    problems = [
+        f"Subject {subject} (first seen at row {named[subject]}) names a work "
+        "unit that never closed — a dangling reference: the entry reads as "
+        "linked, coverage counts it as determinate, and the change fail rate "
+        "counts no failure for it"
+        for subject in sorted(named, key=lambda s: int(s[1:]))
+        if subject not in closed_subjects
+    ]
+    return problems, len(named)
 
 def is_header(line: str) -> bool:
     return line.startswith("|") and line.strip("|").split("|")[0].strip().lower().startswith("date")
@@ -214,7 +278,7 @@ def check_text(text: str) -> tuple[list[str], int]:
                 problems.append(f"row {n} ({date}): '{label}' is empty")
             elif label == "Subject":
                 # The Subject column's own vocabulary — see SUBJECT_LEGACY.
-                if value not in ("none", SUBJECT_LEGACY) and not SUBJECT_RE.fullmatch(value):
+                if value not in (SUBJECT_NONE, SUBJECT_LEGACY) and not SUBJECT_RE.fullmatch(value):
                     problems.append(
                         f"row {n} ({date}): 'Subject' is {value!r} — expected "
                         "'#<n>' (the work unit whose change failed), 'none' "
@@ -236,6 +300,31 @@ def probe(name: str, text: str, want_problems: bool, failures: list[str]) -> Non
     problems, _ = check_text(text)
     ok = bool(problems) == want_problems
     detail = problems[0] if problems else "no problems"
+    print(f"  {'PASS' if ok else 'FAIL'}  {name} — {detail}")
+    if not ok:
+        failures.append(name)
+
+def resolution_probe(
+    name: str,
+    doc: str,
+    closed: set[str],
+    want_problems: bool,
+    want_examined: int,
+    failures: list[str],
+    want_named: str | None = None,
+) -> None:
+    """Probe the resolution leg, which takes rows and a closed set — not a document.
+
+    `want_named` asserts the report names the offending subject rather than
+    merely counting it, which is the half of the discipline a boolean cannot check.
+    """
+    problems, examined = subject_resolution_problems(
+        entry_rows(section_body(doc) or ""), closed
+    )
+    ok = bool(problems) == want_problems and examined == want_examined
+    if want_named is not None:
+        ok = ok and any(want_named in p for p in problems)
+    detail = problems[0] if problems else f"{examined} distinct subject(s), none dangling"
     print(f"  {'PASS' if ok else 'FAIL'}  {name} — {detail}")
     if not ok:
         failures.append(name)
@@ -270,7 +359,8 @@ def main() -> int:
     if not REWORK.is_file():
         sys.exit("evidence/rework.md is missing")
 
-    problems, count = check_text(REWORK.read_text(encoding="utf-8"))
+    text = REWORK.read_text(encoding="utf-8")
+    problems, count = check_text(text)
     if problems:
         print(f"rework log incomplete: {len(problems)} problem(s)\n")
         for p in problems:
@@ -375,6 +465,39 @@ def main() -> int:
         True, failures,
     )
 
+    # The resolution leg. Its input arrives from the ledger, so its probes supply
+    # the closed set themselves: a predicate only ever run against a correct set
+    # has not been shown to reject a wrong one.
+    resolution_probe(
+        "a determinate Subject that closed passes",
+        entries + f"{good_row(1, '#31')}\n", {"#31"}, False, 1, failures,
+    )
+    resolution_probe(
+        "a determinate Subject that never closed is caught, and named",
+        entries + f"{good_row(1, '#31')}\n", set(), True, 1, failures,
+        want_named="#31",
+    )
+    resolution_probe(
+        "a duplicated Subject is one work unit, not two",
+        entries + f"{good_row(1, '#42')}\n{good_row(2, '#42')}\n",
+        {"#42"}, False, 1, failures,
+    )
+    resolution_probe(
+        "a duplicated dangling Subject is reported once",
+        entries + f"{good_row(1, '#42')}\n{good_row(2, '#42')}\n",
+        set(), True, 1, failures,
+    )
+    resolution_probe(
+        "a Subject of 'none' and the pre-column marker are not work units",
+        entries + f"{good_row(1, SUBJECT_NONE)}\n{good_row(2, SUBJECT_LEGACY)}\n",
+        set(), False, 0, failures,
+    )
+    resolution_probe(
+        "a prose cell that mentions a number is not a work-unit reference",
+        entries + f"{good_row(1, 'see #42 for the detail')}\n",
+        {"#42"}, False, 0, failures,
+    )
+
     # The property that makes a live assertion safe at all: the coverage figure is
     # invariant to the ledger's closed-subject set, which every lane moves when it
     # closes a work unit. If it were not, this gate would go RED on another lane's
@@ -393,6 +516,28 @@ def main() -> int:
     )
     if not invariant:
         failures.append("the coverage figure moves with the closed-subject set")
+
+    # The resolution leg against the LIVE document. This is the one assertion in
+    # the gate that reads the ledger, and it reads it through the audit's own
+    # parser so the closed set checked here is the same population the change fail
+    # rate is computed against — a second reading of the ledger is how the gate
+    # and the rate come to disagree about which work units exist.
+    if not LEDGER.is_file():
+        print(f"  FAIL  the ledger is missing at {LEDGER} — nothing can be resolved")
+        failures.append("the ledger is missing, so no determinate Subject can resolve")
+    else:
+        _, closed_subjects = audit.parse_ledger(LEDGER)
+        resolution_problems, examined = subject_resolution_problems(
+            entry_rows(section_body(text) or ""), closed_subjects
+        )
+        print(
+            f"  {'PASS' if not resolution_problems else 'FAIL'}  every determinate "
+            f"Subject resolves to a closed work unit — {examined} distinct "
+            f"subject(s) examined against {len(closed_subjects)} closed"
+        )
+        for problem in resolution_problems:
+            print(f"    - {problem}")
+        failures.extend(resolution_problems)
 
     print()
     if failures:
