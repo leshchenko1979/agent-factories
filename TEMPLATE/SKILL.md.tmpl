@@ -298,6 +298,20 @@ taken from the file is wrong from then on — in a way that looks fine.
 `tools/ledger.py` takes an exclusive lock and computes the next row number
 *inside* it, so the collision cannot happen. Ship its test with it.
 
+**A row is retired by naming it, never by deleting it.** The lock above binds the code,
+not the artifact: a writer that never calls `tools/ledger.py` takes no lock and leaves no
+trace, and once its removal is *committed* the append guard compares working against
+committed, goes self-consistent, and every gate reads green over a file that has lost
+committed history. So no row identity — the `(n, ts, event, actor, subject)` tuple a row
+is known by — is ever removed: a row that must not stand is retired by appending a row
+that names it, and the original stays. Ship the gate that walks the committed history and
+reports every commit whose diff removes a row identity, which is why the check is a set
+difference over identities and not a text search — the one measured case removes a row
+whose surviving neighbours still contain every word it carried. Its exemptions are factory
+data in `docs/ledger-no-shrink-exemptions.json`, keyed by full sha and never inline in the
+gate, and every run prints them so "clean" and "excused" are never the same output; a gate
+that examines zero commits fails loudly rather than passing vacuously.
+
 **A row count is not an integrity check.** The ledger is read as a *sequence*: a
 subject that reaches `close` must have been filed (`intake`) before it and taken
 (`claim`) after that intake, and `verify` fails naming the subject and the missing

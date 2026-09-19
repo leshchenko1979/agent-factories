@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.2
+version: 0.1.3
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -347,6 +347,8 @@ way that looks fine. `tools/ledger.py` takes an exclusive lock, computes the nex
 number *inside* it, and fsyncs before releasing. `tests/test_ledger.py` runs twenty
 concurrent appends and asserts the row numbers are still `1..N`: the property is tested,
 not asserted.
+
+**A row is retired by naming it, never by deleting it.** The single-writer lock above binds the code, not the artifact: a writer that never calls `tools/ledger.py` takes no lock and leaves no trace, and once its removal is *committed* the append guard compares working against committed, goes self-consistent, and every gate reads green over a ledger that has lost committed history. So no row identity — the `(n, ts, event, actor, subject)` tuple a row is known by — is ever removed: a row that must not stand is retired by appending a row that names it, and the original stays. `tests/test_ledger_no_shrink.py` walks the committed history and reports every commit whose diff removes a row identity, which is why the check is a set difference over identities and not a text search — the one measured case removes a row whose surviving neighbours still contain every word it carried. Its exemptions are factory data in `docs/ledger-no-shrink-exemptions.json`, keyed by full sha and never inline in the gate, and every run prints them so "clean" and "excused" are never the same output; a gate that examines zero commits fails loudly rather than passing vacuously.
 
 **A row count is not an integrity check.** The ledger is read as a *sequence*: a subject
 that reaches `close` must have been filed (`intake`) before it and taken (`claim`) after
