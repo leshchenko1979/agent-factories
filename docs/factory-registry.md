@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-19T14:38:02Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-19T14:59:52Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 0 attested, 6 awaiting an answer |
-| generated | live reads | resolved `2026-09-19T14:38:02Z` |
+| generated | live reads | resolved `2026-09-19T14:59:52Z` |
 
 ## Announcements
 
@@ -243,7 +243,7 @@ Attribution basis: deliver_to -> lane.
 | purpose | — |
 | profile | `ops` |
 | repo | `/root/opencrabs` |
-| law | `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md` — revision 0.4.215 |
+| law | `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md` — revision 0.4.217 |
 | owns | — |
 | does not own | — |
 | substrates owned | — |

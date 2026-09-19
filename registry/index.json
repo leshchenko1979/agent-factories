@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T14:38:02Z",
+  "resolved_at": "2026-09-19T14:59:52Z",
   "counts": {
     "factories": 6,
     "attested": 0,
@@ -360,7 +360,7 @@
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.215",
+      "skill_revision": "0.4.217",
       "purpose": null,
       "zone": {
         "owns": null,
