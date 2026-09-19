@@ -640,6 +640,235 @@ CHECKS.update(
 )
 
 
+# ---------------------------------------------------------------------------
+# The live half: which session is actually behind each declared lane.
+#
+# Every read goes through a `file:<path>?mode=ro` URI. The DB is never copied:
+# a copy without its WAL is stale state, and on this box a bare `cp` of a 1 GB
+# database is both a disk leak and memory pressure under a 768 MiB cgroup cap.
+#
+# A lane is resolved by its `thread_id`, and the answer is the session UUID the
+# binding table currently names. That indirection is the point: a fragment
+# declares a stable PLACE (the topic), and the session behind it is whatever the
+# binding says today. Declaring a UUID would be wrong within days, which is why
+# the schema rejects one.
+# ---------------------------------------------------------------------------
+
+
+def profile_dbs() -> list[Path]:
+    """Every profile's database, sorted. Read-only, never copied."""
+    return sorted(PROFILE_ROOT.glob("*/opencrabs.db"))
+
+
+def read_bindings(db: Path) -> list[dict]:
+    """Read one profile's bindings, joined to the session it names.
+
+    `left join` on purpose: a binding whose session row is gone is a fact worth
+    reporting (a lane pointing at nothing), and an inner join would hide it.
+
+    The columns are PROBED rather than assumed. Older profile homes carry a
+    `session_bindings` without `last_origin`/`turn_open_at`, and a fixed SELECT
+    fails outright there — which reads as "this profile has no bindings", the one
+    wrong answer that is indistinguishable from a healthy empty result. So a
+    missing column becomes NULL and the row shape stays constant.
+    """
+    rows: list[dict] = []
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+    except sqlite3.Error as exc:
+        return [{"_error": f"{db}: {exc}"}]
+    conn.row_factory = sqlite3.Row
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute("select name from sqlite_master where type='table'")
+        }
+        if "session_bindings" not in tables:
+            return [{"_error": f"{db}: no session_bindings table"}]
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(session_bindings)")}
+        select = ["b.session_id", "b.channel", "b.chat_id", "b.thread_id", "b.updated_at"]
+        for optional in ("last_origin", "turn_open_at"):
+            select.append(f"b.{optional}" if optional in columns else f"NULL as {optional}")
+        if "sessions" in tables:
+            select += ["s.title as session_title", "s.updated_at as session_updated_at"]
+        else:
+            select += ["NULL as session_title", "NULL as session_updated_at"]
+        sql = (
+            "select " + ", ".join(select) + " from session_bindings b "
+            + ("left join sessions s on s.id = b.session_id" if "sessions" in tables else "")
+        )
+        for row in conn.execute(sql):  # iterated, never materialised into a second list
+            record = dict(row)
+            record["_profile"] = db.parent.name
+            record["_db"] = str(db)
+            rows.append(record)
+    except sqlite3.Error as exc:
+        rows.append({"_error": f"{db}: {exc}"})
+    finally:
+        conn.close()
+    return rows
+
+def load_topic_names(path: str | None) -> dict:
+    """Topic names read from the Telegram surface, where the caller supplied them.
+
+    The daemon DB holds `thread_id` and the session's own title, not the forum
+    topic's NAME — that lives on the Telegram surface. So the name is an INPUT,
+    and an announcement or lane row whose name did not come from this file is
+    rendered `unverified` rather than guessed from a session title that happens
+    to look similar.
+    """
+    if not path:
+        return {}
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"resolve: cannot read --topics {path}: {exc}")
+    entries = data.get("topics", data) if isinstance(data, dict) else data
+    if not isinstance(entries, list):
+        raise SystemExit("resolve: --topics must be a list, or an object with a `topics` list")
+    names: dict = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or "thread_id" not in entry:
+            continue
+        names[(str(entry.get("chat_id", "")), int(entry["thread_id"]))] = entry.get("name")
+    return names
+
+
+def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict) -> dict:
+    """Resolve one declared lane against the live binding rows."""
+    thread_id = lane.get("thread_id")
+    result = {
+        "topic": lane.get("topic"),
+        "role": lane.get("role"),
+        "thread_id": thread_id,
+        "session_id": None,
+        "status": "unbound",
+        "channel": None,
+        "chat_id": None,
+        "bound_at": None,
+        "binding_age_s": None,
+        "last_origin": None,
+        "turn_open": None,
+        "session_title": None,
+        "topic_name": None,
+        "topic_name_verified": False,
+    }
+    if thread_id is None:
+        result["status"] = "no-thread-id"
+        return result
+    matches = [b for b in bindings if b.get("thread_id") == thread_id and "_error" not in b]
+    if not matches:
+        return result
+    if len(matches) > 1:
+        # A thread id that appears in two chats or two profiles is ambiguous, and
+        # picking one silently is how a registry sends work to the wrong lane.
+        newest = max(matches, key=lambda b: b.get("updated_at") or 0)
+        result["status"] = "ambiguous"
+        result["candidates"] = sorted(
+            f"{b['_profile']}:{b['chat_id']}/{b['thread_id']}={b['session_id']}" for b in matches
+        )
+    else:
+        newest = matches[0]
+        result["status"] = "resolved"
+    result.update(
+        {
+            "session_id": newest.get("session_id"),
+            "channel": newest.get("channel"),
+            "chat_id": newest.get("chat_id"),
+            "last_origin": newest.get("last_origin"),
+            "turn_open": bool(newest.get("turn_open_at")),
+            "session_title": newest.get("session_title"),
+        }
+    )
+    updated = newest.get("updated_at")
+    if updated:
+        result["bound_at"] = datetime.datetime.fromtimestamp(
+            updated, datetime.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        result["binding_age_s"] = int(
+            datetime.datetime.now(datetime.timezone.utc).timestamp() - updated
+        )
+    key = (str(newest.get("chat_id", "")), int(thread_id))
+    if key in topic_names:
+        result["topic_name"] = topic_names[key]
+        result["topic_name_verified"] = True
+    return result
+
+
+def collect_declared_lanes(paths: list[Path]) -> tuple[dict, list[str]]:
+    """Every lane the fragments declare, grouped by factory slug."""
+    lanes: dict = {}
+    problems: list[str] = []
+    for path in paths:
+        data, error = load_fragment(path)
+        if error:
+            problems.append(error)
+            continue
+        if not isinstance(data, dict):
+            continue
+        factory = data.get("factory") or path.stem
+        bucket = lanes.setdefault(str(factory), [])
+        for lane in data.get("lanes") or []:
+            if isinstance(lane, dict):
+                bucket.append(lane)
+    return lanes, problems
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    paths = fragment_paths(args.paths)
+    if not paths:
+        print("registry: no fragments to resolve", file=sys.stderr)
+        return 1
+    topic_names = load_topic_names(args.topics)
+    lanes_by_factory, problems = collect_declared_lanes(paths)
+    bindings: list[dict] = []
+    errors: list[str] = []
+    for db in profile_dbs():
+        rows = read_bindings(db)
+        errors.extend(r["_error"] for r in rows if "_error" in r)
+        bindings.extend(r for r in rows if "_error" not in r)
+
+    resolved: dict = {}
+    totals = {"lanes": 0, "resolved": 0, "unbound": 0, "ambiguous": 0, "no-thread-id": 0}
+    for factory, lanes in sorted(lanes_by_factory.items()):
+        rows = [resolve_lane(lane, bindings, topic_names) for lane in lanes]
+        for row in rows:
+            totals["lanes"] += 1
+            totals[row["status"]] = totals.get(row["status"], 0) + 1
+        resolved[factory] = rows
+
+    payload = {
+        "resolved_at": datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
+        "profiles_read": [str(db) for db in profile_dbs()],
+        "bindings_seen": len(bindings),
+        "factories": resolved,
+        "summary": totals,
+        "errors": errors + problems,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=False))
+    else:
+        print(f"resolved_at {payload['resolved_at']}  ({len(bindings)} bindings read)")
+        for factory, rows in sorted(resolved.items()):
+            for row in rows:
+                name = row["topic_name"] or row["session_title"] or "-"
+                print(
+                    f"  {row['status']:<10} {factory:<16} {str(row['topic']):<12} "
+                    f"thread={row['thread_id']} session={row['session_id']}  {name}"
+                )
+        print(
+            "summary: {lanes} lane(s), {resolved} resolved, {unbound} unbound, "
+            "{ambiguous} ambiguous".format(**totals)
+        )
+    if errors or problems:
+        for line in errors + problems:
+            print(f"resolve: {line}", file=sys.stderr)
+    unresolved = totals["unbound"] + totals["ambiguous"] + totals["no-thread-id"]
+    return 1 if unresolved else 0
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     paths = fragment_paths(args.paths)
     if not paths:
@@ -691,6 +920,15 @@ def main(argv: list[str] | None = None) -> int:
     p_validate.set_defaults(func=cmd_validate)
     p_checks = sub.add_parser("checks", help="run every predicate in the allowlist")
     p_checks.set_defaults(func=cmd_checks)
+    p_resolve = sub.add_parser("resolve", help="resolve each declared lane to a live session")
+    p_resolve.add_argument("paths", nargs="*", help="fragment files (default: both stores)")
+    p_resolve.add_argument("--json", action="store_true", help="machine-readable output")
+    p_resolve.add_argument(
+        "--topics",
+        help="JSON list of {chat_id, thread_id, name} read from the Telegram surface; "
+        "without it, topic names render unverified",
+    )
+    p_resolve.set_defaults(func=cmd_resolve)
     args = parser.parse_args(argv)
     return args.func(args)
 
