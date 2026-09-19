@@ -67,8 +67,8 @@ pointing at something that never closed is counted by the coverage and contribut
 no failure to the rate at all — the linkage reads complete while a case has fallen
 out of the numerator. That silent drop is why resolution is gated **separately**:
 `tests/test_rework.py` asserts every determinate Subject resolves to a real closed
-work unit — 27 distinct subjects examined, 0 dangling, measured 2026-09-19 against
-a closed set of 71 (28 cells over 27 subjects, because `#42` carries two entries).
+work unit — 28 distinct subjects examined, 0 dangling, measured 2026-09-19T21:45Z against
+a closed set of 72 (30 cells over 28 subjects, because `#42` and `#102` each carry two entries).
 The two assertions run side by side on purpose — the coverage one stays invariant
 to another lane's closes, the resolution leg reads the ledger deliberately — and
 neither softens the other (`#64` clause 4, landed `50ce912`). Printing the coverage
