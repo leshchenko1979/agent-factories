@@ -76,6 +76,7 @@ PAIRS = [
     ("tools/registry_attest.py", "TEMPLATE/tools/registry_attest.py"),
     ("tests/test_registry.py", "TEMPLATE/tests/test_registry.py"),
     ("tests/test_registry_render.py", "TEMPLATE/tests/test_registry_render.py"),
+    ("tests/test_ledger_close_preflight.py", "TEMPLATE/tests/test_ledger_close_preflight.py"),
 ]
 
 

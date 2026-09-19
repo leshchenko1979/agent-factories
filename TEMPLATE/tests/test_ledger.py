@@ -530,6 +530,11 @@ def main() -> int:
               "stage_tool must copy the new neighbour import")
 
     print("\nprose-as-data — a mention must not suppress a field (#88, ledger n=405 clause 5)")
+    # Each probe below writes its close row through the REAL append path, which since
+    # #98 refuses a close whose subject has no preceding intake and claim. The legs are
+    # seeded directly with `write_ledger` — the fixture helper, which does not go
+    # through the path under test — so each probe fails for its own reason and never
+    # for a missing leg.
     # The class's third direction. `cmd_append` used to test `"tokens_out=" not in
     # detail` — a SUBSTRING test — so a close row whose PROSE mentioned the key
     # suppressed the measurement the tool had genuinely taken, and the row shipped with
@@ -543,7 +548,7 @@ def main() -> int:
         db = seed_telemetry_db(tdir / "telemetry.db")
 
         prose = tdir / "prose.jsonl"
-        prose.write_text("", encoding="utf-8")
+        write_ledger(prose, ("intake", "#88"), ("claim", "#88"))
         r = run(
             prose, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail",
@@ -564,7 +569,7 @@ def main() -> int:
         # did not state is still appended beside it. Both stated tokens stand alone, so
         # both parse — the punctuation case is the boundary pinned below.
         stated = tdir / "stated.jsonl"
-        stated.write_text("", encoding="utf-8")
+        write_ledger(stated, ("intake", "#88"), ("claim", "#88"))
         run(stated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The author stated turns=7 and cost_usd=9.99 before the append",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
@@ -585,7 +590,7 @@ def main() -> int:
         # pinned instead of narrowed because stripping sentence punctuation from the value
         # would re-open the quotation hole (`turns=36'`) this class exists to close.
         punctuated = tdir / "punctuated.jsonl"
-        punctuated.write_text("", encoding="utf-8")
+        write_ledger(punctuated, ("intake", "#88"), ("claim", "#88"))
         run(punctuated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The author stated turns=7.",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
@@ -607,7 +612,7 @@ def main() -> int:
         # suppress the count the tool took. Reading only "is the key named with
         # something after the `=`" would leave this half of the class live.
         quoted = tdir / "quoted.jsonl"
-        quoted.write_text("", encoding="utf-8")
+        write_ledger(quoted, ("intake", "#88"), ("claim", "#88"))
         run(quoted, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The quoted trailer read turns=36' before the repair.",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})

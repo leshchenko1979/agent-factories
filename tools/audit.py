@@ -826,6 +826,22 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_rework_relative_revision.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_rework_relative_revision.py"])
 
+    # 37. Close-leg pre-flight gate: `append --event close` refuses a close whose subject
+    #     has no preceding intake and claim, so the sequence defect is named at the WRITE
+    #     PATH instead of being discovered in history after the board is already closed.
+    #     ONE predicate, TWO call sites: `verify` asks it about every close row it reads,
+    #     `append` asks it about the row it is about to write, with `index = len(rows)`,
+    #     the line that row will occupy. Measured twice before it existed — `#50` at n=304
+    #     and `#86` at n=589, the second time with the invalid row sitting uncommitted in
+    #     the SHARED tree, where the next lane to stage the ledger would have carried it
+    #     into history with no act of its own. The refusal carries NO exemption surface
+    #     and needs none: a close appended now can never predate the gate. §11's guarantee
+    #     is one append path, not tamper-proof, so the order leg and any row written
+    #     AROUND the path stay `verify`'s — both are probed here (issue #98, ruling n=596,
+    #     P29).
+    if (repo_root / "tests/test_ledger_close_preflight.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_close_preflight.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

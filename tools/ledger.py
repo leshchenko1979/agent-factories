@@ -243,6 +243,56 @@ def lineage_divergence(
             )
     return None
 
+def index_by_subject(rows: list[dict]) -> dict[str, list[tuple[int, str]]]:
+    """Every row's (index, event), grouped by subject — built ONCE per pass.
+
+    The sequence predicate is asked about many subjects in a single pass, so the
+    index is built once and handed to it rather than rebuilt per question. Two
+    call sites share this: `verify` asks about every close row in history, and
+    `append` asks about the one row it is about to write (#98, ruling n=596).
+    """
+    by_subject: dict[str, list[tuple[int, str]]] = {}
+    for i, row in enumerate(rows):
+        by_subject.setdefault(row.get("subject"), []).append((i, row.get("event")))
+    return by_subject
+
+def sequence_problems(
+    by_subject: dict[str, list[tuple[int, str]]], subject: str, index: int
+) -> list[tuple[str, str, str]]:
+    """What a `close` of `subject` at `index` is missing, as (subject, leg, message).
+
+    ONE predicate, TWO call sites. `verify` asks it about every close row it
+    reads; `append` asks it about the row it is about to write, with
+    `index = len(rows)` — the line that row will occupy — so the refusal names
+    the leg the audit would have named later, at the moment the write would have
+    created the defect. The order leg is bounded by the *latest* intake before
+    the close, so a re-opened subject must be re-claimed after its re-open.
+
+    Each missing leg is reported INDEPENDENTLY, with no short-circuit: one pass
+    should tell the reader everything that is absent, not the first thing the
+    predicate happened to notice.
+    """
+    if not subject:
+        return []  # a missing subject is a structural problem, reported as one
+
+    legs = by_subject.get(subject, [])
+    intakes = [j for j, ev in legs if ev == "intake" and j < index]
+    claims = [j for j, ev in legs if ev == "claim" and j < index]
+
+    problems: list[tuple[str, str, str]] = []
+    if not intakes:
+        problems.append((subject, "intake",
+            f"line {index + 1}: close for {subject} has no intake before it"))
+    if not claims:
+        problems.append((subject, "claim",
+            f"line {index + 1}: close for {subject} has no claim before it"))
+    # The order leg means nothing until both legs exist, so a subject is never
+    # reported twice for the same absence.
+    if intakes and claims and not any(k > max(intakes) for k in claims):
+        problems.append((subject, "order",
+            f"line {index + 1}: close for {subject} — its claim precedes its intake (n={max(intakes) + 1})"))
+    return problems
+
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
@@ -272,6 +322,28 @@ def cmd_append(args: argparse.Namespace) -> int:
             divergence = lineage_divergence(rows, committed_rows, ref_name)
             if divergence:
                 sys.exit(f"ledger append refused: {divergence}")
+        # A close row is refused at the WRITE PATH when its subject has no
+        # preceding intake and claim — the SAME predicate `verify` runs, asked
+        # here about the row about to be written, with `index = len(rows)`, the
+        # line it will occupy. That is what makes the two call sites one
+        # question rather than two rules: a defect is named at the moment it
+        # would be created instead of being discovered in history later (#98,
+        # ruling n=596).
+        #
+        # MAIN LEDGER ONLY. A sub-ledger is a domain event stream, not the
+        # lifecycle ledger — intake/claim/close are not its vocabulary — so the
+        # sequence law does not reach it. Nothing is lost by that: no sub-ledger
+        # exists on disk and none carries a close row.
+        #
+        # NO EXEMPTION SURFACE here, and none is needed: a close appended now
+        # can never predate the gate. EXEMPTIONS governs `verify`'s reading of
+        # history only, and stays printed there. This does not replace `verify`
+        # — the order leg and any row written around this path remain its.
+        if args.event == "close" and target_ledger == LEDGER:
+            problems = sequence_problems(index_by_subject(rows), args.subject, len(rows))
+            if problems:
+                sys.exit("ledger append refused: "
+                         + "; ".join(message for _subject, _leg, message in problems))
         detail = args.detail
         if args.event == "close":
             try:
@@ -540,37 +612,15 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # A subject's life is a sequence, not a row count. Subjects are compared as
     # exact strings — `#6` and `6` are different subjects, and no normalisation
     # is applied, because guessing at intent is how a gate starts agreeing with
-    # its author.
-    by_subject: dict[str, list[tuple[int, str]]] = {}
-    for i, row in enumerate(rows):
-        by_subject.setdefault(row.get("subject"), []).append((i, row.get("event")))
-
+    # its author. The index is built ONCE and the predicate is asked per close
+    # row; `append` asks the SAME predicate about the row it is about to write,
+    # so a defect is named at the moment it would be created (#98, n=596).
+    by_subject = index_by_subject(rows)
     seq_problems: list[tuple[str, str, str]] = []  # (subject, leg, message)
     for i, row in enumerate(rows):
         if row.get("event") != "close":
             continue
-        subject = row.get("subject")
-        if not subject:
-            continue  # already reported above as a missing field
-        legs = by_subject.get(subject, [])
-        intakes = [j for j, ev in legs if ev == "intake" and j < i]
-        claims = [j for j, ev in legs if ev == "claim" and j < i]
-        # Each missing leg is reported independently, with no short-circuit:
-        # one pass should tell the reader everything that is absent, not the
-        # first thing the gate happened to notice.
-        if not intakes:
-            seq_problems.append((subject, "intake",
-                f"line {i + 1}: close for {subject} has no intake before it"))
-        if not claims:
-            seq_problems.append((subject, "claim",
-                f"line {i + 1}: close for {subject} has no claim before it"))
-        # The order leg means nothing until both legs exist, so a subject is
-        # never reported twice for the same absence. It is bounded by the
-        # *latest* intake before the close, so a re-opened subject must be
-        # re-claimed after its re-open intake.
-        if intakes and claims and not any(k > max(intakes) for k in claims):
-            seq_problems.append((subject, "order",
-                f"line {i + 1}: close for {subject} — its claim precedes its intake (n={max(intakes) + 1})"))
+        seq_problems.extend(sequence_problems(by_subject, row.get("subject"), i))
 
     exempt = {(s, leg): (granted, reason) for s, leg, granted, reason in EXEMPTIONS}
     excused: list[tuple[str, str, str, str]] = []
