@@ -53,11 +53,29 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import sys
 from pathlib import Path
 
+# The declaration's READER is shared with the tool that repairs a row (#87), because the
+# gates and the repair path must agree on which rows a boundary governs: two readers would
+# drift on exactly the inputs that matter, and the factory would then hold a gate that
+# excuses a row the repair path refuses to correct. `tools/` goes on the path rather than
+# being imported as a package, because a bootstrapped factory has `tools/` and `tests/` as
+# siblings with no `__init__.py` in either.
+_TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+
+from ledger_declaration import (  # noqa: E402
+    DECLARATION_EXAMPLE_REL,
+    DECLARATION_REL,
+    DeclarationUnavailable,
+    DeclarationUnreadable,
+    boundary_for,
+    parse_ts,
+)
+
 LEDGER_REL = "evidence/ledger.jsonl"
-DECLARATION_REL = "docs/ledger-invariants.json"
-DECLARATION_EXAMPLE_REL = "docs/ledger-invariants.example.json"
 
 class SkipGate(Exception):
     """Nothing to judge in THIS tree, and that is legitimate: skip with this reason."""
@@ -68,10 +86,6 @@ class GateError(Exception):
     def __init__(self, problems: list[str]) -> None:
         super().__init__("; ".join(problems))
         self.problems = list(problems)
-
-def parse_ts(value: str) -> dt.datetime:
-    """An ISO-8601 UTC timestamp, as `tools/ledger.py` writes it."""
-    return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 def read_rows(repo: Path) -> list[dict]:
     """The ledger's rows, or `SkipGate`/`GateError`. Never raises anything else.
@@ -118,47 +132,17 @@ def declared_boundary(repo: Path, key: str) -> tuple[dt.datetime, str]:
     read it, and silently skipping that would hide a broken declaration behind the same
     output as no declaration at all.
     """
-    path = repo / DECLARATION_REL
-    if not path.is_file():
-        raise SkipGate(
-            f"no {DECLARATION_REL} — the boundary is a DECLARED factory parameter "
-            f"(#78 clause b), and this tree has not declared one; the skeleton is "
-            f"{DECLARATION_EXAMPLE_REL}"
-        )
+    # The READING is shared with `tools/ledger.py repair`, through
+    # `tools/ledger_declaration.py`, so the gates and the repair path cannot disagree about
+    # what this factory declared. The POLICY is this module's: an absent declaration SKIPS,
+    # a broken one FAILS. The repair path maps the same two outcomes onto skip-vs-refuse,
+    # which is the one place the two callers deliberately differ.
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise GateError([f"{DECLARATION_REL} exists but cannot be read: {exc}"]) from exc
-    except json.JSONDecodeError as exc:
-        raise GateError([f"{DECLARATION_REL} is not valid JSON: {exc}"]) from exc
-
-    if not isinstance(payload, dict):
-        raise GateError([f"{DECLARATION_REL} must be a JSON object carrying `invariants`"])
-    declared = payload.get("invariants")
-    if not isinstance(declared, dict):
-        raise GateError([
-            f"{DECLARATION_REL} carries no `invariants` map — see {DECLARATION_EXAMPLE_REL}"
-        ])
-
-    value = declared.get(key)
-    if value is None or (isinstance(value, str) and not value.strip()):
-        raise SkipGate(
-            f"{DECLARATION_REL} declares no `{key}` boundary — this factory has not "
-            f"adopted that invariant, so there is no boundary to judge against"
-        )
-    if not isinstance(value, str):
-        raise GateError([
-            f"{DECLARATION_REL}: `{key}` must be an ISO-8601 UTC string, found "
-            f"{type(value).__name__}"
-        ])
-    try:
-        boundary = parse_ts(value)
-    except (ValueError, TypeError) as exc:
-        raise GateError([
-            f"{DECLARATION_REL}: `{key}` is not a readable ISO-8601 timestamp: "
-            f"{value!r} ({exc})"
-        ]) from exc
-    return boundary, value
+        return boundary_for(repo, key)
+    except DeclarationUnavailable as exc:
+        raise SkipGate(str(exc)) from exc
+    except DeclarationUnreadable as exc:
+        raise GateError(list(exc.problems)) from exc
 
 def boundary_and_rows(repo: Path, key: str) -> tuple[dt.datetime, str, list[dict]]:
     """`(boundary, declared-text, rows)` for one gate, or `SkipGate`/`GateError`.

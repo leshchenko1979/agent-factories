@@ -53,7 +53,33 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# The declaration's READER is shared with the gates (`tests/ledger_boundary.py`), because
+# the repair path and the gates must agree on which rows a boundary governs: two readers
+# would drift on exactly the inputs that matter, leaving a gate that excuses a row the
+# repair path refuses to correct. Imported as a plain LOCAL module, never as
+# `tools.ledger_declaration` — this tool runs as `python3 tools/ledger.py`, so `tools/` is
+# already on the path, and `stage_tool`'s closure walker resolves a neighbour by that same
+# bare name when it stages a throwaway tree.
+from ledger_declaration import (
+    DeclarationUnavailable,
+    DeclarationUnreadable,
+    boundary_for,
+    parse_ts,
+)
+
 REPO = Path(__file__).resolve().parent.parent
+
+# The fields that make a row what it is. `detail` is deliberately absent: it is the ONE
+# field a lawful repair may extend, and the identity around it is what `verify` and every
+# subject-keyed predicate resolve through.
+ROW_IDENTITY = ("n", "ts", "event", "actor", "subject")
+
+# Which declared invariant's boundary governs a correction to a row of each event. Only
+# `close` has one: `close_row_revision` is the sole declared invariant constraining a row's
+# DETAIL. An event with no entry is REFUSED rather than repaired under some other
+# invariant's boundary — a boundary that does not govern the row cannot make a correction
+# lawful, it only makes it look lawful (#87).
+INVARIANT_FOR_EVENT = {"close": "close_row_revision"}
 # Overridable so the gate can be tested against a throwaway ledger. Tests that
 # write the real state surface are how a probe becomes permanent corruption.
 LEDGER = Path(os.environ.get("OC_LEDGER_PATH", REPO / "evidence" / "ledger.jsonl"))
@@ -292,6 +318,154 @@ def cmd_append(args: argparse.Namespace) -> int:
     print(f"{prefix}n={row['n']} {row['event']} {row['subject']} — {row['detail']}")
     return 0
 
+def cmd_repair(args: argparse.Namespace) -> int:
+    """Correct ONE row's `detail` in place, then append the record of the repair.
+
+    The ledger is append-only, and this is its single lawful exception: a row whose
+    detail is INCOMPLETE against an invariant this factory has DECLARED, and whose own
+    timestamp falls AFTER that invariant's declared boundary (#52 clause 2). Everything
+    that makes the row what it is — `n`, `ts`, `event`, `actor`, `subject` — is left
+    untouched, because a row wrong in one of THOSE is retired by naming it in a new row
+    and never edited (SKILL.md §11).
+
+    Two refusals carry the law:
+
+    * A row that PREDATES its invariant's boundary is refused, not repaired. The
+      boundary is exactly the statement that the rule was not yet written when that row
+      was made, so correcting one backfills a record the factory already agreed to leave
+      standing (#53 clause 2).
+    * A repair with no `--note` is refused. The note is the only thing separating a
+      lawful correction from a silent edit, and a silent edit of an append-only surface
+      is the failure this whole section exists to prevent.
+    """
+    if args.actor not in known_actors():
+        sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
+    if not (args.note or "").strip():
+        sys.exit(
+            "ledger repair refused: --note is required — it records WHY the correction "
+            "is lawful, and is the only thing distinguishing a repair from a silent edit "
+            "of an append-only surface (#52 clause 2)"
+        )
+    appended = (args.append_detail or "").strip()
+    if not appended:
+        sys.exit(
+            "ledger repair refused: --append-detail is required — a repair that appends "
+            "nothing changes nothing"
+        )
+
+    target_ledger = LEDGER
+    target_lock = LOCK
+    if getattr(args, "subprocess", None):
+        sub_name = args.subprocess.strip()
+        SUBPROCESSES_DIR.mkdir(parents=True, exist_ok=True)
+        target_ledger = SUBPROCESSES_DIR / f"{sub_name}.jsonl"
+        target_lock = SUBPROCESSES_DIR / f".{sub_name}.lock"
+
+    target_ledger.parent.mkdir(parents=True, exist_ok=True)
+    # The SAME lock as `append`, for the same reason: the next row number is computed
+    # inside it. A repair holding its own lock would be a second writer, and two writers
+    # each reading the same last row each write the same `n`.
+    with open(target_lock, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rows = read_rows(target_ledger)
+        committed_rows, ref_name = read_committed_rows(target_ledger)
+        if committed_rows is not None:
+            divergence = lineage_divergence(rows, committed_rows, ref_name)
+            if divergence:
+                sys.exit(f"ledger repair refused: {divergence}")
+
+        index = next((i for i, row in enumerate(rows) if row.get("n") == args.n), None)
+        if index is None:
+            highest = max(
+                (row.get("n") for row in rows if isinstance(row.get("n"), int)),
+                default=0,
+            )
+            sys.exit(
+                f"ledger repair refused: no row n={args.n} in {target_ledger.name} "
+                f"(highest is n={highest})"
+            )
+        original = rows[index]
+
+        event = original.get("event")
+        key = getattr(args, "invariant", None) or INVARIANT_FOR_EVENT.get(event)
+        if key is None:
+            sys.exit(
+                f"ledger repair refused: n={args.n} is a '{event}' row and no declared "
+                f"invariant governs that event — name one with --invariant if the "
+                f"correction is lawful under a boundary this tool does not map"
+            )
+        try:
+            boundary, declared_text = boundary_for(REPO, key)
+        except DeclarationUnavailable as exc:
+            sys.exit(
+                f"ledger repair refused: cannot establish the boundary for '{key}', so "
+                f"this correction cannot be shown lawful rather than a backfill — {exc}"
+            )
+        except DeclarationUnreadable as exc:
+            sys.exit(f"ledger repair refused: {exc}")
+
+        if parse_ts(original["ts"]) < boundary:
+            sys.exit(
+                f"ledger repair refused: n={args.n} ({original['ts']}) PREDATES the "
+                f"boundary declared for '{key}' ({declared_text}) — a row that predates "
+                f"the rule is excused and left standing, never corrected (#53 clause 2)"
+            )
+
+        # Build the repaired row as a NEW object rather than mutating in place, so the
+        # identity check below compares against pre-repair values instead of against
+        # itself. A check that cannot fail is not a check.
+        identity_before = {field: original.get(field) for field in ROW_IDENTITY}
+        old_detail = str(original.get("detail", ""))
+        # A separator, always: the caller passes the field alone (`head=<sha>`), and
+        # welding it to the previous token (`turns=36head=…`) makes it unreadable as a
+        # field to every consumer — including the gate this repair exists to satisfy.
+        separator = "" if (not old_detail or old_detail[-1].isspace()) else " "
+        repaired = {**original, "detail": f"{old_detail}{separator}{appended}"}
+
+        for field in ROW_IDENTITY:
+            if repaired.get(field) != identity_before[field]:
+                sys.exit(
+                    f"ledger repair refused: {field} would change — row identity is "
+                    f"immutable once pushed (#52 clause 1)"
+                )
+
+        note = (
+            f"repair n={args.n} ({original.get('event')} {original.get('subject')}): "
+            f"{args.note.strip()} — appended {appended!r} under invariant '{key}' "
+            f"(boundary {declared_text})"
+        )
+        run_row = {
+            "n": (rows[-1]["n"] + 1) if rows else 1,
+            "ts": now_iso(),
+            "event": "run",
+            "actor": args.actor,
+            "subject": original.get("subject"),
+            "detail": note,
+        }
+
+        # Replace-then-append, and the replace is ATOMIC. A rewrite that dies halfway
+        # truncates the ledger — the one outcome worse than the incomplete row this
+        # command exists to correct — so the new text is built beside it and swapped in
+        # with `os.replace`, which is atomic within a filesystem.
+        rows[index] = repaired
+        tmp = target_ledger.with_name(target_ledger.name + ".repair-tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, target_ledger)
+
+        with open(target_ledger, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(run_row, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+
+    prefix = f"[{args.subprocess}] " if getattr(args, "subprocess", None) else ""
+    print(f"{prefix}repaired n={args.n}: appended {appended!r}")
+    print(f"{prefix}n={run_row['n']} run {run_row['subject']} — {note}")
+    return 0
+
 def cmd_tail(args: argparse.Namespace) -> int:
     target_ledger = LEDGER
     if getattr(args, "subprocess", None):
@@ -410,6 +584,18 @@ def main() -> int:
     vp = sub.add_parser("verify", help="read-only integrity check")
     vp.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
     vp.set_defaults(func=cmd_verify)
+
+    # `--append-detail` and `--note` are optional to ARGPARSE and required by the handler,
+    # so a caller who omits one is told WHY it is required (a repair that appends nothing
+    # is not a repair; a repair with no stated reason is indistinguishable from a silent
+    # edit). Argparse's own "the following arguments are required" would state neither.
+    rp = sub.add_parser("repair", help="correct a row's detail in place, under the append lock")
+    rp.add_argument("--n", type=int, required=True, help="the row number to correct")
+    rp.add_argument("--append-detail", required=False, help="the text appended to that row's detail")
+    rp.add_argument("--note", required=False, help="WHY the correction is lawful; recorded in the run row beside it")
+    rp.add_argument("--actor", required=False, default="worker", help="the lane performing the repair (default: worker)")
+    rp.add_argument("--invariant", required=False, help="the declared invariant whose boundary governs the row (default: derived from its event)")
+    rp.set_defaults(func=cmd_repair)
 
     args = parser.parse_args()
     return args.func(args)

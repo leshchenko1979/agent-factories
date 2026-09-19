@@ -18,6 +18,7 @@ Exit: 0 all checks pass, 1 a check failed.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import shutil
@@ -296,6 +297,136 @@ def main() -> int:
               "fail-open" in r.stderr, r.stderr.strip()[:90])
         check("the fail-open append landed",
               len(rows(fresh_ledger)) == 1, f"{len(rows(fresh_ledger))} row(s)")
+
+        print("\nthe repair path — one lawful correction, and the refusals that carry it")
+        # The declaration is FACTORY DATA, so read it rather than restating the
+        # timestamp: a probe that hardcodes the boundary reds the day the factory
+        # moves its own declaration, and that red would name this gate instead of
+        # the decision it is describing (#87).
+        declared = json.loads(
+            (REPO / "docs" / "ledger-invariants.json").read_text(encoding="utf-8")
+        )["invariants"]["close_row_revision"]
+        boundary_dt = dt.datetime.fromisoformat(declared.replace("Z", "+00:00"))
+        post_ts = (boundary_dt + dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        probe_sha = "a" * 40
+
+        def write_repair_ledger(path: Path, ts: str) -> None:
+            """intake/claim/close for one subject, every row at `ts`."""
+            path.write_text(
+                "\n".join(
+                    json.dumps({
+                        "n": i, "ts": ts, "event": event, "actor": "worker",
+                        "subject": "#80", "detail": "probe",
+                    })
+                    for i, event in enumerate(("intake", "claim", "close"), 1)
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+        # A row that PREDATES the declared boundary is refused, and the refusal
+        # names the boundary it refuses on. `write_ledger` stamps 2026-09-12, which
+        # is before every boundary this factory has declared.
+        write_ledger(ledger, ("intake", "#1"), ("claim", "#1"), ("close", "#1"))
+        r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+                "--note", "probe")
+        err = r.stderr.strip()
+        check("a pre-boundary row refuses repair", r.returncode != 0, err[:90])
+        check("the refusal names the boundary it refuses on", declared in err, err[:170])
+        check("the refused repair wrote nothing", len(rows(ledger)) == 3,
+              f"{len(rows(ledger))} row(s)")
+
+        # A repair with no stated reason is refused. Run against a POST-boundary
+        # row, so the only thing the refusal can be about is the missing note.
+        write_repair_ledger(ledger, post_ts)
+        r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}")
+        err = r.stderr.strip()
+        check("a repair with no --note is refused", r.returncode != 0, err[:90])
+        check("the refusal names --note as what is missing", "--note" in err, err[:140])
+        check("the refused repair wrote nothing", len(rows(ledger)) == 3,
+              f"{len(rows(ledger))} row(s)")
+
+        # A lawful repair lands, changes only `detail`, appends exactly one `run`
+        # row naming the row and the note, and `verify` accepts the result.
+        identity = ("n", "ts", "event", "actor", "subject")
+        before = rows(ledger)[2]
+        r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+                "--note", "the row omitted the revision its receipts describe")
+        err = r.stderr.strip()
+        check("a post-boundary repair succeeds", r.returncode == 0, err[:140])
+        after_rows = rows(ledger)
+        after = after_rows[2]
+        moved = [f for f in identity if before[f] != after[f]]
+        check("the repaired row's identity is untouched", not moved,
+              f"{[(f, before[f], after[f]) for f in moved]}")
+        check("the detail gained the appended field",
+              after["detail"].endswith(f"head={probe_sha}"), after["detail"][-60:])
+        check("the field is a separate token, not welded to the previous one",
+              f" head={probe_sha}" in after["detail"], after["detail"][-70:])
+        run_rows = [row for row in after_rows if row["event"] == "run"]
+        check("exactly one run row was appended", len(run_rows) == 1, f"{len(run_rows)} run row(s)")
+        check("the run row names the repaired row", "n=3" in run_rows[0]["detail"],
+              run_rows[0]["detail"][:90])
+        check("the run row carries the note",
+              "the row omitted the revision its receipts describe" in run_rows[0]["detail"],
+              run_rows[0]["detail"][:90])
+        check("the ledger gained exactly one row", len(after_rows) == 4,
+              f"{len(after_rows)} row(s)")
+        v = run(ledger, "verify")
+        check("verify accepts the repaired ledger", v.returncode == 0, v.stderr.strip()[:90])
+
+        # The single-writer property has to survive a repair running CONCURRENTLY
+        # with appends: a repair rewrites the file, so a repair holding a different
+        # lock than `append` would interleave with it and re-issue an n.
+        race = Path(tmp) / "race.jsonl"
+        write_repair_ledger(race, post_ts)
+        race_env = {**os.environ, "OC_LEDGER_PATH": str(race),
+                    "OC_ACTORS_PATH": str(Path(tmp) / "no-actors.txt")}
+        procs = []
+        for i in range(10):
+            procs.append(subprocess.Popen(
+                [sys.executable, str(TOOL), "append", "--event", "run", "--actor", "worker",
+                 "--subject", "#race", "--detail", f"race append {i}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
+            procs.append(subprocess.Popen(
+                [sys.executable, str(TOOL), "repair", "--n", "3",
+                 "--append-detail", f"head={probe_sha}", "--note", f"race repair {i}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
+        for p in procs:
+            p.wait()
+        raced = rows(race)
+        check("20 concurrent append+repair invocations all landed", len(raced) == 23,
+              f"{len(raced)} row(s)")
+        check("no two writers claimed the same n (append racing repair)",
+              [row["n"] for row in raced] == list(range(1, 24)),
+              f"n={[row['n'] for row in raced]}")
+
+        # The other half of the policy split: a GATE skips when the tree declares
+        # nothing, but a REPAIR must refuse — it cannot certify a correction as
+        # lawful under a boundary it cannot read, and proceeding anyway is exactly
+        # the silent edit this command exists to make impossible. A staged tool in
+        # a tree with no declaration is that case, and this also proves the new
+        # neighbour import is staged rather than resolved from the live tree.
+        bare = Path(tmp) / "barefactory"
+        (bare / "tools").mkdir(parents=True)
+        (bare / "evidence").mkdir()
+        stage_tool(TOOL, bare / "tools", LOCAL_TOOLS)
+        bare_ledger = bare / "evidence" / "ledger.jsonl"
+        write_repair_ledger(bare_ledger, post_ts)
+        r = subprocess.run(
+            [sys.executable, str(bare / "tools" / "ledger.py"), "repair", "--n", "3",
+             "--append-detail", f"head={probe_sha}", "--note", "probe"],
+            capture_output=True, text=True, cwd=bare,
+            env={**os.environ, "OC_LEDGER_PATH": str(bare_ledger),
+                 "OC_ACTORS_PATH": str(bare / "no-actors.txt")},
+        )
+        err = r.stderr.strip()
+        check("an undeclared boundary refuses the repair (it does not skip)",
+              r.returncode != 0, err[:90])
+        check("the refusal names the invariant it could not read",
+              "close_row_revision" in err, err[:170])
+        check("the staged tool carries its declaration reader",
+              (bare / "tools" / "ledger_declaration.py").is_file(),
+              "stage_tool must copy the new neighbour import")
 
     print()
     if failures:
