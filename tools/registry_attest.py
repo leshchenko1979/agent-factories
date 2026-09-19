@@ -39,6 +39,7 @@ import datetime
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -144,7 +145,15 @@ def hq_targets(fragments: list[tuple[Path, dict]]) -> tuple[list[dict], list[str
 
 
 def dispatch(target: dict, stamp: str, dry_run: bool) -> tuple[bool, str]:
-    """Send one HQ its brief. Returns (sent, detail)."""
+    """Send one HQ its brief. Returns (sent, detail).
+
+    The elapsed seconds ride in the detail on purpose. Each send is a whole CLI
+    invocation, so a six-target run is six process spawns and it is NOT instant: the
+    first paced run was killed part-way through and the only surviving evidence was that
+    the targets sharing a PREFIX of the send order had answered and the rest had not.
+    A duration per target makes the next cut-off legible from the run's own output
+    instead of inferable only from who happened to reply.
+    """
     text = BRIEF.format(slug=target["slug"], stamp=stamp)
     command = [
         OPENCRABS, "-p", PROFILE, "session", "notify", str(target["session_id"]),
@@ -156,19 +165,21 @@ def dispatch(target: dict, stamp: str, dry_run: bool) -> tuple[bool, str]:
     ]
     if dry_run:
         return True, f"dry-run: {len(text)} chars to {target['slug']}"
+    started = time.monotonic()
     try:
         done = subprocess.run(command, capture_output=True, text=True, timeout=120)
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"{type(exc).__name__}: {exc}"
+        return False, f"{type(exc).__name__}: {exc} ({time.monotonic() - started:.1f}s)"
+    elapsed = time.monotonic() - started
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip().splitlines()
-        return False, f"rc={done.returncode}: {detail[-1] if detail else 'no output'}"
+        return False, f"rc={done.returncode}: {detail[-1] if detail else 'no output'} ({elapsed:.1f}s)"
     line = (done.stdout or "").strip()
     try:
         payload = json.loads(line)
-        return True, f"delivery={payload.get('status') or payload.get('delivery') or 'ok'}"
+        return True, f"delivery={payload.get('status') or payload.get('delivery') or 'ok'} ({elapsed:.1f}s)"
     except (json.JSONDecodeError, AttributeError):
-        return True, line[:80] or "ok"
+        return True, f"{line[:80] or 'ok'} ({elapsed:.1f}s)"
 
 
 def main() -> int:
@@ -177,19 +188,43 @@ def main() -> int:
     group.add_argument("--check", action="store_true", help="resolve and print targets, send nothing")
     group.add_argument("--dry-run", action="store_true", help="print the brief, send nothing")
     group.add_argument("--dispatch", action="store_true", help="send to every resolved HQ")
+    parser.add_argument(
+        "--only",
+        metavar="SLUG[,SLUG...]",
+        help=(
+            "restrict to these factory slugs (with --dispatch). A run can be cut short — "
+            "six sequential CLI invocations outlive a foreground shell's patience — and the "
+            "targets that already answered must not be woken a second time to reach the ones "
+            "that did not. A slug that resolves to no HQ is refused rather than skipped, so a "
+            "typo cannot silently send nothing."
+        ),
+    )
     args = parser.parse_args()
 
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     targets, problems = hq_targets(load_fragments())
 
-    print(f"registry-attest {stamp} — {len(targets)} HQ target(s) resolved")
+    if args.only:
+        wanted = [slug.strip() for slug in args.only.split(",") if slug.strip()]
+        resolved = {target["slug"] for target in targets}
+        unknown = [slug for slug in wanted if slug not in resolved]
+        if unknown:
+            print(
+                f"registry-attest: --only names no resolved HQ: {', '.join(unknown)}",
+                file=sys.stderr,
+            )
+            return 1
+        targets = [target for target in targets if target["slug"] in wanted]
+
+    print(f"registry-attest {stamp} — {len(targets)} HQ target(s) resolved", flush=True)
     for target in targets:
         print(
             f"  {target['slug']:<16} thread {str(target['thread_id']):<6} "
-            f"{target['status']:<10} {target['session_id']}  ({target['topic']})"
+            f"{target['status']:<10} {target['session_id']}  ({target['topic']})",
+            flush=True,
         )
     for problem in problems:
-        print(f"  UNRESOLVED  {problem}")
+        print(f"  UNRESOLVED  {problem}", flush=True)
 
     if args.check:
         return 1 if problems else 0
@@ -199,7 +234,7 @@ def main() -> int:
         sent, detail = dispatch(target, stamp, dry_run=args.dry_run)
         if not sent:
             failures += 1
-        print(f"  {'sent' if sent else 'FAILED'}  {target['slug']:<16} {detail}")
+        print(f"  {'sent' if sent else 'FAILED'}  {target['slug']:<16} {detail}", flush=True)
 
     if args.dry_run:
         print("")
