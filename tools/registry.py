@@ -385,6 +385,23 @@ def fragment_paths(explicit: list[str]) -> list[Path]:
     return paths
 
 
+def live_fragment_paths(explicit: list[str]) -> list[Path]:
+    """Which files describe the FLEET — the live store only, never the fixtures.
+
+    `validate` reads both stores, because a fixture that stops validating has
+    stopped describing the schema. Every other command reads live state, and a
+    fixture is not live state: `tests/fixtures/factory-fragment.example.json` is
+    an ai-antispam fragment carrying a lane, an `attested` status and a sample
+    announcement, so resolving or rendering it would report a seventh fragment,
+    duplicate that factory's lane count, and publish a test double as a factory's
+    declaration. The two sets are different questions and are read by different
+    commands.
+    """
+    if explicit:
+        return [Path(p) for p in explicit]
+    return sorted(FRAGMENT_STORE.glob("*.json")) if FRAGMENT_STORE.is_dir() else []
+
+
 # ---------------------------------------------------------------------------
 # The check allowlist: name -> implementation, declared ONCE.
 #
@@ -734,8 +751,16 @@ def load_topic_names(path: str | None) -> dict:
     return names
 
 
-def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict) -> dict:
-    """Resolve one declared lane against the live binding rows."""
+def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict, chat_id=None) -> dict:
+    """Resolve one declared lane against the live binding rows.
+
+    `chat_id` is the factory's OWN chat, and it is a narrowing rather than a
+    guess: a thread id is unique only WITHIN a chat, so thread 4 exists in both
+    the Miidas and the Infra chat and an unscoped match reported Miidas's HQ
+    session among the candidates for Infra's HQ lane. Where the factory's chat is
+    known and the declared thread is not in it, the lane is `unbound` — the
+    honest answer, since the room it names does not exist in that chat.
+    """
     thread_id = lane.get("thread_id")
     result = {
         "topic": lane.get("topic"),
@@ -757,6 +782,8 @@ def resolve_lane(lane: dict, bindings: list[dict], topic_names: dict) -> dict:
         result["status"] = "no-thread-id"
         return result
     matches = [b for b in bindings if b.get("thread_id") == thread_id and "_error" not in b]
+    if chat_id is not None:
+        matches = [b for b in matches if str(b.get("chat_id")) == str(chat_id)]
     if not matches:
         return result
     if len(matches) > 1:
@@ -815,7 +842,7 @@ def collect_declared_lanes(paths: list[Path]) -> tuple[dict, list[str]]:
 
 
 def cmd_resolve(args: argparse.Namespace) -> int:
-    paths = fragment_paths(args.paths)
+    paths = live_fragment_paths(args.paths)
     if not paths:
         print("registry: no fragments to resolve", file=sys.stderr)
         return 1
@@ -831,7 +858,10 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     resolved: dict = {}
     totals = {"lanes": 0, "resolved": 0, "unbound": 0, "ambiguous": 0, "no-thread-id": 0}
     for factory, lanes in sorted(lanes_by_factory.items()):
-        rows = [resolve_lane(lane, bindings, topic_names) for lane in lanes]
+        rows = [
+            resolve_lane(lane, bindings, topic_names, FACTORY_CHATS.get(factory))
+            for lane in lanes
+        ]
         for row in rows:
             totals["lanes"] += 1
             totals[row["status"]] = totals.get(row["status"], 0) + 1
@@ -842,6 +872,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
             "%Y-%m-%dT%H:%M:%SZ"
         ),
         "profiles_read": [str(db) for db in profile_dbs()],
+        "fragment_sources": [str(p) for p in paths],
         "bindings_seen": len(bindings),
         "factories": resolved,
         "summary": totals,
@@ -867,6 +898,414 @@ def cmd_resolve(args: argparse.Namespace) -> int:
             print(f"resolve: {line}", file=sys.stderr)
     unresolved = totals["unbound"] + totals["ambiguous"] + totals["no-thread-id"]
     return 1 if unresolved else 0
+
+
+# ---------------------------------------------------------------------------
+# Enrollment — stage 1 of the five-stage process
+# ---------------------------------------------------------------------------
+#
+# `enroll` writes the OBSERVED half of a fragment mechanically and leaves the
+# DECLARED half explicitly null. The split is the point of the exercise: a
+# generator can read a repo, a skill file and a live binding table, and it can
+# read NOTHING about what a factory offers or what it owns. So it fills what it
+# can prove, and writes `null` where the answer belongs to the factory itself.
+#
+# A stub is a QUESTION, not a claim — which is why this is legitimate for
+# Meta-Factory to run against member factories at all (SKILL.md §3): it authors
+# no member's self-description, it asks the owner to. `status: "unattested"` is
+# how a fragment says nobody has answered yet.
+#
+# Enrollment is keyed on the factory ID and the file is named for it, so a
+# re-delivered brief converges on one fragment instead of writing a second —
+# `session_notify` replay is a verified failure mode on this box (fork #366).
+
+# The factory's own forum chat. An ID and not a name, deliberately: the same
+# chat renders under two names in live binding titles right now ("Opencrabs Dev
+# Factory" and "Crabs Kanban Board"), so a name-keyed lookup would split one
+# chat into two. The box's own law is to identify a surface by its id and treat
+# the name as decoration.
+FACTORY_CHATS = {
+    "ai-antispam": -1003993000918,
+    "infra-factory": -1004486255170,
+    "inferhub-watch": -1004379632866,
+    "meta-factory": -1004497192134,
+    "miidas": -1003996392908,
+    "opencrabs-dev": -1003936827469,
+}
+
+FACTORY_REPOS = {
+    "ai-antispam": "/root/ai-antispam",
+    "infra-factory": "/root/vds-servers",
+    "inferhub-watch": "/root/inferhub-watch",
+    "meta-factory": "/root/agent-factories",
+    "miidas": "/root/miidas",
+    "opencrabs-dev": "/root/opencrabs",
+}
+
+# Where each factory's law file lives, as observed on 2026-09-19. The six are
+# not uniform, and flattening them would hide two real defects: `opencrabs-dev`
+# keeps its law in a repository of its own under the profile (remote
+# `opencrabs-skill`), and `ai-antispam` has a REAL DIRECTORY in the profile
+# skills tree that no bootstrap symlink ever pointed at (issue #79) — so the
+# repo path is what is declared here, because the repo's copy is the one its
+# own law names as authoritative.
+FACTORY_SKILLS = {
+    "ai-antispam": "/root/ai-antispam/SKILL.md",
+    "infra-factory": "/root/vds-servers/skills/infra-factory/SKILL.md",
+    "inferhub-watch": "/root/inferhub-watch/skills/inferhub/SKILL.md",
+    "meta-factory": "/root/agent-factories/skills/meta-factory/SKILL.md",
+    "miidas": "/root/miidas/SKILL.md",
+    "opencrabs-dev": str(PROFILE_ROOT / "ops" / "skills" / "opencrabs-dev" / "SKILL.md"),
+}
+
+# Fallback display names, used only when live bindings name no group for a chat.
+FACTORY_DISPLAY_NAMES = {
+    "ai-antispam": "AI AntiSpam",
+    "infra-factory": "Infra Factory",
+    "inferhub-watch": "InferHub Watch",
+    "meta-factory": "Meta-Factory",
+    "miidas": "Miidas",
+    "opencrabs-dev": "OpenCrabs Dev",
+}
+
+# A topic is not a lane, and binding alone cannot tell them apart: opencrabs-dev's
+# chat holds 42 bound thread ids of which two name a role. Three named rules
+# narrow the set, and the enrollment summary PRINTS what each one removed — a
+# count taken by a pattern is a count of the pattern, never of the lanes, and
+# the output says which of the two numbers it reports:
+#
+#   1. a name that states another factory is a conversation ABOUT a peer — the
+#      OC DEV chat carries `МИИДАС`, `Miidas marketing` and `Inferhub watch`
+#   2. a session-internal title (`subagent: ...`) is a label a dispatch gave
+#      itself, not a room
+#   3. everything else is kept, with `role: null` where the name states no role
+#
+# Rule 3 is deliberate, and it is the fix for a defect this tool found by being
+# run against the live fleet: a role-name filter SILENTLY DROPS the most
+# important lane in the registry. InferHub's HQ session (359fe71b) sits in
+# thread 2 under the title `InferHub Watch: Fallback Publisher Diversity &
+# Predictors` — no role word anywhere in it — and meta-factory's own HQ and
+# Triage lanes carry hand-written titles too. A filter keeping only recognised
+# roles returns a stub missing its own HQ, and a missing row is indistinguishable
+# from a factory that has no HQ. So the filter narrows and never decides:
+# `role: null` states that the name states no role, and the stub asks the HQ.
+LANE_ROLE_HINTS = (
+    ("hq", r"\bhq\b|headquarters"),
+    ("triage", r"\btriage\b"),
+    ("worker", r"\bworker\b"),
+    ("delegate", r"\bdelegate\b"),
+    ("surveys", r"\bsurveys?\b"),
+    ("carrier", r"\bcarrier\b"),
+    ("editor", r"\beditor"),
+    ("outreach", r"\boutreach\b"),
+    ("landing", r"\blanding\b"),
+    ("marketing", r"\bmarketing\b"),
+    ("bot", r"\bbot\b"),
+    ("gateway", r"\bgateway\b"),
+    ("grafana", r"\bgrafana\b"),
+)
+
+# A chat carries rooms that belong to ANOTHER factory, and such a room is a
+# conversation about a peer rather than a lane of this factory. The test is
+# mechanical — the name states a peer's own name — and it is deliberately
+# narrow: a shared word like "infra" would fire on half the fleet.
+FACTORY_NAME_ALIASES = {
+    "ai-antispam": ("ai-antispam", "ai antispam", "antispam"),
+    "infra-factory": ("infra-factory", "infra factory"),
+    "inferhub-watch": ("inferhub",),
+    "meta-factory": ("meta-factory", "meta factory"),
+    "miidas": ("miidas", "миидас"),
+    "opencrabs-dev": ("opencrabs-dev", "opencrabs dev", "crabs kanban", "oc dev"),
+}
+
+SKILL_VERSION_RE = re.compile(r"^version:\s*(\S+)\s*$", re.MULTILINE)
+# `Telegram: <group> / <topic> [chat:...]` — the topic segment, and only that
+# form. A session created inside a topic inherits it, so this is the one title
+# shape whose topic segment is a READ of the room's name.
+TOPIC_SEGMENT_RE = re.compile(r"^Telegram: [^/]+? / (.+?)(?: \[chat:|$)")
+# `Telegram: <group> [chat:...]` or `Telegram: <group> / <topic> [chat:...]`.
+GROUP_SEGMENT_RE = re.compile(r"^Telegram: ([^/]+?)(?: / | \[chat:)")
+# A dispatch names itself, and that label is not a room. Only `subagent:` is
+# treated this way: `worker: inferhub-watch-lane` looks like a lane's own
+# session and dropping it would lose a real lane, which is the worse error.
+SESSION_INTERNAL_TITLE_RE = re.compile(r"^subagent\s*:", re.IGNORECASE)
+
+
+def read_skill_version(path: Path) -> str | None:
+    """The declared `version:` line of a law file, or None. Never a default."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    match = SKILL_VERSION_RE.search(text)
+    return match.group(1) if match else None
+
+
+def lane_name_from_title(title: object) -> tuple[str | None, bool]:
+    """A bound session's title -> (room name, came_from_the_canonical_form).
+
+    The canonical form first: a session created inside a topic inherits
+    `Telegram: <group> / <topic> [chat:...]`, and that topic segment is a read
+    of the room's own name. Any other title was written by whoever created the
+    session, so the name it yields is PROVISIONAL — usually right (meta-factory's
+    HQ lane reads `Meta-Factory HQ: ASIF Architecture & Crons`) and never
+    verified. The caller counts how many names came this way, so a summary can
+    never present a provisional name as a read one.
+    """
+    if not isinstance(title, str):
+        return None, False
+    match = TOPIC_SEGMENT_RE.match(title)
+    if match:
+        return (match.group(1).strip() or None), True
+    if GROUP_SEGMENT_RE.match(title):
+        # The bare `Telegram: <group> [chat:...]` form: the session sits in a
+        # topic (thread 1, or a room named after the chat itself) whose name the
+        # title does not carry. Reading the GROUP name out of it would file a
+        # room under its parent chat's name — a wrong answer, not a missing one.
+        return None, False
+    stripped = title.strip()
+    if not stripped or SESSION_INTERNAL_TITLE_RE.match(stripped):
+        return None, False
+    return stripped, False
+
+
+def group_name_from_title(title: object) -> str | None:
+    """The chat segment of a bound session title, or None when it has none."""
+    if not isinstance(title, str):
+        return None
+    match = GROUP_SEGMENT_RE.match(title)
+    if not match:
+        return None
+    return match.group(1).strip() or None
+
+
+def lane_role(name: str) -> str | None:
+    """The role a name states, or None. The EARLIEST role word wins.
+
+    Position, not table order: `Worker — HQ cycles` states two roles, and it is
+    the worker lane carrying that topic. Table order reads the `HQ` inside the
+    phrase and files the row under the wrong role — a wrong role being worse
+    than no role, because it reads as an answer.
+    """
+    lowered = name.lower()
+    best: tuple[int, str] | None = None
+    for role, pattern in LANE_ROLE_HINTS:
+        match = re.search(pattern, lowered)
+        if match and (best is None or match.start() < best[0]):
+            best = (match.start(), role)
+    return best[1] if best else None
+
+
+def names_other_factory(name: str, slug: str) -> str | None:
+    """The other factory this name states, or None when it states none."""
+    lowered = name.lower()
+    for other, aliases in FACTORY_NAME_ALIASES.items():
+        if other == slug:
+            continue
+        for alias in aliases:
+            if alias in lowered:
+                return other
+    return None
+
+
+def all_bindings() -> tuple[list[dict], list[str]]:
+    """Every binding row from every profile DB, read in place via mode=ro."""
+    rows: list[dict] = []
+    errors: list[str] = []
+    for db in profile_dbs():
+        found = read_bindings(db)
+        errors.extend(r["_error"] for r in found if "_error" in r)
+        rows.extend(r for r in found if "_error" not in r)
+    return rows, errors
+
+
+def derive_lanes(chat_id: int, bindings: list[dict], slug: str) -> tuple[list[dict], dict]:
+    """Derive a factory's lanes from its own chat's live bindings.
+
+    One lane per THREAD: a chat binds several sessions to one topic (thread
+    30220 carries four), and listing each would report one room four times.
+    """
+    stats = {
+        "threads_seen": 0,
+        "roleless": 0,
+        "provisional_names": 0,
+        "dropped_other_factory": [],
+        "dropped_unnamed": [],
+    }
+    by_thread: dict = {}
+    for row in bindings:
+        # `chat_id` is TEXT in the binding table and an int in the constant, so
+        # the comparison is made on the string form. Matching on the raw values
+        # silently returns zero lanes for every factory — a wrong answer that
+        # reads exactly like a factory with no lanes.
+        if str(row.get("chat_id")) != str(chat_id) or row.get("thread_id") is None:
+            continue
+        by_thread.setdefault(row["thread_id"], []).append(row)
+    stats["threads_seen"] = len(by_thread)
+    lanes: list[dict] = []
+    for thread_id in sorted(by_thread):
+        name: str | None = None
+        canonical = False
+        for row in by_thread[thread_id]:
+            candidate, is_canonical = lane_name_from_title(row.get("session_title"))
+            if candidate and (name is None or (is_canonical and not canonical)):
+                name, canonical = candidate, is_canonical
+                if canonical:
+                    break
+        if name is None:
+            # `session_title` is NULL for a session whose title was never set.
+            # Such a thread is a room this tool cannot name, and naming it by its
+            # session UUID would put an identifier in a field that carries a name.
+            stats["dropped_unnamed"].append(thread_id)
+            continue
+        other = names_other_factory(name, slug)
+        if other:
+            stats["dropped_other_factory"].append(f"{thread_id}={name} (about {other})")
+            continue
+        role = lane_role(name)
+        if role is None:
+            stats["roleless"] += 1
+        if not canonical:
+            stats["provisional_names"] += 1
+        lanes.append({"topic": name, "thread_id": thread_id, "role": role, "announcements": []})
+    return lanes, stats
+
+
+def derive_display_name(chat_id: int, bindings: list[dict], slug: str) -> tuple[str, list[str]]:
+    """The chat's live group name, and every name it has rendered under.
+
+    More than one name is not an error — it is a rename, and the caller prints
+    the whole set so the older one is visible rather than silently dropped.
+    """
+    seen: dict = {}
+    for row in bindings:
+        if str(row.get("chat_id")) != str(chat_id):
+            continue
+        name = group_name_from_title(row.get("session_title"))
+        if name:
+            seen[name] = seen.get(name, 0) + 1
+    if not seen:
+        return FACTORY_DISPLAY_NAMES.get(slug, slug), []
+    ranked = sorted(seen, key=lambda n: (-seen[n], n))
+    return ranked[0], ranked
+
+
+def build_stub(slug: str, bindings: list[dict]) -> tuple[dict, dict]:
+    """The observed half, filled; the declared half, explicitly null."""
+    chat_id = FACTORY_CHATS[slug]
+    lanes, stats = derive_lanes(chat_id, bindings, slug)
+    display_name, names_seen = derive_display_name(chat_id, bindings, slug)
+    skill_path = Path(FACTORY_SKILLS[slug])
+    fragment = {
+        "factory": slug,
+        # Observed: the chat's own live name. The declared identity of a factory
+        # is not its group name, but this field is the label a reader matches
+        # against their client, and the client shows the group name.
+        "display_name": display_name,
+        "profile": PROFILE_SCOPE,
+        "repo": FACTORY_REPOS[slug],
+        "skill": FACTORY_SKILLS[slug],
+        # Declared half — `null` is a statement ("nobody has told us"), while an
+        # absent key is indistinguishable from a generator that forgot to write
+        # it. So the key set is complete and the values carry the doubt.
+        "purpose": None,
+        "zone": {"owns": None, "does_not_own": None},
+        "services": None,
+        "substrates_owned": None,
+        # Required, and an empty list is the honest value for a factory with
+        # nothing to announce — an absent key would let the render imply an
+        # answer that was never given.
+        "announcements": [],
+        "lanes": lanes,
+        "status": "unattested",
+        "attested_at": None,
+    }
+    stats.update(
+        {
+            "factory": slug,
+            "chat_id": chat_id,
+            "display_name": display_name,
+            "names_seen": names_seen,
+            "skill_path": str(skill_path),
+            "skill_version": read_skill_version(skill_path),
+            "skill_present": skill_path.is_file(),
+            "repo_present": Path(FACTORY_REPOS[slug]).is_dir(),
+            "lanes": len(lanes),
+            "lane_rows": lanes,
+        }
+    )
+    return fragment, stats
+
+
+def cmd_enroll(args: argparse.Namespace) -> int:
+    """Write the stub for one factory, or for the whole fleet with --all."""
+    slugs = sorted(KNOWN_FACTORY_SLUGS) if args.all else [args.factory]
+    unknown = [s for s in slugs if s not in KNOWN_FACTORY_SLUGS]
+    if unknown:
+        print(f"enroll: unknown factory slug(s): {', '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    bindings, errors = all_bindings()
+    if not bindings:
+        print("enroll: no live bindings read — refusing to write a blind stub", file=sys.stderr)
+        return 1
+
+    FRAGMENT_STORE.mkdir(parents=True, exist_ok=True)
+    written: list[dict] = []
+    skipped: list[str] = []
+    for slug in slugs:
+        path = FRAGMENT_STORE / f"{slug}.json"
+        if path.exists() and not args.force:
+            existing, error = load_fragment(path)
+            status = existing.get("status") if isinstance(existing, dict) else None
+            if error is None and status == "attested":
+                # A filled fragment is a factory's own answer. Overwriting it
+                # with a blank stub would destroy the only declared data the
+                # registry has, so it takes --force to do that on purpose.
+                skipped.append(f"{slug} (attested — use --force to reset)")
+                continue
+        fragment, stats = build_stub(slug, bindings)
+        problems = validate_fragment(fragment, str(path))
+        if problems:
+            for line in problems:
+                print(f"enroll: {line}", file=sys.stderr)
+            return 1
+        if args.dry_run:
+            written.append({**stats, "path": str(path), "dry_run": True})
+            continue
+        path.write_text(json.dumps(fragment, indent=2) + "\n", encoding="utf-8")
+        written.append({**stats, "path": str(path), "dry_run": False})
+
+    for stats in written:
+        names = stats["names_seen"]
+        alias = "" if len(names) <= 1 else f"  (also rendered as: {', '.join(names[1:])})"
+        print(
+            f"  {stats['factory']:<16} lanes={stats['lanes']:<3} "
+            f"threads_seen={stats['threads_seen']:<3} roleless={stats['roleless']:<3} "
+            f"provisional_name={stats['provisional_names']:<3} "
+            f"other_factory={len(stats['dropped_other_factory']):<3} "
+            f"unnamed={len(stats['dropped_unnamed']):<3} "
+            f"skill={stats['skill_version'] or 'UNKNOWN'}"
+            f"{'' if stats['skill_present'] else ' [SKILL FILE MISSING]'}"
+            f"{'' if stats['repo_present'] else ' [REPO MISSING]'}{alias}"
+        )
+        if args.explain:
+            for line in stats["dropped_other_factory"]:
+                print(f"      not a lane (another factory's room): {line}")
+            for thread_id in stats["dropped_unnamed"]:
+                print(f"      not a lane (no title to read a room name from): thread {thread_id}")
+            for lane in stats["lane_rows"]:
+                if lane["role"] is None:
+                    print(f"      role unstated: {lane['thread_id']} {lane['topic']}")
+    for line in skipped:
+        print(f"  skipped {line}")
+    print(
+        f"enroll: {len(written)} fragment(s) "
+        f"{'planned' if args.dry_run else 'written'} to {FRAGMENT_STORE}"
+    )
+    for line in errors:
+        print(f"enroll: {line}", file=sys.stderr)
+    return 0
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -929,6 +1368,19 @@ def main(argv: list[str] | None = None) -> int:
         "without it, topic names render unverified",
     )
     p_resolve.set_defaults(func=cmd_resolve)
+    p_enroll = sub.add_parser(
+        "enroll", help="write a factory's stub: observed half filled, declared half null"
+    )
+    p_enroll.add_argument("--all", action="store_true", help="every known factory")
+    p_enroll.add_argument("factory", nargs="?", help="one factory slug")
+    p_enroll.add_argument("--force", action="store_true", help="overwrite an attested fragment")
+    p_enroll.add_argument("--dry-run", action="store_true", help="report without writing")
+    p_enroll.add_argument(
+        "--explain",
+        action="store_true",
+        help="print every thread the derivation kept without a role, and every one it dropped",
+    )
+    p_enroll.set_defaults(func=cmd_enroll)
     args = parser.parse_args(argv)
     return args.func(args)
 

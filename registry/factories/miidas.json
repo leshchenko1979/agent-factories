@@ -1,0 +1,43 @@
+{
+  "factory": "miidas",
+  "display_name": "Miidas Factory",
+  "profile": "profile",
+  "repo": "/root/miidas",
+  "skill": "/root/miidas/SKILL.md",
+  "purpose": null,
+  "zone": {
+    "owns": null,
+    "does_not_own": null
+  },
+  "services": null,
+  "substrates_owned": null,
+  "announcements": [],
+  "lanes": [
+    {
+      "topic": "HQ",
+      "thread_id": 4,
+      "role": "hq",
+      "announcements": []
+    },
+    {
+      "topic": "Agent runtime",
+      "thread_id": 6,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Worker \u2014 #25 CLIENT_KIND backfill + telemetry projection",
+      "thread_id": 56,
+      "role": "worker",
+      "announcements": []
+    },
+    {
+      "topic": "Marketing",
+      "thread_id": 393,
+      "role": "marketing",
+      "announcements": []
+    }
+  ],
+  "status": "unattested",
+  "attested_at": null
+}

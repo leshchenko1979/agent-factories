@@ -1,0 +1,55 @@
+{
+  "factory": "ai-antispam",
+  "display_name": "ai-antispam",
+  "profile": "profile",
+  "repo": "/root/ai-antispam",
+  "skill": "/root/ai-antispam/SKILL.md",
+  "purpose": null,
+  "zone": {
+    "owns": null,
+    "does_not_own": null
+  },
+  "services": null,
+  "substrates_owned": null,
+  "announcements": [],
+  "lanes": [
+    {
+      "topic": "Outreach",
+      "thread_id": 10780,
+      "role": "outreach",
+      "announcements": []
+    },
+    {
+      "topic": "Triage",
+      "thread_id": 10781,
+      "role": "triage",
+      "announcements": []
+    },
+    {
+      "topic": "HQ",
+      "thread_id": 10782,
+      "role": "hq",
+      "announcements": []
+    },
+    {
+      "topic": "ai-antispam Landing lane",
+      "thread_id": 10783,
+      "role": "landing",
+      "announcements": []
+    },
+    {
+      "topic": "Bot lane \u2014 ai-antispam service (Bot topic)",
+      "thread_id": 10784,
+      "role": "bot",
+      "announcements": []
+    },
+    {
+      "topic": "MAX domain \u2014 lane acceptance &amp; verification",
+      "thread_id": 11156,
+      "role": null,
+      "announcements": []
+    }
+  ],
+  "status": "unattested",
+  "attested_at": null
+}

@@ -1,0 +1,241 @@
+{
+  "factory": "opencrabs-dev",
+  "display_name": "Opencrabs Dev Factory",
+  "profile": "profile",
+  "repo": "/root/opencrabs",
+  "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
+  "purpose": null,
+  "zone": {
+    "owns": null,
+    "does_not_own": null
+  },
+  "services": null,
+  "substrates_owned": null,
+  "announcements": [],
+  "lanes": [
+    {
+      "topic": "bash guard forced-variation design",
+      "thread_id": 7198,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Mermaid",
+      "thread_id": 29947,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Gemini Reasoning and Flow Message Analysis",
+      "thread_id": 30045,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Editor lane: #17/#19 channel-ownership PRs",
+      "thread_id": 30090,
+      "role": "editor",
+      "announcements": []
+    },
+    {
+      "topic": "OC Compiler",
+      "thread_id": 30129,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Deploy #235 Option Collision Guard",
+      "thread_id": 30134,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "OC DEV HQ",
+      "thread_id": 30220,
+      "role": "hq",
+      "announcements": []
+    },
+    {
+      "topic": "Subagents",
+      "thread_id": 30517,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Flood Throttling",
+      "thread_id": 30679,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Graceful restart",
+      "thread_id": 31683,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Plan tool",
+      "thread_id": 31789,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Issue #234: Review Implementation Button",
+      "thread_id": 31847,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Memory: Compaction & Context",
+      "thread_id": 34653,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Vector memory",
+      "thread_id": 36841,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Toolsmith Issue 255 and PR Dependency Laws",
+      "thread_id": 39171,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Harvesting upstream PRs into OpenCrabs",
+      "thread_id": 39218,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Rich resume wire",
+      "thread_id": 39862,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Loop guard",
+      "thread_id": 39883,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "#83 config-manager-warn",
+      "thread_id": 40011,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "#87 config-write-types",
+      "thread_id": 40479,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "#89 memory-search-parity",
+      "thread_id": 40524,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Harvest rich-host buttons",
+      "thread_id": 40695,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Harvest retry-429 ladder",
+      "thread_id": 40696,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "streaming-guard-105-xfer",
+      "thread_id": 42311,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Role split",
+      "thread_id": 42360,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Triage: Issue Portfolio & Harvest Analysis",
+      "thread_id": 42487,
+      "role": "triage",
+      "announcements": []
+    },
+    {
+      "topic": "oc-waiter + #111 durable-notify",
+      "thread_id": 42744,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "#92 demoted-host guard",
+      "thread_id": 42940,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Telegram flow card metrics telemetry bar #232",
+      "thread_id": 43727,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Governance: Ontology & RSI",
+      "thread_id": 43993,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Multicalls",
+      "thread_id": 44326,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Fix #149: Cron Session Isolation",
+      "thread_id": 49607,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Core: Skills & Engine",
+      "thread_id": 49643,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Deploy issue 248 default group command scopes",
+      "thread_id": 50566,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "FlowLine::System split \u2014 #291 header fix",
+      "thread_id": 51188,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "\ud83d\udd0d PROBE review-155",
+      "thread_id": 51714,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "JEV Classifier",
+      "thread_id": 68049,
+      "role": null,
+      "announcements": []
+    }
+  ],
+  "status": "unattested",
+  "attested_at": null
+}

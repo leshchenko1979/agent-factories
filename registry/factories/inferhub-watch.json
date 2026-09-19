@@ -1,0 +1,43 @@
+{
+  "factory": "inferhub-watch",
+  "display_name": "Inferhub watch",
+  "profile": "profile",
+  "repo": "/root/inferhub-watch",
+  "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
+  "purpose": null,
+  "zone": {
+    "owns": null,
+    "does_not_own": null
+  },
+  "services": null,
+  "substrates_owned": null,
+  "announcements": [],
+  "lanes": [
+    {
+      "topic": "InferHub Watch: Fallback Publisher Diversity & Predictors",
+      "thread_id": 2,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Worker \u2014 HQ cycles",
+      "thread_id": 32,
+      "role": "worker",
+      "announcements": []
+    },
+    {
+      "topic": "Grafana",
+      "thread_id": 557,
+      "role": "grafana",
+      "announcements": []
+    },
+    {
+      "topic": "worker: inferhub-watch-lane",
+      "thread_id": 559,
+      "role": "worker",
+      "announcements": []
+    }
+  ],
+  "status": "unattested",
+  "attested_at": null
+}

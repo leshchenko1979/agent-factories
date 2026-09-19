@@ -1,0 +1,49 @@
+{
+  "factory": "meta-factory",
+  "display_name": "Factories",
+  "profile": "profile",
+  "repo": "/root/agent-factories",
+  "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
+  "purpose": null,
+  "zone": {
+    "owns": null,
+    "does_not_own": null
+  },
+  "services": null,
+  "substrates_owned": null,
+  "announcements": [],
+  "lanes": [
+    {
+      "topic": "Surveys",
+      "thread_id": 19,
+      "role": "surveys",
+      "announcements": []
+    },
+    {
+      "topic": "Agent Factories Triage Lane",
+      "thread_id": 20,
+      "role": "triage",
+      "announcements": []
+    },
+    {
+      "topic": "Meta-Factory HQ: ASIF Architecture & Crons",
+      "thread_id": 21,
+      "role": "hq",
+      "announcements": []
+    },
+    {
+      "topic": "Delegate",
+      "thread_id": 68,
+      "role": "delegate",
+      "announcements": []
+    },
+    {
+      "topic": "Worker",
+      "thread_id": 1271,
+      "role": "worker",
+      "announcements": []
+    }
+  ],
+  "status": "unattested",
+  "attested_at": null
+}

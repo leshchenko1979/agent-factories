@@ -1,0 +1,49 @@
+{
+  "factory": "infra-factory",
+  "display_name": "Infra Factory",
+  "profile": "profile",
+  "repo": "/root/vds-servers",
+  "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
+  "purpose": null,
+  "zone": {
+    "owns": null,
+    "does_not_own": null
+  },
+  "services": null,
+  "substrates_owned": null,
+  "announcements": [],
+  "lanes": [
+    {
+      "topic": "HQ",
+      "thread_id": 4,
+      "role": "hq",
+      "announcements": []
+    },
+    {
+      "topic": "Gatus alert routing and fleet triage",
+      "thread_id": 5,
+      "role": "triage",
+      "announcements": []
+    },
+    {
+      "topic": "Surveys",
+      "thread_id": 7,
+      "role": "surveys",
+      "announcements": []
+    },
+    {
+      "topic": "LLM Gateway",
+      "thread_id": 467,
+      "role": "gateway",
+      "announcements": []
+    },
+    {
+      "topic": "TG Hub",
+      "thread_id": 475,
+      "role": null,
+      "announcements": []
+    }
+  ],
+  "status": "unattested",
+  "attested_at": null
+}
