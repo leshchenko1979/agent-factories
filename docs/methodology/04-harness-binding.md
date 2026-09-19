@@ -39,7 +39,7 @@ A multi-agent factory must decouple its **State of Record** from its **Execution
 |    - Guarantees recovery checkpoints, monotonicity, and audit integrity        |
 |                                                                                |
 |  [ Rail 3: Safety Net (Reconciliation / Watchdog Plane) ]                      |
-|    Cron Pacemaker (e.g. factory-triage-hourly) -- sweeps ledger claims > 30m   |
+|    Cron Pacemaker (e.g. factory-triage-patrol) -- sweeps ledger claims > 30m   |
 |    - Catches dropped messages, crashed workers, or stalled turns               |
 |    - Does NOT act as the primary conveyor belt                                 |
 +--------------------------------------------------------------------------------+
