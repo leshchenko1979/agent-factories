@@ -196,6 +196,20 @@ flowchart TD
      factory that has no such table. `tests/test_law_coverage.py` therefore maps P7 to the
      section gate above rather than to `tools/hygiene.py`, which mentioned the pacemaker
      only in prose and upheld nothing.
+   - **Skill-body budget — a STANDING reading, printed and never gated.** Report the line
+     count of every skill body against the owner's 500-line budget (owner order 2026-09-19),
+     naming each body at or over it, or stating plainly that none is. The predicate is LINE
+     COUNT (`wc -l`) — never bytes and never tokens, because a limit re-expressed in another
+     unit stops meaning what it says. The population is the ops profile's skill root,
+     `profiles/ops/skills/*/SKILL.md` (depth 1) — the bodies the profile actually loads — and
+     the population is stated BESIDE the count, because a count whose population is unstated
+     cannot be re-checked. The count is PRINTED, never a verdict: no gate fails on a body being
+     over budget, the owner's rule being "warn, do not block" and the same idiom section 11
+     already uses for the rework share. Ordered by ruling n=622 (board issue #105), after the
+     crossing of this factory's own body went unrecorded for a day. The same section carries
+     the brain-metrics COMPANION readings — the always-injected brain-file line count, and the
+     post-compaction input-token figure read from the daemon log — so the owner's 2026-09-19
+     brain-metrics question becomes a standing reading rather than a one-off.
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
      carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
      the run committed at (`head=<full-sha>`) — those two tokens are read by
