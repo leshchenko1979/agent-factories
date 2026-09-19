@@ -271,6 +271,12 @@ OPTIONAL_GATES: dict[str, str] = {
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md and "
         "would RED in a bootstrapped factory."
     ),
+    "test_registry.py": (
+        "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes KNOWN_FACTORY_SLUGS and FACTORY_CHATS "
+        "for this box's six factories, so a bootstrapped factory would RED on coverage before "
+        "it had enrolled anything. Moves into REQUIRED_GATES in the same change that ports "
+        "TEMPLATE/registry/ and parameterizes those two sets."
+    ),
     "test_session_bindings.py": (
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md, and "
         "additionally requires >=4 lane rows the template's SKILL.md.tmpl does not carry."

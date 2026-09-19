@@ -721,6 +721,26 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_subject_form.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_subject_form.py"])
 
+    # 34. Factory-registry drift gate: the registry's declared half is valid, bound and
+    #     covered, and its generated half is byte-reproducible. The registry is the fleet's
+    #     self-description surface — a peer reads it to learn which topic reaches which
+    #     factory — so it rots in two directions and each has its own failure mode: a
+    #     fragment that stops validating, a lane whose declared thread_id no longer
+    #     resolves to a live binding, a factory group the fleet knows that nobody enrolled,
+    #     and a committed render that no longer equals a fresh one over its state-bearing
+    #     bytes. The render comparison renders the fresh side at the COMMITTED artifact's
+    #     own instant and substitutes that literal stamp for RESOLVED_SENTINEL on both
+    #     sides, so a moved binding or a hand-edit fails while a fresh timestamp does not;
+    #     the sentinel is declared in the renderer precisely so the two cannot disagree
+    #     about it. `resolved_at` is gated separately on its own terms (present, parseable,
+    #     not in the future, agreed by both artifacts) so the normalization can never
+    #     smuggle an absent timestamp past the comparison. Checks 2, 3 and 5 read live
+    #     state — session bindings and the known-factory set — which is why the file is
+    #     classified in gate_registry.OPTIONAL_GATES until it is parameterized for the
+    #     template (P29).
+    if (repo_root / "tests/test_registry.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_registry.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))
