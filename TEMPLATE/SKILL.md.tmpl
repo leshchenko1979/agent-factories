@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.1
+version: 0.1.2
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -460,33 +460,39 @@ one transition is the shape this section forbids, applied to an actor rather tha
 the append path. The write-path refusal above is the BACKSTOP, not the step: it makes
 an omission impossible to reach a close SILENTLY, which is how the shape first
 appeared twice. A claim stamped after the work is a RECONSTRUCTED record: it must
-declare itself in terms, name the basis it rests on, carry the token
-`claim=reconstructed`, and declare the interval between its own `ts` and its close
-row's `ts` as the TOKEN `claim_gap` — carrying that interval in seconds, with a zero
-value where both appends landed in one second — and `verify` prints those rows beside
-its `excused:` lines, so clean, excused and reconstructed are never the same output.
+declare itself in terms, carry the token `claim=reconstructed`, and name the basis it
+rests on with the canonical marker `BASIS:` — and `verify` prints those rows beside its
+`excused:` lines together with the interval it recomputes from the row's own `ts` and
+its close row's `ts`, so clean, excused and reconstructed are never the same output.
 Forward-only: a reconstruction written before this sentence existed is not
-retrofitted (#98, ruling n=602).
+retrofitted (#98, ruling n=602; the interval moved from DECLARED to
+RECOMPUTED-AND-PRINTED under #115, ruling n=687).
 
-**A reconstructed claim DECLARES its interval; it never asserts an equality it cannot
-control.** The token above replaced a requirement that the reconstruction take the
-close row's own `ts`, because both rows were said to be written in the one instant.
-That equality is WITHDRAWN: the claim's `ts` is its own write instant, one of the
-five `ROW_IDENTITY` fields, while the close row's `ts` belongs to whoever appends the
-close — so the second boundary is not the author's to control, and a hand-supplied
+**A reconstructed claim DECLARES itself and its basis; it never asserts an interval it
+cannot control.** The token above replaced a requirement that the reconstruction take
+the close row's own `ts`, because both rows were said to be written in the one
+instant. That equality is WITHDRAWN: the claim's `ts` is its own write instant, one of
+the five `ROW_IDENTITY` fields, while the close row's `ts` belongs to whoever appends
+the close — so the second boundary is not the author's to control, and a hand-supplied
 `ts` would invite back-dating on the honour system. Measured over this factory's five
 historical reconstructions the gaps were 0s, 2s, 0s, 347s and 65s — THREE OF FIVE miss
 that equality, so a gate over it would have fired on honest rows. **A gate must test a
-property its author controls.** The property is therefore a DECLARATION, and the gate
-that upholds it RECOMPUTES the interval from the two rows' own `ts` values and
-compares it to the declared token — tool-sourced on BOTH sides, with no typed
+property its author controls.** That fact withdraws the interval's VALUE for the same
+reason it withdrew the equality: the author controls the ACT of declaring, never the
+interval, which exists only once the close row is appended under the append lock. So
+the declaration is the two facts the author does control — the self-declaration token
+and the basis, named under the canonical marker `BASIS:` — and the interval moves from
+DECLARED to RECOMPUTED-AND-PRINTED: the reader recomputes it from the two rows' own
+`ts` values and prints it beside the row, tool-sourced on BOTH sides, with no typed
 expectation, read through the canonical trailer predicate, because one field has one
-predicate. It PRINTS the population it examined and is proven to BITE by a synthetic
-probe; its live population is legitimately EMPTY until the next reconstruction, so the
-loud-fail-on-zero form is the WRONG guard here. Its boundary is declared in
-`docs/ledger-invariants.json`, and the historical reconstructions are OUTSIDE its
-population: NOTHING IS BACKFILLED. The superseded ledger row stands — a row is retired
-by naming it, never by editing it.
+predicate. The gate PRINTS the population it examined and is proven to BITE by a
+synthetic probe; its live population is legitimately EMPTY until the next
+reconstruction, so the loud-fail-on-zero form is the WRONG guard here. Its boundary is
+declared in `docs/ledger-invariants.json`, and the historical reconstructions are
+OUTSIDE its population: NOTHING IS BACKFILLED. The superseded ledger row stands — a row
+is retired by naming it, never by editing it. The `claim_gap` token is WITHDRAWN as a
+requirement (#115, ruling n=687) and no hand-edit of a ledger row is ever lawful — the
+one-append-path rule stands, and a correction is a DECLARED DEVIATION, never precedent.
 
 **A ledger subject names an issue or describes the work, and the form says which.** A subject that names a board issue is written `#N` — the hash, the digits, and nothing else. `#N` is the strict form every subject-keyed predicate resolves through, so a near-miss is not a malformed reference to those predicates: it is not a reference at all, and the row silently leaves their population without ever being reported as wrong. A subject that names no issue is a descriptive stem naming the work in words (`pickaxe-attribution-trap`), and a clause label extending a reference (`#31-close-receipt`) is descriptive, not a reference — a mechanism that cannot tell those two apart from a broken reference will either miss the defect or fire on the law. The number a subject names is not bound to this factory's own board: a row may cite another repository's issue, so the form is what is codified and no gate may read `#N` as naming this factory's board without saying so. The gate that upholds this is `tests/test_subject_form.py`, and the instant it governs from is declared in `docs/ledger-invariants.json` like every other ledger invariant.
 

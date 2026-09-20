@@ -70,7 +70,14 @@ from ledger_declaration import (
 # The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
-from field_predicate import declares_field, declares_token, split_canonical_run
+from field_predicate import declares_field, split_canonical_run
+
+# The reconstruction predicate — which rows are reconstructed claims and the interval
+# recomputed from the two rows' own `ts` values — is shared with the gate that judges the
+# self-declaration, on the same bare-neighbour import and for the same reason: two private
+# copies of one predicate drift in silence, and the drift lands on exactly the rows that
+# matter (`n=405` clause 5, `n=599`).
+from reconstruction import interval_line, reconstructed_claims
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -842,11 +849,17 @@ def cmd_verify(args: argparse.Namespace) -> int:
         # describes; a row of another event that merely QUOTES the token is out of the
         # population before the predicate is asked, which is what keeps a ruling row that
         # defines the token (measured: n=602) from reading as a reconstruction.
-        for row in rows:
-            if row.get("event") != "claim":
-                continue
-            if declares_token(row.get("detail"), "claim", "reconstructed"):
-                print(f"  reconstructed claim: n={row.get('n')} subject={row.get('subject')}")
+        #
+        # The interval prints beside the row (`n=687` clause 1, #115): the interval moved
+        # from DECLARED to RECOMPUTED-AND-PRINTED, because the author controls the ACT of
+        # declaring and never the interval — the close row's `ts` is assigned by whoever
+        # appends the close, under the append lock. So the reader recomputes it from the
+        # two rows' own `ts` values and PRINTS it. Both the population predicate and the
+        # interval come from `tools/reconstruction.py`, shared with
+        # `tests/test_reconstructed_claim_declared.py` — one field predicate, one home
+        # (`n=405` clause 5, `n=599`), never a private copy that can drift in silence.
+        for row in reconstructed_claims(rows):
+            print(f"  {interval_line(row, rows)}")
         rc = 0
 
     # The revision comparison runs whatever the structure check found: a ledger that is

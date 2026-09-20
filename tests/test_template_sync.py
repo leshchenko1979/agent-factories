@@ -26,6 +26,7 @@ PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
     ("tools/ledger_declaration.py", "TEMPLATE/tools/ledger_declaration.py"),
     ("tools/field_predicate.py", "TEMPLATE/tools/field_predicate.py"),
+    ("tools/reconstruction.py", "TEMPLATE/tools/reconstruction.py"),
     ("tests/gate_fixtures.py", "TEMPLATE/tests/gate_fixtures.py"),
     ("tests/gate_registry.py", "TEMPLATE/tests/gate_registry.py"),
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
@@ -66,7 +67,7 @@ PAIRS = [
     ("tests/test_score_gate_recorded.py", "TEMPLATE/tests/test_score_gate_recorded.py"),
     ("tests/test_subject_form.py", "TEMPLATE/tests/test_subject_form.py"),
     ("tests/test_rework_relative_revision.py", "TEMPLATE/tests/test_rework_relative_revision.py"),
-    ("tests/test_claim_gap_declared.py", "TEMPLATE/tests/test_claim_gap_declared.py"),
+    ("tests/test_reconstructed_claim_declared.py", "TEMPLATE/tests/test_reconstructed_claim_declared.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names
     # one side of a declared pair without its twin, and its table is THIS one — it

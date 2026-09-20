@@ -922,42 +922,61 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_rework_declared_landed.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_rework_declared_landed.py"])
 
-    # 42. Claim-gap declared gate: a RECONSTRUCTED claim row declares the interval between
-    #     its own `ts` and its close row's `ts` as the token `claim_gap`, and this gate
-    #     RECOMPUTES that interval from the two rows' own `ts` values and compares it to the
-    #     declaration — tool-sourced on BOTH sides, with no typed expectation, so the gate
-    #     can never encode the same drift as the row it judges. The token is read through
-    #     `tools/field_predicate.py` (`trailer_tokens` over the canonical run, then
-    #     `keyed_value(token, "claim_gap")` per token), and the close row is resolved by
-    #     SUBJECT with the row number as the tie-break — never by adjacency, because a
-    #     claim's neighbour is a property of the file's order rather than of the work unit.
-    #     WHAT IT REPLACED: the withdrawn requirement that a reconstruction "take the close
-    #     row's own ts, because both rows are written in the one instant". Measured over the
-    #     five historical reconstructions the gaps were 0s, 2s, 0s, 347s and 65s — THREE OF
-    #     FIVE miss that equality — so a gate over it would have fired on honest rows. A gate
-    #     must test a property its author controls, and the claim's own `ts` is one of the
-    #     five `ROW_IDENTITY` fields while the close row's belongs to whoever appends the
-    #     close. The property is therefore a DECLARATION (#112, ruling n=657).
+    # 42. Reconstructed-claim gate: a `claim` row stamped AFTER the work it accepts must
+    #     DECLARE itself (the token `claim=reconstructed`) and name the BASIS it rests on
+    #     under the canonical marker `BASIS:`. That is the whole predicate, and it is
+    #     deliberately narrow: it is the author-controlled half, which is the only half a
+    #     gate may judge.
+    #     WHAT IT REPLACED, AND WHY (#115, ruling n=687): it used to require the row to
+    #     declare the interval between its own `ts` and its close row's `ts` as the token
+    #     `claim_gap`, and it compared that declaration against a recomputation. That
+    #     requirement is WITHDRAWN for the reason the law already carried one paragraph
+    #     down — a gate must test a property its author controls. The author controls the
+    #     ACT of declaring, never the interval: the claim's `ts` is one of the five
+    #     `ROW_IDENTITY` fields, while the close row's `ts` is assigned by
+    #     `tools/ledger.py` under the append lock after `extract_task_telemetry` has run
+    #     (~17-19s measured on this host), so the declared value was never the author's to
+    #     compute. A gate over it would have compared the tool's own arithmetic against the
+    #     rows that arithmetic was computed from — a check that cannot fail. Two
+    #     alternatives were ruled out with it: having the TOOL write the token on the close
+    #     row (same cannot-fail shape), and an atomic claim+close append (structurally zero
+    #     interval, at the cost of a second append path).
+    #     THE INTERVAL MOVES FROM DECLARED TO RECOMPUTED-AND-PRINTED. This gate recomputes
+    #     it from the two rows' own `ts` values — tool-sourced on BOTH sides, no typed
+    #     expectation — and PRINTS it beside each row it examines. It is REPORTED, never
+    #     judged. `tools/ledger.py verify` prints it too, because the amended law asserts
+    #     that it is printed and a law with no mechanism reading it is the dead-text class
+    #     P29 forbids. The close row is resolved by SUBJECT with the row number as the
+    #     tie-break — never by adjacency, because a claim's neighbour is a property of the
+    #     file's order rather than of the work unit — and a work unit with no close row yet
+    #     prints `no close row yet` rather than failing, because a lane reconstructing its
+    #     claim mid-work has not closed yet and the gate must not fail a state the work has
+    #     not reached.
     #     THE POPULATION IS DOUBLY SCOPED: `event == "claim"` AND the row declares
-    #     `claim=reconstructed`. Both halves are load-bearing — a lexical scan finds EIGHT
-    #     rows carrying the token while the event scope cuts it to FIVE, and the three
-    #     excluded rows are a ruling that states the token it defines, a run that quotes it,
-    #     and a close that quotes the claim it closes. The declaration itself is read
-    #     POSITIONALLY, from the canonical trailer only: two different scoping questions,
-    #     two different predicates.
+    #     `claim=reconstructed`. Both halves are load-bearing — the lexical scan finds rows
+    #     that merely QUOTE the token (a ruling that states the token it defines, a run that
+    #     quotes it, a close that quotes the claim it closes) and the event scope is what
+    #     keeps them out (`n=602`). The BASIS marker is read over the WHOLE detail rather
+    #     than positionally, and the head/trailer question cannot arise for it:
+    #     `trailer_tokens` collects only tokens carrying `=`, so a colon-bearing marker can
+    #     never be part of the canonical run. Two scoping questions, two predicates.
+    #     THE MARKER IS MANDATED FORWARD ONLY. Measured before the gate was written: `n=647`
+    #     is an honest reconstruction that names its basis in prose WITHOUT the marker, while
+    #     five of the six historical reconstructions carry it — so a retroactive marker gate
+    #     would have fired on an honest row, the defect class rework entry 157 records.
     #     ⚠️ FORWARD-ONLY — AND THIS GATE MUST NOT COPY BLOCK 41'S LOUD-FAIL-ON-ZERO GUARD,
     #     which is the contrast block 41 already names in its own comment. Its live
     #     population is legitimately EMPTY until the next reconstruction, so an empty read is
     #     the EXPECTED state rather than a broken parse; it takes the PROPORTIONAL guard
     #     instead (`tests/ledger_boundary.py::population_skip_reason`), which SKIPS with a
     #     stated reason and never passes silently. The boundary is a DECLARED FACTORY
-    #     PARAMETER (`docs/ledger-invariants.json`, key `claim_gap_declared`): the five
-    #     historical reconstructions are OUTSIDE the population and print as `excused:` on
-    #     every run, because NOTHING IS BACKFILLED. Its population is printed on every run,
-    #     so a clean run and a run that examined nothing are never the same output (issue
-    #     #112, ruling n=657, P29).
-    if (repo_root / "tests/test_claim_gap_declared.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_claim_gap_declared.py"])
+    #     PARAMETER (`docs/ledger-invariants.json`, key `reconstructed_claim_declared`): all
+    #     six historical reconstructions are OUTSIDE the population and print as `excused:`
+    #     on every run, because NOTHING IS BACKFILLED. Its population is printed on every
+    #     run, so a clean run and a run that examined nothing are never the same output
+    #     (issue #112 ruling n=657, amended under issue #115 ruling n=687, P29).
+    if (repo_root / "tests/test_reconstructed_claim_declared.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_reconstructed_claim_declared.py"])
 
     # 43. The skill-version contract (issue #71, ruling n=455 clause 3, P29). A commit that
     #     moves a LAW FILE's body must move the skill's `version:` line in the SAME commit,

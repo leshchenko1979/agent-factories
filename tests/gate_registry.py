@@ -359,19 +359,22 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_board_intake_recorded.py",
     "test_close_board_recorded.py",
     "test_close_row_revision.py",
-    # Added with its registration (issue #112, ruling n=657). REQUIRED is the correct grain
-    # and OPTIONAL is not, and the deciding fact is that its boundary is FORWARD-ONLY: the
-    # rule governs rows written at or after the instant a factory declares, and nothing is
-    # ever backfilled, so a factory that ships the gate OPTIONAL and omits it writes its
-    # first reconstruction ungoverned and can never repair that — the record a later gate
-    # would need is the one it did not take. The counter-argument, that a factory which
-    # never reconstructs carries a gate that always skips, describes every gate whose
-    # population is an event: it skips with a STATED reason and no boundary key means no
-    # declaration rather than a silent pass, which is the same shape `test_subject_form.py`
-    # and `test_close_row_revision.py` already carry in this tuple. It is also byte-paired
-    # with a TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the
-    # runner and keeping the file (the `test_registry_render.py` reasoning above).
-    "test_claim_gap_declared.py",
+    # Added with its registration (issue #112, ruling n=657; amended under issue #115, ruling
+    # n=687). REQUIRED is the correct grain and OPTIONAL is not, and the deciding fact is
+    # that its boundary is FORWARD-ONLY: the rule governs rows written at or after the
+    # instant a factory declares, and nothing is ever backfilled, so a factory that ships the
+    # gate OPTIONAL and omits it writes its first reconstruction ungoverned and can never
+    # repair that — the record a later gate would need is the one it did not take. The
+    # counter-argument, that a factory which never reconstructs carries a gate that always
+    # skips, describes every gate whose population is an event: it skips with a STATED reason
+    # and no boundary key means no declaration rather than a silent pass, which is the same
+    # shape `test_subject_form.py` and `test_close_row_revision.py` already carry in this
+    # tuple. It is also byte-paired with a TEMPLATE twin, so the manifest grain is what keeps
+    # a factory from dropping the runner and keeping the file (the `test_registry_render.py`
+    # reasoning above). RENAMED from `test_claim_gap_declared.py` by #115: the gate no longer
+    # judges the `claim_gap` token, so the old name described a predicate it no longer
+    # implements — a name that lies about its predicate is worse than a rename.
+    "test_reconstructed_claim_declared.py",
     "test_commit_pair_hook.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
@@ -412,7 +415,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_single_writer.py",
     # Added with its registration (issue #71, ruling n=455 clause 3). REQUIRED is the correct
     # grain and OPTIONAL is not, and the deciding fact is the same one that put
-    # `test_claim_gap_declared.py` in this tuple: its boundary is FORWARD-ONLY. The rule
+    # `test_reconstructed_claim_declared.py` in this tuple: its boundary is FORWARD-ONLY. The rule
     # governs commits at or after the instant a factory declares, nothing is ever backfilled,
     # and a commit is immutable — so a factory that ships the gate OPTIONAL and omits it
     # writes its next law change ungoverned and can never repair that, because the record a
