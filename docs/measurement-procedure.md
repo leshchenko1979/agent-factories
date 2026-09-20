@@ -210,6 +210,42 @@ flowchart TD
      the brain-metrics COMPANION readings — the always-injected brain-file line count, and the
      post-compaction input-token figure read from the daemon log — so the owner's 2026-09-19
      brain-metrics question becomes a standing reading rather than a one-off.
+   - **Compaction RATE — a STANDING reading, printed and never gated.** Report, per lane and
+     **worst-first**, the ratio of **CONTEXT COMPACTIONS** to **COMPLETED TURNS** over a
+     stated window, naming every lane at or above **1:1** as **IN A LOOP**. The instrument is
+     `tools/compaction_rate.py` (`--hours`, `--home`); the two populations are read
+     independently and are deliberately different:
+     - **compactions** — the count of `role='user'` rows in `<home>/opencrabs.db` whose
+       content **begins** with the compaction marker, one row per compaction, read in place
+       over a `mode=ro` URI;
+     - **turns** — the count of daemon-log lines from `channels::telegram::turn_settle`
+       (`Telegram settle: session <uuid>`), one line per **completed** turn.
+
+     **The load-bearing figure is the ratio**, because size cannot see a loop: the window
+     that produced this metric carried **15 compactions against ONE completed turn** on the
+     Worker lane while post-compaction SIZE stayed healthy throughout. **The population and
+     the window are PRINTED BESIDE the count** — a count over a mutable population that
+     carries neither cannot be re-checked (the #102 law) — and the instrument prints the
+     predicate's all-time match count alongside the in-window one, so a zero in-window is
+     visibly different from a predicate that matches nothing.
+     **BOUNDS, stated in the reading rather than hidden:** (1) the turn marker is
+     **channel-scoped** to telegram, so it covers telegram-bound sessions only — every lane
+     on this box, but not a headless one; (2) it counts **completed** turns, so a turn
+     interrupted by a compaction never settles and the marker **undercounts exactly in the
+     state being measured** — the direction is safe, it makes a loop look better than it is;
+     (3) a session with **no settle marker observed** has a **structurally absent**
+     denominator, so its compaction count is printed, its ratio is **not** computed, and it
+     is **never** named a loop — the absence cannot be told apart from a turn that never
+     completed, and reporting it as an infinite ratio would be a verdict the data does not
+     carry.
+     The reading is **never a scored criterion** (ruling n=643 PART 4, board issue #108): a
+     compaction rate is substantially a **substrate** property — the daemon's compaction
+     threshold, the model's context window and provider behaviour set it, and the log shows
+     the trigger directly (`Compaction: primary 'llm-gateway' failed (stream error) — walking
+     the fallback chain`) — while **a scored criterion must be actionable by the scored
+     party**. It is re-visited, not closed: if the rate later proves dominated by
+     factory-controlled inputs, a scored criterion can be added under its own ruling. The
+     same idiom as the skill-body budget above: **warn, do not block.**
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
      carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
      the run committed at (`head=<full-sha>`) — those two tokens are read by
