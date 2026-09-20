@@ -9,8 +9,9 @@ Seven checks, each printed with the count it measured:
   2. every declared `thread_id` resolves to a live `session_bindings` row ON THE
      DECLARED PROFILE
   3. every declared lane is BOUND — declared-but-unbound is a failure, not a warning
-  4. the committed `docs/factory-registry.md` and `registry/index.json` are identical to
-     a fresh render over their STATE-BEARING bytes
+  4. GATE A — the committed `docs/factory-registry.md` and `registry/index.json` are
+     identical, byte for byte and with NO normalization, to a replay of the snapshot
+     `registry/state.json` recorded beside them
   5. coverage — every factory group known to the fleet has a fragment, and every
      fragment names a known slug
   6. `resolved_at` is gated on its own terms — present, parseable, not in the future,
@@ -23,32 +24,51 @@ rebinds, a session is recreated or a lane is renamed, while still READING as tru
 reader cannot tell a stale render from a current binding without the instant it was
 taken, which is what `resolved_at` carries and what check 6 gates.
 
-HOW the timestamp is kept out of check 4 — the one design decision this gate owes, stated
-here rather than assumed, and MEASURED rather than reasoned. The renderer computes its
-freshness badges from the instant it is handed (`_freshness_badge` compares
-`age_hours(attested_at, now)` against the 72 h window), so rendering the fresh side at a
-SENTINEL inverts that test instead of neutralising it: every age becomes NEGATIVE, no
-fragment can render `STALE`, and a genuinely stale attestation would come out reading
-`attested` — the two sides diverge the moment any fragment is stale, in the direction of
-HIDING the failure. Rendering at the committed artifact's OWN instant instead keeps both
-sides on one clock, and the literal stamp is then substituted for the sentinel on both
-sides. So a hand-edit or a moved binding still fails while a fresh timestamp never reads as
-drift, and the probes below prove that by construction rather than asserting it — the first
-version of this paragraph predicted the sentinel would render everything STALE, and the
-probe measured the opposite.
+HOW check 4 stays a CORRECTNESS check — the design decision this gate owes, stated here
+rather than assumed, and MEASURED rather than reasoned (#103, ruling n=613). The renderer
+reads LIVE state — bindings, cron rows, skill versions, predicate results — so comparing a
+committed artifact against a fresh render compares the PAST against the INSTANT. Measured
+2026-09-19/20 in a pristine detached worktree at the shipped revision with zero dirty
+files: `registry/index.json` line 432 carried a committed `"bound_at":
+"2026-09-19T17:54:32Z"` against a fresh `"2026-09-19T23:05:16Z"`. So a lane rebinding a
+topic REDs the gate at a clean HEAD, with no act by the lane running it, and no lane can
+make it green except by re-rendering and committing someone else's state change. One
+verdict was riding two properties, and they are now SPLIT:
 
-What the substitution does in the LIVE path, measured rather than assumed: it is IDENTITY.
-The fresh side is rendered at the committed stamp, so both texts already carry that exact
-literal and `text.replace(stamp, sentinel)` changes neither. The comparison would pass
-without it. It is kept because `drift_problems()` is the shared comparison and its contract
-is two texts rendered at two instants — that is the shape the probes drive, and the shape
-any caller who renders the fresh side at `utc_now()` would get; the substitution is what
-makes that contract well-defined rather than defensive noise. Rendering the fresh side at
-`utc_now()` instead would make it load-bearing and is deliberately NOT done: the badge text
-is then measured on a different clock from the committed render, so an attestation crossing
-its 72 h boundary between the commit and the gate run would RED a tree nobody touched — a
-time-dependent gate, which is the same defect class as one that cannot fail. So the
-substitution is proven by the probes and the live path is proven deterministic by this note.
+  GATE A (check 4, in the verdict) — REPRODUCIBILITY, offline and deterministic. The
+  committed artifacts are compared against a replay of `registry/state.json`: the snapshot
+  of the six live inputs they were rendered from, recorded and committed in the SAME call
+  as the artifacts, so a successful render cannot leave a stale snapshot beside fresh bytes.
+  Both sides carry the snapshot's own values and its own stamp, so nothing volatile is
+  compared, the comparison needs NO normalization, and the verdict is the same at any
+  instant on any box. The gate reads the COMMITTED blobs (`git show HEAD:<path>`), never the
+  working tree — a gate that read the working tree would pass on a tree re-rendered without
+  committing, which is precisely the drift it exists to catch — and every failure message
+  names the revision it measured.
+
+  FRESHNESS (a monitor, never in the verdict) — the committed artifact against a render of
+  LIVE state, reported as a line. It answers "has the box moved since the render?", which is
+  a question about the instant and therefore not gateable: a gate that REDs on a moved
+  binding cannot be made green by the lane that finds it. It is printed OUTSIDE `CHECKS`, so
+  it can never reach the pass/fail verdict.
+
+The monitor renders its live side AT THE COMMITTED INSTANT — a decision it owes, stated
+rather than assumed, and MEASURED rather than reasoned. The renderer computes its freshness
+badges from the instant it is handed (`_freshness_badge` compares `age_hours(attested_at,
+now)` against the 72 h window), so rendering the live side at a SENTINEL inverts that test
+instead of neutralising it: every age becomes NEGATIVE, no fragment can render `STALE`, and
+a genuinely stale attestation would come out reading `attested` — the two sides diverge the
+moment any fragment is stale, in the direction of HIDING the failure. Rendering at the
+committed artifact's OWN instant keeps both sides on one clock, so the monitor reports
+genuine state movement and not clock-induced badge churn, and the literal stamp is then
+substituted for the sentinel on both sides. The probes below prove that by construction
+rather than asserting it — the first version of this paragraph predicted the sentinel would
+render everything STALE, and the probe measured the opposite.
+
+`normalize_stamp()` and `drift_problems()` survive the split as the MONITOR's instrument and
+the probes': they compare two texts rendered at two instants, which is the shape the probes
+drive. GATE A does not use them — it compares two texts rendered from ONE snapshot and needs
+no normalization at all, which is the whole point of the split.
 
 Two scope statements this gate carries, because its report is wrong without them:
 
@@ -59,10 +79,11 @@ Two scope statements this gate carries, because its report is wrong without them
        FAILS naming the undeclared manifest rather than reporting empty coverage. This
        parameterisation is what moved the file out of `gate_registry.OPTIONAL_GATES` and
        into `REQUIRED_GATES`; the gate is now required in the template too.
-  (ii) Check 4 renders the fresh side AT THE COMMITTED INSTANT, so a badge that would
-       have crossed its own staleness boundary since the commit is not caught here. It
-       is rendered in the Freshness table, and check 6 gates the stamp it is measured
-       from; the choice is stated, not implied away.
+  (ii) GATE A reads the committed snapshot, so it catches a hand-edited artifact and a
+       mutated snapshot, and NOT a box that has moved since the render — that is the
+       monitor's report, and the two are deliberately separate. A snapshot that was never
+       committed FAILS the gate BY NAME, because an artifact whose inputs cannot be
+       replayed is unverifiable rather than stale.
 
 The announcement probes take their slugs from the manifest rather than naming a pair:
 `validate_fragment` resolves `factory` against `KNOWN_FACTORY_SLUGS`, so the probe needs
@@ -82,6 +103,7 @@ import difflib
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -96,10 +118,10 @@ import registry_render as rr  # noqa: E402
 PREDICATE = (
     "every fragment in the live store and the fixtures validates; every declared lane "
     "resolves to a live binding on its declared profile; every factory group known to "
-    "the fleet has a fragment; the committed render equals a fresh one over its "
-    "state-bearing bytes; `resolved_at` is present, parseable, not in the future and "
-    "agreed by both artifacts; every announcement is well-formed and no two entries "
-    "sharing an `id` carry differing text."
+    "the fleet has a fragment; the committed artifacts are a byte-exact replay of the "
+    "snapshot committed beside them; `resolved_at` is present, parseable, not in the "
+    "future and agreed by both artifacts; every announcement is well-formed and no two "
+    "entries sharing an `id` carry differing text."
 )
 
 failures: list[str] = []
@@ -213,10 +235,20 @@ def check_coverage() -> list[str]:
     )
     return problems
 
-# --- 4. the committed render reproduces over its state-bearing bytes ---------
+# --- 4. GATE A (reproducibility) and the freshness monitor -------------------
+#
+# GATE A is the verdict: the committed bytes against a replay of the committed
+# snapshot, byte for byte and with NO normalization. The monitor is a REPORT and never a
+# verdict: the committed bytes against a LIVE render, which answers a question about the
+# instant and is therefore not gateable (#103). `normalize_stamp` and `drift_problems`
+# below are the monitor's and the probes' instrument, not GATE A's.
 
 def normalize_stamp(text: str, stamp: object) -> str:
-    """Replace the render instant with the sentinel, so the clock is not compared."""
+    """Replace the render instant with the sentinel, so the clock is not compared.
+
+    The MONITOR's instrument and the probes': two texts rendered at two instants. GATE A
+    does not call this — both of its sides already carry the snapshot's own stamp.
+    """
     if not stamp:
         return text
     return text.replace(str(stamp), rr.RESOLVED_SENTINEL)
@@ -264,26 +296,146 @@ def drift_problems(
             )
     return problems
 
-def read_committed() -> tuple[str, str, object]:
-    """The two committed artifacts and the instant the index says they were read."""
+def read_working_tree() -> tuple[str, str, object]:
+    """The two artifacts AS THEY SIT IN THE WORKING TREE, and the instant the index
+    says they were read.
+
+    This is the PROBES' base and the monitor's helper, never GATE A's: a probe must
+    drive the comparison even on a tree whose render is not yet committed. GATE A reads
+    the committed blobs (`committed_blob`), because a gate that read the working tree
+    would pass on a tree re-rendered without committing — precisely the drift it exists
+    to catch (#103).
+    """
     committed_md = rr.MD_PATH.read_text(encoding="utf-8")
     committed_index = rr.INDEX_PATH.read_text(encoding="utf-8")
     stamp = json.loads(committed_index).get("resolved_at")
     return committed_md, committed_index, stamp
 
-def check_render_reproduces() -> list[str]:
-    try:
-        committed_md, committed_index, stamp = read_committed()
-    except (OSError, json.JSONDecodeError) as exc:
-        return [f"the committed artifacts cannot be read — {exc}"]
-    fresh_md, fresh_index, _ctx = rr.render_texts(resolved_at=str(stamp))
-    problems = drift_problems(
-        committed_md, committed_index, fresh_md, fresh_index, stamp
+def relpath(path: Path) -> str:
+    """A path as `git show` needs it — relative to the repo root, never absolute."""
+    return str(path.relative_to(rr.REPO_ROOT))
+
+def committed_revision() -> tuple[str, str | None]:
+    """HEAD's full sha, or an empty string and the reason it could not be read."""
+    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True)
+    if result.returncode != 0:
+        return "", (
+            "HEAD cannot be resolved — "
+            + result.stderr.decode("utf-8", "replace").strip()
+        )
+    return result.stdout.decode("utf-8").strip(), None
+
+def committed_blob(path: Path) -> tuple[str | None, str | None]:
+    """One file's bytes AT HEAD, decoded, or None and the reason it is not there.
+
+    `git show` is captured as BYTES and decoded here rather than with `text=True`:
+    universal-newline translation would rewrite a CRLF blob to LF and hide a real byte
+    difference from a comparison that claims byte-exactness.
+    """
+    where = relpath(path)
+    result = subprocess.run(
+        ["git", "show", f"HEAD:{where}"], cwd=REPO, capture_output=True
     )
+    if result.returncode != 0:
+        return None, (
+            f"{where} is not committed at HEAD — "
+            + result.stderr.decode("utf-8", "replace").strip()
+        )
+    return result.stdout.decode("utf-8"), None
+
+def check_render_reproduces() -> list[str]:
+    """GATE A — the committed artifacts are a byte-exact replay of their snapshot.
+
+    Both sides are rendered FROM THE SNAPSHOT committed beside them, so no volatile
+    field is compared, the comparison needs NO normalization, and the verdict is the
+    same at any instant on any box. The blobs come from HEAD and never the working
+    tree. Every failure names the revision it measured.
+    """
+    revision, error = committed_revision()
+    if error:
+        return [error]
+
+    blobs: dict[str, str] = {}
+    for path in (rr.MD_PATH, rr.INDEX_PATH, rr.STATE_PATH):
+        text, error = committed_blob(path)
+        if error:
+            return [f"at {revision}: {error}"]
+        blobs[relpath(path)] = text
+
+    state_rel = relpath(rr.STATE_PATH)
+    try:
+        snapshot = json.loads(blobs[state_rel])
+    except json.JSONDecodeError as exc:
+        return [f"at {revision}: {state_rel} does not parse as JSON — {exc}"]
+    if not isinstance(snapshot, dict):
+        return [f"at {revision}: {state_rel} is not an object"]
+
+    try:
+        replay_md, replay_index, _ctx = rr.render_from_snapshot(snapshot)
+    except Exception as exc:  # noqa: BLE001 — an unconsumable snapshot IS the finding
+        return [
+            f"at {revision}: {state_rel} cannot be replayed — "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    problems: list[str] = []
+    for path, replay in ((rr.MD_PATH, replay_md), (rr.INDEX_PATH, replay_index)):
+        committed = blobs[relpath(path)]
+        if committed != replay:
+            problems.append(
+                f"{relpath(path)}: the bytes committed at {revision} are not a replay "
+                f"of {state_rel} — {first_difference(committed, replay)}"
+            )
     counts.append(
-        f"committed render compared against a fresh one at its own instant {stamp}"
+        f"GATE A: {relpath(rr.MD_PATH)} and {relpath(rr.INDEX_PATH)} at {revision[:12]} "
+        f"replayed from {state_rel} ({len(snapshot.get('bindings') or [])} binding(s), "
+        f"{len(snapshot.get('jobs') or [])} job(s), no normalization)"
     )
     return problems
+
+def report_freshness() -> str:
+    """Has the box MOVED since the last committed render? — reported, never gated.
+
+    This is the question GATE A cannot answer and must not try to: it is a question
+    about the INSTANT, so a RED here would be un-greenable by the lane that finds it
+    (#103). The line is printed OUTSIDE `CHECKS` and never reaches the verdict.
+
+    The live side is rendered AT THE COMMITTED INSTANT so both sides sit on one clock:
+    the renderer's freshness badges are a function of the instant it is handed, so a
+    live render at `utc_now()` would report clock-induced badge churn as though the box
+    had moved. On one clock, a difference is genuine state movement.
+    """
+    revision, error = committed_revision()
+    if error:
+        return f"NOT TAKEN — {error}"
+
+    committed_md, error = committed_blob(rr.MD_PATH)
+    if error:
+        return f"NOT TAKEN — {error}"
+    committed_index, error = committed_blob(rr.INDEX_PATH)
+    if error:
+        return f"NOT TAKEN — {error}"
+
+    try:
+        stamp = json.loads(committed_index).get("resolved_at")
+    except json.JSONDecodeError as exc:
+        return f"NOT TAKEN — {relpath(rr.INDEX_PATH)} does not parse as JSON — {exc}"
+
+    try:
+        live_md, live_index, _ctx = rr.render_texts(resolved_at=str(stamp))
+    except Exception as exc:  # noqa: BLE001 — a failed live read is a report, not a verdict
+        return f"NOT TAKEN — a live render raised {type(exc).__name__}: {exc}"
+
+    problems = drift_problems(committed_md, committed_index, live_md, live_index, stamp)
+    if problems:
+        return (
+            f"the box has MOVED since the render committed at {revision[:12]} "
+            f"({stamp}) — {len(problems)} artifact(s) differ; re-render and commit when "
+            f"the movement is wanted. {problems[0]}"
+        )
+    return (
+        f"the box has not moved since the render committed at {revision[:12]} ({stamp})"
+    )
 
 # --- 6. resolved_at, gated on its own terms ---------------------------------
 
@@ -424,7 +576,7 @@ def probe_a_supersession_chain_is_not_ambiguity() -> None:
     )
 
 def probe_a_hand_edit_is_named() -> None:
-    committed_md, committed_index, stamp = read_committed()
+    committed_md, committed_index, stamp = read_working_tree()
     edited = committed_md.replace(
         "Generated file.", "Generated file. HAND EDIT.", 1
     )
@@ -440,12 +592,14 @@ def probe_a_hand_edit_is_named() -> None:
 def probe_only_the_stamp_advanced_passes() -> None:
     """A re-render in which ONLY `resolved_at` advanced must still pass.
 
-    The committed bytes are taken as they are and the stamp is moved forward — which is
-    exactly what a re-render over unchanged live state produces — then compared against a
-    fresh render at the committed instant. The normalization is what makes the two equal,
-    so this probe fails if it is ever removed.
+    The artifact's bytes are taken from the working tree and the stamp is moved
+    forward — which is exactly what a re-render over unchanged live state produces —
+    then compared against the same bytes at the committed instant. The normalization is
+    what makes the two equal, so this probe fails if it is ever removed. This is the
+    MONITOR's instrument: GATE A renders both sides from one snapshot and normalizes
+    nothing, so it is not exercised here.
     """
-    committed_md, committed_index, stamp = read_committed()
+    committed_md, committed_index, stamp = read_working_tree()
     advanced = rr.parse_instant(stamp) + datetime.timedelta(hours=1)
     later = advanced.strftime("%Y-%m-%dT%H:%M:%SZ")
     moved_md = committed_md.replace(str(stamp), later)
@@ -910,7 +1064,7 @@ def probe_the_live_manifest_satisfies_the_prefix_law() -> None:
 CHECKS = (
     ("1. every fragment validates against the schema", check_fragments_validate),
     ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
-    ("4. the committed render reproduces over state-bearing bytes", check_render_reproduces),
+    ("4. GATE A: the committed artifacts replay their committed snapshot", check_render_reproduces),
     ("5. every known factory group is covered", check_coverage),
     ("6. resolved_at is present, parseable, not in the future", check_resolved_at),
     ("7. every announcement is well-formed and unambiguous", check_announcements),
@@ -941,6 +1095,9 @@ def main() -> int:
         check(label, not problems, problems[0][:120] if problems else "")
         for extra in problems[1:]:
             print(f"        - {extra[:160]}")
+    print("")
+    print("Freshness monitor (informational — printed OUTSIDE the verdict):")
+    print(f"  {report_freshness()}")
     print("")
     print("Acceptance probes (each drives the live comparison or the validator directly):")
     for probe in PROBES:

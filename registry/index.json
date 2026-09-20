@@ -1,13 +1,13 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-19T21:48:40Z",
+  "resolved_at": "2026-09-20T01:14:06Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 61,
     "announcements": 11,
-    "jobs": 56,
+    "jobs": 57,
     "unattributed_jobs": 7
   },
   "announcements": [
@@ -355,7 +355,7 @@
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.31",
+      "skill_revision": "1.0.33",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -429,7 +429,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T17:54:32Z",
+          "bound_at": "2026-09-19T23:05:16Z",
           "announcements": []
         },
         {
@@ -579,7 +579,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:27:31Z",
+          "bound_at": "2026-09-19T23:52:29Z",
           "announcements": []
         },
         {
@@ -619,7 +619,7 @@
           "session_id": "a360e13f-4e34-4fac-8a1d-770644040903",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-18T18:18:07Z",
+          "bound_at": "2026-09-19T23:56:01Z",
           "announcements": []
         }
       ],
@@ -979,7 +979,7 @@
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.224",
+      "skill_revision": "0.4.227",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
@@ -1101,7 +1101,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:58:43Z",
+          "bound_at": "2026-09-20T00:53:07Z",
           "announcements": []
         },
         {
@@ -1161,7 +1161,7 @@
           "session_id": "d5863180-017d-4646-82a7-19be145e4974",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:13:00Z",
+          "bound_at": "2026-09-20T00:14:36Z",
           "announcements": []
         },
         {
@@ -1181,7 +1181,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T02:50:51Z",
+          "bound_at": "2026-09-20T00:55:47Z",
           "announcements": []
         },
         {
@@ -1291,7 +1291,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T16:59:18Z",
+          "bound_at": "2026-09-19T23:36:26Z",
           "announcements": []
         },
         {
@@ -1401,7 +1401,7 @@
           "session_id": "ef83024b-90c8-40fc-8490-e8c2879808ab",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T18:09:49Z",
+          "bound_at": "2026-09-20T00:50:16Z",
           "announcements": []
         }
       ],
@@ -1511,8 +1511,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-20T00:07:00+00:00",
-      "last_run_at": "2026-09-19T18:07:29Z",
+      "next_run_at": "2026-09-20T06:07:00+00:00",
+      "last_run_at": "2026-09-20T00:07:01Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1559,8 +1559,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-20T00:25:00+00:00",
-      "last_run_at": "2026-09-19T18:25:38Z",
+      "next_run_at": "2026-09-20T06:25:00+00:00",
+      "last_run_at": "2026-09-20T00:25:08Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1655,8 +1655,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-20T00:00:00+00:00",
-      "last_run_at": "2026-09-19T18:00:29Z",
+      "next_run_at": "2026-09-20T06:00:00+00:00",
+      "last_run_at": "2026-09-20T00:00:58Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1687,13 +1687,29 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-20T00:23:00+00:00",
-      "last_run_at": "2026-09-19T18:23:37Z",
+      "next_run_at": "2026-09-20T06:23:00+00:00",
+      "last_run_at": "2026-09-20T00:23:07Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
       "owner": "inferhub-watch",
       "owner_basis": "name prefix"
+    },
+    {
+      "id": "be4c38ce-d8f6-4d64-b4fe-eaa711af71cc",
+      "name": "infra-handler-escalation-check",
+      "cron_expr": "0 0 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-21T00:00:00+00:00",
+      "last_run_at": null,
+      "deliver_to": "session:a360e13f-4e34-4fac-8a1d-770644040903",
+      "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); L=/root/.opencrabs/logs/opencrabs.$(date -u +%F); AGE=$(( $(date +%s) - $(stat -c %Y \"$L\" 2>/dev/null || echo 0) )); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (>1 core)\"; [ $AGE -gt 7200 ] && echo \"default daemon log STALE: ${AGE}s since last write\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
+      "profile": "ops",
+      "owner": "infra-factory",
+      "owner_basis": "deliver_to -> lane"
     },
     {
       "id": "8198815c-45e0-40ff-87d1-bfa19d038c5b",
@@ -1735,8 +1751,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-20T00:00:00+00:00",
-      "last_run_at": "2026-09-19T18:00:29Z",
+      "next_run_at": "2026-09-20T06:00:00+00:00",
+      "last_run_at": "2026-09-20T00:00:58Z",
       "deliver_to": "session:fb67ca75-8735-4c39-80be-06b59bd4365f",
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -1815,8 +1831,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-20T00:00:00+00:00",
-      "last_run_at": "2026-09-19T18:00:29Z",
+      "next_run_at": "2026-09-20T06:00:00+00:00",
+      "last_run_at": "2026-09-20T00:00:58Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -2167,8 +2183,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-20T00:00:00+00:00",
-      "last_run_at": "2026-09-19T18:00:29Z",
+      "next_run_at": "2026-09-20T06:00:00+00:00",
+      "last_run_at": "2026-09-20T00:00:59Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",

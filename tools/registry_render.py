@@ -372,23 +372,35 @@ def build_context(
     fragment_paths: list[Path],
     bindings: list[dict],
     resolved_at: str,
+    recorded: dict | None = None,
 ) -> tuple[dict, list[str]]:
     """Assemble the render context. One pass, so both outputs agree.
 
     The two renderers MUST read the same context: a document and an index
     generated from two separate reads can disagree about which session owns a
     topic, and the machine form is the one a peer would act on.
+
+    When `recorded` is given, each of the six live reads is replaced by the
+    snapshot's recorded value and the assembly below is untouched — ONE code
+    path, so a replay cannot drift from a live render in its logic (#103).
     """
     fragments: list[dict] = []
     problems: list[str] = []
-    for path in fragment_paths:
-        data, error = load_fragment(path)
-        if error:
-            problems.append(error)
-            continue
-        if isinstance(data, dict):
-            data["_path"] = str(path)
-            fragments.append(data)
+    if recorded is not None:
+        for entry in recorded.get("fragments") or []:
+            if isinstance(entry, dict) and isinstance(entry.get("data"), dict):
+                data = dict(entry["data"])
+                data["_path"] = str(entry.get("path") or "")
+                fragments.append(data)
+    else:
+        for path in fragment_paths:
+            data, error = load_fragment(path)
+            if error:
+                problems.append(error)
+                continue
+            if isinstance(data, dict):
+                data["_path"] = str(path)
+                fragments.append(data)
     fragments.sort(key=lambda f: str(f.get("factory")))
 
     # Which factory each live session belongs to, and which factory each chat
@@ -396,6 +408,9 @@ def build_context(
     # attributable by IDENTITY rather than by the name someone typed.
     chat_owner = {str(chat): slug for slug, chat in FACTORY_CHATS.items()}
     uuid_owner: dict[str, str] = {}
+
+    recorded_versions = (recorded or {}).get("skill_versions") or {}
+    skill_versions: dict[str, str | None] = {}
 
     factories: list[dict] = []
     for fragment in fragments:
@@ -413,14 +428,18 @@ def build_context(
             if resolved.get("session_id"):
                 uuid_owner[str(resolved["session_id"])] = slug
             lanes.append(resolved)
+        skill_path = str(fragment.get("skill") or "")
+        if recorded is not None:
+            version = recorded_versions.get(skill_path)
+        else:
+            version = read_skill_version(Path(skill_path))
+        skill_versions[skill_path] = version
         factories.append(
             {
                 "fragment": fragment,
                 "slug": slug,
                 "lanes": lanes,
-                "skill_version": read_skill_version(
-                    Path(str(fragment.get("skill") or ""))
-                ),
+                "skill_version": version,
                 "attested_at": fragment.get("attested_at"),
                 "status": fragment.get("status"),
             }
@@ -429,24 +448,40 @@ def build_context(
     announcements, conflicts = collect_announcements(fragments)
     problems.extend(conflicts)
 
-    jobs, job_errors, job_homes = cron_rows()
-    problems.extend(job_errors)
+    if recorded is not None:
+        jobs = [dict(j) for j in (recorded.get("jobs") or []) if isinstance(j, dict)]
+        job_homes = [str(h) for h in (recorded.get("job_homes") or [])]
+    else:
+        jobs, job_errors, job_homes = cron_rows()
+        problems.extend(job_errors)
     for job in jobs:
         owner, basis = job_owner(job, uuid_owner, chat_owner)
         job["_owner"] = owner
         job["_basis"] = basis
 
-    return (
-        {
-            "resolved_at": resolved_at,
-            "factories": factories,
-            "announcements": announcements,
-            "jobs": jobs,
-            "job_homes": job_homes,
-            "problems": problems,
-        },
-        problems,
-    )
+    ctx = {
+        "resolved_at": resolved_at,
+        "factories": factories,
+        "announcements": announcements,
+        "jobs": jobs,
+        "job_homes": job_homes,
+        "problems": problems,
+        # The raw inputs, carried so `render_all` can RECORD the snapshot from
+        # the same values the render actually consumed (#103). Recording from a
+        # second read would snapshot something no artifact was built from.
+        "_bindings": bindings,
+        "_skill_versions": skill_versions,
+    }
+    if recorded is not None:
+        # Seed the predicate cache so `run_check` answers from the snapshot and
+        # never EXECUTES a predicate during a replay: one opens every OpenCrabs
+        # home DB and another shells out to systemd.
+        cache: dict = {}
+        for name, entry in (recorded.get("checks") or {}).items():
+            if isinstance(entry, dict):
+                cache[name] = (entry.get("holds"), str(entry.get("evidence") or ""))
+        ctx["_check_cache"] = cache
+    return ctx, problems
 
 
 def _fragment_root_announcements(fragment: dict, slug: str) -> list[dict]:
@@ -954,22 +989,108 @@ def render_index(ctx: dict) -> dict:
 
 MD_PATH = REPO_ROOT / "docs" / "factory-registry.md"
 INDEX_PATH = REPO_ROOT / "registry" / "index.json"
+# The recorded snapshot of every LIVE input one render consumed (#103). It is
+# written in the SAME call as the two artifacts, so a successful render cannot
+# leave a stale snapshot beside fresh bytes — that coupling is what makes the
+# correctness gate a REPRODUCIBILITY check instead of a freshness check.
+STATE_PATH = REPO_ROOT / "registry" / "state.json"
+SNAPSHOT_SCHEMA = "factory-registry-state/1"
 
+
+def record_state(
+    fragments: list[dict],
+    bindings: list[dict],
+    resolved_at: str,
+    skill_versions: dict[str, str | None],
+    jobs: list[dict],
+    job_homes: list[str],
+    checks: dict[str, tuple[bool | None, str]],
+) -> dict:
+    """The snapshot of every LIVE input one render consumed (#103).
+
+    A snapshot that records fewer than all six inputs replays nothing: the
+    renderer would fall back to a live read for whatever is missing, and the
+    gate would compare a fresh value against itself. The six are enumerated
+    here so a reader can check the set rather than trust it.
+
+    `fragments` are the PARSED dicts the render consumed — not a second read of
+    their paths, which would snapshot values no artifact was built from. The
+    `_owner`/`_basis` keys are dropped because they are DERIVED (attribution is
+    recomputed on every render), so recording them would freeze a projection
+    beside its inputs.
+
+    `skill_versions` and `checks` are the two the ruling at `n=613` missed.
+    The second is the non-determinism risk: `run_check` EXECUTES allowlisted
+    predicates, one of which opens every OpenCrabs home database and another
+    shells out to systemd, so a replay that re-ran them would be as volatile
+    as the live path it replaced.
+    """
+    recorded_fragments = []
+    for fragment in fragments:
+        data = {k: v for k, v in fragment.items() if k != "_path"}
+        recorded_fragments.append(
+            {"path": str(fragment.get("_path") or ""), "data": data}
+        )
+    recorded_jobs = [
+        {k: v for k, v in job.items() if k not in ("_owner", "_basis")}
+        for job in jobs
+    ]
+    return {
+        "snapshot_schema": SNAPSHOT_SCHEMA,
+        "resolved_at": resolved_at,
+        "fragments": recorded_fragments,
+        "bindings": list(bindings),
+        "skill_versions": dict(skill_versions),
+        "jobs": recorded_jobs,
+        "job_homes": list(job_homes),
+        "checks": {
+            name: {"holds": holds, "evidence": evidence}
+            for name, (holds, evidence) in checks.items()
+        },
+    }
+
+def load_snapshot(path: Path | None = None) -> tuple[dict | None, str | None]:
+    """Read a recorded snapshot. Returns `(data, error)`; never a default."""
+    target = path or STATE_PATH
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return None, f"{target}: cannot read — {exc}"
+    except json.JSONDecodeError as exc:
+        return None, f"{target}: does not parse as JSON — {exc}"
+    if not isinstance(data, dict):
+        return None, f"{target}: snapshot is not an object"
+    if data.get("snapshot_schema") != SNAPSHOT_SCHEMA:
+        return None, (
+            f"{target}: snapshot_schema is {data.get('snapshot_schema')!r}, "
+            f"expected {SNAPSHOT_SCHEMA!r}"
+        )
+    return data, None
 
 def render_texts(
     explicit: list[str] | None = None,
     resolved_at: str | None = None,
+    recorded: dict | None = None,
 ) -> tuple[str, str, dict]:
     """Render both artifacts to STRINGS, writing nothing.
 
     The gate uses this: it re-renders and compares bytes, and a renderer that
     could only write to disk would force the gate to write before it could
     compare — mutating the artifact it is judging.
+
+    With `recorded`, no live read happens at all — not the fragment store, not
+    the bindings, not the cron tables, and not the predicates (#103).
     """
-    stamp = resolved_at or utc_now()
-    paths = live_fragment_paths(explicit or [])
-    bindings, binding_errors = all_bindings()
-    ctx, problems = build_context(paths, bindings, stamp)
+    if recorded is not None:
+        stamp = str(recorded.get("resolved_at") or "")
+        paths = [Path(str(e.get("path") or "")) for e in recorded.get("fragments") or []]
+        bindings = [b for b in (recorded.get("bindings") or []) if isinstance(b, dict)]
+        binding_errors: list[str] = []
+    else:
+        stamp = resolved_at or utc_now()
+        paths = live_fragment_paths(explicit or [])
+        bindings, binding_errors = all_bindings()
+    ctx, problems = build_context(paths, bindings, stamp, recorded=recorded)
     for error in binding_errors:
         if error not in problems:
             problems.append(error)
@@ -977,6 +1098,15 @@ def render_texts(
     markdown = render_markdown(ctx)
     index = render_index(ctx)
     return markdown, json.dumps(index, indent=2, ensure_ascii=False) + "\n", ctx
+
+def render_from_snapshot(snapshot: dict) -> tuple[str, str, dict]:
+    """Render both artifacts from a recorded snapshot, with NO live read.
+
+    This is the correctness path: both sides of the comparison carry the
+    snapshot's own values and its own stamp, so nothing volatile is compared
+    and a lane rebinding a topic cannot RED a gate at a clean HEAD (#103).
+    """
+    return render_texts(recorded=snapshot)
 
 
 def render_all(
@@ -997,6 +1127,20 @@ def render_all(
             "paths": [],
         }
     markdown, index_text, ctx = render_texts(explicit, resolved_at)
+    # The snapshot is recorded from the values THIS render consumed and written
+    # in the same call as the artifacts, so a successful render cannot leave a
+    # stale snapshot beside fresh bytes (#103). The predicate cache is complete
+    # here because `render_markdown` runs inside `render_texts`.
+    snapshot = record_state(
+        fragments=[f["fragment"] for f in ctx["factories"]],
+        bindings=ctx["_bindings"],
+        resolved_at=ctx["resolved_at"],
+        skill_versions=ctx["_skill_versions"],
+        jobs=ctx["jobs"],
+        job_homes=ctx["job_homes"],
+        checks=ctx.get("_check_cache") or {},
+    )
+    snapshot_text = json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n"
     report = {
         "resolved_at": ctx["resolved_at"],
         "fragments": len(paths),
@@ -1005,15 +1149,19 @@ def render_all(
         "announcements": len(ctx["announcements"]),
         "jobs": len(ctx["jobs"]),
         "unattributed_jobs": sum(1 for j in ctx["jobs"] if not j.get("_owner")),
+        "checks": len(snapshot["checks"]),
         "problems": ctx["problems"],
         "markdown": str(MD_PATH),
         "index": str(INDEX_PATH),
+        "state": str(STATE_PATH),
     }
     if write:
         MD_PATH.parent.mkdir(parents=True, exist_ok=True)
         INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
         MD_PATH.write_text(markdown, encoding="utf-8")
         INDEX_PATH.write_text(index_text, encoding="utf-8")
+        STATE_PATH.write_text(snapshot_text, encoding="utf-8")
         report["markdown_bytes"] = MD_PATH.stat().st_size
         report["index_bytes"] = INDEX_PATH.stat().st_size
+        report["state_bytes"] = STATE_PATH.stat().st_size
     return 0, report
