@@ -153,6 +153,11 @@ PAIRS = [
     # `registry/fleet.example.json` ships because the loader's own error message
     # names it — an error that points at a file nobody ships is a dead end.
     ("registry/fleet.example.json", "TEMPLATE/registry/fleet.example.json"),
+    # The gate-budget manifest's own example (#94, ruling n=744). Same reason as the
+    # fleet example above and the same shape of pair: a bootstrapped factory reads the
+    # SHAPE from here and writes its own `registry/gates.json` from measurements of its
+    # own box, so the example ships whole and byte-identically at both paths.
+    ("registry/gates.example.json", "TEMPLATE/registry/gates.example.json"),
     ("tools/registry.py", "TEMPLATE/tools/registry.py"),
     ("tools/registry_render.py", "TEMPLATE/tools/registry_render.py"),
     ("tools/registry_attest.py", "TEMPLATE/tools/registry_attest.py"),
