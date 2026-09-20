@@ -20,9 +20,12 @@ having, each with a probe that would fail on the shape it forbids:
 3. **A board that could not be read is NOT a clean board.** rc=2 with the failure named,
    never rc=0 over zero issues. This is the failure mode that makes a patrol worse than
    useless: a broken read rendering as a passing one.
-4. **A leg that is not run says so.** The cron-thinness leg (#54 part b) has no predicate,
-   so the runner prints it as NOT RUN with the reason — an absent leg is a different fact
-   from a passing leg, and the two must never render the same.
+4. **A leg that is not run says so.** The cron-thinness leg (#54 part b) is WIRED now, so
+   the deferred set is EMPTY and the runner asserts exactly that — an absent leg is a
+   different fact from a passing leg, and the two must never render the same. The surface
+   is kept because the CLASS is what it guards, not the one instance: a deferral still
+   renders as NOT RUN with its reason, a tracker it names must not be CLOSED, and a claim
+   it states must not be one the tree contradicts (#121).
 5. **A close row's board declaration is checked against the board** (#117). The offline
    close-board gate asserts the token was RECORDED; nothing asserted the recorded state was
    TRUE, so a close row could declare a board close that never happened and read clean. The
