@@ -21,7 +21,8 @@
       "Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers",
       "InferHub model routing, pricing and token economics - that is inferhub-watch",
       "Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos",
-      "Other profiles' brain files and configuration (default, family)"
+      "Other profiles' brain files and configuration (default, family)",
+      "The OpenCrabs log-guard watchdog and its root-crontab line on agents (/usr/local/bin/opencrabs-log-guard.sh) - host infrastructure operated by the owner (Alexey). Its source exists in no factory repo, so no factory can declare it as code it owns; it mitigates a closed OpenCrabs daemon defect class (leshchenko1979/opencrabs#21)."
     ]
   },
   "services": [
