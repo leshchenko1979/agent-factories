@@ -164,7 +164,7 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 |---|---|---|---|---|---|
 | **1. Defect Mechanism Extraction** | Triage | Observed failure or escaped defect | Isolated structural root cause | Blame narrative / symptom focus | Extraction lead time |
 | **2. Mechanized Gate Construction** | Fixing Lane | Isolated root cause | New test in `tests/` or rule in `SKILL.md` | Non-biting gate / dead test | Probe test verification |
-| **3. Entry Gate Audit** | Triage | Candidate rework row | Appended row in `evidence/rework.md` | Fragmented table / blank line | `tests/test_rework.py` pass |
+| **3. Entry Gate Audit** | Triage | Row appended by the lane that holds the defect | Audited row in `evidence/rework.md` | Fragmented table / blank line | `tests/test_rework.py` pass |
 
 ---
 

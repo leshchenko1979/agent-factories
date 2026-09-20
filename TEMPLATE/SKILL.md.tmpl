@@ -238,6 +238,10 @@ archive.
   than one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope
   is its reader's population, and the two are stated together.
 
+- **A predicate that examined nothing has reported nothing, not HOLDS.** Naming a population and examining one are two properties, and the first does not carry the second: a predicate can name its population exactly and still read zero items inside it, and its clean verdict over that empty read is indistinguishable in the output from a verified one. So every predicate that reports a clean verdict over an enumerated population asserts that the enumeration was NON-EMPTY, prints the count it examined, and FAILS LOUDLY on a zero count, naming which population came back empty. A gate that examined zero items must never print the verdict of one that examined the population and found it clean. This generalises a property the suite's history-wide gates already practise; it is codified because a predicate that cannot name its own population is already barred from reporting HOLDS, and a predicate that names its population perfectly and examines nothing is the same failure one step further in.
+  The clause is **two-part**, and the second part is what keeps it from being satisfied by an exit code: a gate PRINTS the population it examined, and it is proven to BITE by a probe that makes it fail. **NON-VACUITY IS A PROPERTY OF THE PROBE, and POPULATION VISIBILITY is the property of the run.** A gate whose only evidence of working is an exit 0 over a population it does not print has not been shown to work. The loud-fail-on-zero form is right for a gate whose population is the whole history, and **wrong for a forward-only gate whose population is legitimately empty until its next instance**, where the probe is the only thing that can show the gate bites.
+- **A cited line is evidence of a FACT, never of a CAUSE.** A log line, a count or a config read can establish that something happened; it cannot establish what produced it, and a causal sentence built on top of a real observation is a separate assertion that needs its own support. A cause is established by varying it — the effect follows — or by its absence coinciding with the effect's absence, and the ruling or entry that asserts one names the disproof it rests on. The sharpest available test: **a cause that VANISHES while the effect persists at FULL RATE is not the cause.** No gate can read causation, so the upholding mechanism is a PROCESS (P29), not a gate — and the clause is the second half of the record law above: the RECORD of a defect states its cause, so the cause must be as checkable as the fact.
+
 ---
 
 ## 10. Context compaction, manifest curation & recovery
@@ -302,7 +306,7 @@ factory keeps outside it, the issue board. Every other path to it is read-only.
 | the issue board (`{{REPO}}` issues) | the work itself — intake, state, and the receipt that resolved it | the lane that files or settles the item (`Triage` owns intake) | read-only, via `gh` |
 | `evidence/ledger.jsonl` | every state transition — intake, claim, dispatch, close, score, ruling, run | `tools/ledger.py append` | `tail`, `verify` — read-only |
 | `evidence/insights.jsonl` | empirical factory insights across growth stages | `tools/insights.py append` | `list`, `verify`, `format` — read-only |
-| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | `Triage`, at the close that resolved it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity, every rate claim's form, and that each determinate `Subject` resolves to a closed work unit; the share of closes declaring a disposition is printed, never gated — never the completeness of the set |
+| `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | the lane that HOLDS the defect: the declaring lane where a close declared the entry, the discovering lane where a patrol or survey found it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity, every rate claim's form, and that each determinate `Subject` resolves to a closed work unit; the share of closes declaring a disposition is printed, never gated — never the completeness of the set |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the measurement job | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated |
 | `processes.md` | the canonical process register | `HQ` | read-only |
@@ -425,11 +429,32 @@ the append path. The write-path refusal above is the BACKSTOP, not the step: it 
 an omission impossible to reach a close SILENTLY, which is how the shape first
 appeared twice. A claim stamped after the work is a RECONSTRUCTED record: it must
 declare itself in terms, name the basis it rests on, carry the token
-`claim=reconstructed`, and take the close row's own ts, because both rows are written
-in the one instant — and `verify` prints those rows beside its `excused:` lines, so
-clean, excused and reconstructed are never the same output. Forward-only: a
-reconstruction written before this sentence existed is not retrofitted (#98, ruling
-n=602).
+`claim=reconstructed`, and declare the interval between its own `ts` and its close
+row's `ts` as the TOKEN `claim_gap` — carrying that interval in seconds, with a zero
+value where both appends landed in one second — and `verify` prints those rows beside
+its `excused:` lines, so clean, excused and reconstructed are never the same output.
+Forward-only: a reconstruction written before this sentence existed is not
+retrofitted (#98, ruling n=602).
+
+**A reconstructed claim DECLARES its interval; it never asserts an equality it cannot
+control.** The token above replaced a requirement that the reconstruction take the
+close row's own `ts`, because both rows were said to be written in the one instant.
+That equality is WITHDRAWN: the claim's `ts` is its own write instant, one of the
+five `ROW_IDENTITY` fields, while the close row's `ts` belongs to whoever appends the
+close — so the second boundary is not the author's to control, and a hand-supplied
+`ts` would invite back-dating on the honour system. Measured over this factory's five
+historical reconstructions the gaps were 0s, 2s, 0s, 347s and 65s — THREE OF FIVE miss
+that equality, so a gate over it would have fired on honest rows. **A gate must test a
+property its author controls.** The property is therefore a DECLARATION, and the gate
+that upholds it RECOMPUTES the interval from the two rows' own `ts` values and
+compares it to the declared token — tool-sourced on BOTH sides, with no typed
+expectation, read through the canonical trailer predicate, because one field has one
+predicate. It PRINTS the population it examined and is proven to BITE by a synthetic
+probe; its live population is legitimately EMPTY until the next reconstruction, so the
+loud-fail-on-zero form is the WRONG guard here. Its boundary is declared in
+`docs/ledger-invariants.json`, and the historical reconstructions are OUTSIDE its
+population: NOTHING IS BACKFILLED. The superseded ledger row stands — a row is retired
+by naming it, never by editing it.
 
 **A ledger subject names an issue or describes the work, and the form says which.** A subject that names a board issue is written `#N` — the hash, the digits, and nothing else. `#N` is the strict form every subject-keyed predicate resolves through, so a near-miss is not a malformed reference to those predicates: it is not a reference at all, and the row silently leaves their population without ever being reported as wrong. A subject that names no issue is a descriptive stem naming the work in words (`pickaxe-attribution-trap`), and a clause label extending a reference (`#31-close-receipt`) is descriptive, not a reference — a mechanism that cannot tell those two apart from a broken reference will either miss the defect or fire on the law. The number a subject names is not bound to this factory's own board: a row may cite another repository's issue, so the form is what is codified and no gate may read `#N` as naming this factory's board without saying so. The gate that upholds this is `tests/test_subject_form.py`, and the instant it governs from is declared in `docs/ledger-invariants.json` like every other ledger invariant.
 
