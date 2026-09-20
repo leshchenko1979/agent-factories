@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.7
+version: 0.1.8
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -284,6 +284,19 @@ archive.
   than one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope
   is its reader's population, and the two are stated together.
 
+- **A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number.**
+  A cap picked by feel is uncalibrated in both directions: too low, it kills a healthy gate and
+  reports a timeout as a verdict; too high, it hides a hung one. So each gate's cap is derived —
+  `budget_sec = margin_x × measured_sec` — with the margin, the measured runtime and the
+  ABSOLUTE revision the measurement was taken at declared together in the gate-budget manifest,
+  so the number carries its own basis and a reader can recompute it. The budget VALUES belong to
+  the process owner, never to the implementing lane. A gate with no entry uses the declared
+  default and the runner PRINTS which gates used it — a declared default with a printed
+  population is not an exempt-by-silence surface, an unprinted fallback would be. A budget
+  exhausted is UNKNOWN: never green, never a plain failure, and its recorded duration is the
+  MEASURED elapsed time, never a hardcoded zero — a timeout is a fact about a gate and must be
+  readable as one.
+
 - **A predicate that examined nothing has reported nothing, not HOLDS.** Naming a population and examining one are two properties, and the first does not carry the second: a predicate can name its population exactly and still read zero items inside it, and its clean verdict over that empty read is indistinguishable in the output from a verified one. So every predicate that reports a clean verdict over an enumerated population asserts that the enumeration was NON-EMPTY, prints the count it examined, and FAILS LOUDLY on a zero count, naming which population came back empty. A gate that examined zero items must never print the verdict of one that examined the population and found it clean. This generalises a property the suite's history-wide gates already practise; it is codified because a predicate that cannot name its own population is already barred from reporting HOLDS, and a predicate that names its population perfectly and examines nothing is the same failure one step further in.
   The clause is **two-part**, and the second part is what keeps it from being satisfied by an exit code: a gate PRINTS the population it examined, and it is proven to BITE by a probe that makes it fail. **NON-VACUITY IS A PROPERTY OF THE PROBE, and POPULATION VISIBILITY is the property of the run.** A gate whose only evidence of working is an exit 0 over a population it does not print has not been shown to work. The loud-fail-on-zero form is right for a gate whose population is the whole history, and **wrong for a forward-only gate whose population is legitimately empty until its next instance**, where the probe is the only thing that can show the gate bites.
 - **A cited line is evidence of a FACT, never of a CAUSE.** A log line, a count or a config read can establish that something happened; it cannot establish what produced it, and a causal sentence built on top of a real observation is a separate assertion that needs its own support. A cause is established by varying it — the effect follows — or by its absence coinciding with the effect's absence, and the ruling or entry that asserts one names the disproof it rests on. The sharpest available test: **a cause that VANISHES while the effect persists at FULL RATE is not the cause.** No gate can read causation, so the upholding mechanism is a PROCESS (P29), not a gate — and the clause is the second half of the record law above: the RECORD of a defect states its cause, so the cause must be as checkable as the fact.
@@ -398,6 +411,22 @@ back before committing. This follows from the ruling that the commit is **transp
 identity**: the row's identity is its `n`. It is upheld **forward-only**, bounded by a
 marker commit recorded in the gate — a history-wide form would be permanently red in any
 factory where the rule landed after the habit did.
+
+**The settlement receipt is taken AFTER the row it certifies.** The `close` row is appended
+first, then `tools/ledger.py verify` runs, and the receipt cited in the row's `detail` is the
+one that covered it. Taken before the append, the receipt is structurally incapable of covering
+the artifact it certifies: `verify` reads a subject's rows as a sequence, so a run made while
+the `close` row does not yet exist has not seen the row it is cited for. This is an ORDER
+defect, never a claim about honesty — a citation taken early is not a false citation, and the
+rows that carry one stand as written.
+
+Its upholding mechanism is a gate as well as this sentence: a close row that cites a verify
+receipt must DECLARE the row count that verify measured, and that count must be at least the
+row's own number — which is exactly the statement that the verify covered the row it certifies.
+The count is read through the one shared field predicate (`tools/field_predicate.py`), so the
+field has one reader; the gate is forward-only, with its boundary declared in the invariants
+file whose example ships as `docs/ledger-invariants.example.json`, and historical rows are
+excused and printed rather than repaired.
 
 **The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate. A rule without an upholding mechanism is dead text.
 

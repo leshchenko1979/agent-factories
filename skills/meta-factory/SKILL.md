@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.11
+version: 0.1.12
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -318,6 +318,18 @@ leaning on shared memory rather than on what it said.
   correctness verdict, because a check that fails by construction carries no more information than
   one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope is
   its reader's population, and the two are stated together (#102, #103).
+- **A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number.**
+  A cap picked by feel is uncalibrated in both directions: too low, it kills a healthy gate and
+  reports a timeout as a verdict; too high, it hides a hung one. So each gate's cap is derived —
+  `budget_sec = margin_x × measured_sec` — with the margin, the measured runtime and the
+  ABSOLUTE sha the measurement was taken at declared together in the gate-budget manifest, so
+  the number carries its own basis and a reader can recompute it. The budget VALUES are the
+  process owner's, never the implementing lane's (n=574 PART 5). A gate with no entry uses the
+  declared default and the audit PRINTS which gates used it — a declared default with a printed
+  population is not an exempt-by-silence surface, an unprinted fallback would be. A budget
+  exhausted is UNKNOWN: never green, never a plain failure, and its recorded duration is the
+  MEASURED elapsed time, never a hardcoded zero — a timeout is a fact about a gate and must be
+  readable as one (#94, ruling n=744).
 - **A predicate that examined nothing has reported nothing, not HOLDS.** Naming a population and examining one are two properties, and the first does not carry the second: a predicate can name its population exactly and still read zero items inside it, and its clean verdict over that empty read is indistinguishable in the output from a verified one. So every predicate that reports a clean verdict over an enumerated population asserts that the enumeration was NON-EMPTY, prints the count it examined, and FAILS LOUDLY on a zero count, naming which population came back empty. A gate that examined zero items must never print the verdict of one that examined the population and found it clean. This generalises a property already stated for one gate (`tests/test_ledger_no_shrink.py`) and already practised across the suite; it is codified because a predicate that cannot name its own population is already barred from reporting HOLDS, and a predicate that names its population perfectly and examines nothing is the same failure one step further in.
   The clause is **two-part**, and the second part is what keeps it from being satisfied by an exit code: a gate PRINTS the population it examined, and it is proven to BITE by a probe that makes it fail. **NON-VACUITY IS A PROPERTY OF THE PROBE, and POPULATION VISIBILITY is the property of the run.** A gate whose only evidence of working is an exit 0 over a population it does not print has not been shown to work. The loud-fail-on-zero form is right for a gate whose population is the whole history — `tests/test_ledger_no_shrink.py`'s is — and **wrong for a forward-only gate whose population is legitimately empty until its next instance**, where the probe is the only thing that can show the gate bites (#112, ruling n=657 item 8).
 - **A cited line is evidence of a FACT, never of a CAUSE.** A log line, a count or a config read can establish that something happened; it cannot establish what produced it, and a causal sentence built on top of a real observation is a separate assertion that needs its own support. A cause is established by varying it — the effect follows — or by its absence coinciding with the effect's absence, and the ruling or entry that asserts one names the disproof it rests on. The sharpest available test, and the one this factory lost a ruling to: **a cause that VANISHES while the effect persists at FULL RATE is not the cause.** No gate can read causation, so the upholding mechanism is a PROCESS (P29), not a gate — and the clause is the second half of the record law above: the RECORD of a defect states its cause, so the cause must be as checkable as the fact.

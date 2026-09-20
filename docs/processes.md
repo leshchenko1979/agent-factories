@@ -147,6 +147,21 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 | **5. Multi-Criteria Gate Evaluation** | Automated Gates | Candidate artifact | Deterministic score vector & error trace | Silent pass / false positive | Gate execution duration & exit code |
 | **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row (Rail 2) + Rail 1 ack + the board issue closed with its receipt | Stale sha / broken remote push / false open (`close` row written, board issue still open) | Commit sha identity & delivery trace · board/ledger close agreement |
 
+**The settlement receipt is taken AFTER the row it certifies (procedure).** The `close` row is
+appended first, then `tools/ledger.py verify` runs, and the receipt cited in the row's `detail`
+is the one that covered it. Taken before the append, the receipt is structurally incapable of
+covering the artifact it certifies: `verify` reads a subject's rows as a sequence, so a run made
+while the `close` row does not yet exist has not seen the row it is cited for. This is an ORDER
+defect, never a claim about honesty — a citation taken early is not a false citation, and the
+rows that carry one stand as written.
+
+Its upholding mechanism is a gate as well as this sentence: a close row that cites a verify
+receipt must DECLARE the row count that verify measured, and that count must be at least the
+row's own number — which is exactly the statement that the verify covered the row it certifies.
+The count is read through the one shared field predicate, so the field has one reader; the gate
+is forward-only, with its boundary declared in `docs/ledger-invariants.json`, and historical
+rows are excused and printed rather than repaired (#96, ruling n=745).
+
 ---
 
 ### 4.2 Rework Prevention & Learning Loop (Process 2: Feedback Loop)
