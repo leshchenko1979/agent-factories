@@ -263,24 +263,37 @@ def test_the_cron_leg_fails_LOUDLY_when_nothing_is_attributed() -> None:
     assert "population came back EMPTY" in out, out
     assert "0 cron row(s) attributed to this factory" in out, out
 
-def test_an_unattributable_row_is_counted_and_never_judged() -> None:
-    """A row this factory cannot attribute is COUNTED and REPORTED, never judged.
+def test_an_unattributable_row_is_COUNTED_NAMED_and_never_judged() -> None:
+    """A row this factory cannot attribute is COUNTED, NAMED, never judged.
 
     The second row carries a WORK ORDER on a waking session target — a real defect under
     the shared predicate — but nobody here declares it, so judging it would be this
     factory enforcing another factory's law.
+
+    NAMED is the half that used to be forbidden here. A bare count is not a report: the
+    name and the home it was read from are what let a reader resolve it, so the population
+    read carries them (#126). The property this probe tests is the one it always claimed —
+    the row is never JUDGED — and it still bites, because a row that reached the problems
+    list would fail the second assertion.
     """
     rows = [
         _thin("factory-triage-patrol"),
         _cron("oc-some-other-factory-job", deliver_to=f"session:{_SESSION_UUID}",
-              prompt="Execute the hourly cycle and write the report."),
+              prompt="Execute the hourly cycle and write the report.", home="other-home"),
     ]
-    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
+                      prefixes=["factory-"])
     assert rc == 0, f"an unattributable row must not fail this factory's run\n{out}"
     assert "1 attributed to nobody" in out, out
-    assert "oc-some-other-factory-job" not in out, (
-        f"the leg judges its OWN rows only — an unattributable row is reported as a "
-        f"count, never named as a problem\n{out}"
+    assert "    unattributed: oc-some-other-factory-job (home other-home)" in out, (
+        f"the population read must NAME every row it could not attribute, with the home "
+        f"it was read from — a count alone resolves to no object and cannot be checked "
+        f"by the reader it is reported to (#126)\n{out}"
+    )
+    judged = [line for line in out.splitlines() if line.startswith("    - ")]
+    assert not any("oc-some-other-factory-job" in line for line in judged), (
+        f"the leg judges its OWN rows only — an unattributable row belongs in the "
+        f"population read, never in this factory's problems\n{judged}\n{out}"
     )
 
 def test_the_cron_leg_BITES_on_a_defect_in_a_row_this_factory_declares() -> None:

@@ -445,16 +445,22 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
     return rows, homes_read, unreached
 
 
-def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], int]:
-    """(rows attributed to this factory, count attributed to nobody) — by declaration."""
+def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], list[dict]]:
+    """(rows attributed to this factory, rows attributed to NOBODY) — by declaration.
+
+    The unattributed rows are RETURNED, not counted. A bare count is not a report: a
+    reader who must act on one has to be able to name it and find the home it came from,
+    and a number that resolves to no object cannot be resolved by anyone (#126). Nothing
+    here JUDGES them — attribution only separates the two populations.
+    """
     attributed: list[dict] = []
-    unattributed = 0
+    unattributed: list[dict] = []
     for row in rows:
         name = str(row.get("name") or "")
         if prefixes and any(name.startswith(prefix) for prefix in prefixes):
             attributed.append(row)
         else:
-            unattributed += 1
+            unattributed.append(row)
     return attributed, unattributed
 
 
@@ -462,10 +468,15 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
                       prefixes: list[str], *, predicate=None, read_at: str = "") -> dict:
     """The cron-thinness leg: THIS factory's rows, judged by the PURE predicate.
 
-    A row the manifest cannot attribute is COUNTED and REPORTED, never judged — the runner
-    judges its own factory's rows, and an unattributable row belongs to nobody here. ZERO
-    attributed rows over a declared, non-empty prefix set FAILS LOUDLY: a clean verdict
-    over an examined-nothing read is not a verdict (skill section 8).
+    A row the manifest cannot attribute is COUNTED, NAMED and REPORTED, never judged — the
+    runner judges its own factory's rows, and an unattributable row belongs to nobody here.
+    It is reported rather than gated: a box-wide RED over unattributable rows would fire on
+    the household rows another home legitimately carries (#101, ruling n=610 PART 3b), so
+    the reader gets the population instead of a verdict, and non-vacuity rides the probe
+    rather than a loud-fail-on-zero the live population could never satisfy (#112).
+
+    ZERO attributed rows over a declared, non-empty prefix set FAILS LOUDLY: a clean
+    verdict over an examined-nothing read is not a verdict (skill section 8).
 
     The rows are read live by the caller; the predicate stays pure and is handed a list.
     """
@@ -492,7 +503,11 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
             "homes_read_names": homes_read,
             "homes_unreached": unreached,
             "rows_attributed": len(attributed),
-            "rows_unattributed": unattributed,
+            "rows_unattributed": len(unattributed),
+            "unattributed_rows": [
+                {"name": str(r.get("name") or ""), "home": str(r.get("home") or "")}
+                for r in unattributed
+            ],
             "prefixes": prefixes,
             "read_at": read_at,
         },
@@ -538,6 +553,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"({', '.join(cov['prefixes']) or 'no declared prefix'}), "
                 f"{cov['rows_unattributed']} attributed to nobody"
             )
+            for row in cov.get("unattributed_rows", []):
+                lines.append(
+                    f"    unattributed: {row['name'] or '(unnamed row)'} "
+                    f"(home {row['home'] or 'unknown'})"
+                )
             lines.append(
                 f"  homes unreached: {len(cov['homes_unreached'])}"
                 + (f" — {'; '.join(cov['homes_unreached'])}" if cov['homes_unreached'] else "")
