@@ -194,10 +194,14 @@ flowchart TD
      harness database, not in the tree, so no repo gate can read it without reding in every
      bootstrapped factory that has no such table. The MECHANICAL half is
      `tests/test_cron_thinness.py` — a pure predicate over a LIST of cron rows, probeable
-     with synthetic ones, which flags a row whose wake route is neither a `session:` target
-     nor a notify command in its prompt. It reads BOTH `deliver_to` and the prompt, because
-     the meta-factory's own correctly-thin pacemaker carries its wake in-prompt with
-     `deliver_to` NULL, and "thin" is not a byte count. `tests/test_law_coverage.py` maps P7
+     with synthetic ones, which flags a row failing EITHER of two legs. Leg (a), the WAKE:
+     the row's route is neither a `session:` target nor a notify command in its prompt. Leg
+     (b), the WORK ORDER: the row wakes something AND its non-empty prompt does not declare
+     itself wake-only with the canonical marker the reference thin rows carry — a work order
+     on a waking row is the two-writers-on-one-actor shape #50 ruled on and rewrote, so a
+     route is necessary but NOT sufficient (issue #120). It reads BOTH `deliver_to` and the
+     prompt, because the meta-factory's own correctly-thin pacemaker carries its wake
+     in-prompt with `deliver_to` NULL, and "thin" is not a byte count. `tests/test_law_coverage.py` maps P7
      (and P28, which states the same rule) to that predicate and to the section gate above.
      It was mapped to `tools/hygiene.py` before, which declares its own scope as P20,
      mentions the pacemaker only in prose, and never reads a cron row — and the mapping
