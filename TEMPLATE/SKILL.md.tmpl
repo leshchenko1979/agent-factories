@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.5
+version: 0.1.6
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -445,6 +445,45 @@ whose surviving neighbours still contain every word it carried. Its exemptions a
 data in `docs/ledger-no-shrink-exemptions.json`, keyed by full sha and never inline in the
 gate, and every run prints them so "clean" and "excused" are never the same output; a gate
 that examines zero commits fails loudly rather than passing vacuously.
+
+**"Retired" names two different objects, and the difference between them carries the teeth:
+a row's IDENTITY, and a FIELD VALUE the ledger cannot remove.** The clause above governs
+the first — the `(n, ts, event, actor, subject)` tuple a row is known by — and its hazard
+is a writer that bypasses the append lock, so its evidence is a set difference over
+committed history. This clause governs the second. A close row declares the revision its
+receipts describe (`head=<sha>`), and the ledger is append-only, so a token that resolves
+to nothing **cannot be removed**: the row stands exactly as written and the false value
+stands inside it. The exit is a DECLARATION in its own file —
+`docs/ledger-retirements.json` — which NAMES the value rather than excusing the row.
+**ADMISSION IS A PROOF OBLIGATION, NOT A LOOKUP:** an entry is admitted only when the
+ledger CARRIES its naming row AND that row's detail carries the false value VERBATIM. The
+naming row is what makes a retirement auditable — it is the row that says *this value was
+wrong, and here is the right one* — so a declaration whose naming row is absent, whose
+naming row does not carry the value it claims, or whose target row's canonical run does
+not declare that value at all, is a gate ERROR and never a silent pass; and an entry
+matching no unresolvable token is an error too, because it would inflate the visible debt
+while excusing nothing. The surface lives in the tree the gate judges and never inline in
+the gate, which is paired byte-identically with this template — a factory's own row
+numbers must not ship to every new factory.
+
+**The existence leg asks whether the declared object EXISTS in this repository, and its
+bound is the part a reader will overread: EXISTENCE is neither ANCESTRY nor TRUTH.** A
+declared revision that resolves is not thereby the revision the row MEASURED, and the leg
+cannot say that it is. Ancestry is refused as the predicate for a MEASURED reason rather
+than a taste: a history rewrite leaves an honest revision unreachable while its object
+survives, so an ancestry test would condemn exactly the rows a rewrite did not touch. And
+a leg that cannot judge SAYS SO: on a tree with no object database the leg reports a
+STATED inability and the run prints `NOT RUN` with its reason, never the verdict of a leg
+that examined the population and found it clean.
+
+**A retired declaration is NEITHER edited NOR excused.** It is not edited, because a
+ledger row is append-only and the one-append-path rule stands — a correction is a DECLARED
+DEVIATION, never a precedent. And it is not excused, because excusing is what the
+exemption surfaces do for a violation whose repair space is empty, while a retirement does
+something different: it names the false value, keeps the true one beside it, and stays
+visible. So the gate prints every admitted entry as a `retired:` line, beside its
+`excused:` lines and the count it examined, and the three — `clean`, `excused`, `retired`
+— are never the same output.
 
 **A row count is not an integrity check.** The ledger is read as a *sequence*: a
 subject that reaches `close` must have been filed (`intake`) before it and taken
