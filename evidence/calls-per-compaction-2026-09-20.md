@@ -123,9 +123,13 @@ intervals examined); the instant is stamped beside the output by the run.
 `~/.opencrabs/profiles/ops/opencrabs-dev/instruments/calls-per-compaction.py` — 5,778 bytes,
 md5 `f43b76f8b975a289d6252a105ab65db9`, matching the hash in ruling n=677. The ruling and the
 intake row record it as **untracked**; a peer lane committed it at `2026-09-20T03:56:11Z` as
-`c1f71d93` (blob md5 identical), so it is tracked now. It is **not yet on `origin/main`**, which
-sits at `91cacb2b` behind a 21-commit unpushed backlog in the state repo (last push
-`2026-09-20T01:01:36Z`) — reported to the process owner rather than pushed from this lane.
+`c1f71d93` (blob md5 identical), so it is tracked now. **Durability, corrected against the live
+remote rather than left as first read:** at `03:57Z` this lane read `origin/main` at `91cacb2b`
+behind a 21-commit unpushed backlog (last push `01:01:36Z`); a peer lane's state sweep pushed at
+~`04:00Z` and flushed it, so `c1f71d93` is now an ancestor of `origin/main` and the file is
+present there — `git show origin/main:instruments/calls-per-compaction.py | md5sum` returns
+`f43b76f8b975a289d6252a105ab65db9`, identical to the working copy. Acceptance criterion 5 is met
+in full: committed **and** pushed.
 
 One gap, offered rather than silently patched: the instrument prints its **population** but not
 the **instant**, unlike `tools/compaction_rate.py`. The reading text therefore requires the
