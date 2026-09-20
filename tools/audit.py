@@ -42,6 +42,16 @@ from field_predicate import (  # noqa: E402
     mentioned_telemetry,
 )
 
+# The gate-budget reader, on the SAME path-insert convention and for the same
+# reason: this file is run as a script (its own dir is already on the path) and
+# imported by `tests/`, and both must resolve the same reader (issue #94).
+from gate_budget import (  # noqa: E402
+    GateBudgetManifestError,
+    TIMEOUT_EXIT_CODE,
+    gate_key_for_cmd,
+    load_gate_budgets,
+)
+
 # The `Subject` column's vocabulary, named once. `tests/test_rework.py` enforces the
 # same three values on the document; they live here as well because the audit *reads*
 # the column to derive a numerator, and a second hand-written pattern would let the
@@ -594,33 +604,61 @@ def parse_rework(rework_path: Path, closed_subject_set: set[str]) -> dict[str, A
     }
 
 
-def run_gate(cmd: list[str], cwd: Path) -> dict[str, Any]:
-    """Run an individual verification gate and capture output and exit code."""
+def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
+    """Run an individual verification gate under its DECLARED time budget.
+
+    `budget_sec` is a PARAMETER, never a constant, and that is the point of #94: the
+    cap is a declared multiple of a measured runtime read from `registry/gates.json`
+    (ruling n=744), so this function cannot know it and must not invent one.
+
+    A gate that exhausts its budget is UNKNOWN -- it neither passed nor failed, and
+    reporting it as either would be a verdict nobody measured. It carries the
+    `unknown` flag and a DISTINCT exit code, so a killed gate is never read as a
+    failed one; its recorded duration is the MEASURED elapsed time, because a
+    timeout is a fact about the gate and must be readable as one.
+    """
+    t0 = datetime.datetime.now()
     try:
-        t0 = datetime.datetime.now()
         res = subprocess.run(
             cmd,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=30,
+            timeout=budget_sec,
         )
         t_el = (datetime.datetime.now() - t0).total_seconds()
         return {
             "cmd": " ".join(cmd),
             "exit_code": res.returncode,
             "passed": res.returncode == 0,
+            "unknown": False,
             "duration_sec": round(t_el, 2),
             "stdout": res.stdout.strip(),
             "stderr": res.stderr.strip(),
         }
+    except subprocess.TimeoutExpired:
+        t_el = (datetime.datetime.now() - t0).total_seconds()
+        return {
+            "cmd": " ".join(cmd),
+            "exit_code": TIMEOUT_EXIT_CODE,
+            "passed": False,
+            "unknown": True,
+            "duration_sec": round(t_el, 2),
+            "stdout": "",
+            "stderr": (
+                f"budget exhausted: the gate was killed at {budget_sec:.2f}s "
+                f"after running {t_el:.2f}s"
+            ),
+        }
     except Exception as e:
+        t_el = (datetime.datetime.now() - t0).total_seconds()
         return {
             "cmd": " ".join(cmd),
             "exit_code": 99,
             "passed": False,
-            "duration_sec": 0.0,
+            "unknown": False,
+            "duration_sec": round(t_el, 2),
             "stdout": "",
             "stderr": str(e),
         }
@@ -1126,9 +1164,24 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_cron_thinness.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_cron_thinness.py"])
 
+    # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
+    # with no manifest entry is NOT an error -- it runs on the declared default, and
+    # `budget_source` is what lets the audit PRINT which gates used it: a declared
+    # default with a printed population is not an exempt-by-silence surface, while
+    # an unprinted fallback is (#94, ruling n=744). A manifest that EXISTS and
+    # cannot be read does NOT fall back -- it raises, because defaulting over an
+    # unreadable budget set would silently re-cap every gate in the tree.
+    budgets = load_gate_budgets()
+
     results = []
     for cmd in gates_to_run:
-        results.append(run_gate(cmd, repo_root))
+        key = gate_key_for_cmd(cmd, repo_root)
+        budget_sec, source = budgets.resolve(key)
+        result = run_gate(cmd, repo_root, budget_sec)
+        result["gate_key"] = key
+        result["budget_sec"] = budget_sec
+        result["budget_source"] = source
+        results.append(result)
     return results
 
 
@@ -1214,7 +1267,10 @@ def format_report_markdown(
     ]
 
     for g in gate_results:
-        status = "PASS" if g["passed"] else "FAIL"
+        # The same three states as the stdout print, and for a sharper reason: this
+        # report is COMMITTED to `evidence/`, so a `FAIL` written here for a gate
+        # that merely ran out of budget would be a durable false verdict (#94).
+        status = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
         note = g["stdout"].splitlines()[-1] if g["stdout"] else (g["stderr"].splitlines()[-1] if g["stderr"] else "")
         note = note.replace("|", "/")
         lines.append(f"| `{g['cmd']}` | `{status}` | `{g['duration_sec']}s` | {note[:60]} |")
@@ -1264,7 +1320,17 @@ def main() -> int:
     ledger_stats, closed_subject_set = parse_ledger(ledger_file)
     rework_stats = parse_rework(rework_file, closed_subject_set)
     cadence_stats = check_cadence_integrity(ledger_file)
-    gate_results = [] if args.no_gates else execute_mechanical_gates(REPO_ROOT)
+    # A manifest that EXISTS and cannot be read is a DEFECT, never a fallback: defaulting
+    # over an unreadable budget set would silently re-cap every gate in the tree (#94).
+    # Caught HERE, at the one call site, so the operator gets one named line instead of a
+    # traceback whose only readable line is its last. Exit 2 is DISTINCT from the 1 a gate
+    # failure returns, because "the audit could not read its budgets" is not "the audit ran
+    # and a gate failed" -- a consumer reading a bare 1 would record a verdict nobody took.
+    try:
+        gate_results = [] if args.no_gates else execute_mechanical_gates(REPO_ROOT)
+    except GateBudgetManifestError as exc:
+        print(f"gate budgets: {exc}", file=sys.stderr)
+        return 2
 
     all_gates_pass = None if args.no_gates else all(g["passed"] for g in gate_results)
     cadence_ok = cadence_stats.get("cadence_held", True)
@@ -1304,8 +1370,27 @@ def main() -> int:
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
-        mark = "PASS" if g["passed"] else "FAIL"
-        print(f"  [{mark}] {g['cmd']} ({g['duration_sec']}s)")
+        # THREE marks, not two (#94 consequence 3): a gate that exhausted its budget
+        # is UNKNOWN -- it neither passed nor failed, and printing FAIL would assert
+        # a verdict nobody measured. The headline's three-state form is #93's; here
+        # the state is at least never silently green.
+        mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
+        print(f"  [{mark}] {g['cmd']} ({g['duration_sec']}s of {g.get('budget_sec', 0.0):.2f}s)")
+
+    # THE DEFAULT POPULATION, PRINTED (#94 consequence 1). A gate with no manifest
+    # entry is legitimate -- a factory that has not measured it yet runs on the
+    # declared default -- but an UNPRINTED fallback is an exempt-by-silence surface,
+    # so the count examined is stated and every fallthrough gate is NAMED. The count
+    # is stated even when it is zero, so an empty population is visibly empty rather
+    # than indistinguishable from a print that never ran.
+    default_gates = [g for g in gate_results if g.get("budget_source") == "default"]
+    print(
+        f"\nGate budgets: {len(gate_results)} gate(s) run — "
+        f"{len(gate_results) - len(default_gates)} declared, "
+        f"{len(default_gates)} fell through to default.budget_sec"
+    )
+    for g in default_gates:
+        print(f"  [DEFAULT] {g.get('gate_key') or '(no file argument resolved)'} — {g['cmd']}")
 
     if args.report or args.output:
         report_md = format_report_markdown(today, ledger_stats, rework_stats, cadence_stats, gate_results)

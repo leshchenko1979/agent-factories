@@ -113,6 +113,11 @@ PAIRS = [
     ("tests/test_ledger_schema.py", "TEMPLATE/tests/test_ledger_schema.py"),
     ("tools/hygiene.py", "TEMPLATE/tools/hygiene.py"),
     ("tools/audit.py", "TEMPLATE/tools/audit.py"),
+    # Added with its registration (issue #94): audit.py imports this module, so it
+    # pairs like every other tool. A factory that has taken no measurements ships
+    # `registry/gates.example.json` and no `gates.json`, so the reader takes the
+    # declared fallback rather than REDing where it is copied.
+    ("tools/gate_budget.py", "TEMPLATE/tools/gate_budget.py"),
     ("tools/roadmap.py", "TEMPLATE/tools/roadmap.py"),
     ("tools/telemetry.py", "TEMPLATE/tools/telemetry.py"),
     ("tools/review.py", "TEMPLATE/tools/review.py"),
