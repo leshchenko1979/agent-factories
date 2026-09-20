@@ -250,8 +250,9 @@ flowchart TD
      stale state and a disk leak — attributes each enabled row by the fleet manifest's
      declared `job_prefixes` (ownership is the DECLARATION, never the home a row sits in),
      and hands its own factory's rows to `pacemaker_problems`, reporting the homes it could
-     not reach BESIDE the verdict, COUNTING the rows nobody declares rather than judging
-     them, and FAILING LOUDLY when zero rows are attributed over a declared prefix set. The
+     not reach BESIDE the verdict, NAMING every row nobody declares — with the home it was
+     read from — rather than judging it, and FAILING LOUDLY when zero rows are attributed
+     over a declared prefix set. The
      deferral surface survives the wiring as a CLASS guard: a leg the runner does not run
      must declare the board issue tracking it and its factual claims about the tree in a
      closed vocabulary, and both are checked against HEAD on every run, so a stated reason
