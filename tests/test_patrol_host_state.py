@@ -40,6 +40,7 @@ import importlib.util
 import io
 import json
 import sys
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -72,14 +73,27 @@ def _rows(*pairs) -> list[dict]:
     ]
 
 
-def _run(issues, rows):
-    """Drive main() with an injected board and ledger; return (rc, stdout)."""
+def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None):
+    """Drive main() with an injected board, ledger AND cron table; return (rc, out, err).
+
+    The cron read is injected for the same reason the board is: a gate must never open
+    the live database, and a probe that can only run against live state cannot run at all
+    when that state is what is broken. An EMPTY declared prefix set leaves the cron leg
+    inert, which is what the board-focused probes want — the probes that exercise the leg
+    pass a prefix set and rows of their own.
+    """
+    cron_rows = [] if cron_rows is None else cron_rows
+    homes = ["probe-home"] if homes is None else homes
+    unreached = [] if unreached is None else unreached
+    prefixes = [] if prefixes is None else prefixes
     out, err = io.StringIO(), io.StringIO()
     rc = RUNNER.main(
         [],
         board_fn=lambda slug: issues,
         slug_fn=lambda: "owner/repo",
         rows_fn=lambda: rows,
+        cron_rows_fn=lambda: (cron_rows, homes, unreached),
+        prefixes_fn=lambda: prefixes,
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
     )
@@ -179,45 +193,189 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
     )
 
 
-def test_the_unrun_leg_is_printed_as_not_run_with_its_reason() -> None:
-    """#121: an unrun leg is stated, and the reason's claims are checked against the tree.
+# --- #121: the cron-thinness leg, WIRED -----------------------------------------
 
-    This probe USED to pin the reason's old factual claims — that the predicate had never
-    been written — so when the predicate landed the reason rotted while the gate stayed
-    green, and the gate was pinning the falsehood rather than checking it. It now checks
-    the claims the reason actually makes: that it declares its own mechanism, names the
-    tracker carrying the open question, and that the predicate it says EXISTS does exist.
+def _cron(name, *, deliver_to="", prompt="", home="probe-home") -> dict:
+    return {"name": name, "deliver_to": deliver_to, "prompt": prompt, "home": home}
+
+_SESSION_UUID = "359fe71b-c7a1-420b-b856-acfb49939a7b"
+_WAKE_PROMPT = (
+    "Thin trigger only. Run the command below, then report and exit. "
+    "do NOT execute any project work yourself"
+)
+
+def _thin(name, **kw) -> dict:
+    """A correctly-thin row: a session target whose prompt declares itself wake-only."""
+    return _cron(name, deliver_to=f"session:{_SESSION_UUID}", prompt=_WAKE_PROMPT, **kw)
+
+def _ledger_with(*subjects) -> Path:
+    """A synthetic ledger in a temp dir — the guard is checked against DATA, not the live log."""
+    path = Path(tempfile.mkdtemp()) / "ledger.jsonl"
+    path.write_text(
+        "".join(
+            json.dumps({"n": i + 1, "ts": "2026-09-19T10:00:00Z", "event": "close",
+                        "actor": "worker", "subject": s, "detail": "probe"}) + "\n"
+            for i, s in enumerate(subjects)
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+def test_the_cron_leg_RUNS_and_states_the_population_it_examined() -> None:
+    """#121: the leg is wired, and every count it reports travels with its scope.
+
+    Ownership is the manifest's DECLARATION, never the home a row sits in — all twelve
+    ai-antispam rows sit in the OPS home, so a home-scoped read answers a narrower
+    question than the one it names (#102).
     """
-    issues = [_issue(1, "OPEN")]
-    rows = _rows(("intake", "#1", 1))
-    rc, out, _ = _run(issues, rows)
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-measurement-daily", home="other-home"),
+        _thin("oc-triage-hourly-patrol", home="other-home"),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
+                      unreached=["gone-home: no opencrabs.db"], prefixes=["factory-"])
     assert rc == 0, out
-    assert "cron-thinness" in out, out
-    assert "NOT RUN" in out, out
-    assert "HAND-WRITTEN" in out, (
-        "the reason must state whether it is derived or hand-written — a fixed string "
-        "that nothing re-checks is the defect, and a reader cannot tell the two apart "
-        "unless it says which it is"
+    assert "LEG cron-thinness — ASSERTED" in out, (
+        f"the leg is WIRED: it must render ASSERTED, never a deferred NOT RUN\n{out}"
     )
-    assert "#121" in out, (
-        "the reason must name the open tracker that carries the remaining question, not "
-        "a closed item — a reader following it must land somewhere that can answer"
+    assert "3 enabled read across 2 home(s)" in out, out
+    assert "2 attributed to this factory (factory-)" in out, out
+    assert "1 attributed to nobody" in out, (
+        f"a row nobody declares is COUNTED, and the count must be printed\n{out}"
     )
-    assert "#54 part (b)" not in out, (
-        "the reason must not still assert the expired claim that the predicate was never "
-        "written, nor send a reader to a closed item with no open tracker"
+    assert "homes unreached: 1" in out, out
+    assert "gone-home" in out, (
+        f"an unreached home is REPORTED, never dropped — an unreachable home is not an "
+        f"empty one\n{out}"
     )
-    assert "predicate EXISTS" in out, (
-        "the reason must state the predicate's real state, which is checkable"
+    assert "read at " in out, f"the read instant must travel with the count\n{out}"
+
+def test_the_cron_leg_fails_LOUDLY_when_nothing_is_attributed() -> None:
+    """A clean verdict over an examined-nothing read is not a verdict (skill section 8).
+
+    The declared prefix set is non-empty and NOTHING matches it, so the population the
+    leg claims to judge came back empty — reported, never read as clean.
+    """
+    rows = [_thin("oc-triage-hourly-patrol")]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 1, f"an empty attributed population must FAIL LOUDLY, got rc={rc}\n{out}"
+    assert "population came back EMPTY" in out, out
+    assert "0 cron row(s) attributed to this factory" in out, out
+
+def test_an_unattributable_row_is_counted_and_never_judged() -> None:
+    """A row this factory cannot attribute is COUNTED and REPORTED, never judged.
+
+    The second row carries a WORK ORDER on a waking session target — a real defect under
+    the shared predicate — but nobody here declares it, so judging it would be this
+    factory enforcing another factory's law.
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _cron("oc-some-other-factory-job", deliver_to=f"session:{_SESSION_UUID}",
+              prompt="Execute the hourly cycle and write the report."),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 0, f"an unattributable row must not fail this factory's run\n{out}"
+    assert "1 attributed to nobody" in out, out
+    assert "oc-some-other-factory-job" not in out, (
+        f"the leg judges its OWN rows only — an unattributable row is reported as a "
+        f"count, never named as a problem\n{out}"
     )
-    thinness = REPO / "tests" / "test_cron_thinness.py"
-    assert thinness.is_file(), (
-        f"the reason claims the predicate EXISTS, but {thinness} is absent — a stated "
-        f"reason must not outlive the tree it describes"
+
+def test_the_cron_leg_BITES_on_a_defect_in_a_row_this_factory_declares() -> None:
+    """Non-vacuity: the wired leg must report a defect, not merely render a green line."""
+    rows = [
+        _thin("factory-triage-patrol"),
+        _cron("factory-broken-pacemaker", deliver_to=f"session:{_SESSION_UUID}",
+              prompt="Execute the 6-hourly cycle and write the report."),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 1, f"a work order on a waking row must fail the run, got rc={rc}\n{out}"
+    assert "factory-broken-pacemaker" in out, out
+    assert "work order" in out, out
+    assert "2 cron row(s) attributed to this factory and judged" in out, (
+        f"the verdict must state the judged population\n{out}"
     )
-    assert "pacemaker_problems" in thinness.read_text(encoding="utf-8"), (
-        "the reason names the predicate's entry point; the tree must carry it"
+
+def test_the_leg_binds_to_the_SHARED_predicate_and_the_shared_registry() -> None:
+    """One predicate, one home — imported, never re-derived.
+
+    A private copy would be self-consistent on both sides and the drift invisible: the
+    class this factory has already ruled (n=405 clause 5, n=599).
+    """
+    assert RUNNER.CRON_THINNESS_PREDICATE == REPO / "tests" / "test_cron_thinness.py", (
+        f"the leg must bind to the shared predicate, not {RUNNER.CRON_THINNESS_PREDICATE}"
     )
+    predicate = RUNNER.load_module("cron_thinness_predicate", RUNNER.CRON_THINNESS_PREDICATE)
+    assert callable(predicate.pacemaker_problems), "the shared entry point must exist"
+    assert RUNNER.REGISTRY == REPO / "tools" / "registry.py", (
+        f"the box read must use the registry the 6h-floor law already uses, "
+        f"not {RUNNER.REGISTRY}"
+    )
+    assert hasattr(RUNNER, "DEFERRED_LEG_REASON") is False, (
+        "the cron-thinness reason must be DELETED, not corrected — a corrected reason is "
+        "still a hand-written claim about the tree that nothing re-checks"
+    )
+
+# --- #121: the CLASS GUARD — a deferral's claims are checked, never trusted ---------
+
+def test_nothing_is_deferred_now_that_the_cron_leg_is_wired() -> None:
+    """Wiring the leg retires the REASON, and an empty list is the honest state."""
+    assert RUNNER.deferred_legs() == [], (
+        f"the cron-thinness leg is WIRED, so nothing may still be deferred: "
+        f"{RUNNER.deferred_legs()}"
+    )
+
+def test_a_deferred_entry_with_a_CLOSED_tracker_is_reported() -> None:
+    """THE BITE. A reader following a closed tracker lands on a settled item.
+
+    This is the exact shape #121 found: the reason pointed at #54, and #54 had closed
+    under it while every gate stayed green. The guard's live population is legitimately
+    EMPTY, so THIS probe is the evidence that it bites (skill section 8).
+    """
+    entries = [{"name": "some-future-leg", "tracker": 54,
+                "claims": [{"path": "tools/registry.py", "present": True}]}]
+    problems = RUNNER.deferred_entry_problems(entries, ledger=_ledger_with("#54"))
+    assert problems, "a CLOSED tracker must be reported"
+    assert any("CLOSED" in p for p in problems), problems
+    assert any("#54" in p for p in problems), problems
+
+def test_a_deferred_entry_with_a_FALSE_claim_is_reported() -> None:
+    """THE BITE, second arm: a stated reason must not outlive the tree it describes."""
+    entries = [{"name": "some-future-leg", "tracker": 121,
+                "claims": [{"path": "tools/registry.py", "present": True},
+                           {"path": "tools/does-not-exist.py", "present": True}]}]
+    problems = RUNNER.deferred_entry_problems(entries, ledger=_ledger_with())
+    assert problems, "a claim the tree contradicts must be reported"
+    assert any("tools/does-not-exist.py" in p for p in problems), problems
+
+def test_a_truthful_deferral_reads_clean() -> None:
+    """The complement: the guard is not a wall — a truthful entry is not a problem."""
+    entries = [{"name": "some-future-leg", "tracker": 121,
+                "claims": [{"path": "tools/registry.py", "present": True},
+                           {"path": "tools/nope.py", "present": False}]}]
+    assert RUNNER.deferred_entry_problems(entries, ledger=_ledger_with()) == [], (
+        "a truthful deferral must read clean"
+    )
+
+def test_a_deferral_declaring_nothing_checkable_is_reported() -> None:
+    """The CLOSED vocabulary is the point: free prose cannot be re-checked."""
+    problems = RUNNER.deferred_entry_problems([{"name": "vague-leg", "reason": "later"}],
+                                             ledger=_ledger_with())
+    assert len(problems) >= 2, problems
+    assert any("tracker" in p for p in problems), problems
+    assert any("claims" in p for p in problems), problems
+
+def test_the_guard_PRINTS_the_population_it_examined() -> None:
+    """A guard that examined nothing must never print the verdict of one that did."""
+    rc, out, _ = _run([], [])
+    assert rc == 0, out
+    assert "deferred entries examined: 0" in out, (
+        f"the empty population must be PRINTED, so a clean read is never mistaken for a "
+        f"checked one\n{out}"
+    )
+
 
 
 def test_the_runner_reads_the_repo_own_ledger_by_default() -> None:

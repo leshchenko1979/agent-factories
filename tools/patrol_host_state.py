@@ -33,7 +33,16 @@ Four things it does deliberately:
   receipt is testimony, not evidence (skill section 11).
 - **Names every leg it does NOT run, with the reason.** A leg that is silent for
   want of a predicate is a different fact from a leg that passed, and the two must
-  never render the same.
+  never render the same. (#121 wired the last such leg, so the list is empty — and
+  the SURFACE stays, because a deferral's stated reason is exactly what rotted
+  un-checked: an entry added here must declare the board issue tracking it and its
+  factual claims about the tree in a closed vocabulary, and both are checked against
+  HEAD on every run.)
+- **Feeds the cron-thinness predicate the live table** (#121). The rows are read from
+  every OpenCrabs home on the BOX, in place through a `mode=ro` URI — never copied,
+  because a copy of a WAL-mode database is stale state and a disk leak. Ownership is
+  the fleet manifest's declared `job_prefixes`, not the home a row sits in, and a row
+  nobody declares is COUNTED and REPORTED rather than judged.
 - **Checks the close rows' board declarations against the board it already read**
   (#117). The offline gate asserts the token was RECORDED; this leg asserts the
   recorded state was TRUE, reading the rows through the gate's own `BOARD_TOKEN`
@@ -55,6 +64,7 @@ import datetime as dt
 import importlib.util
 import json
 import re
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -72,28 +82,15 @@ PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
 # predicate (the class ruled at n=405 clause 5, n=599).
 CLOSE_BOARD_GATE = REPO / "tests" / "test_close_board_recorded.py"
 
-# The leg this runner does NOT yet run, and why. Printed every cycle so an absent
-# leg can never be read as a passing one (the discipline the predicate's own three
-# legs already apply to each other).
+# --- the cron-thinness leg (#121) ---------------------------------------------
 #
-# THIS REASON IS HAND-WRITTEN, AND NOTHING RE-CHECKS IT — which is a defect the reason
-# carries rather than a property it enjoys. It was true when written and the tree moved
-# underneath it, so its factual claims rotted silently while every gate stayed green: the
-# class issue #121 exists to close. Re-typing it correctly is only half the repair, so the
-# reason states its own mechanism and the probe that prints it checks that claim against
-# the tree rather than trusting the string.
-DEFERRED_LEG_REASON = (
-    "HAND-WRITTEN, and nothing re-checks its factual claims — read it as a dated "
-    "statement and verify any claim in it before acting on one. The P7/P28 "
-    "pacemaker-thinness predicate EXISTS — tests/test_cron_thinness.py, "
-    "pacemaker_problems over a list of cron rows, paired byte-identically into "
-    "TEMPLATE/ — so this leg is no longer deferred for want of a predicate, which is "
-    "the ground the original reason stood on and it has expired. What is NOT settled "
-    "is the WIRING, and that is a design question rather than an omission: this runner "
-    "is byte-paired and its home layout differs per factory, so a live read of "
-    "cron_jobs must decide WHICH profiles' tables it reads and how it reports a home "
-    "it could not reach. Tracked as the open ruling request on issue #121."
-)
+# The P7/P28 predicate EXISTS (tests/test_cron_thinness.py, `pacemaker_problems` over a
+# list of cron rows, byte-paired into TEMPLATE/), so this runner FEEDS it. The deferral
+# that used to stand here is DELETED rather than corrected: a reason that no longer
+# exists cannot go stale, and a corrected reason is still a hand-written claim about the
+# tree that nothing re-checks — the class #121 was filed to kill.
+REGISTRY = REPO / "tools" / "registry.py"
+CRON_THINNESS_PREDICATE = REPO / "tests" / "test_cron_thinness.py"
 
 
 class BoardReadError(RuntimeError):
@@ -295,20 +292,228 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
     }
 
 
+def load_module(name: str, path: Path):
+    """Load a module by path, so no import path is assumed."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise BoardReadError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def closed_subjects(path: Path = LEDGER) -> set[str]:
+    """Every subject the ledger has CLOSED — the offline read of a tracker's state.
+
+    The ledger is in the tree, so a deferral's tracker can be checked against HEAD
+    without a board call. A tracker that has closed is the exact staleness #121 found:
+    the reason pointed at #54, and #54 had closed under it.
+    """
+    subjects: set[str] = set()
+    if not path.is_file():
+        return subjects
+    for row in load_rows(path):
+        if row.get("event") == "close" and row.get("subject"):
+            subjects.add(str(row["subject"]))
+    return subjects
+
+
+def deferred_entry_problems(entries: list[dict], *, repo_root: Path = REPO,
+                            ledger: Path = LEDGER) -> list[str]:
+    """Every defect in a DEFERRED entry, checked against the tree — never trusted as prose.
+
+    Wiring the cron-thinness leg retires a STRING, not the CLASS: `deferred_legs()` survives
+    and can carry a new unchecked reason tomorrow. So an entry must declare, in a CLOSED
+    vocabulary, what can be CHECKED:
+
+      - `tracker`: the board issue carrying the remaining question, as an int;
+      - `claims`:  `[{"path": <repo-relative>, "present": <bool>}, ...]`.
+
+    Both are evaluated against HEAD. A tracker already CLOSED in the ledger, or a claim the
+    tree contradicts, is a defect — the vocabulary is closed on purpose, because free prose
+    cannot be checked and a reason that cannot be checked IS the defect this guards.
+
+    The caller prints the population it examined: this guard's live population is
+    legitimately EMPTY until the next deferral, so an empty read is never a clean verdict —
+    the PROBE that shows it bites is the evidence (skill section 8).
+    """
+    problems: list[str] = []
+    if not entries:
+        return problems
+    closed = closed_subjects(ledger)
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            problems.append(
+                f"<entry {index}>: not a mapping ({type(entry).__name__}) — a deferred "
+                f"entry must be a mapping declaring a tracker and its claims"
+            )
+            continue
+        name = str(entry.get("name") or f"<entry {index}>")
+        tracker = entry.get("tracker")
+        if not isinstance(tracker, int) or isinstance(tracker, bool):
+            problems.append(
+                f"{name}: declares no integer `tracker` — a deferral must name the board "
+                f"issue that carries the remaining question, so a reader can follow it"
+            )
+        elif f"#{tracker}" in closed:
+            problems.append(
+                f"{name}: tracker #{tracker} is CLOSED in the ledger — a reader following "
+                f"it lands on a settled item with nothing left to answer, which is exactly "
+                f"how this class first appeared"
+            )
+        claims = entry.get("claims")
+        if not isinstance(claims, list) or not claims:
+            problems.append(
+                f"{name}: declares no `claims` — a deferral must state its factual claims "
+                f"about the tree in the closed vocabulary, or nothing can re-check them"
+            )
+            continue
+        for claim in claims:
+            if (
+                not isinstance(claim, dict)
+                or not isinstance(claim.get("path"), str)
+                or not isinstance(claim.get("present"), bool)
+            ):
+                problems.append(
+                    f"{name}: a claim is not {{'path': str, 'present': bool}} — {claim!r}"
+                )
+                continue
+            actual = (repo_root / claim["path"]).exists()
+            if actual != claim["present"]:
+                problems.append(
+                    f"{name}: claims {claim['path']!r} present={claim['present']}, but the "
+                    f"tree says present={actual} — a stated reason must not outlive the "
+                    f"tree it describes"
+                )
+    return problems
+
+
+def declared_prefixes(repo: Path = REPO) -> list[str]:
+    """This factory's declared `job_prefixes`, read from the fleet manifest.
+
+    Ownership is by the manifest's DECLARATION, never by the home a row happens to sit
+    in: all twelve ai-antispam rows sit in the OPS home, so a profile-scoped read answers
+    a narrower question than the one it names (#102). An empty return is reported by the
+    caller as an unattributable population, never read as a clean one.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    manifest = registry.load_fleet_manifest()
+    want = str(repo.resolve())
+    for record in manifest.get("factories", []):
+        declared = record.get("repo")
+        if isinstance(declared, str) and str(Path(declared).resolve()) == want:
+            return [str(p) for p in record.get("job_prefixes", [])]
+    return []
+
+
+def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
+    """(rows, homes_read, unreached) for every OpenCrabs home's ENABLED cron rows.
+
+    Read IN PLACE through a `mode=ro` URI — copying a live WAL-mode database yields stale
+    state and leaks disk, so no home is ever copied. `opencrabs_home_dbs()` RETURNS the
+    unreached list rather than dropping it: a home that could not be read is not a home
+    with nothing in it, and the two must never render the same.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    dbs, unreached = registry.opencrabs_home_dbs(root)
+    rows: list[dict] = []
+    homes_read: list[str] = []
+    for db in dbs:
+        try:
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error as exc:
+            unreached.append(f"{db.parent.name}: {exc}")
+            continue
+        try:
+            fetched = list(conn.execute(
+                "select name, coalesce(deliver_to,''), coalesce(prompt,'') "
+                "from cron_jobs where enabled = 1"
+            ))
+        except sqlite3.Error as exc:
+            unreached.append(f"{db.parent.name}: {exc}")
+            continue
+        finally:
+            conn.close()
+        for name, deliver_to, prompt in fetched:
+            rows.append({
+                "name": name,
+                "deliver_to": deliver_to,
+                "prompt": prompt,
+                "home": db.parent.name,
+            })
+        homes_read.append(db.parent.name)
+    return rows, homes_read, unreached
+
+
+def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], int]:
+    """(rows attributed to this factory, count attributed to nobody) — by declaration."""
+    attributed: list[dict] = []
+    unattributed = 0
+    for row in rows:
+        name = str(row.get("name") or "")
+        if prefixes and any(name.startswith(prefix) for prefix in prefixes):
+            attributed.append(row)
+        else:
+            unattributed += 1
+    return attributed, unattributed
+
+
+def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
+                      prefixes: list[str], *, predicate=None, read_at: str = "") -> dict:
+    """The cron-thinness leg: THIS factory's rows, judged by the PURE predicate.
+
+    A row the manifest cannot attribute is COUNTED and REPORTED, never judged — the runner
+    judges its own factory's rows, and an unattributable row belongs to nobody here. ZERO
+    attributed rows over a declared, non-empty prefix set FAILS LOUDLY: a clean verdict
+    over an examined-nothing read is not a verdict (skill section 8).
+
+    The rows are read live by the caller; the predicate stays pure and is handed a list.
+    """
+    predicate = predicate or load_module("cron_thinness_predicate",
+                                         CRON_THINNESS_PREDICATE)
+    attributed, unattributed = attribute_rows(rows, prefixes)
+    problems: list[str] = []
+    if prefixes and not attributed:
+        problems.append(
+            f"no enabled row attributed to this factory — {len(rows)} row(s) read across "
+            f"{len(homes_read)} home(s) with declared prefixes {prefixes!r}, and the "
+            f"population came back EMPTY, which is reported and never read as clean"
+        )
+    judged, excused = predicate.pacemaker_problems(attributed)
+    problems.extend(judged)
+    return {
+        "name": "cron-thinness",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "rows_read": len(rows),
+            "homes_read": len(homes_read),
+            "homes_read_names": homes_read,
+            "homes_unreached": unreached,
+            "rows_attributed": len(attributed),
+            "rows_unattributed": unattributed,
+            "prefixes": prefixes,
+            "read_at": read_at,
+        },
+    }
+
+
 def deferred_legs() -> list[dict]:
-    """Legs this runner does not run, each with the reason — never a silent zero."""
-    return [
-        {
-            "name": "cron-thinness",
-            "status": "NOT RUN",
-            "reason": DEFERRED_LEG_REASON,
-        }
-    ]
+    """Legs this runner does not run, each declaring its tracker and its checkable claims.
+
+    EMPTY is the honest state now that the cron-thinness leg is wired: it runs, so there
+    is no reason left to print. The function stays because the SURFACE is the class #121
+    guards — `deferred_entry_problems` checks any entry added here, and the guard's own
+    population is legitimately empty until the next deferral.
+    """
+    return []
 
 
 def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
-           issues: list[dict]) -> str:
+           issues: list[dict], deferred_problems: list[str] | None = None) -> str:
     """The report. Every count travels with the predicate that produced it."""
+    deferred_problems = list(deferred_problems or [])
     open_count = sum(
         1 for i in issues if str(i.get("state", "")).strip().lower() == "open"
     )
@@ -325,6 +530,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  close rows (declaring {cov['declaration_token']}, at or after "
                 f"{cov['invariant_boundary']}): {cov['close_rows_examined']} examined, "
                 f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
+            )
+        elif leg["name"] == "cron-thinness":
+            lines.append(
+                f"  rows: {cov['rows_read']} enabled read across {cov['homes_read']} "
+                f"home(s), {cov['rows_attributed']} attributed to this factory "
+                f"({', '.join(cov['prefixes']) or 'no declared prefix'}), "
+                f"{cov['rows_unattributed']} attributed to nobody"
+            )
+            lines.append(
+                f"  homes unreached: {len(cov['homes_unreached'])}"
+                + (f" — {'; '.join(cov['homes_unreached'])}" if cov['homes_unreached'] else "")
+                + f" — read at {cov['read_at']}"
             )
         else:
             lines.append(
@@ -345,18 +562,36 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
         lines.append("")
     for leg in deferred:
         lines.append(f"LEG {leg['name']} — {leg['status']}")
-        lines.append(f"  {leg['reason']}")
+        if leg.get("reason"):
+            lines.append(f"  {leg['reason']}")
+        if "tracker" in leg:
+            lines.append(f"  tracker: #{leg['tracker']}")
+        for claim in leg.get("claims", []):
+            lines.append(
+                f"  claim: {claim['path']} present={claim['present']}"
+            )
         lines.append("")
-    total = sum(len(leg["problems"]) for leg in legs)
+    lines.append(
+        f"deferred entries examined: {len(deferred)} — checked against HEAD for a closed "
+        f"tracker and a claim the tree contradicts"
+    )
+    for problem in deferred_problems:
+        lines.append(f"    - {problem}")
+    lines.append("")
+    total = sum(len(leg["problems"]) for leg in legs) + len(deferred_problems)
     forward = sum(
         int(leg["coverage"].get("forward_issues_examined", 0)) for leg in legs
     )
     closes = sum(
         int(leg["coverage"].get("close_rows_examined", 0)) for leg in legs
     )
+    cron = sum(
+        int(leg["coverage"].get("rows_attributed", 0)) for leg in legs
+    )
     lines.append(
-        f"verdict: {total} problem(s) over {forward} open issue(s) examined and "
-        f"{closes} close row(s) checked against the board"
+        f"verdict: {total} problem(s) over {forward} open issue(s) examined, "
+        f"{closes} close row(s) checked against the board, and {cron} cron row(s) "
+        f"attributed to this factory and judged"
     )
     return "\n".join(lines)
 
@@ -367,13 +602,17 @@ def main(
     board_fn=fetch_board,
     slug_fn=remote_slug,
     rows_fn=load_rows,
+    cron_rows_fn=box_cron_rows,
+    prefixes_fn=declared_prefixes,
     predicate=None,
     out=print,
     err=print,
 ) -> int:
     """Run the patrol read. Every dependency is injectable, so a probe drives it
     without a live board — and a probe that can only run against the live board is
-    a probe that cannot be run at all when the board is what is broken."""
+    a probe that cannot be run at all when the board is what is broken. The cron read
+    and the prefix declaration are injected for the same reason: a probe drives the
+    cron-thinness leg with NO live database."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -388,12 +627,19 @@ def main(
         err(f"patrol host-state read: FAILED at {read_at} — {exc}")
         return 2
 
+    cron_rows, homes_read, unreached = cron_rows_fn()
     legs = [
         board_intake_leg(issues, rows, predicate=predicate),
         board_close_leg(issues, rows, read_at=read_at),
+        cron_thinness_leg(
+            cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
+        ),
     ]
-    out(render(legs, deferred_legs(), slug=slug, read_at=read_at, issues=issues))
-    return 1 if any(leg["problems"] for leg in legs) else 0
+    deferred = deferred_legs()
+    deferred_problems = deferred_entry_problems(deferred)
+    out(render(legs, deferred, slug=slug, read_at=read_at, issues=issues,
+               deferred_problems=deferred_problems))
+    return 1 if any(leg["problems"] for leg in legs) or deferred_problems else 0
 
 
 if __name__ == "__main__":

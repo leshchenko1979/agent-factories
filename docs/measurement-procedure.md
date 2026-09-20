@@ -209,7 +209,18 @@ flowchart TD
      It was mapped to `tools/hygiene.py` before, which declares its own scope as P20,
      mentions the pacemaker only in prose, and never reads a cron row — and the mapping
      passed anyway, because the coverage test's only check is that a target EXISTS (issue
-     #54).
+     #54). The predicate's host-side runner is WIRED (issue #121, ruling n=739):
+     `tools/patrol_host_state.py`'s cron-thinness leg reads every OpenCrabs home on the BOX
+     in place through a `mode=ro` URI — never a copy, since a copy of a WAL-mode database is
+     stale state and a disk leak — attributes each enabled row by the fleet manifest's
+     declared `job_prefixes` (ownership is the DECLARATION, never the home a row sits in),
+     and hands its own factory's rows to `pacemaker_problems`, reporting the homes it could
+     not reach BESIDE the verdict, COUNTING the rows nobody declares rather than judging
+     them, and FAILING LOUDLY when zero rows are attributed over a declared prefix set. The
+     deferral surface survives the wiring as a CLASS guard: a leg the runner does not run
+     must declare the board issue tracking it and its factual claims about the tree in a
+     closed vocabulary, and both are checked against HEAD on every run, so a stated reason
+     can no longer rot un-checked — which is exactly how the class first appeared.
    - **Skill-body budget — a STANDING reading, printed and never gated.** Report the line
      count of every skill body against the owner's 500-line budget (owner order 2026-09-19),
      naming each body at or over it, or stating plainly that none is. The predicate is LINE

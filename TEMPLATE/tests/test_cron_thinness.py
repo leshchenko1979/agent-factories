@@ -18,11 +18,15 @@ WHY THE UPHOLDER IS A PURE PREDICATE OVER A LIST. The pacemaker rows live in the
 `cron_jobs` table, and the mechanical suite runs offline against a tree. A gate that read
 that table would RED in every bootstrapped factory that has no such table — the failure
 #68 measured. So the predicate is HERE, pure over a list of rows and probeable with
-synthetic ones, and the host-side invocation that feeds it live rows is tracked as the
-open wiring question on #121 — the predicate now EXISTS, so what remains is a ruling on
-which profiles' cron tables such a runner reads and how it reports a home it could not
-reach, not a predicate left to write. `test_probe_is_offline` asserts the purity
-structurally.
+synthetic ones, and the host-side runner that feeds it live rows is WIRED (#121, ruling
+n=739): `tools/patrol_host_state.py` reads every OpenCrabs home on the box in place through
+a `mode=ro` URI, attributes each row by the fleet manifest's declared `job_prefixes`, and
+hands its own factory's rows to `pacemaker_problems`. Ownership is the manifest's
+DECLARATION, never the home a row sits in — all twelve ai-antispam rows sit in the OPS home,
+so a home-scoped read would answer a narrower question than the one it names (#102). A row
+nobody declares is COUNTED and REPORTED, never judged, and zero attributed rows over a
+declared prefix set FAILS LOUDLY. `test_probe_is_offline` asserts the purity structurally,
+and `tests/test_patrol_host_state.py` asserts the wiring.
 
 THINNESS IS TWO LEGS, AND BOTH MUST HOLD (#120, ruling n=729). A pacemaker row is thin
 only when it carries (a) a WAKE — `deliver_to` begins with `session:`, or the prompt
