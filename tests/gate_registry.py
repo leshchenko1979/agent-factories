@@ -4,8 +4,8 @@
 This module is a PURE predicate over a tree, so a synthetic tree can probe it: a rule
 that has only ever seen good input has not been shown to reject bad input.
 
-Three directions, because any one alone leaves a hole
------------------------------------------------------
+Four directions, because any one alone leaves a hole
+----------------------------------------------------
 **declared -> registered.** A file that declares itself a gate must actually be run. An
 earlier probe protected only the gate that carried it — a file asserting its own name
 appears in `tools/audit.py`. That closes one instance and not the class: a new gate file
@@ -30,6 +30,16 @@ manifest is DERIVED from what the template ships (HQ ruling n=432, Part 1): the 
 the artifact every factory inherits, so what it ships every factory must carry. The
 coupling leg asserts manifest and template cannot drift — a leg only the meta-factory can
 carry, because a bootstrapped factory has no `TEMPLATE/` to compare against.
+
+**law -> registered.** The three directions above read the TREE: what it declares, what the
+audit runs, what the template ships. None reads a RECORDED LAW, and a law that names a
+mechanism which is not wired up is the same dead text P29 forbids, one step further out.
+The sources are the two this factory already keeps: the rework log's `Prevented by` column
+(section 11 makes that log a law surface, and its `Prevented by` is the load-bearing column)
+and the skill's own sentences. A `tests/test_*.py` either source names must be REGISTERED.
+SCOPE BOUND, carried in the predicate: this covers mechanisms a RECORDED LAW names; the
+GENERAL case — a test file that should be a gate and is named nowhere — is issue #48,
+already open, and this direction must NOT swallow it.
 
 Why LOOSE-then-STRICT rather than a strict match alone
 ------------------------------------------------------
@@ -78,7 +88,15 @@ Only the declaration discriminates.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
+
+# The rework log's entries table is parsed by ONE module, shared with tests/test_rework.py:
+# a second parser is the defect this repo names as "one field, one predicate", and it fails
+# SILENTLY — two parsers agree until a cell count or a column order changes, and then one
+# returns another column's values under the name it asked for. Imported, never re-derived.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import rework_table as rt  # noqa: E402 — the path above is set deliberately before this line
 
 # The canonical declaration: the opening docstring's first line begins with this.
 CANONICAL_OPENER = "Gate"
@@ -118,6 +136,27 @@ OPENER_ONLY_NOTE = (
     "the OPENER is matched, never the whole file — a whole-file search for 'gate' picks "
     "up a comment and a data field, neither of them a gate"
 )
+
+LAW_COVERAGE_PREDICATE = (
+    "a tests/test_*.py that a RECORDED LAW names as an upholding mechanism must be "
+    "REGISTERED. The law sources are the rework log's `Prevented by` column — section 11 "
+    "makes that log a law surface — and the skill's own sentences. A mechanism named and "
+    "not registered FAILS, NAMING it. SCOPE BOUND: this covers mechanisms a recorded law "
+    "names; the GENERAL case (a test file that should be a gate and is named nowhere) is "
+    "#48, already open, and this direction must NOT swallow it. The report PRINTS the "
+    "entries parsed, the mechanisms named and the files it read on every run — an "
+    "unprinted population is the exempt-by-silence surface ruled at n=571."
+)
+
+# A `tests/test_*.py` NAMED as a token. The token form is what makes the scan safe on
+# prose: a naive whole-file search for the word "gate" picks up test_review.py and
+# test_telemetry.py, but neither file is NAMED as a `test_*.py` in either law source
+# (measured 2026-09-19: 11 named in the skill, 29 in the rework log, 0 false positives),
+# so no exemption is needed and none is granted.
+_FILE_TOKEN = re.compile(r"\btest_[A-Za-z0-9_]+\.py\b")
+
+# The rework log's `Prevented by` column, by the header cell that names it.
+_PREVENTED_BY_HEADER = "prevented by"
 
 def first_docstring_line(text: str) -> str | None:
     """The opening docstring's first line, or None when the file has no docstring."""
@@ -380,3 +419,128 @@ def optional_gate_lines() -> list[str]:
         f"not required: tests/{name} — {reason}"
         for name, reason in sorted(OPTIONAL_GATES.items())
     ]
+
+def law_named_mechanisms(
+    rework_path: Path, skill_path: Path | None
+) -> tuple[dict[str, list[str]], dict]:
+    """(mechanisms, report) — every `test_*.py` a RECORDED LAW names, with provenance.
+
+    `mechanisms` maps a file NAME to the provenance strings that named it, so a failure
+    says WHERE the law named it rather than only that something did. The report states
+    what was read and what was skipped: a source silently absent would shrink the
+    population without saying so, and an unprinted population is the exempt-by-silence
+    surface ruled at n=571.
+
+    The two sources are the rework log's `Prevented by` column — section 11 makes that
+    log a law surface, and `Prevented by` is its load-bearing column — and the skill's
+    own sentences. The column is read through `rt.column_cells`, so a reordered table
+    yields a REPORTED reason rather than another column's values.
+    """
+    mechanisms: dict[str, list[str]] = {}
+    report: dict = {
+        "rework_read": False,
+        "rework_rows": 0,
+        "rework_reason": None,
+        "skill_read": False,
+        "skill_lines": 0,
+    }
+
+    if rework_path.is_file():
+        report["rework_read"] = True
+        rows, reason = rt.column_cells(
+            rework_path.read_text(encoding="utf-8"), "Entries", "Prevented by"
+        )
+        report["rework_rows"] = len(rows)
+        report["rework_reason"] = reason
+        for n, cell in rows:
+            for name in _FILE_TOKEN.findall(cell):
+                mechanisms.setdefault(name, []).append(f"rework log, Entries row {n}")
+
+    if skill_path is not None and skill_path.is_file():
+        text = skill_path.read_text(encoding="utf-8")
+        report["skill_read"] = True
+        report["skill_lines"] = len(text.splitlines())
+        for n, line in enumerate(text.splitlines(), 1):
+            for name in _FILE_TOKEN.findall(line):
+                mechanisms.setdefault(name, []).append(f"skill line {n}")
+
+    return mechanisms, report
+
+def law_coverage_problems(
+    tests_dir: Path,
+    audit_path: Path,
+    rework_path: Path,
+    skill_path: Path | None = None,
+) -> tuple[list[str], dict]:
+    """Direction 4: a mechanism a RECORDED LAW names must be REGISTERED.
+
+    The three directions above read the TREE — what it declares, what the audit runs,
+    what the template ships. This one reads the LAW, because a law naming a mechanism
+    that is not wired up is the dead text P29 forbids, one step further out.
+
+    Two failure legs, reported DISTINCTLY so a reader can tell them apart:
+
+      (a) named, the file exists, and it is not registered in `tools/audit.py` — the
+          mechanism the law relies on does not run.
+      (b) named and no such file exists under `tests/` — a DEAD REFERENCE: the law cites
+          a mechanism this tree does not carry at all.
+
+    SCOPE BOUND, carried in `LAW_COVERAGE_PREDICATE`: this covers mechanisms a recorded
+    law NAMES. The GENERAL case — a test file that should be a gate and is named nowhere
+    — is #48, already open, and this direction must not swallow it.
+    """
+    audit_text = audit_path.read_text(encoding="utf-8") if audit_path.is_file() else ""
+    tests_entries, _ = registered_entries(audit_text)
+    registered = set(tests_entries)
+
+    mechanisms, report = law_named_mechanisms(rework_path, skill_path)
+
+    problems: list[str] = []
+
+    # A law source that EXISTS and cannot be read is not an absent one. Passing here would
+    # be the vacuous-green class this repo names: an empty result from an unparsed region
+    # is indistinguishable from a region with nothing in it, and only the reason
+    # distinguishes them. An ABSENT source is a skip (a bootstrapped factory has no rework
+    # log until it writes one) and is reported as "not read", never as a clean read.
+    if report["rework_read"] and report["rework_reason"] is not None:
+        problems.append(
+            "law source unreadable — the rework log is present but its "
+            f"`Prevented by` column could not be read: {report['rework_reason']}"
+        )
+
+    unregistered: list[str] = []
+    dead_reference: list[str] = []
+    for name in sorted(mechanisms):
+        if name in registered:
+            continue
+        where = "; ".join(mechanisms[name])
+        if (tests_dir / name).is_file():
+            unregistered.append(f"{name} — named by {where}")
+        else:
+            dead_reference.append(f"{name} — named by {where}, no such file under tests/")
+
+    problems += [
+        f"law-named mechanism not registered in tools/audit.py: {item}"
+        for item in unregistered
+    ] + [
+        f"law-named mechanism is a dead reference: {item}" for item in dead_reference
+    ]
+
+    report.update(
+        {
+            "audit_read": audit_path.is_file(),
+            "registered": len(registered),
+            "named": len(mechanisms),
+            "unregistered": unregistered,
+            "dead_reference": dead_reference,
+            "law_sources": [
+                f"rework log: {report['rework_rows']} row(s) read, reason={report['rework_reason']}",
+                (
+                    f"skill: {report['skill_lines']} line(s) read"
+                    if report["skill_read"]
+                    else "skill: NOT READ"
+                ),
+            ],
+        }
+    )
+    return problems, report

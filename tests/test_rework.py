@@ -68,6 +68,18 @@ LEDGER = REPO / "evidence" / "ledger.jsonl"
 sys.path.insert(0, str(REPO / "tools"))
 import audit  # noqa: E402 — the path above is set deliberately before this line
 
+# The entries-table PARSE is shared — `tests/rework_table.py` — because
+# `tests/gate_registry.py` reads one COLUMN of this same table (the `Prevented by` cell,
+# the column section 11 makes a law surface) to find the mechanisms a recorded law names
+# and assert each one is registered (issue #107, ruling n=639, direction 4). Two parsers
+# of one table is the defect this repo names as one-field-one-predicate, and its failure
+# is silent: they agree until a cell count or a column order changes, and then one of
+# them returns another column's values under the name it asked for. What stays HERE is
+# the gate's own subject — completeness, contiguity, vocabulary, rates — and the column
+# list it asserts against.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import rework_table as rt  # noqa: E402
+
 COLUMNS = ["Date", "Source", "Defect", "Root cause", "Resolution", "Prevented by", "Subject"]
 PLACEHOLDERS = {"tbd", "todo", "n/a", "-", "?", "unknown", "none"}
 
@@ -87,13 +99,11 @@ SEPARATOR = "|---|---|---|---|---|---|---|"
 
 def section_body(text: str) -> str | None:
     """The body of the `## Entries` section, or None when it is absent."""
-    match = re.search(r"^## Entries\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
-    return match.group(1) if match else None
+    return rt.section_body(text, "Entries")
 
 def rates_body(text: str) -> str | None:
     """The body of the `## Rates` section, or None when it is absent."""
-    match = re.search(r"^## Rates\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
-    return match.group(1) if match else None
+    return rt.section_body(text, "Rates")
 
 # A numeric rate claim: a percentage, or a count stated per close. Prose that
 # merely *names* the forms (the formula table, the explanation of why two forms
@@ -215,21 +225,9 @@ def subject_resolution_problems(
     ]
     return problems, len(named)
 
-def is_header(line: str) -> bool:
-    return line.startswith("|") and line.strip("|").split("|")[0].strip().lower().startswith("date")
-
-def is_separator(line: str) -> bool:
-    return line.startswith("|") and set(line) <= set("|-: ")
-
-def entry_rows(body: str) -> list[tuple[int, list[str]]]:
-    """Rows of the Entries table: (line number within the section, cells)."""
-    out = []
-    for n, line in enumerate(body.splitlines(), 1):
-        line = line.strip()
-        if not line.startswith("|") or is_separator(line) or is_header(line):
-            continue
-        out.append((n, [c.strip() for c in line.strip("|").split("|")]))
-    return out
+is_header = rt.is_header
+is_separator = rt.is_separator
+entry_rows = rt.entry_rows
 
 def contiguity_problems(body: str, parsed: int) -> list[str]:
     """The entries must be one table under one header — not fragments."""

@@ -59,6 +59,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gate_registry import (  # noqa: E402
+    LAW_COVERAGE_PREDICATE,
     OPENER_ONLY_NOTE,
     OPTIONAL_GATES,
     PREDICATE,
@@ -68,6 +69,8 @@ from gate_registry import (  # noqa: E402
     declared_gates,
     first_docstring_line,
     gate_registration_problems,
+    law_coverage_problems,
+    law_named_mechanisms,
     manifest_drift_problems,
     optional_gate_lines,
     reads_a_docstring,
@@ -76,6 +79,11 @@ from gate_registry import (  # noqa: E402
 
 TESTS_DIR = REPO / "tests"
 AUDIT = REPO / "tools" / "audit.py"
+# Direction 4's two law sources. Both are meta-factory surfaces: a bootstrapped factory
+# has its own skill at a different path and no rework log until it writes one, and the
+# leg reports an unread source rather than treating it as an empty one.
+REWORK_LOG = REPO / "evidence" / "rework.md"
+SKILL = REPO / "skills" / "meta-factory" / "SKILL.md"
 # The coupling leg's comparison tree. In the TEMPLATE copy of this file `REPO` resolves to
 # `TEMPLATE/`, so this path does not exist there and the leg skips itself — which is the
 # behaviour n=432 Part 3 asks for, reached without special-casing.
@@ -419,6 +427,223 @@ def probe_the_predicate_is_stated_with_its_count() -> None:
     check("the predicate names the scan's file set", "tests/test_*.py" in PREDICATE,
           PREDICATE[:60])
 
+# --- synthetic probes: direction 4, law -> registered -----------------------------
+
+REWORK_HEADER = (
+    "## Entries\n\n"
+    "| Date | Source | Defect | Root cause | Resolution | Prevented by | Subject |\n"
+    "|---|---|---|---|---|---|---|\n"
+)
+
+def _rework(*prevented_by: str) -> str:
+    """A synthetic rework log with one Entries row per `Prevented by` cell."""
+    return REWORK_HEADER + "".join(
+        f"| 2026-01-01 | #1 | defect {n} | cause {n} | a fix | {cell} | subject-{n} |\n"
+        for n, cell in enumerate(prevented_by, 1)
+    )
+
+def _law_tree(
+    root: Path, files: dict[str, str], audit: str, rework: str, skill: str
+) -> tuple[Path, Path, Path, Path]:
+    """A throwaway tree carrying BOTH law sources; return (tests, audit, rework, skill)."""
+    tests, audit_path = _synthetic_tree(root, files, audit)
+    rework_path = root / "rework.md"
+    rework_path.write_text(rework, encoding="utf-8")
+    skill_path = root / "SKILL.md"
+    skill_path.write_text(skill, encoding="utf-8")
+    return tests, audit_path, rework_path, skill_path
+
+def probe_a_law_named_unregistered_mechanism_is_named() -> None:
+    """Direction 4 (a): a law names a mechanism that exists but never runs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp),
+            {"test_orphan.py": CANONICAL_GATE},
+            "# an audit that registers nothing\n",
+            _rework("tests/test_orphan.py"),
+            "no mechanism named here\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — a law-named unregistered mechanism is NAMED",
+              any("test_orphan.py" in p for p in problems),
+              problems[0][:80] if problems else "no problem reported")
+        check("direction 4 — the report says WHERE the law named it",
+              report["unregistered"] == [
+                  "test_orphan.py — named by rework log, Entries row 4"
+              ],
+              str(report["unregistered"]))
+        check("direction 4 — the report states the sources it read",
+              report["rework_rows"] == 1 and report["skill_read"] is True,
+              str(report["law_sources"]))
+
+def probe_a_registered_law_named_mechanism_is_clean() -> None:
+    """Direction 4: the same tree with the mechanism registered reports nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp),
+            {"test_orphan.py": CANONICAL_GATE},
+            _register("test_orphan.py"),
+            _rework("tests/test_orphan.py"),
+            "no mechanism named here\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — a registered law-named mechanism is clean",
+              problems == [] and report["named"] == 1,
+              f"problems={problems} named={report['named']}")
+
+def probe_the_skill_arm_alone_names_an_unregistered_mechanism() -> None:
+    """Both sources are read: the skill arm fires with the rework log silent."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp),
+            {"test_skillgate.py": CANONICAL_GATE},
+            "# an audit that registers nothing\n",
+            _rework("nothing yet"),
+            "the gate must run, naming tests/test_skillgate.py\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — the skill arm names an unregistered mechanism",
+              report["unregistered"] == ["test_skillgate.py — named by skill line 1"],
+              str(report["unregistered"]))
+        check("direction 4 — the rework arm stays silent on a 'nothing yet' entry",
+              "test_orphan.py" not in str(report["unregistered"]),
+              str(report["unregistered"]))
+
+def probe_a_prose_mention_is_not_a_mechanism() -> None:
+    """The scan is for a NAMED FILE, never the word "gate" — the false-positive guard.
+
+    A whole-file search for the word "gate" is the predicate this direction must NOT be:
+    it fires on prose, and this repo has already measured two files it would pick up
+    (`tests/test_review.py`, `tests/test_telemetry.py`) neither of which is a gate.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp), {},
+            "# an audit that registers nothing\n",
+            _rework("nothing yet"),
+            "every gate must run; the gate registry reads the gates; a gate is required\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — the word 'gate' in prose names no mechanism",
+              report["named"] == 0 and problems == [],
+              f"named={report['named']} problems={problems}")
+
+def probe_only_the_prevented_by_column_is_read() -> None:
+    """The law source is ONE column: a file named in another column is not a claim."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp),
+            {"test_other.py": CANONICAL_GATE},
+            "# an audit that registers nothing\n",
+            REWORK_HEADER
+            + "| 2026-01-01 | #1 | defect | cause | tests/test_other.py | nothing yet | s |\n",
+            "no mechanism named here\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — a file named outside `Prevented by` is not a mechanism",
+              report["named"] == 0 and problems == [],
+              f"named={report['named']} problems={problems}")
+
+def probe_a_dead_reference_is_reported() -> None:
+    """Direction 4 (b): the law cites a mechanism this tree does not carry at all."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp), {},
+            "# an audit that registers nothing\n",
+            _rework("tests/test_missing.py"),
+            "no mechanism named here\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — a law-named file that does not exist is reported",
+              any("test_missing.py" in p and "dead reference" in p for p in problems),
+              problems[0][:80] if problems else "no problem reported")
+        check("direction 4 — a dead reference is not counted as merely unregistered",
+              report["unregistered"] == [] and len(report["dead_reference"]) == 1,
+              str(report["dead_reference"]))
+
+def probe_an_unreadable_law_source_fails_rather_than_passing() -> None:
+    """A present-but-unparseable law source is not an absent one (the n=571 class)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit, rework, skill = _law_tree(
+            Path(tmp), {},
+            "# an audit that registers nothing\n",
+            "## Entries\n\n| Date | Source |\n|---|---|\n| 2026-01-01 | #1 |\n",
+            "no mechanism named here\n",
+        )
+        problems, report = law_coverage_problems(tests, audit, rework, skill)
+        check("direction 4 — an unreadable law source FAILS and states why",
+              any("law source unreadable" in p for p in problems),
+              problems[0][:90] if problems else "no problem reported")
+        check("direction 4 — the stated reason is the column reader's own",
+              report["rework_reason"]
+              == "the 'Entries' table has no 'Prevented by' column",
+              str(report["rework_reason"]))
+
+    # The contrast: an ABSENT source is a SKIP — reported as not-read, never as a clean
+    # read, and not a failure. A bootstrapped factory has no rework log until it writes one.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        tests, audit = _synthetic_tree(root, {}, "# an audit that registers nothing\n")
+        problems, report = law_coverage_problems(
+            tests, audit, root / "no-such-rework.md", root / "no-such-skill.md"
+        )
+        check("direction 4 — an ABSENT law source is a reported skip, not a failure",
+              problems == [] and report["rework_read"] is False
+              and report["skill_read"] is False
+              and report["law_sources"][1] == "skill: NOT READ",
+              f"problems={problems} sources={report['law_sources']}")
+
+def probe_the_law_coverage_predicate_states_its_scope() -> None:
+    """The scope bound travels with the predicate, or the direction swallows #48."""
+    check("the law-coverage predicate is a module constant",
+          bool(LAW_COVERAGE_PREDICATE.strip()), LAW_COVERAGE_PREDICATE[:60])
+    check("it carries the SCOPE BOUND that keeps #48 out of its population",
+          "SCOPE BOUND" in LAW_COVERAGE_PREDICATE and "#48" in LAW_COVERAGE_PREDICATE,
+          LAW_COVERAGE_PREDICATE[-90:])
+    check("it states that a failure NAMES the mechanism",
+          "NAMING it" in LAW_COVERAGE_PREDICATE, LAW_COVERAGE_PREDICATE[:80])
+
+def probe_the_live_law_coverage_is_clean() -> None:
+    """The meta-factory carries both law sources; a bootstrapped factory carries neither.
+
+    This gate is REQUIRED, so its copy runs in every factory — and a factory has its own
+    skill at a different path and no rework log until it writes one. So each source is
+    asserted only when it EXISTS, and the vacuity leg needs BOTH, which keeps a shipped
+    copy reporting a SKIP instead of REDing on an absent law surface. Same shape as the
+    coupling leg above, reached without special-casing.
+    """
+    problems, report = law_coverage_problems(TESTS_DIR, AUDIT, REWORK_LOG, SKILL)
+    for problem in problems:
+        print(f"    {problem}")
+    print(
+        f"  predicate: {LAW_COVERAGE_PREDICATE}\n"
+        f"  sources: {'; '.join(report['law_sources'])}\n"
+        f"  {report['named']} mechanism(s) named by law, against "
+        f"{report['registered']} registered tests/ path(s) — "
+        f"unregistered: {len(report['unregistered'])}, "
+        f"dead references: {len(report['dead_reference'])}, "
+        f"{len(problems)} problem(s)"
+    )
+    check("every mechanism a recorded law names is registered", problems == [],
+          "; ".join(problems)[:90])
+
+    if REWORK_LOG.is_file():
+        check("the rework log is present and was READ, not silently skipped",
+              report["rework_read"] is True and report["rework_reason"] is None,
+              str(report["law_sources"][0]))
+    if SKILL.is_file():
+        check("the skill is present and was READ, not silently skipped",
+              report["skill_read"] is True, str(report["law_sources"][1]))
+
+    if report["rework_read"] and report["skill_read"]:
+        check("the scan is not vacuous — both law sources read and mechanisms named",
+              report["named"] > 0,
+              f"named={report['named']} rework_rows={report['rework_rows']} "
+              f"skill_lines={report['skill_lines']}")
+    else:
+        print("  (vacuity leg skipped — this tree does not carry BOTH law sources; "
+              "the meta-factory does, a bootstrapped factory need not)")
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -434,6 +659,15 @@ def main() -> int:
     probe_a_complete_required_set_is_clean()
     probe_the_coupling_leg_skips_without_a_template()
     probe_a_manifest_template_mismatch_fails_both_ways()
+    print("  synthetic probes — direction 4, law -> registered")
+    probe_a_law_named_unregistered_mechanism_is_named()
+    probe_a_registered_law_named_mechanism_is_clean()
+    probe_the_skill_arm_alone_names_an_unregistered_mechanism()
+    probe_a_prose_mention_is_not_a_mechanism()
+    probe_only_the_prevented_by_column_is_read()
+    probe_a_dead_reference_is_reported()
+    probe_an_unreadable_law_source_fails_rather_than_passing()
+    probe_the_law_coverage_predicate_states_its_scope()
     print("  live tree")
     probe_the_scan_is_not_vacuous()
     probe_the_resolver_reads_the_live_declaration()
@@ -444,6 +678,8 @@ def main() -> int:
     print("  live tree — direction 3")
     probe_the_live_required_set_is_present()
     probe_the_optional_set_is_printed_with_its_reason()
+    print("  live tree — direction 4")
+    probe_the_live_law_coverage_is_clean()
 
     print()
     if failures:
