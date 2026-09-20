@@ -113,8 +113,23 @@ whole point.
 A scheduled job should do one thing: wake up and notify the owning session (the **Pacemaker Law**).
 The substantive work runs inside that persistent session, under the current law.
 
-- *Proven:* inferhub-watch — `inferhub-watch-hq-hourly` runs exactly one thin trigger
-  notifying the HQ session UUID and stops; opencrabs-dev — `oc-triage-hourly`.
+- *Thinness has TWO legs, and a route satisfies only the first.* A pacemaker row is thin
+  only when (a) it carries a **wake** — `deliver_to` begins with `session:`, or its prompt
+  invokes a session notify — **and** (b) its prompt carries **no work order**. A session
+  target is the wake leg and nothing more: it does **not** make a row thin, and a row whose
+  prompt carries a work order is a violation however it is routed. The reason is the
+  dual-writer shape §11 forbids, applied to an actor rather than to the append path — a
+  prompt carrying a work order executes the process in the cron's own session, and the wake
+  makes the lane it notifies execute the same process again. The declared wake-only form
+  opens with the marker `do NOT execute any project work yourself`; a non-empty prompt that
+  does not declare itself wake-only is reported, never assumed thin. That leg is TEXTUAL —
+  it cannot execute the prompt — so the live behavioural check is the measurement run, not
+  this text.
+- *Proven:* the marker form, verified live 2026-09-20 (the instant is stated because a cron
+  row is mutable) — `factory-triage-patrol`, `oc-triage-owner-digest`,
+  `ai-antispam-triage-sweep`, `ai-antispam-owner-digest` and the four other declared-thin
+  rows then in the enabled table. The two names this line carried before
+  (`inferhub-watch-hq-hourly`, `oc-triage-hourly`) match no live row today.
 - *The Pacemaker Requirement:* Every agent role that owns a periodic process (surveys,
   triage sweeps, hygiene, health checks) **must** have a scheduled pacemaker job targeting
   its persistent session UUID. Without an automated heartbeat, language models default to
@@ -455,8 +470,10 @@ by an active, scheduled pacemaker job waking its session UUID. Without an
 automated heartbeat trigger, conversational bias halts periodic execution the
 moment human attention leaves.
 
-- *Proven:* meta-factory (daily measurement pacemaker), inferhub-watch
-  (HQ hourly pacemaker), miidas (HQ daily pacemaker).
+- *Proven:* meta-factory — `factory-triage-patrol` and `factory-measurement-daily`, both
+  carrying the declared wake-only marker; verified live 2026-09-20. A cron row is MUTABLE, so
+  a named proof carries the instant it was read: the two other factories this line named
+  before now carry work-order rows.
 - *Mechanism:*
   1. A scheduled job acts as a thin pacemaker, sending a direct message to
      the persistent session identifier of the process owner.
@@ -467,7 +484,8 @@ moment human attention leaves.
 - *Prevents:* "Dead text" schedules where a daily or hourly cadence is declared
   in documentation but silently stalls because no mechanical trigger wakes the session.
 - *Boundary:* The cron trigger initiates the turn; it does not embed mutable
-  procedure in its payload.
+  procedure in its payload. Thinness is TWO legs and a route is only the first — P7 states
+  that rule in full, so it is not restated here.
 
 ---
 
