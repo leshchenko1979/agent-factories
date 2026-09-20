@@ -378,6 +378,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_commit_pair_hook.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
+    # Added with its registration (issue #54, P7 + P28). REQUIRED is the correct grain and
+    # OPTIONAL is not: the predicate is PURE over a LIST of cron rows and reads no live
+    # table, so it passes in a bootstrapped factory exactly as it does here — there is no
+    # `TEMPLATE` comparison or box-local fixture that would make it red. It is byte-paired
+    # with a TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the
+    # runner and keeping the file.
+    "test_cron_thinness.py",
     "test_docs_sync.py",
     "test_duplicate_prose.py",
     "test_gate_fixtures_closure.py",

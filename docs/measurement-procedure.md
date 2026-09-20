@@ -188,14 +188,21 @@ flowchart TD
      day's artifact is already written and is reported as `excused:`, never backfilled: a
      section reconstructed after the fact is fabricated provenance, the same no-backfill
      law as the close trailer's.
-   - **Pacemaker thinness — P7's upholding mechanism.** The run verifies that the pacemaker
-     crons it relies on are THIN (`deliver_to` NULL, `set_goal` 0, a one-command wake
-     prompt) and records the result in the artifact's `## Pacemaker Verification` section.
-     This is an OPERATIONAL check, not a repo gate: cron state lives in the harness
-     database, not in the tree, so a gate reading it would red in every bootstrapped
-     factory that has no such table. `tests/test_law_coverage.py` therefore maps P7 to the
-     section gate above rather than to `tools/hygiene.py`, which mentioned the pacemaker
-     only in prose and upheld nothing.
+   - **Pacemaker thinness — P7's upholding mechanism, in TWO parts.** The run verifies that
+     the pacemaker crons it relies on are THIN and records the result in the artifact's
+     `## Pacemaker Verification` section. That is the LIVE half: cron state lives in the
+     harness database, not in the tree, so no repo gate can read it without reding in every
+     bootstrapped factory that has no such table. The MECHANICAL half is
+     `tests/test_cron_thinness.py` — a pure predicate over a LIST of cron rows, probeable
+     with synthetic ones, which flags a row whose wake route is neither a `session:` target
+     nor a notify command in its prompt. It reads BOTH `deliver_to` and the prompt, because
+     the meta-factory's own correctly-thin pacemaker carries its wake in-prompt with
+     `deliver_to` NULL, and "thin" is not a byte count. `tests/test_law_coverage.py` maps P7
+     (and P28, which states the same rule) to that predicate and to the section gate above.
+     It was mapped to `tools/hygiene.py` before, which declares its own scope as P20,
+     mentions the pacemaker only in prose, and never reads a cron row — and the mapping
+     passed anyway, because the coverage test's only check is that a target EXISTS (issue
+     #54).
    - **Skill-body budget — a STANDING reading, printed and never gated.** Report the line
      count of every skill body against the owner's 500-line budget (owner order 2026-09-19),
      naming each body at or over it, or stating plainly that none is. The predicate is LINE

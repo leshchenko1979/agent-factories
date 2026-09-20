@@ -1095,6 +1095,33 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_skill_version_contract.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_skill_version_contract.py"])
 
+    # 44. Cron-thinness gate (issue #54, P7 + P28). A pacemaker cron exists to WAKE the
+    #     session that owns a periodic process; the substantive work runs there, under the
+    #     current law. P7 and P28 both state that, and until #54 neither had a mechanism:
+    #     P7 was mapped to `tools/hygiene.py`, which declares its own scope as P20 and
+    #     never reads a cron row, and P28's mapped targets carried no cron reference
+    #     either. `tests/test_law_coverage.py` asserts only that a mapped target EXISTS,
+    #     so a file that exists and implements nothing passed both — the hole #50 lived
+    #     in, where a live and unbounded P7 violation was found by a lane reading a cron
+    #     row by hand because no gate could see it.
+    #
+    #     The predicate is PURE over a LIST of cron rows, and it must stay so: the rows
+    #     live in the harness `cron_jobs` table while the mechanical suite runs offline
+    #     against a tree, so a gate that read that table would RED in every bootstrapped
+    #     factory that has no such table (the failure #68 measured). It reads BOTH
+    #     `deliver_to` and the prompt, because the meta-factory's own correctly-thin
+    #     pacemaker carries its wake IN THE PROMPT with `deliver_to` NULL — a
+    #     `deliver_to`-only predicate flags a healthy factory — and "thin" is not a byte
+    #     count either: a 1326-byte prompt running one notify command is thin, while a
+    #     shorter prompt carrying a work order is not. A row it cannot classify is
+    #     EXCUSED and PRINTED, never silently clean.
+    #
+    #     Its population is the CALLER's — feeding it live rows is #54 part (b), not
+    #     dispatched — so this gate's own evidence is its synthetic probes, which pin all
+    #     three live shapes and both directions of the byte-count trap.
+    if (repo_root / "tests/test_cron_thinness.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_cron_thinness.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

@@ -174,6 +174,12 @@ PAIRS = [
     # inherits it — the discovery leg is what makes a byte-identical twin meaningful here:
     # a factory's own `skills/<slug>/SKILL.md` is judged by the same file.
     ("tests/test_skill_version_contract.py", "TEMPLATE/tests/test_skill_version_contract.py"),
+    # The cron-thinness predicate (#54, P7 + P28). It is PURE over a LIST of cron rows
+    # and probeable with synthetic ones, which is what makes it portable: a bootstrapped
+    # factory has its own `cron_jobs` table, not this one, and the file never reads it.
+    # Paired so every factory inherits the same predicate rather than a drifting copy,
+    # and REQUIRED in `gate_registry.REQUIRED_GATES` for the same reason.
+    ("tests/test_cron_thinness.py", "TEMPLATE/tests/test_cron_thinness.py"),
 ]
 
 

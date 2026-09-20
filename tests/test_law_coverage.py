@@ -44,13 +44,18 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P4": ["tests/test_session_bindings.py", "skills/meta-factory/SKILL.md"],  # Direct message to session UUID
     "P5": ["evidence/ledger.jsonl"],  # Named place carries state
     "P6": ["TEMPLATE/roles/hq.md", "skills/meta-factory/SKILL.md", "tests/test_hq_delegation.py"],  # HQ works on process, not in it
-    # P7's mechanism is a DECLARED OPERATIONAL PROCESS, not a repo gate: cron state lives
-    # in the harness database, not in the tree, so a gate reading it would red in every
-    # bootstrapped factory that has no such table (#68's failure). The measurement run
-    # verifies the pacemaker crons are thin and the RESULT is a required artifact section,
-    # which tests/test_score_artifact_sections.py asserts. It mapped to tools/hygiene.py
-    # before, which mentioned the pacemaker only in prose and upheld nothing (#69).
-    "P7": ["tests/test_score_artifact_sections.py", "docs/measurement-procedure.md"],
+    # P7's upholding mechanism is TWO-PART, and both halves are needed (issue #54). The
+    # PREDICATE (`tests/test_cron_thinness.py`) is the mechanical half: a pure function
+    # over a LIST of cron rows that flags a row whose wake route is neither a `session:`
+    # target nor a notify in its prompt. It is pure because cron state lives in the
+    # harness database, not in the tree, so a gate reading that table would red in every
+    # bootstrapped factory that has no such table (#68's failure). The PROCESS half is the
+    # measurement run: it verifies the pacemaker crons are thin and the RESULT is a
+    # required artifact section, which tests/test_score_artifact_sections.py asserts. It
+    # mapped to tools/hygiene.py before — a file that declares its own scope as P20 and
+    # never reads a cron row, which passed because the only check here is that the target
+    # EXISTS. A file that exists and implements nothing satisfied it completely (#69, #54).
+    "P7": ["tests/test_cron_thinness.py", "tests/test_score_artifact_sections.py", "docs/measurement-procedure.md"],
     "P8": ["tests/test_ontology.py"],  # Codify vocabulary with a test
     "P9": ["tools/audit.py"],  # Mechanical gates beat prose judgment
     "P10": ["tests/test_template_sync.py", "tests/test_ledger_schema.py"],  # Verification in repo instruction
@@ -71,7 +76,13 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P25": ["skills/meta-factory/SKILL.md"],  # Factory rules live in own skill
     "P26": ["tools/audit.py"],  # Count acts that still need operator
     "P27": ["tools/audit.py", "TEMPLATE/roles/triage.md"],  # Automated task assignment & monitoring
-    "P28": ["tools/hygiene.py", "tools/audit.py"],  # Periodic processes driven by thin cron
+    # P28 describes the SAME OBJECT as P7 — a periodic process driven by a thin nudging
+    # cron — and carried the same defect one level worse: BOTH of its mapped targets were
+    # files that never read a cron row. tools/hygiene.py declares its own scope as P20, and
+    # `grep -c 'cron\|deliver_to\|set_goal' tools/audit.py` returned 0. It now shares P7's
+    # pair: the pure predicate for the wake route, and the measurement run for the live
+    # check. A mapping to a file that implements nothing is dead text (P29, #54).
+    "P28": ["tests/test_cron_thinness.py", "tests/test_score_artifact_sections.py", "docs/measurement-procedure.md"],
     "P29": ["tests/test_law_coverage.py"],  # Every law needs active process or gate (this test)
     "P30": ["evidence/rework.md", "tests/test_rework.py"],  # Autonomous incident remediation
     "P31": ["docs/processes.md", "TEMPLATE/roles/hq.md"],  # Every process has exactly one named owner
