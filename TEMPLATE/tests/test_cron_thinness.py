@@ -47,8 +47,23 @@ three against the live table (`cron_jobs`, `enabled=1`, 23 rows, 2026-09-18):
   2. prompt-carried wake `deliver_to = NULL`, the prompt invokes `session notify <uuid>`.
   3. self-executing      a channel or NULL target, and no wake in the prompt — the work
                          runs in the cron's own session. This is the #50 shape.
-  4. unbaked target      `deliver_to` is a raw create-time `oc://` URL (#119). The harness
-                         refuses it at FIRE time, so the route cannot be read at all.
+  4. unbaked target      `deliver_to` is a raw create-time `oc://` URL (#119). `oc://` IS a
+                         recognised form — the canonical CREATE-TIME one — but a stored row
+                         carries the BAKED wire form `session:<uuid>`, so a raw `oc://`
+                         surviving into a row means the bake was BYPASSED. The harness
+                         refuses it at FIRE time and records `status=delivery_failed`, so the
+                         route cannot be read at all. This class is reported
+                         UNCONDITIONALLY, and `oc://` is deliberately NOT accepted as a second
+                         valid prefix: `session:` is the correct stored form, so accepting it
+                         would classify a genuinely broken row as a healthy route — a false
+                         negative on a real defect, and it would hide the next one.
+                         Provenance of the measured instance: one row box-wide
+                         (`evdokimov-loan-payment-remind`, default profile home), created
+                         2026-09-16 inside the window between the tool's bake landing and the
+                         CLI's own normalize block landing — stale data from an already-fixed
+                         path, not an ongoing leak. Scope and instant: 8 profile homes read
+                         2026-09-20T11:45Z, exactly one unbaked row box-wide, the ops home
+                         carrying zero.
 
 A predicate reading only `deliver_to` flags every shape-2 row; one reading only the prompt
 flags every shape-1 row. Both legs are required, and "thin" is NOT a byte count: the
@@ -79,6 +94,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SESSION_TARGET_PREFIX = "session:"
+UNBAKED_TARGET_PREFIX = "oc://"
 WAKE_ONLY_MARKER = "do NOT execute any project work yourself"
 WAKE_RE = re.compile(r"\bsession[\s_]+notify\b", re.IGNORECASE)
 
@@ -89,8 +105,16 @@ def _text(value: object) -> str:
 
 
 def row_wake(row: dict) -> str:
-    """Which wake this row carries: 'session-target', 'prompt-notify', or 'none'."""
+    """Which route this row carries: 'unbaked-target', 'session-target', 'prompt-notify', 'none'.
+
+    The unbaked check is FIRST, and the order is load-bearing. A raw `oc://` URL is a
+    create-time form the harness refuses at fire time, so the row's route cannot be read at
+    all — and reporting an unreadable route as a MISSING wake would name a defect the row
+    does not have. The class is distinct from `none` for exactly that reason.
+    """
     target = _text(row.get("deliver_to")).strip().lower()
+    if target.startswith(UNBAKED_TARGET_PREFIX):
+        return "unbaked-target"
     if target.startswith(SESSION_TARGET_PREFIX):
         return "session-target"
     if WAKE_RE.search(_text(row.get("prompt"))):
@@ -136,6 +160,17 @@ def pacemaker_problems(rows: list[dict]) -> tuple[list[str], list[str]]:
             )
             continue
         wake = row_wake(row)
+        if wake == "unbaked-target":
+            # Reported UNCONDITIONALLY — before the wake and content legs, and regardless of
+            # what the prompt carries. The declared route fails at FIRE time, so the row is
+            # broken whether or not the prompt also invokes a wake.
+            problems.append(
+                f"{name}: unbaked target — deliver_to is {deliver_to!r}, a raw create-time "
+                f"oc:// URL. The harness refuses it at fire time (status=delivery_failed), so "
+                f"the route cannot be read at all; this is NOT a missing wake. Fix: store the "
+                f"baked form session:<uuid>"
+            )
+            continue
         if wake == "none":
             problems.append(
                 f"{name}: no wake — deliver_to is {deliver_to or 'NULL'} and the prompt "
@@ -284,6 +319,45 @@ def test_the_census_shape_classifies_as_the_issue_describes() -> None:
     assert len(work_order) == 5, work_order
     assert all("worker-" in p for p in no_wake), no_wake
     assert all("session-" in p for p in work_order), work_order
+
+def test_an_unbaked_oc_target_is_a_broken_route_not_a_missing_wake() -> None:
+    """#119: the STORED form decides. `oc://` is create-time; a stored row is baked.
+
+    The row's route is unreadable at fire time, so reporting it as a missing wake would name
+    a defect it does not have — and accepting `oc://` as a second valid prefix would call a
+    genuinely broken row healthy, hiding the next one.
+    """
+    rows = [_row("evdokimov-loan-payment-remind", "", f"oc://session/{_SESSION_UUID}")]
+    assert row_wake(rows[0]) == "unbaked-target", row_wake(rows[0])
+    problems, excused = pacemaker_problems(rows)
+    assert len(problems) == 1, problems
+    assert "evdokimov-loan-payment-remind" in problems[0], problems
+    assert "unbaked" in problems[0], problems
+    assert "session:<uuid>" in problems[0], problems
+    assert "no wake" not in problems[0], problems
+    assert excused == [], excused
+
+def test_the_unbaked_check_keys_on_the_form_not_the_uuid() -> None:
+    """The SAME uuid in two stored forms: baked is clean, raw `oc://` is a problem."""
+    baked = _row("tmp-baked", "", f"session:{_SESSION_UUID}")
+    unbaked = _row("tmp-unbaked", "", f"oc://session/{_SESSION_UUID}")
+    assert row_wake(baked) == "session-target", row_wake(baked)
+    assert row_wake(unbaked) == "unbaked-target", row_wake(unbaked)
+
+    problems, excused = pacemaker_problems([baked])
+    assert problems == [], problems
+    assert excused == [], excused
+    problems, _ = pacemaker_problems([unbaked])
+    assert len(problems) == 1, problems
+
+def test_an_unbaked_target_is_reported_even_when_the_prompt_carries_a_wake() -> None:
+    """Unconditional: the declared route fails at fire time whatever the prompt says."""
+    rows = [_row("tmp-unbaked-but-wakes", _WAKE_PROMPT, f"oc://session/{_SESSION_UUID}")]
+    problems, excused = pacemaker_problems(rows)
+    assert len(problems) == 1, problems
+    assert "unbaked" in problems[0], problems
+    assert "work order" not in problems[0], problems
+    assert excused == [], excused
 
 def test_probe_is_offline() -> None:
     tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
