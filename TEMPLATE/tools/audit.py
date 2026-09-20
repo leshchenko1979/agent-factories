@@ -895,6 +895,33 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_registry_render.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_registry_render.py"])
 
+    # 41. Rework declared-to-landed gate: a close row's canonical trailer declares the
+    #     rework entry it PRODUCED, and a declaration naming an entry that never landed is
+    #     a claim nothing checked — the row then reads as evidence of a lesson recorded
+    #     while the log carries no such entry. BOTH sides go through the shared predicates,
+    #     never a private parse: the declaration through `tools/field_predicate.py`
+    #     (`trailer_tokens` over the canonical run, then `keyed_value(token, "rework")` per
+    #     token — `rework` is not a TELEMETRY_KEY, and `keyed_value` takes ONE token, so the
+    #     list is iterated), the landed entries through `tests/rework_table.py`
+    #     (`column_cells(text, "Entries", "Subject")` — read by NAME, because a positional
+    #     read is silently wrong the moment a column moves, which is the live defect
+    #     `tools/audit.py::parse_rework` still carries).
+    #     THE BOUND, stated so the gate is not oversold: the property is EXISTENCE of the
+    #     named entry, never TRUTH of the production claim. n=633 declares `rework=#102` and
+    #     that token is FALSE — the close RESOLVED entry #102 and produced none, retired by
+    #     name at n=642 — but #102 EXISTS, so the gate passes n=633 CORRECTLY on its own
+    #     narrow property. No retirement surface is owed and none is built: `rework=#N` is
+    #     not a sha, so it never enters `docs/ledger-retirements.json`'s population of
+    #     shape-valid `head=` tokens, and an entry for it would match nothing (n=642).
+    #     LOUD-FAIL-ON-ZERO, and this gate is that kind: its population is the WHOLE
+    #     history, so an empty read means the parse broke, never that the factory is young.
+    #     The forward-only sibling (#112) is the opposite case and must not copy this guard.
+    #     No exemption surface: a declaration written now can never predate the gate, and
+    #     history was measured clean at landing — 7 declarations in scope, all resolved
+    #     (issue #110, ruling n=642, P29).
+    if (repo_root / "tests/test_rework_declared_landed.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_rework_declared_landed.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

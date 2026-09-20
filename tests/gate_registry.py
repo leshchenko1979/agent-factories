@@ -378,6 +378,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ontology.py",
     "test_patrol_host_state.py",
     "test_rework.py",
+    # Added with its registration (issue #110, ruling n=642). REQUIRED is the correct
+    # grain and OPTIONAL is not: the declaration it checks rides on the SAME close row
+    # the sibling rework gates already govern, so a factory carrying the log and the
+    # entry gate but not this one can still declare an entry that never landed — the leg
+    # is a property of the close row, never an optional extra. Its population is the
+    # whole history, so it loud-fails on an empty read rather than skipping.
+    "test_rework_declared_landed.py",
     "test_rework_relative_revision.py",
     "test_registry.py",
     # Added with its registration (issue #107, ruling n=639). It was ALREADY shipped by
