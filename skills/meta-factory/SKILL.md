@@ -258,6 +258,16 @@ leaning on shared memory rather than on what it said.
   narrower read is visible as a narrower read rather than as a clean box. An enumeration
   that cannot name its own population is not allowed to report HOLDS, and a home it could
   not reach is reported as unreached, never omitted (#102).
+- **A measurement whose EITHER SIDE reads live state is a property of the INSTANT, not of the
+  revision — and naming the sha does not make it one.** It must name the instant it read, and it
+  must not be generalized into a revision property: #63 governs the case where both sides are tree
+  bytes, this governs the case where they are not. The two properties are then kept APART.
+  REPRODUCIBILITY — a committed artifact against a replay from its OWN RECORDED INPUTS — is
+  deterministic, offline, and belongs in the correctness pass. FRESHNESS — an artifact against live
+  state — is true only near the instant of the render, and it is REPORTED, never folded into the
+  correctness verdict, because a check that fails by construction carries no more information than
+  one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope is
+  its reader's population, and the two are stated together (#102, #103).
 
 ---
 
