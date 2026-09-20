@@ -96,6 +96,41 @@ The surveyor does not merely check if a cron job or scheduled trigger is written
 3. **Scoring penalty:** A stalled or deadlocked process directly depresses **Stability**
    and **Cadence**. Codification without live execution does not earn level 3 or 4.
 
+### 4.1 Cadence freshness: the own-elapsed-slot predicate
+
+Per **Ruling (2026-09-19, ledger row `n=456`)**:
+
+> *"Cadence freshness is judged against each job's OWN last elapsed slot, read WITH its
+> timezone — never against wall-clock "today" in UTC across a mixed-timezone cron table.
+> A slot that has not yet arrived cannot have been missed."*
+
+And the demotion:
+
+> *"The artifact-date proxy (newest `evidence/scores/*` file) is DEMOTED to a secondary
+> signal. It measures report **GENERATION**, not process **EXECUTION** — a writer that
+> stamps telemetry without emitting a file reads as a missed cadence when it in fact ran."*
+
+**Why the structural case is intrinsic, not a one-off.** `factory-measurement-daily`
+itself fires `0 9 * * *` **Europe/Moscow = 06:00Z**, so **any** job whose slot falls after
+06:00Z is measured *before its own slot arrives*. At the measurement instant
+(`06:20:59Z`, commit `7e5506a`), Miidas's `09:00Z` slot was **2h39m01s in the FUTURE**.
+
+**What stands, and what was retracted.**
+
+| Item | State |
+|------|-------|
+| criterion re-scored | **none** |
+| A2=2 reading, Optimizing → Scalable band move | **stand** — on the undisputed fact that no Tier-1 artifact exists for the 09-18 slot |
+| the correction itself | committed `8b79c36` (ledger row `n=449`) |
+| §8 remedy to Miidas | **retracted** |
+| the timezone *value* | **out of scope** — a member's declared cadence is that factory's call; Miidas has put the alignment question to the owner itself |
+
+**Sibling of #70 — one cause, two surfaces.** Both share a single cause: **a law naming
+an OUTPUT (a file) while the mechanism produces something else (a telemetry row)**, so an
+external surveyor reads absence. **#70** is the **law's name** being wrong — the declared
+artifact the runner never writes. This rule is the **surveyor's predicate** being wrong —
+measuring generation and calling it execution. They are fixed together.
+
 ---
 
 ## 5. What One Run Does: The Two-Tier Audit Architecture
