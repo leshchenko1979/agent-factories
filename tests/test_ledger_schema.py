@@ -266,7 +266,7 @@ def run_self_probes() -> bool:
         "a malformed value in the trailer is still reported",
         {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "close", "actor": "worker",
          "subject": "#88",
-         "detail": "Closed. Receipts taken at head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e "
+         "detail": "Closed. Receipts taken at head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e "
                    "outcome=accepted turns=abc"},
         "invalid integer format for turns",
     )

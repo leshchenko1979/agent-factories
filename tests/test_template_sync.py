@@ -12,15 +12,82 @@ This file is deliberately NOT copied into the template: it guards the pair, and
 a copy of a pair-guard would need its own pair-guard.
 
 Run:  python3 tests/test_template_sync.py
-Exit: 0 in sync, 1 drifted.
+Exit: 0 in sync and portable; 1 on drift or on a non-portable literal.
 """
 
 from __future__ import annotations
 
+import re
+import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# A hex token of at least 12 characters — a git object name, full or abbreviated.
+# Matched inside a paired file it is a literal that travels into every factory that
+# copies this tree, where it resolves to nothing.
+#
+# The FLOOR is MEASURED, not chosen. Over the 58 paired files, every hex token that
+# resolves in THIS repository is 7 or 8 characters (13 at length 7, 4 at length 8), and
+# every one of them is a PROSE CITATION of this repository's history inside a comment or
+# a docstring — a fact about this tree, not a value the file carries. Nothing at length 9
+# to 39 resolves at all, while the widths a fixture literal actually used here are 12
+# (`9552947a985b`) and 40. A floor of 12 therefore catches both observed widths and
+# touches none of the citations, where a {40} form provably MISSES the 12-character case
+# that existed.
+SHA = re.compile(r"\b[0-9a-f]{12,40}\b")
+
+
+def _resolves(sha: str) -> bool:
+    """True when `sha` names a commit object in THIS repository."""
+    return (
+        subprocess.run(
+            ["git", "-C", str(REPO), "cat-file", "-e", f"{sha}^{{commit}}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
+def portability_problems() -> tuple[list[str], int, int]:
+    """`(problems, pairs_scanned, literals_examined)` over every declared pair.
+
+    Byte-identity is necessary but NOT sufficient, and this leg is the half the byte
+    comparison cannot reach. The twins are the same file in two trees that differ BY
+    DESIGN — this factory's object database and a bootstrapped factory's — so a literal
+    in a paired file that resolves HERE and nowhere THERE makes the file's behaviour a
+    property of the tree rather than of the file. The failure is silent and inverted: a
+    probe asserting a token resolves passes here and fails on the day the factory is
+    born, while a probe asserting it does NOT resolve fails here and passes there.
+
+    The predicate is therefore RESOLUTION in this repository, and the remedy is a value
+    that resolves in neither tree. The counts are returned rather than kept so the
+    population examined is PRINTED — a clean verdict over an unstated population is
+    indistinguishable from one that examined nothing.
+    """
+    problems: list[str] = []
+    scanned = 0
+    examined = 0
+    for original, _ in PAIRS:
+        a = REPO / original
+        if not a.is_file():
+            continue  # already reported as drift; this leg does not duplicate it
+        scanned += 1
+        try:
+            text = a.read_text()
+        except UnicodeDecodeError:
+            continue  # a binary pair carries no literals to read
+        for sha in sorted(set(SHA.findall(text))):
+            examined += 1
+            if _resolves(sha):
+                problems.append(
+                    f"{original} carries {sha}, which RESOLVES in this repository — in "
+                    f"the factory this file ships to it will not, so the pair is not "
+                    f"portable; use a value that resolves in neither tree"
+                )
+    return problems, scanned, examined
 
 PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
@@ -122,9 +189,32 @@ def main() -> int:
         for d in drifted:
             print(f"  {d}")
         print("\nRe-copy: cp <original> <copy> — then re-run this gate.")
+        print("portability: NOT RUN — the pair list is already drifted.")
+        return 1
+
+    problems, scanned, examined = portability_problems()
+    if scanned == 0:
+        print(
+            "template sync gate ERROR: zero pairs were read, so this gate examined "
+            "nothing and cannot report a clean verdict"
+        )
+        return 1
+    if problems:
+        print("template non-portable:\n")
+        for p in problems:
+            print(f"  {p}")
+        print(
+            f"\n{scanned} pair(s) scanned, {examined} hex literal(s) examined. A literal "
+            f"above resolves in THIS repository and will not in the factory this file "
+            f"ships to — use a value that resolves in neither tree."
+        )
         return 1
 
     print(f"template in sync: {len(PAIRS)} pair(s) byte-identical")
+    print(
+        f"portability: {scanned} pair(s) scanned, {examined} hex literal(s) examined, "
+        f"0 resolving"
+    )
     return 0
 
 

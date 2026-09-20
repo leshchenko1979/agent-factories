@@ -528,7 +528,7 @@ def test_probe_a_compliant_synthetic_tree_is_not_condemned(tmp_path: Path) -> No
             _close(
                 1,
                 "2026-09-19T06:00:00Z",
-                "Closed. Receipts taken at head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e.",
+                "Closed. Receipts taken at head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e.",
             )
         ],
         invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
@@ -580,7 +580,7 @@ def test_probe_a_malformed_declaration_fails_rather_than_raising(tmp_path: Path)
     would hide a broken declaration behind the same output as no declaration."""
     tree = synthetic_tree(
         tmp_path / "malformed",
-        rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e")],
+        rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e")],
         declaration="{ this is not json",
     )
     status, _, problems, _, _, _ = evaluate(tree)
@@ -590,7 +590,7 @@ def test_probe_a_malformed_declaration_fails_rather_than_raising(tmp_path: Path)
 def test_probe_an_unreadable_declared_boundary_fails(tmp_path: Path) -> None:
     tree = synthetic_tree(
         tmp_path / "bad-date",
-        rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e")],
+        rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e")],
         invariants={INVARIANT_KEY: "yesterday"},
     )
     status, _, problems, _, _, _ = evaluate(tree)
@@ -620,7 +620,7 @@ _OK = {
     "n": 900,
     "ts": "2026-09-19T06:00:00Z",
     "event": "close",
-    "detail": "Closed. Receipts taken at head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e.",
+    "detail": "Closed. Receipts taken at head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e.",
 }
 
 def test_probe_accepts_a_compliant_close_row() -> None:
@@ -659,7 +659,7 @@ def test_probe_accepts_a_row_that_describes_the_field_before_naming_it() -> None
     row = {**_OK, "detail": (
         "Closed. The head= FIELD is carried by only 4 rows; the scan must continue past "
         "this prose to the field that follows. Receipts taken at "
-        "head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e."
+        "head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e."
     )}
     problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
     assert problems == [], f"a row naming its revision after describing the field must pass: {problems}"
@@ -912,7 +912,7 @@ def test_probe_a_tree_with_no_object_database_skips_with_its_reason(
             _close(
                 1,
                 "2026-09-19T06:00:00Z",
-                "Closed. Receipts taken at head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e.",
+                "Closed. Receipts taken at head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e.",
             )
         ],
         invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},

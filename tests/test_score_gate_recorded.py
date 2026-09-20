@@ -208,7 +208,7 @@ def test_probe_a_synthetic_tree_fails_a_row_without_the_verdict(tmp_path: Path) 
     cost the gate its teeth: a post-boundary score row with no verdict still FAILS."""
     tree = synthetic_tree(
         tmp_path / "offending",
-        rows=[_score(1, "2026-09-19T06:00:00Z", "survey-2026-09-19 — head=9552947a985b")],
+        rows=[_score(1, "2026-09-19T06:00:00Z", "survey-2026-09-19 — head=deadbeef985b")],
         invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
     )
     status, _, problems, _, _ = evaluate(tree)
@@ -299,7 +299,7 @@ _OK = {
     "n": 900,
     "ts": "2026-09-19T06:00:00Z",
     "event": "score",
-    "detail": "survey-2026-09-19 — workspace_gate=rc=0 head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e",
+    "detail": "survey-2026-09-19 — workspace_gate=rc=0 head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e",
 }
 
 _PROBE_BOUNDARY = "2026-09-19T05:00:00Z"
@@ -309,12 +309,12 @@ def test_probe_accepts_a_compliant_row() -> None:
     assert problems == [] and excused == []
 
 def test_probe_rejects_a_row_without_the_verdict() -> None:
-    row = {**_OK, "detail": "survey-2026-09-19 — head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e"}
+    row = {**_OK, "detail": "survey-2026-09-19 — head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e"}
     problems, _ = score_gate_problems([row], _PROBE_BOUNDARY)
     assert problems and VERDICT_KEY in problems[0], problems
 
 def test_probe_rejects_a_failing_verdict() -> None:
-    row = {**_OK, "detail": "survey-2026-09-19 — workspace_gate=rc=1 head=9552947a985b0"}
+    row = {**_OK, "detail": "survey-2026-09-19 — workspace_gate=rc=1 head=deadbeef985b0"}
     problems, _ = score_gate_problems([row], _PROBE_BOUNDARY)
     assert problems, "a failing workspace gate must not read as a recorded pass"
 
