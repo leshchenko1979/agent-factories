@@ -98,8 +98,10 @@ Exit: 0 clean, 1 on any failed check.
 
 from __future__ import annotations
 
+import copy
 import datetime
 import difflib
+import hashlib
 import json
 import re
 import sqlite3
@@ -343,33 +345,49 @@ def committed_blob(path: Path) -> tuple[str | None, str | None]:
         )
     return result.stdout.decode("utf-8"), None
 
-def check_render_reproduces() -> list[str]:
-    """GATE A — the committed artifacts are a byte-exact replay of their snapshot.
+def _committed_replay() -> tuple[str, dict[str, str], dict | None, list[str]]:
+    """The three committed blobs, and the snapshot replayed from them.
 
-    Both sides are rendered FROM THE SNAPSHOT committed beside them, so no volatile
-    field is compared, the comparison needs NO normalization, and the verdict is the
-    same at any instant on any box. The blobs come from HEAD and never the working
-    tree. Every failure names the revision it measured.
+    Returns `(revision, blobs, snapshot, problems)`. A non-empty `problems` means the
+    replay could not be FORMED — an unreadable blob, an unparseable snapshot, an
+    unconsumable snapshot — and the caller reports those as the finding. Split out from
+    `check_render_reproduces` so the acceptance probes can reach the comparison with a
+    snapshot they MUTATED, which is the only way to prove the gate is not vacuous.
     """
     revision, error = committed_revision()
     if error:
-        return [error]
+        return "", {}, None, [error]
 
     blobs: dict[str, str] = {}
     for path in (rr.MD_PATH, rr.INDEX_PATH, rr.STATE_PATH):
         text, error = committed_blob(path)
         if error:
-            return [f"at {revision}: {error}"]
+            return revision, {}, None, [f"at {revision}: {error}"]
         blobs[relpath(path)] = text
 
     state_rel = relpath(rr.STATE_PATH)
     try:
         snapshot = json.loads(blobs[state_rel])
     except json.JSONDecodeError as exc:
-        return [f"at {revision}: {state_rel} does not parse as JSON — {exc}"]
+        return revision, blobs, None, [
+            f"at {revision}: {state_rel} does not parse as JSON — {exc}"
+        ]
     if not isinstance(snapshot, dict):
-        return [f"at {revision}: {state_rel} is not an object"]
+        return revision, blobs, None, [f"at {revision}: {state_rel} is not an object"]
+    return revision, blobs, snapshot, []
 
+def gate_a_problems(
+    blobs: dict[str, str], snapshot: dict, revision: str
+) -> list[str]:
+    """GATE A's comparison, given committed blobs and a snapshot — pure, so it is drivable.
+
+    Both sides are rendered FROM THE SAME SNAPSHOT, so both carry that snapshot's own
+    stamp and the comparison needs NO normalization. That is what lets one function
+    serve both the live gate and the probes: mutating a state-bearing key and mutating
+    `resolved_at` are the same question asked of the same code, and neither is
+    normalized away.
+    """
+    state_rel = relpath(rr.STATE_PATH)
     try:
         replay_md, replay_index, _ctx = rr.render_from_snapshot(snapshot)
     except Exception as exc:  # noqa: BLE001 — an unconsumable snapshot IS the finding
@@ -380,12 +398,27 @@ def check_render_reproduces() -> list[str]:
 
     problems: list[str] = []
     for path, replay in ((rr.MD_PATH, replay_md), (rr.INDEX_PATH, replay_index)):
-        committed = blobs[relpath(path)]
+        committed = blobs.get(relpath(path))
         if committed != replay:
             problems.append(
                 f"{relpath(path)}: the bytes committed at {revision} are not a replay "
-                f"of {state_rel} — {first_difference(committed, replay)}"
+                f"of {state_rel} — {first_difference(committed or '', replay)}"
             )
+    return problems
+
+def check_render_reproduces() -> list[str]:
+    """GATE A — the committed artifacts are a byte-exact replay of their snapshot.
+
+    Both sides are rendered FROM THE SNAPSHOT committed beside them, so no volatile
+    field is compared, the comparison needs NO normalization, and the verdict is the
+    same at any instant on any box. The blobs come from HEAD and never the working
+    tree. Every failure names the revision it measured.
+    """
+    revision, blobs, snapshot, problems = _committed_replay()
+    if problems:
+        return problems
+    problems = gate_a_problems(blobs, snapshot, revision)
+    state_rel = relpath(rr.STATE_PATH)
     counts.append(
         f"GATE A: {relpath(rr.MD_PATH)} and {relpath(rr.INDEX_PATH)} at {revision[:12]} "
         f"replayed from {state_rel} ({len(snapshot.get('bindings') or [])} binding(s), "
@@ -649,6 +682,117 @@ def probe_the_sentinel_would_rewrite_badges() -> None:
         rr._freshness_badge("attested", fresh, rr.parse_instant("2026-09-19T14:00:00Z"))
         == rr._freshness_badge("attested", fresh, rr.parse_instant(rr.RESOLVED_SENTINEL)),
         f"at commit: {rr._freshness_badge('attested', fresh, rr.parse_instant('2026-09-19T14:00:00Z'))!r}",
+    )
+
+def probe_a_mutated_snapshot_is_named() -> None:
+    """Criterion 2, leg 1 — a MUTATED snapshot must be REPORTED, never silently replayed.
+
+    The gate is only a correctness check if a wrong snapshot can turn it red. Two
+    mutations are driven: `resolved_at` (the stamp, which no side normalizes away because
+    both sides render from the SAME snapshot) and a state-bearing key (`bindings`). Each
+    must be reported in BOTH artifacts — the two-artifact shape is asserted, not assumed,
+    because a mutation reaching one artifact would still pass a one-artifact assertion.
+    """
+    revision, blobs, snapshot, problems = _committed_replay()
+    if problems:
+        check("a MUTATED snapshot is NAMED as drift", False,
+              f"committed replay unavailable: {problems[0][:80]}")
+        return
+
+    baseline = gate_a_problems(blobs, snapshot, revision)
+    check(
+        "the UNMUTATED committed pair replays clean, so the mutations below are the cause",
+        baseline == [],
+        "; ".join(baseline)[:110],
+    )
+
+    stamped = copy.deepcopy(snapshot)
+    stamped["resolved_at"] = "2030-01-01T00:00:00Z"
+    drift = gate_a_problems(blobs, stamped, revision)
+    check(
+        "a snapshot whose `resolved_at` is MUTATED is NAMED as drift in both artifacts",
+        len(drift) == 2,
+        f"{len(drift)} problem(s) reported",
+    )
+
+    keyed = copy.deepcopy(snapshot)
+    keyed["bindings"] = keyed["bindings"][:-1]
+    drift = gate_a_problems(blobs, keyed, revision)
+    check(
+        "...and a STATE-BEARING key mutated is NAMED too, so no key is normalized away",
+        len(drift) == 2,
+        f"{len(drift)} problem(s) reported",
+    )
+
+def probe_a_hand_edited_committed_artifact_is_named() -> None:
+    """Criterion 2, leg 2 — a hand-edited COMMITTED artifact must be reported.
+
+    The snapshot is left untouched and one committed blob is edited instead, which is the
+    opposite direction from the probe above: there the artifact was right and the snapshot
+    wrong, here the snapshot is right and the artifact wrong. Both directions must be
+    named, and the untouched artifact in the same pair must stay silent — otherwise a
+    comparison that reported every file on any difference would pass this probe.
+    """
+    revision, blobs, snapshot, problems = _committed_replay()
+    if problems:
+        check("a hand-edited COMMITTED artifact is NAMED as drift", False,
+              f"committed replay unavailable: {problems[0][:80]}")
+        return
+
+    md_rel = relpath(rr.MD_PATH)
+    edited = dict(blobs)
+    edited[md_rel] = edited[md_rel].replace(
+        "Generated file.", "Generated file. HAND EDIT.", 1
+    )
+    drift = gate_a_problems(edited, snapshot, revision)
+    check(
+        "a hand-edit to the COMMITTED artifact is NAMED as drift",
+        any(md_rel in p and "HAND EDIT" in p for p in drift),
+        drift[0][:110] if drift else "no problem reported",
+    )
+    check(
+        "...while the untouched artifact of the same pair is NOT reported",
+        not any(relpath(rr.INDEX_PATH) in p for p in drift),
+        f"{len(drift)} problem(s): {'; '.join(drift)[:80]}",
+    )
+
+def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
+    """Criterion 3 — a working-tree edit must NOT move the verdict; the monitor reports it.
+
+    This is the split's load-bearing property: GATE A reads HEAD, so a tree re-rendered
+    (or hand-edited) without committing is not read as a pass. If the gate read the
+    working tree it would go GREEN on exactly the drift it exists to catch — so this probe
+    is what distinguishes the two read paths.
+
+    The working-tree file is written, measured and RESTORED byte-identically, and the
+    restoration is asserted by digest inside the probe rather than trusted: a probe that
+    left the tree dirty would corrupt every later reading, its own included.
+    """
+    before = len(counts)
+    original = rr.MD_PATH.read_bytes()
+    digest = hashlib.md5(original).hexdigest()
+    try:
+        rr.MD_PATH.write_bytes(original + b"\n<!-- working-tree-only edit -->\n")
+        verdict = check_render_reproduces()
+        del counts[before:]  # the probe drives the verdict; it does not report a second time
+        monitor = report_freshness()
+    finally:
+        rr.MD_PATH.write_bytes(original)
+
+    check(
+        "a WORKING-TREE edit does NOT move GATE A's verdict — it reads HEAD, not the tree",
+        verdict == [],
+        "; ".join(verdict)[:110] if verdict else "",
+    )
+    check(
+        "...and the working-tree file is restored byte-identical, asserted by digest",
+        hashlib.md5(rr.MD_PATH.read_bytes()).hexdigest() == digest,
+        f"md5 {digest[:12]}",
+    )
+    check(
+        "...while the freshness MONITOR is what reports it — 'MOVED', never the verdict",
+        "MOVED" in monitor,
+        monitor[:110],
     )
 
 def _announcement(ident: str, text: str, **over) -> dict:
@@ -1075,6 +1219,9 @@ PROBES = (
     probe_a_hand_edit_is_named,
     probe_only_the_stamp_advanced_passes,
     probe_the_sentinel_would_rewrite_badges,
+    probe_a_mutated_snapshot_is_named,
+    probe_a_hand_edited_committed_artifact_is_named,
+    probe_a_working_tree_edit_does_not_move_the_verdict,
     probe_same_id_same_text_is_one_entry,
     probe_differing_text_under_one_id_fails,
     probe_a_warning_without_evidence_fails,
