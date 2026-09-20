@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.6
+version: 0.1.7
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -151,13 +151,24 @@ with four legs — the board issue, the ledger intake row, the claim, and the di
 that implements it. Intake is **Triage's** row, so filing a board item owes Triage a dispatch in
 the **same turn** as the filing, before the implementing lane can claim. Filed last, the intake
 row lands after the claim and **two mechanisms go RED on the one act**: `tests/test_board_intake_recorded.py`
-fails on a subject carrying ledger activity with no intake row of its own, and the ledger's order
+fails on a numeric subject **carrying a `claim` or a `close`** with no intake row of its own, and the ledger's order
 leg **refuses the close**, because the sequence predicate is bounded by the latest intake and a
 claim preceding it does not count. The remedy for the second is a fresh re-claim by the lane that
 took the work — mechanical, but a second acceptance row bought with a dispatch that cost nothing
 to send on time. Precedent: n=191 filed and dispatched intake in one breath. Origin: #113, whose
 intake leg went last (n=675, after the claim at n=673); #114 is the first item filed under this
 clause.
+
+**The offline leg's population is narrower than "ledger activity", and by design.**
+A subject whose only rows are a `ruling` or a `dispatch` is **outside** the offline leg's
+population — not a defect it missed. Under the filing-time ordering above that window is
+NORMAL: HQ stamps the ruling and the dispatches before the intake row exists, so a gate
+widened to every event would fire RED on the designed sequence. The offline leg judges only
+subjects carrying a `claim` or a `close`, and prints that population beside its verdict, so
+its green reads as "examined N, 0 problems" rather than being indistinguishable from
+"examined nothing" (#116). A **board item with no intake row** — the other half of the same
+window — is the **board** leg's concern, owned by the host runner `tools/patrol_host_state.py`,
+which reads the board whole and is the authority on that direction.
 
 **Name your paths at the commit, not only at the stage.** This tree is shared, and a bare
 `git commit` takes the **entire index**, including every peer's staged work — so a commit

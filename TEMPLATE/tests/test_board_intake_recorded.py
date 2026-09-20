@@ -26,13 +26,20 @@ this — is a later step and is not this file's acceptance.
    **only over the full board**, so the caller must say so: with
    `complete_board=False` this leg is skipped rather than guessing, because a
    filtered list would report every issue outside the filter as missing.
-3. **Excused — a subject the ledger acted on with no `intake` row of its own,
-   where that activity predates this gate.** Reported as `excused:`, never folded
-   into a bare clean, so "clean" and "excused" are never the same output. Nothing
-   is backfilled: an intake row written today for work filed before the gate is a
-   falsified record, not a repair.
+3. **Judged — a numeric subject carrying a `claim` or a `close` with no `intake`
+   row of its own.** Reported as `excused:` when that activity predates this gate,
+   and as a problem otherwise — never folded into a bare clean, so "clean" and
+   "excused" are never the same output. The predicate is deliberately NARROWER
+   than "carrying ledger activity", and the difference is BY DESIGN: under the
+   filing-time intake ordering the ruling and the dispatches are stamped BEFORE
+   the intake row, so a subject whose only rows are a ruling or a dispatch is a
+   normal window and not a defect — widening this leg to every event would fire
+   RED during that window. A board item with no intake row is the BOARD leg's
+   concern, owned by the host runner (`tools/patrol_host_state.py`), which reads
+   the board whole. Nothing is backfilled: an intake row written today for work
+   filed before the gate is a falsified record, not a repair.
 
-**The namespace is the reason this gate does not fire on 111 live rows.** Ledger
+**The namespace is why this gate does not fire on every ledger subject.** Ledger
 subjects are not all issue references — `methodology-agent-failure-taxonomy` is a
 law change, not a board issue. Every leg that asserts about issue references
 therefore asserts ONLY over subjects matching `^#\\d+$`, so a descriptive subject
@@ -95,6 +102,29 @@ def intaken_numbers(rows: list[dict]) -> dict[int, object]:
             intaken[number] = row.get("n")
     return intaken
 
+def subjects_acted_without_intake(rows: list[dict]) -> list[str]:
+    """The OFFLINE leg's population: numeric subjects carrying a `claim` or a
+    `close` with no `intake` row of their own.
+
+    This is the leg that produced this gate's verdict, so its count is the
+    denominator the verdict travels with (#116). The predicate is deliberately
+    NARROWER than "carrying ledger activity": under the filing-time intake ordering
+    the ruling and the dispatches are stamped BEFORE the intake row, so a subject
+    whose only rows are a ruling or a dispatch is a normal window and is OUTSIDE
+    this population by design. A board item with no intake row is the BOARD leg's
+    concern, owned by the host runner (`tools/patrol_host_state.py`), which reads
+    the board whole.
+    """
+    intaken = intaken_numbers(rows)
+    acted: set[str] = set()
+    for row in rows:
+        subject = row.get("subject")
+        if not isinstance(subject, str) or issue_reference(subject) is None:
+            continue
+        if row.get("event") in ("claim", "close"):
+            acted.add(subject)
+    return sorted(s for s in acted if issue_reference(s) not in intaken)
+
 def board_intake_coverage(
     issues: list[dict],
     rows: list[dict],
@@ -107,12 +137,20 @@ def board_intake_coverage(
     direction is the same hole in a new place, so the coverage is a value the caller
     can print, and the direction that was NOT asserted says so in words rather than
     being counted as zero.
+
+    The OFFLINE leg — the one that produced this gate's verdict — reports its own
+    population too (`offline_subjects_examined`). A green verdict without its
+    denominator is unreadable: "examined 1, 0 problems" and "examined nothing"
+    print the same word, which is the hole #116 names. The count is taken through
+    `subjects_acted_without_intake`, the same predicate the verdict is reached
+    with, so the two cannot drift.
     """
     return {
         "forward_issues_examined": len(open_issue_numbers(issues)),
         "reverse_intake_rows_examined": len(intaken_numbers(rows)),
         "reverse_leg": "asserted over the FULL board" if complete_board
         else "SKIPPED — partial board list, so the reverse direction is not sound",
+        "offline_subjects_examined": len(subjects_acted_without_intake(rows)),
         "excused_boundary": INVARIANT_LANDED,
     }
 
@@ -155,20 +193,17 @@ def board_intake_problems(
                     f"this leg is only sound over the FULL board"
                 )
 
-    # 3. Excused: a subject the ledger acted on, with no intake row of its own.
+    # 3. Judged: a numeric subject carrying a `claim` or a `close` with no intake
+    #    row of its own — the SAME population the coverage denominator counts, read
+    #    through the one predicate below rather than re-derived here.
     first_row: dict[object, tuple[object, str]] = {}
-    acted_on: set[object] = set()
     for row in rows:
         subject = row.get("subject")
         if not isinstance(subject, str) or issue_reference(subject) is None:
             continue
         first_row.setdefault(subject, (row.get("n"), str(row.get("ts") or "")))
-        if row.get("event") in ("claim", "close"):
-            acted_on.add(subject)
 
-    for subject in sorted(acted_on):
-        if issue_reference(subject) in intaken:
-            continue
+    for subject in subjects_acted_without_intake(rows):
         n, ts = first_row.get(subject, (None, ""))
         try:
             when = _parse_ts(ts)
@@ -176,8 +211,8 @@ def board_intake_problems(
             problems.append(f"subject {subject} (n={n}): unparseable ts {ts!r}")
             continue
         line = (
-            f"subject {subject} (first row n={n} at {ts}) carries ledger activity but "
-            f"no intake row of its own"
+            f"subject {subject} (first row n={n} at {ts}) carries a claim or a "
+            f"close but no intake row of its own"
         )
         if when < boundary:
             excused.append(f"{line} — predates the gate ({exempt_before})")
@@ -213,11 +248,14 @@ def test_live_ledger_records_its_subjects_as_intakes() -> None:
         print(f"  excused: {line}")
     if problems:
         raise AssertionError(
-            "a subject with ledger activity and no intake row:\n  " + "\n  ".join(problems)
+            "a subject carrying a claim or a close with no intake row of its own:\n  "
+            + "\n  ".join(problems)
         )
     coverage = board_intake_coverage([], rows, complete_board=False)
     print(
         f"board-intake gate (ledger leg): "
+        f"offline leg examined {coverage['offline_subjects_examined']} subject(s) "
+        f"carrying a claim or a close with no intake row; "
         f"forward examined {coverage['forward_issues_examined']} open issue(s) "
         f"(no board in this offline run); "
         f"reverse examined {coverage['reverse_intake_rows_examined']} intake row(s), "
@@ -310,6 +348,41 @@ def test_the_coverage_reports_each_direction_under_its_own_predicate() -> None:
     assert partial["forward_issues_examined"] == full["forward_issues_examined"], (
         "the skipped reverse leg changed what the forward leg examined"
     )
+
+def test_the_offline_denominator_counts_what_the_verdict_judged() -> None:
+    """The printed denominator is the population the verdict was reached over.
+
+    A count that drifts from the verdict is worse than no count, so this pins the
+    two together on a fixture where one subject is judged and one is not: `#8`
+    carries a close and no intake row, `#77` carries both, so the leg examines ONE
+    subject and reports ONE line. A denominator counted over every subject would
+    read 2 here; one counted over every row would read 3.
+    """
+    rows = [_row("close", "#8", 7, "2026-09-12T11:09:57Z"),
+            _row("intake", "#77", 8, "2026-09-19T09:00:00Z"),
+            _row("close", "#77", 9, "2026-09-19T10:00:00Z")]
+    problems, excused = board_intake_problems([], rows, complete_board=False)
+    coverage = board_intake_coverage([], rows, complete_board=False)
+    assert len(problems) + len(excused) == 1, (problems, excused)
+    assert coverage["offline_subjects_examined"] == 1, coverage
+
+def test_the_offline_denominator_is_non_zero_on_the_live_ledger() -> None:
+    """Acceptance 2 of #116: an emptied population fails loudly, not vacuously.
+
+    The live ledger carries subjects that closed before the intake requirement
+    existed, so this population is non-empty by construction. If it is ever zero,
+    either the ledger was replaced or the predicate was narrowed to nothing — and a
+    clean verdict over an empty population is indistinguishable from a verified
+    one, which is the failure this assertion exists to make impossible.
+    """
+    rows = _load_rows()
+    examined = subjects_acted_without_intake(rows)
+    assert examined, (
+        "the offline leg examined NOTHING — a clean verdict over an empty population "
+        "is indistinguishable from a verified one (acceptance 2 of #116)"
+    )
+    coverage = board_intake_coverage([], rows, complete_board=False)
+    assert coverage["offline_subjects_examined"] == len(examined), coverage
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
