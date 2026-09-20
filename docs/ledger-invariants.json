@@ -1,6 +1,7 @@
 {
   "_note": "The boundary each ledger invariant landed at IN THIS FACTORY, read by tests/ledger_boundary.py on behalf of the gates that assert them. This is the FACTORY's own data, read by the gates — never inline in them, because those gates are paired byte-identically with their TEMPLATE twins and one factory's history must not live in a file that ships to every new factory. The skeleton is TEMPLATE/docs/ledger-invariants.example.json. Each key is the NAME OF THE GATE that asserts the invariant; each value is the ISO-8601 UTC instant at which the rule took effect here. Rows at or after it are governed; rows before it print as 'excused:' on every run and are never backfilled. The value is the instant the invariant landed, which is conventionally the boundary taken in the run that adopted it rather than the landing commit's own timestamp. A key that is absent means this factory has not adopted that invariant, and the gate SKIPS with a stated reason — never a silent pass, and never another factory's date. A key that is present but unreadable is a gate FAILURE, not a skip.",
   "invariants": {
+    "claim_gap_declared": "2026-09-20T03:19:55Z",
     "close_row_revision": "2026-09-19T05:05:49Z",
     "score_gate_recorded": "2026-09-18T10:04:05Z",
     "subject_form": "2026-09-19T13:07:51Z"
