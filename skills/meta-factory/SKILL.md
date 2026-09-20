@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.3
+version: 0.1.4
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -386,6 +386,12 @@ message asserting row numbers is a claim that can be wrong, and obeying this cla
 removes the claim rather than policing it. It is upheld forward-only by
 `tests/test_ledger_commit_cites_no_rows.py` — a history-wide form would be permanently
 red, since 55 of 146 historical ledger commits cite row numbers in their subject.
+
+**A law file's `version:` field is a CONTRACT with the body beside it, and the two move in the SAME commit.** Every law file in this repo — `skills/*/SKILL.md` and `TEMPLATE/SKILL.md.tmpl` — declares its own `version:`, and each carries its OWN, because the two are not byte-paired: they are independent documents that happen to share a structure, so a version field shared between them would name two different bodies at once and could not be a contract. The contract has two arms and both are needed. **Arm 1:** a commit that changes a law file's BODY must move THAT file's version in the same commit. **Arm 2:** a commit that moves a version must change that file's body. Arm 1 alone catches an unbumped law change; arm 2 catches a bump that names no new bytes, which mints a version range with no content — the same ambiguity the contract exists to remove, seen from the other side. Together the arms force the version and the body to move together, which is what a field naming the bytes means. The predicate is a BYTE change and never a judgement about whether a change was substantive: deleting a duplicated paragraph IS a body change and DOES require a bump, because a lane holding the old copy genuinely has different bytes.
+
+What the contract buys is a lane's own staleness check. After a compaction a lane has lost the law text it was working to, and the only durable thing it can hold is a version. The field therefore has to mean the bytes: a lane that reloaded after a compaction holds the version it last read, compares that against the file in front of it, and a mismatch says the law moved under it. A version that drifts from its body makes that comparison silently useless — it reports "no drift" for a law that changed, which is the exact failure the check exists to prevent.
+
+Upheld forward-only by `tests/test_skill_version_contract.py`, whose boundary is declared in `docs/ledger-invariants.json` under `skill_version_contract` and which reads from its landing commit forward. The historical decouplings are excused and printed as excused, never repaired — a bump written after the fact would be a falsified record rather than a repair. Nothing is backfilled.
 
 **The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate (`tools/audit.py`). A rule without an upholding mechanism is dead text and will be removed.
 

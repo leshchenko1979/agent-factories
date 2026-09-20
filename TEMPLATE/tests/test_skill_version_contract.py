@@ -5,12 +5,12 @@ Origin (issue #71, ruled at ledger `n=455`). The Delegate reported that
 `git log -S "version: 0.1."` returned exactly ONE commit ever touching the version line,
 and concluded the field never moves. The pickaxe counts OCCURRENCES, so a VALUE SWAP
 (`0.1.0` -> `0.1.1`) leaves the count unchanged and is invisible to it — a count taken by
-a pattern is not a count of items. Measured properly, walking every commit that touched
-the file and diffing frontmatter against body: the file has 36 commits; the version moved
-TWICE (`0.1.0` -> `0.1.1` at `5fcf624c`, `0.1.1` -> `0.1.2` at `4919eb1d`), and **32 of
-the 36 changed the LAW BODY without moving the version**, including all four law commits
-of 2026-09-19. The decoupling runs BOTH ways: `5fcf624c` moved the version with NO body
-change — a bump split into its own commit.
+a pattern is not a count of items. Measured properly — walking every commit that touches a
+discovered law file and diffing that file's frontmatter against its body, over BOTH law
+files, 2026-09-20T04:58:08Z: **99 commits, of which 92 moved the LAW BODY without moving
+the version** (44 in `TEMPLATE/SKILL.md.tmpl`, 48 in `skills/meta-factory/SKILL.md`), 3
+moved both, and exactly ONE — `5fcf624c`, `0.1.0` -> `0.1.1` — moved the version with NO
+body change. The decoupling runs BOTH ways, which is why the gate carries TWO arms.
 
 **Why the field is a contract, not a formality (n=455 clause 2).** The fleet's own
 practice settles it: `oc-drift-check` reads the version line from the canonical `SKILL.md`
@@ -20,10 +20,32 @@ that does not move reports "no drift" for a law that changed — the exact failu
 exists to prevent. Presence-scoring would make the third clause of that check
 unimplementable by construction.
 
-**The rule.** For every commit after the declared boundary that touches a law file: if the
-law BODY changed, the version line must have changed in the SAME commit. Nothing is
-backfilled — the historical decouplings are grandfathered by the boundary, and a repair
-written after the fact would be a falsified record rather than a repair.
+**The rule — TWO ARMS (n=484 clause 1), because one arm leaves the mirror defect open.**
+For every commit after the declared boundary that touches a law file: **arm 1** — if the
+law BODY changed, the version line must have moved in the SAME commit; **arm 2** — if the
+version line moved, the law BODY must have changed in the SAME commit. Arm 1 alone catches
+the unbumped body changes; arm 2 catches `5fcf624c`, which moved `0.1.0` -> `0.1.1` with NO
+body change and minted a version range with no content — the mirror of the ambiguity the
+contract exists to remove. Together the arms force the version and the body to move
+together, which is what a field naming the bytes means. Per n=528 the arms apply **PER
+FILE**: both law files are in scope and each carries its own version, because the two are
+not byte-paired (`test_template_sync.py` pairs tools and tests files only — `SKILL.md.tmpl`
+appears in none of them), so a shared version field would name two different bodies at once.
+
+**The predicate is a BYTE change, never a semantic judgement (n=484 clause 3).** A gate
+cannot judge "was this a substantive law change", and a rule needing judgement is dead text
+(P29). Deleting a duplicated paragraph IS a body change and DOES require a bump: a lane
+holding the old copy genuinely has different bytes. Nothing is backfilled — the historical
+decouplings are grandfathered by the boundary, and a repair written after the fact would be
+a falsified record rather than a repair.
+
+**The BODY is defined mechanically, and the splitter must COUNT delimiters (n=484 clause
+2).** Everything after the frontmatter's closing delimiter. The law files carry `---`
+section separators in their bodies, so a splitter that reads a section separator as the
+frontmatter close hashes a fragment — and the gate would then pass a tree it should fail.
+`body_of()` anchors at the start of the file and takes the FIRST closing delimiter, so a
+separator later in the body is inside the body and cannot terminate the frontmatter; the
+probes pin both directions.
 
 **The boundary is DECLARED, not hardcoded, and the population is COMMITS.** The ruling
 names the `tests/test_ledger_commit_cites_no_rows.py` shape, whose marker is a hardcoded
@@ -141,23 +163,44 @@ def contract_problems(path: str, before: str | None, after: str | None) -> list[
     ever seen good input has not been shown to reject bad input. A file ABSENT on either
     side is not a body change — creation and deletion are transitions no version line can
     describe, so they are out of the rule rather than excused inside it.
+
+    TWO ARMS (n=484 clause 1), because one arm leaves the mirror defect open. Arm 1 catches
+    an unbumped body change; arm 2 catches a bump that names no new bytes — `5fcf624c` moved
+    `0.1.0` -> `0.1.1` with NO body change and minted a version range with no content, the
+    mirror of the ambiguity the contract exists to remove. Together the arms force the
+    version and the body to move in the SAME commit, which is what a field naming the bytes
+    means. n=528 settles the scope: both law files are in scope and EACH CARRIES ITS OWN
+    version, because the two are not byte-paired — so this predicate is per FILE, and a
+    commit may satisfy one file's contract while breaking the other's.
+
+    The predicate is a BYTE change and never "was this a substantive law change" (n=484
+    clause 3): a gate cannot judge semantics, and deleting a duplicated paragraph IS a body
+    change and DOES require a bump, because a lane holding the old copy genuinely has
+    different bytes.
     """
     if before is None or after is None:
         return []
-    if body_of(before) == body_of(after):
-        return []
     old, new = version_of(before), version_of(after)
-    if old != new:
-        return []
-    if old is None:
+    body_moved = body_of(before) != body_of(after)
+    version_moved = old != new
+    if body_moved and not version_moved:
+        if old is None:
+            return [
+                f"{path}: the law BODY moved but the file declares no `version:` line — "
+                "there is no field to move, so the contract cannot be honoured"
+            ]
         return [
-            f"{path}: the law BODY moved but the file declares no `version:` line — "
-            "there is no field to move, so the contract cannot be honoured"
+            f"{path}: the law BODY moved but `version:` stayed {old} — a law change the "
+            "drift check cannot see"
         ]
-    return [
-        f"{path}: the law BODY moved but `version:` stayed {old} — a law change the "
-        "drift check cannot see"
-    ]
+    if version_moved and not body_moved:
+        was = old if old is not None else "(absent)"
+        now = new if new is not None else "(absent)"
+        return [
+            f"{path}: `version:` moved {was} -> {now} but the law BODY is unchanged — a "
+            "bump that names no new bytes, so the version no longer identifies a body"
+        ]
+    return []
 
 
 def _git(repo: Path, *args: str) -> tuple[int, str, str]:
@@ -371,7 +414,10 @@ def main(repo: Path | None = None) -> int:
             print(f"  FAIL {problem}")
         return 1
 
-    print("  clean — every law-body change in the window moved its version line")
+    print(
+        "  clean — every law-file change in the window moved its BODY and its version "
+        "line together, per file"
+    )
     return 0
 
 
@@ -454,8 +500,8 @@ def test_live_the_shipped_history_is_not_in_violation() -> None:
 
 
 def test_probe_a_body_change_without_a_version_move_fails(tmp_path: Path) -> None:
-    """THE BITE — the case the gate exists for, and the shape 32 of the skill's 36 commits
-    had. A gate never shown to reject this has not been shown to work."""
+    """THE BITE — arm 1, the case the gate exists for, and the shape 92 of the 99 law-file
+    commits had. A gate never shown to reject this has not been shown to work."""
     root = _probe_repo(tmp_path / "bite")
     _commit_law(root, "skills/probe/SKILL.md", _law("0.1.0", "law A\n"), BEFORE)
     _commit_law(root, "skills/probe/SKILL.md", _law("0.1.0", "law B\n"), AFTER)
@@ -519,14 +565,103 @@ def test_probe_a_creation_is_not_a_violation(tmp_path: Path) -> None:
     assert len(examined) == 1, examined
 
 
-def test_probe_a_version_only_bump_is_not_a_violation(tmp_path: Path) -> None:
-    """The decoupling's OTHER direction: `5fcf624c` moved the version with no body change.
-    A bump split into its own commit is legitimate and must not fire."""
+def test_probe_a_version_only_bump_fails(tmp_path: Path) -> None:
+    """ARM 2 — the mirror defect (n=484 clause 1). `5fcf624c` moved `0.1.0` -> `0.1.1` with
+    NO body change and minted a version range with no content, the mirror of the ambiguity
+    the contract exists to remove. Arm 1 alone passes it, and an earlier revision of this
+    probe ASSERTED that clean verdict — the probe enshrined the bug. A bump that names no
+    new bytes must fire."""
     root = _probe_repo(tmp_path / "bump")
     _commit_law(root, "skills/probe/SKILL.md", _law("0.1.0", "law A\n"), BEFORE)
     _commit_law(root, "skills/probe/SKILL.md", _law("0.1.1", "law A\n"), AFTER)
+    status, _, problems, examined, _ = evaluate(root)
+    assert status == "fail", (status, problems)
+    assert len(examined) == 1, examined
+    assert any("`version:` moved 0.1.0 -> 0.1.1 but the law BODY is unchanged" in p
+               for p in problems), problems
+
+
+def test_probe_adding_a_version_line_alone_is_arm_2(tmp_path: Path) -> None:
+    """Arm 2 is a comparison of two VALUES, and an absent field is one of them: a commit
+    that introduces `version: 0.1.0` without touching the body has moved the version and
+    named no new bytes."""
+    root = _probe_repo(tmp_path / "addline")
+    _commit_law(root, "skills/probe/SKILL.md", _law(None, "law A\n"), BEFORE)
+    _commit_law(root, "skills/probe/SKILL.md", _law("0.1.0", "law A\n"), AFTER)
     status, _, problems, _, _ = evaluate(root)
+    assert status == "fail", (status, problems)
+    assert any("`version:` moved (absent) -> 0.1.0" in p for p in problems), problems
+
+
+def test_probe_both_arms_fire_per_file(tmp_path: Path) -> None:
+    """n=528: the two law files are independent documents, so the arms apply PER FILE. One
+    run can fail one file on arm 1 and the other on arm 2, and the gate must name BOTH
+    rather than stopping at the first problem it finds."""
+    root = _probe_repo(tmp_path / "perfile")
+    _commit_law(root, "skills/one/SKILL.md", _law("0.1.0", "one A\n"), BEFORE)
+    _commit_law(root, "skills/two/SKILL.md", _law("0.1.0", "two A\n"), BEFORE)
+    _commit_law(root, "skills/one/SKILL.md", _law("0.1.0", "one B\n"), AFTER)
+    _commit_law(root, "skills/two/SKILL.md", _law("0.1.1", "two A\n"), AFTER)
+    status, _, problems, _, _ = evaluate(root)
+    assert status == "fail", (status, problems)
+    assert any(p.startswith("skills/one/SKILL.md") and "BODY moved" in p
+               for p in problems), problems
+    assert any(p.startswith("skills/two/SKILL.md") and "BODY is unchanged" in p
+               for p in problems), problems
+
+
+def test_probe_a_mode_only_change_is_not_a_violation(tmp_path: Path) -> None:
+    """A commit that touches a law file without changing its BYTES — a chmod — moves neither
+    the body nor the version, and neither arm may fire on it. The predicate is a byte
+    change (n=484 clause 3), so a mode bit is not a law change."""
+    root = _probe_repo(tmp_path / "mode")
+    _commit_law(root, "skills/probe/SKILL.md", _law("0.1.0", "law A\n"), BEFORE)
+    _probe_git(root, "update-index", "--chmod=+x", "skills/probe/SKILL.md")
+    _probe_git(root, "commit", "-m", "probe chmod", when=AFTER)
+    status, _, problems, examined, _ = evaluate(root)
     assert (status, problems) == ("clean", []), problems
+    assert len(examined) == 1, examined
+
+
+def test_probe_a_section_separator_does_not_close_the_frontmatter() -> None:
+    """n=484 clause 2, the clause's own stated failure: the law files carry `---` section
+    separators in their BODIES, so a splitter that reads one as the frontmatter close hashes
+    a FRAGMENT — "and the gate would then pass a tree it should fail". The splitter must
+    COUNT delimiters: the frontmatter ends at the SECOND one, whatever follows.
+
+    The two texts below share a frontmatter and differ ONLY after a `---` separator. A
+    truncating splitter would hash them as equal and report clean."""
+    head = "---\nname: probe\nversion: 0.1.0\n---\n"
+    tail_a = "## A\nalpha\n\n---\n\n## B\nbeta\n\n---\n\n## C\ngamma\n"
+    tail_b = tail_a.replace("gamma", "GAMMA")
+    assert body_of(head + tail_a) == tail_a
+    assert body_of(head + tail_a) != body_of(head + tail_b)
+    # every separator is INSIDE the body, not consumed as frontmatter
+    assert body_of(head + tail_a).count("---") == 2
+
+
+def test_probe_a_leading_separator_in_the_body_is_not_swallowed() -> None:
+    """The mirror of the clause: a body whose FIRST line is a separator keeps it. Counting
+    delimiters means the frontmatter is the first TWO — a third `---` is body content, and a
+    body that opens with one must not lose its first section."""
+    text = "---\nname: probe\nversion: 0.1.0\n---\n---\n## Section\nlaw\n"
+    assert body_of(text) == "---\n## Section\nlaw\n"
+
+
+def test_probe_a_body_change_after_a_separator_fails_the_gate(tmp_path: Path) -> None:
+    """The clause's consequence, end to end: a commit that changes ONLY the region after a
+    `---` separator, without moving the version, must FIRE. This is the tree the fragmenting
+    splitter would have passed."""
+    head = "---\nname: probe\nversion: 0.1.0\n---\n"
+    root = _probe_repo(tmp_path / "sep")
+    _commit_law(root, "skills/probe/SKILL.md",
+                head + "## A\nalpha\n\n---\n\n## B\nbeta\n", BEFORE)
+    _commit_law(root, "skills/probe/SKILL.md",
+                head + "## A\nalpha\n\n---\n\n## B\nGAMMA\n", AFTER)
+    status, _, problems, examined, _ = evaluate(root)
+    assert status == "fail", (status, problems)
+    assert len(examined) == 1, examined
+    assert any("BODY moved" in p for p in problems), problems
 
 
 def test_probe_a_quoted_version_in_the_body_is_not_the_declaration() -> None:
