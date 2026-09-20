@@ -250,6 +250,54 @@ flowchart TD
      not closed: if the rate later proves dominated by factory-controlled inputs, a scored
      criterion can be added under its own ruling. The same idiom as the skill-body budget
      above: **warn, do not block.**
+   - **Model calls BETWEEN consecutive compactions — a STANDING reading, printed and never
+     gated.** The COMPANION leg to the rate above, and it exists because the ratio is blind
+     to what this measures: `compactions:turns` scores a lane compacting once per turn after
+     **40 calls of work** identically to a spiral compacting once per turn after **2**.
+     Report, per lane, the **MODEL CALLS** observed between two **CONSECUTIVE COMPACTIONS**
+     of that lane — the interval distribution (min, p25, median, p75, max) and the share of
+     intervals at or below **5 calls** — with the **POPULATION** (lanes read, intervals
+     examined) and the **INSTANT** of the read stamped beside the figures (`date -u`), the
+     instrument printing the population itself. The instrument is
+     `instruments/calls-per-compaction.py` in the **opencrabs-dev state repo** (committed
+     under #114); it streams the daemon log line by line with bounded RSS and reads no
+     database. Its three predicates, all anchored on **TEXT**:
+     - **model call** — `streaming request: model=` (the llm-gateway streaming dispatch) or
+       `[OI] API request: model=` (the non-streaming dispatch). The line
+       `[OI] stream request: ~N input tokens` is the **SAME call logged a second time** and
+       is **not** counted.
+     - **compaction** — `Spawning background compaction at`, one line per real compaction.
+     - **interval** — the calls observed for one `session_id` between two consecutive
+       compaction lines of that same session.
+     **TRAP 1 — `triggering LLM compaction` is a CHECK line, not an event.** Counting it
+     over-counts by about **8.5x**, and it fails toward a *confident* wrong number rather
+     than an obvious one: on OpenCrabs Dev HQ's first pass it produced *"median **0** model
+     calls between compactions"*. Measured first-hand on the ops daemon log for this reading
+     (2026-09-20T03:59Z): **8,916** CHECK lines against **1,038** real compactions on 09-19
+     (8.6x) and **1,799** against **211** on 09-20 (8.5x).
+     **TRAP 2 — ANCHOR ON TEXT, NEVER ON A LINE NUMBER.** The dispatch line drifts per
+     build: it read `custom_openai_compatible.rs:3631` on 09-18, `:3667` and `:3673` on
+     09-19 (the daemon was swapped mid-day) and `:3673` on 09-20. A line-number anchor
+     returned **ZERO** calls for 09-18 while the same text was present **33,164 times** in
+     that day's log — a total, silent loss of the population that reads exactly like a quiet
+     box.
+     **A lane whose intervals cannot be computed prints its raw counts and the reason, never
+     a computed ratio** — a lane with fewer than two compactions has no consecutive pair to
+     measure, and an absent interval is not a zero-length one. The first reading
+     (2026-09-20T03:59Z, the 09-19 and 09-20 logs) read **111 lanes**, of which **67** carried
+     at least one compaction and **52** carried a computable interval: median clean interval
+     **18.0 calls**, **35.0%** of intervals at or below 5 calls, and per-lane medians spread
+     **1.0 → 75.0** — the fleet mean describes no lane.
+     **BOUNDS, stated in the reading rather than hidden:** (1) the predicate counts
+     **dispatch** lines, so a request that never reaches one contributes no call; (2) a call
+     is attributed to a lane only when its line carries a `session_id` — over those two logs
+     **1,544 of 44,072** streaming lines (**3.5%**) carried none and enter no lane figure and
+     no fleet ratio; (3) an interval is defined **within one session**, so a lane's first
+     compaction opens none.
+     The reading is **never a scored criterion** (ruling n=677 PART 5, board issue #114,
+     continuing n=643 PART 4): a compaction rate is substantially a **harness** property and
+     **a scored criterion must be actionable by the scored party**. Same idiom as the
+     skill-body budget above: **warn, do not block.**
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
      carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
      the run committed at (`head=<full-sha>`) — those two tokens are read by
