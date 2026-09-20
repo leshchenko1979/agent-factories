@@ -25,12 +25,45 @@ from no budget set, and defaulting over it would silently re-cap every gate.
 
 THE VALUES ARE NOT THE IMPLEMENTING LANE'S (n=574 PART 5). This module reads them;
 it never invents one.
+
+WHY A DECLARED REVISION IS NOW RESOLVED (#125, ruling n=786). `measured_at` was a
+declared revision that NOTHING resolved, so an entry could describe a gate whose
+command had moved under it and no reader could see it. A basis describes a COMMAND,
+and a command has two halves -- the gate's own FILE, and the REGISTRATION that says
+how it runs -- so both are compared against HEAD here:
+
+  LEG A, file identity. The gate file's blob at `measured_at` against its blob at
+  HEAD. Different bytes means the basis describes a DIFFERENT TEST: the entry is
+  STALE-BY-GROWTH and its budget must be re-derived by the predicate above.
+
+  LEG B, command identity. The `gates_to_run.append(...)` argv for that target, read
+  from `tools/audit.py` at BOTH revisions. It moves while the gate's blob stays
+  byte-identical -- measured under #124, where `5e3bfe3` re-pointed six registrations
+  to `-m pytest` and roughly tripled their wall time -- so a bytes-only check reads
+  those entries CLEAN while the command it measured is gone. The two legs barely
+  overlap: of the three gates that exhausted their budget on 2026-09-20, leg A saw
+  one and leg B saw two, so a single-leg check reads two of the three as clean.
+
+STALENESS IS NOT UNDER-BUDGET, and the two are reported apart on purpose. A basis
+that no longer describes its test is a DATA fact; whether the cap still contains the
+gate is a TIMING fact, and the audit's own UNKNOWN verdict is the second one. The
+measured counter-example runs both ways: one gate kept its bytes, moved to the pytest
+runner, and its cap stopped containing it -- while another's bytes moved and it got
+FASTER, so re-deriving it would have TIGHTENED the cap. So neither leg refuses.
+
+WHAT THIS DOES NOT DO. It never re-measures, never re-derives a budget, and never
+refuses a manifest over staleness: the values are the process owner's (n=574 PART 5),
+and a refusal would force the implementing lane to invent one. It REPORTS -- the
+sweep's own account travels with the caps and is printed by the audit, naming the
+population it examined, the revision it read, and every entry it could not reach.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -64,9 +97,47 @@ ENTRY_KEYS = ("budget_sec", "measured_sec", "measured_at", "margin_x")
 # refusing a budget that was edited away from its stated basis.
 MARGIN_LAW_TOLERANCE = 0.01
 
+# The OTHER half of a declared basis: a budget is a cap on a COMMAND, and the audit
+# is where that command is spelled out. A registration lives in one file, so the
+# leg reads one path at two revisions rather than walking the whole run list.
+AUDIT_SOURCE_PATH = "tools/audit.py"
+
+# The canonical reader of those registrations is a tests-side predicate, and it is
+# IMPORTED rather than re-derived. A second `gates_to_run.append(...)` scan is the
+# defect this repo names as "one field, one predicate" (#99): the two agree until the
+# append form changes, and then one of them reads another projection's values under
+# the name it asked for. `gate_registry.registration_entries` reads the target AND the
+# runner from ONE scan for exactly that reason.
+REGISTRATION_MODULE = "gate_registry"
+
+# The two legs, named so a report says WHICH half of the command moved rather than
+# only that something did.
+STALE_BYTES = "bytes"
+STALE_RUNNER = "runner"
+
+# Every git call below is a local object-database read that returns in milliseconds;
+# the cap exists only so a wedged index lock or a corrupt repository fails the SWEEP
+# instead of hanging the audit that calls it.
+GIT_TIMEOUT_SEC = 20
+
 
 class GateBudgetManifestError(Exception):
     """The gate-budget manifest exists but is unparseable or incomplete."""
+
+
+@dataclass(frozen=True)
+class StaleBudget:
+    """One declared entry whose basis no longer describes the command that runs.
+
+    `legs` names WHICH half moved, because the two have different consequences and a
+    single "stale" bit would hide which file to look at. `detail` carries the evidence
+    itself -- the two blob ids for leg A, the two argv forms for leg B -- so the report
+    is checkable rather than an assertion a reader must take on trust.
+    """
+
+    key: str
+    legs: tuple[str, ...]
+    detail: str
 
 
 @dataclass(frozen=True)
@@ -76,6 +147,11 @@ class GateBudgets:
     default_sec: float
     default_source: str
     gates: dict[str, float] = field(default_factory=dict)
+    # The staleness sweep's findings and its OWN account, so a caller can print the
+    # population examined beside the count found. An empty tuple with a note that says
+    # why is the honest form of "nothing reported"; an empty tuple alone is not.
+    stale: tuple[StaleBudget, ...] = ()
+    stale_note: str = ""
 
     def resolve(self, key: str | None) -> tuple[float, str]:
         """The budget for a gate key, and whether it was DECLARED or fell to the default.
@@ -98,6 +174,239 @@ def gates_manifest_path() -> Path:
     """
     override = os.environ.get(GATES_MANIFEST_ENV)
     return Path(override) if override else GATES_MANIFEST_PATH
+
+
+def _git(repo_root: Path, *args: str, stdin: str | None = None) -> tuple[int, str, str]:
+    """One git call inside `repo_root`: exit code and both streams, never through a pipe.
+
+    OFFLINE and read-only by construction -- every caller passes an object-database read
+    (`rev-parse`, `cat-file`, `show`). A missing or wedged `git` is a STATED failure
+    rather than an exception, because a tree checked out without git must still be able
+    to read its budgets: that failure belongs in the sweep's note, not in a traceback.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            capture_output=True,
+            text=True,
+            input=stdin,
+            timeout=GIT_TIMEOUT_SEC,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 1, "", str(exc)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _resolve_commit(repo_root: Path, rev: str) -> str | None:
+    """The commit a revision resolves to, or None when it does not resolve here.
+
+    Resolved BEFORE any blob is read, and that ordering is load-bearing rather than
+    tidy: `cat-file --batch-check` answers "missing" both for a path absent from a real
+    tree AND for every path asked of a revision that resolves to nothing at all, so a
+    sweep that skipped this step would read an unreachable `measured_at` as "every gate
+    file changed" and report the entire manifest stale.
+    """
+    code, out, _ = _git(repo_root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+    resolved = out.strip()
+    return resolved if code == 0 and resolved else None
+
+
+def _blob_ids(repo_root: Path, specs: list[str]) -> dict[str, str] | None:
+    """Blob id per `<commit>:<path>` spec, for the specs that name one.
+
+    ONE call for the whole population: a per-entry `rev-parse` would be two process
+    spawns per gate, and the audit this feeds already exceeds its own runtime budget.
+
+    None means THE OBJECT DATABASE DID NOT ANSWER, and that is a different fact from an
+    empty mapping. Collapsing the two would let a failed read report as "nothing changed"
+    -- a clean verdict over a population that was never examined, which is the failure
+    these legs exist to remove. A spec that names no blob is simply absent from the
+    result, which is the fact the caller compares.
+    """
+    if not specs:
+        return {}
+    code, out, _ = _git(
+        repo_root, "cat-file", "--batch-check", stdin="\n".join(specs) + "\n"
+    )
+    if code != 0:
+        return None
+    lines = out.splitlines()
+    if len(lines) != len(specs):
+        return None
+    ids: dict[str, str] = {}
+    for spec, line in zip(specs, lines):
+        parts = line.split(" ")
+        if len(parts) == 3 and parts[1] in ("blob", "tree", "commit"):
+            ids[spec] = parts[0]
+    return ids
+
+
+def _registration_reader():
+    """The canonical registration predicate, imported from the tree that carries it.
+
+    WHICH TREE: `REPO_ROOT`, never the caller's `repo_root`. That predicate parses TEXT
+    -- it is a property of the DEPLOYED tree, not of the repository whose text is being
+    parsed -- so a sweep over a synthetic repository still reads through the one real
+    scanner, and no fixture can shadow the canonical parser with a lookalike.
+
+    None means the predicate could not be imported, and the caller REPORTS that instead
+    of passing over it: a leg that cannot judge must say so.
+    """
+    tests_dir = REPO_ROOT / "tests"
+    try:
+        if str(tests_dir) not in sys.path:
+            sys.path.insert(0, str(tests_dir))
+        module = __import__(REGISTRATION_MODULE)
+    except ImportError:
+        return None
+    return getattr(module, "registration_entries", None)
+
+
+def _runner_forms(repo_root: Path, commit: str) -> dict[str, tuple[str, ...]] | None:
+    """`{target: argv forms}` for the audit's registrations AT ONE COMMIT.
+
+    None means the registration source or its reader is unavailable -- an unreadable
+    registration is not an empty one, so the caller reports it rather than reading it as
+    "nothing moved". A target appending more than once keeps every form, so a duplicate
+    registration cannot be hidden by the last one written.
+    """
+    reader = _registration_reader()
+    if reader is None:
+        return None
+    code, out, _ = _git(repo_root, "show", f"{commit}:{AUDIT_SOURCE_PATH}")
+    if code != 0:
+        return None
+    forms: dict[str, list[str]] = {}
+    for entry in reader(out):
+        forms.setdefault(entry["target"], []).append(entry["argv"])
+    return {target: tuple(sorted(set(argv))) for target, argv in forms.items()}
+
+def budget_staleness(
+    entries: dict[str, object], repo_root: Path | None = None
+) -> tuple[tuple[StaleBudget, ...], str]:
+    """Which declared bases no longer describe what runs, and the sweep's own account.
+
+    THE PREDICATE, with its population and its instant. For every declared entry the
+    command its basis was measured on is reconstructed at `measured_at` and compared with
+    the command the audit runs at HEAD: `measured_at` is resolved to a commit, the gate
+    file's BLOB is compared (leg A), and the argv its REGISTRATION declares is compared
+    (leg B). An entry whose legs both match describes an unchanged command, and a
+    remaining gap between its basis and its runtime is the INSTANT -- load, reported and
+    never gated.
+
+    THE BOUND, stated because a clean sweep is otherwise overread. These legs cover the
+    gate's own blob and the runner form its registration names. They do NOT see a shared
+    module the gate imports, the interpreter's version, the host's load, or a target a
+    registration reader cannot name. A target present on ONE side of the comparison only
+    is deliberately NOT compared: a registration that appears or disappears belongs to the
+    registered-set directions, and reporting it here too would make one fact look like two.
+
+    FAIL-OPEN, AND PRINTED RATHER THAN REFUSED. A revision this clone cannot resolve
+    (shallow, or a rewritten history) is UNKNOWN, never clean, and it is named in the note
+    with the count it covers. Nothing here raises: a tree checked out without git must
+    still be able to read its budgets, and this module's own doctrine already carries the
+    pattern -- a declared fallback with a PRINTED population is not an exempt-by-silence
+    surface, while an unprinted one is.
+
+    `repo_root` defaults to REPO_ROOT and exists so a probe can aim the object-database
+    reads at a throwaway repository. It is not a switch for the check, which always runs.
+    """
+    root = Path(repo_root) if repo_root is not None else REPO_ROOT
+    if not entries:
+        return (), (
+            "no declared entries — this manifest declares no per-gate basis, so there is "
+            "nothing to compare against HEAD"
+        )
+
+    head = _resolve_commit(root, "HEAD")
+    if head is None:
+        return (), (
+            f"NOT RUN — no resolvable HEAD under {root}, so there is no revision to compare "
+            f"a declared basis against. {len(entries)} declared entr"
+            f"{'y' if len(entries) == 1 else 'ies'} left UNEXAMINED rather than reported clean."
+        )
+
+    by_rev: dict[str, list[str]] = {}
+    for key, entry in entries.items():
+        rev = entry.get("measured_at") if isinstance(entry, dict) else None
+        if isinstance(rev, str):
+            by_rev.setdefault(rev, []).append(key)
+
+    stale: list[StaleBudget] = []
+    unresolved: list[str] = []
+    reached = bytes_blind = runner_blind = 0
+    for rev in sorted(by_rev):
+        keys = sorted(by_rev[rev])
+        commit = _resolve_commit(root, rev)
+        if commit is None:
+            unresolved.append(f"{rev} ({len(keys)} entr{'y' if len(keys) == 1 else 'ies'})")
+            continue
+        reached += len(keys)
+
+        # LEG A — the gate FILE's blob at the declared revision against its blob at HEAD.
+        was = _blob_ids(root, [f"{commit}:{key}" for key in keys])
+        now = _blob_ids(root, [f"{head}:{key}" for key in keys])
+        bytes_moved: dict[str, str] = {}
+        if was is None or now is None:
+            bytes_blind += len(keys)
+        else:
+            for key in keys:
+                before, after = was.get(f"{commit}:{key}"), now.get(f"{head}:{key}")
+                if before != after:
+                    bytes_moved[key] = f"blob {before or 'absent'} -> {after or 'absent'}"
+
+        # LEG B — the argv its REGISTRATION declares, which moves while the blob does not.
+        at_forms = _runner_forms(root, commit)
+        head_forms = _runner_forms(root, head)
+        runner_moved: dict[str, str] = {}
+        if at_forms is None or head_forms is None:
+            runner_blind += len(keys)
+        else:
+            for key in keys:
+                if (
+                    key in at_forms
+                    and key in head_forms
+                    and at_forms[key] != head_forms[key]
+                ):
+                    runner_moved[key] = (
+                        f"registration {' '.join(at_forms[key])} -> "
+                        f"{' '.join(head_forms[key])}"
+                    )
+
+        for key in sorted(set(bytes_moved) | set(runner_moved)):
+            legs: list[str] = []
+            evidence: list[str] = []
+            if key in bytes_moved:
+                legs.append(STALE_BYTES)
+                evidence.append(bytes_moved[key])
+            if key in runner_moved:
+                legs.append(STALE_RUNNER)
+                evidence.append(runner_moved[key])
+            stale.append(StaleBudget(key=key, legs=tuple(legs), detail="; ".join(evidence)))
+
+    plural = "y" if len(entries) == 1 else "ies"
+    note = (
+        f"{len(stale)} of {len(entries)} declared entr{plural} no longer describe what runs "
+        f"— the gate's own blob and its registered argv, compared against HEAD {head[:12]}"
+    )
+    if unresolved:
+        note += (
+            " | NOT EXAMINED — measured_at resolves to nothing here for "
+            + ", ".join(unresolved)
+            + "; a basis whose revision is unreachable is UNKNOWN, never clean"
+        )
+    if bytes_blind or runner_blind:
+        note += (
+            f" | leg A did not answer for {bytes_blind} entr"
+            f"{'y' if bytes_blind == 1 else 'ies'} and leg B for {runner_blind} — reported "
+            f"rather than read as unchanged"
+        )
+    if reached == 0:
+        note += (
+            f" | NOTHING EXAMINED — 0 of {len(entries)} entries carried a reachable revision, "
+            f"so this sweep reaches no verdict at all"
+        )
+    return tuple(stale), note
 
 
 def gate_key_for_cmd(cmd: list[str], repo_root: Path) -> str | None:
@@ -136,12 +445,17 @@ def gate_key_for_cmd(cmd: list[str], repo_root: Path) -> str | None:
     return None
 
 
-def load_gate_budgets(path: Path | None = None) -> GateBudgets:
+def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -> GateBudgets:
     """Read the gate-budget manifest. Raises `GateBudgetManifestError` on a malformed one.
 
     An ABSENT manifest is not a defect and returns the declared fallback with an
     empty table; a manifest that exists and cannot be read is a defect and raises,
     because the two are otherwise the same output for a caller that only sees caps.
+
+    Every declared entry is then swept against its OWN `measured_at` (#125), and the
+    findings and the sweep's account come back with the caps. A malformed entry still
+    RAISES; staleness never does, because the values are the process owner's and reporting
+    is what this module owes its caller.
     """
     target = path or gates_manifest_path()
     if not target.is_file():
@@ -149,6 +463,8 @@ def load_gate_budgets(path: Path | None = None) -> GateBudgets:
             default_sec=FALLBACK_DEFAULT_SEC,
             default_source=f"no manifest at {target} — declared fallback",
             gates={},
+            stale=(),
+            stale_note=f"no manifest at {target} — nothing declared to sweep",
         )
     try:
         raw = target.read_text(encoding="utf-8")
@@ -205,10 +521,13 @@ def load_gate_budgets(path: Path | None = None) -> GateBudgets:
             )
         gates[key] = float(budget)
 
+    stale, stale_note = budget_staleness(entries, repo_root)
     return GateBudgets(
         default_sec=float(default_sec),
         default_source=f"{target}:default",
         gates=gates,
+        stale=stale,
+        stale_note=stale_note,
     )
 
 

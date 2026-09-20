@@ -46,12 +46,26 @@ Two scope statements this gate carries, because its report is wrong without them
        up a comment in `tests/test_review.py` and a data field in `tests/test_telemetry.py`
        — two false positives, neither a gate.
 
+A FIFTH surface rides this file without being a fifth direction (HQ ruling n=786, #125). A
+per-gate budget is a cap on a COMMAND, and every declared entry names the revision its basis
+was taken at — `measured_at`. Nothing resolved it, so an entry whose basis was taken on a
+command that has since changed read exactly like one whose command is unchanged, and the
+audit kept printing the stale entry as sound. The probes at the end of this file resolve it
+and compare the gate file's BLOB and the argv its REGISTRATION declares, both read from the
+object database against a throwaway repository — because leg B is precisely the half that
+moves while a blob does not, which is how six registrations changed runner form in one commit
+and no file-identity check could see it. It REPORTS and never gates: the budget values are the
+process owner's and never the implementing lane's (n=574 PART 5), and a stale basis whose gate
+still runs inside its cap is a fact about the manifest rather than a failing gate.
+
 Run:  python3 tests/test_gate_registration.py
 Exit: 0 clean, non-zero on any gate that is unregistered, non-canonical, or silent.
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -822,6 +836,255 @@ def probe_the_live_runner_forms_are_clean() -> None:
     for form in report["forms"]:
         print(f"    {form}")
 
+# --- synthetic probes: a declared basis is RESOLVED, never trusted (#125) ---------
+#
+# HQ ruling n=786: `measured_at` was a declared revision that NOTHING resolved, so an entry
+# whose basis was taken on a command that has since changed read like one whose command is
+# unchanged. `gate_budget.budget_staleness` resolves it and compares two things — the gate
+# file's BLOB at that revision against its blob at HEAD (leg A), and the argv its
+# REGISTRATION declares at the two revisions (leg B).
+#
+# Leg B is the load-bearing half, and it is the reason a blob-only check is not enough: the
+# runner form lives in `tools/audit.py`, so six registrations moved from the script form to
+# `-m pytest` in one commit while every one of those gate files stayed byte-identical. The
+# two gates that exhausted their budget on 2026-09-20 and had NOT changed bytes are exactly
+# the two a file-identity check reads CLEAN.
+#
+# These probes run against a THROWAWAY REPOSITORY, because a leg that reads the object
+# database cannot be exercised any other way: a lookalike that stubs the git calls would
+# pass while the real reads stayed wrong, which is the bound stated in that module's own
+# probe note. `budget_staleness(..., repo_root=...)` exists for exactly this and says so.
+
+STALE_BASE_AUDIT = (
+    "import sys\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/test_moved.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/test_same.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/test_runner_moved.py"])\n'
+)
+STALE_HEAD_AUDIT = (
+    "import sys\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/test_moved.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/test_same.py"])\n'
+    'gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_runner_moved.py"])\n'
+)
+
+def _gate_budget_module():
+    """`tools/gate_budget.py` ITSELF — the mechanism under probe, never a lookalike.
+
+    Imported lazily, and by the module's own NAME rather than through a file loader, so the
+    module under probe is the one the audit runs and not a second copy that could satisfy
+    every assertion below while the real reader stayed wrong. `tools/` is APPENDED, never
+    inserted, so the repo's own `registry/` directory keeps its precedence over the
+    same-named module beside it.
+    """
+    tools = str(REPO / "tools")
+    if tools not in sys.path:
+        sys.path.append(tools)
+    import gate_budget  # noqa: PLC0415
+
+    return gate_budget
+
+def _git(root: Path, *args: str):
+    """One git call inside `root`, both streams captured, never through a pipe."""
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60
+    )
+
+def _commit(root: Path, message: str) -> str | None:
+    """Stage the synthetic tree and commit it; the new sha, or None when git refuses."""
+    if _git(root, "add", "tests", "tools").returncode != 0:
+        return None
+    done = _git(
+        root,
+        "-c", "user.email=probe@example.invalid",
+        "-c", "user.name=probe",
+        "-c", "commit.gpgsign=false",
+        "commit", "-q", "-m", message,
+    )
+    if done.returncode != 0:
+        return None
+    got = _git(root, "rev-parse", "HEAD")
+    return got.stdout.strip() if got.returncode == 0 else None
+
+def _two_commit_repo(root: Path) -> tuple[str | None, str | None]:
+    """A history in which one gate's BYTES move and another's RUNNER FORM does.
+
+    `tests/test_moved.py` changes content between the two commits; `tests/test_same.py`
+    changes nothing; `tests/test_runner_moved.py` keeps its bytes while its registration
+    moves from the script form to `-m pytest` — the live shape of #124's commit, in
+    miniature. Returns (base_sha, head_sha), or (None, None) when git is unavailable or
+    refuses, so the caller STATES that instead of reading it as a clean sweep.
+    """
+    tests, tools = root / "tests", root / "tools"
+    tests.mkdir(parents=True, exist_ok=True)
+    tools.mkdir(parents=True, exist_ok=True)
+    (tests / "test_same.py").write_text("# identical at both revisions\n", encoding="utf-8")
+    (tests / "test_moved.py").write_text("# v1\n", encoding="utf-8")
+    (tests / "test_runner_moved.py").write_text(
+        "# bytes held; the runner form moved\n", encoding="utf-8"
+    )
+    (tools / "audit.py").write_text(STALE_BASE_AUDIT, encoding="utf-8")
+    if _git(root, "init", "-q").returncode != 0:
+        return None, None
+    base = _commit(root, "base")
+    if base is None:
+        return None, None
+    (tests / "test_moved.py").write_text("# v2 — the bytes moved\n", encoding="utf-8")
+    (tools / "audit.py").write_text(STALE_HEAD_AUDIT, encoding="utf-8")
+    return base, _commit(root, "head")
+
+def _basis(measured_at: str) -> dict:
+    """A well-formed declared entry: `budget_sec` IS `margin_x x measured_sec`, so the only
+    thing these probes vary is the revision the basis was taken at."""
+    return {"budget_sec": 4.0, "measured_sec": 1.0, "margin_x": 4.0, "measured_at": measured_at}
+
+def _manifest(root: Path, gates: dict) -> Path:
+    """Write a throwaway manifest and return its path — never the live store."""
+    path = root / "gates.json"
+    path.write_text(
+        json.dumps({"default": {"budget_sec": 120.0}, "gates": gates}), encoding="utf-8"
+    )
+    return path
+
+def probe_the_declared_basis_legs_are_resolved() -> None:
+    """Both legs, and the clean cell between them, over one synthetic history."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        entries = {
+            "tests/test_moved.py": _basis(base),
+            "tests/test_same.py": _basis(base),
+            "tests/test_runner_moved.py": _basis(base),
+        }
+        stale, note = module.budget_staleness(entries, root)
+        found = {s.key: s for s in stale}
+        check("a MOVED BLOB is stale on leg A",
+              found.get("tests/test_moved.py") is not None
+              and found["tests/test_moved.py"].legs == ("bytes",),
+              str(found.get("tests/test_moved.py")))
+        check("a MOVED REGISTRATION is stale on leg B with its bytes held",
+              found.get("tests/test_runner_moved.py") is not None
+              and found["tests/test_runner_moved.py"].legs == ("runner",),
+              str(found.get("tests/test_runner_moved.py")))
+        check("an entry whose bytes AND registration both held is not reported",
+              "tests/test_same.py" not in found,
+              str(found.get("tests/test_same.py")))
+        check("the sweep reported exactly the two entries that moved", len(stale) == 2,
+              f"{len(stale)} stale: {sorted(found)}")
+        check("the account states its count, its population AND the revision it compared "
+              "against",
+              note.startswith(f"{len(stale)} of {len(entries)} declared entries")
+              and head[:12] in note,
+              note[:120])
+
+def probe_an_unresolvable_revision_is_reported_never_clean() -> None:
+    """A basis this clone cannot resolve is UNKNOWN: named, counted, and never read clean."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, _head = _two_commit_repo(root)
+        if base is None:
+            check("the probe repository could be built and committed", False,
+                  "no base commit — this leg could not judge")
+            return
+        missing = "0" * 40
+        entries = {
+            "tests/test_same.py": _basis(base),
+            "tests/test_moved.py": _basis(missing),
+        }
+        stale, note = module.budget_staleness(entries, root)
+        check("an unresolvable measured_at is named WITH the count it covers",
+              "NOT EXAMINED" in note and missing in note and "1 entry" in note,
+              note.split("|")[-1].strip()[:120])
+        check("the entry that could not be reached is not reported as stale",
+              all(s.key != "tests/test_moved.py" for s in stale),
+              str([s.key for s in stale]))
+        check("the entry that COULD be reached was still examined, and the account says so",
+              note.startswith(f"{len(stale)} of 2 declared entries"),
+              note[:90])
+
+def probe_a_tree_without_a_resolvable_head_is_not_read_as_clean() -> None:
+    """No object database at all: the sweep states it could not run, rather than passing."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)  # deliberately NOT a repository
+        stale, note = module.budget_staleness({"tests/test_same.py": _basis("HEAD")}, root)
+        check("a directory with no resolvable HEAD reports NOT RUN, not clean",
+              stale == () and note.startswith("NOT RUN"), note[:120])
+        check("and it names how many declared entries it left UNEXAMINED",
+              "1 declared entry left UNEXAMINED" in note, note[-100:])
+
+def probe_a_malformed_entry_still_raises() -> None:
+    """The sweep is ADDITIVE: an entry with no stated basis is still refused, before any read."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = _manifest(
+            root,
+            {"tests/test_no_basis.py": {"budget_sec": 4.0, "measured_sec": 1.0, "margin_x": 4.0}},
+        )
+        raised = ""
+        try:
+            module.load_gate_budgets(path=path, repo_root=root)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+        check("an entry with no measured_at still raises, naming the key",
+              "measured_at" in raised, raised[:120] or "nothing was raised")
+
+def probe_the_margin_law_still_raises() -> None:
+    """And a budget its own stated basis does not follow is still refused."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = _manifest(
+            root,
+            {"tests/test_same.py": {"budget_sec": 9.0, "measured_sec": 1.0,
+                                    "margin_x": 4.0, "measured_at": "HEAD"}},
+        )
+        raised = ""
+        try:
+            module.load_gate_budgets(path=path, repo_root=root)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+        check("a budget that is not margin_x x measured_sec still raises",
+              "is not margin_x x measured_sec" in raised, raised[:120] or "nothing was raised")
+
+def probe_the_live_sweep_states_its_own_account() -> None:
+    """On the live manifest: a count that travels with the population it was taken over.
+
+    This asserts the ACCOUNT, never a verdict, and it is deliberately indifferent to how
+    many entries are stale — the check REPORTS (the values are the process owner's), so a
+    probe that demanded a clean sweep would turn a report into a gate. The template copy of
+    this file has no manifest of its own (it ships `gates.example.json`), and it states that
+    rather than reading the absence as a clean sweep.
+    """
+    module = _gate_budget_module()
+    budgets = module.load_gate_budgets()
+    if not budgets.gates:
+        print(f"  live manifest — declared fallback in use, nothing declared to sweep "
+              f"({budgets.default_source[-70:]})")
+        return
+    check("the live manifest was READ, not skipped",
+          budgets.default_source.endswith(":default"), budgets.default_source[-70:])
+    check("every key the sweep names is a key the manifest declares",
+          all(s.key in budgets.gates for s in budgets.stale),
+          str([s.key for s in budgets.stale if s.key not in budgets.gates])[:100]
+          or "all declared")
+    check("the account leads with the count of the population it examined",
+          budgets.stale_note.startswith(
+              f"{len(budgets.stale)} of {len(budgets.gates)} declared entries"
+          ),
+          budgets.stale_note[:110])
+    print(f"  live manifest — {len(budgets.gates)} declared entr"
+          f"{'y' if len(budgets.gates) == 1 else 'ies'}, {len(budgets.stale)} stale")
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -871,6 +1134,14 @@ def main() -> int:
     probe_the_live_law_coverage_is_clean()
     print("  live tree — direction 5")
     probe_the_live_runner_forms_are_clean()
+    print("  synthetic probes — the declared basis is RESOLVED (#125)")
+    probe_the_declared_basis_legs_are_resolved()
+    probe_an_unresolvable_revision_is_reported_never_clean()
+    probe_a_tree_without_a_resolvable_head_is_not_read_as_clean()
+    probe_a_malformed_entry_still_raises()
+    probe_the_margin_law_still_raises()
+    print("  live manifest — the declared revisions, swept")
+    probe_the_live_sweep_states_its_own_account()
 
     print()
     if failures:

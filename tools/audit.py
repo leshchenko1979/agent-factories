@@ -47,6 +47,7 @@ from field_predicate import (  # noqa: E402
 # imported by `tests/`, and both must resolve the same reader (issue #94).
 from gate_budget import (  # noqa: E402
     GateBudgetManifestError,
+    GateBudgets,
     TIMEOUT_EXIT_CODE,
     gate_key_for_cmd,
     load_gate_budgets,
@@ -664,8 +665,15 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
         }
 
 
-def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
-    """Execute all discovered mechanical gates."""
+def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], GateBudgets]:
+    """Execute all discovered mechanical gates, and return the budgets they resolved against.
+
+    The budgets come back WITH the results because the manifest's declared revisions are
+    swept as they are read (#125, ruling n=786), and that sweep's account has to reach a
+    printer. Returning it here costs one tuple and keeps the read at ONE call site: a
+    second `load_gate_budgets()` in `main()` would re-read a file that may have changed
+    under it, so the caps and the sweep could describe two different manifests.
+    """
     gates_to_run: list[list[str]] = []
 
     # 1. Ledger verify
@@ -1182,7 +1190,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
         result["budget_sec"] = budget_sec
         result["budget_source"] = source
         results.append(result)
-    return results
+    return results, budgets
 
 
 def check_cadence_integrity(ledger_path: Path) -> dict[str, Any]:
@@ -1327,7 +1335,10 @@ def main() -> int:
     # failure returns, because "the audit could not read its budgets" is not "the audit ran
     # and a gate failed" -- a consumer reading a bare 1 would record a verdict nobody took.
     try:
-        gate_results = [] if args.no_gates else execute_mechanical_gates(REPO_ROOT)
+        if args.no_gates:
+            gate_results, gate_budgets = [], None
+        else:
+            gate_results, gate_budgets = execute_mechanical_gates(REPO_ROOT)
     except GateBudgetManifestError as exc:
         print(f"gate budgets: {exc}", file=sys.stderr)
         return 2
@@ -1391,6 +1402,26 @@ def main() -> int:
     )
     for g in default_gates:
         print(f"  [DEFAULT] {g.get('gate_key') or '(no file argument resolved)'} — {g['cmd']}")
+
+    # THE DECLARED REVISIONS, SWEPT AND PRINTED (#125, ruling n=786). A basis that no
+    # longer describes the command it was taken on is INVISIBLE in the caps themselves --
+    # `budget_sec`, `measured_sec` and `margin_x` still satisfy the margin law, so every
+    # existing check reads the entry as sound while the wall it describes has moved. The
+    # sweep therefore prints its own account and names every entry it found, on the same
+    # reasoning as the default population above: a check whose population is unprinted is
+    # an exempt-by-silence surface, and the count is stated even at zero so an empty
+    # population is visibly empty rather than indistinguishable from a print that never ran.
+    #
+    # IT REPORTS AND NEVER GATES. The values are the process owner's and never the
+    # implementing lane's (n=574 PART 5), so a stale basis whose gate still runs inside its
+    # cap is a fact about the manifest, not a failing gate -- and `test_template_sync.py`
+    # is the live proof, having moved its bytes and got FASTER. Both legs are stated per
+    # entry because they mean different things: moved BYTES say the basis describes a
+    # different TEST, moved RUNNER FORM says it describes a different COMMAND.
+    if gate_budgets is not None:
+        print(f"\nGate budget staleness: {gate_budgets.stale_note}")
+        for stale in gate_budgets.stale:
+            print(f"  [STALE:{'+'.join(stale.legs)}] {stale.key} — {stale.detail}")
 
     if args.report or args.output:
         report_md = format_report_markdown(today, ledger_stats, rework_stats, cadence_stats, gate_results)

@@ -149,10 +149,10 @@
       "margin_x": 4.272
     },
     "tests/test_reconstructed_claim_declared.py": {
-      "budget_sec": 6.75,
-      "measured_sec": 1.5,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.5
+      "budget_sec": 64.27,
+      "measured_sec": 15.88,
+      "measured_at": "59c66a4ab84dc36253fa0fec829c5e1e59dd23ea",
+      "margin_x": 4.047
     },
     "tests/test_registry.py": {
       "budget_sec": 15.07,
