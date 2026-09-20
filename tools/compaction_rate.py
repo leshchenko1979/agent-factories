@@ -3,10 +3,12 @@
 
 Reports, per lane and worst-first, the ratio of CONTEXT COMPACTIONS to COMPLETED TURNS
 over a stated window. It is a PRINTED READING, never a gate: a compaction rate is
-substantially a SUBSTRATE property — the daemon's compaction threshold, the model's
-context window and provider behaviour set it, not the scored factory (HQ ruling n=643
-PART 4). The reading exists because no other reading can see a loop: post-compaction
-SIZE stayed healthy throughout the window that produced this metric.
+substantially a HARNESS property — the daemon's compaction LOGIC (summary size growing
+across successive compactions), its compaction threshold and the model's context window
+set it, not the scored factory (HQ ruling n=643 PART 4, reason narrowed at ledger n=646;
+provider failure is decoupled from the rate by measurement). The reading exists because
+no other reading can see a loop: post-compaction SIZE stayed healthy throughout the
+window that produced this metric.
 
 THE TWO POPULATIONS ARE DIFFERENT, AND THAT IS THE WHOLE DESIGN
 ---------------------------------------------------------------

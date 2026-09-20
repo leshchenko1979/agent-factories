@@ -238,14 +238,18 @@ flowchart TD
      is **never** named a loop — the absence cannot be told apart from a turn that never
      completed, and reporting it as an infinite ratio would be a verdict the data does not
      carry.
-     The reading is **never a scored criterion** (ruling n=643 PART 4, board issue #108): a
-     compaction rate is substantially a **substrate** property — the daemon's compaction
-     threshold, the model's context window and provider behaviour set it, and the log shows
-     the trigger directly (`Compaction: primary 'llm-gateway' failed (stream error) — walking
-     the fallback chain`) — while **a scored criterion must be actionable by the scored
-     party**. It is re-visited, not closed: if the rate later proves dominated by
-     factory-controlled inputs, a scored criterion can be added under its own ruling. The
-     same idiom as the skill-body budget above: **warn, do not block.**
+     The reading is **never a scored criterion** (ruling n=643 PART 4, board issue #108; its
+     stated reason narrowed at ledger n=646): a compaction rate is substantially a **harness**
+     property — the daemon's compaction **logic** (summary size growing across successive
+     compactions), its compaction threshold and the model's context window set it — while **a
+     scored criterion must be actionable by the scored party**. Provider failure is
+     **decoupled** from the rate by measurement (n=646): the fallback-chain exhaustion storm on
+     09-19 (106 `primary 'inferhub' failed (stream error)`, 71 `primary 'llm-gateway' failed
+     (stream error)`, 107 `fallback chain exhausted`) fell to **0 / 3 / 0** on 09-20 while the
+     loop ran at full rate, and the loop leg is filed as opencrabs **#438**. It is re-visited,
+     not closed: if the rate later proves dominated by factory-controlled inputs, a scored
+     criterion can be added under its own ruling. The same idiom as the skill-body budget
+     above: **warn, do not block.**
    - Append a `score` event row to `evidence/ledger.jsonl` via `tools/ledger.py append`,
      carrying the closing workspace-gate verdict (`workspace_gate=rc=0`) and the HEAD sha
      the run committed at (`head=<full-sha>`) — those two tokens are read by

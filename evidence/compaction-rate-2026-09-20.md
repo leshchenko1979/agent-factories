@@ -100,10 +100,16 @@ reading**, and the reading says so rather than picking the more alarming of the 
    makes a loop look better than it is, never worse.
 3. A count whose population and instant are unstated cannot be re-checked (#102), so both are
    printed with every reading.
-4. **Printed, never gated.** The rate is substantially a substrate property — the daemon's
-   compaction threshold, the model's context window and provider behaviour — and the log
-   shows the trigger directly: `Compaction: primary 'llm-gateway' failed (stream error) —
-   walking the fallback chain`.
+4. **Printed, never gated.** The rate is substantially a **harness** property — the daemon's
+   compaction **logic** (summary size growing across successive compactions), its compaction
+   threshold and the model's context window — and **not** a provider one. An earlier form of
+   this file attributed the rate partly to provider failure on the strength of the log line
+   `Compaction: primary 'llm-gateway' failed (stream error) — walking the fallback chain`.
+   The observation was real, the **causal attribution was not**, and ledger n=646 retired it
+   by measurement: the fallback-chain exhaustion storm on 09-19 (106 `primary 'inferhub'`,
+   71 `primary 'llm-gateway'`, 107 `fallback chain exhausted`) fell to **0 / 3 / 0** on
+   09-20 while this loop ran at full rate. A cause that vanishes while the effect persists is
+   not the cause. The loop leg is filed as opencrabs **#438**.
 
 ---
 
