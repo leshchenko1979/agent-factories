@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.12
+version: 0.1.13
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -559,8 +559,13 @@ the ambiguity branch entirely.
 
 **The cron table is the one surface this factory shares with every other, and sharing is
 why only half of this law can be gated.** A factory's own jobs are named
-`factory-<what-it-does>`, and the fleet manifest's `job_prefixes` is that law made
-mechanical: the prefixes are the only reason a job on a shared box can be attributed to its
+`<declared-prefix><what-it-does>`, and `<declared-prefix>` is that factory's entry in the
+fleet manifest's `job_prefixes` — **the prefix, never the slug**, because the prefix is the
+only token a reader can resolve: a job name is judged against `job_prefixes` and against
+nothing else, so a row named after its slug leaves its own factory's census silently
+(#126). The two tokens coincide for most factories, which is why the distinction stayed
+invisible until one of them did not. Those prefixes are the only reason a job on a shared
+box can be attributed to its
 owner at all, so no two factories may claim the same prefix — and `load_fleet_manifest`
 now refuses a manifest where two overlap, **including one prefix nesting inside another**,
 which `str.startswith` cannot tell apart and which would make the OWNER a property of

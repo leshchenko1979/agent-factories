@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.8
+version: 0.1.9
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -190,8 +190,10 @@ The binding names the mechanism; the requirements are:
    Before disabling, deleting, editing or repacing any cron row, resolve its owner through
    the registry attribution (`tools/registry.py resolve`, `docs/factory-registry.md`); a job
    you cannot attribute to your own factory is **reported, never edited**.
-   *Cron names are namespaced per factory. A factory's own jobs are named
-   `{{FACTORY_SLUG}}-<what-it-does>`, and the manifest's `job_prefixes` is that law made
+   *Cron names are namespaced per factory. A factory's own jobs are named after its
+   **declared prefix** — its `job_prefixes` entry — and never after its slug:
+   `{{FACTORY_SLUG}}` names the factory, while its `job_prefixes` entry names its jobs,
+   and the two may differ. The manifest's `job_prefixes` is that law made
    mechanical: the prefixes are the only reason a job on a shared box can be attributed to
    its owner at all, so no two factories may claim the same prefix. Never disable, delete,
    edit or repace a job that is attributed to another factory — a job you cannot attribute

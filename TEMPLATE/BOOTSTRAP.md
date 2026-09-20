@@ -378,8 +378,10 @@ second is what stops the peer-facing field decaying into stale advice; all three
 job rather than three. Nothing on the box wakes a lane more often than every 6 h.
 
 **Name your jobs after your factory, and touch nobody else's.** Every job you create is
-named `{{FACTORY_SLUG}}-<what-it-does>`, and the prefix you claim here is the same one
-`registry/fleet.json` declares in `job_prefixes` — the manifest validator refuses an empty
+named after the **prefix you declare** in `registry/fleet.json`'s `job_prefixes`, never
+after your slug: `{{FACTORY_SLUG}}` is the name the registry knows you by, while the
+prefix is what the cron table's readers judge — make the two coincide if you can, but
+the prefix is the one that binds — the manifest validator refuses an empty
 prefix list, and refuses two factories whose prefixes overlap (one nesting inside another
 included), so attribution is a property of the manifest rather than of the order it happens
 to list them in. The other half of that law cannot be gated, because the cron table is a
