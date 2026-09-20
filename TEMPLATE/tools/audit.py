@@ -751,7 +751,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     read the board against the ledger, so an owner-filed issue could sit open with
     #     no intake row while each surface stayed internally consistent (issue #56, P29).
     if (repo_root / "tests/test_board_intake_recorded.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_board_intake_recorded.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_board_intake_recorded.py"])
 
     # 26. Gate-fixture closure gate: a fixture that runs a tool inside a throwaway tree
     #     must stage the tool's import CLOSURE, not the file alone. Copying the file alone
@@ -762,7 +762,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     `copy2(REPO_ROOT / TOOL_REL, ...)` and a literal-only match reports it clean
     #     (issue #60, P35, P29).
     if (repo_root / "tests/test_gate_fixtures_closure.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_gate_fixtures_closure.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_gate_fixtures_closure.py"])
 
     # 27. Ledger gate: the single-writer claim, tested rather than asserted — twenty
     #     concurrent appends keep the row numbers 1..N, the append-time guard refuses a
@@ -890,7 +890,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     This gate is OFFLINE: every probe injects a synthetic board, so the audit itself
     #     never calls `gh` (issue #95, ruling n=580 PART 2).
     if (repo_root / "tests/test_patrol_host_state.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_patrol_host_state.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_host_state.py"])
 
     # 36. Rework relative-revision gate: an attribution names an ABSOLUTE sha, never a
     #     moving-HEAD-relative form. The receipt rule above (gate 29) governs RECEIPTS,
@@ -944,7 +944,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     Measured: 14 modules in the live tree, 0 private readers (issue #99, ruling
     #     n=599, P29).
     if (repo_root / "tests/test_telemetry_reader_registry.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_telemetry_reader_registry.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_telemetry_reader_registry.py"])
 
     # 39. Commit-pair hook gate: the refusal point for a one-sided byte pair (#92, ruled
     #     at n=630). `tests/test_template_sync.py` has always caught the class, but only
@@ -1064,7 +1064,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     run, so a clean run and a run that examined nothing are never the same output
     #     (issue #112 ruling n=657, amended under issue #115 ruling n=687, P29).
     if (repo_root / "tests/test_reconstructed_claim_declared.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_reconstructed_claim_declared.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_reconstructed_claim_declared.py"])
 
     # 43. The skill-version contract (issue #71, ruling n=455 clause 3, P29). A commit that
     #     moves a LAW FILE's body must move the skill's `version:` line in the SAME commit,
@@ -1093,7 +1093,7 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     PROBE instead: the test file builds synthetic git histories (the repo's first) and
     #     proves the gate BITES on a body-only change and passes when the version moves.
     if (repo_root / "tests/test_skill_version_contract.py").is_file():
-        gates_to_run.append([sys.executable, "tests/test_skill_version_contract.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_skill_version_contract.py"])
 
     # 44. Cron-thinness gate (issue #54, P7 + P28). A pacemaker cron exists to WAKE the
     #     session that owns a periodic process; the substantive work runs there, under the

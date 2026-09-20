@@ -343,11 +343,22 @@ def test_live_the_historical_reconstructions_are_outside_the_population() -> Non
     found = {row["n"] for row in reconstructed_claims(rows)}
     for n in _HISTORICAL_RECONSTRUCTIONS:
         assert n in found, f"n={n} is a reconstructed claim and the scan missed it"
-    _, _, problems, excused, checked, _ = _live_verdict()
+    _, _, problems, excused, checked, intervals = _live_verdict()
+    # #124 DEFECT B. This leg asserted `checked == 0` — a COUNT of a MUTABLE population —
+    # and it rotted the moment a lawful post-boundary reconstruction landed (n=716 #54,
+    # n=760 #89): #121's class, inside the very file #121 produced. A count of a growing
+    # population is a claim about the tree, so it must rot; the INVARIANT is what this leg
+    # actually cares about, and it does not move when a lawful row arrives. The count is
+    # still PRINTED, never asserted — a leg that examined nothing must never be mistaken
+    # for one that examined the population and found it clean.
     assert problems == [], problems
-    assert checked == 0, f"{checked} reconstruction(s) are governed; none should be yet"
     for n in _HISTORICAL_RECONSTRUCTIONS:
         assert any(f"n={n} " in line for line in excused), (n, excused)
+        assert not any(f"n={n} " in line for line in intervals), (
+            f"n={n} is a PRE-BOUNDARY reconstruction and must not be governed"
+        )
+    print(f"  live — {checked} reconstruction(s) governed, {len(excused)} excused "
+          f"(pre-boundary), {len(intervals)} interval(s) printed")
 
 
 def test_live_the_historical_gaps_recompute_to_the_measured_intervals() -> None:

@@ -196,9 +196,14 @@ RUNNER_FORM_PREDICATE = (
     "`__main__` guard) must be registered under the pytest runner. The runner is read "
     "from the append's argv and the shape from the target's own text; a pytest-style "
     "target invoked as a script runs NOTHING and exits 0, so every `def test_*` in it is "
-    "dead. ONE-WAY BY DESIGN: a script-style target under the pytest runner is NOT "
-    "reported — pytest can collect it, and this direction answers only whether a given "
-    "registration CAN run its target."
+    "dead. A file carrying BOTH a `def test_*` and a `__main__` guard is therefore "
+    "PYTEST-form: runs under either runner is true of the FILE and false of each "
+    "RUNNER, and this direction answers the latter. Measured 2026-09-20 (#124): six "
+    "registered files carried 99 dead legs between them while the audit printed PASS "
+    "for every one. ONE-WAY BY DESIGN: a target carrying NO module-level `def test_*` "
+    "under the pytest runner is NOT reported — pytest collects nothing and exits 5, so "
+    "that direction is LOUD rather than silent, and this direction answers only whether "
+    "a given registration CAN run its target."
 )
 
 def first_docstring_line(text: str) -> str | None:
@@ -679,12 +684,18 @@ def target_form(text: str) -> str:
     """'pytest' when the file is pytest-style, else 'script'.
 
     pytest-style is a module-level `def test_*` with NO `__main__` guard. A file carrying
-    BOTH is script-form — it runs under either runner, so flagging it would be a false
-    red. A file carrying neither is script-form by the same rule, and that is deliberate:
-    this predicate answers what the registration must use, not what the file is, and it
-    does not invent a third answer it cannot act on.
+    NEITHER is script-form by the same rule, and that is deliberate: this predicate
+    answers what the registration MUST use, not what the file is, and it does not invent
+    a third answer it cannot act on.
+
+    A file carrying BOTH is PYTEST-form (#124). The earlier reading — that a both-file
+    "runs under either runner", so flagging it would be a false red — was measured FALSE.
+    Under the script runner pytest never collects the file, so its module-level
+    `def test_*` legs never execute: six registered files carried 99 such legs, every one
+    of them dead, and a script runner exits 0 having run nothing, which is
+    indistinguishable from passing.
     """
-    if _TEST_FUNC.search(text) and not _MAIN_GUARD.search(text):
+    if _TEST_FUNC.search(text):
         return PYTEST_RUNNER
     return SCRIPT_RUNNER
 
@@ -697,9 +708,16 @@ def runner_form_problems(tests_dir: Path, audit_path: Path) -> tuple[list[str], 
     script, pytest never collects it, and every `def test_*` inside is DEAD — the file
     exits 0 having run nothing, which is indistinguishable from passing.
 
-    ONE-WAY BY DESIGN: a script-style target under the pytest runner is NOT reported.
-    pytest can collect such a file, and the reverse case is the one that silently runs
-    nothing.
+    ONE-WAY BY DESIGN, and the reason is the COST ASYMMETRY rather than taste: a both-file
+    registered under pytest loses only its `main()` — pytest runs the module-level legs
+    and never executes the `__main__` guard — and `main()` in these files is a GENERIC
+    runner that calls every `test_*` and prints, which is exactly what pytest does. So
+    that direction loses no assertion and is deliberately NOT reported. Script
+    registration loses EVERY leg; pytest registration loses a printer.
+
+    The bound is stated so it is not mistaken for coverage: this direction reports the
+    SCRIPT-registration direction only. A target carrying NO module-level `def test_*`
+    under the pytest runner is not silent either — pytest collects nothing and exits 5.
 
     A target that is ABSENT is skipped here and named in the report: presence is direction
     3's leg, and a second direction reporting absence would double-report one defect.
@@ -720,12 +738,14 @@ def runner_form_problems(tests_dir: Path, audit_path: Path) -> tuple[list[str], 
                 f"(presence is direction 3's leg)"
             )
             continue
-        form = target_form(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        form = target_form(text)
         forms.append(f"{entry['argv']} — runner={entry['runner']}, target form={form}")
         if form == PYTEST_RUNNER and entry["runner"] == SCRIPT_RUNNER:
             mismatches.append(
-                f"{entry['name']} is pytest-style but is registered as a script "
-                f"({entry['argv']}) — invoked as a script it runs nothing"
+                f"{entry['name']} carries module-level `def test_*` but is registered "
+                f"as a script ({entry['argv']}) — invoked as a script pytest never "
+                f"collects it, so every test leg is DEAD"
             )
 
     problems = [

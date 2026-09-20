@@ -715,13 +715,23 @@ def probe_a_script_style_target_under_the_pytest_runner_is_not_reported() -> Non
               any("runner=pytest" in f and "target form=script" in f for f in report["forms"]),
               str(report["forms"])[:90])
 
-def probe_a_file_with_a_main_guard_is_script_form_even_with_test_functions() -> None:
-    """A file carrying BOTH runs under either runner, so flagging it would be a false red."""
+def probe_a_file_with_a_main_guard_is_still_pytest_form() -> None:
+    """A file carrying BOTH is PYTEST-form (#124).
+
+    The earlier rule read it as script-form on the reasoning that it "runs under either
+    runner, so flagging it would be a false red". Measured FALSE 2026-09-20: under the
+    script runner pytest never collects the file, so its module-level legs never run —
+    SIX registered files carried 99 such legs, all dead, and the audit printed PASS for
+    each. The premise was true of the FILE and false of each RUNNER.
+    """
     both = PYTEST_STYLE + '\n\nif __name__ == "__main__":\n    raise SystemExit(0)\n'
-    check("direction 5 — a `__main__` guard makes a test-function file script-form",
-          target_form(both) == SCRIPT_RUNNER, f"got {target_form(both)}")
-    check("direction 5 — without the guard it is pytest-form",
+    check("direction 5 — a `__main__` guard does NOT make a test-carrying file script-form",
+          target_form(both) == PYTEST_RUNNER, f"got {target_form(both)}")
+    check("direction 5 — without the guard it is pytest-form too",
           target_form(PYTEST_STYLE) == PYTEST_RUNNER, f"got {target_form(PYTEST_STYLE)}")
+    check("direction 5 — a file with NO test function stays script-form",
+          target_form('def main() -> int:\n    return 0\n') == SCRIPT_RUNNER,
+          f"got {target_form('def main() -> int:\n    return 0\n')}")
 
 def probe_the_runner_is_read_from_argv_not_guessed_from_the_target() -> None:
     """The runner comes from the APPEND; the shape from the TARGET. Neither implies the other."""
@@ -796,7 +806,8 @@ def probe_the_runner_form_predicate_states_its_one_way_bound() -> None:
     """Every direction carries its SCOPE BOUND in the predicate text itself."""
     check("direction 5 — the predicate states the one-way bound",
           "ONE-WAY BY DESIGN" in RUNNER_FORM_PREDICATE
-          and "script-style target under the pytest runner is NOT" in RUNNER_FORM_PREDICATE,
+          and "NO module-level `def test_*`" in RUNNER_FORM_PREDICATE
+          and "exits 5" in RUNNER_FORM_PREDICATE,
           RUNNER_FORM_PREDICATE[-60:])
 
 def probe_the_live_runner_forms_are_clean() -> None:
@@ -839,7 +850,7 @@ def main() -> int:
     probe_a_pytest_style_target_under_a_script_runner_is_named()
     probe_the_same_target_under_the_pytest_runner_is_clean()
     probe_a_script_style_target_under_the_pytest_runner_is_not_reported()
-    probe_a_file_with_a_main_guard_is_script_form_even_with_test_functions()
+    probe_a_file_with_a_main_guard_is_still_pytest_form()
     probe_the_runner_is_read_from_argv_not_guessed_from_the_target()
     probe_an_absent_target_is_skipped_and_named_not_double_reported()
     probe_a_tool_invocation_carries_no_target_shape()
