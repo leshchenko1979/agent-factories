@@ -4,7 +4,7 @@
 This module is a PURE predicate over a tree, so a synthetic tree can probe it: a rule
 that has only ever seen good input has not been shown to reject bad input.
 
-Four directions, because any one alone leaves a hole
+Five directions, because any one alone leaves a hole
 ----------------------------------------------------
 **declared -> registered.** A file that declares itself a gate must actually be run. An
 earlier probe protected only the gate that carried it — a file asserting its own name
@@ -40,6 +40,23 @@ and the skill's own sentences. A `tests/test_*.py` either source names must be R
 SCOPE BOUND, carried in the predicate: this covers mechanisms a RECORDED LAW names; the
 GENERAL case — a test file that should be a gate and is named nowhere — is issue #48,
 already open, and this direction must NOT swallow it.
+
+**registered -> CAN RUN.** Every direction above asks WHAT is registered and never HOW.
+`registration_entries` reads the append's argv, which carries two facts — the target and
+the runner — and the first reader kept only the target and DISCARDED the runner, so a
+registration that cannot run its target read exactly like one that runs it (HQ ruling
+n=639 Part 2(d)). The consequence is a gate that reports PASS while testing nothing: a
+pytest-style target (`def test_*` at module level, no `__main__`) invoked as
+`[sys.executable, "tests/X.py"]` runs no test at all and exits 0. Measured live during
+#107(a), which is how the class was found:
+
+    python3 tests/test_registry_render.py        → rc=0, 0 bytes of output
+    python3 -m pytest tests/test_registry_render.py -q → 29 passed in 0.63s
+
+ONE-WAY BY DESIGN: only a pytest-style target under a script runner is reported. A
+script-style target under the pytest runner is collectible, so it is NOT a defect, and
+this direction answers one question — can this registration run its target — rather than
+classifying shapes, which is direction 1's job and stays declaration-only.
 
 Why LOOSE-then-STRICT rather than a strict match alone
 ------------------------------------------------------
@@ -155,8 +172,34 @@ LAW_COVERAGE_PREDICATE = (
 # so no exemption is needed and none is granted.
 _FILE_TOKEN = re.compile(r"\btest_[A-Za-z0-9_]+\.py\b")
 
-# The rework log's `Prevented by` column, by the header cell that names it.
-_PREVENTED_BY_HEADER = "prevented by"
+# The rework log's `Prevented by` column, by the header cell that names it. The exact
+# header text: matching is case-insensitive, but the column reader builds its failure
+# reason from this string, so the casing is what a reader of that reason sees.
+_PREVENTED_BY_HEADER = "Prevented by"
+
+# The two runner forms an append can use, and the two shapes a target can have. The RUNNER
+# is read from the append's argv; the SHAPE is read from the target's own text.
+PYTEST_RUNNER = "pytest"
+SCRIPT_RUNNER = "script"
+
+# A pytest-style target: module-level `def test_*` and NO `__main__` guard.
+#
+# Shape is read ONLY to answer whether a given registration CAN run its target. It never
+# becomes a general shape classifier — the declaration question keeps its own
+# declaration-only predicate (direction 1, and the "Shape is deliberately NOT the
+# discriminator" note above), and this direction answers one narrower question.
+_TEST_FUNC = re.compile(r"^def test_[A-Za-z0-9_]*\(", re.M)
+_MAIN_GUARD = re.compile(r"^if __name__ == ['\"]__main__['\"]:", re.M)
+
+RUNNER_FORM_PREDICATE = (
+    "a registered gate whose target is pytest-style (module-level `def test_*`, no "
+    "`__main__` guard) must be registered under the pytest runner. The runner is read "
+    "from the append's argv and the shape from the target's own text; a pytest-style "
+    "target invoked as a script runs NOTHING and exits 0, so every `def test_*` in it is "
+    "dead. ONE-WAY BY DESIGN: a script-style target under the pytest runner is NOT "
+    "reported — pytest can collect it, and this direction answers only whether a given "
+    "registration CAN run its target."
+)
 
 def first_docstring_line(text: str) -> str | None:
     """The opening docstring's first line, or None when the file has no docstring."""
@@ -182,19 +225,63 @@ def declared_gates(tests_dir: Path) -> list[tuple[Path, str]]:
             found.append((path, first))
     return found
 
-def registered_entries(audit_text: str) -> tuple[list[str], list[str]]:
-    """Return (tests/ file names, tool invocation argv) read from the audit's run list."""
-    tests_entries: list[str] = []
-    tool_entries: list[str] = []
+def registration_entries(audit_text: str) -> list[dict]:
+    """Every `gates_to_run.append(...)`, with BOTH projections read from ONE scan.
+
+    An append's argv carries two facts: the TARGET it registers and the RUNNER it
+    registers it under. `registered_entries` kept only the first and DISCARDED the
+    second, so a registration that cannot run its target read exactly like one that runs
+    it — the reason direction 4 exists (#107(d), HQ ruling n=639 Part 2). Both
+    projections come from this single scan: a second `_APPEND` scan would be the same
+    defect one level down.
+    """
+    entries: list[dict] = []
     for match in _APPEND.finditer(audit_text):
-        quoted = _QUOTED.findall(match.group("argv"))
+        argv = match.group("argv")
+        quoted = _QUOTED.findall(argv)
         target = next((q for q in quoted if q.startswith(("tests/", "tools/"))), None)
         if target is None:
             continue
-        if target.startswith("tests/"):
-            tests_entries.append(Path(target).name)
+        entries.append(
+            {
+                "target": target,
+                "name": Path(target).name,
+                "kind": "tests" if target.startswith("tests/") else "tool",
+                "runner": _runner_of(quoted),
+                "argv": " ".join(quoted),
+            }
+        )
+    return entries
+
+def _runner_of(quoted: list[str]) -> str:
+    """The runner an append's argv invokes, read from its ARGUMENT STRUCTURE.
+
+    NOT a substring test over the whole argv: a target named `tests/test_pytest_form.py`
+    contains the word "pytest" and would be misread as a pytest invocation, hiding a real
+    mismatch behind its own filename. Measured — this predicate's own probe caught exactly
+    that on its first run. The runner is recognised only by a token that can BE the runner:
+    the `-m pytest` pair (the module form this audit uses) or `pytest` as the argv's own
+    executable.
+    """
+    for i, token in enumerate(quoted):
+        if token == "pytest" and (i == 0 or quoted[i - 1] == "-m"):
+            return PYTEST_RUNNER
+    return SCRIPT_RUNNER
+
+def registered_entries(audit_text: str) -> tuple[list[str], list[str]]:
+    """Return (tests/ file names, tool invocation argv) read from the audit's run list.
+
+    A PROJECTION of `registration_entries`, never a second parse — one append scan, two
+    readers, so the target set and the runner set can never disagree about what the audit
+    contains.
+    """
+    tests_entries: list[str] = []
+    tool_entries: list[str] = []
+    for entry in registration_entries(audit_text):
+        if entry["kind"] == "tests":
+            tests_entries.append(entry["name"])
         else:
-            tool_entries.append(" ".join(quoted))
+            tool_entries.append(entry["argv"])
     return tests_entries, tool_entries
 
 def gate_registration_problems(tests_dir: Path, audit_path: Path) -> tuple[list[str], dict]:
@@ -448,7 +535,7 @@ def law_named_mechanisms(
     if rework_path.is_file():
         report["rework_read"] = True
         rows, reason = rt.column_cells(
-            rework_path.read_text(encoding="utf-8"), "Entries", "Prevented by"
+            rework_path.read_text(encoding="utf-8"), "Entries", _PREVENTED_BY_HEADER
         )
         report["rework_rows"] = len(rows)
         report["rework_reason"] = reason
@@ -543,4 +630,68 @@ def law_coverage_problems(
             ],
         }
     )
+    return problems, report
+
+def target_form(text: str) -> str:
+    """'pytest' when the file is pytest-style, else 'script'.
+
+    pytest-style is a module-level `def test_*` with NO `__main__` guard. A file carrying
+    BOTH is script-form — it runs under either runner, so flagging it would be a false
+    red. A file carrying neither is script-form by the same rule, and that is deliberate:
+    this predicate answers what the registration must use, not what the file is, and it
+    does not invent a third answer it cannot act on.
+    """
+    if _TEST_FUNC.search(text) and not _MAIN_GUARD.search(text):
+        return PYTEST_RUNNER
+    return SCRIPT_RUNNER
+
+def runner_form_problems(tests_dir: Path, audit_path: Path) -> tuple[list[str], dict]:
+    """Direction 5: a registration must be able to RUN its target.
+
+    A registration the audit cannot actually run is not a gate. The runner comes from the
+    append's argv; the target's shape comes from its own text. When the target is
+    pytest-style and the registration is script form, the append invokes the file as a
+    script, pytest never collects it, and every `def test_*` inside is DEAD — the file
+    exits 0 having run nothing, which is indistinguishable from passing.
+
+    ONE-WAY BY DESIGN: a script-style target under the pytest runner is NOT reported.
+    pytest can collect such a file, and the reverse case is the one that silently runs
+    nothing.
+
+    A target that is ABSENT is skipped here and named in the report: presence is direction
+    3's leg, and a second direction reporting absence would double-report one defect.
+    """
+    audit_text = audit_path.read_text(encoding="utf-8") if audit_path.is_file() else ""
+    entries = registration_entries(audit_text)
+
+    forms: list[str] = []
+    mismatches: list[str] = []
+    for entry in entries:
+        if entry["kind"] != "tests":
+            forms.append(f"{entry['argv']} — tool invocation, no target shape to read")
+            continue
+        path = tests_dir / entry["name"]
+        if not path.is_file():
+            forms.append(
+                f"{entry['argv']} — runner={entry['runner']}, target absent "
+                f"(presence is direction 3's leg)"
+            )
+            continue
+        form = target_form(path.read_text(encoding="utf-8"))
+        forms.append(f"{entry['argv']} — runner={entry['runner']}, target form={form}")
+        if form == PYTEST_RUNNER and entry["runner"] == SCRIPT_RUNNER:
+            mismatches.append(
+                f"{entry['name']} is pytest-style but is registered as a script "
+                f"({entry['argv']}) — invoked as a script it runs nothing"
+            )
+
+    problems = [
+        f"runner form cannot run its target: {item}" for item in mismatches
+    ]
+    report = {
+        "audit_read": audit_path.is_file(),
+        "registrations": len(entries),
+        "forms": forms,
+        "mismatches": mismatches,
+    }
     return problems, report

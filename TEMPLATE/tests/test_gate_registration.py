@@ -63,8 +63,11 @@ from gate_registry import (  # noqa: E402
     OPENER_ONLY_NOTE,
     OPTIONAL_GATES,
     PREDICATE,
+    PYTEST_RUNNER,
     REQUIRED_GATES,
     REQUIRED_PREDICATE,
+    RUNNER_FORM_PREDICATE,
+    SCRIPT_RUNNER,
     TOOL_INVOCATION_NOTE,
     declared_gates,
     first_docstring_line,
@@ -74,7 +77,11 @@ from gate_registry import (  # noqa: E402
     manifest_drift_problems,
     optional_gate_lines,
     reads_a_docstring,
+    registered_entries,
+    registration_entries,
     required_gate_problems,
+    runner_form_problems,
+    target_form,
 )
 
 TESTS_DIR = REPO / "tests"
@@ -644,6 +651,166 @@ def probe_the_live_law_coverage_is_clean() -> None:
         print("  (vacuity leg skipped — this tree does not carry BOTH law sources; "
               "the meta-factory does, a bootstrapped factory need not)")
 
+# --- synthetic probes: direction 5, registered -> CAN RUN -------------------------
+
+def _register_pytest(*names: str) -> str:
+    """The SAME registrations as `_register`, under the pytest runner."""
+    return "".join(
+        f'gates_to_run.append([sys.executable, "-m", "pytest", "tests/{n}"])\n' for n in names
+    )
+
+# pytest-style: module-level `def test_*`, NO `__main__` guard. Invoked as a script this
+# file defines its functions and calls none of them — it exits 0 having run nothing.
+PYTEST_STYLE = (
+    '#!/usr/bin/env python3\n"""Gate: a pytest-style synthetic gate.\n"""\n'
+    "\n\ndef test_one() -> None:\n    assert True\n"
+    "\n\ndef test_two() -> None:\n    assert True\n"
+)
+
+# script-style: a `main()` under a `__main__` guard, so a script invocation really runs it.
+SCRIPT_STYLE = (
+    '#!/usr/bin/env python3\n"""Gate: a script-style synthetic gate.\n"""\n'
+    "\n\ndef main() -> int:\n    return 0\n"
+    "\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+)
+
+def probe_a_pytest_style_target_under_a_script_runner_is_named() -> None:
+    """The defect: a registration that cannot run its target."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {"test_pytestish.py": PYTEST_STYLE}, _register("test_pytestish.py")
+        )
+        problems, report = runner_form_problems(tests, audit)
+        check("direction 5 — a pytest-style target under a script runner is NAMED",
+              any("test_pytestish.py" in p for p in problems),
+              problems[0][:80] if problems else "no problem reported")
+        check("direction 5 — the report carries the mismatch, naming file and runner read",
+              len(report["mismatches"]) == 1
+              and "test_pytestish.py" in report["mismatches"][0]
+              and "registered as a script" in report["mismatches"][0],
+              str(report["mismatches"])[:90])
+
+def probe_the_same_target_under_the_pytest_runner_is_clean() -> None:
+    """The same file, registered correctly, must be clean — else the rule is a blanket."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {"test_pytestish.py": PYTEST_STYLE}, _register_pytest("test_pytestish.py")
+        )
+        problems, report = runner_form_problems(tests, audit)
+        check("direction 5 — the same target under the pytest runner is CLEAN",
+              problems == [] and report["mismatches"] == [],
+              str(problems)[:80] or "clean")
+
+def probe_a_script_style_target_under_the_pytest_runner_is_not_reported() -> None:
+    """ONE-WAY BY DESIGN: pytest can collect a script-style file, so it is not a defect."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {"test_scripty.py": SCRIPT_STYLE}, _register_pytest("test_scripty.py")
+        )
+        problems, report = runner_form_problems(tests, audit)
+        check("direction 5 — a script-style target under the pytest runner is NOT reported",
+              problems == [],
+              str(problems)[:80] or "clean")
+        check("direction 5 — and the report still states the runner it read",
+              any("runner=pytest" in f and "target form=script" in f for f in report["forms"]),
+              str(report["forms"])[:90])
+
+def probe_a_file_with_a_main_guard_is_script_form_even_with_test_functions() -> None:
+    """A file carrying BOTH runs under either runner, so flagging it would be a false red."""
+    both = PYTEST_STYLE + '\n\nif __name__ == "__main__":\n    raise SystemExit(0)\n'
+    check("direction 5 — a `__main__` guard makes a test-function file script-form",
+          target_form(both) == SCRIPT_RUNNER, f"got {target_form(both)}")
+    check("direction 5 — without the guard it is pytest-form",
+          target_form(PYTEST_STYLE) == PYTEST_RUNNER, f"got {target_form(PYTEST_STYLE)}")
+
+def probe_the_runner_is_read_from_argv_not_guessed_from_the_target() -> None:
+    """The runner comes from the APPEND; the shape from the TARGET. Neither implies the other."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {"test_pytestish.py": PYTEST_STYLE, "test_scripty.py": SCRIPT_STYLE},
+            _register("test_pytestish.py") + _register_pytest("test_scripty.py"),
+        )
+        entries = registration_entries(audit.read_text(encoding="utf-8"))
+        by_name = {e["name"]: e["runner"] for e in entries}
+        check("direction 5 — the runner is read from each append's own argv",
+              by_name == {"test_pytestish.py": SCRIPT_RUNNER, "test_scripty.py": PYTEST_RUNNER},
+              str(by_name))
+
+def probe_an_absent_target_is_skipped_and_named_not_double_reported() -> None:
+    """Presence is direction 3's leg; a second report of one defect is noise."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(Path(tmp), {}, _register("test_ghost.py"))
+        problems, report = runner_form_problems(tests, audit)
+        check("direction 5 — an absent target is NOT a runner-form problem",
+              problems == [], str(problems)[:80] or "clean")
+        check("direction 5 — but it is NAMED in the report as skipped",
+              any("target absent" in f for f in report["forms"]),
+              str(report["forms"])[:90])
+
+def probe_a_tool_invocation_carries_no_target_shape() -> None:
+    """A `tools/*.py` invocation has no test shape to read, and must not be classified."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {},
+            'gates_to_run.append([sys.executable, "tools/ledger.py", "verify"])\n',
+        )
+        problems, report = runner_form_problems(tests, audit)
+        check("direction 5 — a tool invocation is reported as carrying no target shape",
+              problems == [] and any("tool invocation" in f for f in report["forms"]),
+              str(report["forms"])[:90])
+
+def probe_registered_entries_is_a_projection_of_one_scan() -> None:
+    """DRY, mechanically: a second `_APPEND` scan is the same defect one level down."""
+    import inspect
+
+    from gate_registry import registered_entries as _re
+
+    source = inspect.getsource(_re)
+    check("direction 5 — registered_entries does NOT re-scan for appends",
+          "_APPEND" not in source,
+          "registered_entries still scans _APPEND itself")
+    check("direction 5 — registered_entries delegates to registration_entries",
+          "registration_entries(" in source, source.strip().splitlines()[0][:60])
+
+def probe_a_target_whose_name_contains_pytest_is_not_misread_as_the_runner() -> None:
+    """The runner is read from ARGUMENT STRUCTURE, never from a substring of the argv.
+
+    A script-form registration of `tests/test_pytest_form.py` carries the word "pytest"
+    inside the target's own name. A `"pytest" in argv` test reads it as a pytest
+    invocation and silently HIDES the mismatch — the predicate's own first run did exactly
+    that, on the probe above.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {"test_pytest_form.py": PYTEST_STYLE}, _register("test_pytest_form.py")
+        )
+        entries = registration_entries(audit.read_text(encoding="utf-8"))
+        check("direction 5 — a target named test_pytest_form.py in script form reads as script",
+              entries[0]["runner"] == SCRIPT_RUNNER, str(entries[0]["runner"]))
+        problems, _ = runner_form_problems(tests, audit)
+        check("direction 5 — and the mismatch is still reported, not hidden by the name",
+              any("test_pytest_form.py" in p for p in problems),
+              problems[0][:80] if problems else "no problem reported — hidden by the name")
+
+def probe_the_runner_form_predicate_states_its_one_way_bound() -> None:
+    """Every direction carries its SCOPE BOUND in the predicate text itself."""
+    check("direction 5 — the predicate states the one-way bound",
+          "ONE-WAY BY DESIGN" in RUNNER_FORM_PREDICATE
+          and "script-style target under the pytest runner is NOT" in RUNNER_FORM_PREDICATE,
+          RUNNER_FORM_PREDICATE[-60:])
+
+def probe_the_live_runner_forms_are_clean() -> None:
+    """The live tree: every registration can run its target, and the population is printed."""
+    problems, report = runner_form_problems(TESTS_DIR, AUDIT)
+    check("the audit was READ, not silently skipped", report["audit_read"] is True,
+          f"audit_read={report['audit_read']}")
+    check("the live tree has no registration that cannot run its target",
+          problems == [], str(problems[:1])[:90] or "clean")
+    print(f"  live tree — direction 5: {report['registrations']} registration(s) read, "
+          f"{len(report['mismatches'])} runner-form mismatch(es)")
+    for form in report["forms"]:
+        print(f"    {form}")
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -668,6 +835,17 @@ def main() -> int:
     probe_a_dead_reference_is_reported()
     probe_an_unreadable_law_source_fails_rather_than_passing()
     probe_the_law_coverage_predicate_states_its_scope()
+    print("  synthetic probes — direction 5, registered -> CAN RUN")
+    probe_a_pytest_style_target_under_a_script_runner_is_named()
+    probe_the_same_target_under_the_pytest_runner_is_clean()
+    probe_a_script_style_target_under_the_pytest_runner_is_not_reported()
+    probe_a_file_with_a_main_guard_is_script_form_even_with_test_functions()
+    probe_the_runner_is_read_from_argv_not_guessed_from_the_target()
+    probe_an_absent_target_is_skipped_and_named_not_double_reported()
+    probe_a_tool_invocation_carries_no_target_shape()
+    probe_registered_entries_is_a_projection_of_one_scan()
+    probe_a_target_whose_name_contains_pytest_is_not_misread_as_the_runner()
+    probe_the_runner_form_predicate_states_its_one_way_bound()
     print("  live tree")
     probe_the_scan_is_not_vacuous()
     probe_the_resolver_reads_the_live_declaration()
@@ -680,6 +858,8 @@ def main() -> int:
     probe_the_optional_set_is_printed_with_its_reason()
     print("  live tree — direction 4")
     probe_the_live_law_coverage_is_clean()
+    print("  live tree — direction 5")
+    probe_the_live_runner_forms_are_clean()
 
     print()
     if failures:
