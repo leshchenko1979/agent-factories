@@ -14,10 +14,16 @@ the defect fired**: its sentence governs the *staging* step, while the hazard li
 *commit* step. Under P29 that is dead text, and it is why the rule survived every audit
 run: prose is not a mechanism, and a rule whose mechanism is misnamed has none.
 
-This gate is the mechanism. It reads the repo law and every role card that commits, and
-fails when one of them states the staging rule without naming the invocation to use, or
-does not carry the rule at all. That is the same regression-gate role
-`tests/test_hq_delegation.py` plays for the retired HQ-alone doctrine.
+This gate is the mechanism. It reads the repo law, every role card that commits, and the
+factory's own skill file, and fails when one of them states the staging rule without naming
+the invocation to use, or does not carry the rule at all. That is the same regression-gate
+role `tests/test_hq_delegation.py` plays for the retired HQ-alone doctrine.
+
+The skill surface is the third family because the defect **recurred** on 2026-09-20 — #47's
+shape again. The gate read the repo law and the cards and never the skill, so the lane that
+commits most often (every ruling, every ledger row, every law change) had neither rule nor
+gate, and this gate reported clean while a bare commit swept a peer lane's staged work into
+a law commit. A rule that covers every surface except the one that fires is dead text.
 
 It resolves its own tree, so one file serves both: run from this repo it checks
 `TEMPLATE/…`; run from `TEMPLATE/` — or from a bootstrapped factory, where the copies sit
@@ -32,6 +38,7 @@ from __future__ import annotations
 
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -48,6 +55,15 @@ ROLE_CARDS = (
     ("triage", ("TEMPLATE/roles/triage.md", "roles/triage.md")),
     ("carrier", ("TEMPLATE/roles/carrier.md", "roles/carrier.md")),
 )
+
+# The factory's own law file. It is NOT a role card — it is the surface the lane that commits
+# MOST OFTEN reads: every ruling, every ledger row, every law change goes through it. It carried
+# no commit rule at all when this defect RECURRED on 2026-09-20 (#47's shape again, a bare commit
+# sweeping a peer's staged work into a law commit), because the gate read only the surfaces it was
+# written for and never the one the committing lane actually reads. Resolved template-first, then
+# by the bootstrapped factory's own skill directory, whose name the gate cannot know.
+SKILL_LAW = ("TEMPLATE/SKILL.md.tmpl", "SKILL.md")
+SKILL_LAW_GLOB = "skills/*/SKILL.md"
 
 # The invocation to use. A line naming `git commit` must also carry the pathspec form,
 # because `git commit -m <msg>` alone is the hazard.
@@ -83,6 +99,31 @@ def _resolve(candidates: tuple[str, ...]) -> Path | None:
     return None
 
 
+def _skill_surfaces() -> list[Path]:
+    """Every skill surface present in this tree, in a stable order.
+
+    The template-repo layout first, then the bootstrapped factory's own skill directory.
+    That directory's name is not knowable from here, which is why this half globs.
+    """
+    found: list[Path] = []
+    for rel in SKILL_LAW:
+        path = REPO_ROOT / rel
+        if path.is_file():
+            found.append(path)
+    for path in sorted(REPO_ROOT.glob(SKILL_LAW_GLOB)):
+        if path.is_file() and path not in found:
+            found.append(path)
+    return found
+
+
+def _shown(path: Path) -> str:
+    """Path relative to the repo when it is inside it — a probe's file is not."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def probe() -> list[str]:
     """Probe the predicates against both shapes, and report anything that is wrong."""
     failures: list[str] = []
@@ -115,6 +156,33 @@ def probe() -> list[str]:
     return failures
 
 
+def probe_the_skill_surface_bites() -> list[str]:
+    """The skill family is only shown to work by an input that makes it fail.
+
+    Non-vacuity is a property of the PROBE, not of the run: a check that has only ever seen
+    compliant input is indistinguishable from one that examines nothing (#112, n=657).
+    """
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        bad = Path(tmp) / "SKILL.md"
+        bad.write_text(
+            "**Never** `git add -A` or `git commit -a`. Stage the paths you changed.\n",
+            encoding="utf-8",
+        )
+        if not check_surface("skill law", bad, needs_prohibition=True):
+            failures.append("probe: a staging-only skill surface was reported clean")
+
+        good = Path(tmp) / "COMPLIANT.md"
+        good.write_text(
+            "In a shared tree a bare `git commit` takes the entire index. "
+            "Use `git commit -m <msg> -- <paths>`.\n",
+            encoding="utf-8",
+        )
+        if check_surface("skill law", good, needs_prohibition=True):
+            failures.append("probe: a compliant skill surface was reported as a problem")
+    return failures
+
+
 def check_surface(label: str, path: Path, *, needs_prohibition: bool) -> list[str]:
     text = path.read_text(encoding="utf-8")
     problems: list[str] = []
@@ -122,17 +190,17 @@ def check_surface(label: str, path: Path, *, needs_prohibition: bool) -> list[st
     if not states_pathspec_invocation(text):
         if STAGING_ONLY.search(text):
             problems.append(
-                f"{label} ({path.relative_to(REPO_ROOT)}) states the staging rule but "
+                f"{label} ({_shown(path)}) states the staging rule but "
                 "never names the invocation — the shape the defect slipped past"
             )
         else:
             problems.append(
-                f"{label} ({path.relative_to(REPO_ROOT)}) carries no shared-tree commit rule"
+                f"{label} ({_shown(path)}) carries no shared-tree commit rule"
             )
 
     if needs_prohibition and not forbids_bare_commit(text):
         problems.append(
-            f"{label} ({path.relative_to(REPO_ROOT)}) does not state that a bare "
+            f"{label} ({_shown(path)}) does not state that a bare "
             "`git commit` is the hazard"
         )
 
@@ -141,6 +209,7 @@ def check_surface(label: str, path: Path, *, needs_prohibition: bool) -> list[st
 
 def main() -> int:
     problems = probe()
+    problems.extend(probe_the_skill_surface_bites())
 
     law = _resolve(REPO_LAW)
     if law is None:
@@ -155,15 +224,28 @@ def main() -> int:
             continue
         problems.extend(check_surface(f"{role} card", card, needs_prohibition=False))
 
+    # The skill family. Its population is PRINTED on every run, and an empty one fails
+    # loudly: a clean verdict over a population nobody enumerated is not a verdict.
+    surfaces = _skill_surfaces()
+    if not surfaces:
+        problems.append(
+            "no skill surface found; looked for "
+            f"{', '.join(SKILL_LAW)} and {SKILL_LAW_GLOB}"
+        )
+    for path in surfaces:
+        problems.extend(check_surface("skill law", path, needs_prohibition=True))
+
     if problems:
         for line in problems:
             print(f"  FAIL {line}")
         return 1
 
     print(
-        "commit pathspec law: clean — the repo law and every committing card "
-        f"({len(ROLE_CARDS)}) name the invocation"
+        "commit pathspec law: clean — the repo law, every committing card "
+        f"({len(ROLE_CARDS)}), and every skill surface ({len(surfaces)}) name the invocation"
     )
+    for path in surfaces:
+        print(f"  examined skill surface: {_shown(path)}")
     return 0
 
 

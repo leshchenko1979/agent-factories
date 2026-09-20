@@ -159,6 +159,14 @@ to send on time. Precedent: n=191 filed and dispatched intake in one breath. Ori
 intake leg went last (n=675, after the claim at n=673); #114 is the first item filed under this
 clause.
 
+**Name your paths at the commit, not only at the stage.** This tree is shared, and a bare
+`git commit` takes the **entire index**, including every peer's staged work — so a commit
+written for two paths can land carrying a dozen, and one lane's commit becomes the transport for
+another lane's unreviewed work. Use `git commit -m <msg> -- <paths>`, or stage and commit in a
+single invocation. The staging rule alone is satisfiable in full while this fires: it governs the
+*staging* step, and the hazard lives in the *commit* step. Origin: #47, recurred on this lane
+2026-09-20 when a bare commit carried a peer's staged registry-gate fix into a law commit.
+
 ---
 
 ## 5. Substrate routing — a defect goes to the repo that must change
