@@ -70,7 +70,7 @@ from ledger_declaration import (
 # The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
-from field_predicate import declares_field, split_canonical_run
+from field_predicate import declared_keys, declares_field, split_canonical_run
 
 # The reconstruction predicate — which rows are reconstructed claims and the interval
 # recomputed from the two rows' own `ts` values — is shared with the gate that judges the
@@ -519,6 +519,33 @@ def cmd_repair(args: argparse.Namespace) -> int:
         # itself. A check that cannot fail is not a check.
         identity_before = {field: original.get(field) for field in ROW_IDENTITY}
         old_detail = str(original.get("detail", ""))
+        # THE RE-DECLARATION REFUSAL (#104, ruled at ledger n=620 PART 4). The sentence
+        # the insertion rule below rests on — "a `key=value` append EXTENDS the run and is
+        # safe either way" — holds only when the key is NEW. An append that introduces a
+        # key the row's canonical run ALREADY declares leaves the row carrying one field
+        # twice, and a reader that takes the last occurrence as canonical then reads the
+        # appended value while the row's own declaration still stands beside it. Refusing
+        # costs nothing lawful: repair's lawful case is a row INCOMPLETE against a declared
+        # invariant, and an incomplete row is MISSING the key, never carrying it twice.
+        #
+        # Both sides are read through the SHARED predicate and both are scoped to a
+        # canonical run. The row's run is the row's own declaration, so prose in its head
+        # is not a declaration of the field; the appended text is read the same way, so a
+        # prose note that merely NAMES a field is not refused. The refusal happens HERE —
+        # before `rows[index]` is rebuilt and before the atomic replace — so a refused
+        # repair leaves the ledger byte-identical.
+        re_declared = [
+            key for key in declared_keys(appended) if key in declared_keys(old_detail)
+        ]
+        if re_declared:
+            names = ", ".join(repr(key) for key in re_declared)
+            sys.exit(
+                f"ledger repair refused: --append-detail declares {names}, which "
+                f"n={args.n}'s canonical run ALREADY declares — a `key=value` append "
+                f"extends the run only when the key is NEW, and a field carried twice has "
+                f"no canonical reading (#104, ruled at ledger n=620 PART 4). Repair a row "
+                f"MISSING a field, never one that already carries it."
+            )
         # The appended text goes BEFORE the canonical run, never after it (#91, ruled at
         # ledger n=572 PART 3). A row's trailer is POSITIONAL — the run of `key=value`
         # tokens at the END of the detail — so text placed after the run TERMINATES it
@@ -526,8 +553,11 @@ def cmd_repair(args: argparse.Namespace) -> int:
         # trailer-scoped reader stops at. Measured on n=303: its telemetry was canonical
         # when the row was written, and a repair note appended after it displaced
         # cost_usd=2.7719 out of the fleet total. A `key=value` append EXTENDS the run
-        # safely; a prose append does not, and the tool cannot know which it was given.
-        # Inserting before the run is correct for both, so no judgement is required.
+        # safely when its key is NEW; a prose append does not, and the tool cannot know
+        # which it was given — EXCEPT when the key is one the run already declares, which
+        # the refusal above settles before this point (#104, ruled at ledger n=620 PART 4).
+        # Inserting before the run is correct for every append that reaches here, so no
+        # further judgement is required.
         head, run = split_canonical_run(old_detail)
         if run:
             # `rstrip`/`lstrip` normalise only the DELIMITERS at the insertion point —

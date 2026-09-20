@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.8
+version: 0.1.9
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -280,7 +280,17 @@ leaning on shared memory rather than on what it said.
   declared telemetry — the repair silently REMOVES a measurement from the fleet total.
   `tools/ledger.py repair` therefore inserts its appended text BEFORE the run, so a prose
   note lands in the head and the run stays terminal; a `key=value` append EXTENDS the run
-  itself and is safe either way. Measured precedent: n=303's two parenthetical `REPAIR NOTE`
+  itself and is safe either way — **when its key is NEW**. An append that introduces a key
+  the run ALREADY declares is **REFUSED**, non-zero, before any write, so the ledger is
+  left byte-identical: one field carrying two values has no canonical reading, and a
+  consumer that takes the last occurrence reads the appended one while the row's own
+  declaration still stands beside it. Refusing costs nothing lawful, because repair's
+  lawful case is a row **INCOMPLETE** against a declared invariant — and an incomplete row
+  is MISSING the key, never carrying it twice. Both sides of the comparison are read
+  through the shared predicate (`field_predicate.declared_keys`) and each is scoped to its
+  own canonical run, so prose in the head is not a declaration of the field and a prose
+  append that merely NAMES a field is not refused (#104, ruled at ledger n=620 PART 4).
+  Measured precedent: n=303's two parenthetical `REPAIR NOTE`
   sentences displaced its own canonical `cost_usd=2.7719 tokens_out=9956523 turns=1 …`, which
   was canonical when the row was written. n=303 is **not** backfilled — the law above bars it
   — and stands as the measured precedent (#91, ruling n=572 PART 3).

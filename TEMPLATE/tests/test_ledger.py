@@ -31,6 +31,7 @@ Exit: 0 all checks pass, 1 a check failed.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import shutil
@@ -757,9 +758,88 @@ def main() -> int:
               rows(norun)[2]["detail"] == f"Closed with no trailer at all head={probe_sha}",
               rows(norun)[2]["detail"])
 
+        # The RE-DECLARATION refusal (#104, ruled at ledger n=620 PART 4). A `key=value`
+        # append extends the canonical run only when the key is NEW. An append that
+        # re-declares a key the row's run already carries leaves one field with two values
+        # and no canonical reading: a consumer taking the last occurrence reads the
+        # appended one while the row's own declaration still stands beside it. The refusal
+        # happens BEFORE any write, so the ledger is byte-identical afterwards — proved by
+        # CHECKSUM, because "the file looks unchanged" is an eye, not a receipt.
+        redeclare = Path(tmp) / "redeclare.jsonl"
+        write_repair_ledger(redeclare, post_ts)
+        seeded = rows(redeclare)
+        seeded[2]["detail"] = (
+            f"Closed. Receipts taken at head={'b' * 40} cost_usd=1.2500 turns=3"
+        )
+        redeclare.write_text(
+            "\n".join(json.dumps(row) for row in seeded) + "\n", encoding="utf-8"
+        )
+        digest_before = hashlib.md5(redeclare.read_bytes()).hexdigest()
+        r = run(redeclare, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
+                "--note", "probe: a re-declaring append must be refused")
+        err = r.stderr.strip()
+        check("a re-declaring --append-detail is refused", r.returncode != 0, err[:90])
+        check("the refusal names the key it would re-declare", "'head'" in err, err[:220])
+        check("the refusal names the row", "n=3" in err, err[:220])
+        check("the refused repair left the ledger BYTE-IDENTICAL",
+              hashlib.md5(redeclare.read_bytes()).hexdigest() == digest_before,
+              f"{digest_before} -> {hashlib.md5(redeclare.read_bytes()).hexdigest()}")
+        check("the refused repair appended no run row", len(rows(redeclare)) == 3,
+              f"{len(rows(redeclare))} row(s)")
+
+        # (c) THE GUARD IS NOT A FALSE-REFUSAL GENERATOR. A NEW key still repairs, and it
+        # still lands BEFORE the run, so the row's declared telemetry survives the repair.
+        newkey = Path(tmp) / "newkey.jsonl"
+        newkey.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
+        r = run(newkey, "repair", "--n", "3", "--append-detail", "board=closed",
+                "--note", "probe: a NEW key must still repair")
+        check("an append introducing a NEW key still repairs",
+              r.returncode == 0, r.stderr.strip()[:140])
+        newkey_detail = rows(newkey)[2]["detail"]
+        check("the new key landed and the original telemetry is still the run's tail",
+              dict(declared_telemetry(newkey_detail)).get("turns") == "3"
+              and newkey_detail.endswith("cost_usd=1.2500 turns=3"), newkey_detail[-70:])
+
+        # (d) THE GUARD BITES, and an exit 0 over an unchanged file shows nothing — so the
+        # probe contrasts the SAME append against a row that does NOT declare the key.
+        # Identical text, opposite verdicts: that is the only thing showing the refusal is
+        # caused by the ROW's declaration rather than by the text alone.
+        nohead = Path(tmp) / "nohead.jsonl"
+        write_repair_ledger(nohead, post_ts)
+        plain = rows(nohead)
+        plain[2]["detail"] = "Closed with no revision field at all"
+        nohead.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
+        r = run(nohead, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
+                "--note", "probe: the same append, on a row that does not declare head")
+        check("the SAME append repairs a row that does NOT declare the key",
+              r.returncode == 0, r.stderr.strip()[:140])
+        check("...and the key it introduced is now in that row's run",
+              rows(nohead)[2]["detail"].endswith(f"head={'c' * 40}"),
+              rows(nohead)[2]["detail"][-70:])
+
+        # The other side of the shared predicate: a prose append that merely NAMES a field
+        # declares nothing (`head=` is a MENTION — `keyed_value` returns no value for it,
+        # and `token_key` returns no key), so it must not be refused. Without this the
+        # guard could be "fixed" by scanning the whole detail for the key as a substring,
+        # which is #88's class one layer up.
+        prose_note = Path(tmp) / "prosenote.jsonl"
+        prose_note.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
+        r = run(prose_note, "repair", "--n", "3",
+                "--append-detail", "REPAIR NOTE: the row omitted the head field.",
+                "--note", "probe: a prose append declares no key")
+        check("a prose append that declares no key is not refused",
+              r.returncode == 0, r.stderr.strip()[:140])
+
         # The single-writer property has to survive a repair running CONCURRENTLY
         # with appends: a repair rewrites the file, so a repair holding a different
         # lock than `append` would interleave with it and re-issue an n.
+        #
+        # Each repair appends a key of its OWN, and that is load-bearing rather than
+        # cosmetic: ten repairs of the SAME row each appending `head=` would now be
+        # refused from the second onwards — the first lands the key, and the re-declaration
+        # refusal above then refuses the rest, because one field with two values has no
+        # canonical reading. Racing distinct keys exercises the lock, which is what this
+        # block is for, without tripping the guard whose own probe sits above.
         race = Path(tmp) / "race.jsonl"
         write_repair_ledger(race, post_ts)
         race_env = {**os.environ, "OC_LEDGER_PATH": str(race),
@@ -772,7 +852,7 @@ def main() -> int:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
             procs.append(subprocess.Popen(
                 [sys.executable, str(TOOL), "repair", "--n", "3",
-                 "--append-detail", f"head={probe_sha}", "--note", f"race repair {i}"],
+                 "--append-detail", f"race{i}=ok", "--note", f"race repair {i}"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
         for p in procs:
             p.wait()

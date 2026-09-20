@@ -92,6 +92,29 @@ def keyed_value(token: str, key: str) -> str | None:
     value = token[len(prefix):]
     return value or None
 
+def token_key(token: str) -> str | None:
+    """The key `token` DECLARES, or None when it declares none.
+
+    The KEY half of `keyed_value`, and the same declaration shape: the key, then `=`,
+    then a NON-EMPTY value. It exists because a reader sometimes needs to ask WHICH
+    fields a token sequence declares rather than what ONE named field's value is —
+    `tools/ledger.py repair` asks it of both the row's canonical run and the text it is
+    about to append, to refuse an append that re-declares a field the row already
+    carries (#104, ruled at ledger `n=620` PART 4).
+
+    A private `token.split("=")[0]` at that call site is the defect this module exists
+    to close — one field, one predicate — and the difference is not stylistic: this
+    form treats `head=` as a MENTION with no key, exactly as `keyed_value` treats it as
+    a mention with no value, so a prose note that merely NAMES a field cannot be read as
+    declaring it.
+
+    The split is on the FIRST `=`, so a value may itself contain one.
+    """
+    key, sep, value = token.partition("=")
+    if not sep or not key or not value:
+        return None
+    return key
+
 def declares_field(detail: str, key: str) -> bool:
     """True when `detail` declares `key` with a value that PARSES for that key's type.
 
@@ -150,6 +173,28 @@ def trailer_tokens(detail: str) -> list[str]:
         run.append(token)
     run.reverse()
     return run
+
+def declared_keys(detail: str) -> list[str]:
+    """The keys DECLARED in `detail`'s canonical trailer, in order, deduplicated.
+
+    The question `tools/ledger.py repair` must ask twice before it writes: which fields
+    does the row's run already carry, and which does the text I am about to append
+    introduce? An append that answers the same key twice is refused (#104, ruled at
+    ledger `n=620` PART 4), and the refusal is why the sentence "a `key=value` append
+    EXTENDS the run and is safe either way" now holds only when the key is NEW.
+
+    Both halves of the predicate compose here, and neither is optional: the run is
+    POSITIONAL, so a token quoted mid-detail is not one of this row's declarations; and
+    the key is read through `token_key`, so a bare `head=` MENTION contributes no key.
+    A caller that scanned the whole detail, or split on `=` itself, would answer a
+    different question and refuse lawful repairs.
+    """
+    keys: list[str] = []
+    for token in trailer_tokens(detail):
+        key = token_key(token)
+        if key is not None and key not in keys:
+            keys.append(key)
+    return keys
 
 def split_canonical_run(detail: str) -> tuple[str, str]:
     """`(head, run)` — the detail split at the START of its canonical trailing run.
