@@ -180,16 +180,43 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
 
 
 def test_the_unrun_leg_is_printed_as_not_run_with_its_reason() -> None:
-    """#54 part (b): an absent predicate is stated, never rendered as zero problems."""
+    """#121: an unrun leg is stated, and the reason's claims are checked against the tree.
+
+    This probe USED to pin the reason's old factual claims — that the predicate had never
+    been written — so when the predicate landed the reason rotted while the gate stayed
+    green, and the gate was pinning the falsehood rather than checking it. It now checks
+    the claims the reason actually makes: that it declares its own mechanism, names the
+    tracker carrying the open question, and that the predicate it says EXISTS does exist.
+    """
     issues = [_issue(1, "OPEN")]
     rows = _rows(("intake", "#1", 1))
     rc, out, _ = _run(issues, rows)
     assert rc == 0, out
     assert "cron-thinness" in out, out
     assert "NOT RUN" in out, out
-    assert "#54 part (b)" in out, "the reason must name the call site it belongs to"
-    assert "deliver_to" in out, (
-        "the reason must carry the measurement that shows no predicate exists"
+    assert "HAND-WRITTEN" in out, (
+        "the reason must state whether it is derived or hand-written — a fixed string "
+        "that nothing re-checks is the defect, and a reader cannot tell the two apart "
+        "unless it says which it is"
+    )
+    assert "#121" in out, (
+        "the reason must name the open tracker that carries the remaining question, not "
+        "a closed item — a reader following it must land somewhere that can answer"
+    )
+    assert "#54 part (b)" not in out, (
+        "the reason must not still assert the expired claim that the predicate was never "
+        "written, nor send a reader to a closed item with no open tracker"
+    )
+    assert "predicate EXISTS" in out, (
+        "the reason must state the predicate's real state, which is checkable"
+    )
+    thinness = REPO / "tests" / "test_cron_thinness.py"
+    assert thinness.is_file(), (
+        f"the reason claims the predicate EXISTS, but {thinness} is absent — a stated "
+        f"reason must not outlive the tree it describes"
+    )
+    assert "pacemaker_problems" in thinness.read_text(encoding="utf-8"), (
+        "the reason names the predicate's entry point; the tree must carry it"
     )
 
 

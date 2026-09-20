@@ -18,8 +18,11 @@ WHY THE UPHOLDER IS A PURE PREDICATE OVER A LIST. The pacemaker rows live in the
 `cron_jobs` table, and the mechanical suite runs offline against a tree. A gate that read
 that table would RED in every bootstrapped factory that has no such table — the failure
 #68 measured. So the predicate is HERE, pure over a list of rows and probeable with
-synthetic ones, and the host-side invocation that feeds it live rows is a separate item
-(#54 part b, not dispatched). `test_probe_is_offline` asserts the purity structurally.
+synthetic ones, and the host-side invocation that feeds it live rows is tracked as the
+open wiring question on #121 — the predicate now EXISTS, so what remains is a ruling on
+which profiles' cron tables such a runner reads and how it reports a home it could not
+reach, not a predicate left to write. `test_probe_is_offline` asserts the purity
+structurally.
 
 THINNESS IS TWO LEGS, AND BOTH MUST HOLD (#120, ruling n=729). A pacemaker row is thin
 only when it carries (a) a WAKE — `deliver_to` begins with `session:`, or the prompt

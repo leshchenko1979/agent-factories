@@ -75,13 +75,24 @@ CLOSE_BOARD_GATE = REPO / "tests" / "test_close_board_recorded.py"
 # The leg this runner does NOT yet run, and why. Printed every cycle so an absent
 # leg can never be read as a passing one (the discipline the predicate's own three
 # legs already apply to each other).
+#
+# THIS REASON IS HAND-WRITTEN, AND NOTHING RE-CHECKS IT — which is a defect the reason
+# carries rather than a property it enjoys. It was true when written and the tree moved
+# underneath it, so its factual claims rotted silently while every gate stayed green: the
+# class issue #121 exists to close. Re-typing it correctly is only half the repair, so the
+# reason states its own mechanism and the probe that prints it checks that claim against
+# the tree rather than trusting the string.
 DEFERRED_LEG_REASON = (
-    "#54 part (b) — the P7/P28 pacemaker-thinness assertion was never written, so "
-    "there is no predicate for a host-side runner to feed: grep for deliver_to or "
-    "set_goal over tests/ and tools/ returns only tools/registry_render.py, which "
-    "RENDERS a cron row into a table and asserts nothing about it. One mechanism, "
-    "two call sites — this runner is the mechanism, and a call site whose predicate "
-    "does not exist is a predicate to write first, not a runner to wire."
+    "HAND-WRITTEN, and nothing re-checks its factual claims — read it as a dated "
+    "statement and verify any claim in it before acting on one. The P7/P28 "
+    "pacemaker-thinness predicate EXISTS — tests/test_cron_thinness.py, "
+    "pacemaker_problems over a list of cron rows, paired byte-identically into "
+    "TEMPLATE/ — so this leg is no longer deferred for want of a predicate, which is "
+    "the ground the original reason stood on and it has expired. What is NOT settled "
+    "is the WIRING, and that is a design question rather than an omission: this runner "
+    "is byte-paired and its home layout differs per factory, so a live read of "
+    "cron_jobs must decide WHICH profiles' tables it reads and how it reports a home "
+    "it could not reach. Tracked as the open ruling request on issue #121."
 )
 
 
