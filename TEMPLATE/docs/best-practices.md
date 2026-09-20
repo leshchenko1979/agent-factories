@@ -120,7 +120,11 @@ The substantive work runs inside that persistent session, under the current law.
   prompt carries a work order is a violation however it is routed. The reason is the
   dual-writer shape §11 forbids, applied to an actor rather than to the append path — a
   prompt carrying a work order executes the process in the cron's own session, and the wake
-  makes the lane it notifies execute the same process again. The declared wake-only form
+  makes the lane it notifies execute the same process again. The second reason is STALENESS,
+  and it is P7's own original purpose: a cron prompt cannot be updated by a skill change, so
+  a work order frozen inside one goes stale silently. That limb is independent of
+  writer-count — it stands even for a row whose lane would never double-execute — so the two
+  reasons are stated together and neither carries the rule alone. The declared wake-only form
   opens with the marker `do NOT execute any project work yourself`; a non-empty prompt that
   does not declare itself wake-only is reported, never assumed thin. That leg is TEXTUAL —
   it cannot execute the prompt — so the live behavioural check is the measurement run, not
