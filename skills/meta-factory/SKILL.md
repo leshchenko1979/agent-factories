@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.10
+version: 0.1.11
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -57,6 +57,14 @@ arrives anywhere — this chat, a member factory's reply, a lane's own observati
 as an issue on `leshchenko1979/agent-factories`. It is not tracked in chat. Chat carries the
 conversation; the board carries the work. Triage owns intake, and a closed issue carries the
 receipt that resolved it.
+
+**A ruling that orders a mechanism gets its OWN board item.** A mechanism ordered by a ruling
+is filed as its own issue on the board — never as a numbered item riding inside another issue's
+dispatch. The board is the surface a patrol reads; a queue position inside a dispatch is read by
+nothing, so a mechanism that exists only as a queue entry is invisible to every sweep: it reads
+as undispatched, and the patrol that should carry it cannot see it at all. Its upholding
+mechanism is a PROCESS (P29): before a ruling is stamped, the lane that authors it files an
+issue for every mechanism the ruling orders, so each one has a subject a patrol can find.
 
 ---
 

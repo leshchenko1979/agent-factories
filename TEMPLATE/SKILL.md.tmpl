@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.6
+version: 0.1.7
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -116,6 +116,14 @@ and **two mechanisms go RED on the one act**: the board-intake gate fails on a n
 because the sequence predicate is bounded by the latest intake and a claim preceding it does not
 count. The remedy is a fresh re-claim by the lane that took the work — mechanical, but a second
 acceptance row bought with a dispatch that cost nothing to send on time.
+
+**A ruling that orders a mechanism gets its OWN board item.** A mechanism ordered by a ruling
+is filed as its own issue on the board — never as a numbered item riding inside another issue's
+dispatch. The board is the surface a patrol reads; a queue position inside a dispatch is read by
+nothing, so a mechanism that exists only as a queue entry is invisible to every sweep: it reads
+as undispatched, and the patrol that should carry it cannot see it at all. Its upholding
+mechanism is a PROCESS (P29): before a ruling is stamped, the lane that authors it files an
+issue for every mechanism the ruling orders, so each one has a subject a patrol can find.
 
 **The offline leg's population is narrower than "ledger activity", and by design.** A subject
 whose only rows are a `ruling` or a `dispatch` is **outside** the offline leg's population —
