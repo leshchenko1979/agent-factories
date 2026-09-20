@@ -36,6 +36,12 @@ REPO = Path(__file__).resolve().parent.parent
 # (`9552947a985b`) and 40. A floor of 12 therefore catches both observed widths and
 # touches none of the citations, where a {40} form provably MISSES the 12-character case
 # that existed.
+#
+# THE BOUND, stated rather than left implied: a RESOLVING literal of 7 to 11 characters
+# would pass this leg. The floor cannot go lower without firing on the citations above,
+# so what it buys is the class at the widths a fixture literal has actually used, and not
+# below them. A predicate that states its population and hides its floor is the defect
+# this comment exists to avoid.
 SHA = re.compile(r"\b[0-9a-f]{12,40}\b")
 
 
