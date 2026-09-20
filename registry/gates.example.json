@@ -1,0 +1,14 @@
+{
+  "_note": "SHAPE ONLY -- this file carries no measurement. A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number: budget_sec = margin_x x measured_sec. A cap picked by feel is uncalibrated in both directions -- too low, it kills a healthy gate and reports a timeout as a verdict; too high, it hides a hung one. So each gate's cap is derived, with the margin, the measured runtime and the ABSOLUTE revision the measurement was taken at declared together, so the number carries its own basis and a reader can recompute it. The budget VALUES belong to the process owner, never to the implementing lane.\n\nCopy this file to registry/gates.json and replace every value with a measurement of YOUR box: measured_sec from your own audit run, measured_at the absolute revision that run describes, margin_x a stated multiple of that measurement. A gate with no entry uses default.budget_sec, and the runner PRINTS which gates used it -- a declared default with a printed population is not an exempt-by-silence surface. A budget exhausted is UNKNOWN: never green, never a plain failure, and its recorded duration is the MEASURED elapsed time, never a hardcoded zero.",
+  "default": {
+    "budget_sec": 120.0
+  },
+  "gates": {
+    "tests/test_example_gate.py": {
+      "budget_sec": 12.5,
+      "measured_sec": 3.1,
+      "measured_at": "0000000000000000000000000000000000000000",
+      "margin_x": 4.232
+    }
+  }
+}

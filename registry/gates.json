@@ -1,0 +1,272 @@
+{
+  "_note": "A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number (#94, ruling n=744): budget_sec = margin_x x measured_sec. A cap picked by feel is uncalibrated in both directions -- too low, it kills a healthy gate and reports a timeout as a verdict; too high, it hides a hung one. The budget VALUES are the process owner's, never the implementing lane's (n=574 PART 5).\n\nTHE MARGIN, AND ITS BASIS. margin_x is a stated function of the measurement, not a number picked by feel, because the measured spread is not uniform across the range. A 13-run probe of three gates spanning the range (tests/test_single_writer.py, tests/test_patrol_host_state.py, tests/test_ledger_no_shrink.py; 2026-09-20) measured a worst within-run spread of 2.48x, and the audit-vs-standalone factor on the slowest gate was 1.83x. The relative spread SHRINKS as runtime grows (2.35x at 0.11 s against 1.15x at 16.11 s), because a short runtime is dominated by fixed process overhead whose variance is a large fraction of a small total. A flat relative margin would therefore give the LEAST headroom exactly where the noise is relatively largest. So margin_x = 4.0 + 0.75 / measured_sec: the asymptotic 4.0 is a stated safety factor above the worst measured cross-context factor (1.83x), and the 0.75-second term is the largest absolute jitter the probe measured among the short gates (tests/test_patrol_host_state.py, 0.48 s to 1.20 s, i.e. 0.72 s) rounded up to the next quarter second -- the fixed overhead that dominates a short runtime, expressed as a margin. The constant is 0.75 and not a rounder value for a reason worth stating: with 4.0 as the asymptotic factor the product is 4 x measured + K, so a fixed term whose fractional part complements that of 4 x measured lands the budget on an exact integer -- under a 0.72 s term two gates in this set did exactly that, one of them reproducing the very hardcoded cap this manifest replaces. A budget that reads as a picked number is the ambiguity the manifest exists to remove. budget_sec is the product rounded to 2 dp; margin_x is stored rounded to 3 dp and the product is taken from the unrounded value, so recomputing from measured_sec reproduces the declared budget to within 0.01 s.\n\nmeasured_at is the ABSOLUTE revision the runtimes were measured at, never a relative revision. measured_sec is the duration python3 tools/audit.py recorded for that gate at that revision -- the audit already records duration_sec per gate, so no new instrument is needed. CAVEAT ON THIS MEASUREMENT: the run that produced these numbers was DEGRADED (one gate failing) and was taken with a peer lane's writes in flight, so the values are conservative upper bounds on a quiet-tree runtime. That makes the declared budgets generous, not tight.\n\nTHE DEFAULT. A gate with no entry uses default.budget_sec, and the audit PRINTS which gates used it -- a declared default with a printed population is not an exempt-by-silence surface, an unprinted fallback would be. The default is set to the LARGEST declared budget, so the fallback is never tighter than any gate actually measured: a default below a known gate's budget would reintroduce the very defect this manifest exists to prevent.\n\nA budget exhausted is UNKNOWN: never green, never a plain failure, and its recorded duration is the MEASURED elapsed time, never a hardcoded zero. (tools/audit.py currently returns exit_code 99 / duration_sec 0.0 on a timeout -- that is the reader half of #94, the Worker's.)\n\nThis file is this box's DECLARED manifest. The template ships the SHAPE only, as TEMPLATE/registry/gates.example.json, because a bootstrapped factory has no measurement of this box and must not inherit one: a gate that cannot pass where it is copied is not a gate, it is a tax on every new factory.",
+  "default": {
+    "budget_sec": 118.51
+  },
+  "gates": {
+    "tests/test_audit_rates.py": {
+      "budget_sec": 71.67,
+      "measured_sec": 17.73,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.042
+    },
+    "tests/test_board_intake_recorded.py": {
+      "budget_sec": 2.07,
+      "measured_sec": 0.33,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 6.273
+    },
+    "tests/test_close_board_recorded.py": {
+      "budget_sec": 24.19,
+      "measured_sec": 5.86,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.128
+    },
+    "tests/test_close_row_revision.py": {
+      "budget_sec": 43.07,
+      "measured_sec": 10.58,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.071
+    },
+    "tests/test_commit_pair_hook.py": {
+      "budget_sec": 2.19,
+      "measured_sec": 0.36,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 6.083
+    },
+    "tests/test_commit_pathspec_law.py": {
+      "budget_sec": 1.67,
+      "measured_sec": 0.23,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 7.261
+    },
+    "tests/test_criteria_count.py": {
+      "budget_sec": 3.79,
+      "measured_sec": 0.76,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.987
+    },
+    "tests/test_cron_thinness.py": {
+      "budget_sec": 30.31,
+      "measured_sec": 7.39,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.101
+    },
+    "tests/test_docs_sync.py": {
+      "budget_sec": 2.03,
+      "measured_sec": 0.32,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 6.344
+    },
+    "tests/test_duplicate_prose.py": {
+      "budget_sec": 1.91,
+      "measured_sec": 0.29,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 6.586
+    },
+    "tests/test_gate_fixtures_closure.py": {
+      "budget_sec": 28.07,
+      "measured_sec": 6.83,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.11
+    },
+    "tests/test_gate_registration.py": {
+      "budget_sec": 4.35,
+      "measured_sec": 0.9,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.833
+    },
+    "tests/test_hq_delegation.py": {
+      "budget_sec": 19.99,
+      "measured_sec": 4.81,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.156
+    },
+    "tests/test_hygiene_inflight.py": {
+      "budget_sec": 26.67,
+      "measured_sec": 6.48,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.116
+    },
+    "tests/test_hygiene_namespace.py": {
+      "budget_sec": 25.15,
+      "measured_sec": 6.1,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.123
+    },
+    "tests/test_law_coverage.py": {
+      "budget_sec": 44.35,
+      "measured_sec": 10.9,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.069
+    },
+    "tests/test_law_structure.py": {
+      "budget_sec": 33.83,
+      "measured_sec": 8.27,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.091
+    },
+    "tests/test_ledger.py": {
+      "budget_sec": 87.87,
+      "measured_sec": 21.78,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.034
+    },
+    "tests/test_ledger_close_preflight.py": {
+      "budget_sec": 61.07,
+      "measured_sec": 15.08,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.05
+    },
+    "tests/test_ledger_commit_cites_no_rows.py": {
+      "budget_sec": 6.79,
+      "measured_sec": 1.51,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.497
+    },
+    "tests/test_ledger_no_shrink.py": {
+      "budget_sec": 118.51,
+      "measured_sec": 29.44,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.025
+    },
+    "tests/test_ledger_schema.py": {
+      "budget_sec": 2.15,
+      "measured_sec": 0.35,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 6.143
+    },
+    "tests/test_ontology.py": {
+      "budget_sec": 4.55,
+      "measured_sec": 0.95,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.789
+    },
+    "tests/test_patrol_host_state.py": {
+      "budget_sec": 11.79,
+      "measured_sec": 2.76,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.272
+    },
+    "tests/test_reconstructed_claim_declared.py": {
+      "budget_sec": 6.75,
+      "measured_sec": 1.5,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.5
+    },
+    "tests/test_registry.py": {
+      "budget_sec": 15.07,
+      "measured_sec": 3.58,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.209
+    },
+    "tests/test_registry_render.py": {
+      "budget_sec": 23.51,
+      "measured_sec": 5.69,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.132
+    },
+    "tests/test_rework.py": {
+      "budget_sec": 6.31,
+      "measured_sec": 1.39,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.54
+    },
+    "tests/test_rework_declared_landed.py": {
+      "budget_sec": 3.47,
+      "measured_sec": 0.68,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 5.103
+    },
+    "tests/test_rework_relative_revision.py": {
+      "budget_sec": 4.35,
+      "measured_sec": 0.9,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.833
+    },
+    "tests/test_roadmap_transition.py": {
+      "budget_sec": 11.99,
+      "measured_sec": 2.81,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.267
+    },
+    "tests/test_score_artifact_sections.py": {
+      "budget_sec": 29.75,
+      "measured_sec": 7.25,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.103
+    },
+    "tests/test_score_gate_recorded.py": {
+      "budget_sec": 16.07,
+      "measured_sec": 3.83,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.196
+    },
+    "tests/test_session_bindings.py": {
+      "budget_sec": 34.03,
+      "measured_sec": 8.32,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.09
+    },
+    "tests/test_single_writer.py": {
+      "budget_sec": 1.19,
+      "measured_sec": 0.11,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 10.818
+    },
+    "tests/test_skill_version_contract.py": {
+      "budget_sec": 9.59,
+      "measured_sec": 2.21,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.339
+    },
+    "tests/test_subject_form.py": {
+      "budget_sec": 66.55,
+      "measured_sec": 16.45,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.046
+    },
+    "tests/test_synthesize_interface.py": {
+      "budget_sec": 3.99,
+      "measured_sec": 0.81,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.926
+    },
+    "tests/test_telemetry_reader_registry.py": {
+      "budget_sec": 13.23,
+      "measured_sec": 3.12,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.24
+    },
+    "tests/test_template_integrity.py": {
+      "budget_sec": 15.99,
+      "measured_sec": 3.81,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.197
+    },
+    "tests/test_template_sync.py": {
+      "budget_sec": 5.39,
+      "measured_sec": 1.16,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.647
+    },
+    "tools/hygiene.py": {
+      "budget_sec": 4.95,
+      "measured_sec": 1.05,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.714
+    },
+    "tools/ledger.py": {
+      "budget_sec": 5.71,
+      "measured_sec": 1.24,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.605
+    },
+    "tools/roadmap.py": {
+      "budget_sec": 3.83,
+      "measured_sec": 0.77,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "margin_x": 4.974
+    }
+  }
+}
