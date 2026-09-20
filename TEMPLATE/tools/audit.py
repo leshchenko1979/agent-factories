@@ -1116,9 +1116,13 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     #     shorter prompt carrying a work order is not. A row it cannot classify is
     #     EXCUSED and PRINTED, never silently clean.
     #
-    #     Its population is the CALLER's — feeding it live rows is #54 part (b), not
-    #     dispatched — so this gate's own evidence is its synthetic probes, which pin all
-    #     three live shapes and both directions of the byte-count trap.
+    #     Its population is the CALLER's, and the host-side runner that feeds it live
+    #     rows is WIRED (#121, ruling n=739): tools/patrol_host_state.py reads every
+    #     OpenCrabs home in place through a mode=ro URI and hands its own factory's
+    #     rows to pacemaker_problems. This gate's own evidence nevertheless remains
+    #     its synthetic probes, because the predicate is PURE over a list and cannot
+    #     read live state — not because no caller exists. Those probes pin all three
+    #     live shapes and both directions of the byte-count trap.
     if (repo_root / "tests/test_cron_thinness.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_cron_thinness.py"])
 
