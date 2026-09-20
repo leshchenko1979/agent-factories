@@ -410,6 +410,19 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_score_artifact_sections.py",
     "test_score_gate_recorded.py",
     "test_single_writer.py",
+    # Added with its registration (issue #71, ruling n=455 clause 3). REQUIRED is the correct
+    # grain and OPTIONAL is not, and the deciding fact is the same one that put
+    # `test_claim_gap_declared.py` in this tuple: its boundary is FORWARD-ONLY. The rule
+    # governs commits at or after the instant a factory declares, nothing is ever backfilled,
+    # and a commit is immutable — so a factory that ships the gate OPTIONAL and omits it
+    # writes its next law change ungoverned and can never repair that, because the record a
+    # later gate would need is the commit it did not check. The counter-argument, that a
+    # factory which keeps its version line honest carries a gate that always skips, describes
+    # every gate whose population is an event: it skips with a STATED reason, and a missing
+    # boundary key means no declaration rather than a silent pass. It is byte-paired with a
+    # TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the runner
+    # and keeping the file.
+    "test_skill_version_contract.py",
     "test_subject_form.py",
     "test_telemetry_reader_registry.py",
     "test_template_integrity.py",

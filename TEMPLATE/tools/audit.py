@@ -959,6 +959,35 @@ def execute_mechanical_gates(repo_root: Path) -> list[dict[str, Any]]:
     if (repo_root / "tests/test_claim_gap_declared.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_claim_gap_declared.py"])
 
+    # 43. The skill-version contract (issue #71, ruling n=455 clause 3, P29). A commit that
+    #     moves a LAW FILE's body must move the skill's `version:` line in the SAME commit,
+    #     because `oc-drift-check` reads that line and a version-keyed staleness check reading
+    #     a field that does not move reports "no drift" for a law that changed. Measured at
+    #     n=455: of the 36 commits touching the law file, 32 changed the law body without
+    #     moving the version — the decoupling is the norm, not an edge case.
+    #
+    #     Its population is COMMITS, not rows, so it reads a git history rather than the
+    #     ledger, and it DISCOVERS the law file (`git ls-files` matched against the skill
+    #     globs) instead of hardcoding the slug — that discovery leg is what lets it ship in
+    #     the template and judge a bootstrapped factory's own skill.
+    #
+    #     Forward-only by construction: the boundary is a DECLARED FACTORY PARAMETER
+    #     (`docs/ledger-invariants.json`, key `skill_version_contract`), commits before it are
+    #     OUTSIDE the population, and NOTHING IS BACKFILLED — a commit cannot be repaired
+    #     after the fact, so grandfathering is the only honest option and it is stated rather
+    #     than implied. An absent key SKIPS with a stated reason; a key that is present but
+    #     unreadable FAILS, because an unreadable declaration is not an absent one.
+    #
+    #     The loud-fail-on-zero form would be the WRONG guard here: this gate's population is
+    #     legitimately EMPTY until the next law commit, so an empty window is a STATED SKIP
+    #     and never a silent pass. The gate PRINTS the population it examined on every run —
+    #     the boundary, the law files it discovered, and the commit count — so a clean run and
+    #     a run that examined nothing are never the same output. Its non-vacuity is shown by a
+    #     PROBE instead: the test file builds synthetic git histories (the repo's first) and
+    #     proves the gate BITES on a body-only change and passes when the version moves.
+    if (repo_root / "tests/test_skill_version_contract.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_skill_version_contract.py"])
+
     results = []
     for cmd in gates_to_run:
         results.append(run_gate(cmd, repo_root))

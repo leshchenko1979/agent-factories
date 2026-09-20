@@ -95,6 +95,11 @@ PAIRS = [
     # implementation rather than a drifting second copy.
     ("tests/hook_installation.py", "TEMPLATE/tests/hook_installation.py"),
     ("tests/test_commit_pair_hook.py", "TEMPLATE/tests/test_commit_pair_hook.py"),
+    # The skill-version contract gate (#71, ruling n=455). It DISCOVERS the law file rather
+    # than hardcoding the slug, so it ships in the template and every bootstrapped factory
+    # inherits it — the discovery leg is what makes a byte-identical twin meaningful here:
+    # a factory's own `skills/<slug>/SKILL.md` is judged by the same file.
+    ("tests/test_skill_version_contract.py", "TEMPLATE/tests/test_skill_version_contract.py"),
 ]
 
 
