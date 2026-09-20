@@ -146,6 +146,19 @@ Before dispatching work to any lane, check it is not already claimed.
 
 Work goes **sender → owner of the resource**, directly. No relay hops.
 
+**The intake leg is dispatched at FILING time, never last.** Filing a board item is a sequence
+with four legs — the board issue, the ledger intake row, the claim, and the dispatch to the lane
+that implements it. Intake is **Triage's** row, so filing a board item owes Triage a dispatch in
+the **same turn** as the filing, before the implementing lane can claim. Filed last, the intake
+row lands after the claim and **two mechanisms go RED on the one act**: `tests/test_board_intake_recorded.py`
+fails on a subject carrying ledger activity with no intake row of its own, and the ledger's order
+leg **refuses the close**, because the sequence predicate is bounded by the latest intake and a
+claim preceding it does not count. The remedy for the second is a fresh re-claim by the lane that
+took the work — mechanical, but a second acceptance row bought with a dispatch that cost nothing
+to send on time. Precedent: n=191 filed and dispatched intake in one breath. Origin: #113, whose
+intake leg went last (n=675, after the claim at n=673); #114 is the first item filed under this
+clause.
+
 ---
 
 ## 5. Substrate routing — a defect goes to the repo that must change

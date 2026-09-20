@@ -470,6 +470,49 @@ def report_freshness() -> str:
         f"the box has not moved since the render committed at {revision[:12]} ({stamp})"
     )
 
+def _monitor_reading_the_working_tree() -> str:
+    """`report_freshness` with its COMMITTED side read from the WORKING TREE, not HEAD.
+
+    This is the mechanism revert the bite probe below drives. The real monitor reads HEAD
+    through `committed_blob`; this one reads the file on disk, which is the shape the probe
+    above was written against when it asserted MOVED off its own working-tree edit. It
+    exists so that read path can be shown LOAD-BEARING rather than assumed: a substituted
+    monitor that reads the tree must make `probe_a_working_tree_edit_does_not_move_the_
+    verdict` FAIL, and an exit 0 over an unchanged file can never show that (#113, the P29
+    non-vacuity rule: the property is the PROBE's, and the probe is what must be shown to
+    bite).
+    """
+    revision, error = committed_revision()
+    if error:
+        return f"NOT TAKEN — {error}"
+
+    try:
+        committed_md = rr.MD_PATH.read_text(encoding="utf-8")
+        committed_index = rr.INDEX_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"NOT TAKEN — a working-tree read raised {type(exc).__name__}: {exc}"
+
+    try:
+        stamp = json.loads(committed_index).get("resolved_at")
+    except json.JSONDecodeError as exc:
+        return f"NOT TAKEN — {relpath(rr.INDEX_PATH)} does not parse as JSON — {exc}"
+
+    try:
+        live_md, live_index, _ctx = rr.render_texts(resolved_at=str(stamp))
+    except Exception as exc:  # noqa: BLE001 — a failed live read is a report, not a verdict
+        return f"NOT TAKEN — a live render raised {type(exc).__name__}: {exc}"
+
+    problems = drift_problems(committed_md, committed_index, live_md, live_index, stamp)
+    if problems:
+        return (
+            f"the box has MOVED since the render committed at {revision[:12]} "
+            f"({stamp}) — {len(problems)} artifact(s) differ; re-render and commit when "
+            f"the movement is wanted. {problems[0]}"
+        )
+    return (
+        f"the box has not moved since the render committed at {revision[:12]} ({stamp})"
+    )
+
 # --- 6. resolved_at, gated on its own terms ---------------------------------
 
 MD_STAMP = re.compile(r"\*\*resolved at\*\* `([^`]+)`")
@@ -756,13 +799,36 @@ def probe_a_hand_edited_committed_artifact_is_named() -> None:
         f"{len(drift)} problem(s): {'; '.join(drift)[:80]}",
     )
 
+
+# The marker the working-tree probe writes. The probe writes its BYTES and the assertion
+# searches the TEXT, so one constant keeps the two from drifting apart — and the marker is
+# what makes the assertion deterministic rather than live-state dependent: HEAD cannot
+# contain it and the live render cannot contain it, so it can only appear in the monitor's
+# output if the monitor read the working tree.
+TREE_EDIT_MARKER = "<!-- working-tree-only edit -->"
+
+
 def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
-    """Criterion 3 — a working-tree edit must NOT move the verdict; the monitor reports it.
+    """Criterion 3 — a working-tree edit must move NEITHER the verdict NOR the monitor:
+    both read HEAD, and neither reads the working tree.
 
     This is the split's load-bearing property: GATE A reads HEAD, so a tree re-rendered
     (or hand-edited) without committing is not read as a pass. If the gate read the
     working tree it would go GREEN on exactly the drift it exists to catch — so this probe
     is what distinguishes the two read paths.
+
+    The monitor is bound here by the MARKER its own edit writes, never by the text it
+    happens to return and never by a before/after DELTA. Two earlier bindings each passed
+    for a reason unrelated to their own stimulus (#113): asserting that MOVED appears made
+    the probe pass whenever genuine drift happened to exist and fail once the render was
+    fresh; and asserting that two consecutive monitor reads are IDENTICAL is not a property
+    this probe controls — the monitor re-reads LIVE state on every call, so that comparison
+    flaked the moment live state moved between the two calls, which it did. The marker is
+    deterministic: HEAD cannot contain it and the live render cannot contain it, so it can
+    only appear if the monitor read the working tree. The monitor's sensitivity to LIVE
+    state is probed directly by the `drift_problems` hand-edit probe above, and its read
+    path is proven load-bearing by the bite probe below, which substitutes a monitor that
+    reads the working tree and requires THIS probe to fail.
 
     The working-tree file is written, measured and RESTORED byte-identically, and the
     restoration is asserted by digest inside the probe rather than trusted: a probe that
@@ -772,7 +838,7 @@ def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
     original = rr.MD_PATH.read_bytes()
     digest = hashlib.md5(original).hexdigest()
     try:
-        rr.MD_PATH.write_bytes(original + b"\n<!-- working-tree-only edit -->\n")
+        rr.MD_PATH.write_bytes((TREE_EDIT_MARKER + "\n").encode() + original)
         verdict = check_render_reproduces()
         del counts[before:]  # the probe drives the verdict; it does not report a second time
         monitor = report_freshness()
@@ -790,10 +856,47 @@ def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
         f"md5 {digest[:12]}",
     )
     check(
-        "...while the freshness MONITOR is what reports it — 'MOVED', never the verdict",
-        "MOVED" in monitor,
+        "...and the freshness MONITOR does not see the edit either — its committed side "
+        "comes from HEAD through the same committed_blob the gate uses, so the marker text "
+        "this probe wrote cannot appear anywhere in its output",
+        not monitor.startswith("NOT TAKEN") and TREE_EDIT_MARKER not in monitor,
         monitor[:110],
     )
+
+def probe_the_monitor_read_path_is_load_bearing() -> None:
+    """The BITE for the assertion above — the monitor's read path is proven, not asserted.
+
+    An exit 0 over an unchanged file shows nothing, so the probe above is shown to be
+    non-vacuous by a MECHANISM REVERT: `report_freshness` is swapped for a substituted
+    monitor that reads the WORKING TREE where the real one reads HEAD, and the probe must
+    then FAIL. The failure is required to NAME the assertion rather than merely to be
+    non-empty — a probe that broke for an unrelated reason would satisfy "it failed" while
+    proving nothing about the read path.
+
+    The substitution is scoped to this probe: the module global is restored in a `finally`,
+    so the informational line `main()` prints after the probes uses the real monitor.
+    """
+    real = globals()["report_freshness"]
+    globals()["report_freshness"] = _monitor_reading_the_working_tree
+    try:
+        mark = len(failures)
+        probe_a_working_tree_edit_does_not_move_the_verdict()
+        produced = failures[mark:]
+        # The failure this probe INDUCED is its evidence, not the gate's verdict: it is
+        # captured above and removed here, or the deliberately-reverted run would leave the
+        # gate exiting 1 on a tree where every real check is clean.
+        del failures[mark:]
+    finally:
+        globals()["report_freshness"] = real
+
+    check(
+        "the probe BITES: a monitor that reads the WORKING TREE makes it FAIL, naming the "
+        "monitor assertion — so that assertion is load-bearing, not decoration",
+        any("freshness MONITOR does not see the edit" in name for name in produced),
+        f"the reverted read path produced {len(produced)} failure(s): "
+        + ("; ".join(name[:70] for name in produced) if produced else "none"),
+    )
+
 
 def _announcement(ident: str, text: str, **over) -> dict:
     entry = {
@@ -1222,6 +1325,7 @@ PROBES = (
     probe_a_mutated_snapshot_is_named,
     probe_a_hand_edited_committed_artifact_is_named,
     probe_a_working_tree_edit_does_not_move_the_verdict,
+    probe_the_monitor_read_path_is_load_bearing,
     probe_same_id_same_text_is_one_entry,
     probe_differing_text_under_one_id_fails,
     probe_a_warning_without_evidence_fails,
