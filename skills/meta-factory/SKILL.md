@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.4
+version: 0.1.5
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -373,6 +373,19 @@ gates the result — the lane applies the correction, and the writer verifies it
 before the item closes. Deciding content is never delegated; typing a decision is never
 `HQ`'s.
 
+**A figure DERIVED from the surface it sits on is not authored content either.** A figure
+computed from that surface's own rows, with no input from any other surface, carries no
+content decision to delegate — its value is a measurement and its definition lives in the
+gate that computes it — so recomputing it is TRANSCRIPTION under the clause above, and the
+commit that INVALIDATES it updates it IN THE SAME COMMIT, whichever lane makes that commit.
+The writer still gates the result. This clause is scoped to DERIVED figures and nothing
+else: it does not touch the RATE figures, which are ledger-owned and are not restated at
+all, it does not move the duty to add an entry, and it does not make any lane the writer of
+another lane's surface. The live instance is the coverage claim in `evidence/rework.md`'s
+`## Rates` — a property of that file alone, measured by `tools/audit.py` and asserted by
+`tests/test_rework.py`, which moves whenever any lane adds an entry, so the lane that
+breaks it is NOT the lane that owns the surface (#51, ruling n=329).
+
 **A commit message names the concern; it does not cite row numbers.** A ledger row's
 number is assigned *inside* the append lock, so it cannot be known before the append —
 and by the time the commit runs, another lane may have appended further rows. Three
@@ -451,6 +464,8 @@ re-implements the predicate and is imported under its name satisfies an identity
 the imported name and leaves the class open. Stated so the rule is not oversold: identity
 of the function is what is codified, correctness of the reading is
 `tools/field_predicate.py`'s own gate (#99, ruling n=599).
+
+**A gate whose only exits are barred is a stop with no andon cord.** A gate that reads commit *subjects* across a range can be violated by a commit already PUSHED, and then no repair is available: the commit is immutable, a revert does not remove the offending subject from the range, and re-anchoring the marker past the violation would make the marker's own stated definition false and silently convert a live violation into an excused one — the exact silent-excuse failure the exemption design forbids. Left that way the suite stays permanently RED and the next lane learns to ignore a red gate, which destroys every other gate's signal; so the defect is the EMPTY REPAIR SPACE, not the violation. Every gate of that shape therefore carries a sanctioned, VISIBLE exit: an exemption table holding the entries as FACTORY DATA in its own file and never inline in the gate, because the gate is paired byte-identically with its template twin and a factory sha must not ship to every new factory, and each entry is keyed by the FULL 40-character sha copied from live git output. An exemption is a visible debt, not forgiveness: every entry that MATCHES is printed as an `excused:` line on EVERY run, and the closing line distinguishes clean from excused, so the two are never the same output. An entry that is malformed, or that matches NO violation in the range, is a gate ERROR rather than a silent pass — an exemption list that quietly fails to load is indistinguishable from no exemptions, and a stale entry inflates the visible debt while excusing nothing. Admission is by PROOF, as everywhere in this section: an exemption is granted only where the repair space is genuinely empty, and the entry STATES that proof; an exemption nobody would defend in that output is one that gets fixed instead. And a SECOND exemption of the same shape is a PROCESS DEFECT, not an exemption — one is a debt, two mean the mechanism (running `tools/audit.py` before a commit that touches the surface) is not biting, and the remedy is a mechanism, never a third row. Instances: `docs/ledger-commit-exemptions.json` for `tests/test_ledger_commit_cites_no_rows.py`, and `docs/ledger-no-shrink-exemptions.json` for `tests/test_ledger_no_shrink.py` (#47 clause 4, ruling n=328).
 
 **A row is retired by naming it, never by deleting it.** The single-writer lock above binds the code, not the artifact: a writer that never calls `tools/ledger.py` takes no lock and leaves no trace, and once its removal is *committed* the append guard compares working against committed, goes self-consistent, and every gate reads green over a ledger that has lost committed history. So no row identity — the `(n, ts, event, actor, subject)` tuple a row is known by — is ever removed: a row that must not stand is retired by appending a row that names it, and the original stays. `tests/test_ledger_no_shrink.py` walks the committed history and reports every commit whose diff removes a row identity, which is why the check is a set difference over identities and not a text search — the one measured case removes a row whose surviving neighbours still contain every word it carried. Its exemptions are factory data in `docs/ledger-no-shrink-exemptions.json`, keyed by full sha and never inline in the gate, and every run prints them so "clean" and "excused" are never the same output; a gate that examines zero commits fails loudly rather than passing vacuously.
 
