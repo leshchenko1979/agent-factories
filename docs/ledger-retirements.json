@@ -1,0 +1,12 @@
+{
+  "_note": "Factory data for the close-row revision gate (tests/test_close_row_revision.py). It lives HERE, in the tree the gate judges, and never inline in the gate itself: the gate is paired byte-identically into TEMPLATE/, so a factory's own row numbers must not ship to every new factory. The skeleton is TEMPLATE/docs/ledger-retirements.example.json. An entry retires ONE field of ONE ledger row: a value the ledger cannot remove (the row is append-only, so its false token stays) but which is known not to resolve. THE ADMISSION RULE IS A PROOF OBLIGATION, NOT A LOOKUP: an entry is admitted only when the ledger CARRIES its naming row AND that row's detail carries the false value VERBATIM. A retirement whose naming row is absent is a gate ERROR, never a silent pass, and an entry matching no unresolvable token is an ERROR too, because it would inflate the visible debt while excusing nothing. Every admitted entry PRINTS on every run, so clean / excused / retired are three DIFFERENT outputs and never the same one.",
+  "retirements": [
+    {
+      "row": 618,
+      "field": "head",
+      "false_value": "6a1f0f12444cc69394d7553a9a2d918c48e4ec1",
+      "naming_row": 619,
+      "true_value": "6a1f0f12c72147aabd02e93bd72d95356aa68625"
+    }
+  ]
+}

@@ -65,6 +65,8 @@ Exit: 0 clean, fully excused, or skipped-with-reason; non-zero on any post-bound
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -87,7 +89,7 @@ REPO = Path(__file__).resolve().parent.parent
 # `tools/ledger.py`. Imported by module name so a staged throwaway `tools/` resolves it
 # the same way — see tools/field_predicate.py.
 sys.path.insert(0, str(REPO / "tools"))
-from field_predicate import keyed_value  # noqa: E402
+from field_predicate import keyed_value, trailer_tokens  # noqa: E402
 
 # The key this gate's boundary is declared under, in the factory's own
 # `docs/ledger-invariants.json`. The key is the gate's own name, so the declaration says
@@ -98,6 +100,12 @@ REVISION_FIELD = "head"
 REVISION_KEY = f"{REVISION_FIELD}="
 _HEX = set("0123456789abcdef")
 _MIN_SHA = 7
+
+# The DECLARED RETIREMENT surface: this gate's own factory data, read from the tree it
+# judges and never inline in the gate — which is paired byte-identically into TEMPLATE/,
+# so a factory's own row numbers must not live in a file that ships to every new factory.
+# The skeleton is TEMPLATE/docs/ledger-retirements.example.json.
+RETIREMENTS_PATH = "docs/ledger-retirements.json"
 
 def _declared_revision(detail: str) -> str | None:
     """The `head=<sha>` value, or None when no readable field is present.
@@ -130,6 +138,208 @@ def _declared_revision(detail: str) -> str | None:
         if len(sha) >= _MIN_SHA and all(c in _HEX for c in sha):
             return sha
     return None
+
+def _trailer_revision(detail: str) -> str | None:
+    """The `head=<sha>` value from the row's CANONICAL RUN, or None when it declares none.
+
+    The existence leg reads the run and never the whole detail, and the difference is
+    MEASURED rather than theoretical (#104, ruled at `n=620` PART 5). `n=565` is the
+    worked example: its prose quotes the FOREIGN sha `4ae1ffdb…`, which resolves, while
+    its own trailer declares `3878936a…`. A whole-detail scan therefore reads a revision
+    that row never measured — and the two failure directions are opposite: a quoted
+    foreign sha REDs an honest row, and an EARLIER resolving prose token MASKS a
+    fabricated trailer token, which is the defect this leg exists to catch.
+
+    This is also §11's own definition applied literally: the canonical run IS the row's
+    declaration, so a token outside it is a quotation. And it is one field with one
+    predicate — the same `trailer_tokens` the repair path and the telemetry readers use.
+
+    The value is the FIRST `head=` in the run, the same precedence `_declared_revision`
+    applies; the run is short and its fields are machine-written, so a second `head=` is
+    a writer defect rather than a choice this reader should resolve.
+    """
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, REVISION_FIELD)
+        if value is None:
+            continue
+        sha = value.strip(").`")
+        if len(sha) >= _MIN_SHA and all(c in _HEX for c in sha):
+            return sha
+    return None
+
+
+def _resolves(sha: str, repo: Path) -> bool:
+    """True when `sha` names a commit object in `repo`. Offline — no network, no board.
+
+    EXISTENCE is neither ANCESTRY nor TRUTH, and the bound is stated so it is not
+    oversold: a fabricated sha fails, while a real sha that is the WRONG revision
+    passes. Ancestry is refused as the predicate because a history rewrite leaves an
+    honest revision unreachable while its object survives, so ancestry would condemn
+    exactly the rows a rewrite did not touch.
+    """
+    return subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "-e", f"{sha}^{{commit}}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def read_retirements(repo: Path) -> tuple[list[dict], list[str]]:
+    """`(entries, problems)` for the declared retirement surface.
+
+    An ABSENT file means no retirements — the shipped state of a new factory, and not a
+    defect. A file that exists but cannot be read is a problem: a declaration that
+    quietly fails to load is indistinguishable from no declaration, which is the
+    vacuous-pass shape this repo forbids. A malformed ENTRY is a problem too, for the
+    same reason a malformed exemption is: it would excuse nothing while looking like it
+    should.
+    """
+    path = repo / RETIREMENTS_PATH
+    if not path.exists():
+        return [], []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [], [f"{RETIREMENTS_PATH} is not valid JSON — {exc}"]
+    entries = data.get("retirements") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        return [], [f"{RETIREMENTS_PATH} carries no 'retirements' list"]
+    problems: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            problems.append(f"{RETIREMENTS_PATH}: an entry is not an object")
+            continue
+        missing = [
+            key
+            for key in ("row", "field", "false_value", "naming_row", "true_value")
+            if entry.get(key) in (None, "")
+        ]
+        if missing:
+            problems.append(
+                f"{RETIREMENTS_PATH}: an entry for row {entry.get('row')} is missing "
+                f"{', '.join(missing)}"
+            )
+    return entries, problems
+
+
+def retirement_problems(
+    entries: list[dict], rows: list[dict]
+) -> tuple[list[str], list[str], list[str]]:
+    """`(problems, matched, prints)` for the retirement entries against `rows`.
+
+    THE ADMISSION RULE, and it is a proof obligation rather than a lookup: an entry is
+    admitted ONLY when the ledger CARRIES its naming row AND that row's detail carries
+    the false value VERBATIM. The naming row is what makes a retirement auditable — it
+    is the row that says "this value was wrong and here is the right one" — so a
+    declaration whose naming row is absent is a gate ERROR, never a silent pass. An
+    entry that matches no unresolvable token is an error too: it would inflate the
+    visible debt while excusing nothing, the same shape as a stale exemption.
+
+    `prints` is what every run shows, so clean / excused / retired are three DIFFERENT
+    outputs and never the same one.
+    """
+    by_n = {row.get("n"): row for row in rows}
+    problems: list[str] = []
+    matched: list[str] = []
+    prints: list[str] = []
+    for entry in entries:
+        row_n, naming_n = entry.get("row"), entry.get("naming_row")
+        false_value, true_value = entry.get("false_value"), entry.get("true_value")
+        target = by_n.get(row_n)
+        naming = by_n.get(naming_n)
+        if target is None:
+            problems.append(
+                f"{RETIREMENTS_PATH}: the entry for row {row_n} names a row this ledger "
+                f"does not carry — an admission is proved against a row, never asserted"
+            )
+            continue
+        if naming is None:
+            problems.append(
+                f"{RETIREMENTS_PATH}: the entry for row {row_n} names row {naming_n} as "
+                f"its naming row, and this ledger does not carry it — a retirement whose "
+                f"naming row is absent is not admitted"
+            )
+            continue
+        if false_value not in str(naming.get("detail") or ""):
+            problems.append(
+                f"{RETIREMENTS_PATH}: the entry for row {row_n} claims row {naming_n} "
+                f"names {false_value} verbatim, and that row's detail does not carry it"
+            )
+            continue
+        if _trailer_revision(str(target.get("detail") or "")) != false_value:
+            problems.append(
+                f"{RETIREMENTS_PATH}: the entry for row {row_n} retires {false_value}, "
+                f"which is not the value that row's canonical run declares — a stale "
+                f"retirement excuses nothing"
+            )
+            continue
+        matched.append(false_value)
+        prints.append(
+            f"retired: n={row_n} declares {REVISION_FIELD}={false_value} "
+            f"(unresolvable), retired by n={naming_n} naming it verbatim; the row's "
+            f"measured revision is {REVISION_FIELD}={true_value}"
+        )
+    return problems, matched, prints
+
+
+def _is_git_work_tree(repo: Path) -> bool:
+    """True when `repo` is inside a git work tree, so an object database exists."""
+    return (
+        subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--is-inside-work-tree"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
+def close_row_revision_existence_problems(
+    population: list[dict], repo: Path, retired_values: set[str]
+) -> tuple[list[str], int, str | None]:
+    """`(problems, checked, reason)` over an ALREADY-SPLIT post-boundary population.
+
+    Every row declaring a shape-valid `head=` in its canonical run must have that value
+    RESOLVE to a commit object in this repository. The count examined is returned rather
+    than kept, because the population is a property of the INSTANT: the ruling recorded
+    33 tokens at its landing and the same read measures 37 now, so a gate that asserted
+    a constant would go red for the one reason that is not a defect. It PRINTS what it
+    examined, and a run that examined nothing is visible as such rather than reading as
+    a clean one.
+
+    `reason` is set when the tree under judgement carries no object database at all — a
+    synthetic fixture, or a tree whose git is unavailable. That is a STATED inability to
+    judge rather than a verdict: reporting "does not resolve" for every token in such a
+    tree would be a false-RED generator, and returning a silent clean would be the
+    vacuous pass this repo forbids. The caller turns it into a skip.
+
+    A token equal to an ADMITTED retirement's false value is passed over here and printed
+    by the caller, so clean / excused / retired stay three different outputs.
+    """
+    if not _is_git_work_tree(repo):
+        return (
+            [],
+            0,
+            f"the existence leg could not run: {repo} is not a git work tree, so it "
+            f"carries no object database to resolve a declared revision against",
+        )
+    problems: list[str] = []
+    checked = 0
+    for row in population:
+        n = row.get("n")
+        sha = _trailer_revision(str(row.get("detail") or ""))
+        if sha is None:
+            continue
+        checked += 1
+        if sha in retired_values:
+            continue
+        if not _resolves(sha, repo):
+            problems.append(
+                f"n={n} declares {REVISION_KEY}{sha}, which does not resolve to a commit "
+                f"in this repository — a receipt must name a revision that exists"
+            )
+    return problems, checked, None
+
 
 def close_row_revision_problems(
     rows: list[dict], boundary_text: str
@@ -165,51 +375,86 @@ def close_row_revision_problems(
 
     return problems, excused
 
-def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
-    """`(status, reason, problems, excused, checked)` over `repo` — the probe-able core.
+def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int, list[str]]:
+    """`(status, reason, problems, excused, checked, prints)` over `repo` — the core.
 
     `status` is `"pass"`, `"skip"` or `"fail"`. A real problem always outranks a skip:
     the population guard runs only on an otherwise-clean ledger, so a defect is never
     hidden behind "there was nothing to judge".
+
+    `checked` is the EXISTENCE leg's own count — post-boundary close rows whose canonical
+    run declares a shape-valid `head=` and whose value was resolved — while `excused` is
+    the pre-boundary population the shape leg set aside. `prints` carries the admitted
+    retirement declarations, so clean / excused / retired are three different outputs
+    rather than one.
     """
     try:
         boundary, boundary_text, rows = boundary_and_rows(repo, INVARIANT_KEY)
     except SkipGate as exc:
-        return "skip", str(exc), [], [], 0
+        return "skip", str(exc), [], [], 0, []
     except GateError as exc:
-        return "fail", "", list(exc.problems), [], 0
+        return "fail", "", list(exc.problems), [], 0, []
 
     problems, excused = close_row_revision_problems(rows, boundary_text)
-    if problems:
-        return "fail", "", problems, excused, 0
+
+    # The retirement surface is read from the tree UNDER JUDGEMENT, and a declaration it
+    # cannot honour is a DEFECT rather than an absence — the same reason a malformed
+    # boundary fails instead of skipping. The naming row is looked up in the whole ledger,
+    # because a retirement is named by a `run` row rather than by a close.
+    entries, retirement_read_problems = read_retirements(repo)
+    retirement_issues, retired_values, prints = retirement_problems(entries, rows)
+    problems = problems + retirement_read_problems + retirement_issues
 
     population = post_boundary_rows(rows, boundary, "close")
+    existence_problems, checked, leg_reason = close_row_revision_existence_problems(
+        population, repo, set(retired_values)
+    )
+    problems = problems + existence_problems
+
+    if problems:
+        return "fail", "", problems, excused, 0, prints
+
     reason = population_skip_reason(population, boundary_text, "close")
     if reason:
-        return "skip", reason, [], excused, 0
-    return "pass", "", [], excused, len(population)
+        return "skip", reason, [], excused, 0, prints
 
-def _live_verdict() -> tuple[str, list[str], list[str], int]:
+    # A leg that could not run is a STATED reason, never a clean verdict: the shape leg
+    # judged its population and the existence leg did not, so the run must not print the
+    # verdict of one that examined the population and found it clean.
+    if leg_reason:
+        return "skip", leg_reason, [], excused, 0, prints + [f"NOT RUN — {leg_reason}"]
+    return "pass", "", [], excused, checked, prints
+
+def _live_verdict() -> tuple[str, list[str], list[str], int, list[str]]:
     """The verdict for the tree this file is running in, skipping with its reason."""
-    status, reason, problems, excused, checked = evaluate(REPO)
+    status, reason, problems, excused, checked, prints = evaluate(REPO)
     for line in excused:
         print(f"  excused: {line}")
+    for line in prints:
+        print(f"  {line}")
     if status == "skip":
         print(f"  SKIP: {reason}")
         pytest.skip(reason)
     if status == "fail":
         raise AssertionError(
-            "close rows written after the declared boundary must name the revision "
-            "their receipts describe:\n  " + "\n  ".join(problems)
+            "close rows written after the declared boundary must name the revision their "
+            "receipts describe, and that revision must EXIST:\n  " + "\n  ".join(problems)
         )
-    return status, problems, excused, checked
+    return status, problems, excused, checked, prints
 
 # --- live gate -------------------------------------------------------------------
 
 def test_live_close_rows_declare_the_revision_they_measured() -> None:
-    _, _, excused, checked = _live_verdict()
+    """The population is PRINTED, never asserted: it is a property of the INSTANT.
+
+    The ruling recorded 33 tokens checked at its landing and the same read measures 37
+    now, so a constant would go red for the one reason that is not a defect. A run that
+    examined nothing is visible as `0 checked` rather than reading as a clean one.
+    """
+    _, _, excused, checked, prints = _live_verdict()
     print(
-        f"close-row revision gate: {checked} post-boundary close row(s) verified, "
+        f"close-row revision gate: {checked} post-boundary close row(s) declared a "
+        f"revision and every one RESOLVES; {len(prints)} retired by declaration; "
         f"{len(excused)} excused (pre-boundary)"
     )
 
@@ -228,7 +473,7 @@ def _close(n: int, ts: str, detail: str) -> dict:
 def test_probe_a_tree_with_no_ledger_skips_with_a_stated_reason(tmp_path: Path) -> None:
     """`TEMPLATE/evidence/` does not exist — the ledger is BOOTSTRAP-created. A gate
     that RAISED here was RED on the very tree it ships to (#78, #76's class)."""
-    status, reason, problems, _, _ = evaluate(synthetic_tree(tmp_path / "bare"))
+    status, reason, problems, _, _, _ = evaluate(synthetic_tree(tmp_path / "bare"))
     assert status == "skip", (status, reason, problems)
     assert "evidence/ledger.jsonl" in reason and "BOOTSTRAP" in reason, reason
 
@@ -241,7 +486,7 @@ def test_probe_a_tree_with_no_declared_boundary_skips_with_a_stated_reason(
         tmp_path / "undeclared",
         rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. audit -> HEALTHY (PASS).")],
     )
-    status, reason, _, _, _ = evaluate(tree)
+    status, reason, _, _, _, _ = evaluate(tree)
     assert status == "skip", (status, reason)
     assert "ledger-invariants.json" in reason and "DECLARED factory parameter" in reason, reason
 
@@ -253,7 +498,7 @@ def test_probe_a_declaration_missing_this_key_skips(tmp_path: Path) -> None:
         rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. audit -> HEALTHY (PASS).")],
         invariants={"score_gate_recorded": "2026-09-18T10:04:05Z"},
     )
-    status, reason, _, _, _ = evaluate(tree)
+    status, reason, _, _, _, _ = evaluate(tree)
     assert status == "skip", (status, reason)
     assert INVARIANT_KEY in reason, reason
 
@@ -265,11 +510,18 @@ def test_probe_a_synthetic_tree_fails_a_close_row_with_no_revision(tmp_path: Pat
         rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. audit -> HEALTHY (PASS).")],
         invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
     )
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert problems and "does not declare the revision" in problems[0], problems
 
-def test_probe_a_compliant_synthetic_tree_passes(tmp_path: Path) -> None:
+def test_probe_a_compliant_synthetic_tree_is_not_condemned(tmp_path: Path) -> None:
+    """A synthetic fixture has no object database, so the existence leg CANNOT judge it.
+
+    The honest outcome is a STATED skip carrying that reason — never a pass it did not
+    earn, and never a false RED from resolving every token against a tree that has no
+    objects. (A pass is proven against the real repository by the live gate below; the
+    fabricated/resolvable pair is proven directly in the probe that follows.)
+    """
     tree = synthetic_tree(
         tmp_path / "compliant",
         rows=[
@@ -281,9 +533,10 @@ def test_probe_a_compliant_synthetic_tree_passes(tmp_path: Path) -> None:
         ],
         invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
     )
-    status, reason, problems, _, checked = evaluate(tree)
-    assert (status, problems) == ("pass", []), (status, reason, problems)
-    assert checked == 1, checked
+    status, reason, problems, _, checked, prints = evaluate(tree)
+    assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
+    assert "not a git work tree" in reason, reason
+    assert any("NOT RUN" in line for line in prints), prints
 
 def test_probe_the_boundary_comes_from_the_declaration_not_this_file(
     tmp_path: Path,
@@ -298,7 +551,7 @@ def test_probe_the_boundary_comes_from_the_declaration_not_this_file(
         tmp_path / "late", rows=[row], invariants={INVARIANT_KEY: "2026-09-19T07:00:00Z"}
     )
     assert evaluate(early)[0] == "fail", "the declared boundary was not applied"
-    status, _, problems, excused, _ = evaluate(late)
+    status, _, problems, excused, _, _ = evaluate(late)
     assert (status, problems) == ("skip", []), (status, problems)
     assert excused and "2026-09-19T07:00:00Z" in excused[0], excused
 
@@ -310,7 +563,7 @@ def test_probe_an_empty_population_skips_rather_than_passing(tmp_path: Path) -> 
         rows=[_close(1, "2026-09-19T04:00:00Z", "Closed. no revision field.")],
         invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
     )
-    status, reason, problems, excused, checked = evaluate(tree)
+    status, reason, problems, excused, checked, _ = evaluate(tree)
     assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
     assert "population is empty" in reason, reason
     assert len(excused) == 1, excused
@@ -319,7 +572,7 @@ def test_probe_an_empty_ledger_skips(tmp_path: Path) -> None:
     tree = synthetic_tree(
         tmp_path / "empty-ledger", rows=[], invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"}
     )
-    status, reason, _, _, _ = evaluate(tree)
+    status, reason, _, _, _, _ = evaluate(tree)
     assert status == "skip" and "carries no rows" in reason, (status, reason)
 
 def test_probe_a_malformed_declaration_fails_rather_than_raising(tmp_path: Path) -> None:
@@ -330,7 +583,7 @@ def test_probe_a_malformed_declaration_fails_rather_than_raising(tmp_path: Path)
         rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e")],
         declaration="{ this is not json",
     )
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail" and problems, (status, problems)
     assert "not valid JSON" in problems[0], problems
 
@@ -340,7 +593,7 @@ def test_probe_an_unreadable_declared_boundary_fails(tmp_path: Path) -> None:
         rows=[_close(1, "2026-09-19T06:00:00Z", "Closed. head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e")],
         invariants={INVARIANT_KEY: "yesterday"},
     )
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "not a readable ISO-8601 timestamp" in problems[0], problems
 
@@ -349,7 +602,7 @@ def test_probe_a_corrupt_ledger_line_fails_rather_than_raising(tmp_path: Path) -
         tmp_path / "corrupt", invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"}
     )
     (tree / "evidence/ledger.jsonl").write_text('{"n": 1}\nnot a row\n', encoding="utf-8")
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "is not a JSON row" in problems[0], problems
 
@@ -469,10 +722,210 @@ def test_probe_ignores_non_close_events() -> None:
     problems, excused = close_row_revision_problems([other], _PROBE_BOUNDARY)
     assert problems == [] and excused == []
 
+# --- probes: the existence leg and the declared retirement surface (#104, PART 5) --
+
+# The fixtures below are DERIVED from the tree under judgement, never written down. This
+# gate is paired byte-identically into TEMPLATE/, so a hard-coded sha would resolve only
+# in the repository it was copied from: the probe would pass here and go RED in every
+# factory bootstrapped from the template. Factory data lives in the factory's own
+# docs/ledger-retirements.json, which is exactly what the retirement probes exercise.
+
+def _resolvable_sha(repo: Path) -> str:
+    """`repo`'s own HEAD, read live — a revision that resolves in ANY factory."""
+    out = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert _resolves(out, repo), out
+    return out
+
+def _absent_sha(repo: Path) -> str:
+    """A 40-hex value `repo` does NOT carry, derived from one it does and then CHECKED
+    against the object database — so the probe cannot pass by accident of which shas
+    happen to exist here."""
+    base = _resolvable_sha(repo)
+    for i in range(len(base)):
+        for ch in "0123456789abcdef":
+            if ch == base[i]:
+                continue
+            candidate = base[:i] + ch + base[i + 1 :]
+            if not _resolves(candidate, repo):
+                return candidate
+    raise AssertionError("every one-character mutation of HEAD resolves?")
+
+def test_probe_a_fabricated_head_fails_and_a_resolvable_one_passes(tmp_path: Path) -> None:
+    """EXISTENCE, and the bound it does NOT cover, stated so it is not oversold: a
+    fabricated sha fails, while a real sha that is the WRONG revision passes. Both are
+    probed against the REAL repository, so the check is shown to distinguish an absent
+    OBJECT from an absent repository — a synthetic tree would fail either way."""
+    fabricated = _close(
+        1, "2026-09-19T06:00:00Z", f"Closed. head={_absent_sha(REPO)} board=closed"
+    )
+    problems, checked, reason = close_row_revision_existence_problems(
+        [fabricated], REPO, set()
+    )
+    assert checked == 1 and problems and reason is None, (checked, problems, reason)
+    assert "does not resolve" in problems[0], problems
+
+    real = _close(
+        2, "2026-09-19T06:00:00Z", f"Closed. head={_resolvable_sha(REPO)} board=closed"
+    )
+    problems, checked, reason = close_row_revision_existence_problems([real], REPO, set())
+    assert (problems, checked, reason) == ([], 1, None), (problems, checked, reason)
+
+    # And a tree with no object database is a STATED inability to judge, never a clean
+    # verdict and never a false RED — every token in such a tree would "not resolve".
+    _, checked, reason = close_row_revision_existence_problems(
+        [fabricated], tmp_path, set()
+    )
+    assert checked == 0 and reason and "not a git work tree" in reason, (checked, reason)
+
+def test_probe_the_existence_leg_reads_the_canonical_run_not_the_whole_detail() -> None:
+    """`n=565`'s measured shape, and why the whole-detail scan is refused.
+
+    The row's prose quotes a RESOLVING foreign sha while its own trailer declares an
+    ABSENT one. A whole-detail scan reads the quotation and passes the row, which is
+    the defect this leg exists to catch; the trailer read condemns it. The two directions
+    are opposite and both are real: a quoted foreign sha REDs an honest row, and an
+    EARLIER resolving prose token MASKS a fabricated trailer token.
+    """
+    absent, present = _absent_sha(REPO), _resolvable_sha(REPO)
+    row = _close(
+        1,
+        "2026-09-19T06:00:00Z",
+        f"Closed. The fix landed at {present} as described. board=closed head={absent}",
+    )
+    assert _trailer_revision(row["detail"]) == absent, _trailer_revision(row["detail"])
+    problems, checked, reason = close_row_revision_existence_problems([row], REPO, set())
+    assert checked == 1 and problems and reason is None, (checked, problems, reason)
+    assert absent in problems[0], problems
+
+def test_probe_a_declared_retirement_with_its_naming_row_passes_and_prints() -> None:
+    """The admission rule SATISFIED: the ledger CARRIES the naming row and that row's
+    detail carries the false value VERBATIM. The entry is then PRINTED, and the token it
+    retires is passed over by the existence leg rather than condemned."""
+    false_value, true_value = _absent_sha(REPO), _resolvable_sha(REPO)
+    entries = [
+        {
+            "row": 618,
+            "field": REVISION_FIELD,
+            "false_value": false_value,
+            "naming_row": 619,
+            "true_value": true_value,
+        }
+    ]
+    target = _close(618, "2026-09-19T06:00:00Z", f"Closed. head={false_value} board=closed")
+    naming = {
+        "n": 619,
+        "ts": "2026-09-19T06:01:00Z",
+        "event": "run",
+        "actor": "worker",
+        "subject": "#102",
+        "detail": (
+            f"CORRECTION: n=618 declares head={false_value}, which does not resolve to a "
+            f"commit; the revision it measured is head={true_value}."
+        ),
+    }
+    problems, matched, prints = retirement_problems(entries, [target, naming])
+    assert (problems, matched) == ([], [false_value]), (problems, matched)
+    assert prints and false_value in prints[0] and "n=619" in prints[0], prints
+
+    problems, checked, reason = close_row_revision_existence_problems(
+        [target], REPO, set(matched)
+    )
+    assert (problems, checked, reason) == ([], 1, None), (problems, checked, reason)
+
+def test_probe_a_retirement_whose_naming_row_is_absent_is_an_error() -> None:
+    """A retirement is AUDITABLE only through the row that names it, so a declaration
+    whose naming row this ledger does not carry is a gate ERROR — never a silent pass."""
+    false_value = _absent_sha(REPO)
+    entries = [
+        {
+            "row": 618,
+            "field": REVISION_FIELD,
+            "false_value": false_value,
+            "naming_row": 999,
+            "true_value": _resolvable_sha(REPO),
+        }
+    ]
+    target = _close(618, "2026-09-19T06:00:00Z", f"Closed. head={false_value} board=closed")
+    problems, matched, prints = retirement_problems(entries, [target])
+    assert problems and "naming row" in problems[0], problems
+    assert matched == [] and prints == [], (matched, prints)
+
+def test_probe_a_stale_retirement_excuses_nothing() -> None:
+    """An entry matching no unresolvable token would inflate the visible debt while
+    excusing nothing — the shape a stale exemption has, and an ERROR for the same reason.
+    Here the naming row does carry the false value, so only the target's own run refutes
+    it: the row declares a RESOLVING sha, and the entry is stale."""
+    false_value, true_value = _absent_sha(REPO), _resolvable_sha(REPO)
+    entries = [
+        {
+            "row": 618,
+            "field": REVISION_FIELD,
+            "false_value": false_value,
+            "naming_row": 619,
+            "true_value": true_value,
+        }
+    ]
+    target = _close(618, "2026-09-19T06:00:00Z", f"Closed. head={true_value} board=closed")
+    naming = {
+        "n": 619,
+        "ts": "2026-09-19T06:01:00Z",
+        "event": "run",
+        "actor": "worker",
+        "subject": "#102",
+        "detail": f"notes that head={false_value} was the wrong value",
+    }
+    problems, matched, _ = retirement_problems(entries, [target, naming])
+    assert problems and "stale retirement" in problems[0], problems
+    assert matched == [], matched
+
+def test_probe_an_absent_retirement_file_is_not_a_defect() -> None:
+    """A new factory ships NO retirements. The skeleton under `TEMPLATE/docs/` is the
+    example, and the example itself is never read — so absence reads as absence, not as
+    a gate that cannot load its data."""
+    entries, problems = read_retirements(REPO / "TEMPLATE")
+    assert (entries, problems) == ([], []), (entries, problems)
+
+def test_probe_a_malformed_retirement_file_fails_rather_than_raising(tmp_path: Path) -> None:
+    """A declaration that cannot be READ is indistinguishable from no declaration, which
+    is the vacuous-pass shape this repo forbids."""
+    tree = synthetic_tree(
+        tmp_path / "bad-retirements", invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"}
+    )
+    (tree / RETIREMENTS_PATH).write_text("{ not json", encoding="utf-8")
+    entries, problems = read_retirements(tree)
+    assert problems and "not valid JSON" in problems[0], problems
+
+def test_probe_a_tree_with_no_object_database_skips_with_its_reason(
+    tmp_path: Path,
+) -> None:
+    """The shape leg judged its population and the existence leg could NOT, so the run
+    must say NOT RUN rather than print a clean verdict — and it must not report every
+    token as unresolvable, which is the false-RED direction of the same defect."""
+    tree = synthetic_tree(
+        tmp_path / "no-object-db",
+        rows=[
+            _close(
+                1,
+                "2026-09-19T06:00:00Z",
+                "Closed. Receipts taken at head=9552947a985b0f1a6c8919c362a0a56ec7d0d42e.",
+            )
+        ],
+        invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
+    )
+    status, reason, problems, _, checked, prints = evaluate(tree)
+    assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
+    assert "not a git work tree" in reason, reason
+    assert any("NOT RUN" in line for line in prints), prints
+
 def main() -> int:
     """Script form: the same verdict, with the skip reason on STDOUT rather than in a
     pytest short summary — so a reader of the run sees WHY nothing was judged."""
-    status, reason, problems, _, checked = evaluate(REPO)
+    status, reason, problems, _, checked, prints = evaluate(REPO)
     if status == "skip":
         print(f"close-row revision gate: SKIP — {reason}")
         return 0
@@ -481,7 +934,12 @@ def main() -> int:
         for line in problems:
             print(f"  {line}", file=sys.stderr)
         return 1
-    print(f"close-row revision gate: clean — {checked} post-boundary close row(s) verified")
+    for line in prints:
+        print(f"  {line}")
+    print(
+        f"close-row revision gate: clean — {checked} post-boundary close row(s) declared "
+        f"a revision and every one RESOLVES; {len(prints)} retired by declaration"
+    )
     return 0
 
 if __name__ == "__main__":
