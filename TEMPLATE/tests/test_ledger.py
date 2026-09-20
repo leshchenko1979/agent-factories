@@ -11,7 +11,9 @@ filed (`intake`) and taken (`claim`) before it. Both are tested here.
 A third is a READ path rather than a write one: `verify` must PRINT the rows that
 declare themselves reconstructions (`claim=reconstructed`), beside its `excused:`
 lines, so clean, excused and reconstructed are never the same output (#98, ruling
-n=602 PART 5).
+n=602 PART 5) — and since #115 (ruling n=687 clause 1) that line also carries the
+interval RECOMPUTED from the two rows' own `ts` values, because the author controls
+the act of declaring and never the interval the tool stamps under the append lock.
 
 And a fourth closes the exemption's own boundary: an entry that would excuse a
 POST-gate omission is ADMITTED only by its PROOF, so an entry carrying none is
@@ -295,8 +297,14 @@ def main() -> int:
 
         set_detail(rec, 1, "Taken on acceptance of the dispatch. claim=reconstructed")
         r = run(rec, "verify")
+        # The printed form carries the RECOMPUTED INTERVAL since #115 (ruling n=687
+        # clause 1): the interval moved from DECLARED to RECOMPUTED-AND-PRINTED, so the
+        # line now names the row AND the interval the reader computed from the two rows'
+        # own `ts` values. Asserting the row's own identity plus the `interval=` field is
+        # the property; pinning the NUMBER would pin the fixture's clock, not the tool.
         check("a claim row carrying the token prints its reconstructed line",
-              r.returncode == 0 and "reconstructed claim: n=2 subject=#98" in r.stdout,
+              r.returncode == 0
+              and "reconstructed claim: n=2 (subject #98) interval=" in r.stdout,
               r.stdout.strip().splitlines()[-1] if r.stdout else "")
 
         # The SCOPE: the token describes a CLAIM row, so a row of another event that
@@ -322,7 +330,7 @@ def main() -> int:
               r.returncode == 0
               and "ledger clean:" in r.stdout
               and "excused: #6 missing claim" in r.stdout
-              and "reconstructed claim: n=4 subject=#98" in r.stdout
+              and "reconstructed claim: n=4 (subject #98) interval=" in r.stdout
               and next((i for i, l in enumerate(lines) if "excused:" in l), 99)
                   < next((i for i, l in enumerate(lines) if "reconstructed claim:" in l), -1),
               " | ".join(l.strip() for l in lines))
