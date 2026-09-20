@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-20T01:14:06Z",
+  "resolved_at": "2026-09-20T03:19:49Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -579,7 +579,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T23:52:29Z",
+          "bound_at": "2026-09-20T02:50:28Z",
           "announcements": []
         },
         {
@@ -1071,7 +1071,7 @@
           "session_id": "d18ce16a-75a0-447c-90c7-ab7dabce4411",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:20:04Z",
+          "bound_at": "2026-09-20T01:36:03Z",
           "announcements": []
         },
         {
@@ -1101,7 +1101,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-20T00:53:07Z",
+          "bound_at": "2026-09-20T01:19:03Z",
           "announcements": []
         },
         {
@@ -1121,7 +1121,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T10:10:52Z",
+          "bound_at": "2026-09-20T03:15:36Z",
           "announcements": []
         },
         {
@@ -1141,7 +1141,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T01:19:16Z",
+          "bound_at": "2026-09-20T03:14:19Z",
           "announcements": []
         },
         {
@@ -1158,10 +1158,10 @@
           "topic": "Memory: Compaction & Context",
           "thread_id": 34653,
           "role": null,
-          "session_id": "d5863180-017d-4646-82a7-19be145e4974",
-          "status": "resolved",
+          "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
+          "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-20T00:14:36Z",
+          "bound_at": "2026-09-20T03:02:56Z",
           "announcements": []
         },
         {
@@ -1181,7 +1181,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T00:55:47Z",
+          "bound_at": "2026-09-20T02:21:06Z",
           "announcements": []
         },
         {
@@ -1291,7 +1291,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T23:36:26Z",
+          "bound_at": "2026-09-20T02:30:11Z",
           "announcements": []
         },
         {
@@ -1381,7 +1381,7 @@
           "session_id": "2ed8adeb-4784-4159-b68f-0e552490641e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T14:19:56Z",
+          "bound_at": "2026-09-20T03:11:13Z",
           "announcements": []
         },
         {
@@ -1401,7 +1401,7 @@
           "session_id": "ef83024b-90c8-40fc-8490-e8c2879808ab",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T00:50:16Z",
+          "bound_at": "2026-09-20T02:18:15Z",
           "announcements": []
         }
       ],
@@ -1949,7 +1949,7 @@
       "trigger_cmd": "if /root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-harvest-census check 321 2>/dev/null | grep -q \"already MERGED\"; then :; else echo \"HARVEST-PENDING-321\"; fi",
       "profile": "ops",
       "owner": "opencrabs-dev",
-      "owner_basis": "deliver_to -> lane"
+      "owner_basis": "name prefix"
     },
     {
       "id": "f71e35c4-9447-4fa9-9518-2510f79527dc",
