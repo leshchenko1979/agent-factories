@@ -28,10 +28,11 @@ and asserts a membership, which is what a gate can do.
 
 Two sides, two shared predicates — neither re-implemented
 ---------------------------------------------------------
-Side 1, the declaration, is read through `tools/field_predicate.py`. `rework` is not a
-telemetry KEY, so `declared_telemetry` returns nothing for it: the detail's canonical
-trailing run is split by `trailer_tokens`, and each token is asked for the key by
-`keyed_value`, ONE token per call. The trailer and not the whole detail, because `detail`
+Side 1, the declaration, is read through ONE predicate,
+`tools/field_predicate.py::declared_rework`, which this gate CALLS rather than
+re-deriving. `rework` is not a telemetry KEY, so `declared_telemetry` returns nothing for
+it; the predicate is the positional read of the canonical trailing run. The trailer and
+not the whole detail, because `detail`
 is free prose that QUOTES trailers as evidence — the retirement rows quote the very token
 they retire — and a scan over the whole detail reads a quotation as a declaration.
 
@@ -41,10 +42,11 @@ position is the defect that module exists to prevent: a hardcoded index keeps re
 the cell at that position after the table is reordered, and hands back another column's
 values under the name it asked for.
 
-The subject VOCABULARY is bound from `tools/audit.py` — `SUBJECT_WORK_UNIT_RE`,
-`SUBJECT_NONE` — rather than re-spelled, because that module reads the same column to
-derive the change fail rate numerator, and two hand-written patterns is how two readers
-come to disagree about which cells name a work unit at all.
+The subject VOCABULARY is bound, not re-spelled: `tools/audit.py::rework_bucket` is the
+ONE classifier of a declared value, and it reads `SUBJECT_WORK_UNIT_RE`/`SUBJECT_NONE`
+from the module that also reads that column to derive the change fail rate numerator.
+Two hand-written patterns is how two readers come to disagree about which values name a
+work unit at all — so the audit's declaration count and this gate share the classifier.
 
 The population guard, and why this gate is the loud-fail kind
 -------------------------------------------------------------
@@ -102,13 +104,10 @@ import rework_table as rt  # noqa: E402
 sys.path.insert(0, str(REPO / "tools"))
 import audit  # noqa: E402
 
-# Side 1's predicate, imported as NAMES so a private re-implementation cannot satisfy this
-# gate's own import while reading the field some other way.
-from field_predicate import keyed_value, trailer_tokens  # noqa: E402
-
-# The two canonical values that are not a work-unit reference. See the docstring: a value
-# outside `#N` and these two is printed as out of scope, never silently dropped.
-KEYWORD_VALUES = (audit.SUBJECT_NONE, "unstated")
+# Side 1's predicate, imported as a NAME so a private re-implementation cannot satisfy this
+# gate's own import while reading the field some other way. The value's VOCABULARY is bound
+# the same way, from `audit.rework_bucket` — one field, one read, one classification.
+from field_predicate import declared_rework  # noqa: E402
 
 
 def close_rows(ledger_text: str) -> list[dict]:
@@ -128,15 +127,14 @@ def declarations(ledger_text: str) -> list[dict]:
     """Every `rework=` token a close row's CANONICAL TRAILER declares.
 
     One dict per declaration: the row number, the close's own subject, and the value the
-    token carries. `trailer_tokens` bounds the read to the trailing run, so a token quoted
-    inside a sentence is prose and never becomes a declaration.
+    token carries. The read is `field_predicate.declared_rework`, SHARED with the audit's
+    declaration count rather than re-implemented here, and it bounds the read to the
+    trailing run — so a token quoted inside a sentence is prose, never a declaration.
     """
     found: list[dict] = []
     for row in close_rows(ledger_text):
-        for token in trailer_tokens(str(row.get("detail", ""))):
-            value = keyed_value(token, "rework")
-            if value is not None:
-                found.append(
+        for value in declared_rework(str(row.get("detail", ""))):
+            found.append(
                     {
                         "n": row.get("n"),
                         "subject": str(row.get("subject", "")),
@@ -162,16 +160,19 @@ def landed_subjects(rework_text: str) -> tuple[set[str], int, str | None]:
 def classify(decls: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     """(in_scope, keyword, other) — the declarations split by the FORM of their value.
 
-    Determinate is the same predicate the Subject column's vocabulary uses, so the two
-    sides of this gate agree on what a work-unit reference looks like by construction.
+    `audit.rework_bucket` is the ONE classifier, so this gate and the audit's declaration
+    count agree on what a work-unit reference is by construction rather than by review.
+    A keyword value is out of scope, not a failure: `none` states the close produced no
+    entry, and `unstated` is the absence token (#53 clause 2).
     """
     in_scope: list[dict] = []
     keyword: list[dict] = []
     other: list[dict] = []
     for decl in decls:
-        if audit.SUBJECT_WORK_UNIT_RE.fullmatch(decl["value"]):
+        bucket = audit.rework_bucket(decl["value"])
+        if bucket == "work_unit":
             in_scope.append(decl)
-        elif decl["value"] in KEYWORD_VALUES:
+        elif bucket in ("none", "unstated"):
             keyword.append(decl)
         else:
             other.append(decl)

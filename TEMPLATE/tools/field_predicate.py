@@ -196,6 +196,48 @@ def declared_keys(detail: str) -> list[str]:
             keys.append(key)
     return keys
 
+# The close trailer's `rework` field — the disposition a close DECLARES. Its domain is
+# exactly two canonical values, ruled at ledger `n=386` clause 3 (reusing #53 clauses
+# 3/4): `rework=#N` names the rework entry THIS close produced, and `rework=none`
+# states that it produced none. ABSENCE stays `unstated`, never read as `none` (#53
+# clause 2) — an unrecorded disposition is UNKNOWN, never a value.
+#
+# `rework` is deliberately NOT in TELEMETRY_KEYS, and the distinction is load-bearing:
+# `tools/telemetry.py::format_detail_string` never emits it, so the token is the
+# AUTHOR's and its ABSENCE is the normal case, never a defect (#106). A reader must
+# therefore ask whether a value was DECLARED, not whether the field is present.
+REWORK_KEY = "rework"
+
+def declared_rework(detail: str) -> list[str]:
+    """Every `rework` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE positional read of this field, shared by both call sites — `tools/audit.py`
+    counts declarations from it and `tests/test_rework_declared_landed.py` resolves the
+    references it returns. A private `token.split("=")` at either would be the class
+    `n=405` PART 5 rules: one field, one predicate. Classification of a value is NOT
+    here: the vocabulary (`#N` · `none` · `unstated`) belongs beside the domain
+    constants in `tools/audit.py::rework_bucket`, exactly as `declared_outcome` sits
+    beside `OUTCOME_DOMAIN`.
+
+    The run is POSITIONAL (`trailer_tokens`), so a token quoted mid-sentence is prose and
+    never becomes a declaration — the reading `n=633` needed, whose false `rework=#102`
+    is quoted in other rows' prose. Values are read VERBATIM, like every other value here.
+
+    A LIST, not a single value, because the two callers differ on the multiplicity they
+    can see: the resolving gate must report EVERY declaration it finds, while a count
+    reads one disposition per row. The law gives a row one token (§8: a field carrying
+    two values has no canonical reading, which is why `tools/ledger.py repair` refuses to
+    append a key the run already declares), and the live population obeys it — measured
+    0 of 92 close rows carry two at ledger `n=712`. Stated so a reader that takes
+    `values[0]` knows the bound it is relying on rather than assuming it.
+    """
+    values: list[str] = []
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, REWORK_KEY)
+        if value is not None:
+            values.append(value)
+    return values
+
 def split_canonical_run(detail: str) -> tuple[str, str]:
     """`(head, run)` — the detail split at the START of its canonical trailing run.
 

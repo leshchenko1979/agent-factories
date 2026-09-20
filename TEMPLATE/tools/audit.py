@@ -36,7 +36,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # sibling form: this file is run as a script (its own dir is already on the path) and
 # imported by `tests/`, and both must resolve the same reader.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from field_predicate import declared_telemetry, mentioned_telemetry  # noqa: E402
+from field_predicate import (  # noqa: E402
+    declared_rework,
+    declared_telemetry,
+    mentioned_telemetry,
+)
 
 # The `Subject` column's vocabulary, named once. `tests/test_rework.py` enforces the
 # same three values on the document; they live here as well because the audit *reads*
@@ -90,6 +94,57 @@ def declared_outcome(detail: str) -> tuple[str, str | None]:
         f"outcome value {value!r} is outside the domain {OUTCOME_DOMAIN} — "
         f"reported, never bucketed as a verdict",
     )
+
+def rework_bucket(value: str) -> str:
+    """The FORM of a declared `rework` value — one bucket, never a verdict (#106).
+
+    `work_unit` — a reference to the entry this close produced (`#N`), tested with the
+    same `SUBJECT_WORK_UNIT_RE` the rework log's Subject column uses, so the count here
+    and the gate that RESOLVES those references agree by construction. `none` — the close
+    states it produced no entry. `unstated` — the row carries the absence token itself
+    (#53 clause 2: an unrecorded disposition is UNKNOWN, never a value). `invalid:<value>`
+    — anything else, reported by name rather than bucketed as a disposition.
+
+    Classification lives here and not in `field_predicate.py` because it needs this
+    module's vocabulary (`SUBJECT_WORK_UNIT_RE`, `SUBJECT_NONE`) and importing upward
+    would invert the dependency; the POSITIONAL read stays there, where it is shared.
+    `tests/test_rework_declared_landed.py` imports THIS function, so a value is never
+    classified two ways.
+    """
+    if SUBJECT_WORK_UNIT_RE.fullmatch(value):
+        return "work_unit"
+    if value == SUBJECT_NONE:
+        return "none"
+    if value == "unstated":
+        return "unstated"
+    return f"invalid:{value}"
+
+def format_rework_declaration_note(stats: dict[str, Any]) -> str:
+    """The declaration count's buckets, so the share is never read alone (#106).
+
+    Every bucket is printed. A row carrying `rework=unstated` is UNDECLARED, not a
+    declaration — and a value outside the vocabulary is reported by name, because a
+    malformed declaration silently counted as one is the defect the marker exists to
+    make visible. The note states the PREDICATE with the number: the canonical trailer,
+    read by position.
+    """
+    buckets = stats.get("rework_declarations_by_bucket", {}) or {}
+    undeclared = stats.get("close_events", 0) - stats.get("close_rows_declaring_rework", 0)
+    parts = [
+        f"rework=#N {buckets.get('work_unit', 0)}",
+        f"rework=none {buckets.get('none', 0)}",
+        f"undeclared {undeclared}",
+    ]
+    if buckets.get("unstated", 0):
+        parts.append(f"of which state rework=unstated {buckets.get('unstated', 0)}")
+    invalid = stats.get("invalid_rework_reports", []) or []
+    if invalid:
+        parts.append(f"invalid {len(invalid)}")
+    return (
+        "canonical trailer read by position: " + "; ".join(parts)
+        + " (printed, never gated — n=386 clause 5)"
+    )
+
 
 def format_yield_rate(stats: dict[str, Any]) -> str:
     """The yield as a percentage, or `n/a` when no run row states an outcome."""
@@ -200,6 +255,10 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
             "unstated_run_rows": 0,
             "unstated_close_rows": 0,
             "invalid_outcome_reports": [],
+            "rework_declarations_by_bucket": {},
+            "close_rows_declaring_rework": 0,
+            "rework_declaration_rate": 0.0,
+            "invalid_rework_reports": [],
             "first_pass_yield": 1.0,
             "first_pass_yield_population": 0,
             "first_pass_yield_coverage": [0, 0],
@@ -242,6 +301,11 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
     run_rows_stating_outcome = 0
     close_rows_stating_outcome = 0
     invalid_outcome_reports: list[str] = []
+    # The close trailer's `rework` marker — the disposition a close DECLARES (#106,
+    # ruling `n=386` clause 5). Read through the ONE predicate, `declared_rework`.
+    rework_declarations_by_bucket: dict[str, int] = {}
+    close_rows_declaring_rework = 0
+    invalid_rework_reports: list[str] = []
     total_runs = 0
     total_cost_usd = 0.0
     total_tokens_in = 0
@@ -312,6 +376,24 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
                 close_rows_stating_outcome += 1
             if close_outcome == "accepted":
                 successful_closed_subjects.add(subj)
+            # One ROW declares one disposition, so the row count is taken once per
+            # row however many tokens the run carries (the law gives a row one; the
+            # list is what lets the resolving gate see every token it must resolve).
+            row_declares = False
+            for rework_value in declared_rework(detail):
+                bucket = rework_bucket(rework_value)
+                rework_declarations_by_bucket[bucket] = (
+                    rework_declarations_by_bucket.get(bucket, 0) + 1
+                )
+                if bucket in ("work_unit", "none"):
+                    row_declares = True
+                elif bucket.startswith("invalid:"):
+                    invalid_rework_reports.append(
+                        f"n={ev.get('n')} close {subj}: rework value {rework_value!r} "
+                        f"is not a work-unit reference (#N) or 'none'"
+                    )
+            if row_declares:
+                close_rows_declaring_rework += 1
 
             if subj in subjects_intake:
                 try:
@@ -401,6 +483,12 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         "unstated_run_rows": unstated_run_rows,
         "unstated_close_rows": unstated_close_rows,
         "invalid_outcome_reports": invalid_outcome_reports,
+        "rework_declarations_by_bucket": rework_declarations_by_bucket,
+        "close_rows_declaring_rework": close_rows_declaring_rework,
+        "rework_declaration_rate": round(
+            close_rows_declaring_rework / close_events if close_events > 0 else 0.0, 4
+        ),
+        "invalid_rework_reports": invalid_rework_reports,
         "first_pass_yield": round(yield_val, 4) if yield_val is not None else None,
         "first_pass_yield_population": run_rows_stating_outcome,
         "first_pass_yield_coverage": [run_rows_stating_outcome, total_runs],
@@ -1074,6 +1162,7 @@ def format_report_markdown(
         f"| **Closed Tasks** | `{ledger_stats.get('closed_tasks', 0)}` | Distinct closed subjects; `{ledger_stats.get('close_events', 0)}` close rows ({ledger_stats.get('close_events', 0) - ledger_stats.get('closed_tasks', 0)} re-close of a re-opened subject) |",
         f"| **First-Pass Yield** | `{format_yield_rate(ledger_stats)}` | {format_yield_note(ledger_stats)} |",
         f"| **Rework Entries** | `{rework_stats.get('total_entries', 0)}` | Defect count recorded in rework.md |",
+        f"| **Rework Declarations** | `{ledger_stats.get('close_rows_declaring_rework', 0)}/{ledger_stats.get('close_events', 0)}` ({round(ledger_stats.get('rework_declaration_rate', 0.0) * 100, 1)}%) | Close rows declaring a `rework=#N` or `rework=none` disposition — {format_rework_declaration_note(ledger_stats)} |",
         f"| **Rework Share** | `{round(rework_stats.get('rework_share', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ ({rework_stats.get('closed_subjects', 0)} closed subjects + {rework_stats.get('total_entries', 0)} rework entries) |",
         f"| **Rework per Close** | `{round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ {rework_stats.get('closed_subjects', 0)} closed subjects |",
         f"| **Change Fail Rate** | `{round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}%` | {rework_stats.get('change_fail_rate_numerator', 0)} closes that produced a rework entry ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units — **linkage coverage `{rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)}`** entries carry a determinate Subject ({round(rework_stats.get('subject_coverage', 0.0) * 100, 1)}%); read the rate only against this coverage |",
@@ -1179,6 +1268,7 @@ def main() -> int:
     print(f"  - Undeclared Outcomes: {format_undeclared_text(ledger_stats)}")
     print(f"  - Closed Subjects: {ledger_stats.get('closed_tasks', 0)} (close rows: {ledger_stats.get('close_events', 0)}) | Intake Subjects: {ledger_stats.get('intake_tasks', 0)}")
     print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (share: {round(rework_stats.get('rework_share', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ ({rework_stats.get('closed_subjects', 0)} + {rework_stats.get('total_entries', 0)}) | per close: {round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ {rework_stats.get('closed_subjects', 0)})")
+    print(f"  - Rework Declarations: {ledger_stats.get('close_rows_declaring_rework', 0)}/{ledger_stats.get('close_events', 0)} close rows declare a disposition ({round(ledger_stats.get('rework_declaration_rate', 0.0) * 100, 1)}%) — {format_rework_declaration_note(ledger_stats)}")
     print(f"  - Change Fail Rate: {round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}% = {rework_stats.get('change_fail_rate_numerator', 0)} ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units (linkage coverage: {rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)} entries carry a determinate Subject — a bare rate is never read alone)")
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")

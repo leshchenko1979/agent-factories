@@ -63,6 +63,15 @@ not been shown to reject bad input.
    6): against append-only rows a threshold would be permanently RED with no lawful
    repair.
 
+10. **The declaration figure is PRINTED, and its READER is reconciled.** The close
+    trailer's `rework=` marker (issue #106, ruling `n=386` clause 5) is printed and
+    never gated: no threshold here rides on the share. What IS gated is that the
+    printed figure equals the population a SECOND implementation measures on the same
+    ledger — rule 6's shape, applied to the marker's reader. That reader re-derives the
+    canonical trailer boundary itself and keeps its own vocabulary, so a slip in the
+    shared predicate cannot hide in both; it also reports MULTIPLICITY, which the
+    audit's row count cannot see, the law giving a row one `rework` token.
+
 Run:  python3 -m pytest tests/test_audit_rates.py -q
 Exit: 0 clean, non-zero on any rate regression.
 """
@@ -584,6 +593,169 @@ def test_a_doctored_outcome_bucket_is_rejected():
     doctored["delivery"]["first_pass_yield"] = 1.0
     assert outcome_population_problems(doctored), "a yield with no population survived"
 
+# ---------------------------------------------------------------------------
+# The close trailer's `rework` declaration — printed, never gated (#106)
+# ---------------------------------------------------------------------------
+
+# The vocabulary `audit.rework_bucket` answers in. This file states its own copy, as it
+# does for the outcome domain: a gate that borrows the reader's constants cannot catch a
+# reader that changed them.
+REWORK_WORK_UNIT = "work_unit"
+REWORK_NONE = "none"
+REWORK_UNSTATED = "unstated"
+
+def rework_bucket_problems() -> list[str]:
+    """The ONE classifier's forms, probed directly.
+
+    `audit_reader.rework_bucket` is shared — the audit's declaration count and
+    `tests/test_rework_declared_landed.py` both call it — so a slip here is a slip in
+    both, and the vocabulary is the one the rework log's Subject column uses.
+    """
+    problems: list[str] = []
+    cases = (
+        ("#7", REWORK_WORK_UNIT),
+        ("#102", REWORK_WORK_UNIT),
+        (SUBJECT_NONE, REWORK_NONE),
+        ("unstated", REWORK_UNSTATED),
+        ("seven", "invalid:seven"),
+        ("#", "invalid:#"),
+        ("#12x", "invalid:#12x"),
+        ("", "invalid:"),
+    )
+    for value, expected in cases:
+        got = audit_reader.rework_bucket(value)
+        if got != expected:
+            problems.append(f"rework value {value!r} bucketed {got!r}, expected {expected!r}")
+    return problems
+
+def read_rework_declarations(path: Path = LEDGER) -> dict:
+    """A SECOND, independent read of the declaration population — see rule 10.
+
+    It re-derives the canonical trailer boundary itself, walking the detail's tokens
+    from the END while they carry `=`, rather than importing
+    `field_predicate.trailer_tokens`. That is the point: a gate that borrows the
+    reader's pattern cannot catch the reader's pattern being wrong.
+
+    Returns the population the printed figure must match —
+    `rows_declaring` (close rows declaring `#N` or `none`), `buckets` (the same values
+    tallied by form) and `multi` (rows carrying MORE THAN ONE `rework` token, by row
+    number, which the audit's per-row count cannot see).
+    """
+    rows_declaring = 0
+    buckets = {REWORK_WORK_UNIT: 0, REWORK_NONE: 0, REWORK_UNSTATED: 0}
+    multi: list[int] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        ev = json.loads(line)
+        if ev.get("event") != "close" or not ev.get("subject"):
+            continue
+        values: list[str] = []
+        for token in reversed(str(ev.get("detail", "")).split()):
+            if "=" not in token:
+                break
+            if token.startswith("rework="):
+                value = token[len("rework="):]
+                if value:
+                    values.append(value)
+        if len(values) > 1:
+            multi.append(ev.get("n"))
+        declared = False
+        for value in values:
+            if SUBJECT_WORK_UNIT_RE.fullmatch(value):
+                buckets[REWORK_WORK_UNIT] += 1
+                declared = True
+            elif value == SUBJECT_NONE:
+                buckets[REWORK_NONE] += 1
+                declared = True
+            elif value == REWORK_UNSTATED:
+                buckets[REWORK_UNSTATED] += 1
+        if declared:
+            rows_declaring += 1
+    return {"rows_declaring": rows_declaring, "buckets": buckets, "multi": multi}
+
+def rework_declaration_problems(payload: dict, independent: dict | None = None) -> list[str]:
+    """The printed declaration figure must MATCH an independent read (#106).
+
+    Nothing here thresholds the share — it is PRINTED, never gated (ruling `n=386`
+    clause 5). What is gated is the reader: a figure the audit publishes must equal the
+    population a second implementation measures on the same ledger, or it reports a
+    number nobody can re-derive.
+    """
+    problems: list[str] = []
+    delivery = payload.get("delivery", {})
+    if independent is None:
+        independent = read_rework_declarations()
+
+    declared = delivery.get("close_rows_declaring_rework")
+    close_events = delivery.get("close_events", 0)
+    buckets = delivery.get("rework_declarations_by_bucket", {}) or {}
+    rate = delivery.get("rework_declaration_rate")
+
+    if independent["multi"]:
+        problems.append(
+            "close row(s) declare the `rework` field more than once "
+            f"(n={independent['multi']}): the law gives a row one token"
+        )
+    if declared != independent["rows_declaring"]:
+        problems.append(
+            f"the audit prints {declared} close row(s) declaring a disposition, an "
+            f"independent read finds {independent['rows_declaring']}"
+        )
+    for form in (REWORK_WORK_UNIT, REWORK_NONE, REWORK_UNSTATED):
+        if buckets.get(form, 0) != independent["buckets"][form]:
+            problems.append(
+                f"the audit's {form!r} bucket is {buckets.get(form, 0)}, an independent "
+                f"read finds {independent['buckets'][form]}"
+            )
+    # A row declares ONE disposition, so the two declaring forms must sum to the row
+    # count — unless a row carried two tokens, which is reported above.
+    summed = buckets.get(REWORK_WORK_UNIT, 0) + buckets.get(REWORK_NONE, 0)
+    if not independent["multi"] and summed != declared:
+        problems.append(
+            f"the declaring buckets sum to {summed} but {declared} row(s) are counted"
+        )
+    if buckets.get(REWORK_UNSTATED, 0) > close_events - (declared or 0):
+        problems.append(
+            "the `unstated` bucket is larger than the undeclared population: a row "
+            "carrying the absence token cannot also be a row that declared nothing"
+        )
+    expected_rate = round(declared / close_events, 4) if close_events else 0.0
+    if rate != expected_rate:
+        problems.append(
+            f"the printed rate {rate} does not follow from {declared}/{close_events} "
+            f"(expected {expected_rate})"
+        )
+    if delivery.get("invalid_rework_reports") is None:
+        problems.append("the payload carries no invalid_rework_reports list")
+    return problems
+
+def test_the_rework_classifier_names_each_form():
+    problems = rework_bucket_problems()
+    assert not problems, "; ".join(problems)
+
+def test_the_printed_rework_declaration_figure_is_derived_not_stated():
+    problems = rework_declaration_problems(load_audit())
+    assert not problems, "; ".join(problems)
+
+def test_a_doctored_rework_declaration_figure_is_rejected():
+    """The reconciliation must reject bad input, not merely accept good input."""
+    payload = load_audit()
+    assert rework_declaration_problems(payload) == [], "the live payload must reconcile"
+
+    doctored = json.loads(json.dumps(payload))
+    doctored["delivery"]["close_rows_declaring_rework"] += 1
+    assert rework_declaration_problems(doctored), "a hand-raised declaration count survived"
+
+    doctored = json.loads(json.dumps(payload))
+    doctored["delivery"]["rework_declarations_by_bucket"]["none"] += 1
+    assert rework_declaration_problems(doctored), "a hand-raised bucket survived"
+
+    doctored = json.loads(json.dumps(payload))
+    doctored["delivery"]["rework_declaration_rate"] = 0.99
+    assert rework_declaration_problems(doctored), "a stated rate survived"
+
+
 def telemetry_scope_problems() -> list[str]:
     """Rule 9 — telemetry is read from the canonical TRAILER, never from prose (#90).
 
@@ -670,6 +842,8 @@ def main() -> int:
     problems += derivation_problems(payload, derive_fail_linkage())
     problems += outcome_reader_problems()
     problems += outcome_population_problems(payload)
+    problems += rework_bucket_problems()
+    problems += rework_declaration_problems(payload)
     problems += telemetry_scope_problems()
     if problems:
         print("rate gate FAILED:", file=sys.stderr)
@@ -690,6 +864,13 @@ def main() -> int:
     )
     print(f"denominators reconciled — {rows} close rows over {subjects} distinct closed subjects")
     dl = payload["delivery"]
+    print(
+        f"rework declarations OK — {dl['close_rows_declaring_rework']} of "
+        f"{dl['close_events']} close rows declare a disposition "
+        f"({round(dl['rework_declaration_rate'] * 100, 1)}%), buckets "
+        f"{dl['rework_declarations_by_bucket']} — printed, never gated (n=386 clause 5); "
+        f"{len(dl['invalid_rework_reports'])} invalid value(s) reported"
+    )
     print(
         f"outcomes read as fields — yield population {dl['first_pass_yield_population']} of "
         f"{dl['run_events']} run rows, coverage {dl['first_pass_yield_coverage']}; "
