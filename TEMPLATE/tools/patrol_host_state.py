@@ -10,12 +10,19 @@ runner that fetches the board — is "a later step and not this file's acceptanc
 #56 closed with part (b) out of scope, and #54 part (b) is the same shape: one
 mechanism, two call sites. This file is that mechanism.
 
+**#117 added the second call site.** `tests/test_close_board_recorded.py` asserts a close
+row RECORDED the board state it observed (`board=closed`); nothing verified the
+observation was TRUE, so two close rows declared a board close that had never happened
+and the gate read clean over both. The board-close leg below closes that gap: it reads
+the close rows through the GATE's own predicate and constant and reports every
+declaration the live board contradicts.
+
 **A green predicate with no live input is a gate that has never been asked a
 question.** So this runner supplies the input, and it prints each leg's own coverage
 count beside its verdict: "0 problems" over "0 examined" and "0 problems" over "29
 examined" are different facts, and only the second is a finding.
 
-Three things it does deliberately:
+Four things it does deliberately:
 
 - **Reads the board WHOLE** (`--state all`, no filter). The reverse leg — an intake
   row naming a number the board never heard of — is sound only over the full board,
@@ -27,6 +34,13 @@ Three things it does deliberately:
 - **Names every leg it does NOT run, with the reason.** A leg that is silent for
   want of a predicate is a different fact from a leg that passed, and the two must
   never render the same.
+- **Checks the close rows' board declarations against the board it already read**
+  (#117). The offline gate asserts the token was RECORDED; this leg asserts the
+  recorded state was TRUE, reading the rows through the gate's own `BOARD_TOKEN`
+  and `INVARIANT_LANDED` so the two surfaces cannot drift into two definitions of
+  one field. Freshness stays REPORTED — the read instant travels with the count and
+  is never folded into the verdict, because a check that fails by construction
+  carries no more information than one that cannot fail.
 
 The board slug is derived from the git remote, so nothing here hardcodes a factory.
 
@@ -47,6 +61,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
+
+# The close-board gate (#44) OWNS the definition of a close row's board
+# declaration — its whole-detail token scan (`BOARD_TOKEN`) and its invariant
+# boundary (`INVARIANT_LANDED`). The board-close leg below BINDS to both rather
+# than re-deriving them: a canonical-trailer read (`trailer_tokens` in
+# tools/field_predicate.py) sees only 40 of the 52 post-invariant rows, because 12
+# carry the token OUTSIDE the trailing `=`-run — so a leg that re-derived the read
+# would judge 12 rows fewer than the gate and go green over them. One field, one
+# predicate (the class ruled at n=405 clause 5, n=599).
+CLOSE_BOARD_GATE = REPO / "tests" / "test_close_board_recorded.py"
 
 # The leg this runner does NOT yet run, and why. Printed every cycle so an absent
 # leg can never be read as a passing one (the discipline the predicate's own three
@@ -70,6 +94,22 @@ def load_predicate(path: Path = PREDICATE):
     spec = importlib.util.spec_from_file_location("board_intake_predicate", path)
     if spec is None or spec.loader is None:
         raise BoardReadError(f"cannot load the predicate at {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_close_board_gate(path: Path = CLOSE_BOARD_GATE):
+    """The close-board gate module, loaded by path so no import path is assumed.
+
+    The board-close leg reads the rows through THIS module's predicate and constant,
+    so the leg and the gate cannot drift into two definitions of one field. The
+    loader is deliberately separate from `load_predicate` so each surface's identity
+    is visible at the call site rather than inferred from an argument.
+    """
+    spec = importlib.util.spec_from_file_location("close_board_gate", path)
+    if spec is None or spec.loader is None:
+        raise BoardReadError(f"cannot load the close-board gate at {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -161,6 +201,89 @@ def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None) -> di
     }
 
 
+def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
+                    read_at: str, predicate=None) -> dict:
+    """The live board-close leg: every close row's board declaration checked (#117).
+
+    Population: post-invariant close rows carrying the GATE's own token whose subject
+    names an issue, where that issue is not closed on the board read. A subject the
+    board has never heard of is a MISSING ROW, not a silent pass — it is reported as
+    a problem, because "absent" and "closed" are different facts and only one of them
+    is what the row declares.
+
+    The population count is returned as `close_rows_examined` and printed beside the
+    verdict, so a green reads as "examined N, 0 problems" rather than being
+    indistinguishable from "examined nothing". The read instant travels with it:
+    freshness is a property of the INSTANT and is REPORTED, never folded into the
+    correctness verdict.
+    """
+    gate = gate or load_close_board_gate()
+    predicate = predicate or load_predicate()
+    token, boundary = gate.BOARD_TOKEN, gate.INVARIANT_LANDED
+    bound = gate._parse_ts(boundary)
+
+    board_numbers = {
+        i.get("number") for i in issues if isinstance(i.get("number"), int)
+    }
+    closed = {
+        i.get("number")
+        for i in issues
+        if isinstance(i.get("number"), int)
+        and str(i.get("state", "")).strip().lower() == "closed"
+    }
+
+    problems: list[str] = []
+    examined = 0
+    for row in rows:
+        if row.get("event") != "close":
+            continue
+        detail = str(row.get("detail") or "")
+        if token not in detail:
+            # The GATE's own predicate (a whole-detail token scan), never a second
+            # parser: a trailer-only read would drop every row carrying the token
+            # outside the trailing `=`-run and go green over them.
+            continue
+        number = predicate.issue_reference(row.get("subject"))
+        if number is None:
+            continue
+        try:
+            when = gate._parse_ts(row.get("ts", ""))
+        except (ValueError, TypeError):
+            continue
+        if when < bound:
+            # The GATE's own boundary: pre-invariant rows predate the rule and are
+            # outside this population, exactly as the offline gate excuses them.
+            continue
+        examined += 1
+        if number in closed:
+            continue
+        if number in board_numbers:
+            problems.append(
+                f"n={row.get('n')} declares {token} for #{number}, but #{number} is "
+                f"still OPEN on the board (read at {read_at}) — the close records a "
+                f"settlement that was never performed"
+            )
+        else:
+            problems.append(
+                f"n={row.get('n')} declares {token} for #{number}, but no issue "
+                f"#{number} exists on the board (read at {read_at}) — the subject "
+                f"names a board item that is absent, not one that is closed"
+            )
+
+    return {
+        "name": "board-close",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "close_rows_examined": examined,
+            "board_read_at": read_at,
+            "declaration_token": token,
+            "invariant_boundary": boundary,
+        },
+    }
+
+
 def deferred_legs() -> list[dict]:
     """Legs this runner does not run, each with the reason — never a silent zero."""
     return [
@@ -186,15 +309,22 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     for leg in legs:
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
-        lines.append(
-            f"  forward  (open issue with no intake row): "
-            f"{cov['forward_issues_examined']} examined, "
-            f"{sum(1 for p in leg['problems'] if 'OPEN on the board' in p)} problem(s)"
-        )
-        lines.append(
-            f"  reverse  (intake row naming no board issue): "
-            f"{cov['reverse_intake_rows_examined']} examined — {cov['reverse_leg']}"
-        )
+        if leg["name"] == "board-close":
+            lines.append(
+                f"  close rows (declaring {cov['declaration_token']}, at or after "
+                f"{cov['invariant_boundary']}): {cov['close_rows_examined']} examined, "
+                f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
+            )
+        else:
+            lines.append(
+                f"  forward  (open issue with no intake row): "
+                f"{cov['forward_issues_examined']} examined, "
+                f"{sum(1 for p in leg['problems'] if 'OPEN on the board' in p)} problem(s)"
+            )
+            lines.append(
+                f"  reverse  (intake row naming no board issue): "
+                f"{cov['reverse_intake_rows_examined']} examined — {cov['reverse_leg']}"
+            )
         lines.append(f"  excused: {len(leg['excused'])}")
         lines.append(f"  problems: {len(leg['problems'])}")
         for problem in leg["problems"]:
@@ -207,11 +337,15 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
         lines.append(f"  {leg['reason']}")
         lines.append("")
     total = sum(len(leg["problems"]) for leg in legs)
-    examined = sum(
-        int(leg["coverage"]["forward_issues_examined"]) for leg in legs
+    forward = sum(
+        int(leg["coverage"].get("forward_issues_examined", 0)) for leg in legs
+    )
+    closes = sum(
+        int(leg["coverage"].get("close_rows_examined", 0)) for leg in legs
     )
     lines.append(
-        f"verdict: {total} problem(s) over {examined} open issue(s) examined"
+        f"verdict: {total} problem(s) over {forward} open issue(s) examined and "
+        f"{closes} close row(s) checked against the board"
     )
     return "\n".join(lines)
 
@@ -243,7 +377,10 @@ def main(
         err(f"patrol host-state read: FAILED at {read_at} — {exc}")
         return 2
 
-    legs = [board_intake_leg(issues, rows, predicate=predicate)]
+    legs = [
+        board_intake_leg(issues, rows, predicate=predicate),
+        board_close_leg(issues, rows, read_at=read_at),
+    ]
     out(render(legs, deferred_legs(), slug=slug, read_at=read_at, issues=issues))
     return 1 if any(leg["problems"] for leg in legs) else 0
 
