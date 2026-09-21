@@ -100,6 +100,12 @@
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
       "margin_x": 4.123
     },
+    "tests/test_insights_gate_recorded.py": {
+      "budget_sec": 26.95,
+      "measured_sec": 6.55,
+      "measured_at": "31077b1b50476c80ce7d521c9243ec65f655e930",
+      "margin_x": 4.115
+    },
     "tests/test_law_coverage.py": {
       "budget_sec": 44.35,
       "measured_sec": 10.9,
