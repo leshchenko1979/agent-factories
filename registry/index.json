@@ -1,14 +1,14 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-20T21:53:33Z",
+  "resolved_at": "2026-09-21T00:43:06Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 61,
     "announcements": 11,
-    "jobs": 56,
-    "unattributed_jobs": 6
+    "jobs": 54,
+    "unattributed_jobs": 4
   },
   "announcements": [
     {
@@ -429,7 +429,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T20:00:49Z",
+          "bound_at": "2026-09-21T00:06:17Z",
           "announcements": []
         },
         {
@@ -580,7 +580,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T20:12:57Z",
+          "bound_at": "2026-09-21T00:07:04Z",
           "announcements": []
         },
         {
@@ -661,7 +661,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.12",
+      "skill_revision": "0.1.13",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -1052,7 +1052,7 @@
           "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T17:10:23Z",
+          "bound_at": "2026-09-20T23:38:00Z",
           "announcements": []
         },
         {
@@ -1072,7 +1072,7 @@
           "session_id": "d18ce16a-75a0-447c-90c7-ab7dabce4411",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T01:36:03Z",
+          "bound_at": "2026-09-20T22:05:42Z",
           "announcements": []
         },
         {
@@ -1102,7 +1102,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-20T21:51:20Z",
+          "bound_at": "2026-09-21T00:15:44Z",
           "announcements": []
         },
         {
@@ -1122,7 +1122,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T17:18:23Z",
+          "bound_at": "2026-09-20T23:46:33Z",
           "announcements": []
         },
         {
@@ -1142,7 +1142,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T03:14:19Z",
+          "bound_at": "2026-09-20T21:58:34Z",
           "announcements": []
         },
         {
@@ -1152,7 +1152,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T09:45:50Z",
+          "bound_at": "2026-09-21T00:11:59Z",
           "announcements": []
         },
         {
@@ -1162,7 +1162,7 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-20T21:08:42Z",
+          "bound_at": "2026-09-21T00:28:14Z",
           "announcements": []
         },
         {
@@ -1192,7 +1192,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-16T00:10:47Z",
+          "bound_at": "2026-09-21T00:26:54Z",
           "announcements": []
         },
         {
@@ -1212,7 +1212,7 @@
           "session_id": "40427d4f-af4a-48ba-993f-f5f0b21916c0",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T18:38:44Z",
+          "bound_at": "2026-09-21T00:22:45Z",
           "announcements": []
         },
         {
@@ -1252,7 +1252,7 @@
           "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T10:02:14Z",
+          "bound_at": "2026-09-21T00:26:21Z",
           "announcements": []
         },
         {
@@ -1262,7 +1262,7 @@
           "session_id": "afe476f8-279b-4d54-b628-c9d7e35873c8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:17:38Z",
+          "bound_at": "2026-09-21T00:26:30Z",
           "announcements": []
         },
         {
@@ -1272,7 +1272,7 @@
           "session_id": "9fa7c71a-f009-418a-ac06-d0336efcf491",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T03:45:55Z",
+          "bound_at": "2026-09-21T00:27:20Z",
           "announcements": []
         },
         {
@@ -1292,7 +1292,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T02:30:11Z",
+          "bound_at": "2026-09-20T22:55:01Z",
           "announcements": []
         },
         {
@@ -1372,7 +1372,7 @@
           "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T18:34:01Z",
+          "bound_at": "2026-09-21T00:26:51Z",
           "announcements": []
         },
         {
@@ -1402,7 +1402,7 @@
           "session_id": "ef83024b-90c8-40fc-8490-e8c2879808ab",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T21:31:03Z",
+          "bound_at": "2026-09-20T22:59:47Z",
           "announcements": []
         }
       ],
@@ -1512,8 +1512,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-21T00:07:00+00:00",
-      "last_run_at": "2026-09-20T18:07:08Z",
+      "next_run_at": "2026-09-21T06:07:00+00:00",
+      "last_run_at": "2026-09-21T00:07:35Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1560,8 +1560,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-21T00:25:00+00:00",
-      "last_run_at": "2026-09-20T18:25:20Z",
+      "next_run_at": "2026-09-21T06:25:00+00:00",
+      "last_run_at": "2026-09-21T00:25:50Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1656,8 +1656,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-21T00:00:00+00:00",
-      "last_run_at": "2026-09-20T18:00:02Z",
+      "next_run_at": "2026-09-21T06:00:00+00:00",
+      "last_run_at": "2026-09-21T00:00:23Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1688,8 +1688,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-21T00:23:00+00:00",
-      "last_run_at": "2026-09-20T18:23:19Z",
+      "next_run_at": "2026-09-21T06:23:00+00:00",
+      "last_run_at": "2026-09-21T00:23:49Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1704,13 +1704,13 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-21T00:00:00+00:00",
-      "last_run_at": null,
-      "deliver_to": "session:a360e13f-4e34-4fac-8a1d-770644040903",
+      "next_run_at": "2026-09-22T00:00:00+00:00",
+      "last_run_at": "2026-09-21T00:00:23Z",
+      "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
       "owner": "infra-factory",
-      "owner_basis": "deliver_to -> lane"
+      "owner_basis": "name prefix"
     },
     {
       "id": "8198815c-45e0-40ff-87d1-bfa19d038c5b",
@@ -1722,11 +1722,11 @@
       "has_goal_template": false,
       "next_run_at": "2026-09-21T15:05:00+00:00",
       "last_run_at": "2026-09-20T15:05:57Z",
-      "deliver_to": "session:fb67ca75-8735-4c39-80be-06b59bd4365f",
+      "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
       "owner": "infra-factory",
-      "owner_basis": "deliver_to -> lane"
+      "owner_basis": "name prefix"
     },
     {
       "id": "73e9a3d0-8dfe-48db-a169-3fae3d2a0405",
@@ -1738,11 +1738,11 @@
       "has_goal_template": false,
       "next_run_at": "2026-09-21T06:00:00+00:00",
       "last_run_at": "2026-09-20T06:00:32Z",
-      "deliver_to": "telegram:-1004486255170:7",
+      "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
       "owner": "infra-factory",
-      "owner_basis": "deliver_to -> chat"
+      "owner_basis": "name prefix"
     },
     {
       "id": "d6119dbc-95d2-4341-aeb5-dc1c839cc9ed",
@@ -1750,15 +1750,15 @@
       "cron_expr": "0 */6 * * *",
       "timezone": "UTC",
       "enabled": 1,
-      "set_goal": 1,
+      "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-21T00:00:00+00:00",
-      "last_run_at": "2026-09-20T18:00:02Z",
-      "deliver_to": "session:fb67ca75-8735-4c39-80be-06b59bd4365f",
+      "next_run_at": "2026-09-21T06:00:00+00:00",
+      "last_run_at": "2026-09-21T00:00:24Z",
+      "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
       "owner": "infra-factory",
-      "owner_basis": "deliver_to -> lane"
+      "owner_basis": "name prefix"
     },
     {
       "id": "e51a80de-c58b-44f3-ac73-fa5472ab07ea",
@@ -1832,8 +1832,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-21T00:00:00+00:00",
-      "last_run_at": "2026-09-20T18:00:02Z",
+      "next_run_at": "2026-09-21T06:00:00+00:00",
+      "last_run_at": "2026-09-21T00:00:23Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -2184,8 +2184,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-21T00:00:00+00:00",
-      "last_run_at": "2026-09-20T18:00:03Z",
+      "next_run_at": "2026-09-21T06:00:00+00:00",
+      "last_run_at": "2026-09-21T00:00:24Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2223,38 +2223,6 @@
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> lane"
-    },
-    {
-      "id": "031e3d00-ba6f-4775-96fb-c18cc4792d7b",
-      "name": "__opencrabs_dedup_scan__",
-      "cron_expr": "0 4 * * 1",
-      "timezone": "UTC",
-      "enabled": 1,
-      "set_goal": null,
-      "has_goal_template": false,
-      "next_run_at": null,
-      "last_run_at": null,
-      "deliver_to": "telegram:-1002554690655",
-      "trigger_cmd": null,
-      "profile": "code-spike",
-      "owner": null,
-      "owner_basis": "unattributed"
-    },
-    {
-      "id": "effc62cb-2bdb-4ed3-aa37-6043169329f1",
-      "name": "__opencrabs_dedup_scan__",
-      "cron_expr": "0 4 * * 1",
-      "timezone": "UTC",
-      "enabled": 1,
-      "set_goal": 0,
-      "has_goal_template": false,
-      "next_run_at": "2026-09-27T04:00:00+00:00",
-      "last_run_at": "2026-09-20T04:00:28Z",
-      "deliver_to": "telegram:-1002554690655",
-      "trigger_cmd": null,
-      "profile": "oc134probe",
-      "owner": null,
-      "owner_basis": "unattributed"
     },
     {
       "id": "0333b707-8652-42f9-8e91-61194e1f99ec",
