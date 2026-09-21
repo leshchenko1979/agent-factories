@@ -42,9 +42,9 @@ how it runs -- so both are compared against HEAD here:
   from the script form to `-m pytest` -- so a bytes-only check reads those entries
   CLEAN while the command it measured is gone. THE MAGNITUDE OF THAT MOVE IS NOT
   UNIFORM AND IS NOT ASSUMED. #124's own summary called it "roughly tripled their wall
-  time"; re-measured under #131 at `c7773b4` from five whole-command samples each under
-  the current form, the four of those six that had not yet been re-derived came out
-  0.77x / 1.15x / 1.47x / 2.34x their declared bases -- ONE OF THEM FASTER THAN THE BASE
+  time"; re-measured at `c7773b4` from whole-command samples under the current form, the
+  four of those six that had not yet been re-derived came out 0.77x / 1.37x / 1.47x /
+  2.34x their declared bases -- ONE OF THEM FASTER THAN THE BASE
   IT REPLACED. So this leg asserts WHICH COMMAND was measured, never how much slower the
   new one is, and a re-derivation is taken from fresh samples under the current form
   rather than carried from any such summary. The two legs barely

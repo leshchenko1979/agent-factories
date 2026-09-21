@@ -71,10 +71,10 @@
       "margin_x": 6.586
     },
     "tests/test_gate_fixtures_closure.py": {
-      "budget_sec": 32.27,
-      "measured_sec": 7.88,
+      "budget_sec": 38.15,
+      "measured_sec": 9.35,
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "margin_x": 4.095
+      "margin_x": 4.08
     },
     "tests/test_gate_registration.py": {
       "budget_sec": 4.35,
