@@ -1172,6 +1172,33 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_cron_thinness.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_cron_thinness.py"])
 
+    # 45. Close-telemetry provenance gate (issue #130). A close row's five measurement
+    #     keys (`cost_usd`, `tokens_in`, `tokens_out`, `turns`, `duration`) have TWO
+    #     possible writers: `tools/ledger.py`'s close guard fills them from a window it
+    #     MEASURED, and the author may have declared them by hand. Nothing structural
+    #     distinguishes the two -- HQ measured all three candidate predicates (POSITION,
+    #     COMPLETENESS, VALUE EQUALITY) and each FAILED -- so the row must CARRY its
+    #     provenance: exactly one `telemetry=` token in its canonical trailer, one of
+    #     `measured` / `typed` / `unavailable`. The guard states it on all three of its
+    #     branches, so the predicate is the WRITER'S OWN GUARANTEE and needs no key list.
+    #
+    #     The population is EVERY post-boundary close row, not only those declaring a
+    #     measurement: the narrower predicate is strictly WEAKER, because a row whose
+    #     guard never ran at all declares no measurement to hang provenance on. The gate
+    #     PRINTS the population it examined (P29) and reports a stated SKIP -- never a
+    #     silent pass -- when that population is empty or the boundary is undeclared.
+    #
+    #     The boundary is a DECLARED FACTORY PARAMETER read from
+    #     `docs/ledger-invariants.json`, never a date hardcoded here: this gate file is
+    #     paired byte-identically into `TEMPLATE/tests/`, and a baked-in date would RED
+    #     in the tree it ships to (#76's class, P35). It is FORWARD-ONLY: the rows
+    #     written before the guard landed -- including #130's own hand-typed class,
+    #     `n=368`/`n=372`/`n=374` -- print as `excused:` on every run and are never
+    #     backfilled, because a value reconstructed after the fact is a falsified record
+    #     rather than a repair.
+    if (repo_root / "tests/test_close_telemetry_provenance.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_telemetry_provenance.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

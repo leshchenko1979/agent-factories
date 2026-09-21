@@ -70,7 +70,12 @@ from ledger_declaration import (
 # The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
-from field_predicate import declared_keys, declares_field, split_canonical_run
+from field_predicate import (
+    declared_keys,
+    declared_telemetry_provenance,
+    declares_field,
+    split_canonical_run,
+)
 
 # The reconstruction predicate — which rows are reconstructed claims and the interval
 # recomputed from the two rows' own `ts` values — is shared with the gate that judges the
@@ -382,8 +387,16 @@ def cmd_append(args: argparse.Namespace) -> int:
             except ImportError:
                 extract_task_telemetry = None
 
-            if extract_task_telemetry:
-                telem = extract_task_telemetry(args.subject, ledger_path=target_ledger)
+            # A `telem` of None is NOT an empty measurement: it is the extractor saying it
+            # has NO WINDOW BASIS, and #130 part 3 is the ruling that it must SAY SO rather
+            # than invent one. It used to substitute `now - 300` for a window it had never
+            # measured, so a close row whose subject had no `claim` row shipped
+            # `duration=300s` -- a CONSTANT that every consumer read as a measurement
+            # (n=405 clause 6: absence must be STATED, never manufactured). BOTH causes of
+            # None land in the branch below, which states the absence in #129's spelling.
+            telem = (extract_task_telemetry(args.subject, ledger_path=target_ledger)
+                     if extract_task_telemetry else None)
+            if telem is not None:
                 missing = []
                 # A substring test here is what made this the third site of the
                 # prose-as-data class (#88, n=405 clause 5): a close row whose PROSE
@@ -410,6 +423,7 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # genuinely took, and taking them is not a judgement.
                 if missing:
                     detail = f"{detail} {' '.join(missing)}".strip()
+                    provenance = "measured"
                 elif not declares_field(detail, "duration"):
                     # The COMPLEMENT of the append above, and the half that was missing.
                     # The two branches have DIFFERENT populations, and the boundary is the
@@ -431,8 +445,29 @@ def cmd_append(args: argparse.Namespace) -> int:
                     # the window was too short, which IS the finding. Guarded on the
                     # DECLARED field so an author's own duration is never duplicated.
                     detail = f"{detail} duration={telem.get('duration_sec', 0)}s".strip()
+                    provenance = "measured"
+                else:
+                    # THE TOOL CONTRIBUTED NOTHING, AND THE ROW NOW SAYS SO (#130 part 2).
+                    # This is the branch every HAND-TYPED row reaches: the extractor found
+                    # its window basis present and its five keys already declared, so it
+                    # added nothing -- and #130's class lives exactly here, because the
+                    # values in the row are the AUTHOR's, not a measurement. HQ measured all
+                    # three candidate structural predicates (position, completeness, value
+                    # equality) and each FAILED, so the writer states it instead.
+                    provenance = "typed"
+                # PROVENANCE, CARRIED (#130 part 2). The five keys above are TOOL-OWNED: a
+                # consumer must be able to tell a value the tool TOOK from one an author
+                # TYPED, and no structural read of a row can make that distinction, so the
+                # WRITER states it. `telemetry=` is the field #129 introduced for the
+                # absence case; these are its other two values. Written once, from the
+                # branch that decided it, and only when the row does not already declare
+                # one -- two tokens for one field have no canonical reading (SKILL.md
+                # section 8) -- which is also why the read is POSITIONAL through the shared
+                # predicate rather than a substring test here.
+                if not declared_telemetry_provenance(detail):
+                    detail = f"{detail} telemetry={provenance}".strip()
             else:
-                # THE EXTRACTOR COULD NOT BE IMPORTED, AND THE ROW NOW SAYS SO (#129).
+                # TWO CAUSES LAND HERE, AND THE ROW NOW SAYS SO (#129, #130 part 3).
                 # `extract_task_telemetry` resolving to None used to skip this whole
                 # block in silence: the row was appended, rc was 0, and NOTHING in it
                 # said no measurement had been taken -- a close row that reads as
@@ -447,7 +482,8 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # The token names the FIELD and its STATE, so a reader can see WHY the
                 # row carries no numbers; it is not one of the five keys
                 # `field_predicate` reads, so it declares no measurement.
-                detail = f"{detail} telemetry=unavailable".strip()
+                if not declared_telemetry_provenance(detail):
+                    detail = f"{detail} telemetry=unavailable".strip()
 
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,

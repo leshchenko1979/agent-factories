@@ -364,6 +364,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_board_intake_recorded.py",
     "test_close_board_recorded.py",
     "test_close_row_revision.py",
+    # Added with its registration (issue #130). REQUIRED is the correct grain and OPTIONAL
+    # is not, for the same deciding fact as the gate below: its boundary is FORWARD-ONLY.
+    # The rule governs close rows written at or after the instant a factory declares, and
+    # nothing is ever backfilled, so a factory that ships the gate OPTIONAL and omits it
+    # writes its first close row with no provenance and can never repair that — the
+    # evidence a later gate would need is the evidence it did not take. The
+    # counter-argument, that a factory whose close rows all predate its declaration
+    # carries a gate that only ever skips, describes every gate whose population is an
+    # event: it skips with a STATED reason, and no boundary key means no declaration
+    # rather than a silent pass. It is byte-paired with a TEMPLATE twin, so the manifest
+    # grain is what keeps a factory from dropping the runner and keeping the file.
+    "test_close_telemetry_provenance.py",
     # Added with its registration (issue #112, ruling n=657; amended under issue #115, ruling
     # n=687). REQUIRED is the correct grain and OPTIONAL is not, and the deciding fact is
     # that its boundary is FORWARD-ONLY: the rule governs rows written at or after the

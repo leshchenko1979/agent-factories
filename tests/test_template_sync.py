@@ -190,6 +190,16 @@ PAIRS = [
     # Paired so every factory inherits the same predicate rather than a drifting copy,
     # and REQUIRED in `gate_registry.REQUIRED_GATES` for the same reason.
     ("tests/test_cron_thinness.py", "TEMPLATE/tests/test_cron_thinness.py"),
+    # The close-telemetry provenance gate (#130). Paired for the same reason as the
+    # cron-thinness predicate above, and with one property of its own that makes the twin
+    # load-bearing: it carries NO date. Its boundary is a DECLARED FACTORY PARAMETER read
+    # from `docs/ledger-invariants.json`, so a bootstrapped factory inherits a gate that
+    # judges ITS OWN ledger from ITS OWN declaration — a hardcoded boundary here would RED
+    # in the tree it ships to (#76's class, P35). REQUIRED in
+    # `gate_registry.REQUIRED_GATES`, because its boundary is FORWARD-ONLY: a factory that
+    # ships the file but drops the runner writes its first close row with no provenance
+    # and can never repair that.
+    ("tests/test_close_telemetry_provenance.py", "TEMPLATE/tests/test_close_telemetry_provenance.py"),
 ]
 
 

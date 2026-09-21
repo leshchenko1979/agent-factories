@@ -170,8 +170,13 @@ def extract_task_telemetry(
     ledger_path: Path | None = None,
     session_id: str | None = None,
     db_path: Path | None = None,
-) -> dict[str, Any]:
-    """Find claim time for subject in ledger and compute delta telemetry to now."""
+) -> dict[str, Any] | None:
+    """Find claim time for subject in ledger and compute delta telemetry to now.
+
+    Returns None when there is no window BASIS: no ledger file, no `claim` row for the
+    subject, or an unparseable claim timestamp. None is the STATED absence (#130) --
+    every call site renders it as `telemetry=unavailable`, never as a window.
+    """
     if ledger_path is None:
         ledger_path = REPO_ROOT / "evidence/ledger.jsonl"
 
@@ -192,9 +197,16 @@ def extract_task_telemetry(
         except Exception:
             pass
 
-    # If no claim found, default to start of current turn / 5 minutes ago
+    # NO CLAIM ROW, NO WINDOW (#130, HQ ruling part 3). This branch used to substitute
+    # `now - 300` for a window it had never measured, so a close row whose subject had
+    # no `claim` row shipped `duration=300s` -- a CONSTANT that every consumer read as a
+    # measurement. Same class as #129 one level up: a silent absence read as a value.
+    # The repair is the same shape: STATE the absence in #129's spelling rather than
+    # manufacture a number. Returning None lets every call site render
+    # `telemetry=unavailable`, and a reader can then tell "nothing was measured" from
+    # "a measurement was taken and its value is zero" -- which `now - 300` could not.
     if start_epoch == 0:
-        start_epoch = int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - 300
+        return None
 
     return extract_window_telemetry(
         db_path=db_path,
@@ -203,8 +215,16 @@ def extract_task_telemetry(
     )
 
 
-def format_detail_string(telemetry: dict[str, Any], outcome: str = "accepted", gate: str = "all-pass") -> str:
-    """Format key-value detail string suitable for ledger close rows."""
+def format_detail_string(telemetry: dict[str, Any] | None, outcome: str = "accepted", gate: str = "all-pass") -> str:
+    """Format key-value detail string suitable for ledger close rows.
+
+    None is the extractor's "no window basis" return (#130); it renders as the STATED
+    absence `telemetry=unavailable`, never as a row of zeros -- zeros would read as a
+    measurement of nothing.
+    """
+    if telemetry is None:
+        return "telemetry=unavailable"
+
     duration = telemetry.get("duration_sec", 0)
     turns = telemetry.get("turns", 0)
     cost = telemetry.get("cost_usd", 0.0)
@@ -219,6 +239,13 @@ def format_detail_string(telemetry: dict[str, Any], outcome: str = "accepted", g
         f"tokens_out={t_out}",
         f"outcome={outcome}",
         f"gate={gate}",
+        # PROVENANCE, CARRIED (#130, HQ ruling part 2). The five keys above are
+        # TOOL-OWNED: a consumer must be able to tell a value the tool TOOK from one an
+        # author TYPED, and no structural read of a row can make that distinction -- HQ
+        # measured all three candidate predicates (position, completeness, value
+        # equality) and each failed. So the WRITER states it. `telemetry=` is the field
+        # #129 introduced for the absence case; `measured` is its second value.
+        "telemetry=measured",
     ]
     return " ".join(parts)
 
@@ -251,6 +278,10 @@ def main() -> int:
 
     if args.format == "detail":
         print(format_detail_string(res, outcome=args.outcome, gate=args.gate))
+    elif res is None:
+        # #130: the extractor's stated absence, in the same spelling the detail form
+        # uses, so `--format json` cannot print a bare `null` that reads as data.
+        print(json.dumps({"telemetry": "unavailable"}))
     else:
         print(json.dumps(res, indent=2))
 

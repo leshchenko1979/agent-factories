@@ -231,12 +231,7 @@ def declared_rework(detail: str) -> list[str]:
     0 of 92 close rows carry two at ledger `n=712`. Stated so a reader that takes
     `values[0]` knows the bound it is relying on rather than assuming it.
     """
-    values: list[str] = []
-    for token in trailer_tokens(detail):
-        value = keyed_value(token, REWORK_KEY)
-        if value is not None:
-            values.append(value)
-    return values
+    return _declared_values(detail, REWORK_KEY)
 
 def split_canonical_run(detail: str) -> tuple[str, str]:
     """`(head, run)` — the detail split at the START of its canonical trailing run.
@@ -342,3 +337,69 @@ def _value_parses(key: str, value: str) -> bool:
             return False
         return True
     return telemetry_value_problem(key, value) is None
+
+def _declared_values(detail: str, key: str) -> list[str]:
+    """Every `key` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The positional read of a WORD-valued field, extracted so the two fields that need it
+    share ONE loop rather than two copies — `declared_rework` and
+    `declared_telemetry_provenance` differ only in the key they ask for, and a
+    copy-pasted loop is how one of them silently drifts from the other.
+
+    A LIST, not a single value, because the callers differ on the multiplicity they can
+    see: a resolving gate must report EVERY declaration it finds, while a count reads one
+    disposition per row.
+    """
+    values: list[str] = []
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, key)
+        if value is not None:
+            values.append(value)
+    return values
+
+# The close trailer's `telemetry` field — the PROVENANCE of the measurement keys above,
+# and the field #129 introduced for the absence case. `#130` (HQ ruling, three parts)
+# made it the answer to a question no structural read of a row can settle: HQ measured
+# all three candidate predicates — POSITION, COMPLETENESS and VALUE EQUALITY — and each
+# FAILED, so provenance must be CARRIED by the row, never inferred from it. The
+# requirement: a consumer must tell a value the tool TOOK from one an author TYPED
+# WITHOUT re-deriving the ledger.
+#
+# `telemetry` is deliberately NOT in TELEMETRY_KEYS, for `rework`'s reason and one of its
+# own. Like `rework` it declares no measurement, so it must not enter any aggregate that
+# sums or counts the keys. Unlike `rework` its value is a WORD, so the numeric predicate
+# `declares_field` can never see it — that one type-tests the value and rejects every
+# word — which is why the read below is positional and why `declares_token` exists where
+# a single named value is the question.
+#
+# Three values, and each names the WRITER:
+#   * `measured`    -- the tool TOOK the values: `tools/telemetry.py::format_detail_string`
+#                      emitted them, or `tools/ledger.py`'s close guard appended them.
+#   * `typed`       -- the values were NOT contributed by the tool. The guard's
+#                      contribution-free branch is exactly where a hand-typed row enters.
+#   * `unavailable` -- nothing was measured, STATED rather than silently absent (#129).
+TELEMETRY_PROVENANCE_KEY = "telemetry"
+TELEMETRY_PROVENANCE_VALUES: tuple[str, ...] = ("measured", "typed", "unavailable")
+
+def declared_telemetry_provenance(detail: str) -> list[str]:
+    """Every `telemetry` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE positional read of this field, imported by both call sites — the close guard
+    in `tools/ledger.py`, which must not RESTATE a provenance the detail already carries
+    (two tokens for one field have no canonical reading, §8), and
+    `tests/test_close_telemetry_provenance.py`, which asserts that a row declaring a
+    measurement declares its provenance too. A private `token.split("=")` at either would
+    be the class `n=405` PART 5 rules: one field, one predicate.
+
+    The run is POSITIONAL (`trailer_tokens`), matching `declared_rework`: a token quoted
+    mid-sentence is prose and never becomes a declaration. That is what makes both sides
+    of the gate's question read from ONE surface — a row whose trailer declares
+    `duration=` must declare `telemetry=` in the SAME trailer, so the population and the
+    provenance can never be read from different places.
+
+    Classification of a value is NOT here: the vocabulary is the writer's, and a reader
+    that wants to know whether a value is one the writer may use compares against
+    `TELEMETRY_PROVENANCE_VALUES` beside the constant, exactly as `rework_bucket` sits
+    beside `OUTCOME_DOMAIN`.
+    """
+    return _declared_values(detail, TELEMETRY_PROVENANCE_KEY)

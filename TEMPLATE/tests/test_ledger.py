@@ -1059,6 +1059,21 @@ def main() -> int:
         check("a stated window is not duplicated",
               detail.count("duration=") == 1 and "duration=42s" in detail, detail[-100:])
 
+        # PROVENANCE, CARRIED (#130). Every leg above judges WHAT the guard wrote; these
+        # judge that the row SAYS WHO WROTE IT. HQ measured all three candidate structural
+        # predicates -- position, completeness, value equality -- and each FAILED, so no
+        # reader can settle this from the row's own shape: the writer states it instead.
+        #
+        # The row just written is the sharpest case in the whole gate. The author stated
+        # `duration=42s` THEMSELVES, so the extractor contributed NOTHING -- `missing` was
+        # empty and the field was already declared -- which means the values in that row are
+        # the AUTHOR's, not a measurement. That is #130's class exactly, and it is the branch
+        # (`provenance = "typed"`) that did not exist before this issue.
+        check("a row the tool contributed nothing to says the author typed it",
+              "telemetry=typed" in detail, detail[-100:])
+        check("and it carries exactly one provenance token",
+              detail.count("telemetry=") == 1, detail[-100:])
+
         print("\nthe guard's own availability — an unimportable extractor is stated, not silent")
         # The two legs above judge a window that WAS measured. This one judges the case
         # where nothing could be measured at all: the extractor could not be imported, and
@@ -1118,6 +1133,11 @@ def main() -> int:
               r.returncode == 0 and "telemetry=unavailable" not in detail, detail[-90:])
         check("extractor present: the window was measured and stated",
               declares_field(detail, "duration"), detail[-90:])
+        # #130: measured, and SAID to be measured -- one token, from the one writer.
+        check("extractor present: the row says the tool took the values",
+              "telemetry=measured" in detail, detail[-90:])
+        check("extractor present: exactly one provenance token",
+              detail.count("telemetry=") == 1, detail[-90:])
 
         # ARM RED — the neighbour is gone, and the SAME command must now say so.
         (absent / "tools" / "telemetry.py").unlink()
@@ -1130,6 +1150,10 @@ def main() -> int:
         detail = (rows(absent_ledger) or [{}])[-1].get("detail", "")
         check("an unimportable extractor is stated, never silent",
               r.returncode == 0 and "telemetry=unavailable" in detail, detail[-90:])
+        # #130: the third provenance value, and the same one-token invariant. Without this
+        # the third branch would be the only writer nobody pinned to exactly one token.
+        check("and it carries exactly one provenance token",
+              detail.count("telemetry=") == 1, detail[-90:])
         # Non-vacuity: the row carries NO measurement, which is precisely why the statement
         # has to exist. Without this the leg would pass on a row that had the numbers.
         for key in ("cost_usd", "tokens_in", "tokens_out", "turns", "duration"):
