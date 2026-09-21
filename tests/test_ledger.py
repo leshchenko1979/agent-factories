@@ -982,6 +982,83 @@ def main() -> int:
         check("a quoted unparseable value does not suppress the measurement",
               "turns=3" in detail, detail[-100:])
 
+        # The COMPLEMENT of the suppression leg above, and the half that was MISSING.
+        # Every telemetry token is appended only when its value is `> 0`, so a close row
+        # whose window yielded NOTHING shipped SILENCE — and the case is SYSTEMATIC, not
+        # incidental: a lane that claims and closes together at the end of a work item
+        # writes both rows after the work has landed, so the window holds no turns and
+        # every cost and yield figure computed from that row silently degrades. The boundary
+        # is the `> 0` test, and the two branches have DIFFERENT populations: a window
+        # LONGER than a second belongs to the guard above, and a ZERO-second window belongs
+        # to the branch under test here. The receipted instance is n=607 (#98), whose claim
+        # (n=606) and close both carry ts 2026-09-19T17:57:10Z -- a zero-second window, and
+        # no telemetry token in the row (n=405 clause 6: absence must be STATED, never
+        # silent). The probe points the telemetry source at an EMPTY database AND dates the
+        # claim row in the FUTURE, so `max(0, now - start_epoch)` is exactly 0 and the
+        # `> 0` guard above cannot answer this leg. BOTH halves are load-bearing: pointing at
+        # an empty database alone leaves a ~780000s window (write_ledger stamps every row
+        # 2026-09-12T00:00:00Z), which the pre-existing guard satisfies -- a probe in that
+        # shape passes with this branch deleted ENTIRELY, which is exactly what happened
+        # here and is why the future stamp is not decoration. The companion assertions keep
+        # the probe non-vacuous: the row must carry NO cost/tokens/turns token, which proves
+        # the window really was empty and the statement came from this branch.
+        import sqlite3
+        from field_predicate import declares_field  # the shared predicate, one field one read
+
+        silent = tdir / "silent.jsonl"
+        empty_db = tdir / "empty.db"
+        conn = sqlite3.connect(empty_db)
+        conn.execute(
+            "CREATE TABLE messages (created_at INTEGER, cost REAL, input_tokens INTEGER, "
+            "token_count INTEGER, role TEXT, session_id TEXT)"
+        )
+        conn.commit()
+        conn.close()
+        # The claim row is written BY HAND rather than through write_ledger, which stamps
+        # every row `2026-09-12T00:00:00Z`: a date ~9 days in the past makes the window
+        # ~780000s, the guard above fires, and the branch under test is never reached. A
+        # FUTURE stamp makes `duration_sec` exactly 0 -- the shape of the real instance
+        # n=607, and the only shape this branch exists for. Do NOT use `ts == now`: the
+        # close lands a second later, `duration_sec` becomes 1, and the vacuity returns.
+        silent.write_text(
+            "\n".join(
+                json.dumps({
+                    "n": i, "ts": "2030-01-01T00:00:00Z", "event": event, "actor": "hq",
+                    "subject": "#89", "detail": "probe",
+                })
+                for i, event in enumerate(("intake", "claim"), 1)
+            ) + "\n",
+            encoding="utf-8",
+        )
+        r = run(
+            silent, "append", "--event", "close", "--actor", "worker", "--subject", "#89",
+            "--detail", "Closed with no telemetry inside the window.",
+            actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
+        )
+        check("a close row whose window yielded nothing is accepted",
+              r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
+        detail = (rows(silent) or [{}])[-1].get("detail", "")
+        check("an empty window states the window it used",
+              declares_field(detail, "duration"), detail[-100:])
+        for key in ("cost_usd", "tokens_in", "tokens_out", "turns"):
+            check(f"and the empty window declared no {key} (the probe is not vacuous)",
+                  not declares_field(detail, key), detail[-100:])
+
+        # The other direction, pinned: an author who STATED the window is not given a
+        # second one. One field, one value — the guard reads the DECLARED field, never a
+        # substring, because a substring test is what made this the third site of the
+        # prose-as-data class in the first place.
+        stated = tdir / "stated_window.jsonl"
+        write_ledger(stated, ("intake", "#90"), ("claim", "#90"))
+        run(
+            stated, "append", "--event", "close", "--actor", "worker", "--subject", "#90",
+            "--detail", "Closed. The author stated duration=42s before the append.",
+            actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
+        )
+        detail = (rows(stated) or [{}])[-1].get("detail", "")
+        check("a stated window is not duplicated",
+              detail.count("duration=") == 1 and "duration=42s" in detail, detail[-100:])
+
     print()
     if failures:
         print(f"ledger gate FAILED: {len(failures)} check(s)")

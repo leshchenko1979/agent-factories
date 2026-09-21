@@ -403,6 +403,27 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # genuinely took, and taking them is not a judgement.
                 if missing:
                     detail = f"{detail} {' '.join(missing)}".strip()
+                elif not declares_field(detail, "duration"):
+                    # The COMPLEMENT of the append above, and the half that was missing.
+                    # The two branches have DIFFERENT populations, and the boundary is the
+                    # `> 0` test: a window LONGER than a second is the guard above's, a
+                    # window of ZERO seconds is this one's. Every append above is guarded
+                    # on its value being `> 0`, so a close row whose window was too short
+                    # to contain a turn shipped SILENCE -- and the case is SYSTEMATIC, not
+                    # incidental: a lane that claims and closes together at the end of a
+                    # work item writes both rows inside the same second, so the window
+                    # holds nothing and every cost and yield figure computed from that row
+                    # silently degrades (n=405 clause 6: absence must be STATED, never
+                    # silent). The RECEIPTED instance is n=607 (#98): claim and close both
+                    # stamped 2026-09-19T17:57:10Z, a ZERO-SECOND window, no telemetry
+                    # declared -- committed, and the guard above provably cannot reach it.
+                    # `duration_sec` IS the window the extractor already used, so stating
+                    # it needs no new plumbing, and the `duration=` spelling keeps ONE
+                    # token per field -- it is the key `field_predicate` already reads for
+                    # a unit-carrying window. `duration=0s` is the honest reading: it says
+                    # the window was too short, which IS the finding. Guarded on the
+                    # DECLARED field so an author's own duration is never duplicated.
+                    detail = f"{detail} duration={telem.get('duration_sec', 0)}s".strip()
 
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,
