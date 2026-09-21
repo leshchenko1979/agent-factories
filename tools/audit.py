@@ -1381,6 +1381,38 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_insights_gate_recorded.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_gate_recorded.py"])
 
+    # 47. Binding-mechanism-existence gate (issue #74, ruling n=485). §11 of the law gives the
+    #     durable ledger exactly one writer, `tools/ledger.py append`, and a law clause now
+    #     states that an ad-hoc probe, scratch script or throwaway harness must never append to
+    #     live state. The REQUIREMENT is product-neutral and lives in the core law; the
+    #     product-specific MECHANIC — which variables redirect which append path, and the
+    #     incantation that uses them — lives in `docs/methodology/04-harness-binding.md` §10.
+    #     A binding that names a redirect the tool no longer reads is a law naming a mechanism
+    #     that does not exist, and nothing checked that: the defect was found by a lane that had
+    #     been told the seam existed and watched it not work (#48's class), so this gate reads
+    #     the variable names OUT OF THE BINDING DOCUMENT and probes the tool for each one.
+    #
+    #     The predicate is BEHAVIOUR, never a string match, and the population is derived from
+    #     the document rather than from a second list kept beside it — a list would be free to
+    #     drift from the doc the law points readers at. Each named variable is pinned at a
+    #     throwaway path, an append is run, and the gate asserts the row landed THERE and that
+    #     the tool's own default path was NOT created; `OC_ACTORS_PATH` is probed in both
+    #     directions (a declared lane ACCEPTED, an absent file REFUSED), because acceptance
+    #     alone would not distinguish the override from the repo's live vocabulary still being
+    #     read. The third probe asserts the gate's own hermeticity: no marker row reached the
+    #     live ledger. A ledger that moved WITHOUT the marker is printed as consistent with a
+    #     concurrent lawful append, never as a leak — a peer lane's honest write must not turn
+    #     this gate RED.
+    #
+    #     Forward-only by construction: the gate reads the two artifacts as they stand, so there
+    #     is no boundary to declare and nothing to grandfather. Its non-vacuity is shown by
+    #     construction rather than by a probe over history — it asserts the binding named at
+    #     least one variable, so a table it could not parse FAILS loudly instead of passing over
+    #     an empty population (P29). It is byte-paired with a TEMPLATE twin, so the manifest
+    #     grain is what keeps a factory from dropping the runner and keeping the file.
+    if (repo_root / "tests/test_binding_mechanism_exists.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_binding_mechanism_exists.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

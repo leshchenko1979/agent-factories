@@ -169,3 +169,70 @@ context_manifest:
 ```
 
 By explicitly curating `active_skills`, discarding inactive sibling roles, and declaring `required_tools`, agent sessions maintain immediate operational readiness without tool search latency or skill amnesia post-compaction.
+
+---
+
+## 10. Probe Isolation — a throwaway harness never appends to live state
+
+The factory's durable ledger is `evidence/ledger.jsonl`, and §11 of the law gives it exactly
+one writer: `tools/ledger.py append`. **An ad-hoc probe, scratch script or throwaway harness
+must never append to the live ledger.** A probe that does is a SECOND writer on a surface the
+law gives one, and the rows it leaves behind are indistinguishable from real state
+transitions. The factory has paid for this twice — a 2026-09-12 concurrency probe left 20 rows
+in the live ledger, and a 2026-09-19 probe left one — and in both cases the author did not know
+the isolation seam existed.
+
+**Copying the data file isolates nothing.** The append path is bound to the tool's LOCATION,
+not to the data it reads, so a copy of `ledger.jsonl` with the tool still resolving its own
+repository root writes to the LIVE file. The seam is an environment override, and the tool
+reads three of them:
+
+| Variable | Redirects | Default when unset |
+|---|---|---|
+| `OC_LEDGER_PATH` | the ledger an append lands in | `<repo>/evidence/ledger.jsonl` |
+| `OC_SUBPROCESS_DIR` | the directory a `--subprocess` sub-ledger lands in | `<repo>/evidence/subprocesses` |
+| `OC_ACTORS_PATH` | the file the lane vocabulary is read from | `<tools>/actors.txt` |
+
+A probe that appends is therefore run with all three pinned:
+
+```bash
+OC_LEDGER_PATH=/tmp/probe/ledger.jsonl \
+OC_SUBPROCESS_DIR=/tmp/probe/subprocesses \
+OC_ACTORS_PATH=/tmp/probe/no-actors.txt \
+  python3 tools/ledger.py append --event run --actor worker --subject probe --detail "..."
+```
+
+`OC_ACTORS_PATH` is pinned even when the probe declares no lane of its own. Unset, the tool
+reads the repository's live `tools/actors.txt`, so a probe's actor vocabulary would depend on
+exactly the state it is trying to leave alone.
+
+### 10.1 The one cost: an isolated run is NOT covered by the ledger guard
+
+`tools/ledger.py` refuses an append that would REWRITE committed lineage: it compares the
+working ledger against its committed self and names the first divergence. A path outside the
+repository has no committed lineage to compare against, so the guard **fails open** and writes
+this to stderr:
+
+```
+warning: ledger guard: cannot read committed lineage (proceeding fail-open)
+```
+
+Three facts a probe author must know, because a cost visible only in a warning reads as a
+malfunction:
+
+1. A run under isolation is **not covered** by the shrink guard. The guard's contract is to
+   make a rewrite of committed lineage loud; an isolated path has none, and refusing the append
+   would break the sanctioned isolation.
+2. That stderr warning is **expected** on this path and is **not an error**.
+3. Isolation and the guard are **mutually exclusive on one run**: a run is either against live
+   state, where the guard applies, or against a throwaway path, where it does not.
+
+### 10.2 Upholding mechanism
+
+The mechanism's existence is gated rather than assumed. `tests/test_binding_mechanism_exists.py`
+reads the variable names out of THIS document and asserts `tools/ledger.py` HONOURS each one —
+it sets the variable, appends, and asserts the row lands at the pinned path while the tool's
+own default path stays empty and the live ledger gains nothing. A document naming a variable
+the tool has stopped reading is a law naming a mechanism that does not exist (#48's class), and
+only a behaviour probe catches a rename. The REQUIREMENT lives in the core law in
+product-neutral words; this binding carries the product-specific mechanic.

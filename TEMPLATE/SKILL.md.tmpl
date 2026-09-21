@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.9
+version: 0.1.10
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -597,6 +597,22 @@ one-append-path rule stands, and a correction is a DECLARED DEVIATION, never pre
 
 **Declare the writer for every surface you add.** A surface with no named writer
 is a surface that will acquire two.
+
+**An ad-hoc probe never appends to live state, and the seam that isolates it is a
+MECHANISM, not a copy.** A scratch script or throwaway harness that appends to a
+durable surface is a SECOND writer on a surface this section gives one writer, and the
+rows it leaves behind are indistinguishable from real state transitions. **Copying the
+data file isolates nothing:** the append path is bound to the TOOL's location, not to
+the data it reads, so a copy of the ledger with the tool still resolving its own
+repository root writes to the live file. So the tool exposes a redirect for every path
+an append can land in, the harness binding documents those names and the incantation
+that uses them — a name is a mechanic of one product and naming it in this law is a
+leak — and a gate proves the tool HONOURS each name the binding publishes, because a
+binding naming a redirect the tool no longer reads is a law naming a mechanism that
+does not exist. **The seam carries a stated COST:** a path outside the repository has
+no committed lineage to compare against, so the guard that makes a rewrite of live
+history loud FAILS OPEN and warns — that warning is EXPECTED on this path, not an
+error.
 
 **A lane's bindings are a SUPERSESSION CHAIN, and the live session is the newest binding within its own profile: a topic re-opened several times carries one binding per generation, and the newest is the lane. Only a match across two PROFILES is ambiguous, because there the registry cannot tell which daemon's session owns the topic; a single-profile chain is resolved by recency and the resolution is reported, never suppressed. The exit code carries the verdict: unbound and no-thread-id mean a declared lane is unreachable and exit non-zero, while a superseded chain is a live lane and does not.**
 

@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.13
+version: 0.1.14
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -577,6 +577,8 @@ is not, because it governs a cron table no single factory owns, and its upholdin
 is the process rather than a gate (#101): before touching a cron row, resolve the job's
 owner through the registry attribution, and report a job you cannot attribute. That process
 rides the existing ≥6 h attest pacemaker's question set rather than a new job.
+
+**An ad-hoc probe never appends to live state, and the seam that isolates it is a MECHANISM, not a copy.** A scratch script, throwaway harness or one-off probe that appends to a durable surface is a SECOND writer on a surface this section gives one, and the rows it leaves behind are indistinguishable from real state transitions — the factory has paid for this twice, once with twenty rows and once with one, and in both cases the author did not know the seam existed. **Copying the data file isolates nothing:** the append path is bound to the TOOL's location, not to the data it reads, so a copy of the ledger with the tool still resolving its own repository root writes to the live file. So the requirement is a three-part SHAPE — the tool exposes a redirect for every path an append can land in; the harness binding documents those names and the incantation that uses them, because a name is a mechanic of one product and naming it in this law is a leak; and a gate proves the tool HONOURS each name the binding publishes, since a binding that names a redirect the tool no longer reads is a law naming a mechanism that does not exist. **The seam carries a stated COST:** a path outside the repository has no committed lineage to compare against, so the guard that makes a rewrite of live history loud FAILS OPEN and warns — that warning is EXPECTED on this path and is not an error. The gate that upholds this is `tests/test_binding_mechanism_exists.py`.
 
 ---
 

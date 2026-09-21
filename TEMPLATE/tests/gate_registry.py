@@ -361,6 +361,17 @@ def gate_registration_problems(tests_dir: Path, audit_path: Path) -> tuple[list[
 # Part 1's derivation and Part 3's equality leg meet only at the declared-gate grain.
 REQUIRED_GATES: tuple[str, ...] = (
     "test_audit_rates.py",
+    # Added with its registration (issue #74, ruling n=485). REQUIRED is the correct grain and
+    # OPTIONAL is not: the gate is PURE over two paired artifacts — the harness binding's own
+    # variable table and the tool that must honour each name in it — so it passes in a
+    # bootstrapped factory exactly as it does here, with no box-local fixture and no TEMPLATE
+    # comparison to make it red. A factory that dropped the runner while keeping the file would
+    # keep a binding that promises an isolation seam nothing proves exists, and the harm that
+    # promise prevents is UNRECOVERABLE rather than merely unrecorded: a probe that ignores the
+    # seam appends to LIVE state, so the rows it leaves are indistinguishable from real
+    # transitions and no later gate can separate them. It is byte-paired with a TEMPLATE twin,
+    # so the manifest grain is what keeps a factory from dropping the runner and keeping the file.
+    "test_binding_mechanism_exists.py",
     "test_board_intake_recorded.py",
     "test_close_board_recorded.py",
     "test_close_row_revision.py",
