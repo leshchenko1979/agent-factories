@@ -1085,6 +1085,243 @@ def probe_the_live_sweep_states_its_own_account() -> None:
     print(f"  live manifest — {len(budgets.gates)} declared entr"
           f"{'y' if len(budgets.gates) == 1 else 'ies'}, {len(budgets.stale)} stale")
 
+# ---------------------------------------------------------------------------
+# #93 — THE THREE-STATE VERDICT, and the cause on the line (P29).
+#
+# The class this leg closes, as Triage measured it at pristine 2fbd097: `run_gate`
+# returned `exit_code: 99` with `duration_sec: 0.0` HARDCODED on a timeout, so a gate
+# that timed out and a gate that crashed on import were the SAME ROW -- and the 0.0 was
+# a literal occupying a field whose name asserts it was measured. The default report
+# carried no stderr at all, so the cause was invisible to the reader who must decide
+# whether to re-run.
+#
+# A probe over a COPY would satisfy every assertion below while the runner the audit
+# actually uses stayed wrong, so `_audit_module()` imports `tools/audit.py` by its own
+# name -- the same convention as `_gate_budget_module()` above, and for the same reason.
+# ---------------------------------------------------------------------------
+
+# The probe's budget is deliberately TINY, and that is a design choice rather than a
+# detail: this gate carries a DECLARED 4.35s budget, and a probe that really sleeps for
+# seconds would turn the gate that GUARDS the timeout law into a flake generator -- the
+# exact defect #93 exists to close. At 0.05s the forced timeout costs two attempts of
+# 0.05s each.
+PROBE_TIMEOUT_BUDGET_SEC = 0.05
+
+
+def _audit_module():
+    """`tools/audit.py` ITSELF -- the mechanism under probe, never a lookalike.
+
+    Imported lazily and by the module's own NAME rather than through a file loader, so
+    the runner under probe is the one the audit runs. `tools/` is APPENDED, never
+    inserted, so the repo's own `registry/` keeps its precedence over the same-named
+    module beside it. Twin of `_gate_budget_module` above.
+    """
+    tools = str(REPO / "tools")
+    if tools not in sys.path:
+        sys.path.append(tools)
+    import audit  # noqa: PLC0415
+
+    return audit
+
+
+def _synthetic_gate(passed: bool, unknown: bool) -> dict:
+    """One gate result shaped exactly as `run_gate` returns them."""
+    return {"cmd": "synthetic", "passed": passed, "unknown": unknown, "duration_sec": 1.0}
+
+
+def probe_a_timeout_carries_true_elapsed_and_a_distinct_exit_code() -> dict:
+    """PART 1: a killed gate reports WHEN it died, and is never read as a crash.
+
+    Returns the result so the retry probe asserts on the SAME run rather than sleeping
+    a second time.
+    """
+    audit = _audit_module()
+    gate_budget = _gate_budget_module()
+    res = audit.run_gate(["/bin/sleep", "5"], REPO, PROBE_TIMEOUT_BUDGET_SEC)
+    check(
+        "a timed-out gate carries the DISTINCT timeout exit code, never the generic 99",
+        res["exit_code"] == gate_budget.TIMEOUT_EXIT_CODE,
+        f"exit_code={res['exit_code']}, TIMEOUT_EXIT_CODE={gate_budget.TIMEOUT_EXIT_CODE}",
+    )
+    check(
+        "a timed-out gate is UNKNOWN, never a plain failure",
+        res["unknown"] is True and res["passed"] is False,
+        f"unknown={res['unknown']}, passed={res['passed']}",
+    )
+    check(
+        "the recorded duration is the MEASURED elapsed time, not the 0.0 literal",
+        res["duration_sec"] > 0.0,
+        f"{res['duration_sec']}s against a {PROBE_TIMEOUT_BUDGET_SEC}s budget",
+    )
+    check(
+        "the cause is in stderr, where the FAIL line reads it",
+        "budget exhausted" in res["stderr"],
+        res["stderr"][:90],
+    )
+    return res
+
+
+def probe_the_retry_is_bounded_and_recorded(timed_out: dict) -> None:
+    """PART 4: ONE retry, recorded -- an unrecorded retry hides a genuinely slow gate."""
+    check(
+        "a timeout is retried exactly ONCE",
+        timed_out["attempts"] == 2,
+        f"attempts={timed_out['attempts']}",
+    )
+    check(
+        "the retry is RECORDED, with the first attempt's own elapsed time",
+        timed_out["retried"] is True
+        and isinstance(timed_out.get("first_attempt_sec"), float),
+        f"retried={timed_out['retried']}, "
+        f"first_attempt_sec={timed_out.get('first_attempt_sec')}",
+    )
+
+
+def probe_a_genuine_failure_is_never_retried() -> None:
+    """PART 4's bound: a non-zero exit is a VERDICT, and a verdict is not re-rolled."""
+    audit = _audit_module()
+    failed = audit.run_gate(["/bin/sh", "-c", "exit 3"], REPO, 30.0)
+    check(
+        "a genuine FAIL keeps its own exit code and is NEVER retried",
+        failed["exit_code"] == 3
+        and failed["attempts"] == 1
+        and failed["retried"] is False
+        and failed["unknown"] is False,
+        f"exit_code={failed['exit_code']}, attempts={failed['attempts']}, "
+        f"retried={failed['retried']}",
+    )
+
+
+def probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out: dict) -> None:
+    """PART 2, end to end: a REAL timed-out result, judged by the REAL verdict.
+
+    This is the leg the acceptance criteria name -- a probe proving a timed-out gate
+    lands in UNKNOWN -- driven from the runner's own output rather than from a fixture.
+    """
+    audit = _audit_module()
+    verdict = audit.judge_gates([_synthetic_gate(True, False), timed_out])
+    check(
+        "a real timed-out gate forces UNKNOWN, never DEGRADED",
+        verdict.status == "UNKNOWN",
+        verdict.status,
+    )
+    check(
+        "the timed-out gate is counted in NO pass total",
+        verdict.all_known_pass is True and verdict.examined == 1,
+        f"all_known_pass={verdict.all_known_pass}, examined={verdict.examined}",
+    )
+    check(
+        "the timed-out gate is not filed as a failure either",
+        verdict.failed == [] and len(verdict.unknown) == 1,
+        f"failed={len(verdict.failed)}, unknown={len(verdict.unknown)}",
+    )
+    check(
+        "a timed-out gate is NOT healthy -- no verdict is not a green",
+        not verdict.healthy,
+        repr(verdict.healthy),
+    )
+    line = audit.render_status_line(verdict)
+    check(
+        "the headline renders UNKNOWN as loudly as FAIL",
+        "UNKNOWN" in line and "NOT a green" in line and "HEALTHY" not in line,
+        line[:130],
+    )
+    check(
+        "the headline states the population it reports over",
+        f"1 of {verdict.total}" in line,
+        line[:130],
+    )
+
+
+def probe_the_three_states_are_distinct_and_a_failure_outranks_unknown() -> None:
+    """PART 2: three states, three DISTINCT renderings -- and a measured FAIL wins."""
+    audit = _audit_module()
+    green = audit.judge_gates([_synthetic_gate(True, False)])
+    degraded = audit.judge_gates(
+        [_synthetic_gate(True, False), _synthetic_gate(False, False)]
+    )
+    unknown = audit.judge_gates(
+        [_synthetic_gate(True, False), _synthetic_gate(False, True)]
+    )
+    check(
+        "every gate that ran to a verdict passed -> GREEN",
+        green.status == "GREEN",
+        green.status,
+    )
+    check("a gate that FAILED -> DEGRADED", degraded.status == "DEGRADED", degraded.status)
+    check(
+        "a gate that returned NO verdict -> UNKNOWN",
+        unknown.status == "UNKNOWN",
+        unknown.status,
+    )
+    check(
+        "the three states render as three DISTINCT headlines",
+        len({audit.render_status_line(v) for v in (green, degraded, unknown)}) == 3,
+        " / ".join(audit.render_status_line(v)[:34] for v in (green, degraded, unknown)),
+    )
+    check(
+        "GREEN is the only state that is healthy",
+        green.healthy is True and degraded.healthy is False and not unknown.healthy,
+    )
+    both = audit.judge_gates(
+        [
+            _synthetic_gate(True, False),
+            _synthetic_gate(False, False),
+            _synthetic_gate(False, True),
+        ]
+    )
+    check(
+        "a measured FAIL outranks an UNKNOWN -- a statement beats its absence",
+        both.status == "DEGRADED" and len(both.unknown) == 1,
+        both.status,
+    )
+    check(
+        "the UNKNOWN gates are still NAMED beside the failure, never dropped",
+        f"{len(both.unknown)} more" in audit.render_status_line(both),
+        audit.render_status_line(both)[:130],
+    )
+
+
+def probe_a_skipped_suite_is_still_no_verdict() -> None:
+    """The #28 law survives the third state: no gates run means NO verdict, not a green."""
+    audit = _audit_module()
+    verdict = audit.judge_gates([], gates_ran=False)
+    check(
+        "a skipped suite reports no status at all", verdict.status is None, repr(verdict.status)
+    )
+    check("a skipped suite is not healthy", verdict.healthy is None, repr(verdict.healthy))
+    check(
+        "a skipped suite keeps its own headline",
+        "GATES SKIPPED" in audit.render_status_line(verdict),
+        audit.render_status_line(verdict),
+    )
+
+
+def probe_the_fail_line_cause_is_read_by_one_predicate() -> None:
+    """PART 1(c): the cause is read by ONE helper, so the stdout and markdown surfaces
+    cannot disagree about which line states it (one field, one predicate)."""
+    audit = _audit_module()
+    check(
+        "the cause is the LAST non-blank line, not the first",
+        audit.last_reported_line("first line\n\n  the cause  \n") == "the cause",
+        repr(audit.last_reported_line("first line\n\n  the cause  \n")),
+    )
+    check(
+        "the cause is collapsed onto one line",
+        audit.last_reported_line("x\n  a   b  \n") == "a b",
+        repr(audit.last_reported_line("x\n  a   b  \n")),
+    )
+    check(
+        "an output-less gate yields NO cause rather than a blank one",
+        audit.last_reported_line("") == "" and audit.last_reported_line("\n \n") == "",
+    )
+    check(
+        "the cause is BOUNDED, so a chatty gate cannot flood the line",
+        len(audit.last_reported_line("z" * 900)) == 200,
+        str(len(audit.last_reported_line("z" * 900))),
+    )
+
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -1140,6 +1377,15 @@ def main() -> int:
     probe_a_tree_without_a_resolvable_head_is_not_read_as_clean()
     probe_a_malformed_entry_still_raises()
     probe_the_margin_law_still_raises()
+    print("  synthetic probes — #93: a timeout is UNKNOWN, never a 0.0s FAIL")
+    timed_out = probe_a_timeout_carries_true_elapsed_and_a_distinct_exit_code()
+    probe_the_retry_is_bounded_and_recorded(timed_out)
+    probe_a_genuine_failure_is_never_retried()
+    probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out)
+    probe_the_three_states_are_distinct_and_a_failure_outranks_unknown()
+    probe_a_skipped_suite_is_still_no_verdict()
+    probe_the_fail_line_cause_is_read_by_one_predicate()
+
     print("  live manifest — the declared revisions, swept")
     probe_the_live_sweep_states_its_own_account()
 
