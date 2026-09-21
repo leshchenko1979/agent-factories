@@ -89,6 +89,7 @@ REPO = Path(__file__).resolve().parent.parent
 AUDIT = REPO / "tools" / "audit.py"
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 REWORK = REPO / "evidence" / "rework.md"
+ONTOLOGY = REPO / "ONTOLOGY.md"
 GATE_CMD = "tests/test_audit_rates.py"
 
 # The reader under test, imported rather than re-implemented: rule 7 is about what
@@ -836,6 +837,125 @@ def telemetry_scope_problems() -> list[str]:
 
     return problems
 
+# ---------------------------------------------------------------------------
+# #39 — the definition and the counted population must admit the same shapes.
+#
+# The ontology defines `work unit`; `closed_subjects` counts a population. When the
+# definition narrows to issues while the count stays unfiltered, every per-task
+# denominator answers a different question than the law states — the class P29 exists
+# to catch. This block couples the two. It does NOT pick a resolution: narrowing the
+# count and widening the definition are both consistent, and both pass. What it
+# refuses is the drift between them.
+# ---------------------------------------------------------------------------
+
+WORK_UNIT_TERM = "work unit"
+
+# The `## Canonical terms` table, read with the idiom the ontology gate uses for its
+# own section reads: the lookahead stops at the next heading of either level.
+TERMS_SECTION_RE = re.compile(
+    r"^## Canonical terms\s*$(.*?)(?=^## |^### )", re.MULTILINE | re.DOTALL
+)
+
+# A definition ADMITS a non-issue subject when it names that form. Vocabulary, not a
+# phrase match: the cell is prose and a lawful rewording must not red the gate.
+WORK_UNIT_ADMITS_NON_ISSUE = ("stem", "descriptive", "no board issue", "no issue")
+
+def work_unit_definition(ontology_path: Path = ONTOLOGY) -> str:
+    """The Definition cell of the `work unit` row, or "" when it cannot be read."""
+    match = TERMS_SECTION_RE.search(ontology_path.read_text(encoding="utf-8"))
+    if not match:
+        return ""
+    for line in match.group(1).splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [c.strip() for c in stripped.split("|")]
+        # cells[0] is the empty run before the leading pipe, so the term is cells[1]
+        # and the definition cells[2] — the same offset the ontology gate relies on.
+        if len(cells) < 4 or cells[1].strip("`").strip().lower() != WORK_UNIT_TERM:
+            continue
+        return cells[2]
+    return ""
+
+def closed_subject_shapes(path: Path = LEDGER) -> tuple[int, int]:
+    """(issue-shaped, non-issue) among the DISTINCT closed subjects in the ledger.
+
+    Distinct SUBJECTS, never close rows — the same population `closed_subjects` counts,
+    split by the shape predicate the audit and the rework log already share.
+    """
+    subjects: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        ev = json.loads(line)
+        if ev.get("event") == "close" and ev.get("subject"):
+            subjects.add(ev["subject"])
+    issue_shaped = sum(1 for s in subjects if SUBJECT_WORK_UNIT_RE.fullmatch(s))
+    return issue_shaped, len(subjects) - issue_shaped
+
+def work_unit_definition_problems(
+    payload: dict, definition: str | None = None, ontology_path: Path = ONTOLOGY
+) -> list[str]:
+    """Every way the `work unit` definition and the counted population disagree.
+
+    The count's EXPECTED value is DERIVED from the definition, so the two cannot drift
+    in either direction: an issue-only definition requires an issue-shaped count, and a
+    definition that admits descriptive stems requires a count that keeps them. An
+    unreadable definition is reported, never read as agreement.
+    """
+    text = definition if definition is not None else work_unit_definition(ontology_path)
+    if not text:
+        return [
+            f"could not read the `{WORK_UNIT_TERM}` definition from {ontology_path.name} "
+            f"— an unreadable definition is not agreement"
+        ]
+
+    issue_shaped, non_issue = closed_subject_shapes()
+    admits_non_issue = any(t in text.lower() for t in WORK_UNIT_ADMITS_NON_ISSUE)
+    expected = issue_shaped + non_issue if admits_non_issue else issue_shaped
+    why = (
+        "the definition admits non-issue subjects, so the count must keep them"
+        if admits_non_issue
+        else "the definition is issue-only, so the count must be issue-shaped"
+    )
+
+    counted = (payload.get("delivery") or {}).get("closed_subjects")
+    if counted is not None and counted != expected:
+        return [
+            f"`{WORK_UNIT_TERM}`: {why} — expected {expected} ({issue_shaped} issue-shaped, "
+            f"{non_issue} descriptive stem(s)), closed_subjects reports {counted}; "
+            f"definition reads {text!r}"
+        ]
+    return []
+
+def test_the_work_unit_definition_matches_the_counted_population():
+    problems = work_unit_definition_problems(load_audit())
+    assert not problems, "; ".join(problems)
+
+def test_the_definition_gate_rejects_a_narrowed_definition():
+    """The coupling must reject drift, not merely accept the wording that is live."""
+    payload = load_audit()
+    assert work_unit_definition_problems(payload) == [], "the live pair must agree"
+
+    # The pre-#39 wording: a definition that admits issues only.
+    assert work_unit_definition_problems(
+        payload, definition="One issue, from opened to closed"
+    ), "an issue-only definition survived against a count that keeps descriptive stems"
+
+    # The other direction: the definition admits descriptive stems while the count has
+    # been narrowed to issues. Both halves must bite, or the gate guards only one way.
+    filtered = json.loads(json.dumps(payload))
+    filtered["delivery"]["closed_subjects"] = 1
+    filtered["delivery"]["closed_tasks"] = 1
+    assert work_unit_definition_problems(filtered), (
+        "a count narrowed away from the definition survived"
+    )
+
+    # An unreadable definition is reported, never read as agreement.
+    assert work_unit_definition_problems(payload, definition="")
+
+
 def main() -> int:
     payload = load_audit()
     problems = rate_form_problems(payload)
@@ -845,6 +965,7 @@ def main() -> int:
     problems += rework_bucket_problems()
     problems += rework_declaration_problems(payload)
     problems += telemetry_scope_problems()
+    problems += work_unit_definition_problems(payload)
     if problems:
         print("rate gate FAILED:", file=sys.stderr)
         for p in problems:
@@ -863,6 +984,12 @@ def main() -> int:
         f"({round(rw['subject_coverage'] * 100, 1)}%) — derived, not stated"
     )
     print(f"denominators reconciled — {rows} close rows over {subjects} distinct closed subjects")
+    issue_shaped, non_issue = closed_subject_shapes()
+    print(
+        f"work unit definition OK — admits all {issue_shaped + non_issue} closed "
+        f"subject(s): {issue_shaped} issue-shaped, {non_issue} descriptive stem(s); "
+        f"definition reads {work_unit_definition()!r}"
+    )
     dl = payload["delivery"]
     print(
         f"rework declarations OK — {dl['close_rows_declaring_rework']} of "
