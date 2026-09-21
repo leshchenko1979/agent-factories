@@ -1413,6 +1413,40 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_binding_mechanism_exists.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_binding_mechanism_exists.py"])
 
+    # 47. Close-row verify-count gate (issue #96, ruled at ledger n=745). A close row's
+    #     cited `tools/ledger.py verify` receipt is taken BEFORE the row exists, so the
+    #     receipt structurally cannot cover the artifact it certifies: verify reads a
+    #     subject's rows as a SEQUENCE, and a run made while the close row is absent has
+    #     not seen the row it is cited for. The repair is that the row STATES what the
+    #     receipt measured -- a close row that cites a verify receipt must declare
+    #     `verify_rows=` in its canonical trailer, and that count must be AT LEAST the
+    #     row's own number. A declared count of n-1 is not a MALFORMED row: it is a row
+    #     that has TOLD you its verify predated the append, which is why this is an ORDER
+    #     gate and not an accusation -- a citation taken early is not a false citation,
+    #     and the rows that carry one stand as written.
+    #
+    #     The field is read through `tools/field_predicate.py` and NOTHING else (§11's
+    #     one-field-one-predicate law binds a NEW field exactly as an old one), and the
+    #     read is POSITIONAL -- the canonical trailer -- so prose can TRIGGER the question
+    #     (a citation IS prose) and can never SATISFY it.
+    #
+    #     The boundary is a DECLARED FACTORY PARAMETER read from
+    #     `docs/ledger-invariants.json`, never a date hardcoded here: this gate file is
+    #     paired byte-identically into `TEMPLATE/tests/`, and a baked-in date would RED in
+    #     the tree it ships to (#76's class, P35). It is FORWARD-ONLY: the close rows
+    #     written before the boundary -- including the five known instances that cite
+    #     verify in prose with no declared count, `n=746`/`n=749`/`n=752`/`n=763`/`n=783`
+    #     -- print as `excused:` on every run and are never backfilled.
+    #
+    #     THE ONE PLACE IT REFUSES THE FAMILY'S PROPORTIONAL SKIP, and n=745 rules it: its
+    #     population is the WHOLE close history, so a ledger carrying rows and NOT ONE
+    #     close row FAILS loudly rather than skipping. A clean verdict over a population
+    #     that was never judged is what P29 forbids -- contrast #112, whose population a
+    #     factory may legitimately never produce and which is therefore proven by its
+    #     probe instead.
+    if (repo_root / "tests/test_close_verify_receipt_declared.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_verify_receipt_declared.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
