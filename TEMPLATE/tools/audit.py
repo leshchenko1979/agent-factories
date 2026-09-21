@@ -1454,6 +1454,22 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_close_verify_count_declared.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_verify_count_declared.py"])
 
+    # 48. Brain-metrics gate: the standing-reading instrument measures what it says.
+    #     Registered because a gate that never runs is indistinguishable from a gate that
+    #     passes (#59's class, P29): `docs/measurement-procedure.md` §5 declares the
+    #     brain-metrics COMPANION readings as a standing obligation every factory owes, and
+    #     this is the file that proves the mechanism behind them exists and behaves. Its run
+    #     is FIXTURE-DRIVEN and offline by construction -- the live figures are properties of
+    #     an INSTANT, never of a revision (leg A's files are in no repository, so a revision
+    #     stamp pins nothing about them: measured 09-19 -> 09-21, leg A moved +82 lines and
+    #     419 B inside a single turn's window), so this gate asserts the ARITHMETIC against
+    #     fixtures and the instrument REPORTS freshness. A criterion pinned to a live figure
+    #     would fail a correct instrument. (The number above is 48, not 47: the two entries
+    #     preceding this one both read `# 47.` -- noted rather than renumbered, because
+    #     renumbering a peer's entry inside a commit about this gate would bury the fix.)
+    if (repo_root / "tests/test_brain_metrics.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_brain_metrics.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

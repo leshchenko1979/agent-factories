@@ -270,7 +270,23 @@ flowchart TD
      crossing of this factory's own body went unrecorded for a day. The same section carries
      the brain-metrics COMPANION readings — the always-injected brain-file line count, and the
      post-compaction input-token figure read from the daemon log — so the owner's 2026-09-19
-     brain-metrics question becomes a standing reading rather than a one-off.
+     brain-metrics question becomes a standing reading rather than a one-off. **The instrument
+     is `tools/brain_metrics.py` (`--home`, `--hours`, `--log-dir`)**, and it reports all three
+     figures in one command: the always-injected brain files (its default population is the
+     Tier 0 triple, cited from `docs/methodology/04-harness-binding.md`, and a named file that
+     is absent is printed BY NAME rather than dropped), every `skills/*/SKILL.md` body against
+     the 500-line budget above, and the post-compaction input tokens from the daemon log.
+     **It prints the predicate, the population and the instant beside every figure**, and it
+     **gates none of them** — no exit code depends on a measured magnitude, so a moved corpus
+     still exits 0. **Two bounds travel with the reading rather than sitting in a footnote.**
+     (1) **A revision stamp pins only what is in version control:** the always-injected files
+     live in no repository, so their identity is the INSTANT and a stamp pins the skill bodies
+     and pins nothing about them — which is why a standing reading exists at all. (2) **The
+     dated oracle is REPORTED, never asserted** as current: the instrument prints the live
+     figure BESIDE the 2026-09-19 snapshot with the delta named, and a nonzero delta is
+     movement of the corpus, never a regression. Its gate is `tests/test_brain_metrics.py`,
+     fixture-driven and offline by construction for exactly that reason: the arithmetic is
+     the pass/fail, the live figure is the report.
    - **Compaction RATE — a STANDING reading, printed and never gated.** Report, per lane and
      **worst-first**, the ratio of **CONTEXT COMPACTIONS** to **COMPLETED TURNS** over a
      stated window, naming every lane at or above **1:1** as **IN A LOOP**. The instrument is

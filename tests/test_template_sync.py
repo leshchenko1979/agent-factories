@@ -217,6 +217,34 @@ PAIRS = [
     # FORWARD-ONLY: a factory that ships the file but drops the runner writes its next close
     # row with no stated verify count and can never repair that.
     ("tests/test_close_verify_count_declared.py", "TEMPLATE/tests/test_close_verify_count_declared.py"),
+    # The brain-metrics standing reading (P29 — no board issue: it ships under the standing
+    # obligation `docs/measurement-procedure.md` §5 already declares). Paired because the
+    # WHOLE value of a standing reading is that two factories compute the SAME predicate the
+    # same way: a drifting second copy would make two factories' "24.4 % of a 200k window"
+    # figures incomparable while both still looked correct. Unlike `insights.py` /
+    # `synthesize_insights.py`, which read THIS factory's own `evidence/insights.jsonl`, this
+    # file reads only artifacts every bootstrapped factory already has — its own Tier 0 brain
+    # files, its own `skills/*/SKILL.md`, its own daemon logs — and imports nothing from this
+    # repository, so (unlike `gate_budget.py`) the rationale cannot rest on an import edge.
+    # A reader can reject the pairing on the two limits it actually carries: the `--home`
+    # default names the profile THIS box serves (overridable by flag — the same shape
+    # `tools/telemetry.py` already ships), and the oracle block CITES
+    # `evidence/brain-metrics-2026-09-19.md` without ever reading it, so a factory that lacks
+    # that file still runs and compares against a foreign, dated baseline.
+    # The nearest analogue argues AGAINST pairing: `tools/compaction_rate.py`, the other
+    # measurement tool, is one of the four deliberately unpaired tools, so "the idiom donor is
+    # paired, therefore pair it" is not an available argument here.
+    ("tools/brain_metrics.py", "TEMPLATE/tools/brain_metrics.py"),
+    # The gate for the pair above, and paired for the reason that makes it a gate rather than
+    # a convenience: a bootstrapped factory inherits the INSTRUMENT, and an instrument whose
+    # arithmetic nothing checks is the shape this factory has already paid for — a gate that
+    # ran nowhere while the audit printed HEALTHY over it (issue #59). Its probes are fixtures
+    # and offline by construction, so the twin passes in a factory tree for the same reason it
+    # does here: the live figures are properties of an INSTANT and are REPORTED by the
+    # instrument, never asserted by this gate. That is also why no criterion in this change
+    # pins a live figure — the fixture leg is the only pass/fail available (see the rationale
+    # on the instrument's own pair above).
+    ("tests/test_brain_metrics.py", "TEMPLATE/tests/test_brain_metrics.py"),
 ]
 
 

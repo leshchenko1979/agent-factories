@@ -373,6 +373,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     # so the manifest grain is what keeps a factory from dropping the runner and keeping the file.
     "test_binding_mechanism_exists.py",
     "test_board_intake_recorded.py",
+    # Added with its registration (no board issue: it ships under the standing-reading
+    # obligation `docs/measurement-procedure.md` §5 already declares). REQUIRED is the correct
+    # grain and OPTIONAL is not, for the reason that decides the entries around it: the gate
+    # is PURE AND FIXTURE-DRIVEN over the instrument's own arithmetic — it reads no live
+    # database, opens no socket and shells out to nothing — so it passes in a bootstrapped
+    # factory exactly as it does here, with no box-local fixture and no TEMPLATE comparison to
+    # make it red. It is byte-paired with a TEMPLATE twin, so the manifest grain is what keeps
+    # a factory from dropping the runner and keeping the file; and the file it guards is the
+    # ONLY mechanism behind a standing reading the law already tells every factory to owe, so
+    # a factory that dropped the runner would carry a declared reading with nothing measuring
+    # it — dead text, which is the failure P29 names.
+    "test_brain_metrics.py",
     "test_close_board_recorded.py",
     "test_close_row_revision.py",
     # Added with its registration (issue #130). REQUIRED is the correct grain and OPTIONAL
