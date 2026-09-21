@@ -409,6 +409,16 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_hq_delegation.py",
     "test_hygiene_inflight.py",
     "test_hygiene_namespace.py",
+    # Added with its registration (issue #46). REQUIRED is the correct grain and OPTIONAL
+    # is not, and the deciding fact is the same one that put the score-run twin
+    # (`test_score_gate_recorded.py`) in this tuple: its boundary is FORWARD-ONLY. The rule
+    # governs rows written at or after the instant a factory declares, nothing is ever
+    # backfilled, and a ledger row is immutable — so a factory that ships the gate OPTIONAL
+    # and omits it writes its next synthesis run ungoverned and can never repair that,
+    # because the record it did not take is the one thing that cannot be reconstructed.
+    # It is byte-paired with a TEMPLATE twin, so the manifest grain is what keeps a factory
+    # from dropping the runner and keeping the file.
+    "test_insights_gate_recorded.py",
     "test_law_structure.py",
     "test_ledger.py",
     "test_ledger_close_preflight.py",

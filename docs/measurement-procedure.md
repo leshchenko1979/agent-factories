@@ -380,6 +380,77 @@ flowchart TD
 
 ---
 
+## 5.1 The Insights Synthesis Run — Process 3's second artifact
+
+Process 3 declares **two** artifacts: `evidence/scores/<date>.md` and
+`evidence/insights.jsonl`. The procedure above covers the first. This section covers the
+second, and it sits here rather than in a document of its own because the closing
+mechanism is the SAME mechanism: a run is not finished until its declared artifact is
+committed and the workspace gate is clean. One rule, two artifacts.
+
+> Origin (issue #46): on 2026-09-18 the synthesis run appended insight #22, wrote its own
+> `run` row carrying `audit=DEGRADED-hygiene-modified-tracked-files`, reported anyway, and
+> left `evidence/insights.jsonl` uncommitted for over two hours. The run *recorded* the
+> dirty tree instead of clearing it. A law gap, not a habit gap: no document stated what
+> the run owed, so nothing could hold it to anything.
+
+### Step sequence
+
+**Provenance, stated plainly.** The step sequence below was **transcribed by the Worker
+lane in the shape of the score run's own steps**, not quoted from a Surveys-authored
+specification — no ledger row from Surveys specified these steps, and the run's only two
+recorded rows (`n=241`, `n=298`) carry its outcome and its pacemaker rewrite rather than
+its procedure. The *shape* is rule-bound (the closing invariant is the score run's,
+verbatim in mechanism); the *enumeration* is a transcription, and it is marked as one so a
+later reader does not mistake it for a ruling.
+
+1. **Read the evidence.** Collect the period's observed patterns from the ledger, the
+   gates, the rework log and the surveys. Every claim carries a receipt; a remembered
+   pattern is not an input.
+2. **Synthesise.** Append each new insight to `evidence/insights.jsonl` through
+   `tools/insights.py append` — the file's one writer. An insight is a finding plus the
+   mechanism behind it, not a restatement of a metric.
+3. **File what the insights imply.** A finding that names a defect or a missing gate is
+   filed as a board issue, not left as prose in the insight.
+4. **Record the run.** Stamp the `run` row on `evidence/ledger.jsonl` by
+   `python3 tools/ledger.py append`, carrying the insights appended and the workspace
+   verdict described below.
+5. **Commit and close.**
+   - Commit the run's own artifacts — `evidence/insights.jsonl` and any board-visible
+     record the run produced — with an explicit pathspec.
+   - The run row carries `workspace_gate=rc=0` and `head=<sha>`, the HEAD it committed at,
+     so the verdict is *recorded* rather than asserted, and the sha makes the row checkable
+     against the repository instead of a claim about a tree that has since moved.
+   - **Closing invariant — the run is not finished until the workspace gate is clean.**
+     Execute `python3 tools/hygiene.py --audit` and require **rc=0**, **scoped to the run's
+     own artifacts**: the gate answers for the files this run touched, and an unrelated
+     lane's in-flight changes are not this run's defect. Any re-read correction landing
+     *after* the commit above re-opens this step: commit it, re-run the gate, and only then
+     report. A gate that exists and is never invoked is dead text (P29), and the run's own
+     artifact is the first thing it must cover — an insights file left uncommitted is a
+     claim the repository cannot back.
+6. **Report.** Present the insights and the filed issues to the operator. Reporting comes
+   after the gate, never instead of it: a run that reports from a dirty tree is reporting
+   an artifact that does not exist yet.
+
+### The mechanical half
+
+`tests/test_insights_gate_recorded.py` upholds steps 4 and 5 for every run row written at
+or after the boundary this factory declares in `docs/ledger-invariants.json` under
+`insights_gate_recorded`. It reads the population through the shared
+`tests/ledger_boundary.py` reader — one implementation, shared with the close-row and
+score-run gates — and it is **forward-only**: rows written before the declared boundary
+print as `excused:` with their count and are never backfilled, because a verdict written
+today for a run that predates the rule would be a falsified record rather than a repair.
+
+The gate's bound, stated so it is not oversold: it asserts that the verdict and the sha are
+**present and well-formed**, not that the gate they name truly passed. A run that wrote
+`workspace_gate=rc=0` over a red gate would still pass — the token records the run's own
+act, and no structural read can falsify it. The live half of that property is the operator's
+review of the artifact, which is exactly why the sha travels with the verdict.
+
+---
+
 ## 6. Cognitive Bounds & Survey Resolution Ratio (Q = N_leaf / S)
 
 ### 6.1 The Mathematical Model

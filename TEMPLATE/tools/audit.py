@@ -1348,6 +1348,39 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_close_telemetry_provenance.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_telemetry_provenance.py"])
 
+    # 46. Insights-gate verdict gate (issue #46). Process 3 declares TWO artifacts as its
+    #     output contract -- `evidence/scores/<date>.md` AND `evidence/insights.jsonl` --
+    #     and the score file got its closing invariant under #32 while the insights half
+    #     got none. So on 2026-09-18 the synthesis run appended insight #22, wrote its own
+    #     `run` row carrying `audit=DEGRADED-hygiene-modified-tracked-files`, reported
+    #     anyway, and ended with the artifact uncommitted for over two hours: it RECORDED
+    #     the dirty tree instead of clearing it. This gate is #32's rule one artifact over,
+    #     and it reads the same two tokens rather than minting a vocabulary of its own --
+    #     `workspace_gate=rc=0`, the closing workspace verdict, and `head=<sha>`, the HEAD
+    #     the run committed at. Tokens are read through the SHARED
+    #     `tools/field_predicate.py::keyed_value`, never a substring test, because a row
+    #     that merely NAMES a field is not a row that declares it.
+    #
+    #     The population is an ACT scoped TWICE -- `event == "run"` AND
+    #     `subject == "weekly-insight-synthesis-pacemaker"` -- because the ledger carries
+    #     other `run` rows under other subjects, and a predicate on `event` alone would
+    #     govern them. The subject is a LANE-LOCAL string, not a schema name, so a factory
+    #     that names its pacemaker differently edits that one constant in its own copy.
+    #     The gate PRINTS the population it examined (P29) and reports a stated SKIP --
+    #     never a silent pass -- when that population is empty or the boundary is
+    #     undeclared.
+    #
+    #     The boundary is a DECLARED FACTORY PARAMETER read from
+    #     `docs/ledger-invariants.json`, never a date hardcoded here: this gate file is
+    #     paired byte-identically into `TEMPLATE/tests/`, and a baked-in date would RED in
+    #     the tree it ships to, or pass it vacuously (#76's class, P35). It is FORWARD-ONLY:
+    #     rows written before the boundary -- including the run row that motivated it --
+    #     print as `excused:` on every run and are never backfilled, because a verdict
+    #     written today for a run that predates the rule would be a falsified record rather
+    #     than a repair.
+    if (repo_root / "tests/test_insights_gate_recorded.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_gate_recorded.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
