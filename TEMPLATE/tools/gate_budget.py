@@ -39,8 +39,15 @@ how it runs -- so both are compared against HEAD here:
   LEG B, command identity. The `gates_to_run.append(...)` argv for that target, read
   from `tools/audit.py` at BOTH revisions. It moves while the gate's blob stays
   byte-identical -- measured under #124, where `5e3bfe3` re-pointed six registrations
-  to `-m pytest` and roughly tripled their wall time -- so a bytes-only check reads
-  those entries CLEAN while the command it measured is gone. The two legs barely
+  from the script form to `-m pytest` -- so a bytes-only check reads those entries
+  CLEAN while the command it measured is gone. THE MAGNITUDE OF THAT MOVE IS NOT
+  UNIFORM AND IS NOT ASSUMED. #124's own summary called it "roughly tripled their wall
+  time"; re-measured under #131 at `c7773b4` from five whole-command samples each under
+  the current form, the four of those six that had not yet been re-derived came out
+  0.77x / 1.15x / 1.47x / 2.34x their declared bases -- ONE OF THEM FASTER THAN THE BASE
+  IT REPLACED. So this leg asserts WHICH COMMAND was measured, never how much slower the
+  new one is, and a re-derivation is taken from fresh samples under the current form
+  rather than carried from any such summary. The two legs barely
   overlap: of the three gates that exhausted their budget on 2026-09-20, leg A saw
   one and leg B saw two, so a single-leg check reads two of the three as clean.
 

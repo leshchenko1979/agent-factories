@@ -11,10 +11,10 @@
       "margin_x": 4.042
     },
     "tests/test_board_intake_recorded.py": {
-      "budget_sec": 26.63,
-      "measured_sec": 6.47,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.116
+      "budget_sec": 20.55,
+      "measured_sec": 4.95,
+      "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
+      "margin_x": 4.152
     },
     "tests/test_close_board_recorded.py": {
       "budget_sec": 24.19,
@@ -27,6 +27,12 @@
       "measured_sec": 10.58,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
       "margin_x": 4.071
+    },
+    "tests/test_close_telemetry_provenance.py": {
+      "budget_sec": 18.39,
+      "measured_sec": 4.41,
+      "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
+      "margin_x": 4.17
     },
     "tests/test_commit_pair_hook.py": {
       "budget_sec": 2.19,
@@ -65,10 +71,10 @@
       "margin_x": 6.586
     },
     "tests/test_gate_fixtures_closure.py": {
-      "budget_sec": 28.07,
-      "measured_sec": 6.83,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.11
+      "budget_sec": 32.27,
+      "measured_sec": 7.88,
+      "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
+      "margin_x": 4.095
     },
     "tests/test_gate_registration.py": {
       "budget_sec": 4.35,
@@ -143,10 +149,10 @@
       "margin_x": 4.789
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 11.79,
-      "measured_sec": 2.76,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.272
+      "budget_sec": 17.03,
+      "measured_sec": 4.07,
+      "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
+      "margin_x": 4.184
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 64.27,
@@ -233,10 +239,10 @@
       "margin_x": 4.926
     },
     "tests/test_telemetry_reader_registry.py": {
-      "budget_sec": 13.23,
-      "measured_sec": 3.12,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.24
+      "budget_sec": 29.95,
+      "measured_sec": 7.3,
+      "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
+      "margin_x": 4.103
     },
     "tests/test_template_integrity.py": {
       "budget_sec": 15.99,
