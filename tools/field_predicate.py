@@ -403,3 +403,43 @@ def declared_telemetry_provenance(detail: str) -> list[str]:
     beside `OUTCOME_DOMAIN`.
     """
     return _declared_values(detail, TELEMETRY_PROVENANCE_KEY)
+
+# The close trailer's `verify_rows` field -- the ROW COUNT a cited `tools/ledger.py verify`
+# receipt MEASURED (#96, ruled at ledger `n=745`). verify reads a subject's rows as a
+# SEQUENCE, so a receipt taken before the close row exists has not seen the row it is cited
+# for: the citation is structurally incapable of covering the artifact it certifies. The
+# count is what makes that checkable, because a count is a NUMBER and a citation in prose is
+# not -- a row declaring `n-1` has not lied, it has TOLD you its verify predated the append.
+#
+# `verify_rows` is deliberately NOT in TELEMETRY_KEYS, for `rework`'s and `telemetry`'s
+# reason: it is a count of ROWS READ, not a measurement of the work, so it must not enter an
+# aggregate that sums or counts those keys.
+#
+# The read is POSITIONAL, which is why it is here rather than routed through
+# `declares_field`: that predicate scans the WHOLE detail and answers whether a field is
+# mentioned at all, and a `verify_rows=` token quoted mid-sentence would satisfy it. The
+# invariant asks what the row DECLARES, and a declaration lives in the canonical trailer.
+VERIFY_ROWS_KEY = "verify_rows"
+
+def declared_verify_rows(detail: str) -> list[str]:
+    """Every `verify_rows` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE read of this field, imported by the gate that asserts its invariant -- a close
+    row that cites a verify receipt must declare the row count that verify measured, and
+    that count must be at least the row's own number. A private `token.split("=")` inside
+    the gate would be the class ruled at `n=405` PART 5: one field, one predicate. Section
+    11's law binds a NEW field exactly as it binds an old one, which is why the key is
+    declared here and nowhere else.
+
+    The run is POSITIONAL (`trailer_tokens`), matching `declared_rework` and
+    `declared_telemetry_provenance`: a count quoted mid-sentence is prose and never a
+    declaration, so the number a reader acts on is always the row's own. Values are read
+    VERBATIM, like every other value here.
+
+    A LIST, for `declared_rework`'s reason: the gate must be able to REPORT two
+    declarations rather than read the first silently, because two tokens for one field have
+    no canonical reading (SKILL.md section 8). Classification of a value -- whether it
+    parses, and whether it covers the row -- is NOT here: that is the gate's question, and
+    it is asked of the strings this returns.
+    """
+    return _declared_values(detail, VERIFY_ROWS_KEY)
