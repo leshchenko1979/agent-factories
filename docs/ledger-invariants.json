@@ -3,7 +3,7 @@
   "invariants": {
     "close_row_revision": "2026-09-19T05:05:49Z",
     "close_telemetry_provenance": "2026-09-21T03:38:51Z",
-    "close_verify_receipt_declared": "2026-09-21T21:45:26Z",
+    "close_verify_count_declared": "2026-09-21T21:59:35Z",
     "insights_gate_recorded": "2026-09-21T10:01:42Z",
     "reconstructed_claim_declared": "2026-09-20T06:00:15Z",
     "score_gate_recorded": "2026-09-18T10:04:05Z",

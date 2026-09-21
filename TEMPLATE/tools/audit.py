@@ -1425,10 +1425,17 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     gate and not an accusation -- a citation taken early is not a false citation,
     #     and the rows that carry one stand as written.
     #
-    #     The field is read through `tools/field_predicate.py` and NOTHING else (§11's
-    #     one-field-one-predicate law binds a NEW field exactly as an old one), and the
-    #     read is POSITIONAL -- the canonical trailer -- so prose can TRIGGER the question
-    #     (a citation IS prose) and can never SATISFY it.
+    #     The field's token is `rows` -- the spelling the ledger ALREADY carries (`n=761`
+    #     declares it, `n=762` is the repair row that put it there, both naming this ruling)
+    #     -- so no second spelling is invented for the datum. It is read through
+    #     `tools/field_predicate.py` and NOTHING else (§11's one-field-one-predicate law
+    #     binds a NEW field exactly as an old one), and the read is POSITIONAL -- the
+    #     canonical trailer -- so prose can never SATISFY it.
+    #
+    #     THE POPULATION IS EVERY CLOSE ROW, not only the rows that mention verify: verify
+    #     is part of settlement for every close, so the case worth catching is the close
+    #     where it did not run, which a citation-filtered population cannot see by
+    #     construction. One predicate, and it is the writer's own guarantee.
     #
     #     The boundary is a DECLARED FACTORY PARAMETER read from
     #     `docs/ledger-invariants.json`, never a date hardcoded here: this gate file is
@@ -1444,8 +1451,8 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     that was never judged is what P29 forbids -- contrast #112, whose population a
     #     factory may legitimately never produce and which is therefore proven by its
     #     probe instead.
-    if (repo_root / "tests/test_close_verify_receipt_declared.py").is_file():
-        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_verify_receipt_declared.py"])
+    if (repo_root / "tests/test_close_verify_count_declared.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_verify_count_declared.py"])
 
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
