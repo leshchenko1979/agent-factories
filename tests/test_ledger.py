@@ -1059,6 +1059,83 @@ def main() -> int:
         check("a stated window is not duplicated",
               detail.count("duration=") == 1 and "duration=42s" in detail, detail[-100:])
 
+        print("\nthe guard's own availability — an unimportable extractor is stated, not silent")
+        # The two legs above judge a window that WAS measured. This one judges the case
+        # where nothing could be measured at all: the extractor could not be imported, and
+        # the row used to be appended in complete silence — rc 0, no telemetry, and not a
+        # word in the row saying so. Same defect one level up (n=405 clause 6: absence must
+        # be STATED, never silent), and it is receipted on EIGHT post-guard close rows
+        # (n=169, 173, 210, 341, 370, 399, 607, 686) that shipped with no telemetry at all.
+        #
+        # The probe stages the tool the way every throwaway tree in this gate does, then
+        # DELETES `telemetry.py` from the staged directory. That deletion is the only way
+        # the import can still fail, and it is deliberate rather than convenient: the
+        # module's own bare sibling imports (`ledger_declaration`, `field_predicate`,
+        # `reconstruction`) put `tools/` on `sys.path` as a side effect, so a writer whose
+        # `sys.path[0]` was neither the repo root nor `tools/` now kills the module OUTRIGHT
+        # at load — loudly, before any row exists — instead of silently skipping the block.
+        # The failure mode left to guard is "the neighbour is not there", which is exactly
+        # what the unlink models. Both arms run the SAME staged tree, so the extractor's
+        # presence is the only difference between them. The database is pinned to an EMPTY
+        # one, and NOT to a path that does not exist: `find_database_path` accepts the env
+        # path only `if p.is_file()` and otherwise falls through to the profile database on
+        # the live box, so a bogus path would silently read the running daemon's totals --
+        # the exact box-dependence `run()`'s docstring warns against. An empty database
+        # yields a zero measurement while the window itself still comes from the ledger.
+        absent = Path(tmp) / "noextractor"
+        (absent / "tools").mkdir(parents=True)
+        (absent / "evidence").mkdir()
+        stage_tool(TOOL, absent / "tools", LOCAL_TOOLS)
+        absent_tool = absent / "tools" / "ledger.py"
+        absent_ledger = absent / "evidence" / "ledger.jsonl"
+        absent_db = absent / "empty.db"
+        conn = sqlite3.connect(absent_db)
+        conn.execute(
+            "CREATE TABLE messages (created_at INTEGER, cost REAL, input_tokens INTEGER, "
+            "token_count INTEGER, role TEXT, session_id TEXT)"
+        )
+        conn.commit()
+        conn.close()
+        write_ledger(absent_ledger, ("intake", "#91"), ("claim", "#91"))
+
+        def absent_run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [sys.executable, str(absent_tool), *args],
+                capture_output=True, text=True, cwd=absent,
+                env={**os.environ, "OC_LEDGER_PATH": str(absent_ledger),
+                     "OC_ACTORS_PATH": str(absent / "no-actors.txt"),
+                     "OPENCRABS_DB_PATH": str(absent_db)},
+            )
+
+        # ARM GREEN — the extractor is present, so this leg must not fire at all, and the
+        # extractor must actually have RUN. Both halves are asserted: without the second,
+        # the arm would pass on a tree where the module was never staged, and the RED arm
+        # below would then be proving the wrong thing.
+        r = absent_run("append", "--event", "close", "--actor", "worker",
+                       "--subject", "#91", "--detail", "Closed with the extractor present.")
+        detail = (rows(absent_ledger) or [{}])[-1].get("detail", "")
+        check("extractor present: the row does not claim it was unavailable",
+              r.returncode == 0 and "telemetry=unavailable" not in detail, detail[-90:])
+        check("extractor present: the window was measured and stated",
+              declares_field(detail, "duration"), detail[-90:])
+
+        # ARM RED — the neighbour is gone, and the SAME command must now say so.
+        (absent / "tools" / "telemetry.py").unlink()
+        absent_ledger.write_text(
+            "\n".join(json.dumps(row) for row in rows(absent_ledger)[:2]) + "\n",
+            encoding="utf-8",
+        )
+        r = absent_run("append", "--event", "close", "--actor", "worker",
+                       "--subject", "#91", "--detail", "Closed with no extractor at all.")
+        detail = (rows(absent_ledger) or [{}])[-1].get("detail", "")
+        check("an unimportable extractor is stated, never silent",
+              r.returncode == 0 and "telemetry=unavailable" in detail, detail[-90:])
+        # Non-vacuity: the row carries NO measurement, which is precisely why the statement
+        # has to exist. Without this the leg would pass on a row that had the numbers.
+        for key in ("cost_usd", "tokens_in", "tokens_out", "turns", "duration"):
+            check(f"and it declared no {key} (the probe is not vacuous)",
+                  not declares_field(detail, key), detail[-90:])
+
     print()
     if failures:
         print(f"ledger gate FAILED: {len(failures)} check(s)")

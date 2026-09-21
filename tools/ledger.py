@@ -367,13 +367,20 @@ def cmd_append(args: argparse.Namespace) -> int:
                          + "; ".join(message for _subject, _leg, message in problems))
         detail = args.detail
         if args.event == "close":
+            # ONE form, and it is the bare NEIGHBOUR import -- the same form the three
+            # sibling imports at the head of this file use, and for the same reason:
+            # this tool runs as `python3 tools/ledger.py`, so `tools/` is on the path,
+            # while a dotted `tools.telemetry` import would need the REPO ROOT there --
+            # and `tools/__init__.py` does not exist, so `tools` is a PEP 420 namespace
+            # package and that form can only ever fail. It was the FIRST form tried and
+            # it never succeeded: measured directly (#129), the dotted form raised
+            # ImportError while the bare form resolved, in the normal CLI form, in the
+            # same process. Collapsing the chain to the one reachable form also removes
+            # a level of nesting from the block below.
             try:
-                from tools.telemetry import extract_task_telemetry
+                from telemetry import extract_task_telemetry
             except ImportError:
-                try:
-                    from telemetry import extract_task_telemetry
-                except ImportError:
-                    extract_task_telemetry = None
+                extract_task_telemetry = None
 
             if extract_task_telemetry:
                 telem = extract_task_telemetry(args.subject, ledger_path=target_ledger)
@@ -424,6 +431,23 @@ def cmd_append(args: argparse.Namespace) -> int:
                     # the window was too short, which IS the finding. Guarded on the
                     # DECLARED field so an author's own duration is never duplicated.
                     detail = f"{detail} duration={telem.get('duration_sec', 0)}s".strip()
+            else:
+                # THE EXTRACTOR COULD NOT BE IMPORTED, AND THE ROW NOW SAYS SO (#129).
+                # `extract_task_telemetry` resolving to None used to skip this whole
+                # block in silence: the row was appended, rc was 0, and NOTHING in it
+                # said no measurement had been taken -- a close row that reads as
+                # measured while carrying none. That is n=405 clause 6, "absence must
+                # be STATED, never silent", applied to the guard's own availability
+                # rather than to the window it used. The class is receipted: EIGHT
+                # post-guard close rows shipped with no telemetry at all (n=169, 173,
+                # 210, 341, 370, 399, 607, 686), and for SIX of them the cause is
+                # established BY VARIATION -- both import forms raised ImportError
+                # because the writer's `sys.path[0]` was neither the repo root nor
+                # `tools/`, so the truthiness gate above skipped the block entirely.
+                # The token names the FIELD and its STATE, so a reader can see WHY the
+                # row carries no numbers; it is not one of the five keys
+                # `field_predicate` reads, so it declares no measurement.
+                detail = f"{detail} telemetry=unavailable".strip()
 
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,
