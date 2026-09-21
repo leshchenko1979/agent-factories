@@ -107,6 +107,53 @@ def test_foreign_litter_does_not_fail_our_audit() -> None:
         assert not ours.exists(), "clean mode (dry_run=False) reaped nothing"
 
 
+def scratch_name(line: str) -> str:
+    """The filename a `stale scratch file:` violation line names.
+
+    Parsed by LABEL, never by the LAST COLON (ai-antispam HQ, 2026-09-21).
+    `reap_stale_scratch` freezes an age annotation into each entry before `basename`
+    is applied, so the violation line reads
+
+        '  - stale scratch file: <name> (age: 64h)'
+
+    and the last colon belongs to the ANNOTATION, not to the label: an `rsplit(":")`
+    returned `'64h)'` for every line, whatever the filename was. That read the guard RED
+    on our OWN litter (a false RED) and left it blind to a foreign name at the same time.
+    Factored out of the live loop so `test_scratch_name_parser_is_probed_offline` can
+    drive it with synthetic lines — a probe is the only way this predicate is exercised
+    on a box whose namespace happens to hold nothing, which is exactly the state that let
+    the defect sit here unreported.
+    """
+    tail = line.split("stale scratch file:", 1)[1]
+    return tail.split(" (age:", 1)[0].strip()
+
+def test_scratch_name_parser_is_probed_offline() -> None:
+    """The parser is driven by SYNTHETIC lines, so this file is never vacuous.
+
+    The live loop below can only assert over lines the tool actually prints, and on a box
+    whose `/tmp/<repo>-*` namespace holds nothing stale it examines ZERO lines — green
+    because it saw nothing, not because the population was clean. That is the state that
+    let the `rsplit` defect ship: the loop body had never run here, while it fired on the
+    first run anywhere with real litter. So the predicate is probed directly, and the
+    probe would FAIL on the defect it was written for.
+    """
+    own = "  - stale scratch file: agent-factories-probe.log (age: 30h)"
+    foreign = "  - stale scratch file: ai-antispam-probe.log (age: 64h)"
+
+    assert scratch_name(own) == "agent-factories-probe.log", scratch_name(own)
+    assert scratch_name(foreign) == "ai-antispam-probe.log", scratch_name(foreign)
+    assert scratch_name(own).startswith(f"{REPO.name}-"), "our OWN litter must be accepted"
+    assert not scratch_name(foreign).startswith(f"{REPO.name}-"), (
+        "a FOREIGN name must be rejected by the namespace assertion"
+    )
+
+    # The defect itself, pinned so a regression to the old form cannot pass: the LAST
+    # COLON belongs to the age annotation, so that parse can never yield a filename.
+    assert own.rsplit(":", 1)[-1].strip() == "30h)", "the old parse is what the fix replaced"
+    assert not own.rsplit(":", 1)[-1].strip().startswith(f"{REPO.name}-"), (
+        "the old parse rejected our own file — a false RED, the half that made it visible"
+    )
+
 def test_cli_audit_never_reports_foreign_litter() -> None:
     """End-to-end: real /tmp litter from the dev tools is never our violation.
 
@@ -133,7 +180,7 @@ def test_cli_audit_never_reports_foreign_litter() -> None:
 
     for line in output.splitlines():
         if "stale scratch file" in line:
-            name = line.rsplit(":", 1)[-1].strip()
+            name = scratch_name(line)
             assert name.startswith(f"{REPO.name}-"), (
                 f"audit reported a scratch file outside our namespace: {name!r}"
             )
