@@ -215,10 +215,10 @@
       "margin_x": 10.818
     },
     "tests/test_skill_version_contract.py": {
-      "budget_sec": 9.59,
-      "measured_sec": 2.21,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.339
+      "budget_sec": 49.59,
+      "measured_sec": 12.21,
+      "measured_at": "b82876f2f5d4f3d8c97411cb950ca5b2575fbd09",
+      "margin_x": 4.061
     },
     "tests/test_subject_form.py": {
       "budget_sec": 66.55,
