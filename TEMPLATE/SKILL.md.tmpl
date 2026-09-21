@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.10
+version: 0.1.11
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -231,6 +231,20 @@ archive.
 - **No claim without a check.** Existence, absence and status all require a
   tool call in the same turn. "I have not verified" is an acceptable answer;
   a confident guess is not.
+- **A criterion is a claim too, and it is AUTHORED long before it is judged.** A plan
+  acceptance criterion that names a path, a gate or a file asserts that the artefact RESOLVES,
+  so the check the clause above requires is due **when the criterion is written**, not at
+  completion and not by whoever executes it days later. Resolve every name as you write it;
+  where the artefact does not exist, name the MECHANISM by the behaviour you will observe
+  rather than a filename that merely reads plausible. A name assembled from its neighbours is
+  the same fabrication as a guessed sha, and it survives longer because **nothing runs a
+  plan**, and a plan lives outside every tree the offline suite reads: a criterion naming a
+  test file that exists under **no revision** stood on a live plan for three days, its name
+  assembled from the two real artefacts beside it, and a patrol's report caught it rather
+  than any mechanical check. **No gate can uphold this and that is stated, not implied** —
+  so what upholds it is the process: the authoring lane resolves each name, and the lane
+  that meets a criterion naming an absent artefact reports it and never silently re-words
+  it (a judged acceptance is a record, and rewriting one is a backfill).
 - **An attribution names an ABSOLUTE revision, never a relative one.** The receipt rule above
   governs RECEIPTS; this governs INVESTIGATION, which a probe that writes no receipt never
   reaches. `HEAD~1` means *the parent of whatever HEAD is when the probe runs*, so in a shared

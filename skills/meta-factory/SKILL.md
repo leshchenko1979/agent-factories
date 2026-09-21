@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.14
+version: 0.1.15
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -255,6 +255,22 @@ leaning on shared memory rather than on what it said.
 - **Identifiers are never hand-assembled.** Copy the full value from live output.
 - **No claim without a check.** Existence, absence and status all require a tool call in the
   same turn. "I have not verified" is acceptable; a confident guess is not.
+- **A criterion is a claim too, and it is AUTHORED long before it is judged.** A plan
+  acceptance criterion that names a path, a gate or a file asserts that the artefact RESOLVES,
+  so the check the clause above requires is due **when the criterion is written** — not at
+  completion, and not by whoever executes it days later. Resolve every name as you write it;
+  where the artefact does not exist, name the MECHANISM by the behaviour you will observe
+  rather than a filename that merely reads plausible. A name assembled from its neighbours is
+  the same fabrication as a guessed sha, and it survives longer because **nothing runs a
+  plan**: measured 2026-09-21, a Worker plan task carried as its third acceptance criterion a
+  command naming a test file that exists under **no revision**. The name was assembled from
+  the two real artefacts beside it — the ledger-invariants JSON and the ledger-boundary
+  helper — which is exactly what made it read plausible rather than wrong. It stood for
+  three days, and a patrol's report caught it, not a mechanical check. **No gate can uphold
+  this and that is stated, not implied** — a session plan lives outside every tree the
+  offline suite reads — so what upholds it is the process: the authoring lane resolves each
+  name, and the lane that meets a criterion naming an absent artefact reports it and never
+  silently re-words it (a judged acceptance is a record, and rewriting one is a backfill).
 - **Verification is scoped by load-bearing.** Verify what you will act on or report; accept
   receipted facts you will not. In a cross-lane pass, the value is the **contradiction** check.
 - **An attribution names an ABSOLUTE sha, never a relative revision.** The receipt rule above
