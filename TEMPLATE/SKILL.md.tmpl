@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.11
+version: 0.1.12
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -245,6 +245,12 @@ archive.
   so what upholds it is the process: the authoring lane resolves each name, and the lane
   that meets a criterion naming an absent artefact reports it and never silently re-words
   it (a judged acceptance is a record, and rewriting one is a backfill).
+- **A citation is resolvable by a reader who holds ONLY this document.** A reference to
+  tracked work carries its NUMBER, taken in full from the read that returned it; a reference
+  to another document NAMES that document; a bare section number resolves only inside the file
+  that holds it — which is precisely the reader an agent usually is: after a compaction, in
+  another session, or in another factory. A numberless "see above" reads as knowledge while
+  carrying none.
 - **An attribution names an ABSOLUTE revision, never a relative one.** The receipt rule above
   governs RECEIPTS; this governs INVESTIGATION, which a probe that writes no receipt never
   reaches. `HEAD~1` means *the parent of whatever HEAD is when the probe runs*, so in a shared

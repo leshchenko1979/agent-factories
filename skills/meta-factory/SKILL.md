@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.15
+version: 0.1.16
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -271,6 +271,19 @@ leaning on shared memory rather than on what it said.
   offline suite reads — so what upholds it is the process: the authoring lane resolves each
   name, and the lane that meets a criterion naming an absent artefact reports it and never
   silently re-words it (a judged acceptance is a record, and rewriting one is a backfill).
+- **A citation is resolvable by a reader who holds ONLY this document.** A reference to
+  tracked work carries its NUMBER, taken in full from the read that returned it; a reference
+  to another document NAMES that document; a bare section number resolves only inside the file
+  that holds it — which is precisely the reader an agent usually is: after a compaction, in
+  another session, or in another factory. The mechanism is structural, not stylistic, so this is
+  the citation half of the two bullets above: a numberless "see above" is unreadable to anyone
+  who reached the law without the surrounding conversation, and it reads as knowledge while
+  carrying none. Filed by the owner as `#135` half 2 on his own stated basis — a correlation
+  observed in one factory, which he labelled a stated correlation rather than a measured chain —
+  and MEASURED before it was written, in the direction that matters: this file's four section
+  references are ALL compliant (three name their document, one is a same-file reference), so the
+  clause is PREVENTIVE here rather than corrective, and it is stated that way rather than
+  claiming a defect this tree does not carry.
 - **Verification is scoped by load-bearing.** Verify what you will act on or report; accept
   receipted facts you will not. In a cross-lane pass, the value is the **contradiction** check.
 - **An attribution names an ABSOLUTE sha, never a relative revision.** The receipt rule above
