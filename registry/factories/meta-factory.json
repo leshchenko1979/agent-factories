@@ -53,9 +53,9 @@
       "cadence": "1st and 15th, 09:00Z"
     },
     {
-      "name": "meta-factory-registry-attest",
+      "name": "factory-registry-attest",
       "audience": "agent",
-      "entry": "cron meta-factory-registry-attest",
+      "entry": "cron factory-registry-attest",
       "cadence": "daily 06:00Z"
     }
   ],
