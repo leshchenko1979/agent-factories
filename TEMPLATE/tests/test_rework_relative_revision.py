@@ -39,6 +39,23 @@ suffix") as the ROOTLESS form is what keeps the two tiers consistent; a rooted
 suffix is a different token class. If HQ rules the rooted form barred as well, this
 is a one-line change to `classify` and the count is already printed.
 
+A TILDE THAT MODIFIES A QUANTITY IS NOT A REVISION (#140). `~` is the approximation
+marker in ordinary prose, so a rootless tilde whose number is followed by the quantity
+it approximates — `inside ~90 minutes`, `~2 hours` — is a MEASUREMENT, and the rootless
+branch reports it as `approximated` rather than flagging it. This is the predicate being
+made to ask its own question above: the discriminator is *is the token a revision?*, and
+a duration is not one. The repair is the PREDICATE and never a third exemption row — an
+exemption granted to something that is not a defect is a permanent weakening (`SKILL.md`
+section 11), and this gate errors on an exemption that matches nothing, so a duration
+exemption would be wrong in the first place and unstable besides. The class of measure
+nouns is CLOSED and lives in source because it is universal, unlike the factory data
+below; `commits` is deliberately ABSENT, because a commit count IS a revision distance
+and `~2 commits back` stays governed. Every token the branch sets aside is PRINTED in
+the population line, so a run that excused an approximation and a run that never saw one
+are never the same output. Measured at the fix: the rootless branch contributed ZERO
+true positives to the live log, and its one live collision was a Root cause cell reading
+`inside ~90 minutes`.
+
 EXEMPTIONS ARE FACTORY DATA, NEVER SOURCE IN THIS FILE. This gate is paired
 byte-identically with `TEMPLATE/tests/test_rework_relative_revision.py`, so a
 pre-gate instance named inline would ship to every new factory — #78's ruling, and
@@ -90,20 +107,57 @@ MOVING_CITATION = re.compile(rf"(?<![0-9A-Za-z_/])(?:HEAD|@){SUFFIX}(?![0-9A-Za-
 ROOTED_CITATION = re.compile(rf"(?<![0-9A-Za-z_/]){HEX}{SUFFIX}(?![0-9A-Za-z_])")
 # A rootless suffix standing alone as a whole token. The boundary class is whitespace or
 # a backtick, so the `~` of a home-directory path and the `^` of a regex anchor cannot
-# match, and `x^2` is excluded by the same lookbehind.
+# match, and `x^2` is excluded by the same lookbehind. A backtick is a BOUNDARY, not an
+# escape: a `~1` in backticks is still a token, so quoting a citation does not excuse it.
 ROOTLESS_CITATION = re.compile(r"(?<![^\s`])[~^]\d*(?![^\s`])")
+
+# The quantity words a tilde may be approximating. `~` is the approximation marker in
+# ordinary prose, so `inside ~90 minutes` is a MEASUREMENT rather than a revision (#140).
+# The class is CLOSED and lives in source because it is UNIVERSAL — a measure noun reads
+# the same in every factory — unlike the exemptions below, which are factory data.
+# `commits` is deliberately ABSENT: a commit count IS a revision distance, so
+# `~2 commits back` stays governed rather than excused.
+APPROXIMATED_QUANTITIES = frozenset({
+    "minutes", "minute", "mins", "min",
+    "seconds", "second", "secs", "sec",
+    "hours", "hour", "hrs", "hr",
+    "days", "day", "weeks", "week", "months", "month", "years", "year",
+    "entries", "entry", "rows", "row", "cells", "cell", "lines", "line",
+    "chars", "characters", "bytes", "tokens", "files", "file",
+    "points", "percent",
+})
 
 PREDICATE = (
     "no entry in evidence/rework.md cites a revision by a moving-HEAD-relative form "
-    "(HEAD~, HEAD~N, HEAD^, @~, @^, or a rootless ~N/^N) outside the declared exemptions"
+    "(HEAD~, HEAD~N, HEAD^, @~, @^, or a rootless ~N/^N standing as a token) outside the "
+    "declared exemptions; a rootless tilde that modifies a quantity is a measurement"
 )
 
+def approximates_a_quantity(cell: str, match: re.Match) -> bool:
+    """True when the tilde token is followed by the quantity it approximates.
+
+    Prose states what a number measures in the word after it, and that word is the
+    discriminator: `inside ~90 minutes` and `~2 hours` are MEASUREMENTS, while
+    `the parent is ~1` is a citation. A token followed by anything outside the closed
+    class stays GOVERNED — the safe direction, because a false positive is visible on
+    the next run while a missed citation is silent.
+    """
+    word = re.match(r"\s+([A-Za-z]+)", cell[match.end():])
+    return bool(word) and word.group(1).lower() in APPROXIMATED_QUANTITIES
+
 def citations_in(cell: str) -> list[tuple[str, str]]:
-    """`(form, kind)` for every revision citation in a cell; kind is `moving`/`rooted`."""
+    """`(form, kind)` for every tilde/caret token in a cell.
+
+    kind is `moving`/`rooted`/`approximated`. An approximated tilde is RETURNED as its
+    own kind rather than dropped: the gate prints every token it set aside, so a
+    discriminator that excused one is never the same output as one that never looked.
+    """
     found: list[tuple[str, str]] = []
     found.extend((m.group(0), "moving") for m in MOVING_CITATION.finditer(cell))
     found.extend((m.group(0), "rooted") for m in ROOTED_CITATION.finditer(cell))
-    found.extend((m.group(0), "moving") for m in ROOTLESS_CITATION.finditer(cell))
+    for match in ROOTLESS_CITATION.finditer(cell):
+        kind = "approximated" if approximates_a_quantity(cell, match) else "moving"
+        found.append((match.group(0), kind))
     return found
 
 def entry_citations(text: str) -> tuple[list[dict], int, int]:
@@ -189,11 +243,13 @@ def report(citations: list[dict], entries: int, cells: int, exemptions: list[dic
     """The population line — printed on EVERY run, clean or not."""
     governed = [c for c in citations if c["kind"] == "moving"]
     rooted = [c for c in citations if c["kind"] == "rooted"]
+    approximated = [c for c in citations if c["kind"] == "approximated"]
     return (
         f"predicate — {PREDICATE}; examined {entries} entry row(s) across {cells} cell(s), "
-        f"{len(citations)} revision citation(s): {len(governed)} governed (moving-HEAD), "
-        f"{len(rooted)} observed (absolute-sha root, deterministic); "
-        f"{len(exemptions)} exemption(s) declared"
+        f"{len(governed) + len(rooted)} revision citation(s): {len(governed)} governed "
+        f"(moving-HEAD), {len(rooted)} observed (absolute-sha root, deterministic); "
+        f"{len(approximated)} approximated (a tilde modifying a quantity — a measurement, "
+        f"not a revision); {len(exemptions)} exemption(s) declared"
     )
 
 # --------------------------------------------------------------------------- probes
@@ -294,6 +350,54 @@ def main() -> int:
         "an absolute-sha parent form is OBSERVED, not dropped",
         [c["kind"] for c in rooted] == ["rooted"],
         f"kinds={[c['kind'] for c in rooted]}",
+        failures,
+    )
+
+    # #140 — the class the rootless branch must separate: a REVISION from a DURATION.
+    # A test driven from the live table passes VACUOUSLY here, because the live log
+    # carries no duration-matching instance; both directions are driven from fixtures.
+    probe(
+        "a fixture writing a duration as `~90 minutes` passes — a measurement is not a revision",
+        "the interval was inside ~90 minutes",
+        False, failures,
+    )
+    probe(
+        "a fixture citing a bare rootless ~1 as a revision is still caught",
+        "the parent is ~1",
+        True, failures,
+    )
+    probe(
+        "a fixture citing a bare rootless ^1 is still caught — a caret has no prose meaning",
+        "the parent is ^1",
+        True, failures,
+    )
+    probe(
+        "a commit count is a revision distance, so `~2 commits back` stays governed",
+        "the change landed ~2 commits back",
+        True, failures,
+    )
+
+    set_aside, _, _ = entry_citations(
+        synthetic_doc(synthetic_row(root_cause="the interval was inside ~90 minutes"))
+    )
+    check(
+        "an approximated tilde is OBSERVED, not dropped — the gate prints what it set aside",
+        [c["kind"] for c in set_aside] == ["approximated"],
+        f"kinds={[c['kind'] for c in set_aside]}",
+        failures,
+    )
+
+    both_cites, _, _ = entry_citations(
+        synthetic_doc(
+            synthetic_row(root_cause="the interval was inside ~90 minutes"),
+            synthetic_row(root_cause="a second defect", resolution="the parent is ~1"),
+        )
+    )
+    both_kinds = {c["form"]: c["kind"] for c in both_cites}
+    check(
+        "ONE fixture carrying both shapes: the duration passes, the revision is flagged",
+        both_kinds.get("~90") == "approximated" and both_kinds.get("~1") == "moving",
+        f"kinds={both_kinds}",
         failures,
     )
 
