@@ -18,16 +18,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ctypes
 import datetime
+import fcntl
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -643,6 +646,10 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 stderr=subprocess.PIPE,
                 text=True,
                 timeout=budget_sec,
+                # The orphan half of #145: a gate must not outlive the run that started
+                # it. `preexec_fn` leaves `cmd` untouched, so the budget key still
+                # describes the command that ran.
+                preexec_fn=_orphan_guard(),
             )
             t_el = (datetime.datetime.now() - t0).total_seconds()
             return {
@@ -813,6 +820,102 @@ def render_status_line(verdict: GateVerdict) -> str:
         )
     return line
 
+
+# PR_SET_PDEATHSIG's opcode (linux/prctl.h). Named rather than inlined so the one
+# call below reads as what it is.
+PR_SET_PDEATHSIG = 1
+
+# The whole-run in-flight guard's lock, and its refusal exit code (issue #145, ruling
+# n=940 Q2). The lock sits at the repo root and is covered by `.gitignore`'s `.*.lock`
+# rule, the same idiom `.ledger.lock` and `.insights.lock` already use.
+AUDIT_LOCK = REPO_ROOT / ".audit.lock"
+LOCK_HELD_EXIT_CODE = 3
+
+def _orphan_guard() -> Callable[[], None]:
+    """Build the child-side `preexec_fn` that binds a child's life to THIS process.
+
+    THE PROPERTY (issue #145, ruling n=940): no process in a run's tree outlives the
+    run. The lock does NOT close this — a dead holder releases the lock, so the lock
+    never sees an orphan, and the orphan is exactly the load the guard exists to bound:
+    a gate left running after its audit was killed keeps burning the cgroup the next
+    run is about to contend for.
+
+    WHY `preexec_fn` AND NOT A WRAPPER: the gate's command line IS its budget key
+    (`gate_key_for_cmd`), so prefixing a supervisor onto `cmd` would silently re-key
+    every entry in the manifest. `preexec_fn` runs in the forked child before `exec`,
+    so the command line the budget describes is the command line that runs.
+
+    WHY IT IS SAFE HERE: `preexec_fn` is documented as unsafe in a threaded program,
+    and this runner is single-threaded — the gate loop is sequential and nothing in
+    this file starts a thread.
+
+    FAIL-OPEN, deliberately: on a platform without `prctl` the call is skipped and the
+    run proceeds unguarded. The property is a load bound, never a correctness
+    condition, so losing it must not stop an audit from running.
+
+    THE RACE, and why the `getppid` check is not decoration: `PR_SET_PDEATHSIG` arms
+    only for deaths AFTER it is set, so a parent that died between `fork` and this
+    call leaves a child that would never be signalled. Re-parenting is detectable
+    precisely because the parent pid changes, so a child that finds a different
+    `getppid` exits itself rather than outliving the run that spawned it.
+    """
+    parent_pid = os.getpid()
+
+    def _bind() -> None:
+        try:
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+        except Exception:
+            return
+        if os.getppid() != parent_pid:
+            os._exit(0)
+
+    return _bind
+
+def acquire_run_lock(*, wait: bool = False, lock_path: Path | None = None) -> Any | None:
+    """Take the whole-run lock, or refuse. Returns the held handle, or None on refusal.
+
+    SCOPE (ruling n=940 Q1): the contended unit is the RUN, not the gate. The gate loop
+    is sequential — `for cmd in gates_to_run` — so one run can never overlap itself, and
+    a per-gate guard would bound nothing while adding a lock acquisition per gate.
+
+    WHY REFUSE AND NOT WAIT (Q2): `flock` self-heals, so the safety argument for
+    refusing is gone; the argument that remains is that WAITING IS WHAT CREATES THE
+    ORPHAN — a lane's turn that blocks on the lock can die before it ever holds it, and
+    the run it was waiting to start then belongs to nobody. So the default is a
+    non-blocking refuse and `--wait` is the caller's opt-in.
+
+    The handle is returned rather than kept in a global so the lock's lifetime is the
+    caller's `with` block, and the refusal is a NAMED stderr line so a consumer can tell
+    did-not-run from ran-and-failed. Nothing is written on the refusal path — no run
+    row: `OUTCOME_DOMAIN` is a closed four-token set and a refused run did no work, so
+    its row would either red a gate or let it grade the yield it never measured.
+    """
+    path = AUDIT_LOCK if lock_path is None else lock_path
+    try:
+        handle = open(path, "w")
+    except OSError as exc:
+        # An unopenable lock is a DEFECT, never a silent fallback to unguarded running:
+        # falling through would make the guard's absence indistinguishable from a free
+        # lock, which is the exempt-by-silence shape this factory forbids.
+        print(
+            f"audit in-flight guard: cannot open the run lock at {path} — {exc}",
+            file=sys.stderr,
+        )
+        return None
+    flags = fcntl.LOCK_EX if wait else (fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        fcntl.flock(handle, flags)
+    except OSError:
+        handle.close()
+        print(
+            f"audit in-flight guard: another audit run holds {path} — this run did NOT "
+            f"start, no gate ran and no run row was written (re-run when it finishes, "
+            f"or pass --wait to block on it)",
+            file=sys.stderr,
+        )
+        return None
+    return handle
 
 def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], GateBudgets]:
     """Execute all discovered mechanical gates, and return the budgets they resolved against.
@@ -1470,6 +1573,32 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_brain_metrics.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_brain_metrics.py"])
 
+    # 49. In-flight guard gate: two audit runs contending for one cgroup is real load —
+    #     17 cron jobs fired inside a 19-second window on 2026-09-22 after the scheduler
+    #     starvation filed as opencrabs#504, and the pile included audits from MORE THAN
+    #     ONE repository. The contended unit is the RUN, not the gate: the loop below is
+    #     sequential, so a run can never overlap itself. A second run now refuses on its
+    #     own exit code (3, distinct from the gate-failure 1 and the budget-manifest 2),
+    #     prints a named stderr line, and writes NO run row — `OUTCOME_DOMAIN` is a closed
+    #     four-token set, so a refused row would either red a gate or let a run that did no
+    #     work grade the yield it never measured.
+    #     THE EXEMPTION UNDER `--no-gates` IS LOAD-BEARING, and this registration is why:
+    #     `tests/test_audit_rates.py` is itself a registered gate that runs
+    #     `audit.py --json --no-gates` and asserts rc==0, so a NAIVE whole-run guard makes
+    #     the outer run hold the lock while its own gate's nested run refuses, and that gate
+    #     reds. The gate below drives BOTH directions — a guard that is absent fails the
+    #     refusal probe, and a guard that is too wide fails the recursion probe.
+    #     The second half is the ORPHAN PROPERTY: no process in a run's tree outlives the
+    #     run. The lock cannot close it (a dead holder releases the lock, so the lock never
+    #     sees an orphan), so `PR_SET_PDEATHSIG` is set in the gate child before exec and
+    #     the gate proves it against a CONTROL arm.
+    #     THE BOUND, stated so the guard is not oversold: a per-repo lock cannot bound the
+    #     ops cgroup, which is shared ACROSS repositories — at least three other repos run
+    #     this same template audit inside it, each with its own lock. (issue #145, ruling
+    #     n=940, P29).
+    if (repo_root / "tests/test_audit_inflight_guard.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_audit_inflight_guard.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
@@ -1620,7 +1749,37 @@ def main() -> int:
         action="store_true",
         help="Emit metrics only, skipping the mechanical gate suite (used by tests/test_audit_rates.py to avoid gate recursion). The verdict fields report null, never a green.",
     )
+    parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Block on the run lock instead of refusing. The default is a non-blocking refuse (exit 3), because a blocked caller is what leaves an orphan when its turn dies.",
+    )
     args = parser.parse_args()
+
+    # THE WHOLE-RUN IN-FLIGHT GUARD (issue #145, ruling n=940). Two runs contending for
+    # one cgroup is the load this bounds: 17 cron jobs fired inside a 19-second window
+    # after the 2026-09-22 scheduler starvation, and the runs piled up. The guard is
+    # taken BEFORE any work — a refusal must cost nothing and write nothing.
+    #
+    # EXEMPT UNDER --no-gates, and the exemption is principled rather than a carve-out:
+    # `--no-gates` spawns no gates and so contributes none of the load the guard bounds.
+    # It is also what keeps the suite green — `tests/test_audit_rates.py` is a registered
+    # gate that runs `audit.py --json --no-gates` and asserts rc==0, so a guard applied
+    # there would make the outer run hold the lock while its own gate's nested run
+    # refused, and the gate would red.
+    #
+    # The handle is held in a local for the rest of `main()`: it is released when this
+    # function returns and the file object is collected, which is exactly whole-run
+    # scope, and it is deliberately NOT a global that could outlive the run.
+    run_lock = None
+    if not args.no_gates:
+        run_lock = acquire_run_lock(wait=args.wait)
+        if run_lock is None:
+            # Exit 3 is DISTINCT from the 1 a gate failure returns, in the same namespace
+            # as the budget-manifest refusal's 2: "the audit did not run" is not "the
+            # audit ran and a gate failed", and a consumer reading a bare 1 would record
+            # a verdict nobody took.
+            return LOCK_HELD_EXIT_CODE
 
     ledger_file = REPO_ROOT / "evidence/ledger.jsonl"
     rework_file = REPO_ROOT / "evidence/rework.md"

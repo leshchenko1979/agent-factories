@@ -126,6 +126,11 @@ PAIRS = [
     ("tests/test_hygiene_namespace.py", "TEMPLATE/tests/test_hygiene_namespace.py"),
     ("tests/test_docs_sync.py", "TEMPLATE/tests/test_docs_sync.py"),
     ("tests/test_audit_rates.py", "TEMPLATE/tests/test_audit_rates.py"),
+    # Added with its registration (issue #145): the gate drives `tools/audit.py`, which is a
+    # paired file, so it is only meaningful where BOTH ship — a factory that took the tool's
+    # in-flight guard without the gate proving it would carry a guard nothing checks, and one
+    # that took the gate without the tool would run probes that cannot pass.
+    ("tests/test_audit_inflight_guard.py", "TEMPLATE/tests/test_audit_inflight_guard.py"),
     # Added with its registration (issue #74): the gate reads the harness binding's own
     # variable table and probes the tool for each name it finds, so it is only meaningful
     # where BOTH artifacts ship — and both do, byte-paired (`docs/**` by

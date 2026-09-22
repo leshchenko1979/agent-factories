@@ -361,6 +361,19 @@ def gate_registration_problems(tests_dir: Path, audit_path: Path) -> tuple[list[
 # Part 1's derivation and Part 3's equality leg meet only at the declared-gate grain.
 REQUIRED_GATES: tuple[str, ...] = (
     "test_audit_rates.py",
+    # Added with its registration (issue #145, ruling n=940). REQUIRED is the correct grain
+    # and OPTIONAL is not: the gate drives the tool's own mechanism against a THROWAWAY copy
+    # of its tree — it reads no live board, no fleet manifest and no box-local fixture — so it
+    # passes in a bootstrapped factory exactly as it does here. Its one live-tree dependency
+    # is the ledger, and that is handled by SKIPPING WITH ITS REASON rather than asserting it
+    # (`TEMPLATE/` ships no `evidence/`; `BOOTSTRAP.md` creates it), which is the discipline
+    # `tests/ledger_boundary.py` exists to enforce after #76/#78. It is byte-paired with a
+    # TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the runner
+    # and keeping the file. THE LOAD-BEARING HALF is that `tests/test_audit_rates.py` — an
+    # entry already in this tuple — is a registered gate that runs `audit.py --json --no-gates`
+    # and asserts rc==0, so the two gates constrain each other: this one proves the exemption
+    # that keeps that one green.
+    "test_audit_inflight_guard.py",
     # Added with its registration (issue #74, ruling n=485). REQUIRED is the correct grain and
     # OPTIONAL is not: the gate is PURE over two paired artifacts — the harness binding's own
     # variable table and the tool that must honour each name in it — so it passes in a
