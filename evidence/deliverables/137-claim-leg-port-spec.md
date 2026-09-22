@@ -10,7 +10,7 @@
 
 | Field | Value |
 |---|---|
-| Path (preserved durably) | `evidence/deliverables/137-claim-leg-0b42a5c0.diff` |
+| Path (preserved durably) | **§8 of this file** — the fenced block, verbatim (folded in from a standalone `.diff`) |
 | md5 | `0b42a5c03f096cbd9487c08f029b4618` |
 | Size | 96 lines, 6,007 B |
 | Covers | `sequence_problems` **only** (37 lines → 84 lines) |
@@ -138,3 +138,120 @@ Both support half 1's wording correction and are recorded here rather than as se
 
 So the closure a synced factory owes is **four** artefacts, not three: the three imported
 modules, plus `actors.txt` (or the `EVENTS`/`ACTORS` declaration appropriate to that factory).
+
+---
+
+## 8. The delivered patch, verbatim
+
+**This section is the durable home of the artifact.** The standalone
+`evidence/deliverables/137-claim-leg-0b42a5c0.diff` has been folded in here and §1's path row
+updated to match, because `evidence/` admits only **declared** single-writer surfaces and a bare
+`.diff` is not one of them — `tests/test_single_writer.py` refused it as an un-declared state
+surface. Folding it into this file keeps one artifact instead of two, and needs no change to the
+gate's matcher, which already covers `evidence/*.md`.
+
+Byte-exactness is receipted: extracting the fenced block below reproduces md5
+`0b42a5c03f096cbd9487c08f029b4618`, **96 lines, 6,007 B** — identical to the delivered file.
+
+Extraction (this is the final fenced block in the file):
+
+    awk '/^```diff$/{f=1;next} f && /^```$/{exit} f' evidence/deliverables/137-claim-leg-port-spec.md
+
+```diff
+--- /tmp/sp_template.py	2026-09-22 00:20:25.604311313 +0000
++++ /tmp/sp_local.py	2026-09-22 00:20:25.604311313 +0000
+@@ -1,14 +1,43 @@
+ def sequence_problems(
+-    by_subject: dict[str, list[tuple[int, str]]], subject: str, index: int
++    by_subject: dict[str, list[tuple[int, str]]], subject: str, index: int,
++    event: str = "close",
+ ) -> list[tuple[str, str, str]]:
+-    """What a `close` of `subject` at `index` is missing, as (subject, leg, message).
++    """What a `close` — or a `claim` — of `subject` at `index` is missing.
+ 
+-    ONE predicate, TWO call sites. `verify` asks it about every close row it
+-    reads; `append` asks it about the row it is about to write, with
+-    `index = len(rows)` — the line that row will occupy — so the refusal names
+-    the leg the audit would have named later, at the moment the write would have
+-    created the defect. The order leg is bounded by the *latest* intake before
+-    the close, so a re-opened subject must be re-claimed after its re-open.
++    ONE predicate, and now TWO events x TWO call sites. `verify` asks it about
++    every close row it reads AND every claim row; `append` asks it about the row
++    it is about to write, with `index = len(rows)` — the line that row will
++    occupy — so the refusal names the leg the audit would have named later, at
++    the moment the write would have created the defect. The order leg is bounded
++    by the *latest* intake before the close, so a re-opened subject must be
++    re-claimed after its re-open.
++
++    WHY A CLAIM IS CHECKED AT ALL (#121). `close` was the only event the sequence
++    predicate ever looked at, so a `claim` whose subject had no `intake` ANYWHERE
++    was invisible: `verify` read GREEN while the ledger was already defective,
++    and the defect surfaced hours later, when someone tried to close. Measured:
++    at ledger `4c46bc0` (257 rows) `verify` returned 0 problems while this leg
++    named `line 256: claim for #120 has no intake anywhere in the ledger` —
++    about nine minutes before the close that turned the gate red. A claim is work
++    being taken, and work cannot be taken on a subject the ledger never admitted.
++
++    WHY THE CLAIM LEG IS "anywhere" AND NOT "before it". A late-reconstruction
++    intake lands AFTER the original claim by design, so a positional claim
++    predicate would re-flag the repair. Measured: after intake n=258 landed,
++    claim n=256 stayed clean, and so did re-claim n=259. The CLOSE legs keep
++    their positional form — the order leg depends on it, and a close whose
++    subject was admitted only later is still correctly reported, because that
++    close could not have been lawful on the row it occupies.
++
++    WHY NOT A `dispatch` LEG (measured, not assumed). Three legacy subjects carry
++    a dispatch and no intake (`#87` `#88` `#89`; `SKILL.md@1.0.11`; `#108`
++    dispatched to worker lane `1122b15e`) and none has a claim or a close, so a
++    dispatch-keyed leg would fire three false positives on rows that are not
++    defective.
++
++    The MESSAGE is phrased for the event that actually triggered it — a
++    claim-triggered problem says `claim`, never `close` — because a mislabelled
++    message sends the reader to the wrong transition.
+ 
+     Each missing leg is reported INDEPENDENTLY, with no short-circuit: one pass
+     should tell the reader everything that is absent, not the first thing the
+@@ -18,19 +47,37 @@
+         return []  # a missing subject is a structural problem, reported as one
+ 
+     legs = by_subject.get(subject, [])
+-    intakes = [j for j, ev in legs if ev == "intake" and j < index]
++    # A CLAIM's intake is looked for ANYWHERE, never only before it: the intake it
++    # needs may be a late reconstruction that landed after it by design (#121). A
++    # CLOSE's legs stay positional — a close could not have been lawful on the row
++    # it occupies unless its subject was already admitted by then.
++    # `j` is a GLOBAL ledger index, never a position within `legs` — bounding it
++    # by `len(legs)` compares an index against a length and silently misses every
++    # intake on the ledger's early rows (measured: 39 false positives at 270 rows,
++    # all of them on subjects whose global indices exceed their own row count).
++    # The claim leg therefore takes every intake in the subject's history, which
++    # is what "anywhere in the ledger" means; the close leg stays bounded by its
++    # own row, because a close could not have been lawful on the row it occupies
++    # unless its subject was already admitted by then.
++    if event == "close":
++        intakes = [j for j, ev in legs if ev == "intake" and j < index]
++    else:
++        intakes = [j for j, ev in legs if ev == "intake"]
+     claims = [j for j, ev in legs if ev == "claim" and j < index]
+ 
+     problems: list[tuple[str, str, str]] = []
+     if not intakes:
++        tail = " before it" if event == "close" else " anywhere in the ledger"
+         problems.append((subject, "intake",
+-            f"line {index + 1}: close for {subject} has no intake before it"))
+-    if not claims:
++            f"line {index + 1}: {event} for {subject} has no intake{tail}"))
++    # The claim leg is a CLOSE leg only: a `claim` row IS its own claim, so asking
++    # a claim for a claim would report every claim in the ledger against itself.
++    if event == "close" and not claims:
+         problems.append((subject, "claim",
+             f"line {index + 1}: close for {subject} has no claim before it"))
+     # The order leg means nothing until both legs exist, so a subject is never
+     # reported twice for the same absence.
+-    if intakes and claims and not any(k > max(intakes) for k in claims):
++    if event == "close" and intakes and claims and not any(k > max(intakes) for k in claims):
+         problems.append((subject, "order",
+             f"line {index + 1}: close for {subject} — its claim precedes its intake (n={max(intakes) + 1})"))
+     return problems
+```
