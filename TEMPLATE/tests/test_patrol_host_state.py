@@ -50,6 +50,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -769,6 +770,76 @@ def test_the_leg_shares_the_manifest_declaration_with_the_CRON_leg() -> None:
     mine, nobody = RUNNER.attribute_rows(rows, ["factory-"])
     assert [r["name"] for r in mine] == ["factory-mine"], mine
     assert [r["name"] for r in nobody] == ["oc-not-mine"], nobody
+
+
+def _home_db(path: Path, *jobs) -> None:
+    """A throwaway OpenCrabs home holding real cron rows — the read path, not a stub.
+
+    The registry itself drives its floor law over a throwaway root for exactly this
+    reason: a reader that has only ever run against the live box has not been shown to
+    read what it claims. This probe builds the SHAPE the live box has (a default home
+    beside a profile root) and reads it through the runner's own function.
+    """
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "create table cron_jobs "
+        "(id text, name text, deliver_to text, prompt text, enabled integer)"
+    )
+    conn.executemany("insert into cron_jobs values (?,?,?,?,?)", jobs)
+    conn.commit()
+    conn.close()
+
+def test_the_box_read_SUPPLIES_the_id_that_resolves_each_row() -> None:
+    """THE DEFECT THIS PROBE EXISTS FOR, measured live before it was written.
+
+    The leg's first live run reported every finding as `(cron id unstated)`, because the
+    box read projected only name/deliver_to/prompt and the id never reached the report.
+    The probes above could not see it: they HAND the leg a row that already carries an id,
+    so they fed it the very field whose absence was the bug. A criterion naming "the job
+    id" is satisfied by a row that HAS one, and the read path is where it is lost.
+    """
+    root = Path(tempfile.mkdtemp()) / "profiles"
+    (root / "ops").mkdir(parents=True)
+    _home_db(root.parent / "opencrabs.db",
+             ("id-in-default-home", "factory-default-home", "", "", 1))
+    _home_db(root / "ops" / "opencrabs.db",
+             ("id-in-ops-home", "factory-ops-home", "session:probe", _WAKE_PROMPT, 1),
+             ("id-disabled", "factory-disabled", "", "", 0))
+    rows, homes_read, unreached = RUNNER.box_cron_rows(root)
+    assert unreached == [], unreached
+    assert len(homes_read) == 2, f"both homes must be read: {homes_read}"
+    by_name = {row["name"]: row for row in rows}
+    assert set(by_name) == {"factory-default-home", "factory-ops-home"}, (
+        f"the read is of ENABLED rows only: {sorted(by_name)}"
+    )
+    for name in ("factory-default-home", "factory-ops-home"):
+        assert by_name[name].get("id"), (
+            f"{name} was read without an id — a report cannot resolve a row it names by "
+            f"a name two homes may share (#126)"
+        )
+    assert by_name["factory-ops-home"]["id"] == "id-in-ops-home", by_name
+
+def test_a_finding_reports_the_id_read_from_the_box_not_a_placeholder() -> None:
+    """End to end over the same throwaway shape: the id in the REPORT is the id on the ROW.
+
+    The report is what a reader acts on. A placeholder there — `unstated`, `row 3` — is a
+    finding that cannot be resolved to a cron job, which is the whole job of the line.
+    """
+    root = Path(tempfile.mkdtemp()) / "profiles"
+    (root / "ops").mkdir(parents=True)
+    _home_db(root.parent / "opencrabs.db")
+    _home_db(root / "ops" / "opencrabs.db",
+             ("55b363eb-live", "factory-measurement-daily", "session:probe", _WAKE_PROMPT, 1))
+    rows, homes_read, unreached = RUNNER.box_cron_rows(root)
+    log_dir = _log_dir(**{"factory-measurement-daily-20260921T060126.log": _FAILURE})
+    leg = RUNNER.notify_receipt_leg(rows, homes_read, unreached, ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "55b363eb-live" in leg["problems"][0], leg["problems"]
+    assert "unstated" not in leg["problems"][0], (
+        f"the id was read from the row and must be reported, never hedged\n"
+        f"{leg['problems'][0]}"
+    )
 
 
 def main() -> int:

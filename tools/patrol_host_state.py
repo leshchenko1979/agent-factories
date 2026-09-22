@@ -473,7 +473,7 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             continue
         try:
             fetched = list(conn.execute(
-                "select name, coalesce(deliver_to,''), coalesce(prompt,'') "
+                "select id, name, coalesce(deliver_to,''), coalesce(prompt,'') "
                 "from cron_jobs where enabled = 1"
             ))
         except sqlite3.Error as exc:
@@ -481,8 +481,13 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             continue
         finally:
             conn.close()
-        for name, deliver_to, prompt in fetched:
+        for row_id, name, deliver_to, prompt in fetched:
             rows.append({
+                # The id is read because a report must RESOLVE the row it names: two jobs
+                # may share a name across homes, and a name alone is not an address. The
+                # notify-receipt leg cites it; the cron-thinness predicate ignores it and
+                # is handed the row whole rather than a projection (#126).
+                "id": row_id,
                 "name": name,
                 "deliver_to": deliver_to,
                 "prompt": prompt,
