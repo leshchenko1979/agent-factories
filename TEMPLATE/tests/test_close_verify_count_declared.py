@@ -88,6 +88,7 @@ Exit: 0 clean or skipped-with-reason; non-zero on a post-boundary close row whos
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -116,8 +117,54 @@ from field_predicate import declared_verify_rows  # noqa: E402
 # which invariant each date belongs to.
 INVARIANT_KEY = "close_verify_count_declared"
 
+# The exemption surface, and why this gate must carry one. The invariant's repair space is
+# EMPTY once a row exists: a ledger row is append-only, `tools/ledger.py repair` refuses to
+# re-declare a key the row's canonical run already carries (#104, ruled n=620 PART 4) and
+# inserts its text BEFORE that run, and a row's `n` is identity and immutable — so a close
+# row that shipped a count short of its own number can never be corrected. A gate whose only
+# exits are barred is a stop with no andon cord (SKILL.md section 11), so the exit is a table
+# of FACTORY DATA in its own file: absent or empty means none, every matching row is printed
+# as an `excused:` line on EVERY run, and an entry that matches nothing is a gate ERROR
+# rather than a silent pass. The skeleton ships as
+# `TEMPLATE/docs/close-verify-count-exemptions.example.json`.
+EXEMPTIONS_PATH = "docs/close-verify-count-exemptions.json"
+
+def load_exemptions(repo: Path) -> tuple[list[dict], list[str]]:
+    """The factory's declared exemptions, or `([], [])` when it has declared none.
+
+    A list that cannot be READ is a problem, never a silent pass: an exemption list that
+    quietly fails to load is indistinguishable from no exemptions, the vacuous-pass shape
+    this repo forbids.
+    """
+    path = repo / EXEMPTIONS_PATH
+    if not path.is_file():
+        return [], []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"{EXEMPTIONS_PATH}: not valid JSON — {exc}"]
+    if not isinstance(data, dict) or not isinstance(data.get("exemptions"), list):
+        return [], [f"{EXEMPTIONS_PATH}: expected a JSON object with an 'exemptions' list"]
+    exemptions: list[dict] = []
+    problems: list[str] = []
+    for index, raw in enumerate(data["exemptions"], 1):
+        if not isinstance(raw, dict):
+            problems.append(f"{EXEMPTIONS_PATH}: exemption {index} is not an object")
+            continue
+        missing = [field for field in ("n", "reason") if not raw.get(field)]
+        if missing:
+            problems.append(
+                f"{EXEMPTIONS_PATH}: exemption {index} is missing {', '.join(missing)}"
+            )
+            continue
+        if not isinstance(raw["n"], int):
+            problems.append(f"{EXEMPTIONS_PATH}: exemption {index} 'n' is not an integer")
+            continue
+        exemptions.append(raw)
+    return exemptions, problems
+
 def close_verify_count_declared_problems(
-    rows: list[dict], boundary_text: str
+    rows: list[dict], boundary_text: str, exemptions: list[dict] | None = None
 ) -> tuple[list[str], list[str], int, int]:
     """`(problems, excused, governed, covered)` over `rows` — the invariant, pure.
 
@@ -130,6 +177,11 @@ def close_verify_count_declared_problems(
     A row before the boundary is EXCUSED by name and never called clean — the distinction
     `tools/ledger.py` draws for its own legacy closes, so "clean" and "excused" are never the
     same output.
+
+    `exemptions` are the factory's declared entries for rows whose repair space is empty.
+    An exempted row is EXCUSED BY NAME and printed on every run, and it leaves `governed`
+    because the predicate did not apply to it — a debt that is visible, never forgiveness
+    and never a silent subtraction.
     """
     problems: list[str] = []
     excused: list[str] = []
@@ -151,6 +203,10 @@ def close_verify_count_declared_problems(
             excused.append(
                 f"n={n} ({ts}) predates the declared boundary ({boundary_text})"
             )
+            continue
+        exempt = next((entry for entry in (exemptions or []) if entry["n"] == n), None)
+        if exempt is not None:
+            excused.append(f"n={n} ({ts}) EXEMPTED — {exempt['reason']}")
             continue
         governed += 1
         detail = str(row.get("detail") or "")
@@ -211,12 +267,43 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], dict]:
     except GateError as exc:
         return "fail", "", list(exc.problems), [], {}
 
+    exemptions, exemption_problems = load_exemptions(repo)
     problems, excused, governed, covered = close_verify_count_declared_problems(
-        rows, boundary_text
+        rows, boundary_text, exemptions
     )
+    problems = list(exemption_problems) + problems
+    # A STALE exemption is a FAILURE, never silence: it inflates the visible debt while
+    # excusing nothing, and the record and its exemption must not drift apart. An entry is
+    # USED only where it excused a governed row — an entry for a row that does not exist, is
+    # not a close, predates the boundary, or already covers its own number excuses nothing.
+    for entry in exemptions:
+        row = next((r for r in rows if r.get("n") == entry["n"]), None)
+        if row is None or row.get("event") != "close":
+            problems.append(
+                f"{EXEMPTIONS_PATH}: exemption n={entry['n']} matches no close row — a "
+                f"stale exemption excuses nothing; remove it"
+            )
+            continue
+        try:
+            when = parse_ts(row.get("ts", ""))
+        except (ValueError, TypeError):
+            continue
+        if when < boundary:
+            problems.append(
+                f"{EXEMPTIONS_PATH}: exemption n={entry['n']} predates the declared "
+                f"boundary ({boundary_text}) — a pre-boundary row is already excused by "
+                f"the boundary, so this entry excuses nothing; remove it"
+            )
+            continue
+        declared = declared_verify_rows(str(row.get("detail") or ""))
+        if len(declared) == 1 and declared[0].isdigit() and int(declared[0]) >= entry["n"]:
+            problems.append(
+                f"{EXEMPTIONS_PATH}: exemption n={entry['n']} excuses nothing — the row "
+                f"declares rows={declared[0]} and covers its own number; remove it"
+            )
     counts = {
         "history": sum(1 for row in rows if row.get("event") == "close"),
-        "governed": len(post_boundary_rows(rows, boundary, "close")),
+        "governed": governed,
         "covered": covered,
     }
     if problems:
@@ -521,3 +608,90 @@ def test_probe_the_ledger_rows_field_is_the_one_it_reads() -> None:
     assert declared_verify_rows(f"{_CITING_DETAIL}") == ["900"]
     assert declared_verify_rows("ledger_rows=11 rows=12") == ["12"]
     assert declared_verify_rows("ledger_rows=11") == []
+
+def _with_exemptions(tree: Path, exemptions: list[dict]) -> Path:
+    """Write the factory's exemption table into a synthetic tree."""
+    docs = tree / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "close-verify-count-exemptions.json").write_text(
+        json.dumps({"_note": "probe fixture", "exemptions": exemptions}),
+        encoding="utf-8",
+    )
+    return tree
+
+def test_probe_an_exempted_row_is_excused_and_printed(tmp_path: Path) -> None:
+    """A row whose repair space is empty is EXCUSED BY NAME and leaves the governed
+    population — a visible debt, never a clean verdict and never a silent subtraction."""
+    short = _close(
+        900, "2026-09-21T06:00:00Z", _CITING_DETAIL.replace("rows=900", "rows=899")
+    )
+    tree = _with_exemptions(
+        synthetic_tree(
+            tmp_path / "exempt", rows=[short], invariants={INVARIANT_KEY: _PROBE_BOUNDARY}
+        ),
+        [{"n": 900, "reason": "repair space is empty — measured"}],
+    )
+    status, reason, problems, excused, counts = evaluate(tree)
+    assert status == "pass", (status, reason, problems)
+    assert not problems, problems
+    assert excused and "EXEMPTED" in excused[0] and "n=900" in excused[0], excused
+    assert counts["history"] == 1 and counts["governed"] == 0, counts
+
+def test_probe_a_stale_exemption_fails(tmp_path: Path) -> None:
+    """An exemption that matches no row is a FAILURE, never silence: it inflates the
+    visible debt while excusing nothing."""
+    tree = _with_exemptions(
+        synthetic_tree(
+            tmp_path / "stale",
+            rows=[_close(900, "2026-09-21T06:00:00Z", _CITING_DETAIL)],
+            invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        ),
+        [{"n": 999, "reason": "nothing"}],
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", problems
+    assert "stale exemption" in problems[0], problems[0]
+
+def test_probe_an_exemption_that_excuses_nothing_fails(tmp_path: Path) -> None:
+    """An entry for a row that COVERS its own number excuses nothing and is an ERROR."""
+    tree = _with_exemptions(
+        synthetic_tree(
+            tmp_path / "covering",
+            rows=[_close(900, "2026-09-21T06:00:00Z", _CITING_DETAIL)],
+            invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        ),
+        [{"n": 900, "reason": "nothing"}],
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", problems
+    assert "excuses nothing" in problems[0], problems[0]
+
+def test_probe_a_malformed_exemption_list_fails(tmp_path: Path) -> None:
+    """A list that cannot be read is a problem, never a silent pass."""
+    tree = synthetic_tree(
+        tmp_path / "malformed",
+        rows=[_close(900, "2026-09-21T06:00:00Z", _CITING_DETAIL)],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+    )
+    docs = tree / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "close-verify-count-exemptions.json").write_text("{not json", encoding="utf-8")
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", problems
+    assert "not valid JSON" in problems[0], problems[0]
+
+def test_probe_an_exemption_does_not_blunt_the_bite(tmp_path: Path) -> None:
+    """THE CONTROL for the exemption surface: an entry for a DIFFERENT row leaves the
+    below-n finding biting, so the exit cannot widen into a blanket excuse."""
+    short = _close(
+        900, "2026-09-21T06:00:00Z", _CITING_DETAIL.replace("rows=900", "rows=899")
+    )
+    tree = _with_exemptions(
+        synthetic_tree(
+            tmp_path / "control", rows=[short], invariants={INVARIANT_KEY: _PROBE_BOUNDARY}
+        ),
+        [{"n": 901, "reason": "another row"}],
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", problems
+    assert any("rows=899" in problem for problem in problems), problems
