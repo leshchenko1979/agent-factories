@@ -33,6 +33,16 @@ the guard bounds. The probe that holds the lock and runs `--no-gates` under it i
 catches that naive guard, so both directions are driven: a guard that is ABSENT fails the
 refusal probe, and a guard that is TOO WIDE fails the recursion probe.
 
+A THIRD DIRECTION RIDES THIS GATE, learned by shipping the first version broken. The gate
+runs INSIDE an audit, and that run holds `.audit.lock` for its whole duration — so any
+BLOCKING acquisition of the lock in this file deadlocks the gate against the very run that
+spawned it. Measured at landing: the blocking form hung the suite for 10+ minutes and had
+to be killed by pid. The acquisition here is therefore non-blocking, and `None` from it
+means "an enclosing run already holds the lock" — the precondition the probes assert is
+already satisfied, so they proceed without taking it themselves. The probe
+`probe_the_lock_acquisition_is_non_blocking` is the regression probe, driven in a CHILD
+process because a blocking call in this one would hang the gate rather than fail it.
+
 WHAT THIS GATE DOES NOT CLAIM. A per-repo lock cannot bound the ops cgroup. The cgroup is
 shared ACROSS repositories and at least three other repositories run the same template
 audit inside it (ai-antispam, inferhub-watch, vds-servers), each with its own lock. The
@@ -78,10 +88,32 @@ def _audit_source() -> str:
     return AUDIT.read_text(encoding="utf-8")
 
 def _hold_lock(lock_path: Path):
-    """Hold the run lock exactly as a live run does, and return the held handle."""
+    """Hold the run lock exactly as a live run does, or report that one is already held.
+
+    Returns the held handle, or None when ANOTHER process already holds the lock.
+
+    THE NON-BLOCKING FORM IS LOAD-BEARING, and it was learned by shipping the blocking one
+    first. This gate runs INSIDE an audit — the audit registers it as a gate — and the
+    outer run holds `.audit.lock` for its whole duration. A blocking acquisition here
+    therefore deadlocks the gate against the very run that spawned it: the gate hangs to
+    its budget, is killed, and the audit records it UNKNOWN. Measured at landing: the
+    blocking form hung the suite for 10+ minutes and had to be killed by pid.
+
+    Returning None is not a degraded path — it means the precondition the probes assert is
+    ALREADY SATISFIED by the enclosing run, so they proceed without taking the lock
+    themselves. The assertion is identical either way; only who holds the lock differs.
+    """
     handle = open(lock_path, "w")
-    fcntl.flock(handle, fcntl.LOCK_EX)
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
     return handle
+
+def _release(handle) -> None:
+    if handle is not None:
+        handle.close()
 
 def _run_audit(repo: Path, *extra: str, timeout: int = 90) -> tuple[int, str, str, float]:
     """`(rc, stdout, stderr, elapsed)` for an audit run in `repo`."""
@@ -130,16 +162,17 @@ def probe_the_guard_refuses_a_second_run() -> str:
     try:
         rc, out, err, elapsed = _run_audit(REPO, "--json", timeout=60)
     finally:
-        handle.close()
+        _release(handle)
+    holder = "this probe" if handle is not None else "the enclosing run (the lock was already held)"
     assert rc == LOCK_HELD_EXIT_CODE, (
         f"a run whose lock is held must refuse with exit {LOCK_HELD_EXIT_CODE}, got {rc} "
-        f"(stdout {len(out)}B, stderr {err.strip()[:200]!r})"
+        f"(holder: {holder}; stdout {len(out)}B, stderr {err.strip()[:200]!r})"
     )
     assert "audit in-flight guard" in err, f"the refusal must be NAMED on stderr, got {err.strip()[:200]!r}"
     assert str(lock) in err, f"the refusal must name the lock it could not take, got {err.strip()[:200]!r}"
     assert out.strip() == "", f"a refused run takes no verdict, so stdout must be empty, got {out[:200]!r}"
     assert elapsed < 30, f"a refusal must cost nothing — it returned before any work ({elapsed:.1f}s)"
-    return f"refused with exit {rc} in {elapsed:.2f}s, naming {lock.name}, no verdict emitted"
+    return f"refused with exit {rc} in {elapsed:.2f}s, naming {lock.name}, no verdict emitted (lock held by {holder})"
 
 def probe_the_guard_is_exempt_under_no_gates() -> str:
     """(a) THE RECURSION CASE: the outer run holds the lock, the nested run must not refuse.
@@ -154,14 +187,15 @@ def probe_the_guard_is_exempt_under_no_gates() -> str:
     try:
         rc, out, err, elapsed = _run_audit(REPO, "--json", "--no-gates", timeout=90)
     finally:
-        handle.close()
+        _release(handle)
+    holder = "this probe" if handle is not None else "the enclosing run (the lock was already held)"
     assert rc == 0, (
         f"--no-gates must be EXEMPT from the guard while the lock is held (the nested-run "
         f"case), got rc={rc}; stderr {err.strip()[:200]!r}"
     )
     assert "audit in-flight guard" not in err, "the exempt path must not print a refusal"
     assert '"gates_skipped": true' in out, "the exempt run must still report its payload"
-    return f"nested run under a held lock exited 0 in {elapsed:.2f}s with gates_skipped=true"
+    return f"nested run under a held lock ({holder}) exited 0 in {elapsed:.2f}s with gates_skipped=true"
 
 def probe_the_refusal_writes_no_run_row() -> str:
     """(b) The refusal writes NO run row, proven on a ledger nobody else touches."""
@@ -178,9 +212,13 @@ def probe_the_refusal_writes_no_run_row() -> str:
         try:
             rc, out, err, _ = _run_audit(repo, "--json", timeout=60)
         finally:
-            handle.close()
+            _release(handle)
         after_rows, after_md5 = _ledger_identity(repo)
         assert rc == LOCK_HELD_EXIT_CODE, f"the throwaway run must refuse too, got rc={rc}"
+        assert handle is not None, (
+            "this probe's lock is the THROWAWAY tree's own, which nothing else holds — a "
+            "None here means the acquisition is broken, not that a run holds it"
+        )
         assert (before_rows, before_md5) == (after_rows, after_md5), (
             f"a refused run must leave the ledger BYTE-IDENTICAL: {before_rows} rows/"
             f"{before_md5} before, {after_rows} rows/{after_md5} after"
@@ -303,6 +341,53 @@ def probe_the_gate_is_registered_and_paired() -> str:
         return f"{GATE_CMD} is registered, and the audit twins are byte-identical"
     return f"{GATE_CMD} is registered (no TEMPLATE twin in this tree)"
 
+def probe_the_lock_acquisition_is_non_blocking() -> str:
+    """The probe's own acquisition must not BLOCK — the deadlock this gate shipped with.
+
+    This is a REGRESSION probe for the defect the first version of this file carried: the
+    blocking `flock(LOCK_EX)` form deadlocked the gate against the audit that spawned it,
+    because that run holds the lock for its whole duration. Measured at landing — the
+    suite hung for 10+ minutes and had to be killed by pid.
+
+    DRIVEN IN A CHILD PROCESS, because a blocking call in THIS process would hang the gate
+    rather than fail it, and a probe that can hang is not a probe. The child takes the lock
+    twice: the first acquisition succeeds (or reports the enclosing run's hold), and the
+    SECOND must return immediately. Under the blocking form it never returns.
+    """
+    child = f"""
+import sys
+sys.path.insert(0, {str(REPO / "tests")!r})
+import test_audit_inflight_guard as G
+h1 = G._hold_lock(G.REPO / ".audit.lock")
+if h1 is None:
+    print("OUTER")
+    sys.exit(0)
+h2 = G._hold_lock(G.REPO / ".audit.lock")
+print("NONE" if h2 is None else "UNEXPECTED")
+"""
+    try:
+        res = subprocess.run(
+            [sys.executable, "-c", child],
+            cwd=REPO,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            "the lock acquisition BLOCKED — the second acquisition never returned, which is "
+            "the deadlock this gate shipped with (a gate that runs inside an audit cannot "
+            "take a blocking lock the enclosing run holds)"
+        )
+    verdict = res.stdout.strip()
+    assert verdict in ("NONE", "OUTER"), (
+        f"unexpected acquisition result {verdict!r} (rc={res.returncode}, stderr {res.stderr.strip()[:200]!r})"
+    )
+    if verdict == "OUTER":
+        return "the enclosing run holds the lock; the second acquisition returned rather than blocked"
+    return "a second acquisition returned None immediately instead of blocking"
+
 PROBES = (
     ("(a) whole-run scope", probe_the_guard_is_whole_run),
     ("(a) recursion case — exempt under --no-gates", probe_the_guard_is_exempt_under_no_gates),
@@ -310,6 +395,7 @@ PROBES = (
     ("(b) the refusal writes no run row", probe_the_refusal_writes_no_run_row),
     ("(b) the exit code is distinct", probe_the_exit_code_is_distinct),
     ("(d) the orphan property, control-paired", probe_the_orphan_property_control_paired),
+    ("(e) the acquisition is non-blocking", probe_the_lock_acquisition_is_non_blocking),
     ("registration and pairing", probe_the_gate_is_registered_and_paired),
 )
 
