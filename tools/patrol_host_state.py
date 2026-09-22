@@ -22,7 +22,7 @@ question.** So this runner supplies the input, and it prints each leg's own cove
 count beside its verdict: "0 problems" over "0 examined" and "0 problems" over "29
 examined" are different facts, and only the second is a finding.
 
-Four things it does deliberately:
+Six things it does deliberately:
 
 - **Reads the board WHOLE** (`--state all`, no filter). The reverse leg — an intake
   row naming a number the board never heard of — is sound only over the full board,
@@ -50,6 +50,14 @@ Four things it does deliberately:
   one field. Freshness stays REPORTED — the read instant travels with the count and
   is never folded into the verdict, because a check that fails by construction
   carries no more information than one that cannot fail.
+
+- **Reads the notify logs a failed thin trigger leaves behind** (#122). A cron's notify can
+  fail while the table records a successful run, and the table cannot express the outcome —
+  `cron_jobs` carries no status, error or result column at all. WHERE the failure lands is
+  the job-local log, and the predicate is the SUCCESS TOKEN (`notification id <uuid>`), never
+  the byte count the finding was first stated in: a log carrying no receipt is a notify that
+  produced no receipt, which IS the invariant. A failure report cannot ride the channel that
+  failed, which is why this is a READER and not a second notify.
 
 The board slug is derived from the git remote, so nothing here hardcodes a factory.
 
@@ -91,6 +99,45 @@ CLOSE_BOARD_GATE = REPO / "tests" / "test_close_board_recorded.py"
 # tree that nothing re-checks — the class #121 was filed to kill.
 REGISTRY = REPO / "tools" / "registry.py"
 CRON_THINNESS_PREDICATE = REPO / "tests" / "test_cron_thinness.py"
+
+# --- the notify-receipt leg (#122) ---------------------------------------------
+#
+# Origin (issue #122, ruled at ledger n=772..774). A thin-trigger cron's notify can FAIL
+# while the cron table records a SUCCESSFUL run, and the table cannot express the outcome:
+# `pragma table_info(cron_jobs)` carries no status, error or result column at all —
+# `last_run_at` is stamped when the run is DISPATCHED, and nothing writes an outcome beside
+# it. The failure therefore lands on the only surface that survives it: the job-local log
+# the thin trigger's own redirect writes.
+#
+# **A FAILURE REPORT CANNOT RIDE THE CHANNEL THAT FAILED.** The obvious repair — have the
+# prompt report its own non-zero exit — is dead on arrival: the notify failed because the
+# gateway was unreachable, so a second notify travels the SAME transport and fails the same
+# way. That is why the shape here is a READER, and not a workaround for one.
+#
+# **THE PREDICATE IS CONTENT, NOT SIZE** (ruling n=774). The finding was stated as a byte
+# count (155 = failure, 197 = success), and a byte count is a count by PATTERN — this
+# factory's own law bars a pattern count from standing in for a count of items, and a new
+# error string arriving at a familiar length would satisfy it. The sharper predicate is the
+# SUCCESS TOKEN: a log that produced a receipt carries `notification id <uuid>`; a log that
+# carries none is a notify that produced no receipt, which IS the invariant. The uuid is
+# REQUIRED rather than the bare phrase, so prose ABOUT a missing id cannot satisfy the read
+# (the prose-as-data class, ruled at n=405 clause 5).
+#
+# **NON-VACUITY RIDES A PROBE, NEVER A LOUD-FAIL-ON-ZERO** (ruling n=774 done-criteria).
+# The live population of failed notifies is legitimately EMPTY on a quiet day, so an empty
+# read here is a normal read and is PRINTED as one — the opposite call from the cron-thinness
+# leg above, which fails loudly because its population is the rows this factory declares. The
+# probe that drives a log carrying no receipt is what shows the leg can bite (#112's shape).
+LOG_DIR = Path("/tmp")
+# `<job-name>-<YYYYmmddTHHMMSS>.log` — the thin trigger's own redirect, nothing else.
+NOTIFY_LOG_RE = re.compile(r"^(?P<job>.+)-(?P<stamp>\d{8}T\d{6})\.log$")
+NOTIFY_RECEIPT_TOKEN = "notification id"
+# The token AND the id it names. Anchored on a UUID so a log that merely MENTIONS the token
+# cannot read as a receipt, and the `\b` ends keep a longer identifier from matching.
+NOTIFY_RECEIPT_RE = re.compile(
+    r"\bnotification id\s+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
 
 
 class BoardReadError(RuntimeError):
@@ -514,6 +561,137 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
     }
 
 
+def reads_notify_receipt(text: str) -> bool:
+    """True when `text` carries a notify RECEIPT — the token AND the id it names.
+
+    The uuid is required on purpose. A log whose only line is "no notification id was
+    recorded" carries the phrase and must NOT satisfy the read, because a field prose can
+    SATISFY is the class ruled at n=405 clause 5.
+    """
+    return NOTIFY_RECEIPT_RE.search(text) is not None
+
+def notify_failure_line(text: str) -> str:
+    """The line that reports the failure: the transport error if present, else the first
+    non-empty line. Quoted verbatim — a report a reader cannot trace back to bytes is
+    testimony, not evidence."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if "transport_error" in line:
+            return line
+    return lines[0] if lines else ""
+
+def notify_logs(log_dir: Path = LOG_DIR) -> tuple[list[tuple[str, Path]], str | None]:
+    """(matched (job-name, path) pairs, not-run reason) for the thin-trigger log surface.
+
+    The reason is `None` when the directory was READ and a stated reason when it was not:
+    an absent directory is a NOT RUN, and a read that never happened must not render as a
+    read that found nothing. The pairs sort by job then filename, so two runs over the same
+    surface print the same order and a diff of two reports is readable.
+    """
+    if not log_dir.is_dir():
+        return [], (
+            f"the thin-trigger log directory {log_dir} does not exist — the only surface "
+            f"a failed notify lands on was never read"
+        )
+    matched: list[tuple[str, Path]] = []
+    for path in log_dir.iterdir():
+        if not path.is_file():
+            continue
+        found = NOTIFY_LOG_RE.match(path.name)
+        if found:
+            matched.append((found.group("job"), path))
+    matched.sort(key=lambda pair: (pair[0], pair[1].name))
+    return matched, None
+
+def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
+                       prefixes: list[str], *, log_dir: Path = LOG_DIR,
+                       read_at: str = "") -> dict:
+    """The notify-receipt leg: did each thin trigger's notify produce a RECEIPT?
+
+    POPULATION. The job-local logs whose job NAME is an ENABLED cron row this factory
+    DECLARES — the same manifest declaration `cron_thinness_leg` attributes rows by, so one
+    predicate governs both legs and this one judges its own surface only. Three buckets are
+    COUNTED, NAMED and REPORTED rather than dropped, because a population that resolves to
+    no object cannot be checked by the reader it is reported to (#126):
+
+      - `logs_matched` — judged, because a live row this factory declares owns the name;
+      - `retired_logs` — this factory's prefix with no live row: history, never judged;
+      - `unattributed_logs` — nobody here declares it: another factory's law (#101, n=610).
+
+    A log that EXISTS and cannot be read is a PROBLEM, never an absence — a declared surface
+    that defeats the read is the #69 clause (e) shape. An absent log DIRECTORY is a NOT RUN
+    carrying its reason and no problem: the surface is a constant of this tool rather than
+    factory data, and a box with no thin triggers yet has nothing to judge.
+
+    ZERO MATCHED LOGS IS NOT A FAILURE HERE (ruling n=774 done-criteria). This population is
+    legitimately empty on a quiet day, so an empty read is PRINTED and never gated — the
+    opposite call from the cron-thinness leg, whose population is the rows the factory
+    declares and which therefore does fail loudly. Non-vacuity here is carried by the probe.
+    """
+    attributed, _ = attribute_rows(rows, prefixes)
+    live = {str(row.get("name") or ""): row for row in attributed}
+    matched, not_run = notify_logs(log_dir)
+    problems: list[str] = []
+    excused: list[str] = []
+    judged: list[dict] = []
+    retired: list[dict] = []
+    foreign: list[dict] = []
+    for name, path in matched:
+        if not prefixes or not any(name.startswith(prefix) for prefix in prefixes):
+            foreign.append({"job": name, "path": str(path)})
+            continue
+        row = live.get(name)
+        if row is None:
+            retired.append({"job": name, "path": str(path)})
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            problems.append(
+                f"{name}: {path} exists and could not be read ({exc}) — a surface that "
+                f"defeats the read is a defect, never an absence"
+            )
+            continue
+        if reads_notify_receipt(text):
+            excused.append(f"{name}: {path.name} carries a receipt — the notify delivered")
+            continue
+        line = notify_failure_line(text)
+        judged.append({
+            "job": name,
+            "id": str(row.get("id") or ""),
+            "path": str(path),
+            "line": line,
+        })
+        problems.append(
+            f"{name} (cron id {row.get('id') or 'unstated'}): the notify produced NO "
+            f"receipt — {path} carries no '{NOTIFY_RECEIPT_TOKEN}' id; failure line: "
+            f"{line!r}"
+        )
+    return {
+        "name": "notify-receipt",
+        "status": "NOT RUN" if not_run else "ASSERTED",
+        "reason": not_run,
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "log_dir": str(log_dir),
+            "jobs_read": len(attributed),
+            "rows_read": len(rows),
+            "homes_read": len(homes_read),
+            "homes_read_names": homes_read,
+            "homes_unreached": unreached,
+            "logs_on_surface": len(matched),
+            "logs_matched": len(matched) - len(retired) - len(foreign),
+            "logs_without_receipt": len(judged),
+            "logs_retired": len(retired),
+            "logs_unattributed": len(foreign),
+            "retired_logs": retired,
+            "unattributed_logs": foreign,
+            "prefixes": prefixes,
+            "read_at": read_at,
+        },
+    }
+
 def deferred_legs() -> list[dict]:
     """Legs this runner does not run, each declaring its tracker and its checkable claims.
 
@@ -563,6 +741,33 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 + (f" — {'; '.join(cov['homes_unreached'])}" if cov['homes_unreached'] else "")
                 + f" — read at {cov['read_at']}"
             )
+        elif leg["name"] == "notify-receipt":
+            declared = ", ".join(cov["prefixes"]) or "no declared prefix"
+            lines.append(
+                f"  jobs: {cov['jobs_read']} enabled row(s) attributed to this factory "
+                f"of {cov['rows_read']} read across {cov['homes_read']} home(s) "
+                f"({declared})"
+            )
+            lines.append(
+                f"  homes unreached: {len(cov['homes_unreached'])}"
+                + (f" — {'; '.join(cov['homes_unreached'])}" if cov['homes_unreached'] else "")
+            )
+            lines.append(
+                f"  logs matched: {cov['logs_matched']} of {cov['logs_on_surface']} log(s) "
+                f"on {cov['log_dir']} naming a live row this factory declares — "
+                f"{cov['logs_without_receipt']} produced no receipt"
+            )
+            for row in cov.get("retired_logs", []):
+                lines.append(
+                    f"    no live row: {row['job']} ({row['path']}) — history, not judged"
+                )
+            for row in cov.get("unattributed_logs", []):
+                lines.append(
+                    f"    unattributed: {row['job']} ({row['path']}) — nobody here declares it"
+                )
+            if leg.get("reason"):
+                lines.append(f"  {leg['reason']}")
+            lines.append(f"  read at {cov['read_at'] or 'unstated'}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -608,10 +813,14 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     cron = sum(
         int(leg["coverage"].get("rows_attributed", 0)) for leg in legs
     )
+    notify = sum(
+        int(leg["coverage"].get("logs_matched", 0)) for leg in legs
+    )
     lines.append(
         f"verdict: {total} problem(s) over {forward} open issue(s) examined, "
         f"{closes} close row(s) checked against the board, and {cron} cron row(s) "
-        f"attributed to this factory and judged"
+        f"attributed to this factory and judged, and {notify} notify log(s) judged "
+        f"for a receipt"
     )
     return "\n".join(lines)
 
@@ -624,6 +833,7 @@ def main(
     rows_fn=load_rows,
     cron_rows_fn=box_cron_rows,
     prefixes_fn=declared_prefixes,
+    log_dir: Path = LOG_DIR,
     predicate=None,
     out=print,
     err=print,
@@ -653,6 +863,10 @@ def main(
         board_close_leg(issues, rows, read_at=read_at),
         cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
+        ),
+        notify_receipt_leg(
+            cron_rows, homes_read, unreached, prefixes_fn(), log_dir=log_dir,
+            read_at=read_at,
         ),
     ]
     deferred = deferred_legs()

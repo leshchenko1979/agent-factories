@@ -8,7 +8,7 @@ therefore examines **0 open issues** and the reverse leg is skipped by design. A
 that has never been asked a question reports the same green as one that passes.
 
 `tools/patrol_host_state.py` is part (b) — the host-side runner that supplies the input.
-This file is its gate, and it asserts the five properties that make the runner worth
+This file is its gate, and it asserts the six properties that make the runner worth
 having, each with a probe that would fail on the shape it forbids:
 
 1. **The board is read WHOLE.** The reverse leg is sound only over the full board, so a
@@ -32,6 +32,14 @@ having, each with a probe that would fail on the shape it forbids:
    leg binds to that gate's own `BOARD_TOKEN` and `INVARIANT_LANDED` rather than re-deriving
    them — a trailer-only read sees 40 of the 52 post-invariant rows, so a re-derived leg
    would judge 12 rows fewer and go false-green over them.
+
+6. **A failed notify SURFACES** (#122). A cron's notify can fail while the run row reads
+   green, and the failure lands on the job-local log. The leg is keyed on the SUCCESS TOKEN
+   and not on the byte count the finding arrived in, so a new error string at a familiar
+   length cannot satisfy it — and a log that merely MENTIONS the token is not a receipt,
+   because a field prose can satisfy is not a field (n=405 clause 5). Its live population
+   is legitimately empty on a quiet day, so non-vacuity rides the probe and never a
+   loud-fail-on-zero (#112) — the opposite call from the cron-thinness leg beside it.
 
 Run:  python3 tests/test_patrol_host_state.py
 Exit: 0 all checks pass, 1 a check failed.
@@ -61,6 +69,12 @@ def load_runner():
 
 RUNNER = load_runner()
 
+# One EMPTY log surface per process, not one per probe. The notify-receipt leg's default
+# surface is the live `/tmp` — which is exactly the directory a per-call temp dir would
+# leak into, and this leg SCANS that directory. A probe that emptied 15 directories into
+# the surface under test would be feeding its own fixtures to the next run.
+_EMPTY_LOG_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-log-"))
+
 
 def _issue(number: int, state: str) -> dict:
     return {"number": number, "state": state, "title": f"issue {number}",
@@ -76,19 +90,28 @@ def _rows(*pairs) -> list[dict]:
     ]
 
 
-def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None):
-    """Drive main() with an injected board, ledger AND cron table; return (rc, out, err).
+def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
+         log_dir=None):
+    """Drive main() with an injected board, ledger, cron table AND log surface; return
+    (rc, out, err).
 
     The cron read is injected for the same reason the board is: a gate must never open
     the live database, and a probe that can only run against live state cannot run at all
     when that state is what is broken. An EMPTY declared prefix set leaves the cron leg
     inert, which is what the board-focused probes want — the probes that exercise the leg
     pass a prefix set and rows of their own.
+
+    The log surface is injected for the third time and for the same reason (#122): with
+    no declared prefix the notify-receipt leg judges nothing, and the default here is a
+    fresh EMPTY directory rather than the live `/tmp`, so no probe depends on what the
+    box happens to have left lying around. The probes that exercise the leg pass a
+    directory of their own.
     """
     cron_rows = [] if cron_rows is None else cron_rows
     homes = ["probe-home"] if homes is None else homes
     unreached = [] if unreached is None else unreached
     prefixes = [] if prefixes is None else prefixes
+    log_dir = _EMPTY_LOG_DIR if log_dir is None else log_dir
     out, err = io.StringIO(), io.StringIO()
     rc = RUNNER.main(
         [],
@@ -97,6 +120,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         rows_fn=lambda: rows,
         cron_rows_fn=lambda: (cron_rows, homes, unreached),
         prefixes_fn=lambda: prefixes,
+        log_dir=log_dir,
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
     )
@@ -522,6 +546,229 @@ def test_a_pre_invariant_close_row_is_outside_the_population() -> None:
     assert "0 close row(s) checked" in out, (
         f"a pre-invariant close row must not enter the population\n{out}"
     )
+
+
+# --- #122: the notify-receipt leg — a failed notify SURFACES -----------------------
+
+def _log_dir(**files: str) -> Path:
+    """A synthetic log surface. The live population is legitimately empty on a quiet day,
+    so a probe that needs a fixture gets one rather than the box's leftovers."""
+    root = Path(tempfile.mkdtemp())
+    for name, text in files.items():
+        (root / name.replace("__", "-")).write_text(text, encoding="utf-8")
+    return root
+
+# The two shapes the finding was measured on, verbatim from the live surface: a 155-byte
+# transport failure and a 197-byte delivered notify. THE LEG IS KEYED ON THE SECOND'S
+# SUCCESS TOKEN, never on either size — a byte count is a count by pattern.
+_FAILURE = (
+    "❌ transport_error: cannot reach the A2A gateway at http://127.0.0.1:18791/a2a/v1: "
+    "error sending request for url (http://127.0.0.1:18791/a2a/v1) (exit 4)\n"
+)
+_RECEIPT = (
+    "⚠️ deferred: deferred for session 6ca0d547-4a72-4c29-ac10-967daa98af0a: delivers once "
+    "the session has been quiet for 20s (hard cap 30s) — notification id "
+    "f50759ea-b25f-475b-9c48-319dfa73dd8c\n"
+)
+
+def _notify_row(name, *, row_id="row-1", home="probe-home") -> dict:
+    """An ENABLED cron row this factory declares — the rows the leg attributes by.
+
+    The prompt is `_WAKE_PROMPT`, so the row is correctly thin and the CRON leg beside it
+    stays clean: a probe for the notify leg must not red on the other leg, or the run's
+    exit code would not be attributable to the defect under test.
+    """
+    return {"id": row_id, "name": name, "home": home, "deliver_to": "session:probe",
+            "prompt": _WAKE_PROMPT}
+
+def test_the_notify_leg_BITES_on_a_log_carrying_no_receipt() -> None:
+    """THE BITE, and the acceptance criterion's probe: a log with no notification id.
+
+    Non-vacuity here rides THIS fixture, never a loud-fail-on-zero: the live population of
+    failed notifies is legitimately empty on a quiet day, so an empty read is a normal read
+    (#112's shape — the opposite call from the cron-thinness leg, whose population is the
+    rows the factory declares and which therefore does fail loudly).
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260921T060126.log": _FAILURE})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    rc, out, _ = _run([], [], cron_rows=rows, prefixes=["factory-"], log_dir=log_dir)
+    assert rc == 1, f"a notify that produced no receipt must fail the run, got rc={rc}\n{out}"
+    assert "the notify produced NO receipt" in out, out
+    assert "55b363eb-probe" in out, (
+        f"the report must name the cron id, so the defective JOB is resolvable\n{out}"
+    )
+    assert "factory-measurement-daily-20260921T060126.log" in out, (
+        f"the report must name the LOG PATH the failure was read from\n{out}"
+    )
+    assert "transport_error" in out, (
+        f"the report must quote the failure LINE, so a reader can trace it to bytes\n{out}"
+    )
+
+def test_the_notify_leg_prints_the_population_it_examined() -> None:
+    """P29: a clean verdict over a population that was never named is indistinguishable
+    from one that examined nothing."""
+    log_dir = _log_dir(**{"factory-measurement-daily-20260921T060126.log": _RECEIPT})
+    rows = [_notify_row("factory-measurement-daily")]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
+                      unreached=["gone-home: no opencrabs.db"], prefixes=["factory-"],
+                      log_dir=log_dir)
+    assert rc == 0, out
+    assert "LEG notify-receipt — ASSERTED" in out, out
+    assert "1 enabled row(s) attributed to this factory of 1 read across 2 home(s)" in out, (
+        f"the jobs read, the homes read and the family they belong to must all be named\n{out}"
+    )
+    assert "homes unreached: 1" in out, out
+    assert "gone-home" in out, (
+        f"an unreached home is REPORTED — an unreachable home is not an empty one\n{out}"
+    )
+    assert "logs matched: 1 of 1 log(s)" in out, out
+    assert "0 produced no receipt" in out, out
+    assert "read at " in out, f"the read instant must travel with the count\n{out}"
+
+def test_a_receipt_bearing_log_is_EXCUSED_and_never_judged() -> None:
+    """A notify that DELIVERED is not a finding — and the excuse says which token proved it."""
+    log_dir = _log_dir(**{"factory-measurement-daily-20260919T060154.log": _RECEIPT})
+    rows = [_notify_row("factory-measurement-daily")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert leg["problems"] == [], leg["problems"]
+    assert len(leg["excused"]) == 1 and "carries a receipt" in leg["excused"][0], leg["excused"]
+
+def test_prose_ABOUT_a_missing_receipt_does_not_satisfy_the_read() -> None:
+    """The prose-as-data law (n=405 clause 5): a field prose can SATISFY is not a field.
+
+    A log that merely MENTIONS the token must not read as a receipt, or the leg would go
+    quiet exactly when it is being told the id is absent.
+    """
+    log_dir = _log_dir(**{
+        "factory-measurement-daily-20000101T000000.log":
+            "❌ the notify returned no notification id: transport_error (exit 4)\n",
+        "factory-measurement-daily-20000101T000001.log":
+            _FAILURE.replace("transport_error", "notification id absent; transport_error"),
+    })
+    rows = [_notify_row("factory-measurement-daily")]
+    for name in sorted(p.name for p in log_dir.iterdir()):
+        text = (log_dir / name).read_text(encoding="utf-8")
+        assert not RUNNER.reads_notify_receipt(text), (
+            f"{name} mentions the token without naming an id and must NOT read as a "
+            f"receipt — prose about a missing field is the n=405 clause 5 damage"
+        )
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert len(leg["problems"]) == 2, (
+        f"both logs carry no receipt and both must be reported: {leg['problems']}"
+    )
+
+def test_a_log_with_no_live_ROW_is_reported_as_history_and_never_judged() -> None:
+    """A name this factory declares but that no enabled row carries is HISTORY.
+
+    Judging it would red on a retired pacemaker's log forever, and a leg that cannot go
+    green is a leg nobody reads. It is COUNTED and NAMED instead — the state resolved, not
+    dropped (#126). The second half is the sharp edge: a row that WAS live and has been
+    DISABLED is likewise history, because the population is enabled rows.
+    """
+    log_dir = _log_dir(**{"factory-triage-6h-20260922T000045.log": _FAILURE})
+    rows = [_notify_row("factory-measurement-daily")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert leg["problems"] == [], (
+        f"a retired job's log carries no live row to judge and must not be a problem: "
+        f"{leg['problems']}"
+    )
+    assert leg["coverage"]["logs_retired"] == 1, leg["coverage"]
+    assert leg["coverage"]["retired_logs"][0]["job"] == "factory-triage-6h", leg["coverage"]
+    assert leg["coverage"]["logs_matched"] == 0, (
+        f"a retired log is outside the judged population\n{leg['coverage']}"
+    )
+
+def test_a_log_nobody_here_declares_is_reported_and_never_judged() -> None:
+    """Another factory's law is not this factory's to enforce (#101, ruling n=610 part 3b)."""
+    log_dir = _log_dir(**{"oc-some-other-job-20260922T000045.log": _FAILURE})
+    rows = [_notify_row("factory-measurement-daily")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert leg["problems"] == [], (
+        f"an unattributable log belongs in the population read, never in the problems: "
+        f"{leg['problems']}"
+    )
+    assert leg["coverage"]["logs_unattributed"] == 1, leg["coverage"]
+    assert leg["coverage"]["unattributed_logs"][0]["job"] == "oc-some-other-job", leg["coverage"]
+
+def test_a_log_that_exists_and_cannot_be_READ_is_a_problem_not_an_absence() -> None:
+    """The #69 clause (e) shape: a declared surface that defeats the read is a defect.
+
+    An unreadable log rendering as an absent one is the failure mode that makes a reader
+    worse than useless — the notify may have failed and the leg would say nothing.
+
+    The read failure is DRIVEN rather than simulated with a permission bit: this gate runs
+    as root on this box, and root reads a `chmod 000` file happily, so a permission-bit
+    probe would pass for the wrong reason here and fail in a factory that runs as a user.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260921T060126.log": _FAILURE})
+    target = log_dir / "factory-measurement-daily-20260921T060126.log"
+    rows = [_notify_row("factory-measurement-daily")]
+    real_read_text = Path.read_text
+
+    def denying_read_text(self, *args, **kwargs):
+        if self == target:
+            raise OSError("probe: simulated read failure")
+        return real_read_text(self, *args, **kwargs)
+
+    with mock.patch.object(Path, "read_text", denying_read_text):
+        leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                        log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert leg["problems"], "an unreadable log must be a problem, never an absence"
+    assert "could not be read" in leg["problems"][0], leg["problems"]
+    assert "never an absence" in leg["problems"][0], leg["problems"]
+    assert leg["coverage"]["logs_without_receipt"] == 0, (
+        f"the row was never JUDGED — it failed at the read, which is a different fact: "
+        f"{leg['coverage']}"
+    )
+
+def test_an_absent_log_directory_is_a_NOT_RUN_with_its_reason() -> None:
+    """A read that never happened must never render as a read that found nothing.
+
+    Stated in the leg's own contract, so this is asserted against the leg rather than
+    through main() — main() takes the constant path that exists.
+    """
+    rows = [_notify_row("factory-measurement-daily")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=Path("/tmp/does-not-exist-probe-122"),
+                                    read_at="2026-09-22T00:00:00Z")
+    assert leg["status"] == "NOT RUN", leg["status"]
+    assert leg["reason"] and "does not exist" in leg["reason"], leg["reason"]
+    assert leg["problems"] == [], (
+        f"an unread surface is NOT RUN, never a problem and never a silent pass: {leg}"
+    )
+
+def test_the_leg_finds_the_LIVE_surface_and_never_copies_it() -> None:
+    """The leg reads `/tmp` IN PLACE by constant, and the constant is this tool's own.
+
+    A copy of a live surface is stale the moment it is written, and the failure log is a
+    file that the next run overwrites; there is nothing to copy and no reason to.
+    """
+    assert RUNNER.LOG_DIR == Path("/tmp"), f"the surface is /tmp, not {RUNNER.LOG_DIR}"
+    matched, reason = RUNNER.notify_logs(RUNNER.LOG_DIR)
+    assert reason is None, f"the live surface must be readable here: {reason}"
+    assert all(
+        RUNNER.NOTIFY_LOG_RE.match(path.name) for _, path in matched
+    ), "every matched path must carry a `<job>-<stamp>.log` name"
+    print(f"  live log surface: {len(matched)} matched log(s) under {RUNNER.LOG_DIR}")
+
+def test_the_leg_shares_the_manifest_declaration_with_the_CRON_leg() -> None:
+    """ONE attribution predicate, TWO legs — imported, never re-derived.
+
+    Ownership is the manifest's declared `job_prefixes`, so a leg that re-derived it would
+    judge a different population than the leg beside it and the two reports could never be
+    reconciled.
+    """
+    rows = [
+        _notify_row("factory-mine"),
+        dict(_notify_row("oc-not-mine"), home="other-home"),
+    ]
+    mine, nobody = RUNNER.attribute_rows(rows, ["factory-"])
+    assert [r["name"] for r in mine] == ["factory-mine"], mine
+    assert [r["name"] for r in nobody] == ["oc-not-mine"], nobody
 
 
 def main() -> int:
