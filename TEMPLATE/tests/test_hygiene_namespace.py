@@ -137,11 +137,17 @@ def test_scratch_name_parser_is_probed_offline() -> None:
     first run anywhere with real litter. So the predicate is probed directly, and the
     probe would FAIL on the defect it was written for.
     """
-    own = "  - stale scratch file: agent-factories-probe.log (age: 30h)"
-    foreign = "  - stale scratch file: ai-antispam-probe.log (age: 64h)"
+    # BOTH names are DERIVED, never literal. This file is copied into every factory, and
+    # a literal here made the probe a property of the ORIGIN tree. Measured 2026-09-22 on
+    # the byte-identical copy: with `agent-factories` hardcoded, the probe FAILS wherever
+    # the containing directory name differs — a real destination factory, and even this
+    # repo's own `TEMPLATE/tests/` — because `own` then carries a foreign name and
+    # `foreign` carries ours, so the pair INVERTS and the assertion reds (#137).
+    own = f"  - stale scratch file: {REPO.name}-probe.log (age: 30h)"
+    foreign = f"  - stale scratch file: not-{REPO.name}-probe.log (age: 64h)"
 
-    assert scratch_name(own) == "agent-factories-probe.log", scratch_name(own)
-    assert scratch_name(foreign) == "ai-antispam-probe.log", scratch_name(foreign)
+    assert scratch_name(own) == f"{REPO.name}-probe.log", scratch_name(own)
+    assert scratch_name(foreign) == f"not-{REPO.name}-probe.log", scratch_name(foreign)
     assert scratch_name(own).startswith(f"{REPO.name}-"), "our OWN litter must be accepted"
     assert not scratch_name(foreign).startswith(f"{REPO.name}-"), (
         "a FOREIGN name must be rejected by the namespace assertion"
