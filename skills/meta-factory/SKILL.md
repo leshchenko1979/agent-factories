@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.16
+version: 0.1.17
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -255,6 +255,20 @@ leaning on shared memory rather than on what it said.
 - **Identifiers are never hand-assembled.** Copy the full value from live output.
 - **No claim without a check.** Existence, absence and status all require a tool call in the
   same turn. "I have not verified" is acceptable; a confident guess is not.
+- **A blocker a lane reports is CLAIMED STATE, and a plan's state is read from the plan — never
+  from the lane's memory of it.** "Blocked on your approval", "awaiting `/execute`", "the card is
+  pending" are status claims about a live session plan, so they carry the obligation the clause
+  above puts on every other existence and status claim: a same-turn read of LIVE plan state, not
+  a recollection that a plan was opened. A completed plan is ARCHIVED — its card reads completed
+  and there is nothing left to approve — so a stale blocker sends the reader to a card that no
+  longer exists, and whoever acts on it pays the cost. Measured 2026-09-23: a lane reported two
+  workstreams as queued "behind your `/execute` on the plan card" eight hours after that plan had
+  completed and been archived, and the owner went looking for a card that was gone. **The failure
+  was DETECTED and not acted on** — the message carried the daemon's own phantom-blocked marker
+  and nobody read it — which is the second half of the rule: a self-heal marker is a receipt, and
+  a receipt nobody reads is not a check. **Approval routing is PER-SESSION:** `/execute` typed in
+  one topic approves that topic's session plan and no other, so a lane asking for approval names
+  WHERE the card lives, not merely that it exists.
 - **A criterion is a claim too, and it is AUTHORED long before it is judged.** A plan
   acceptance criterion that names a path, a gate or a file asserts that the artefact RESOLVES,
   so the check the clause above requires is due **when the criterion is written** — not at
