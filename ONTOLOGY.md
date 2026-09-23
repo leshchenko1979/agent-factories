@@ -28,7 +28,7 @@ defect to fix, not a synonym to tolerate.
 | `Triage` | The lane that turns findings into tracked work and assigns it | intake, dispatcher, router, janitor |
 | `Surveys` | The lane that measures factories against the rubric | measurement, metrics, analytics, scorekeeper, auditor |
 | `lane` | A persistent session bound to one named place | worker session, thread, channel, chat session, agent |
-| `work unit` | Any subject that reaches a close: a board issue, or a descriptive stem where no issue exists | task, ticket, job, item |
+| `work unit` | Any subject that reaches a close: a board issue of the board the ledger records, or a descriptive stem where no issue exists — or where a second board's numbering would collide with that board's | task, ticket, job, item |
 | `surface` | The chat product a factory runs on | chat, channel, platform, messenger |
 | `binding` | An add-on that names the substrate. Exactly one of each kind | link, mapping, connection, integration |
 | `add-on` | A pack of extra structure on top of the core | plugin, extension, module, adapter |
