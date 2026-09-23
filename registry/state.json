@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-23T11:33:47Z",
+  "resolved_at": "2026-09-23T11:39:38Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -439,7 +439,7 @@
             "name": "factory-measurement-daily",
             "audience": "agent",
             "entry": "cron factory-measurement-daily",
-            "cadence": "daily 09:00Z"
+            "cadence": "daily 09:00 MSK (06:00Z)"
           },
           {
             "name": "factory-triage-patrol",
@@ -451,19 +451,19 @@
             "name": "factory-insights-weekly",
             "audience": "agent",
             "entry": "cron factory-insights-weekly",
-            "cadence": "weekly, Fri 18:00Z"
+            "cadence": "weekly, Fri 18:00 MSK (15:00Z); fires only when its trigger_cmd exits 0"
           },
           {
             "name": "factory-template-weekly",
             "audience": "agent",
             "entry": "cron factory-template-weekly",
-            "cadence": "weekly, Mon 09:00Z"
+            "cadence": "weekly, Mon 09:00 MSK (06:00Z); fires only when its trigger_cmd exits 0"
           },
           {
             "name": "factory-growth-map-biweekly",
             "audience": "agent",
             "entry": "cron factory-growth-map-biweekly",
-            "cadence": "1st and 15th, 09:00Z"
+            "cadence": "1st and 15th, 09:00 MSK (06:00Z)"
           },
           {
             "name": "factory-registry-attest",
@@ -480,7 +480,7 @@
         "announcements": [
           {
             "id": "pacemaker-triggers-still-pass-mode-quiet",
-            "text": "Pacemaker cron triggers on this box still pass --mode quiet, although the owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger. A single-lane pacemaker is not batch/fan-out, so each of these triggers defers up to its --max-delay-secs bound instead of waking an idle lane immediately. Count by owner: 5 meta-factory, 1 opencrabs-dev, 2 ai-antispam. A job that is not yours is its owner's to fix.",
+            "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's four were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved). CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet.",
             "severity": "warning",
             "since": "2026-09-19T03:36:54Z",
             "affects": [
@@ -491,7 +491,7 @@
           },
           {
             "id": "brain-metrics-baseline-measured",
-            "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. First measured and written up by hand at evidence/brain-metrics-2026-09-19.md. Read afresh 2026-09-21T22:48:40Z (docs/measurement-procedure.md section 5): ALWAYS-INJECTED FILES (leg A; the Tier 0 triple SOUL.md, USER.md, AGENTS.md named in docs/methodology/04-harness-binding.md; these files live in NO repository, so a leg-A reading has an instant for its identity and no revision) 670 lines / 104881 bytes, about 29965 tokens = 14.98 percent of a 200k window. SKILL BODIES (leg B; every skills/*/SKILL.md at depth 1) 667 lines / 66518 bytes, about 19005 tokens = 9.50 percent; the main body skills/meta-factory/SKILL.md is 667 lines, 167 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1337 lines / 171399 bytes, about 48970 tokens = 24.48 percent of the window, paid before a session reads its first message. POST-COMPACTION INPUT TOKENS (leg C; daemon-log lines matching 'Compaction: sending N / N messages to summarizer (X / Y input tokens, reserving Z for output)' at context.rs, read streaming) over n=2415 events in the 24 h to 2026-09-21T22:48:40Z: mean 38386 input tokens = 19.2 percent of the window, median 25617 = 12.8 percent, p90 100000 = 50.0 percent. The event COUNT tracks how many lanes were awake and how many turns they ran, NOT the weight of the law -- read the mean/median as the floor signal. The 2026-09-19 oracle figures are printed BESIDE the live reading with the delta named and are never asserted as current; a nonzero delta is movement of the corpus over the interval between the two reads. The oracle's own numbers live where they were measured (evidence/brain-metrics-2026-09-19.md) and are carried by the instrument, deliberately NOT restated here: a figure copied into a claim about live state is stale before it is committed, and this claim was already invalidated once inside the hour it was written. CAUTION: the trigger line Context at NN percent (>65 percent) at compaction.rs uses a DIFFERENT denominator (effective_token_count over effective_max, window minus reserves) and must never be read as a fraction of the provider window.",
+            "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. Read 2026-09-23T11:28:08Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md, named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 698 lines / 133877 bytes / about 38250 tokens = 19.12 percent of a 200k window — AGENTS.md alone is 641 lines / 129188 bytes, 91.83 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 755 lines / 74467 bytes / about 21276 tokens = 10.64 percent; skills/meta-factory/SKILL.md alone is 755 lines, 255 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1453 lines / 208344 bytes / about 59526 tokens = 29.76 percent of the window, paid before a session reads its first message. The previous read in this notice (2026-09-21T22:48:40Z: 1337 / 171399 / 24.48 percent) is kept as the step this one follows, never overwritten: the floor rose 5.28 points in about 1.7 days and AGENTS.md is most of it. LEG C IS CURRENTLY UNREADABLE, and this notice therefore carries NO leg-C figure. Its needle is the summarizer line 'Compaction: sending N / N messages to summarizer (X / Y input tokens, reserving Z for output)' at src/brain/agent/service/context.rs:1084. Measured 2026-09-23: that needle occurs 28 to 2330 times per day across the ops logs of 09-16 through 09-21, and ZERO times in the 09-22 and 09-23 logs — the population collapsed at that boundary and has not returned. The emitting call is tracing::info! and the configured level is info, and the string is present in the running binary (v0.5.3), so this is NOT a logging-level change; the cause is not yet established, and both a superseded compaction path and an emission regression fit. The instrument handles it correctly: it prints 'no event in this window this run' and exits 4 rather than returning a silent zero. Treat any leg-C figure dated before 2026-09-22 as un-refreshable from this surface. CAUTION: the trigger line 'Context at NN percent' at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
             "severity": "info",
             "since": "2026-09-19T14:20:00Z",
             "affects": [
@@ -533,7 +533,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-19T15:39:01Z"
+        "attested_at": "2026-09-23T11:39:29Z"
       }
     },
     {
@@ -2065,7 +2065,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790162804,
+      "session_updated_at": 1790163524,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2091,7 +2091,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1790162803,
+      "session_updated_at": 1790163341,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2117,7 +2117,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790163177,
+      "session_updated_at": 1790163447,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2286,7 +2286,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790163069,
+      "session_updated_at": 1790163442,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2334,11 +2334,11 @@
       "channel": "telegram",
       "chat_id": "-5364020915",
       "thread_id": null,
-      "updated_at": 1790160985,
+      "updated_at": 1790163328,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Авито-автоответчик - боссы [chat:-5364020915]",
-      "session_updated_at": 1790161444,
+      "session_updated_at": 1790163331,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2468,7 +2468,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / JEV Classifier [chat:-1003936827469:topic:68049]",
-      "session_updated_at": 1790163121,
+      "session_updated_at": 1790163242,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2941,7 +2941,7 @@
       "name": "factory-template-weekly",
       "cron_expr": "0 9 * * Mon",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 2646d31a-71ee-49f0-be81-9c8dc32d32fa --text \"Weekly template packaging — run tests/test_template_sync.py, package the lean core and the fleet add-ons, and audit delivery status.\" --title \"factory template weekly $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/factory-template-weekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 2646d31a-71ee-49f0-be81-9c8dc32d32fa --text \"Weekly template packaging — run tests/test_template_sync.py, package the lean core and the fleet add-ons, and audit delivery status.\" --title \"factory template weekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-template-weekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
