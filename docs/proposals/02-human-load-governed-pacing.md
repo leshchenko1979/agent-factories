@@ -26,6 +26,10 @@ QUALITY**, and a degraded decision is more expensive than a late one:
 So the cost of overload is **paid downstream, in rework**, and it is paid by the factories —
 which is why measuring it is the factories' job and not a courtesy.
 
+The measured baseline is in **§8** — including the finding that the fleet's declared
+owner-facing surface is pointed at the wrong object, and that the obvious metric
+(send-event counts) overstates the real load by about 19x.
+
 ## 2. The measurement must be OBSERVED, never self-reported
 
 **This is the load-bearing design constraint, and it follows from the complaint itself.**
@@ -139,3 +143,77 @@ work**, not the presence of capacity. Two guards:
 4. **Is the weight function wanted, or is count-plus-irreversibility enough?** The three-axis
    weight is the most YAGNI-prone part of this proposal and can be dropped without
    disturbing the loop.
+
+---
+
+## 8. The measured baseline (2026-09-23), and the trap in the obvious metric
+
+Measured on this box, this turn. The proposal above argues *how* to govern human load; this
+section records *what the load is now*, because a loop with no measured baseline has no
+setpoint.
+
+### 8.1 The declared surface is not the loaded surface
+
+`audience` is a schema-validated per-service field (`agent|owner`, `tools/registry.py:509`).
+Fleet-wide, of 39 declared services:
+
+| factory | agent | owner |
+|---|---|---|
+| ai-antispam | 5 | 3 |
+| miidas | 3 | 3 |
+| infra-factory | 6 | 2 |
+| inferhub-watch | 5 | 1 |
+| **meta-factory** | 6 | **0** |
+| opencrabs-dev | 5 | 0 |
+| **total** | **30** | **9** |
+
+Cross-checked against the rendered `registry/index.json` — same tally (30 / 9), so the two
+readings agree rather than one being a stale render.
+
+The load actually arriving, from channel telemetry — **new** messages to the owner-facing
+group on 09-23:
+
+| topic | new messages |
+|---|---|
+| 21 (meta-factory HQ) | 48 |
+| 68 (Delegate) | 29 |
+| 20 (Triage) | 19 |
+| 19 (Surveys) | 14 |
+| **meta-factory, all four** | **110 of 117 (94 %)** |
+
+**The declaration and the load are inverted.** The factory that declares **zero**
+owner-facing services generates ~94 % of the new owner-facing traffic. The five factories
+that declare the 9 owner-facing services contributed the remaining ~7.
+
+Cause: `audience` is declared on **services** (crons), while the owner's attention is
+consumed by **lanes** — and a lane declares `topic`, `thread_id`, `role` and `announcements`
+and **no audience field at all**. So the surface that actually carries the load has nothing
+to measure against, and the surface that is measured is not the one that loads him.
+
+This is the declared-vs-effective failure in a new place: not a stale number, but a
+correctly-declared field pointed at the wrong surface.
+
+### 8.2 The obvious metric overstates by ~19x
+
+| day | send events | **new messages** | edits |
+|---|---|---|---|
+| 09-22 (full) | 3 525 | **184** | 2 281 |
+| 09-23 (to 14:22Z) | 2 272 | **117** | 1 485 |
+
+A send-event count is not a load. 1 485 of 09-23's 2 272 events are `editMessageText`
+against messages that already exist — a single live status bubble is re-edited every few
+seconds. This is the same law the factory already applies to deliveries: a send telemetry
+line is not the artefact, and N sends can be ONE visible message.
+
+So the metric's population is **new messages plus decision requests (gates)** — never
+platform events. A loop driven by send-event counts would be throttling against its own
+status bubble.
+
+### 8.3 What this changes in the design
+
+1. The declaration must move to (or be added on) the **lane**, because that is where the
+   attention is spent. A per-service audience answers "which crons notify the owner", which
+   is not the question this proposal exists to answer.
+2. The metric counts **new messages and gates**; its unit is declared per §4.
+3. A measured baseline now exists, so the setpoint can be set against a number rather than
+   an impression — and both readings above carry their instant and their population.
