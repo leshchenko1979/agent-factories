@@ -78,6 +78,26 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "evidence" / "ledger.jsonl"
+FIELD_PREDICATE = REPO / "tools" / "field_predicate.py"
+
+# ---- the canonicality leg (law: SKILL.md section 8, the ladder T0-T4) --------------
+#
+# A check that reports a discrepancy names the TIER that resolved it (law section 8), and
+# this leg is the PROCESS half of that rule: the tiers DECLARED in the ledger are
+# enumerated, and every `T4` — the verdict meaning NEITHER side is canonical — that no
+# later row has superseded is reported. Without this, an unresolved tier lives only in a
+# lane's prose, which is where a resolution goes to be forgotten.
+#
+# Population and its limit, stated because a count without its predicate is unreadable:
+# `rows_read` is every ledger row loaded, and `rows_declaring_tier` is the subset whose
+# canonical trailer DECLARES `tier=`. The second figure is legitimately zero today — the
+# field is new, so nothing has declared one yet — and zero THERE is not the vacuous-clean
+# failure the population law bars, because the enumeration asserted non-empty is
+# `rows_read`, never the tier count. What proves this leg BITES is the probe in
+# `tests/test_patrol_host_state.py`, not a live hit (#112, ruling n=657 item 8).
+CANONICALITY_KEY = "tier"
+CANONICALITY_TIERS = ("T0", "T1", "T2", "T3", "T4")
+CANONICALITY_UNRESOLVED = "T4"
 PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
 
 # The close-board gate (#44) OWNS the definition of a close row's board
@@ -697,6 +717,94 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
         },
     }
 
+def field_predicate_readers():
+    """The shared detail-field predicate, loaded by path so no import path is assumed.
+
+    Loaded rather than imported because this runner is copied into every member factory,
+    where the layout above it is not the same — the same reason `load_predicate` exists
+    for the board predicate. The READ goes through the shared predicate and never a
+    private `split("=")`: one field, one predicate (SKILL.md section 11).
+    """
+    spec = importlib.util.spec_from_file_location("field_predicate", FIELD_PREDICATE)
+    if spec is None or spec.loader is None:
+        raise BoardReadError(f"cannot load the field predicate at {FIELD_PREDICATE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
+    """Every tier the ledger DECLARES, and every `T4` still standing.
+
+    The read is a SEQUENCE, not a single scan: a `T4` is superseded by a LATER row for the
+    same subject declaring a resolved tier (T0-T3). Without that, a tier that was routed
+    and answered would red this leg for ever — the permanent-false-positive class #139
+    names, where a leg with no exit teaches the next reader to ignore a red patrol.
+    """
+    fp = field_predicate_readers()
+    problems: list[str] = []
+    declared: list[tuple[int, str, str]] = []
+
+    for index, row in enumerate(rows):
+        detail = str(row.get("detail") or "")
+        if CANONICALITY_KEY not in fp.declared_keys(detail):
+            continue
+        value = ""
+        for token in fp.trailer_tokens(detail):
+            found = fp.keyed_value(token, CANONICALITY_KEY)
+            if found is not None:
+                value = found
+                break
+        tier = value.upper()
+        if tier not in CANONICALITY_TIERS:
+            problems.append(
+                f"n={row.get('n')} ({row.get('subject')}): tier={value!r} is not one of "
+                f"{'/'.join(CANONICALITY_TIERS)} — an unrecognised tier cannot have "
+                f"resolved a discrepancy, and reading it as one is the defect this leg "
+                f"exists to catch"
+            )
+            continue
+        declared.append((index, str(row.get("subject") or ""), tier))
+
+    unresolved: list[tuple[int, str]] = []
+    superseded = 0
+    for index, subject, tier in declared:
+        if tier != CANONICALITY_UNRESOLVED:
+            continue
+        answered = any(
+            later_index > index
+            and later_subject == subject
+            and later_tier != CANONICALITY_UNRESOLVED
+            for later_index, later_subject, later_tier in declared
+        )
+        if answered:
+            superseded += 1
+            continue
+        unresolved.append((index, subject))
+
+    for index, subject in unresolved:
+        row = rows[index]
+        problems.append(
+            f"n={row.get('n')} ({subject}): tier={CANONICALITY_UNRESOLVED} — NEITHER side "
+            f"is canonical and no later row for this subject resolves it. Re-measure, or "
+            f"route the open question; an unresolved tier is a finding, never a clean result"
+        )
+
+    return {
+        "name": "canonicality-tier",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "rows_read": len(rows),
+            "rows_declaring_tier": len(declared),
+            "tiers_declared": sorted({tier for _, _, tier in declared}),
+            "t4_superseded": superseded,
+            "t4_standing": len(unresolved),
+            "unresolved_subjects": [subject for _, subject in unresolved],
+            "read_at": read_at,
+        },
+    }
+
 def deferred_legs() -> list[dict]:
     """Legs this runner does not run, each declaring its tracker and its checkable claims.
 
@@ -773,6 +881,19 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             if leg.get("reason"):
                 lines.append(f"  {leg['reason']}")
             lines.append(f"  read at {cov['read_at'] or 'unstated'}")
+        elif leg["name"] == "canonicality-tier":
+            tiers = ", ".join(cov["tiers_declared"]) or "none declared"
+            lines.append(
+                f"  rows: {cov['rows_declaring_tier']} of {cov['rows_read']} declare a "
+                f"tier ({tiers}); {cov['t4_standing']} standing tier="
+                f"{CANONICALITY_UNRESOLVED}, {cov['t4_superseded']} superseded"
+            )
+            if cov["unresolved_subjects"]:
+                lines.append(
+                    f"  UNRESOLVED: {', '.join(cov['unresolved_subjects'])} — no tier "
+                    f"resolved these, and that is a finding, not a clean result"
+                )
+            lines.append(f"  read at {cov['read_at']}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -873,6 +994,7 @@ def main(
             cron_rows, homes_read, unreached, prefixes_fn(), log_dir=log_dir,
             read_at=read_at,
         ),
+        canonicality_leg(rows, read_at=read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)

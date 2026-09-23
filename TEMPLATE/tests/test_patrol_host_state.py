@@ -842,6 +842,151 @@ def test_a_finding_reports_the_id_read_from_the_box_not_a_placeholder() -> None:
     )
 
 
+def _tier_row(n: int, subject: str, detail: str, event: str = "ruling") -> dict:
+    """A ledger row carrying whatever `detail` says — trailer discipline is the caller's."""
+    return {"n": n, "ts": "2026-09-19T10:00:00Z", "event": event, "actor": "hq",
+            "subject": subject, "detail": detail}
+
+
+def test_the_canonicality_leg_primes_ON_the_ledger_it_was_given() -> None:
+    """A leg is only as good as the population it enumerates, so the population is stated.
+
+    `rows_declaring_tier` is legitimately zero today — the field is new — and zero THERE
+    is not a vacuous clean, because the enumeration asserted non-empty is `rows_read`.
+    """
+    rows = _rows(("intake", "#1", 1), ("close", "#1", 2))
+    leg = RUNNER.canonicality_leg(rows, read_at="2026-09-23T11:00Z")
+    assert leg["name"] == "canonicality-tier", leg["name"]
+    assert leg["status"] == "ASSERTED", leg
+    cov = leg["coverage"]
+    assert cov["rows_read"] == 2, cov
+    assert cov["rows_declaring_tier"] == 0, cov
+    assert leg["problems"] == [], leg["problems"]
+
+
+def test_a_STANDING_T4_is_reported_and_names_the_tier() -> None:
+    """The probe that proves this leg BITES: force a T4, and it must not read clean.
+
+    The declaration sits in the canonical trailer — the run of `key=value` tokens at the
+    END of the detail (SKILL.md section 11). Prose after it terminates the run, which is
+    the next test's subject.
+    """
+    rows = [_tier_row(1, "#900", "open question: which twin is canonical run=7 tier=T4")]
+    leg = RUNNER.canonicality_leg(rows, read_at="2026-09-23T11:00Z")
+    assert leg["problems"], "a standing T4 produced no problem — the leg is vacuous"
+    joined = " ".join(leg["problems"])
+    assert "tier=T4" in joined, joined
+    assert "NEITHER side is canonical" in joined, joined
+    assert leg["coverage"]["t4_standing"] == 1, leg["coverage"]
+
+
+def test_a_T4_superseded_by_a_LATER_row_stops_reding_for_ever() -> None:
+    """A leg with no exit teaches the next reader to ignore a red patrol (#139).
+
+    The read is a SEQUENCE: once a later row for the same subject declares a resolved
+    tier, the T4 is history, not a standing finding.
+    """
+    rows = [
+        _tier_row(1, "#900", "unresolved run=7 tier=T4"),
+        _tier_row(2, "#900", "resolved run=8 tier=T1"),
+    ]
+    leg = RUNNER.canonicality_leg(rows, read_at="2026-09-23T11:00Z")
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["t4_superseded"] == 1, leg["coverage"]
+    assert leg["coverage"]["t4_standing"] == 0, leg["coverage"]
+
+
+def test_a_T4_for_a_DIFFERENT_subject_is_not_superseded_by_the_wrong_row() -> None:
+    """Supersession is keyed on the SUBJECT, never on mere recency.
+
+    An earlier draft compared indices alone, which would let any later row anywhere in
+    the ledger resolve any earlier T4 — the adjacency error, in a new place.
+    """
+    rows = [
+        _tier_row(1, "#900", "unresolved run=7 tier=T4"),
+        _tier_row(2, "#901", "an unrelated subject run=8 tier=T1"),
+    ]
+    leg = RUNNER.canonicality_leg(rows, read_at="2026-09-23T11:00Z")
+    assert leg["coverage"]["t4_standing"] == 1, leg["coverage"]
+    assert leg["coverage"]["unresolved_subjects"] == ["#900"], leg["coverage"]
+
+
+def test_an_EMPTY_tier_population_is_NOT_a_vacuous_clean() -> None:
+    """The loud-fail form is WRONG for a forward-only population, and this pins why.
+
+    `rows_declaring_tier` is legitimately zero until the first tier lands, so failing on
+    zero would red the patrol for a state that is not a defect — the permanent
+    false-positive class #139 names. Section 8's own clause (#112, ruling n=657 item 8)
+    makes NON-VACUITY a property of the PROBE for exactly this shape, and
+    `test_a_STANDING_T4_is_reported_and_names_the_tier` above is that probe. What the
+    RUN must carry is POPULATION VISIBILITY, not a synthetic finding.
+    """
+    leg = RUNNER.canonicality_leg([], read_at="2026-09-23T11:00Z")
+    assert leg["problems"] == [], (
+        "an empty tier population must not manufacture a finding — non-vacuity is the "
+        f"probe's job here, and this leg is forward-only: {leg['problems']}"
+    )
+    assert leg["coverage"]["rows_read"] == 0, leg["coverage"]
+    assert "rows_declaring_tier" in leg["coverage"], leg["coverage"]
+
+
+def test_the_leg_PRINTS_the_population_it_examined() -> None:
+    """Population visibility is the RUN's property: a count travelling with its predicate."""
+    rows = [_tier_row(1, "#900", "settled run=7 tier=T1")]
+    rc, out, _ = _run([], rows)
+    assert "1 of 1 declare a tier" in out, out
+
+
+def test_an_unrecognised_tier_is_a_defect_not_a_resolution() -> None:
+    """`tier=T9` cannot have resolved a discrepancy, and reading it as one is the bug."""
+    rows = [_tier_row(1, "#902", "nonsense run=7 tier=T9")]
+    leg = RUNNER.canonicality_leg(rows, read_at="2026-09-23T11:00Z")
+    assert leg["problems"], "an unrecognised tier passed"
+    assert "not one of" in " ".join(leg["problems"]), leg["problems"]
+
+
+def test_a_tier_OUTSIDE_the_canonical_trailer_is_a_mention_not_a_declaration() -> None:
+    """The read is trailer-scoped by design, and this pins that it is not a bug.
+
+    A detail whose trailer is terminated by prose declares nothing: the same rule that
+    makes a quoted trailer mid-sentence not a declaration (#91, ruled at n=572 PART 3).
+    """
+    rows = [_tier_row(1, "#903", "a mention only tier=T4 and then prose follows")]
+    leg = RUNNER.canonicality_leg(rows, read_at="2026-09-23T11:00Z")
+    assert leg["coverage"]["rows_declaring_tier"] == 0, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+
+def test_the_leg_reaches_the_RENDERED_report_and_reds_the_run() -> None:
+    """End to end: a standing T4 must appear in the report AND set the exit code."""
+    rows = [_tier_row(1, "#900", "unresolved run=7 tier=T4")]
+    rc, out, _ = _run([], rows)
+    assert "LEG canonicality-tier" in out, out
+    assert "tier=T4" in out, out
+    assert rc == 1, f"a standing T4 must red the run, got rc={rc}\n{out}"
+
+
+def test_a_clean_ledger_reads_clean_in_the_RENDERED_report() -> None:
+    """The negative half: with nothing unresolved the leg must not manufacture a finding."""
+    rows = [_tier_row(1, "#900", "settled run=7 tier=T1")]
+    rc, out, _ = _run([], rows)
+    assert "LEG canonicality-tier" in out, out
+    assert "1 standing tier=T4" not in out, out
+    assert "0 standing tier=T4" in out, out
+
+
+def test_the_leg_reads_through_the_SHARED_predicate_never_a_private_split() -> None:
+    """One field, one predicate (section 11) — a private parse is the defect it names."""
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    assert "field_predicate" in source, "the leg does not bind to the shared predicate"
+    start = source.index("def canonicality_leg")
+    end = source.index("def deferred_legs")
+    body = source[start:end]
+    assert "trailer_tokens(" in body, "the trailer read must come from the module"
+    assert "keyed_value(" in body, "the value read must come from the module"
+    assert '.split("=")' not in body, "a private split is exactly what the law bars"
+
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]

@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.17
+version: 0.1.18
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -376,6 +376,51 @@ leaning on shared memory rather than on what it said.
 - **A predicate that examined nothing has reported nothing, not HOLDS.** Naming a population and examining one are two properties, and the first does not carry the second: a predicate can name its population exactly and still read zero items inside it, and its clean verdict over that empty read is indistinguishable in the output from a verified one. So every predicate that reports a clean verdict over an enumerated population asserts that the enumeration was NON-EMPTY, prints the count it examined, and FAILS LOUDLY on a zero count, naming which population came back empty. A gate that examined zero items must never print the verdict of one that examined the population and found it clean. This generalises a property already stated for one gate (`tests/test_ledger_no_shrink.py`) and already practised across the suite; it is codified because a predicate that cannot name its own population is already barred from reporting HOLDS, and a predicate that names its population perfectly and examines nothing is the same failure one step further in.
   The clause is **two-part**, and the second part is what keeps it from being satisfied by an exit code: a gate PRINTS the population it examined, and it is proven to BITE by a probe that makes it fail. **NON-VACUITY IS A PROPERTY OF THE PROBE, and POPULATION VISIBILITY is the property of the run.** A gate whose only evidence of working is an exit 0 over a population it does not print has not been shown to work. The loud-fail-on-zero form is right for a gate whose population is the whole history — `tests/test_ledger_no_shrink.py`'s is — and **wrong for a forward-only gate whose population is legitimately empty until its next instance**, where the probe is the only thing that can show the gate bites (#112, ruling n=657 item 8).
 - **A cited line is evidence of a FACT, never of a CAUSE.** A log line, a count or a config read can establish that something happened; it cannot establish what produced it, and a causal sentence built on top of a real observation is a separate assertion that needs its own support. A cause is established by varying it — the effect follows — or by its absence coinciding with the effect's absence, and the ruling or entry that asserts one names the disproof it rests on. The sharpest available test, and the one this factory lost a ruling to: **a cause that VANISHES while the effect persists at FULL RATE is not the cause.** No gate can read causation, so the upholding mechanism is a PROCESS (P29), not a gate — and the clause is the second half of the record law above: the RECORD of a defect states its cause, so the cause must be as checkable as the fact.
+- **Canonicality: which of two contradicting states stands (the ladder, T0–T4).** A check that
+  reports a discrepancy has found a *disagreement*, not a *direction* — and a lane that guesses
+  the direction repairs the canonical side to match the stale one, which is worse than the
+  discrepancy standing. So every such report carries the TIER that resolved it, cheapest rung
+  first:
+  - **T0 — identity.** Read the objects' own fields before arbitrating anything: the question is
+    often malformed rather than the state (a quote attributed from row adjacency; a twin pair
+    where byte-identity *is* the property). One read, and the question dissolves.
+  - **T1 — precedence.** Where one side is UPSTREAM of the other, upstream wins and no goal
+    knowledge is needed: source over render, authored over generated, live over snapshot, and
+    §11's one named writer over every other path to that surface. **T1 POINTS AT §11's table and
+    never restates it** — a second copy would drift from the gate that reads the first, which is
+    the defect this clause exists to prevent. Precedence is never RECENCY: the newer side does
+    not win.
+  - **T2 — metric.** Only where both sides are genuinely independent does the factory's own goal
+    decide, and the resolution NAMES the metric. An unstated metric cannot decide, so a T2 claim
+    that cannot name one is a T3 or a T4 by construction.
+  - **T3 — strategy.** Where the goal is too abstract to decide, a declared strategy does. The
+    strategy layer is **already machine-readable, and the ladder does not duplicate it**:
+    `tests/test_law_coverage.py`'s `PRACTICE_GATES` maps every practice law to the artefacts that
+    uphold it, and the gate prints its own mapped count on every run — so a lane holding a check
+    **inverts that map** to read its strategies off the existing relation rather than adding a
+    second one beside it. No count is written here: the figure belongs to the gate that measures
+    it, and a number copied into this file would be stale the moment a law is typed. A per-check
+    copy of that field is the drift this clause's T1 rule forbids, in the strategy layer.
+  - **T4 — neither.** Neither side is canonical on the evidence available: one is superseded, or
+    both, or the identity needed to decide was never recorded. **T4 is a VERDICT, not a failure.**
+    Its two answers are *re-measure* and *UNRESOLVED with the open question named*. Forcing a pick
+    is how a durable record acquires a false fact — where no surface records the actor, the honest
+    outcome is a recorded `UNRESOLVED`, never a named culprit.
+  **The verdict NAMES its tier, and a T4 is loud.** A resolution that does not say which rung
+  decided it is unauditable and can never be re-litigated when the metric or strategy moves. A
+  check that found a discrepancy and reached no tier prints that outcome the way the patrol prints
+  its `RAN` / `NOT RUN` legs, so "no tier resolved it" is never readable as a clean result. Its
+  upholding mechanism is a PROCESS (P29), not a gate: no gate can decide a metric comparison, and
+  one that pretended to would fail in a way that reads as a finding — so the standing patrol
+  reports each tier that went unresolved.
+  **Canonicality is not ownership, and the two are read apart.** `ONTOLOGY.md` carries the pair:
+  ownership (§11) is *authority over a surface*; canonicality is *truth about a pair*. Ownership
+  supplies ONE of T1's four precedence forms — it decides only when one side derives from the
+  other. Two readings of the SAME surface share an owner, so ownership cannot choose between them;
+  and a disagreement whose owner is undecidable is a T4, not a licence to name one.
+  **What this does NOT do:** it never pre-writes canonical state per surface. That is the one
+  approach that goes stale silently, which is the disease rather than the cure; the ladder is
+  walked lazily, at the site, only where a disagreement actually exists.
 
 ---
 

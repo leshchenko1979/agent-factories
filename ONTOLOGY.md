@@ -73,6 +73,9 @@ defect to fix, not a synonym to tolerate.
 | `context_manifest_curation` | Explicit pre-compaction prompt declaration of active and discarded skills and required tools to guarantee post-compaction state retention | manifest tagging, context filtering |
 | `cognitive_trap` | A failure mode a person and an agent share, where the counter is a practice rather than a stronger generator. Naming it a trap keeps the remedy in view | human error, mistake, quirk, weakness |
 | `mirror_test` | The diagnostic that asks whether a person fails the same way, and which of the four failure families the defect belongs to, before any counter is designed | analogy check, sanity check, gut check |
+| `canonicality` | Which of two contradicting states is the one to keep — a property of a PAIR, settled by the cheapest resolution tier that can answer it, never by which side was written last | authority, ownership, correctness, source of truth |
+| `resolution tier` | One of the five ordered rungs a discrepancy is resolved at: T0 identity, T1 precedence, T2 metric, T3 strategy, T4 neither | level, priority, rank, layer |
+| `UNRESOLVED` | The T4 verdict — neither side is canonical on the evidence available. A finding to route, never a failure to conceal | unknown, undecided, pending, TBD |
 
 <!--
 Rules for a good entry:
@@ -444,7 +447,7 @@ keep their own band — and the register itself is not yet written.
 
 ### Terms that are not synonyms
 
-Four pairs look interchangeable and are not. Conflating them is how work gets
+Five pairs look interchangeable and are not. Conflating them is how work gets
 duplicated and claims get filed against the wrong object:
 
 | Pair | The difference |
@@ -453,6 +456,7 @@ duplicated and claims get filed against the wrong object:
 | `binding` vs `add-on` | Every binding is an add-on; not every add-on is a binding. A binding names the substrate and there is exactly one of each kind; a domain add-on is optional and plural |
 | `subagent` vs `lane` | A subagent has no channel binding and finishes. A lane is bound to a place and persists. A subagent id recorded as a lane is a defect — six member-HQ replies parked against one on 2026-09-11 |
 | `epistemic_failure` vs `context_capacity_failure` | Both leave a wrong statement behind, and only one is a hallucination. The first is generation ungrounded in facts — the fact was never in context. The second is a fact that *was* in context and is gone. The counters differ (a receipt vs a flush), so calling a lost fact a hallucination prescribes prompt-bloat that cannot work. Run the `mirror_test` before naming either |
+| `canonicality` vs `ownership` | Ownership answers WHO may write a surface (§11) — it is authority over a surface. Canonicality answers WHICH of two contradicting states stands — it is truth about a pair. Ownership supplies ONE of T1's precedence forms, so it decides a disagreement only when one side is a derivation of the other. Two readings of the SAME surface have the same owner, so ownership cannot choose between them: the `23.67 %` ↔ `23.73 %` pair was settled by freshness, not by authorship. And where no surface records the actor at all (#138), ownership is ABSENT — the honest verdict is `UNRESOLVED`, not a named culprit. Reading the two as one turns "who is answerable" into "whose number wins", which freezes a stale value the moment its owner is named |
 
 ---
 
