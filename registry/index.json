@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-22T20:36:29Z",
+  "resolved_at": "2026-09-23T11:33:47Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -12,19 +12,19 @@
   },
   "announcements": [
     {
-      "id": "gate-runner-timeout-flake",
+      "id": "gatus-config-carries-live-credentials",
       "severity": "warning",
       "scope": "profile",
-      "text": "The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.",
-      "since": "2026-09-19T15:37:24Z",
-      "review_by": null,
+      "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.",
+      "since": "2026-09-23",
+      "review_by": "2026-10-07",
       "check": null,
-      "evidence": "Read at source 2026-09-19T15:37Z, three files: /root/agent-factories/tools/audit.py:519 timeout=30 and :533 exit_code 99 with duration_sec 0.0; /root/agent-factories/TEMPLATE/tools/audit.py:519 and :533 byte-identical shape (def run_gate at :509 in both); /root/miidas/tools/audit.py:88 GATE_TIMEOUT_SEC = 180, applied at :286. The TEMPLATE copy is the load-bearing one: every factory bootstrapped from it inherits the defect. Fix landed in miidas commit e4c5ab5.",
+      "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file.",
       "affects": [
         "profile"
       ],
       "origins": [
-        "miidas"
+        "infra-factory"
       ],
       "conflict": []
     },
@@ -100,7 +100,7 @@
       "id": "miidas-volume-namespace-on-apps",
       "severity": "warning",
       "scope": "profile",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.",
       "since": "2026-09-13T09:56:00Z",
       "review_by": null,
       "check": null,
@@ -355,7 +355,7 @@
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.54",
+      "skill_revision": "1.0.56",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -429,7 +429,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T08:55:02Z",
+          "bound_at": "2026-09-23T06:20:50Z",
           "announcements": []
         },
         {
@@ -496,7 +496,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-09-19T14:22:25Z",
+      "attested_at": "2026-09-23T11:32:57Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -570,6 +570,12 @@
           "audience": "agent",
           "entry": "root crontab on agents: python3 /root/vds-servers/tools/hygiene.py --clean",
           "cadence": "hourly - a host script, not a lane wake"
+        },
+        {
+          "name": "infra-handler-escalation-check",
+          "audience": "agent",
+          "entry": "cron be4c38ce-d8f6-4d64-b4fe-eaa711af71cc - thin trigger that wakes the TG Hub lane (a360e13f-4e34-4fac-8a1d-770644040903) when a downstream handler goes unactioned past 24 h; delivers no report of its own",
+          "cadence": "daily 00:00 (0 0 * * *)"
         }
       ],
       "lanes": [
@@ -600,7 +606,7 @@
           "session_id": "8daa376e-367c-452d-840f-0c18d66ef60a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-17T12:12:45Z",
+          "bound_at": "2026-09-23T08:02:08Z",
           "announcements": []
         },
         {
@@ -620,7 +626,7 @@
           "session_id": "a360e13f-4e34-4fac-8a1d-770644040903",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T10:44:12Z",
+          "bound_at": "2026-09-23T07:09:00Z",
           "announcements": []
         }
       ],
@@ -650,6 +656,19 @@
             "profile"
           ],
           "evidence": null
+        },
+        {
+          "id": "gatus-config-carries-live-credentials",
+          "severity": "warning",
+          "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.",
+          "scope": "profile",
+          "since": "2026-09-23",
+          "review_by": "2026-10-07",
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file."
         }
       ]
     },
@@ -661,7 +680,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.16",
+      "skill_revision": "0.1.18",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -730,7 +749,7 @@
           "session_id": "5c99ad51-8889-40cb-b589-fa13fd673c06",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-15T09:06:12Z",
+          "bound_at": "2026-09-23T10:47:40Z",
           "announcements": []
         },
         {
@@ -750,7 +769,7 @@
           "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T22:22:29Z",
+          "bound_at": "2026-09-23T10:53:14Z",
           "announcements": []
         },
         {
@@ -807,21 +826,22 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-19T15:37:24Z",
+      "attested_at": "2026-09-23T11:33:47Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.9",
+      "skill_revision": "1.1.12",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
           "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps",
           "leshchenko1979/miidas and leshchenko1979/miidas-template",
-          "per-client slot state: pool/slots/miidas-*.env on apps, plus the miidas-* container and miidas_* volume namespaces",
+          "per-client slot state: pool/slots/miidas-*.env on apps — apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ — plus the miidas-* container and miidas_* volume namespaces",
           "the Miidas Factory Telegram chat (-1003996392908) and its topics",
           "/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer",
           "cron miidas-hq-daily-trigger",
-          "the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle"
+          "the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle",
+          "leshchenko1979/miidas-landing — the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing"
         ],
         "does_not_own": [
           "client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface",
@@ -834,8 +854,9 @@
       "substrates_owned": [
         "leshchenko1979/miidas",
         "leshchenko1979/miidas-template",
+        "leshchenko1979/miidas-landing",
         "/root/miidas/SKILL.md (live skill path is a symlink to it)",
-        "apps: pool/slots/miidas-*.env and the miidas-* compose stack"
+        "apps: pool/slots/miidas-*.env at /data/projects/miidas/pool/slots/ and the miidas-* compose stack under /data/projects/miidas/compose/"
       ],
       "services": [
         {
@@ -897,7 +918,7 @@
           "announcements": []
         },
         {
-          "topic": "Worker — #25 CLIENT_KIND backfill + telemetry projection",
+          "topic": "Worker",
           "thread_id": 56,
           "role": "worker",
           "session_id": "b57efabd-85df-4467-bed7-f5a596285f68",
@@ -913,7 +934,7 @@
           "session_id": "39d2b612-dbfc-4953-ae02-609267c68c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T11:51:20Z",
+          "bound_at": "2026-09-23T09:33:30Z",
           "announcements": []
         }
       ],
@@ -921,7 +942,7 @@
         {
           "id": "miidas-volume-namespace-on-apps",
           "severity": "warning",
-          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
+          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.",
           "scope": "profile",
           "since": "2026-09-13T09:56:00Z",
           "review_by": null,
@@ -956,19 +977,6 @@
             "profile"
           ],
           "evidence": null
-        },
-        {
-          "id": "gate-runner-timeout-flake",
-          "severity": "warning",
-          "text": "The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.",
-          "scope": "profile",
-          "since": "2026-09-19T15:37:24Z",
-          "review_by": null,
-          "check": null,
-          "affects": [
-            "profile"
-          ],
-          "evidence": "Read at source 2026-09-19T15:37Z, three files: /root/agent-factories/tools/audit.py:519 timeout=30 and :533 exit_code 99 with duration_sec 0.0; /root/agent-factories/TEMPLATE/tools/audit.py:519 and :533 byte-identical shape (def run_gate at :509 in both); /root/miidas/tools/audit.py:88 GATE_TIMEOUT_SEC = 180, applied at :286. The TEMPLATE copy is the load-bearing one: every factory bootstrapped from it inherits the defect. Fix landed in miidas commit e4c5ab5."
         }
       ]
     },
@@ -980,7 +988,7 @@
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.241",
+      "skill_revision": "0.4.243",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
@@ -1052,7 +1060,7 @@
           "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T14:41:53Z",
+          "bound_at": "2026-09-23T05:30:30Z",
           "announcements": []
         },
         {
@@ -1092,7 +1100,7 @@
           "session_id": "1a63f103-b899-4ad2-a5b3-c89f2902bf97",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T15:13:48Z",
+          "bound_at": "2026-09-22T21:16:18Z",
           "announcements": []
         },
         {
@@ -1102,7 +1110,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-22T20:00:47Z",
+          "bound_at": "2026-09-23T09:14:09Z",
           "announcements": []
         },
         {
@@ -1132,7 +1140,7 @@
           "session_id": "7e1ebbb6-68b3-478b-abc2-b697e70c2f37",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-18T11:53:20Z",
+          "bound_at": "2026-09-23T07:07:54Z",
           "announcements": []
         },
         {
@@ -1162,7 +1170,7 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-22T20:25:13Z",
+          "bound_at": "2026-09-23T08:43:38Z",
           "announcements": []
         },
         {
@@ -1182,7 +1190,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T15:08:16Z",
+          "bound_at": "2026-09-23T06:59:33Z",
           "announcements": []
         },
         {
@@ -1292,7 +1300,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T20:07:17Z",
+          "bound_at": "2026-09-23T05:32:02Z",
           "announcements": []
         },
         {
@@ -1362,7 +1370,7 @@
           "session_id": "4b4463d5-381c-4458-aa0c-3cf199882084",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T12:43:15Z",
+          "bound_at": "2026-09-23T06:05:15Z",
           "announcements": []
         },
         {
@@ -1382,7 +1390,7 @@
           "session_id": "2ed8adeb-4784-4159-b68f-0e552490641e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T08:46:42Z",
+          "bound_at": "2026-09-23T05:21:27Z",
           "announcements": []
         },
         {
@@ -1402,7 +1410,7 @@
           "session_id": "ef83024b-90c8-40fc-8490-e8c2879808ab",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T20:31:28Z",
+          "bound_at": "2026-09-23T10:17:47Z",
           "announcements": []
         }
       ],
@@ -1432,8 +1440,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-22T06:44:26Z",
+      "next_run_at": "2026-09-24T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:24Z",
       "deliver_to": "telegram:-1003993000918:10784",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1464,8 +1472,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T07:00:00+00:00",
-      "last_run_at": "2026-09-22T08:57:39Z",
+      "next_run_at": "2026-09-24T07:00:00+00:00",
+      "last_run_at": "2026-09-23T07:00:49Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1480,8 +1488,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-22T08:54:52Z",
+      "next_run_at": "2026-09-24T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:24Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1496,8 +1504,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-21T06:00:22Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:24Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1528,8 +1536,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:07:00+00:00",
-      "last_run_at": "2026-09-22T19:50:42Z",
+      "next_run_at": "2026-09-23T12:07:00+00:00",
+      "last_run_at": "2026-09-23T06:07:30Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1544,8 +1552,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:30:00+00:00",
-      "last_run_at": "2026-09-22T08:57:39Z",
+      "next_run_at": "2026-09-24T06:30:00+00:00",
+      "last_run_at": "2026-09-23T06:30:49Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1560,8 +1568,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T05:50:00+00:00",
-      "last_run_at": "2026-09-22T08:54:53Z",
+      "next_run_at": "2026-09-24T05:50:00+00:00",
+      "last_run_at": "2026-09-23T05:50:24Z",
       "deliver_to": "session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1576,8 +1584,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:40:00+00:00",
-      "last_run_at": "2026-09-22T19:50:42Z",
+      "next_run_at": "2026-09-23T12:40:00+00:00",
+      "last_run_at": "2026-09-23T06:40:49Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -1592,8 +1600,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:25:00+00:00",
-      "last_run_at": "2026-09-22T19:50:42Z",
+      "next_run_at": "2026-09-23T12:25:00+00:00",
+      "last_run_at": "2026-09-23T06:25:48Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1624,8 +1632,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T09:00:00+00:00",
-      "last_run_at": "2026-09-22T09:00:41Z",
+      "next_run_at": "2026-09-24T09:00:00+00:00",
+      "last_run_at": "2026-09-23T09:00:51Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1672,8 +1680,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T05:00:00+00:00",
-      "last_run_at": "2026-09-22T08:55:00Z",
+      "next_run_at": "2026-09-24T05:00:00+00:00",
+      "last_run_at": "2026-09-23T05:00:23Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1688,8 +1696,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:00:00+00:00",
-      "last_run_at": "2026-09-22T19:50:42Z",
+      "next_run_at": "2026-09-23T12:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:27Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1704,8 +1712,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-22T08:55:02Z",
+      "next_run_at": "2026-09-24T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:27Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1720,8 +1728,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:23:00+00:00",
-      "last_run_at": "2026-09-22T19:50:43Z",
+      "next_run_at": "2026-09-23T12:23:00+00:00",
+      "last_run_at": "2026-09-23T06:23:48Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1736,8 +1744,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:00:00+00:00",
-      "last_run_at": "2026-09-22T00:00:33Z",
+      "next_run_at": "2026-09-24T00:00:00+00:00",
+      "last_run_at": "2026-09-23T00:00:20Z",
       "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
@@ -1768,8 +1776,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-22T08:55:05Z",
+      "next_run_at": "2026-09-24T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:27Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1784,8 +1792,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-23T00:00:00+00:00",
-      "last_run_at": "2026-09-22T19:50:43Z",
+      "next_run_at": "2026-09-23T12:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:28Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -1832,8 +1840,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-22T08:54:58Z",
+      "next_run_at": "2026-09-24T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:24Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1848,8 +1856,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:00:00+00:00",
-      "last_run_at": "2026-09-22T08:55:08Z",
+      "next_run_at": "2026-09-24T06:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:24Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1880,8 +1888,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T00:00:00+00:00",
-      "last_run_at": "2026-09-22T19:50:42Z",
+      "next_run_at": "2026-09-23T12:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:26Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -1896,8 +1904,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T09:00:00+00:00",
-      "last_run_at": "2026-09-22T09:00:41Z",
+      "next_run_at": "2026-09-24T09:00:00+00:00",
+      "last_run_at": "2026-09-23T09:00:51Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1912,8 +1920,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T07:00:00+00:00",
-      "last_run_at": "2026-09-22T08:57:39Z",
+      "next_run_at": "2026-09-24T07:00:00+00:00",
+      "last_run_at": "2026-09-23T07:00:49Z",
       "deliver_to": "session:7e1ebbb6-68b3-478b-abc2-b697e70c2f37",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1928,8 +1936,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T08:00:00+00:00",
-      "last_run_at": "2026-09-22T08:57:39Z",
+      "next_run_at": "2026-09-24T08:00:00+00:00",
+      "last_run_at": "2026-09-23T08:00:50Z",
       "deliver_to": "session:a5b34466-1c14-441f-b2c6-6eaf4f316dde",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2216,8 +2224,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-23T00:00:00+00:00",
-      "last_run_at": "2026-09-22T19:51:01Z",
+      "next_run_at": "2026-09-23T12:00:00+00:00",
+      "last_run_at": "2026-09-23T06:00:29Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2232,8 +2240,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T06:30:00+00:00",
-      "last_run_at": "2026-09-22T08:57:39Z",
+      "next_run_at": "2026-09-24T06:30:00+00:00",
+      "last_run_at": "2026-09-23T06:30:49Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",

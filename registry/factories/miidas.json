@@ -9,11 +9,12 @@
     "owns": [
       "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps",
       "leshchenko1979/miidas and leshchenko1979/miidas-template",
-      "per-client slot state: pool/slots/miidas-*.env on apps, plus the miidas-* container and miidas_* volume namespaces",
+      "per-client slot state: pool/slots/miidas-*.env on apps — apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ — plus the miidas-* container and miidas_* volume namespaces",
       "the Miidas Factory Telegram chat (-1003996392908) and its topics",
       "/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer",
       "cron miidas-hq-daily-trigger",
-      "the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle"
+      "the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle",
+      "leshchenko1979/miidas-landing — the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing"
     ],
     "does_not_own": [
       "client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface",
@@ -64,13 +65,14 @@
   "substrates_owned": [
     "leshchenko1979/miidas",
     "leshchenko1979/miidas-template",
+    "leshchenko1979/miidas-landing",
     "/root/miidas/SKILL.md (live skill path is a symlink to it)",
-    "apps: pool/slots/miidas-*.env and the miidas-* compose stack"
+    "apps: pool/slots/miidas-*.env at /data/projects/miidas/pool/slots/ and the miidas-* compose stack under /data/projects/miidas/compose/"
   ],
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-19: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -98,17 +100,6 @@
         "profile"
       ],
       "scope": "factory"
-    },
-    {
-      "id": "gate-runner-timeout-flake",
-      "text": "The shared factory audit gate runner carries a load-dependent FALSE FAILURE, and it is in your TEMPLATE. subprocess.run(timeout=30) sits at audit.py:519 while a manager test suite's ordinary wall time is 22-29s under load, and the timeout branch returns exit_code 99 with duration_sec 0.0 - indistinguishable from a real gate failure. MIIDAS hit it failing gate 15 at 0.0s at box load average 12.31 and raised its ceiling to GATE_TIMEOUT_SEC=180. A factory reading a 99 with duration_sec 0.0 should suspect the ceiling, not the gate; the honest fix is a ceiling well above the slowest gate's wall time.",
-      "severity": "warning",
-      "since": "2026-09-19T15:37:24Z",
-      "affects": [
-        "profile"
-      ],
-      "scope": "profile",
-      "evidence": "Read at source 2026-09-19T15:37Z, three files: /root/agent-factories/tools/audit.py:519 timeout=30 and :533 exit_code 99 with duration_sec 0.0; /root/agent-factories/TEMPLATE/tools/audit.py:519 and :533 byte-identical shape (def run_gate at :509 in both); /root/miidas/tools/audit.py:88 GATE_TIMEOUT_SEC = 180, applied at :286. The TEMPLATE copy is the load-bearing one: every factory bootstrapped from it inherits the defect. Fix landed in miidas commit e4c5ab5."
     }
   ],
   "lanes": [
@@ -125,7 +116,7 @@
       "announcements": []
     },
     {
-      "topic": "Worker — #25 CLIENT_KIND backfill + telemetry projection",
+      "topic": "Worker",
       "thread_id": 56,
       "role": "worker",
       "announcements": []
@@ -138,5 +129,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-19T15:37:24Z"
+  "attested_at": "2026-09-23T11:33:47Z"
 }

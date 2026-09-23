@@ -67,6 +67,12 @@
       "audience": "agent",
       "entry": "root crontab on agents: python3 /root/vds-servers/tools/hygiene.py --clean",
       "cadence": "hourly - a host script, not a lane wake"
+    },
+    {
+      "name": "infra-handler-escalation-check",
+      "audience": "agent",
+      "entry": "cron be4c38ce-d8f6-4d64-b4fe-eaa711af71cc - thin trigger that wakes the TG Hub lane (a360e13f-4e34-4fac-8a1d-770644040903) when a downstream handler goes unactioned past 24 h; delivers no report of its own",
+      "cadence": "daily 00:00 (0 0 * * *)"
     }
   ],
   "substrates_owned": [
@@ -97,6 +103,18 @@
         "profile"
       ],
       "since": "2026-09-19"
+    },
+    {
+      "id": "gatus-config-carries-live-credentials",
+      "scope": "profile",
+      "severity": "warning",
+      "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-09-23",
+      "review_by": "2026-10-07",
+      "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file."
     }
   ],
   "lanes": [
@@ -132,5 +150,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-19T14:22:25Z"
+  "attested_at": "2026-09-23T11:32:57Z"
 }
