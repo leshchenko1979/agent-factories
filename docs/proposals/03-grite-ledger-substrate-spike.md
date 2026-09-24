@@ -169,8 +169,9 @@ storage-format problem.
   omitted). Signing fidelity is **unknown**.
 - Only the `x86_64-unknown-linux-gnu` build of 0.5.3. The docs site may describe a newer version —
   0.5.3 is the newest release published (2026-05-07).
-- The `grite-daemon` was never run; all results are `--no-daemon`. The daemon may change
-  concurrency behaviour.
+- The `grite-daemon` was not exercised for the merge or concurrency results (all `--no-daemon`).
+  It **was** run for §9's clone test and behaved identically to `--no-daemon`, so the daemon does
+  not change that result. Whether it changes concurrency behaviour remains untested.
 - Snapshots (`refs/grite/snapshots/*`) were not exercised.
 - No large-repo scale test beyond 300 events.
 
@@ -179,3 +180,72 @@ storage-format problem.
 This is a third-party defect in a public repo (`neul-labs/grite`, MIT, 18★, last push 2026-07-02).
 Nothing has been filed upstream — that is an owner decision, not a lane's. The reproduction is
 self-contained and would take a maintainer minutes to run.
+
+---
+
+## 9. ADDENDUM (2026-09-25) — a fresh clone cannot see any issues
+
+Added after the owner asked whether the repo had been set up correctly. It had; testing every
+setup variant turned up a **larger defect than the merge failure**, and it invalidates the
+multi-agent premise outright.
+
+### The finding
+
+A clone that receives WAL commits through git **never materializes them**. The WAL ref travels
+perfectly and every command reports success, but the local store stays empty — so a second agent
+on a clone sees **zero issues**.
+
+| Step | Result |
+|---|---|
+| Plain `git clone` | no `refs/grite/wal` locally (expected — needs the refspec) |
+| `grite sync --pull` | `ok:true`, **`"Pulled 1 new events"`**, WAL head == seed head exactly |
+| WAL chunk in the clone's own object store | **byte-identical blob** to the seed's; my CBOR decoder reads the event out of it |
+| `grite issue list` | **`total: 0`** |
+| `grite db stats` | **`event_count: 0`** |
+| `grite issue show <seed-id>` | `not_found` |
+
+Sharpest form of the test — a clone that already holds one **locally created** event, then pulls:
+
+| | events | local issue | pulled issue |
+|---|---|---|---|
+| start | 0 | 0 | 0 |
+| after local `issue create` | **1** | 1 | 0 |
+| after `sync --pull` | **1** (unchanged) | 1 | **0** |
+
+Local writes materialize. Pulled events never do. In a clone whose WAL holds **2 commits**
+(`base` + `LOCAL`), `rebuild` reports `event_count: 1` and materializes only `LOCAL`.
+
+### Every setup explanation was tested and eliminated
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| `grite init` ordering | init→pull, pull→init, fetch→init, and **no init at all** | identical: 0 events |
+| init creates a conflicting WAL | WAL head after init | **no WAL at all** — init creates none; the WAL appears on first event |
+| Actor state isolation (`actors.md`) | copied the **seed's actor dir + repo default** into a fresh clone | still 0 events |
+| Refspec / raw fetch vs `sync --pull` | fetch refspec then init, vs sync-only | identical |
+| Daemon vs `--no-daemon` | ran `sync --pull` with the daemon auto-spawned | identical: `"Pulled 1 new events"`, 0 issues |
+| Recovery commands | `rebuild`, `rebuild --from-snapshot`, `doctor`, `doctor --fix` | all report `ok:true`; 0 events |
+
+### Why this is a documentation contradiction, not just a bug
+
+- `architecture.md:121-127` specifies the Sync Path as **fetch → new WAL entries read → events
+  inserted into sled → projections rebuilt**. Steps 3–4 do not happen.
+- `operations.md:37` says `rebuild` "replays all events" — but from the **local store**, which is
+  empty. So rebuild cannot recover it either: nothing in the CLI ingests WAL → sled.
+- `architecture.md:22` states *"Correctness never depends on the daemon; the CLI can always
+  rebuild state from the WAL."* Measured, **the CLI cannot**: no command materializes events that
+  arrived via git.
+
+This is a **closed loop** — the documented recovery path reads the store that the failed step was
+supposed to fill.
+
+### Consequence for the verdict
+
+Section 1's recommendation (**do not adopt**) is unchanged and now over-determined. The merge
+failure and this failure are independent, and either alone is disqualifying. The multi-agent
+scenario the README leads with — *"Agent B sees the lock and picks a different task"* — cannot
+work if Agent B's clone sees no issues.
+
+**Version tested:** `grite 0.5.3`, the newest published release (2026-05-07), i.e. what
+`install.sh` installs today. The repo's `main` has commits after that release, so a fix may exist
+unreleased — but this is what a user gets.
