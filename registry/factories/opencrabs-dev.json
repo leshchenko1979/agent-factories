@@ -62,13 +62,13 @@
       "id": "notify-now-mode-retired",
       "scope": "profile",
       "severity": "warning",
-      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
+      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
       "affects": [
         "profile"
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issue #373; commits 9dffa5632 + 6db34e1fd, deployed. notify_policy.rs returns Err for mode=now; the session_notify schema's delivery.mode enum is exactly [turn-end, quiet]."
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:171. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha."
     }
   ],
   "lanes": [
@@ -296,5 +296,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-19T15:50:04Z"
+  "attested_at": "2026-09-24T06:20:00Z"
 }

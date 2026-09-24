@@ -1,13 +1,13 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-23T11:39:38Z",
+  "resolved_at": "2026-09-24T22:47:48Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 61,
     "announcements": 11,
-    "jobs": 56,
+    "jobs": 58,
     "unattributed_jobs": 4
   },
   "announcements": [
@@ -66,11 +66,11 @@
       "id": "notify-now-mode-retired",
       "severity": "warning",
       "scope": "profile",
-      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
+      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
       "since": "2026-09-19",
       "review_by": "2026-12-19",
       "check": null,
-      "evidence": "fork issue #373; commits 9dffa5632 + 6db34e1fd, deployed. notify_policy.rs returns Err for mode=now; the session_notify schema's delivery.mode enum is exactly [turn-end, quiet].",
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:171. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha.",
       "affects": [
         "profile"
       ],
@@ -204,7 +204,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-09-19T14:23:42Z",
+      "attested_at": "2026-09-24T06:20:00Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -216,7 +216,7 @@
           "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
           "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
           "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-          "this factory's own chat (-1003993000918), its topics and its 12 crons"
+          "this factory's own chat (-1003993000918), its topics and its 14 cron rows (10 enabled, 4 disabled: three fired one-shots parked for 2027, plus outreach-db-sync suspended pending an owner ruling on campaign-repo push policy)"
         ],
         "does_not_own": [
           "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -247,28 +247,10 @@
           "cadence": "daily 08:50 MSK"
         },
         {
-          "name": "ai-antispam-triage-sweep",
-          "audience": "agent",
-          "entry": "cron e1588fe5-ddbb-4f4f-84f4-b6e06513683c",
-          "cadence": "every 6h"
-        },
-        {
           "name": "ai-antispam-owner-digest",
           "audience": "owner",
           "entry": "cron a3a292e7-4c14-401e-8095-02e86f5530ea",
           "cadence": "daily 09:30 MSK"
-        },
-        {
-          "name": "ai-antispam-outreach-watch-poll",
-          "audience": "agent",
-          "entry": "cron cfb86dc5-4be4-4984-8331-d682504d2d1f",
-          "cadence": "every 6h"
-        },
-        {
-          "name": "ai-antispam-outreach-db-sync",
-          "audience": "agent",
-          "entry": "cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4",
-          "cadence": "daily 09:00 MSK"
         },
         {
           "name": "ai-antispam-bot-service-health",
@@ -277,10 +259,46 @@
           "cadence": "daily 09:00 MSK"
         },
         {
+          "name": "ai-antispam-triage-sweep",
+          "audience": "agent",
+          "entry": "cron e1588fe5-ddbb-4f4f-84f4-b6e06513683c",
+          "cadence": "every 6h UTC at :25"
+        },
+        {
+          "name": "ai-antispam-outreach-watch-poll",
+          "audience": "agent",
+          "entry": "cron cfb86dc5-4be4-4984-8331-d682504d2d1f",
+          "cadence": "every 6h UTC at :07"
+        },
+        {
+          "name": "ai-antispam-stream-liveness-check",
+          "audience": "agent",
+          "entry": "cron 3384c696-7b75-4668-97c3-a73eab96e38e",
+          "cadence": "every 6h UTC at :40"
+        },
+        {
+          "name": "ai-antispam-outreach-auto-kick",
+          "audience": "agent",
+          "entry": "cron e1fb18bc-0e0c-432e-a54a-1734feab7438",
+          "cadence": "daily 07:00 UTC"
+        },
+        {
+          "name": "ai-antispam-outreach-mining-tranche",
+          "audience": "agent",
+          "entry": "cron f3f5f53c-d218-4cf3-9bbc-d26a12c3f9ca",
+          "cadence": "Mon/Wed/Fri 06:00 UTC"
+        },
+        {
           "name": "ai-antispam-wave0-reply-sweep",
           "audience": "agent",
           "entry": "cron 5e515bac-fb81-41c6-b1e2-603ab824ad90",
           "cadence": "daily 12:00 MSK"
+        },
+        {
+          "name": "ai-antispam-wave0-unactivated-reprobe",
+          "audience": "agent",
+          "entry": "cron 61fcbbfc-e365-4db0-926b-2ad13873a517",
+          "cadence": "Tue 12:00 MSK"
         }
       ],
       "lanes": [
@@ -291,7 +309,7 @@
           "session_id": "acc3fa9b-cefa-4e35-bf87-422696e558f0",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-18T18:37:02Z",
+          "bound_at": "2026-09-24T19:46:51Z",
           "announcements": []
         },
         {
@@ -301,7 +319,7 @@
           "session_id": "6ca0d547-4a72-4c29-ac10-967daa98af0a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-12T12:13:52Z",
+          "bound_at": "2026-09-24T11:33:54Z",
           "announcements": []
         },
         {
@@ -311,7 +329,7 @@
           "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T23:35:41Z",
+          "bound_at": "2026-09-24T21:38:44Z",
           "announcements": []
         },
         {
@@ -331,7 +349,7 @@
           "session_id": "6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-17T08:43:30Z",
+          "bound_at": "2026-09-24T18:16:40Z",
           "announcements": []
         },
         {
@@ -355,7 +373,7 @@
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.56",
+      "skill_revision": "1.0.66",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -429,7 +447,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T06:20:50Z",
+          "bound_at": "2026-09-24T20:02:26Z",
           "announcements": []
         },
         {
@@ -586,7 +604,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T16:19:37Z",
+          "bound_at": "2026-09-24T19:43:18Z",
           "announcements": []
         },
         {
@@ -606,7 +624,7 @@
           "session_id": "8daa376e-367c-452d-840f-0c18d66ef60a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T08:02:08Z",
+          "bound_at": "2026-09-24T15:20:10Z",
           "announcements": []
         },
         {
@@ -626,7 +644,7 @@
           "session_id": "a360e13f-4e34-4fac-8a1d-770644040903",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T07:09:00Z",
+          "bound_at": "2026-09-24T13:28:58Z",
           "announcements": []
         }
       ],
@@ -680,7 +698,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.18",
+      "skill_revision": "0.1.20",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -759,7 +777,7 @@
           "session_id": "f4c192c9-a8e9-4268-9026-ee3e4970cc8a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-17T00:40:08Z",
+          "bound_at": "2026-09-23T21:00:20Z",
           "announcements": []
         },
         {
@@ -769,7 +787,7 @@
           "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T10:53:14Z",
+          "bound_at": "2026-09-24T22:21:02Z",
           "announcements": []
         },
         {
@@ -830,7 +848,7 @@
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.12",
+      "skill_revision": "1.1.14",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
@@ -904,7 +922,7 @@
           "session_id": "e4f96a33-45ac-412e-8788-1b678cf2addb",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T11:50:47Z",
+          "bound_at": "2026-09-24T10:04:41Z",
           "announcements": []
         },
         {
@@ -914,7 +932,7 @@
           "session_id": "5a5335ee-db68-46fe-b13e-a082b2beadb5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-17T17:49:57Z",
+          "bound_at": "2026-09-24T10:02:53Z",
           "announcements": []
         },
         {
@@ -934,7 +952,7 @@
           "session_id": "39d2b612-dbfc-4953-ae02-609267c68c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T09:33:30Z",
+          "bound_at": "2026-09-24T11:43:22Z",
           "announcements": []
         }
       ],
@@ -984,11 +1002,11 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-19T15:50:04Z",
+      "attested_at": "2026-09-24T06:20:00Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.243",
+      "skill_revision": "0.4.249",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
@@ -1070,7 +1088,7 @@
           "session_id": "127429e6-08de-439c-9162-2c8b0a9f73d9",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:09:38Z",
+          "bound_at": "2026-09-24T08:15:25Z",
           "announcements": []
         },
         {
@@ -1080,7 +1098,7 @@
           "session_id": "d18ce16a-75a0-447c-90c7-ab7dabce4411",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T22:05:42Z",
+          "bound_at": "2026-09-24T11:58:12Z",
           "announcements": []
         },
         {
@@ -1110,7 +1128,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-23T09:14:09Z",
+          "bound_at": "2026-09-24T22:41:51Z",
           "announcements": []
         },
         {
@@ -1120,7 +1138,7 @@
           "session_id": "a5b34466-1c14-441f-b2c6-6eaf4f316dde",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T09:17:37Z",
+          "bound_at": "2026-09-24T12:06:46Z",
           "announcements": []
         },
         {
@@ -1130,7 +1148,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T10:26:00Z",
+          "bound_at": "2026-09-24T22:43:53Z",
           "announcements": []
         },
         {
@@ -1140,7 +1158,7 @@
           "session_id": "7e1ebbb6-68b3-478b-abc2-b697e70c2f37",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T07:07:54Z",
+          "bound_at": "2026-09-24T12:02:14Z",
           "announcements": []
         },
         {
@@ -1150,7 +1168,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T13:18:41Z",
+          "bound_at": "2026-09-24T12:20:11Z",
           "announcements": []
         },
         {
@@ -1160,7 +1178,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T14:59:21Z",
+          "bound_at": "2026-09-24T18:36:01Z",
           "announcements": []
         },
         {
@@ -1180,7 +1198,7 @@
           "session_id": "212b3c83-6659-49c8-9984-0cf849f769c1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T04:02:09Z",
+          "bound_at": "2026-09-24T20:30:58Z",
           "announcements": []
         },
         {
@@ -1190,7 +1208,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T06:59:33Z",
+          "bound_at": "2026-09-24T22:35:11Z",
           "announcements": []
         },
         {
@@ -1200,7 +1218,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T00:26:54Z",
+          "bound_at": "2026-09-24T16:46:11Z",
           "announcements": []
         },
         {
@@ -1230,7 +1248,7 @@
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-14T08:05:42Z",
+          "bound_at": "2026-09-24T12:00:27Z",
           "announcements": []
         },
         {
@@ -1260,7 +1278,7 @@
           "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T00:26:21Z",
+          "bound_at": "2026-09-24T20:57:38Z",
           "announcements": []
         },
         {
@@ -1280,7 +1298,7 @@
           "session_id": "9fa7c71a-f009-418a-ac06-d0336efcf491",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T15:54:13Z",
+          "bound_at": "2026-09-24T20:30:25Z",
           "announcements": []
         },
         {
@@ -1290,7 +1308,7 @@
           "session_id": "63d775f9-18e2-4097-8696-d9a2ca796f14",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T10:03:57Z",
+          "bound_at": "2026-09-24T22:09:42Z",
           "announcements": []
         },
         {
@@ -1300,7 +1318,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T05:32:02Z",
+          "bound_at": "2026-09-24T21:25:59Z",
           "announcements": []
         },
         {
@@ -1330,7 +1348,7 @@
           "session_id": "95bec69b-0e96-46a9-9d91-dc355e8af18f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-20T17:58:23Z",
+          "bound_at": "2026-09-24T22:10:23Z",
           "announcements": []
         },
         {
@@ -1340,7 +1358,7 @@
           "session_id": "6630dc9a-0eeb-46c2-95b8-bfae43e0766b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T04:10:19Z",
+          "bound_at": "2026-09-23T22:03:01Z",
           "announcements": []
         },
         {
@@ -1380,7 +1398,7 @@
           "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T00:26:51Z",
+          "bound_at": "2026-09-24T07:57:35Z",
           "announcements": []
         },
         {
@@ -1390,7 +1408,7 @@
           "session_id": "2ed8adeb-4784-4159-b68f-0e552490641e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T05:21:27Z",
+          "bound_at": "2026-09-24T19:14:07Z",
           "announcements": []
         },
         {
@@ -1410,7 +1428,7 @@
           "session_id": "ef83024b-90c8-40fc-8490-e8c2879808ab",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T10:17:47Z",
+          "bound_at": "2026-09-24T19:30:25Z",
           "announcements": []
         }
       ],
@@ -1418,7 +1436,7 @@
         {
           "id": "notify-now-mode-retired",
           "severity": "warning",
-          "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. interrupt:true is accepted but INERT - it is not an escalation. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
+          "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
           "scope": "profile",
           "since": "2026-09-19",
           "review_by": "2026-12-19",
@@ -1426,12 +1444,28 @@
           "affects": [
             "profile"
           ],
-          "evidence": "fork issue #373; commits 9dffa5632 + 6db34e1fd, deployed. notify_policy.rs returns Err for mode=now; the session_notify schema's delivery.mode enum is exactly [turn-end, quiet]."
+          "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:171. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha."
         }
       ]
     }
   ],
   "jobs": [
+    {
+      "id": "093a0432-9d4d-41f1-95cf-ea05187408ae",
+      "name": "ai-antispam-43-close-gate",
+      "cron_expr": "5 12 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-25T12:05:00+00:00",
+      "last_run_at": "2026-09-24T12:05:04Z",
+      "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
+      "trigger_cmd": "[ \"$(date -u +%Y%m%d)\" -ge 20260927 ] && /usr/local/bin/gh issue view 43 --repo alexeyleshchenko/ai-antispam --json state 2>/dev/null | grep -q OPEN && echo GATE-DUE",
+      "profile": "ops",
+      "owner": "ai-antispam",
+      "owner_basis": "deliver_to -> lane"
+    },
     {
       "id": "d2c7e157-9370-4752-a054-c853b4bb2d3c",
       "name": "ai-antispam-bot-service-health",
@@ -1440,8 +1474,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:24Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-24T06:00:55Z",
       "deliver_to": "telegram:-1003993000918:10784",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1472,8 +1506,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T07:00:00+00:00",
-      "last_run_at": "2026-09-23T07:00:49Z",
+      "next_run_at": "2026-09-25T07:00:00+00:00",
+      "last_run_at": "2026-09-24T07:00:00Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1488,8 +1522,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:24Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-24T09:27:02Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1515,13 +1549,13 @@
     {
       "id": "31f75ed3-6d27-45a9-8aec-d2180f77f824",
       "name": "ai-antispam-outreach-stream-joins",
-      "cron_expr": "0 */6 * * *",
+      "cron_expr": "0 0 * * *",
       "timezone": "UTC",
-      "enabled": 0,
+      "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-19T00:00:00+00:00",
-      "last_run_at": "2026-09-15T12:00:17Z",
+      "next_run_at": "2026-09-25T00:00:00+00:00",
+      "last_run_at": "2026-09-24T18:20:23Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1536,8 +1570,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T12:07:00+00:00",
-      "last_run_at": "2026-09-23T06:07:30Z",
+      "next_run_at": "2026-09-25T00:07:00+00:00",
+      "last_run_at": "2026-09-24T18:07:23Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1552,8 +1586,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:30:00+00:00",
-      "last_run_at": "2026-09-23T06:30:49Z",
+      "next_run_at": "2026-09-25T06:30:00+00:00",
+      "last_run_at": "2026-09-24T06:30:00Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1568,8 +1602,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T05:50:00+00:00",
-      "last_run_at": "2026-09-23T05:50:24Z",
+      "next_run_at": "2026-09-25T05:50:00+00:00",
+      "last_run_at": "2026-09-24T05:50:55Z",
       "deliver_to": "session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1584,10 +1618,26 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T12:40:00+00:00",
-      "last_run_at": "2026-09-23T06:40:49Z",
+      "next_run_at": "2026-09-25T00:40:00+00:00",
+      "last_run_at": "2026-09-24T18:40:25Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
+      "profile": "ops",
+      "owner": "ai-antispam",
+      "owner_basis": "deliver_to -> chat"
+    },
+    {
+      "id": "2681492a-82c7-469d-a996-eab0de381b22",
+      "name": "ai-antispam-timeout-monitor",
+      "cron_expr": "0 12 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-25T12:00:00+00:00",
+      "last_run_at": "2026-09-24T12:00:03Z",
+      "deliver_to": "telegram:-1003993000918:10784",
+      "trigger_cmd": "ssh apps 'docker logs --since 2026-09-24T21:45:37 ai-antispam 2>&1 | awk \"/app.agents: Gateway spam classification failed/{n++} END{print n+0}\"' > /tmp/ai_antispam_fallbacks && ssh apps 'docker exec postgres psql -U postgres -d ai_spam_bot -At -F \"|\" -c \"SELECT count(*) AS total, count(*) FILTER (WHERE status='\"'\"'decided'\"'\"') AS decided, count(*) FILTER (WHERE status='\"'\"'failed'\"'\"') AS failed FROM classification_verdicts WHERE created_at >= TIMESTAMPTZ '\"'\"'2026-09-24T21:45:37Z'\"'\"';\"' > /tmp/ai_antispam_verdicts && printf 'deploy 2026-09-24T21:45:37Z | gateway_fallbacks=%s | verdicts total|decided|failed=%s\\n' \"$(cat /tmp/ai_antispam_fallbacks)\" \"$(cat /tmp/ai_antispam_verdicts)\" && rm -f /tmp/ai_antispam_fallbacks /tmp/ai_antispam_verdicts",
       "profile": "ops",
       "owner": "ai-antispam",
       "owner_basis": "deliver_to -> chat"
@@ -1600,10 +1650,10 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T12:25:00+00:00",
-      "last_run_at": "2026-09-23T06:25:48Z",
+      "next_run_at": "2026-09-25T00:25:00+00:00",
+      "last_run_at": "2026-09-24T18:25:23Z",
       "deliver_to": null,
-      "trigger_cmd": null,
+      "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
       "owner": "ai-antispam",
       "owner_basis": "name prefix"
@@ -1632,8 +1682,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T09:00:00+00:00",
-      "last_run_at": "2026-09-23T09:00:51Z",
+      "next_run_at": "2026-09-25T09:00:00+00:00",
+      "last_run_at": "2026-09-24T09:00:01Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1680,8 +1730,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T05:00:00+00:00",
-      "last_run_at": "2026-09-23T05:00:23Z",
+      "next_run_at": "2026-09-25T05:00:00+00:00",
+      "last_run_at": "2026-09-24T05:00:55Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1696,8 +1746,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T12:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:27Z",
+      "next_run_at": "2026-09-25T00:00:00+00:00",
+      "last_run_at": "2026-09-24T18:00:22Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1712,8 +1762,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:27Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-24T06:00:55Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1728,8 +1778,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T12:23:00+00:00",
-      "last_run_at": "2026-09-23T06:23:48Z",
+      "next_run_at": "2026-09-25T00:23:00+00:00",
+      "last_run_at": "2026-09-24T18:23:23Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1744,8 +1794,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T00:00:00+00:00",
-      "last_run_at": "2026-09-23T00:00:20Z",
+      "next_run_at": "2026-09-25T00:00:00+00:00",
+      "last_run_at": "2026-09-24T00:00:53Z",
       "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
@@ -1760,8 +1810,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:05:00+00:00",
-      "last_run_at": "2026-09-22T15:08:10Z",
+      "next_run_at": "2026-09-25T15:05:00+00:00",
+      "last_run_at": "2026-09-24T15:05:06Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1776,8 +1826,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:27Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-24T06:00:55Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1792,8 +1842,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-23T12:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:28Z",
+      "next_run_at": "2026-09-25T00:00:00+00:00",
+      "last_run_at": "2026-09-24T18:00:22Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -1840,8 +1890,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:24Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-24T06:00:55Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1856,8 +1906,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:24Z",
+      "next_run_at": "2026-09-25T06:00:00+00:00",
+      "last_run_at": "2026-09-24T06:00:55Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1888,8 +1938,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T12:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:26Z",
+      "next_run_at": "2026-09-25T00:00:00+00:00",
+      "last_run_at": "2026-09-24T18:00:22Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -1904,8 +1954,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T09:00:00+00:00",
-      "last_run_at": "2026-09-23T09:00:51Z",
+      "next_run_at": "2026-09-25T09:00:00+00:00",
+      "last_run_at": "2026-09-24T09:00:02Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1917,11 +1967,11 @@
       "name": "oc-harvest-18-resume",
       "cron_expr": "0 7 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T07:00:00+00:00",
-      "last_run_at": "2026-09-23T07:00:49Z",
+      "next_run_at": "2026-09-25T07:00:00+00:00",
+      "last_run_at": "2026-09-24T07:00:00Z",
       "deliver_to": "session:7e1ebbb6-68b3-478b-abc2-b697e70c2f37",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1933,11 +1983,11 @@
       "name": "oc-harvest-225-resume",
       "cron_expr": "0 8 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T08:00:00+00:00",
-      "last_run_at": "2026-09-23T08:00:50Z",
+      "next_run_at": "2026-09-25T08:00:00+00:00",
+      "last_run_at": "2026-09-24T08:00:01Z",
       "deliver_to": "session:a5b34466-1c14-441f-b2c6-6eaf4f316dde",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1949,11 +1999,11 @@
       "name": "oc-harvest-250-resume",
       "cron_expr": "15 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:15:00+00:00",
-      "last_run_at": "2026-09-22T15:16:10Z",
+      "next_run_at": "2026-09-25T15:15:00+00:00",
+      "last_run_at": "2026-09-24T15:15:06Z",
       "deliver_to": "session:63d775f9-18e2-4097-8696-d9a2ca796f14",
       "trigger_cmd": "echo HARVEST-PENDING-250",
       "profile": "ops",
@@ -1965,11 +2015,11 @@
       "name": "oc-harvest-318-resume",
       "cron_expr": "20 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:20:00+00:00",
-      "last_run_at": "2026-09-22T15:22:09Z",
+      "next_run_at": "2026-09-25T15:20:00+00:00",
+      "last_run_at": "2026-09-24T15:20:06Z",
       "deliver_to": "session:212b3c83-6659-49c8-9984-0cf849f769c1",
       "trigger_cmd": "echo HARVEST-PENDING-318",
       "profile": "ops",
@@ -1981,11 +2031,11 @@
       "name": "oc-harvest-321-resume",
       "cron_expr": "15 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:15:00+00:00",
-      "last_run_at": "2026-09-22T15:16:42Z",
+      "next_run_at": "2026-09-25T15:15:00+00:00",
+      "last_run_at": "2026-09-24T15:15:06Z",
       "deliver_to": "session:cbdfde4a-b3fe-457a-817b-5113b938f12d",
       "trigger_cmd": "echo HARVEST-PENDING-321",
       "profile": "ops",
@@ -1997,11 +2047,11 @@
       "name": "oc-harvest-326-resume",
       "cron_expr": "30 14 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T14:30:00+00:00",
-      "last_run_at": "2026-09-22T14:31:02Z",
+      "next_run_at": "2026-09-25T14:30:00+00:00",
+      "last_run_at": "2026-09-24T14:30:05Z",
       "deliver_to": "session:aaa8d8ae-a4be-4b89-9f92-01a317075be3",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2013,11 +2063,11 @@
       "name": "oc-harvest-341-resume",
       "cron_expr": "45 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:45:00+00:00",
-      "last_run_at": "2026-09-22T19:50:43Z",
+      "next_run_at": "2026-09-25T15:45:00+00:00",
+      "last_run_at": "2026-09-24T15:45:06Z",
       "deliver_to": "session:facd50af-0807-4fee-942b-008bff037f6f",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2029,11 +2079,11 @@
       "name": "oc-harvest-344-resume",
       "cron_expr": "45 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:45:00+00:00",
-      "last_run_at": "2026-09-22T19:50:43Z",
+      "next_run_at": "2026-09-25T15:45:00+00:00",
+      "last_run_at": "2026-09-24T15:45:06Z",
       "deliver_to": "session:127429e6-08de-439c-9162-2c8b0a9f73d9",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2045,11 +2095,11 @@
       "name": "oc-harvest-345-resume",
       "cron_expr": "50 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:50:00+00:00",
-      "last_run_at": "2026-09-22T19:50:43Z",
+      "next_run_at": "2026-09-25T15:50:00+00:00",
+      "last_run_at": "2026-09-24T15:50:06Z",
       "deliver_to": "session:6630dc9a-0eeb-46c2-95b8-bfae43e0766b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2061,11 +2111,11 @@
       "name": "oc-harvest-346-resume",
       "cron_expr": "35 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:35:00+00:00",
-      "last_run_at": "2026-09-22T19:50:48Z",
+      "next_run_at": "2026-09-25T15:35:00+00:00",
+      "last_run_at": "2026-09-24T15:35:06Z",
       "deliver_to": "session:aff7ff41-a3a7-4c53-adc5-80fb7a33ba50",
       "trigger_cmd": "echo HARVEST-PENDING-346",
       "profile": "ops",
@@ -2077,11 +2127,11 @@
       "name": "oc-harvest-348-resume",
       "cron_expr": "40 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:40:00+00:00",
-      "last_run_at": "2026-09-22T19:50:50Z",
+      "next_run_at": "2026-09-25T15:40:00+00:00",
+      "last_run_at": "2026-09-24T15:40:06Z",
       "deliver_to": "session:c78e78e0-099e-455e-8dfb-7e9b8f7d13e5",
       "trigger_cmd": "echo HARVEST-PENDING-348",
       "profile": "ops",
@@ -2093,11 +2143,11 @@
       "name": "oc-harvest-364-resume",
       "cron_expr": "30 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:30:00+00:00",
-      "last_run_at": "2026-09-22T19:49:41Z",
+      "next_run_at": "2026-09-25T15:30:00+00:00",
+      "last_run_at": "2026-09-24T15:30:06Z",
       "deliver_to": "session:9fa7c71a-f009-418a-ac06-d0336efcf491",
       "trigger_cmd": "echo HARVEST-PENDING-364",
       "profile": "ops",
@@ -2125,13 +2175,13 @@
       "name": "oc-harvest-402-resume",
       "cron_expr": "0 18 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T18:00:00+00:00",
-      "last_run_at": "2026-09-22T19:50:57Z",
+      "next_run_at": "2026-09-25T18:00:00+00:00",
+      "last_run_at": "2026-09-24T18:00:22Z",
       "deliver_to": "session:52058a75-e94b-4400-9e07-aac3a891bb1f",
-      "trigger_cmd": "echo HARVEST-PENDING-402",
+      "trigger_cmd": "L=/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-ledger; out=$(timeout -s KILL 25 \"$L\" events --n 20000 --kind note 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"402 mode-gate unreadable rc=$rc - failing OPEN -- $(printf '%s' \"$out\" | tail -c 300)\"; exit 0; fi; m=$(printf '%s\\n' \"$out\" | awk -F'\\t' '$5 ~ /^MODE: / {m=$5} END {print m}'); if [ -z \"$m\" ]; then echo \"402 mode-gate: no MODE note in the ledger - failing OPEN\"; exit 0; fi; case \"$m\" in \"MODE: DEGRADED\"*) exit 0 ;; *) echo \"402 mode register changed to [$m] - re-measure and act.\" ;; esac",
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> lane"
@@ -2144,10 +2194,10 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:45:00+00:00",
-      "last_run_at": "2026-09-22T19:51:00Z",
+      "next_run_at": "2026-09-25T15:45:00+00:00",
+      "last_run_at": "2026-09-24T15:45:06Z",
       "deliver_to": "session:afe476f8-279b-4d54-b628-c9d7e35873c8",
-      "trigger_cmd": "echo HARVEST-PENDING-403",
+      "trigger_cmd": "L=/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/oc-ledger; out=$(timeout -s KILL 25 \"$L\" events --n 20000 --kind note 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"403 mode-gate unreadable rc=$rc - failing OPEN -- $(printf '%s' \"$out\" | tail -c 300)\"; exit 0; fi; m=$(printf '%s\\n' \"$out\" | awk -F'\\t' '$5 ~ /^MODE: / {m=$5} END {print m}'); if [ -z \"$m\" ]; then echo \"403 mode-gate: no MODE note in the ledger - failing OPEN\"; exit 0; fi; case \"$m\" in \"MODE: DEGRADED\"*) exit 0 ;; *) echo \"403 mode register changed to [$m] - re-measure and act.\" ;; esac",
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> lane"
@@ -2157,11 +2207,11 @@
       "name": "oc-harvest-421-resume",
       "cron_expr": "25 15 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T15:25:00+00:00",
-      "last_run_at": "2026-09-22T15:26:04Z",
+      "next_run_at": "2026-09-25T15:25:00+00:00",
+      "last_run_at": "2026-09-24T15:25:06Z",
       "deliver_to": "session:212b3c83-6659-49c8-9984-0cf849f769c1",
       "trigger_cmd": "echo HARVEST-PENDING-421",
       "profile": "ops",
@@ -2224,8 +2274,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-23T12:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:29Z",
+      "next_run_at": "2026-09-25T00:00:00+00:00",
+      "last_run_at": "2026-09-24T18:00:22Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2240,8 +2290,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-24T06:30:00+00:00",
-      "last_run_at": "2026-09-23T06:30:49Z",
+      "next_run_at": "2026-09-25T06:30:00+00:00",
+      "last_run_at": "2026-09-24T06:30:00Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2272,8 +2322,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-23T18:00:00+00:00",
-      "last_run_at": "2026-09-22T18:00:50Z",
+      "next_run_at": "2026-09-25T18:00:00+00:00",
+      "last_run_at": "2026-09-24T18:00:03Z",
       "deliver_to": "telegram:-1004286036984",
       "trigger_cmd": null,
       "profile": "family",

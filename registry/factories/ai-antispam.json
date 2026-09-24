@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 12 crons"
+      "this factory's own chat (-1003993000918), its topics and its 14 cron rows (10 enabled, 4 disabled: three fired one-shots parked for 2027, plus outreach-db-sync suspended pending an owner ruling on campaign-repo push policy)"
     ],
     "does_not_own": [
       "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -36,28 +36,10 @@
       "cadence": "daily 08:50 MSK"
     },
     {
-      "name": "ai-antispam-triage-sweep",
-      "audience": "agent",
-      "entry": "cron e1588fe5-ddbb-4f4f-84f4-b6e06513683c",
-      "cadence": "every 6h"
-    },
-    {
       "name": "ai-antispam-owner-digest",
       "audience": "owner",
       "entry": "cron a3a292e7-4c14-401e-8095-02e86f5530ea",
       "cadence": "daily 09:30 MSK"
-    },
-    {
-      "name": "ai-antispam-outreach-watch-poll",
-      "audience": "agent",
-      "entry": "cron cfb86dc5-4be4-4984-8331-d682504d2d1f",
-      "cadence": "every 6h"
-    },
-    {
-      "name": "ai-antispam-outreach-db-sync",
-      "audience": "agent",
-      "entry": "cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4",
-      "cadence": "daily 09:00 MSK"
     },
     {
       "name": "ai-antispam-bot-service-health",
@@ -66,10 +48,46 @@
       "cadence": "daily 09:00 MSK"
     },
     {
+      "name": "ai-antispam-triage-sweep",
+      "audience": "agent",
+      "entry": "cron e1588fe5-ddbb-4f4f-84f4-b6e06513683c",
+      "cadence": "every 6h UTC at :25"
+    },
+    {
+      "name": "ai-antispam-outreach-watch-poll",
+      "audience": "agent",
+      "entry": "cron cfb86dc5-4be4-4984-8331-d682504d2d1f",
+      "cadence": "every 6h UTC at :07"
+    },
+    {
+      "name": "ai-antispam-stream-liveness-check",
+      "audience": "agent",
+      "entry": "cron 3384c696-7b75-4668-97c3-a73eab96e38e",
+      "cadence": "every 6h UTC at :40"
+    },
+    {
+      "name": "ai-antispam-outreach-auto-kick",
+      "audience": "agent",
+      "entry": "cron e1fb18bc-0e0c-432e-a54a-1734feab7438",
+      "cadence": "daily 07:00 UTC"
+    },
+    {
+      "name": "ai-antispam-outreach-mining-tranche",
+      "audience": "agent",
+      "entry": "cron f3f5f53c-d218-4cf3-9bbc-d26a12c3f9ca",
+      "cadence": "Mon/Wed/Fri 06:00 UTC"
+    },
+    {
       "name": "ai-antispam-wave0-reply-sweep",
       "audience": "agent",
       "entry": "cron 5e515bac-fb81-41c6-b1e2-603ab824ad90",
       "cadence": "daily 12:00 MSK"
+    },
+    {
+      "name": "ai-antispam-wave0-unactivated-reprobe",
+      "audience": "agent",
+      "entry": "cron 61fcbbfc-e365-4db0-926b-2ad13873a517",
+      "cadence": "Tue 12:00 MSK"
     }
   ],
   "substrates_owned": [
@@ -118,5 +136,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-19T14:23:42Z"
+  "attested_at": "2026-09-24T06:20:00Z"
 }
