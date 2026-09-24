@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-24T22:49:41Z",
+  "resolved_at": "2026-09-24T22:56:27Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -102,7 +102,38 @@
           "Postgres ai_spam_bot on apps - single writer outreach/lib/db.py",
           "the bot container and MAX webhook route on apps"
         ],
-        "announcements": [],
+        "announcements": [
+          {
+            "id": "bot-repo-origin-is-live-not-legacy",
+            "text": "The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.",
+            "severity": "warning",
+            "since": "2026-09-24T06:08:33Z",
+            "affects": [
+              "profile"
+            ],
+            "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+          },
+          {
+            "id": "gh-pages-branches-diverged",
+            "text": "The two remotes' gh-pages branches have DIVERGED and must not be treated as one branch: origin 02d743b2 vs alexey 9bcd36dc (re-measured 2026-09-24, unchanged). origin is the live site host, so a blind force-push to either takes the landing page down. 'Level at main' does NOT mean level everywhere.",
+            "severity": "warning",
+            "since": "2026-09-24T06:08:33Z",
+            "affects": [
+              "profile"
+            ],
+            "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+          },
+          {
+            "id": "two-files-named-skill-md",
+            "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
+            "severity": "warning",
+            "since": "2026-09-24T06:08:33Z",
+            "affects": [
+              "profile"
+            ],
+            "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+          }
+        ],
         "lanes": [
           {
             "topic": "Outreach",
@@ -1550,7 +1581,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517]",
-      "session_updated_at": 1790290002,
+      "session_updated_at": 1790290385,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1598,9 +1629,9 @@
       "channel": "telegram",
       "chat_id": "-1003936827469",
       "thread_id": 39171,
-      "updated_at": 1790289311,
-      "last_origin": "callback",
-      "turn_open_at": 1790289311,
+      "updated_at": 1790290252,
+      "last_origin": "text",
+      "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
       "session_updated_at": 1790289710,
       "_profile": "ops",
@@ -1823,7 +1854,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Triage: Issue Portfolio & Harvest Analysis",
-      "session_updated_at": 1790289983,
+      "session_updated_at": 1790290572,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1901,7 +1932,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Ontology [chat:-1003936827469:topic:43993]",
-      "session_updated_at": 1790290154,
+      "session_updated_at": 1790290269,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2109,7 +2140,7 @@
       "last_origin": "callback",
       "turn_open_at": 1790288462,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790289906,
+      "session_updated_at": 1790290409,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2135,7 +2166,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1790250478,
+      "session_updated_at": 1790290408,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2174,7 +2205,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1790273489,
+      "session_updated_at": 1790290412,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2304,7 +2335,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1790286715,
+      "session_updated_at": 1790290408,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2330,7 +2361,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790289936,
+      "session_updated_at": 1790290530,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2495,11 +2526,11 @@
       "channel": "telegram",
       "chat_id": "-1003936827469",
       "thread_id": 30220,
-      "updated_at": 1790289711,
+      "updated_at": 1790290573,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790290133,
+      "session_updated_at": 1790290579,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },

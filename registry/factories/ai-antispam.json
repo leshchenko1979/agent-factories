@@ -96,7 +96,38 @@
     "Postgres ai_spam_bot on apps - single writer outreach/lib/db.py",
     "the bot container and MAX webhook route on apps"
   ],
-  "announcements": [],
+  "announcements": [
+    {
+      "id": "bot-repo-origin-is-live-not-legacy",
+      "text": "The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.",
+      "severity": "warning",
+      "since": "2026-09-24T06:08:33Z",
+      "affects": [
+        "profile"
+      ],
+      "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+    },
+    {
+      "id": "gh-pages-branches-diverged",
+      "text": "The two remotes' gh-pages branches have DIVERGED and must not be treated as one branch: origin 02d743b2 vs alexey 9bcd36dc (re-measured 2026-09-24, unchanged). origin is the live site host, so a blind force-push to either takes the landing page down. 'Level at main' does NOT mean level everywhere.",
+      "severity": "warning",
+      "since": "2026-09-24T06:08:33Z",
+      "affects": [
+        "profile"
+      ],
+      "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+    },
+    {
+      "id": "two-files-named-skill-md",
+      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
+      "severity": "warning",
+      "since": "2026-09-24T06:08:33Z",
+      "affects": [
+        "profile"
+      ],
+      "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+    }
+  ],
   "lanes": [
     {
       "topic": "Outreach",
