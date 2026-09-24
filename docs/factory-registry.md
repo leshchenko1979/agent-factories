@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-24T22:56:27Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-24T23:03:38Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-24T22:56:27Z` |
+| generated | live reads | resolved `2026-09-24T23:03:38Z` |
 
 ## Announcements
 
@@ -17,12 +17,6 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
 
 ### 🟡 warning (9)
 
-- 🟡 **`bot-repo-origin-is-live-not-legacy`** — The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.
-  - affects: profile · since: 2026-09-24T06:08:33Z · declared by: ai-antispam
-- 🟡 **`gh-pages-branches-diverged`** — The two remotes' gh-pages branches have DIVERGED and must not be treated as one branch: origin 02d743b2 vs alexey 9bcd36dc (re-measured 2026-09-24, unchanged). origin is the live site host, so a blind force-push to either takes the landing page down. 'Level at main' does NOT mean level everywhere.
-  - affects: profile · since: 2026-09-24T06:08:33Z · declared by: ai-antispam
-- 🟡 **`two-files-named-skill-md`** — Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.
-  - affects: profile · since: 2026-09-24T06:08:33Z · declared by: ai-antispam
 - 🟡 **`gatus-config-carries-live-credentials`** — vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.
   - affects: profile · since: 2026-09-23 · review by: 2026-10-07 · declared by: infra-factory
 - 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's four were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved). CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet.
@@ -33,8 +27,14 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-19 · review by: 2026-12-19 · declared by: opencrabs-dev
 - 🟡 **`inferhub-autoswitcher-retired`** — The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-24: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-24 — the tier channels this notice named are no longer in the table (live new_api.channels holds exactly two rows: id 43 gemini, status 3 disabled, priority 300, auto_ban 1; id 44 iq-75-plus, status 1 enabled, priority 200, auto_ban 0), and because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is now PERSISTENT, not transient. That inversion is the thing to know.
   - affects: infra-factory · since: 2026-09-18T22:51:42Z · declared by: inferhub-watch
+- 🟡 **`two-files-named-skill-md`** — Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.
+  - affects: ai-antispam · since: 2026-09-17 · declared by: ai-antispam
 - 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
+- 🟡 **`gh-pages-origin-ahead-not-diverged`** — The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.
+  - affects: ai-antispam · since: 2026-09-11 · declared by: ai-antispam
+- 🟡 **`bot-repo-origin-is-live-not-legacy`** — The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.
+  - affects: ai-antispam, infra-factory · since: 2026-01-12 · declared by: ai-antispam
 
 ### 🔵 info (5)
 
@@ -68,7 +68,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-24T06:08:33Z |
+| freshness | ✅ attested 2026-09-24T23:00:12Z |
 | purpose | Run the ai-antispam AI spam-blocker bot service (Telegram + MAX) and the outreach campaign that recruits channel owners to install it. |
 | profile | `ops` |
 | repo | `/root/ai-antispam` |
@@ -76,7 +76,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | owns | ['the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)', 'the outreach campaign repo /root/ai-antispam-outreach and its Postgres state', 'Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)', 'the MAX domain - API surface, webhook ingress, subscription, moderation port', "this factory's own chat (-1003993000918), its topics and its 14 cron rows (10 enabled, 4 disabled: three fired one-shots parked for 2027, plus outreach-db-sync suspended pending an owner ruling on campaign-repo push policy)"] |
 | does not own | ['the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory', 'VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory', 'token provisioning, model routing, inference pricing - inferhub-watch', 'the factory template and meta-factory law - meta-factory', 'Miidas accounting - miidas', 'tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)'] |
 | substrates owned | ['/root/ai-antispam - public repo alexeyleshchenko/ai-antispam (git via SSH alias github.com-alexey)', '/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach', 'Postgres ai_spam_bot on apps - single writer outreach/lib/db.py', 'the bot container and MAX webhook route on apps'] |
-| attested at | 2026-09-24T06:08:33Z |
+| attested at | 2026-09-24T23:00:12Z |
 
 **Services**
 
@@ -97,11 +97,11 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 **Announcements reaching this factory**
 
 - 🟡 **`bot-repo-origin-is-live-not-legacy`** — The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.
-  - affects: profile · since: 2026-09-24T06:08:33Z · declared by: ai-antispam
-- 🟡 **`gh-pages-branches-diverged`** — The two remotes' gh-pages branches have DIVERGED and must not be treated as one branch: origin 02d743b2 vs alexey 9bcd36dc (re-measured 2026-09-24, unchanged). origin is the live site host, so a blind force-push to either takes the landing page down. 'Level at main' does NOT mean level everywhere.
-  - affects: profile · since: 2026-09-24T06:08:33Z · declared by: ai-antispam
+  - affects: ai-antispam, infra-factory · since: 2026-01-12 · declared by: ai-antispam
+- 🟡 **`gh-pages-origin-ahead-not-diverged`** — The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.
+  - affects: ai-antispam · since: 2026-09-11 · declared by: ai-antispam
 - 🟡 **`two-files-named-skill-md`** — Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.
-  - affects: profile · since: 2026-09-24T06:08:33Z · declared by: ai-antispam
+  - affects: ai-antispam · since: 2026-09-17 · declared by: ai-antispam
 
 **Lanes**
 
@@ -315,7 +315,7 @@ Attribution basis: name prefix.
 | purpose | MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them. |
 | profile | `ops` |
 | repo | `/root/miidas` |
-| law | `/root/miidas/SKILL.md` — revision 1.1.14 |
+| law | `/root/miidas/SKILL.md` — revision 1.1.15 |
 | owns | ['/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps', 'leshchenko1979/miidas and leshchenko1979/miidas-template', 'per-client slot state: pool/slots/miidas-*.env on apps — apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ — plus the miidas-* container and miidas_* volume namespaces', 'the Miidas Factory Telegram chat (-1003996392908) and its topics', '/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer', 'cron miidas-hq-daily-trigger', 'the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle', 'leshchenko1979/miidas-landing — the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing'] |
 | does not own | ['client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface', "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle", "the apps host beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows", "other factories' repos, chats and processes", 'OpenCrabs core and the dev process'] |
 | substrates owned | ['leshchenko1979/miidas', 'leshchenko1979/miidas-template', 'leshchenko1979/miidas-landing', '/root/miidas/SKILL.md (live skill path is a symlink to it)', 'apps: pool/slots/miidas-*.env at /data/projects/miidas/pool/slots/ and the miidas-* compose stack under /data/projects/miidas/compose/'] |
@@ -419,7 +419,7 @@ Attribution basis: deliver_to -> lane.
 | Triage: Issue Portfolio & Harvest Analysis | 42487 | triage | `530c29ec-596e-43a4-9c7e-1b6dfc3cd870` | Triage: Issue Portfolio & Harvest Analysis | resolved | telegram | 2026-09-24T21:25:59Z | — |
 | oc-waiter + #111 durable-notify | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-09-18T17:39:21Z | — |
 | #92 demoted-host guard | 42940 | _unstated_ | `c78e78e0-099e-455e-8dfb-7e9b8f7d13e5` | Telegram: Opencrabs Dev Factory / #92 demoted-host guard [chat:-1003936827469:topic:42940] | resolved | telegram | 2026-09-18T17:37:25Z | — |
-| Telegram flow card metrics telemetry bar #232 | 43727 | _unstated_ | `95bec69b-0e96-46a9-9d91-dc355e8af18f` | Telegram flow card metrics telemetry bar #232 | resolved | telegram | 2026-09-24T22:10:23Z | — |
+| Telegram flow card metrics telemetry bar #232 | 43727 | _unstated_ | `95bec69b-0e96-46a9-9d91-dc355e8af18f` | Telegram flow card metrics telemetry bar #232 | resolved | telegram | 2026-09-24T22:57:34Z | — |
 | Governance: Ontology & RSI | 43993 | _unstated_ | `6630dc9a-0eeb-46c2-95b8-bfae43e0766b` | Telegram: Opencrabs Dev Factory / Ontology [chat:-1003936827469:topic:43993] | resolved | telegram | 2026-09-23T22:03:01Z | — |
 | Multicalls | 44326 | _unstated_ | `a38499fc-76a4-4aff-8953-fa5931ad0e5c` | Telegram: Crabs Kanban Board / Multicalls [chat:-1003936827469:topic:44326] | resolved | telegram | 2026-09-07T12:48:39Z | — |
 | Fix #149: Cron Session Isolation | 49607 | _unstated_ | `6cd8175f-fb27-4cf3-a390-971ff2519a47` | Fix #149: Cron Session Isolation | resolved | telegram | 2026-09-19T11:17:52Z | — |

@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-24T22:56:27Z",
+  "resolved_at": "2026-09-24T23:03:38Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -11,57 +11,6 @@
     "unattributed_jobs": 4
   },
   "announcements": [
-    {
-      "id": "bot-repo-origin-is-live-not-legacy",
-      "severity": "warning",
-      "scope": null,
-      "text": "The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.",
-      "since": "2026-09-24T06:08:33Z",
-      "review_by": null,
-      "check": null,
-      "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape.",
-      "affects": [
-        "profile"
-      ],
-      "origins": [
-        "ai-antispam"
-      ],
-      "conflict": []
-    },
-    {
-      "id": "gh-pages-branches-diverged",
-      "severity": "warning",
-      "scope": null,
-      "text": "The two remotes' gh-pages branches have DIVERGED and must not be treated as one branch: origin 02d743b2 vs alexey 9bcd36dc (re-measured 2026-09-24, unchanged). origin is the live site host, so a blind force-push to either takes the landing page down. 'Level at main' does NOT mean level everywhere.",
-      "since": "2026-09-24T06:08:33Z",
-      "review_by": null,
-      "check": null,
-      "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape.",
-      "affects": [
-        "profile"
-      ],
-      "origins": [
-        "ai-antispam"
-      ],
-      "conflict": []
-    },
-    {
-      "id": "two-files-named-skill-md",
-      "severity": "warning",
-      "scope": null,
-      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
-      "since": "2026-09-24T06:08:33Z",
-      "review_by": null,
-      "check": null,
-      "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape.",
-      "affects": [
-        "profile"
-      ],
-      "origins": [
-        "ai-antispam"
-      ],
-      "conflict": []
-    },
     {
       "id": "gatus-config-carries-live-credentials",
       "severity": "warning",
@@ -148,6 +97,23 @@
       "conflict": []
     },
     {
+      "id": "two-files-named-skill-md",
+      "severity": "warning",
+      "scope": null,
+      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
+      "since": "2026-09-17",
+      "review_by": null,
+      "check": null,
+      "evidence": "Repo SKILL.md first appears at cd2a3f8 (2026-09-17, self-audit kit adoption). Measured cost 2026-09-23: a peer lane's version claim and this lane's contradicted each other and BOTH were right - they named different files. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z).",
+      "affects": [
+        "ai-antispam"
+      ],
+      "origins": [
+        "ai-antispam"
+      ],
+      "conflict": []
+    },
+    {
       "id": "miidas-volume-namespace-on-apps",
       "severity": "warning",
       "scope": "profile",
@@ -161,6 +127,41 @@
       ],
       "origins": [
         "miidas"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "gh-pages-origin-ahead-not-diverged",
+      "severity": "warning",
+      "scope": null,
+      "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.",
+      "since": "2026-09-11",
+      "review_by": null,
+      "check": null,
+      "evidence": "git merge-base alexey/gh-pages origin/gh-pages = 9bcd36dc (alexey's own head); rev-list --left-right --count = 0 1. git ls-tree: CNAME present at alexey/gh-pages (blob b0f261c3), absent at origin/gh-pages. Mirror Pages API reports cname ai-antispam.ru / status built while its branch head carries no CNAME file - the setting outlives the file. Measured 2026-09-24. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z).",
+      "affects": [
+        "ai-antispam"
+      ],
+      "origins": [
+        "ai-antispam"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "bot-repo-origin-is-live-not-legacy",
+      "severity": "warning",
+      "scope": null,
+      "text": "The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.",
+      "since": "2026-01-12",
+      "review_by": null,
+      "check": null,
+      "evidence": "Pages API 2026-09-24: leshchenko1979/ai-antispam -> cname ai-antispam.ru, status built, source gh-pages; alexeyleshchenko/ai-antispam -> cname null, source main. https://ai-antispam.ru HTTP 200, last-modified 2026-09-11T21:57:55Z == mirror head 02d743b. Domain carried on origin's gh-pages since c3f37e5 (2026-01-12, Create CNAME). Image derivation: 87b6d35 (2026-08-13). Separate numbering measured: canonical #41 = the moderation defect closed 2026-09-24; mirror #41 = a merged PR. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z).",
+      "affects": [
+        "ai-antispam",
+        "infra-factory"
+      ],
+      "origins": [
+        "ai-antispam"
       ],
       "conflict": []
     },
@@ -255,7 +256,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-09-24T06:08:33Z",
+      "attested_at": "2026-09-24T23:00:12Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -420,39 +421,40 @@
           "severity": "warning",
           "text": "The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.",
           "scope": null,
-          "since": "2026-09-24T06:08:33Z",
+          "since": "2026-01-12",
           "review_by": null,
           "check": null,
           "affects": [
-            "profile"
+            "ai-antispam",
+            "infra-factory"
           ],
-          "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+          "evidence": "Pages API 2026-09-24: leshchenko1979/ai-antispam -> cname ai-antispam.ru, status built, source gh-pages; alexeyleshchenko/ai-antispam -> cname null, source main. https://ai-antispam.ru HTTP 200, last-modified 2026-09-11T21:57:55Z == mirror head 02d743b. Domain carried on origin's gh-pages since c3f37e5 (2026-01-12, Create CNAME). Image derivation: 87b6d35 (2026-08-13). Separate numbering measured: canonical #41 = the moderation defect closed 2026-09-24; mirror #41 = a merged PR. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z)."
         },
         {
-          "id": "gh-pages-branches-diverged",
+          "id": "gh-pages-origin-ahead-not-diverged",
           "severity": "warning",
-          "text": "The two remotes' gh-pages branches have DIVERGED and must not be treated as one branch: origin 02d743b2 vs alexey 9bcd36dc (re-measured 2026-09-24, unchanged). origin is the live site host, so a blind force-push to either takes the landing page down. 'Level at main' does NOT mean level everywhere.",
+          "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.",
           "scope": null,
-          "since": "2026-09-24T06:08:33Z",
+          "since": "2026-09-11",
           "review_by": null,
           "check": null,
           "affects": [
-            "profile"
+            "ai-antispam"
           ],
-          "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+          "evidence": "git merge-base alexey/gh-pages origin/gh-pages = 9bcd36dc (alexey's own head); rev-list --left-right --count = 0 1. git ls-tree: CNAME present at alexey/gh-pages (blob b0f261c3), absent at origin/gh-pages. Mirror Pages API reports cname ai-antispam.ru / status built while its branch head carries no CNAME file - the setting outlives the file. Measured 2026-09-24. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z)."
         },
         {
           "id": "two-files-named-skill-md",
           "severity": "warning",
           "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
           "scope": null,
-          "since": "2026-09-24T06:08:33Z",
+          "since": "2026-09-17",
           "review_by": null,
           "check": null,
           "affects": [
-            "profile"
+            "ai-antispam"
           ],
-          "evidence": "Declared by ai-antispam HQ in its 2026-09-24 registry re-attestation answer (Delegate inbox row 224, landed 2026-09-24T06:08:33Z); the measurements are inline in the text. ENVELOPE DERIVED: the member declared these as prose, so `id`, `severity`, `since`, `affects` and this `evidence` were derived by the Delegate lane from the text and that answer's instant. `since` is the DECLARATION instant, NOT an established fact-origin — correct it if the fact began to hold earlier. Filed as #152 against the brief, which does not state the object shape."
+          "evidence": "Repo SKILL.md first appears at cd2a3f8 (2026-09-17, self-audit kit adoption). Measured cost 2026-09-23: a peer lane's version claim and this lane's contradicted each other and BOTH were right - they named different files. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z)."
         }
       ]
     },
@@ -939,7 +941,7 @@
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.14",
+      "skill_revision": "1.1.15",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
@@ -1439,7 +1441,7 @@
           "session_id": "95bec69b-0e96-46a9-9d91-dc355e8af18f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T22:10:23Z",
+          "bound_at": "2026-09-24T22:57:34Z",
           "announcements": []
         },
         {
