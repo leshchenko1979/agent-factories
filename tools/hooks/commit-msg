@@ -17,6 +17,23 @@ drift is silent. The word boundary inside that predicate is load-bearing:
 never edits the message. The clause's doctrine is that the message names the
 concern, so the message stays the author's to fix.
 
+**AND IT WRITES ONE TRAILER, WHICH IS NOT A REWRITE.** Since 2026-09-25 (plan
+2646d31a step 6, issue #138) the hook APPENDS a `Session-Id:` trailer carrying
+`OPENCRABS_SESSION_ID`. The distinction from the paragraph above is exact: a
+rewrite changes text the AUTHOR wrote, while a trailer is text the TOOL wrote
+about the commit — the same act as the ledger's own `ts` and `n`, which no
+author supplies either. Attribution was previously available only from prose a
+lane chose to write, and measured across this repo the result was zero: **0 of
+the last 200 commits carried a `Session-Id` trailer, and every commit carried
+one shared author identity**, so a commit could not be attributed to a lane at
+all — the gap that made two lanes chase the wrong culprit on 2026-09-21.
+
+It is mechanical, which is the whole point: the environment already knows the
+session, so asking a lane to remember a flag would reproduce the omission. The
+trailer is written ONLY when the variable is set (a human committing by hand
+gets no trailer rather than a fabricated one), never duplicated if already
+present, and never touched when the subject is refused.
+
 **Fail open, and loudly.** If the predicate cannot be loaded — the gate file is
 absent, or this is not a git work tree — the hook prints a WARNING naming what it
 could not read and exits 0. A hook that refuses every commit on a packaging bug
@@ -40,12 +57,19 @@ Exit: 0 the subject names the concern; 1 the subject cites a row number.
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 GATE_RELATIVE = "tests/test_ledger_commit_cites_no_rows.py"
 PREDICATE_NAME = "subject_cites_rows"
+
+# The session the commit is made in, and the trailer it is recorded under. The
+# daemon exports the variable into every tool subprocess it spawns, so this is a
+# READ of something already known rather than a new obligation on the lane.
+SESSION_ENV = "OPENCRABS_SESSION_ID"
+TRAILER_KEY = "Session-Id"
 
 REMEDY = """commit-msg: REFUSED — the subject cites a ledger row number.
 
@@ -102,6 +126,54 @@ def load_predicate(top: Path):
     return getattr(module, PREDICATE_NAME, None)
 
 
+def session_id() -> str:
+    """The committing session, or "" when there is none.
+
+    Empty is a REAL answer, not a failure: a human running `git commit` by hand has
+    no session, and a fabricated trailer would be worse than none — it would name an
+    actor that does not exist, which is the phantom-identifier class.
+    """
+    return (os.environ.get(SESSION_ENV) or "").strip()
+
+def trailer_present(text: str) -> bool:
+    """Whether the message ALREADY carries the trailer.
+
+    Matched as a TRAILER LINE (`Token: value` at the start of a line), never as a
+    substring: a body sentence that merely mentions the key is prose, and reading it
+    as a declaration is this repo's ruled prose-as-data class (#88 / n=405 clause 5).
+    """
+    for line in text.splitlines():
+        if line.strip().lower().startswith(f"{TRAILER_KEY.lower()}:"):
+            return True
+    return False
+
+def add_session_trailer(message_path: Path, sid: str) -> bool:
+    """Append the trailer to the message file. Returns whether it wrote.
+
+    A git trailer belongs in the LAST paragraph, so the key is appended after a blank
+    line. Appending to a message that already ends in a trailer block would start a
+    second block, so the blank line is written only when the text does not already end
+    in one. Nothing else in the file is touched — the author's subject and body are
+    byte-identical before and after.
+    """
+    try:
+        text = message_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if trailer_present(text):
+        return False
+    # Git strips comment lines before committing, so the trailer must land after the
+    # last CONTENT line rather than after the comment block `-v`/`-e` may append.
+    lines = text.splitlines()
+    last = max((i for i, l in enumerate(lines) if l.strip() and not l.startswith("#")),
+               default=None)
+    if last is None:
+        return False
+    tail = lines[last + 1:]
+    body = lines[:last + 1] + [""] + [f"{TRAILER_KEY}: {sid}"] + tail
+    message_path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    return True
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(
@@ -128,10 +200,20 @@ def main(argv: list[str]) -> int:
         )
         return 0
 
-    subject = subject_of(Path(argv[1]))
+    message_path = Path(argv[1])
+    subject = subject_of(message_path)
     if predicate(subject):
         print(REMEDY.format(subject=subject), file=sys.stderr)
         return 1
+
+    # The subject is lawful, so the commit proceeds — and the trailer is written HERE
+    # rather than before the check, so a REFUSED commit is never touched. A refusal
+    # that had already stamped the message would attribute a commit that never
+    # happened.
+    sid = session_id()
+    if sid and add_session_trailer(message_path, sid):
+        print(f"commit-msg: {TRAILER_KEY}: {sid} written (from {SESSION_ENV}).",
+              file=sys.stderr)
     return 0
 
 

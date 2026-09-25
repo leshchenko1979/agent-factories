@@ -158,6 +158,10 @@ PAIRS = [
     ("tests/test_subject_form.py", "TEMPLATE/tests/test_subject_form.py"),
     ("tests/test_rework_relative_revision.py", "TEMPLATE/tests/test_rework_relative_revision.py"),
     ("tests/test_reconstructed_claim_declared.py", "TEMPLATE/tests/test_reconstructed_claim_declared.py"),
+    # The commit-session-trailer gate (issue #138, ruling n=928). Paired for the same
+    # reason every other gate is: the hook it pins ships from TEMPLATE, so a factory
+    # that takes the hook must take its pin too.
+    ("tests/test_commit_session_trailer.py", "TEMPLATE/tests/test_commit_session_trailer.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names
     # one side of a declared pair without its twin, and its table is THIS one — it

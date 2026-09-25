@@ -1516,7 +1516,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_binding_mechanism_exists.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_binding_mechanism_exists.py"])
 
-    # 47. Brain-metrics gate: the standing-reading instrument measures what it says.
+    # 48. Brain-metrics gate: the standing-reading instrument measures what it says.
     #     Registered because a gate that never runs is indistinguishable from a gate that
     #     passes (#59's class, P29): `docs/measurement-procedure.md` §5 declares the
     #     brain-metrics COMPANION readings as a standing obligation every factory owes, and
@@ -1532,7 +1532,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_brain_metrics.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_brain_metrics.py"])
 
-    # 48. In-flight guard gate: two audit runs contending for one cgroup is real load —
+    # 49. In-flight guard gate: two audit runs contending for one cgroup is real load —
     #     17 cron jobs fired inside a 19-second window on 2026-09-22 after the scheduler
     #     starvation filed as opencrabs#504, and the pile included audits from MORE THAN
     #     ONE repository. The contended unit is the RUN, not the gate: the loop below is
@@ -1557,6 +1557,29 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     n=940, P29).
     if (repo_root / "tests/test_audit_inflight_guard.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_audit_inflight_guard.py"])
+
+    # 50. Commit-session-trailer gate (issue #138, ruled at ledger n=928; plan 2646d31a
+    #     step 6). The commit-msg hook now APPENDS a `Session-Id:` trailer carrying
+    #     `OPENCRABS_SESSION_ID`, because a commit in this repo could previously not be
+    #     attributed to a lane at all: measured, 0 of the last 200 commits carried the
+    #     trailer and every one carried a shared author identity, so on 2026-09-21 two
+    #     lanes chased the wrong culprit over a commit that named nobody.
+    #     The trailer is a TOOL-written field, not a rewrite of the author's text --
+    #     the same act as the ledger's own `ts` and `n`, which no author supplies --
+    #     and it is written only AFTER the subject passes the citation clause, so a
+    #     REFUSED commit is never stamped.
+    #     THE LIMIT THIS GATE CANNOT CROSS, stated because it is the whole reason the
+    #     probe is built the way it is: it can prove the MECHANISM (driven directly,
+    #     with a synthetic message and session, both directions plus the refusal), and
+    #     it cannot prove a historical commit carries a trailer, because the hook was
+    #     installed late and history is not rewritten. A live-state population belongs
+    #     to a patrol leg, never to a gate over history.
+    #     It drives the hook DIRECTLY rather than making a real commit: the hook
+    #     resolves its predicate through `git rev-parse --show-toplevel`, so a
+    #     throwaway repository would have to carry this repo's whole gate file -- a
+    #     fixture testing a fixture. Direct invocation tests the code git runs.
+    if (repo_root / "tests/test_commit_session_trailer.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_commit_session_trailer.py"])
 
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and

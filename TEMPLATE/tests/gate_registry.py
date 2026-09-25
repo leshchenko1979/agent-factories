@@ -429,6 +429,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # implements — a name that lies about its predicate is worse than a rename.
     "test_reconstructed_claim_declared.py",
     "test_commit_pair_hook.py",
+    # Added with its registration (issue #138, ruling n=928; plan 2646d31a step 6).
+    # REQUIRED is the correct grain and OPTIONAL is not, for the same deciding fact as
+    # the three commit-hook entries around it: the mechanism it pins is a HOOK, and a
+    # factory that drops the runner and keeps the hook has an unpinned hook. It drives
+    # the hook directly with a synthetic message and a synthetic session -- no live
+    # board, no fleet manifest, no box-local fixture -- so it passes in a bootstrapped
+    # factory exactly as it does here. It is byte-paired with a TEMPLATE twin, so the
+    # manifest grain is what keeps a factory from dropping the runner.
+    "test_commit_session_trailer.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
     # Added with its registration (issue #54, P7 + P28). REQUIRED is the correct grain and
