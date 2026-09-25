@@ -393,6 +393,21 @@ flowchart TD
 8. **Report to Operator & Member HQs:**
    - Present summary, score movements, and fleet patterns to the Factories analysis topic.
    - Deliver consulting advisories to member factory HQs via direct communication channels.
+   - **Owner decisions go to the register — a prose "blocked on you" line is not a
+     registration.** A finding whose fix needs the OWNER's ruling is registered in the same
+     turn the run stops, via `oc-questions ask --factory meta-factory` (the `oc_questions`
+     tool carries the same verb): the tool resolves the lane from this session's own
+     binding, so there is no `--lane` to mislabel, and it prints the open-question total.
+     Nothing aggregates a sentence in the topic, and the owner cannot see which lane is
+     waiting on him. Read the page URL from the register's own pointer
+     (`profiles/ops/questions/pages/latest.json`) and never assemble it from the factory
+     slug — only ONE page directory exists and it carries every set, so a `<factory-slug>`
+     path is a dead link for the owner. Do not re-ask on a daily clock: the register's own
+     `asked_at` age is what re-surfaces a question, so a repeated topic ping is noise.
+     **The routing test is what the decision moves:** a change that moves a **GATE**, or
+     that reverses an owner order, is the owner's and belongs in the register; a rubric or
+     ruling change that moves only a **SCORE** routes to HQ for a ruling. Canonical clause:
+     `skills/meta-factory/SKILL.md` §11.
 
 ---
 
