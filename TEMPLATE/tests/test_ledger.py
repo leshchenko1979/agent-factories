@@ -875,9 +875,15 @@ def main() -> int:
         stage_tool(TOOL, bare / "tools", LOCAL_TOOLS)
         bare_ledger = bare / "evidence" / "ledger.jsonl"
         write_repair_ledger(bare_ledger, post_ts)
+        # The probe declares an actor so that it reaches the code under test.
+        # Identity is now derived from the session BEFORE the boundary is read, so
+        # in a staged tree (which carries no lane resolver) the actor guard fires
+        # first and the boundary refusal below would be unreachable — the probe
+        # would then pass on a refusal it never exercised. A REDIRECTED ledger is
+        # a fixture, so a declared actor there is the fixture's own declaration.
         r = subprocess.run(
             [sys.executable, str(bare / "tools" / "ledger.py"), "repair", "--n", "3",
-             "--append-detail", f"head={probe_sha}", "--note", "probe"],
+             "--append-detail", f"head={probe_sha}", "--note", "probe", "--actor", "hq"],
             capture_output=True, text=True, cwd=bare,
             env={**os.environ, "OC_LEDGER_PATH": str(bare_ledger),
                  "OC_ACTORS_PATH": str(bare / "no-actors.txt")},

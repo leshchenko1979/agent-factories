@@ -137,6 +137,88 @@ def known_actors() -> tuple[str, ...]:
                 extra.append(role)
     return ACTORS + tuple(role for role in extra if role not in ACTORS)
 
+
+def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
+    """The role of the lane that is WRITING, derived from its session.
+
+    `OPENCRABS_SESSION_ID` is exported into every tool subprocess the daemon
+    spawns, so the identity of the writer is already mechanical — the kit simply
+    never asked for it. Resolution reuses the registry's own lane resolver, the
+    same code that renders `registry/state.json`, so a lane the registry resolves
+    resolves here, and a lane it cannot place is refused BY NAME rather than
+    defaulted. A default is how a repair gets stamped as the Worker by a lane
+    that never said so.
+
+    Returns `(role, reason)`. `role` is None when the session cannot be resolved,
+    and `reason` then names what failed — never a silent fallback.
+    """
+    sid = (session_id or os.environ.get("OPENCRABS_SESSION_ID") or "").strip()
+    if not sid:
+        return None, "OPENCRABS_SESSION_ID is not set, so the writing lane is unidentifiable"
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    try:
+        import registry  # noqa: PLC0415 — lazy: a fixture append must not pay for it
+    except Exception as exc:  # an import failure is environmental, never an identity
+        return None, f"the lane resolver is unavailable (registry import failed: {exc})"
+    try:
+        bindings, errors = registry.all_bindings()
+    except Exception as exc:
+        return None, f"the lane resolver is unavailable (binding read failed: {exc})"
+    if not bindings:
+        detail = f" ({'; '.join(errors)})" if errors else ""
+        return None, f"no live binding was readable{detail}"
+    try:
+        paths = registry.live_fragment_paths([])
+    except Exception as exc:
+        return None, f"the lane resolver is unavailable (fragment read failed: {exc})"
+    for path in paths:
+        data, err = registry.load_fragment(path)
+        if err or not isinstance(data, dict):
+            continue
+        chat_id = registry.FACTORY_CHATS.get(data.get("factory"))
+        for lane in data.get("lanes") or []:
+            if not isinstance(lane, dict):
+                continue
+            resolved = registry.resolve_lane(lane, bindings, {}, chat_id)
+            if resolved.get("session_id") and resolved["session_id"] == sid:
+                role = resolved.get("role") or lane.get("role")
+                if role:
+                    return str(role), ""
+    return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s)"
+
+
+def resolve_actor(declared: str | None, redirected: bool) -> tuple[str | None, str]:
+    """The actor for a row: DERIVED from the session, never silently defaulted.
+
+    A REDIRECTED ledger (`OC_LEDGER_PATH`) is a fixture — it is written by tests
+    and probes that must be able to name any actor — so there an explicit
+    `--actor` is the fixture's own declaration. The LIVE ledger is written by a
+    lane, and a lane's identity is mechanical, so there the actor is derived and
+    an explicit one is accepted only when it AGREES with the derivation.
+    """
+    if redirected:
+        # A FIXTURE names its own actors: a throwaway ledger has no live lane to
+        # bind to, so a declared actor there is the fixture's declaration and not
+        # a claim about who is writing. The derivation is still the default when
+        # none is given, so a probe can exercise it without an env var.
+        if declared:
+            return declared, ""
+        derived, reason = session_to_role()
+        if derived:
+            return derived, ""
+        return None, f"no actor was given and none could be derived: {reason}"
+    derived, reason = session_to_role()
+    if derived:
+        if declared and declared != derived:
+            return None, (
+                f"actor '{declared}' does not match the role this session resolves to "
+                f"('{derived}') — identity is derived from OPENCRABS_SESSION_ID, not declared"
+            )
+        return derived, ""
+    return None, reason
+
 # Closes written before the sequence check existed, keyed by (subject, leg).
 # An exemption is a dated, attributed admission, never a convenience: it names
 # the subject, the leg, the date it was granted, the reason, and the PROOF — an
@@ -322,6 +404,10 @@ def sequence_problems(
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
+    actor, actor_why = resolve_actor(args.actor, bool(os.environ.get("OC_LEDGER_PATH")))
+    if actor is None:
+        sys.exit(f"ledger append refused: {actor_why}")
+    args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
 
@@ -522,6 +608,10 @@ def cmd_repair(args: argparse.Namespace) -> int:
       lawful correction from a silent edit, and a silent edit of an append-only surface
       is the failure this whole section exists to prevent.
     """
+    actor, actor_why = resolve_actor(args.actor, bool(os.environ.get("OC_LEDGER_PATH")))
+    if actor is None:
+        sys.exit(f"ledger repair refused: {actor_why}")
+    args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
     if not (args.note or "").strip():
@@ -989,7 +1079,10 @@ def main() -> int:
 
     ap = sub.add_parser("append", help="the only write path")
     ap.add_argument("--event", required=True)
-    ap.add_argument("--actor", required=True)
+    ap.add_argument(
+        "--actor", required=False,
+        help="the writing lane's role; DERIVED from OPENCRABS_SESSION_ID and accepted only when it matches",
+    )
     ap.add_argument("--subject", required=True)
     ap.add_argument("--detail", required=True)
     ap.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
@@ -1017,7 +1110,10 @@ def main() -> int:
     rp.add_argument("--n", type=int, required=True, help="the row number to correct")
     rp.add_argument("--append-detail", required=False, help="the text appended to that row's detail")
     rp.add_argument("--note", required=False, help="WHY the correction is lawful; recorded in the run row beside it")
-    rp.add_argument("--actor", required=False, default="worker", help="the lane performing the repair (default: worker)")
+    rp.add_argument(
+        "--actor", required=False,
+        help="the lane performing the repair; DERIVED from OPENCRABS_SESSION_ID, never defaulted",
+    )
     rp.add_argument("--invariant", required=False, help="the declared invariant whose boundary governs the row (default: derived from its event)")
     rp.set_defaults(func=cmd_repair)
 
