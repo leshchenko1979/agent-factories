@@ -716,6 +716,53 @@ def last_reported_line(text: str, limit: int = 200) -> str:
     return " ".join(lines[-1].split())[:limit]
 
 
+GATE_CAUSE_LIMIT = 140
+"""One bound for a failing gate's recorded cause, shared by every surface that prints it.
+
+Raised from the 60 the markdown cell used, because a SCRIPT-shaped failure states a COUNT
+and a SPECIMEN and 60 characters cannot hold both (issue #158). The bound is KEPT: this
+lands on one line of a table whose job is to let the reader decide whether to RE-RUN, not
+to reproduce the log.
+"""
+
+_COUNT_FIRST_RE = re.compile(r"\b\d+\s+(?:problem|violation)\(s\)", re.IGNORECASE)
+
+def reported_cause(text: str, limit: int = GATE_CAUSE_LIMIT) -> str:
+    """A failing gate's cause: its COUNT when the output carries one, AND its last line.
+
+    The kit ships TWO output shapes and they put the summary in DIFFERENT places. A
+    PYTEST-shaped gate writes its failure list LAST and carries no count line, so the last
+    line IS the reason. A SCRIPT-shaped gate prints `N problem(s) in <path>` FIRST and then
+    N violations, so the last line is one ARBITRARY specimen and the total is lost --
+    measured on tests/test_ledger_schema.py, where SIX problems were recorded as a single
+    truncated tail violation (issue #158).
+
+    So the count line is recorded FIRST when one exists, and the last line is appended as
+    the specimen. Both share ONE bound, and the join keeps the HEAD, so the count cannot be
+    crowded out by a specimen longer than the remaining budget.
+    """
+    lines = [" ".join(ln.split()) for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    last = lines[-1]
+    counted = next((ln for ln in lines if _COUNT_FIRST_RE.search(ln)), None)
+    if counted is None or counted == last:
+        return last[:limit]
+    return f"{counted} \u2014 {last}"[:limit]
+
+def attach_gate_causes(gate_results: list[dict]) -> None:
+    """Set `note` on every gate that did not pass, from the ONE predicate above.
+
+    Computed once and read by all three surfaces (the JSON payload, the markdown report
+    and the stdout headline), so they cannot disagree about what the gate said. A PASSING
+    gate carries no note; an UNKNOWN gate is not a pass and does carry one.
+    """
+    for g in gate_results:
+        if g.get("passed"):
+            g.pop("note", None)
+            continue
+        g["note"] = reported_cause(g.get("stdout") or "") or reported_cause(g.get("stderr") or "")
+
 @dataclass
 class GateVerdict:
     """The THREE-state verdict over a gate run (#93 ruling n=574 PART 2).
@@ -1724,9 +1771,8 @@ def format_report_markdown(
         status = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
         # The cause is read through the SAME helper as the stdout report, so the two
         # surfaces cannot disagree about which line states it (one field, one predicate).
-        note = last_reported_line(g["stdout"]) or last_reported_line(g["stderr"])
-        note = note.replace("|", "/")
-        lines.append(f"| `{g['cmd']}` | `{status}` | `{g['duration_sec']}s` | {note[:60]} |")
+        note = (g.get("note") or "").replace("|", "/")
+        lines.append(f"| `{g['cmd']}` | `{status}` | `{g['duration_sec']}s` | {note} |")
 
     lines.extend([
         "",
@@ -1834,6 +1880,12 @@ def main() -> int:
 
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
+    # THE CAUSE IS COMPUTED ONCE, for every surface (#158). It is attached here, before
+    # the JSON emit and before both text renders, so the three cannot disagree about what
+    # a failing gate said -- and so the JSON carries the COUNT a script-shaped gate prints
+    # FIRST rather than leaving it to be dug out of the full stdout.
+    attach_gate_causes(gate_results)
+
     if args.json:
         payload = {
             "date": today,
@@ -1876,9 +1928,7 @@ def main() -> int:
             # line is the lane that must decide whether to RE-RUN. stdout first -- a
             # failing pytest gate writes its failure summary there -- then stderr, which
             # is where a KILLED or crashed gate states its reason.
-            cause = last_reported_line(g.get("stdout") or "") or last_reported_line(
-                g.get("stderr") or ""
-            )
+            cause = g.get("note") or ""
             if cause:
                 line += f" — {cause}"
         if g.get("retried"):

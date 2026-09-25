@@ -1321,6 +1321,99 @@ def probe_the_fail_line_cause_is_read_by_one_predicate() -> None:
         str(len(audit.last_reported_line("z" * 900))),
     )
 
+def probe_a_script_shaped_failure_records_its_count() -> None:
+    """Issue #158: the kit ships TWO output shapes and they summarise in DIFFERENT places.
+
+    A SCRIPT-shaped gate prints `N problem(s)` FIRST and its violations after, so keeping
+    only the LAST line discards the count and keeps one arbitrary specimen -- measured on
+    `tests/test_ledger_schema.py`, where SIX problems were recorded as a single truncated
+    tail violation. A PYTEST-shaped gate writes its reason LAST and must be UNCHANGED.
+    """
+    audit = _audit_module()
+    script = (
+        "ledger schema: 6 problem(s) in /repo/evidence/ledger.jsonl\n"
+        "  line 15: n=15 (#41) — actor 'worker' is not authorized\n"
+        "  line 95: n=95 (#101) — malformed telemetry\n"
+    )
+    cause = audit.reported_cause(script)
+    check(
+        "a script-shaped failure records its COUNT, not only a tail specimen",
+        "6 problem(s)" in cause,
+        repr(cause),
+    )
+    check(
+        "the count is kept AND a specimen follows it",
+        cause.startswith("ledger schema: 6 problem(s)") and "n=95" in cause,
+        repr(cause),
+    )
+    check(
+        "the OLD predicate loses the count on this shape — the defect, reproduced",
+        "6 problem(s)" not in audit.last_reported_line(script),
+        repr(audit.last_reported_line(script)),
+    )
+    pytest_shaped = (
+        "=================== FAILURES ===================\n"
+        "E   assert 1 == 2\n"
+        "=========== 1 failed, 31 passed in 1.42s ===========\n"
+    )
+    check(
+        "a pytest-shaped failure is UNCHANGED — its reason is already last",
+        audit.reported_cause(pytest_shaped) == audit.last_reported_line(pytest_shaped),
+        repr(audit.reported_cause(pytest_shaped)),
+    )
+    check(
+        "the cause is BOUNDED on both shapes",
+        len(audit.reported_cause(script)) <= audit.GATE_CAUSE_LIMIT,
+        str(len(audit.reported_cause(script))),
+    )
+    check(
+        "an output-less gate yields NO cause rather than a blank one",
+        audit.reported_cause("") == "",
+        repr(audit.reported_cause("")),
+    )
+    check(
+        "a count line that IS the last line is not duplicated",
+        audit.reported_cause("only 2 problem(s) here\n") == "only 2 problem(s) here",
+        repr(audit.reported_cause("only 2 problem(s) here\n")),
+    )
+
+def probe_the_note_is_attached_once_for_every_surface() -> None:
+    """The cause is computed ONCE and read by all three surfaces (#158).
+
+    A cause visible only via `--json` is a cause the reader does not have; a cause derived
+    SEPARATELY per surface is two answers to one question. `attach_gate_causes` is the one
+    call, and the JSON therefore carries the COUNT a script-shaped gate prints first.
+    """
+    audit = _audit_module()
+    roster = [
+        {"cmd": "passing", "passed": True, "unknown": False, "duration_sec": 1.0,
+         "stdout": "all good"},
+        {"cmd": "script-shaped", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "ledger schema: 6 problem(s) in /repo/x\n  line 15: n=15 (#41)\n"},
+        {"cmd": "empty-fail", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": ""},
+    ]
+    audit.attach_gate_causes(roster)
+    check(
+        "a PASSING gate carries no note",
+        "note" not in roster[0],
+        repr(roster[0].get("note")),
+    )
+    check(
+        "a failing gate carries the note, with its COUNT",
+        "6 problem(s)" in roster[1].get("note", ""),
+        repr(roster[1].get("note")),
+    )
+    check(
+        "the note is BOUNDED, so it cannot grow the table cell",
+        len(roster[1]["note"]) <= audit.GATE_CAUSE_LIMIT,
+        str(len(roster[1]["note"])),
+    )
+    check(
+        "a silent failing gate carries an EMPTY note, never an absent key",
+        roster[2].get("note") == "",
+        repr(roster[2].get("note")),
+    )
 
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
@@ -1385,6 +1478,8 @@ def main() -> int:
     probe_the_three_states_are_distinct_and_a_failure_outranks_unknown()
     probe_a_skipped_suite_is_still_no_verdict()
     probe_the_fail_line_cause_is_read_by_one_predicate()
+    probe_a_script_shaped_failure_records_its_count()
+    probe_the_note_is_attached_once_for_every_surface()
 
     print("  live manifest — the declared revisions, swept")
     probe_the_live_sweep_states_its_own_account()
