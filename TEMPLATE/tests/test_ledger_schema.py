@@ -38,17 +38,11 @@ CORE_ACTORS = ("hq", "triage", "worker", "carrier", "owner")
 EVENT_TYPES = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", "run")
 REQUIRED_FIELDS = {"n", "ts", "event", "actor", "subject", "detail"}
 
-# Role-to-Event Authorization Matrix
-AUTHORIZED_ACTORS_BY_EVENT: dict[str, tuple[str, ...]] = {
-    "genesis": ("hq", "owner"),
-    "ruling": ("hq", "owner"),
-    "score": ("surveys", "hq", "owner"),
-    "intake": ("triage", "hq", "owner", "delegate"),
-    "claim": ("hq", "worker", "carrier", "triage", "delegate", "surveys"),
-    "dispatch": ("triage", "hq", "owner", "delegate"),
-    "close": ("hq", "worker", "carrier", "triage", "delegate", "surveys", "owner"),
-    "run": ("hq", "surveys", "worker", "carrier", "triage", "delegate", "owner"),
-}
+# Role-to-Event Authorization Matrix — imported from its ONE home
+# (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
+# only copy, `append` could not consult it, so an unauthorized row was written silently and
+# reported here a day later: the blind spot was exactly one audit wide by construction.
+from ledger_declaration import AUTHORIZED_ACTORS_BY_EVENT  # noqa: E402
 
 ISO_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 

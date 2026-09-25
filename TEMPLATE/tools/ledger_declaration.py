@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""The factory's DECLARED ledger invariants — ONE reader, shared by the tool and the gates.
+"""The factory's DECLARED ledger policy — ONE home, shared by the tool and the gates.
+
+Two declarations live here, and for the same reason: two consumers must agree about each,
+and a second copy would drift on exactly the inputs that matter.
+
+* the INVARIANT BOUNDARIES a factory has adopted, read from `docs/ledger-invariants.json`
+  (the rest of this module), and
+* the ROLE-TO-EVENT AUTHORIZATION MATRIX (`AUTHORIZED_ACTORS_BY_EVENT`), which the write
+  path enforces at append time and the schema gate reports against.
 
 `docs/ledger-invariants.json` maps an invariant's name to the ISO-8601 UTC instant at
 which it took effect IN THIS FACTORY. It is factory DATA, so it does not ship; the
@@ -35,7 +43,8 @@ one. `tools/ledger.py` reaches it through a plain import (so the fixture helper
 `tests/gate_fixtures.stage_tool` copies it into a throwaway tree by following that
 import), and `tests/ledger_boundary.py` adds the tool directory to `sys.path`.
 
-Run:  imported by `tools/ledger.py` and `tests/ledger_boundary.py`, never run directly.
+Run:  imported by `tools/ledger.py`, `tests/ledger_boundary.py` and
+      `tests/test_ledger_schema.py`, never run directly.
 """
 
 from __future__ import annotations
@@ -46,6 +55,29 @@ from pathlib import Path
 
 DECLARATION_REL = "docs/ledger-invariants.json"
 DECLARATION_EXAMPLE_REL = "docs/ledger-invariants.example.json"
+
+# Role-to-Event authorization, in ONE home.
+#
+# Two consumers must agree about it and neither may hold its own copy: the write path
+# (`tools/ledger.py append`) refuses a row the matrix does not authorize, and
+# `tests/test_ledger_schema.py` reports one written before that refusal existed. While the
+# matrix lived only in the gate, the write path could not consult it, so an unauthorized
+# row was written SILENTLY and surfaced a day later — the gate was the only guard, and its
+# blind spot was exactly one audit wide by construction.
+#
+# Membership is not authorization: `known_actors()` answers whether a name is an actor at
+# all, and this answers which actor may write which event. `append` checks both, and a
+# refusal names the event and the actor it refused.
+AUTHORIZED_ACTORS_BY_EVENT: dict[str, tuple[str, ...]] = {
+    "genesis": ("hq", "owner"),
+    "ruling": ("hq", "owner"),
+    "score": ("surveys", "hq", "owner"),
+    "intake": ("triage", "hq", "owner", "delegate"),
+    "claim": ("hq", "worker", "carrier", "triage", "delegate", "surveys"),
+    "dispatch": ("triage", "hq", "owner", "delegate"),
+    "close": ("hq", "worker", "carrier", "triage", "delegate", "surveys", "owner"),
+    "run": ("hq", "surveys", "worker", "carrier", "triage", "delegate", "owner"),
+}
 
 class DeclarationUnavailable(Exception):
     """This factory has declared nothing for this key — the CALLER decides what that means.

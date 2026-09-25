@@ -61,6 +61,7 @@ from pathlib import Path
 # already on the path, and `stage_tool`'s closure walker resolves a neighbour by that same
 # bare name when it stages a throwaway tree.
 from ledger_declaration import (
+    AUTHORIZED_ACTORS_BY_EVENT,
     DeclarationUnavailable,
     DeclarationUnreadable,
     boundary_for,
@@ -410,6 +411,14 @@ def cmd_append(args: argparse.Namespace) -> int:
     args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
+    authorized = AUTHORIZED_ACTORS_BY_EVENT.get(args.event, ())
+    if authorized and args.actor not in authorized:
+        sys.exit(
+            f"ledger append refused: actor '{args.actor}' is not authorized for a "
+            f"'{args.event}' row (authorized: {', '.join(authorized)}) — membership is "
+            "not authorization, and the matrix is enforced here so an unauthorized row "
+            "is refused when it is written rather than reported a day later"
+        )
 
     target_ledger = LEDGER
     target_lock = LOCK
