@@ -493,7 +493,8 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             continue
         try:
             fetched = list(conn.execute(
-                "select id, name, coalesce(deliver_to,''), coalesce(prompt,'') "
+                "select id, name, coalesce(deliver_to,''), coalesce(prompt,''), "
+                "coalesce(last_run_at,'') "
                 "from cron_jobs where enabled = 1"
             ))
         except sqlite3.Error as exc:
@@ -501,7 +502,7 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             continue
         finally:
             conn.close()
-        for row_id, name, deliver_to, prompt in fetched:
+        for row_id, name, deliver_to, prompt, last_run_at in fetched:
             rows.append({
                 # The id is read because a report must RESOLVE the row it names: two jobs
                 # may share a name across homes, and a name alone is not an address. The
@@ -511,6 +512,11 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
                 "name": name,
                 "deliver_to": deliver_to,
                 "prompt": prompt,
+                # The fire instant, read for the duty-receipt leg (#147): the round a
+                # trigger woke is the one dated the day the run was DISPATCHED, and
+                # `last_run_at` is that instant. `enabled = 1` is in the WHERE clause
+                # above, so every row here is enabled and carries no `enabled` key.
+                "last_run_at": last_run_at,
                 "home": db.parent.name,
             })
         homes_read.append(db.parent.name)
@@ -717,6 +723,189 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
         },
     }
 
+# --- the duty-completion-receipt leg (#147) ------------------------------------
+#
+# Origin (issue #147, ruled at ledger n=974). #122's leg asks whether a thin trigger's
+# notify produced a RECEIPT. This leg asks the question #122 cannot: did the DUTY that
+# notify woke actually COMPLETE? They are opposite ends of one mechanism and neither
+# implies the other — a notify can succeed while the duty fails (this leg), or the notify
+# can fail (the leg above). Measured on the registry-attest pacemaker: six fragments sat
+# at attested_at 2026-09-19 for four days against a job firing daily at 0 6, while
+# `cron_job_runs` carried SUCCESS on 09-21 and 09-23. Nothing reported it, because a cron
+# run row describes the TRIGGER and the trigger worked.
+#
+# **THE RECEIPT BELONGS TO THE DUTY, NEVER TO THE TRIGGER** (ruling n=974). A cron run row
+# may truthfully report only that the trigger fired. The duty's completion receipt is an
+# append-only ledger RUN row written by the woken lane, carrying the round outcome and the
+# targets attested. `attested_at` is RESULTING STATE — a CONSEQUENCE of a completed round —
+# and is never the receipt, which is why a stale attestation and a missing receipt are
+# different findings and this leg reports the second.
+#
+# **THE ROW DECLARES ITS OWN RECEIPT.** This runner must not hardcode a job name: the
+# repository's own doctrine is that a name comes from the declaration and never from a
+# reader (`tools/registry.py` says so in place). So a row that owes a duty receipt SAYS SO
+# in its own prompt, on one line:
+#
+#     receipt_subject: <stem>
+#
+# and the leg judges exactly those rows. A row declaring no stem is NOT JUDGED, and is
+# COUNTED and NAMED in the coverage: a clean verdict over a population that declared
+# nothing must never be the same output as one that examined the population and found it
+# clean (P29).
+#
+# **THE ROUND COMES FROM THE ROW'S OWN RECORD, not from a cron parser.** `last_run_at` is
+# stamped when the run is DISPATCHED, so it names the instant the trigger last fired and
+# the round it woke is the one dated that day. Deriving the round by parsing `cron_expr`
+# would re-implement a scheduler and would be wrong for every form this parser does not
+# know; reading the row's own record cannot disagree with the row.
+#
+# **NON-VACUITY RIDES A PROBE, NEVER A LOUD-FAIL-ON-ZERO.** A box whose duty round
+# completed cleanly has an empty problem list, so an empty read here is a normal read and
+# is PRINTED as one. The probe that drives a fired round with no receipt is what shows the
+# leg can bite (#112's shape).
+RECEIPT_DECL_RE = re.compile(r"^receipt_subject:\s*(\S+)\s*$", re.MULTILINE)
+FRAGMENT_STORE = REPO / "registry" / "factories"
+# The outcome values that mean the duty did NOT complete. Read through the SHARED
+# positional reader rather than a private scan: `outcome` is one field with one predicate
+# (SKILL.md section 11), and a regex here would drift from the ledger's own reading.
+DUTY_FAILED_OUTCOMES = ("failed", "abandoned")
+
+def declared_receipt_stem(prompt: str) -> str | None:
+    """The receipt stem this row declares, or None — the line `receipt_subject: <stem>`.
+
+    Anchored to a whole line so a sentence that merely MENTIONS the declaration cannot
+    satisfy it: prose about a field is not a declaration of one (the class ruled at
+    n=405 clause 5).
+    """
+    found = RECEIPT_DECL_RE.search(prompt or "")
+    return found.group(1) if found else None
+
+def receipt_round(last_run_at: str) -> str | None:
+    """The round date a fire instant belongs to — its UTC date, `YYYY-MM-DD`.
+
+    `last_run_at` is RFC3339 TEXT on this table, so it takes NO `unixepoch` modifier:
+    `messages.created_at` is INTEGER and needs one, `cron_jobs.last_run_at` is TEXT and
+    returns NULL for every row if handed it. An absent or unshaped value returns None and
+    the caller reports NOT JUDGED rather than naming a round it cannot read.
+    """
+    text = (last_run_at or "").strip()
+    if len(text) < 10 or text[4] != "-" or text[7] != "-":
+        return None
+    return text[:10]
+
+def attestation_state(store: Path = FRAGMENT_STORE) -> tuple[dict, str | None]:
+    """(fragment -> attested_at, not-read reason) — RESULTING STATE, never a receipt.
+
+    Read because criterion 4 requires `attested_at` to be NAMED as resulting state rather
+    than offered as the receipt, and naming it without reading it would be testimony. It
+    never makes this leg green: a completed round and a stale one differ HERE only after
+    the receipt has already been found. A store that cannot be read returns a stated
+    reason, so an unread store never renders as a fresh one.
+    """
+    if not store.is_dir():
+        return {}, f"the fragment store {store} does not exist"
+    read: dict = {}
+    for path in sorted(store.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            read[path.name] = f"unreadable: {type(exc).__name__}"
+            continue
+        if isinstance(data, dict):
+            read[str(data.get("factory") or path.stem)] = data.get("attested_at")
+    return read, None
+
+def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
+                     prefixes: list[str], ledger_rows: list[dict], *,
+                     read_at: str = "", store: Path = FRAGMENT_STORE,
+                     predicate=None) -> dict:
+    """The duty-completion leg: did the round each thin trigger woke LEAVE A RECEIPT?
+
+    POPULATION. The ENABLED cron rows this factory DECLARES that carry a receipt
+    declaration in their own prompt. Three buckets are COUNTED, NAMED and PRINTED rather
+    than dropped, because a population that resolves to no object cannot be checked by the
+    reader it is reported to (#126): the rows JUDGED, the declared rows owing no receipt,
+    and the rows attributed to nobody.
+    """
+    if predicate is None:
+        predicate = field_predicate_readers()
+
+    attributed, foreign = attribute_rows(rows, prefixes)
+    declared: list[tuple[dict, str]] = []
+    undeclared: list[dict] = []
+    for row in attributed:
+        stem = declared_receipt_stem(str(row.get("prompt") or ""))
+        if stem:
+            declared.append((row, stem))
+        else:
+            undeclared.append(row)
+
+    problems: list[str] = []
+    excused: list[str] = []
+    judged: list[dict] = []
+    for row, stem in declared:
+        name = str(row.get("name") or "(unnamed row)")
+        job_id = str(row.get("id") or "unstated")
+        fired = str(row.get("last_run_at") or "")
+        round_date = receipt_round(fired)
+        if round_date is None:
+            excused.append(
+                f"{name} (cron id {job_id}): declares a receipt but records no fire "
+                f"instant (last_run_at={fired!r}), so no round can be named — NOT JUDGED"
+            )
+            continue
+        subject = f"{stem}-{round_date}"
+        receipts = [r for r in ledger_rows if str(r.get("subject") or "") == subject]
+        judged.append({
+            "name": name, "id": job_id, "stem": stem, "round": round_date,
+            "fired": fired, "receipts": len(receipts),
+        })
+        if not receipts:
+            problems.append(
+                f"{name} (cron id {job_id}): the round {round_date} has NO duty receipt — "
+                f"no ledger run row carries the subject {subject!r}. A cron run row records "
+                f"only that the TRIGGER fired, so a green run here is a MISSING duty and "
+                f"not a clean one"
+            )
+            continue
+        for receipt in receipts:
+            detail = str(receipt.get("detail") or "")
+            for value in DUTY_FAILED_OUTCOMES:
+                if predicate.declares_token(detail, "outcome", value):
+                    problems.append(
+                        f"{name} (cron id {job_id}): the round {round_date} FAILED — "
+                        f"receipt row n={receipt.get('n')} declares outcome={value}"
+                    )
+
+    state, state_reason = attestation_state(store)
+    return {
+        "name": "duty-receipt",
+        "status": "ASSERTED" if declared else "NOT RUN",
+        "reason": (None if declared else (
+            "no enabled row this factory declares carries a `receipt_subject:` "
+            "declaration, so no duty owes a receipt on this box"
+        )),
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "jobs_read": len(attributed),
+            "rows_read": len(rows),
+            "homes_read": len(homes_read),
+            "homes_read_names": homes_read,
+            "homes_unreached": unreached,
+            "prefixes": prefixes,
+            "jobs_declaring_receipt": len(declared),
+            "jobs_undeclared": len(undeclared),
+            "undeclared_jobs": [str(r.get("name") or "") for r in undeclared],
+            "jobs_unattributed": len(foreign),
+            "duties_judged": judged,
+            "duties_missing": len([p for p in problems if "NO duty receipt" in p]),
+            "attested_at_state": state,
+            "attested_at_not_read": state_reason,
+            "read_at": read_at,
+        },
+    }
+
 def field_predicate_readers():
     """The shared detail-field predicate, loaded by path so no import path is assumed.
 
@@ -881,6 +1070,39 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             if leg.get("reason"):
                 lines.append(f"  {leg['reason']}")
             lines.append(f"  read at {cov['read_at'] or 'unstated'}")
+        elif leg["name"] == "duty-receipt":
+            declared = ", ".join(cov["prefixes"]) or "no declared prefix"
+            lines.append(
+                f"  jobs: {cov['jobs_read']} enabled row(s) attributed to this factory "
+                f"of {cov['rows_read']} read across {cov['homes_read']} home(s) "
+                f"({declared})"
+            )
+            lines.append(
+                f"  duties: {cov['jobs_declaring_receipt']} row(s) declare a receipt, "
+                f"{cov['jobs_undeclared']} declare none and are NOT JUDGED, "
+                f"{cov['jobs_unattributed']} attributed to nobody"
+            )
+            for name in cov.get("undeclared_jobs", []):
+                lines.append(f"    owes no receipt: {name or '(unnamed row)'}")
+            for duty in cov.get("duties_judged", []):
+                lines.append(
+                    f"    {duty['name']} (cron id {duty['id']}): round {duty['round']} "
+                    f"(fired {duty['fired'] or 'unstated'}) — "
+                    f"{duty['receipts']} receipt row(s)"
+                )
+            lines.append(
+                "  attested_at (RESULTING STATE, never the receipt): "
+                + (
+                    f"{len(cov['attested_at_state'])} fragment(s) read"
+                    if not cov.get("attested_at_not_read")
+                    else str(cov["attested_at_not_read"])
+                )
+            )
+            for factory, when in sorted(cov.get("attested_at_state", {}).items()):
+                lines.append(f"    {factory}: {when}")
+            if leg.get("reason"):
+                lines.append(f"  {leg['reason']}")
+            lines.append(f"  read at {cov['read_at'] or 'unstated'}")
         elif leg["name"] == "canonicality-tier":
             tiers = ", ".join(cov["tiers_declared"]) or "none declared"
             lines.append(
@@ -993,6 +1215,9 @@ def main(
         notify_receipt_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), log_dir=log_dir,
             read_at=read_at,
+        ),
+        duty_receipt_leg(
+            cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at
         ),
         canonicality_leg(rows, read_at=read_at),
     ]

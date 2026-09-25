@@ -783,9 +783,13 @@ def _home_db(path: Path, *jobs) -> None:
     conn = sqlite3.connect(path)
     conn.execute(
         "create table cron_jobs "
-        "(id text, name text, deliver_to text, prompt text, enabled integer)"
+        "(id text, name text, deliver_to text, prompt text, enabled integer, "
+        "last_run_at text)"
     )
-    conn.executemany("insert into cron_jobs values (?,?,?,?,?)", jobs)
+    conn.executemany(
+        "insert into cron_jobs (id, name, deliver_to, prompt, enabled) values (?,?,?,?,?)",
+        jobs,
+    )
     conn.commit()
     conn.close()
 
@@ -986,6 +990,131 @@ def test_the_leg_reads_through_the_SHARED_predicate_never_a_private_split() -> N
     assert "keyed_value(" in body, "the value read must come from the module"
     assert '.split("=")' not in body, "a private split is exactly what the law bars"
 
+
+# --- the duty-completion-receipt leg (#147) ------------------------------------
+#
+# #122's leg asks whether a thin trigger's notify produced a RECEIPT. These probe the
+# question it cannot: did the DUTY the notify woke actually COMPLETE? The live population
+# of a cleanly-completed round is an EMPTY problem list, so a test driven from the live box
+# passes vacuously — every probe below drives the leg from a FIXTURE.
+
+_RECEIPT_PROMPT = (
+    "Thin trigger only — do NOT execute any project work yourself. Call the "
+    "session_notify tool exactly ONCE, then stop.\n\nreceipt_subject: registry-attest\n"
+)
+
+def _duty_row(name="factory-registry-attest", *, prompt=_RECEIPT_PROMPT,
+              last_run_at="2026-09-25T06:00:13Z",
+              row_id="9ec28cec-100c-4325-ba3e-62972351ff0d") -> dict:
+    return {
+        "id": row_id, "name": name, "deliver_to": "", "prompt": prompt,
+        "last_run_at": last_run_at, "home": "probe-home",
+    }
+
+def _receipt_row(subject="registry-attest-2026-09-25",
+                 detail="the round completed.", n=1) -> dict:
+    return {"n": n, "ts": "2026-09-25T06:14:25Z", "event": "run", "actor": "delegate",
+            "subject": subject, "detail": detail}
+
+def _duty_leg(cron_rows, ledger_rows, *, store=None) -> dict:
+    return RUNNER.duty_receipt_leg(
+        cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
+        read_at="2026-09-25T06:31:48Z",
+        store=store if store is not None else Path(tempfile.mkdtemp()),
+    )
+
+def test_the_duty_leg_BITES_when_a_fired_round_left_no_receipt() -> None:
+    """THE probe this leg exists for: a green cron run with no duty row is a FINDING.
+
+    The measured instance: six fragments sat at attested_at 2026-09-19 for four days while
+    `cron_job_runs` carried success — the trigger worked and the duty did not, and nothing
+    reported it.
+    """
+    leg = _duty_leg([_duty_row()], [])
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["coverage"]["duties_judged"][0]["round"] == "2026-09-25", leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    problem = leg["problems"][0]
+    assert "NO duty receipt" in problem, problem
+    assert "registry-attest-2026-09-25" in problem, problem
+    assert "9ec28cec" in problem, "the finding must RESOLVE the row it names, by id"
+    assert "TRIGGER fired" in problem, "the finding must say what a green run does mean"
+
+def test_the_duty_leg_passes_when_the_round_left_its_receipt() -> None:
+    leg = _duty_leg([_duty_row()], [_receipt_row()])
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 1
+
+def test_the_duty_leg_reports_a_FAILED_receipt_not_only_a_missing_one() -> None:
+    """A receipt that declares a non-success outcome is a FAILED duty, never a clean one."""
+    leg = _duty_leg(
+        [_duty_row()],
+        [_receipt_row(detail="the round did not complete. outcome=failed")],
+    )
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "FAILED" in leg["problems"][0], leg["problems"][0]
+    assert "outcome=failed" in leg["problems"][0], leg["problems"][0]
+
+def test_a_row_declaring_no_receipt_is_NOT_JUDGED_and_is_COUNTED_by_name() -> None:
+    """P29: a clean verdict over a population that declared nothing must never be the same
+    output as one that examined the population — so the undeclared rows are NAMED."""
+    leg = _duty_leg(
+        [_duty_row(), _duty_row(name="factory-measurement-daily", prompt="no declaration here")],
+        [],
+    )
+    assert leg["coverage"]["jobs_declaring_receipt"] == 1, leg["coverage"]
+    assert leg["coverage"]["jobs_undeclared"] == 1, leg["coverage"]
+    assert leg["coverage"]["undeclared_jobs"] == ["factory-measurement-daily"], leg["coverage"]
+    assert len(leg["problems"]) == 1, "the undeclared row is not judged and adds no problem"
+
+def test_the_duty_leg_reports_NOT_RUN_when_no_row_declares_a_receipt() -> None:
+    leg = _duty_leg([_duty_row(prompt="no declaration here")], [])
+    assert leg["status"] == "NOT RUN", leg
+    assert "receipt_subject:" in (leg["reason"] or ""), leg["reason"]
+    assert leg["problems"] == [], leg["problems"]
+
+def test_the_round_comes_from_the_rows_own_fire_instant_never_a_parsed_schedule() -> None:
+    """`last_run_at` is stamped at DISPATCH, so it names the round the trigger woke."""
+    leg = _duty_leg([_duty_row(last_run_at="2026-09-24T06:00:11Z")], [])
+    assert leg["coverage"]["duties_judged"][0]["round"] == "2026-09-24", leg["coverage"]
+    assert "registry-attest-2026-09-24" in leg["problems"][0], leg["problems"][0]
+
+def test_a_row_with_no_fire_instant_is_EXCUSED_and_never_guessed() -> None:
+    """A round that cannot be READ is never NAMED: the row is excused with its reason."""
+    leg = _duty_leg([_duty_row(last_run_at="")], [])
+    assert leg["problems"] == [], leg["problems"]
+    assert len(leg["excused"]) == 1, leg["excused"]
+    assert "no fire instant" in leg["excused"][0], leg["excused"][0]
+
+def test_a_MENTION_of_the_declaration_is_not_a_DECLARATION() -> None:
+    """Prose about a field must not satisfy it — the declaration is a whole LINE (n=405)."""
+    prompt = (
+        "Thin trigger only — do NOT execute any project work yourself.\n"
+        "The old text said receipt_subject: registry-attest and it was removed.\n"
+    )
+    assert RUNNER.declared_receipt_stem(prompt) is None, "a mid-sentence mention declared one"
+    assert RUNNER.declared_receipt_stem(_RECEIPT_PROMPT) == "registry-attest"
+
+def test_the_duty_leg_names_attested_at_as_RESULTING_STATE_never_the_receipt() -> None:
+    """Criterion 4: a stale attestation is RESULTING STATE, and a stale one must not stand
+    in for the missing receipt — the receipt is the ledger run row, and it is still absent."""
+    store = Path(tempfile.mkdtemp())
+    (store / "probe.json").write_text(
+        json.dumps({"factory": "probe", "attested_at": "2026-09-19T00:00:00Z"}),
+        encoding="utf-8",
+    )
+    leg = _duty_leg([_duty_row()], [], store=store)
+    assert leg["coverage"]["attested_at_state"] == {"probe": "2026-09-19T00:00:00Z"}, leg["coverage"]
+    assert len(leg["problems"]) == 1, "a stale attestation must not excuse the missing receipt"
+
+def test_the_duty_leg_is_WIRED_into_the_runner_and_prints_its_population() -> None:
+    """A leg that is not wired is not a leg: the runner's own output must carry it."""
+    rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"])
+    assert "LEG duty-receipt" in out, out
+    assert "1 row(s) declare a receipt" in out, out
+    assert "RESULTING STATE, never the receipt" in out, out
+    assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
+    assert rc == 1, "a missing duty receipt must fail the run"
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
