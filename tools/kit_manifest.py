@@ -107,6 +107,9 @@ CLOSURE_MODULES = frozenset({
     # tools/ -- imported by the executables, never invoked directly
     "TEMPLATE/tools/field_predicate.py",     # imported_by 10 shipped files
     "TEMPLATE/tools/gate_budget.py",         # imported by tools/audit.py
+    "TEMPLATE/tools/kit_identity.py",        # imported by all 10 executables, so the
+                                             # version predicate has ONE implementation
+                                             # rather than ten that drift
     "TEMPLATE/tools/ledger_declaration.py",  # the HARD tier: raises at import
     "TEMPLATE/tools/reconstruction.py",      # the HARD tier: raises at import
     "TEMPLATE/tools/registry_render.py",     # imported by tools/registry.py

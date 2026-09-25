@@ -55,6 +55,7 @@ import shutil
 import subprocess
 import sys
 import time
+from kit_identity import VersionAction
 
 # A gate may only glob a namespace this factory OWNS.
 #
@@ -208,6 +209,8 @@ def main() -> int:
     global GRACE_MINUTES, REQUIRED_COMMITTED
 
     parser = argparse.ArgumentParser(description="Workspace hygiene and GC audit tool.")
+    parser.add_argument("--version", action=VersionAction,
+                    help="print this copy\'s identity and exit")
     parser.add_argument("--audit", action="store_true", help="Audit without removing")
     parser.add_argument("--clean", action="store_true", help="Reap stale scratch items")
     parser.add_argument(

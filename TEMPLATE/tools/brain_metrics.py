@@ -65,6 +65,7 @@ import gzip
 import hashlib
 import os
 import re
+from kit_identity import VersionAction
 
 BUDGET_LINES = 500
 DEFAULT_WINDOW = 200_000
@@ -454,6 +455,8 @@ def main() -> int:
         description="brain-metrics standing reading: the static law floor and the "
                     "post-compaction context it is paid in"
     )
+    ap.add_argument("--version", action=VersionAction,
+                    help="print this copy\'s identity and exit")
     ap.add_argument("--home", default=os.path.expanduser("~/.opencrabs/profiles/ops"),
                     help="profile home holding the always-injected brain files (leg A)")
     ap.add_argument("--hours", type=float, default=24.0,

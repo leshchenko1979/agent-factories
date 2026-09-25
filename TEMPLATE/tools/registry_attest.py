@@ -50,6 +50,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 import registry as reg  # noqa: E402
+from kit_identity import VersionAction
 
 OPENCRABS = "/usr/local/bin/opencrabs"
 PROFILE = reg.FACTORY_PROFILE
@@ -241,6 +242,8 @@ def dispatch(target: dict, stamp: str, dry_run: bool) -> tuple[bool, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--version", action=VersionAction,
+                    help="print this copy\'s identity and exit")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="resolve and print targets, send nothing")
     group.add_argument("--dry-run", action="store_true", help="print the brief, send nothing")
