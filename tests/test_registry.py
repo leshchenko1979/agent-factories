@@ -727,6 +727,77 @@ def probe_the_sentinel_would_rewrite_badges() -> None:
         f"at commit: {rr._freshness_badge('attested', fresh, rr.parse_instant('2026-09-19T14:00:00Z'))!r}",
     )
 
+def render_carried_binding_index(snapshot: dict) -> tuple[int | None, str]:
+    """The index of the LAST snapshot binding the replay CARRIES, and why it qualifies.
+
+    The predicate is the RENDERER'S OWN SELECTION, read from the renderer rather than
+    restated here. `registry_render.build_context` resolves every DECLARED lane against
+    the snapshot's bindings and copies the winning row's `session_id`, `chat_id`,
+    `bound_at`, `last_origin`, `turn_open` and `session_title` into the context both
+    artifacts are rendered from. A binding that no declared lane resolves to contributes
+    nothing to either artifact, so mutating it is render-NEUTRAL: a probe driven from such
+    a row measures the mutation's ABSENCE, never the detector's sensitivity.
+
+    That is precisely the defect this helper replaces (#151). The probe below used to take
+    the LAST binding by POSITION (`bindings[:-1]`) on a list REGENERATED from live state,
+    so its verdict tracked which chat happened to sort last rather than whether the
+    detector works. Measured at e918d9b: `bindings[-1]` is the Avito member chat (thread
+    7603), which the render does not carry — 61 of 130 bindings resolve a declared lane —
+    so dropping it is render-neutral and the assertion of 2 could not be met. The probe
+    then failed for EVERY lane at every revision whose last binding was not render-carried,
+    which is what made a position-dependent probe a suite-wide red.
+
+    Returning `None` is a CLAIM ABOUT THE SNAPSHOT, and the caller FAILS on it rather than
+    skipping: a snapshot carrying no render-carried binding would make the probe vacuous,
+    which is the failure mode this helper exists to prevent. Read from the renderer, so a
+    change to the renderer's selection rule can never drift from this predicate — the two
+    are not two copies of a rule but one rule and its caller.
+    """
+    bindings = snapshot.get("bindings") or []
+    consumable = [b for b in bindings if isinstance(b, dict)]
+    if not consumable:
+        return None, "the snapshot carries no binding rows at all"
+    try:
+        ctx, problems = rr.build_context(
+            [], consumable, str(snapshot.get("resolved_at") or ""), recorded=snapshot
+        )
+    except Exception as exc:  # noqa: BLE001 — an unconsumable snapshot IS the finding
+        return None, (
+            f"the snapshot cannot be assembled into a render context — "
+            f"{type(exc).__name__}: {exc}"
+        )
+    if problems:
+        return None, f"the render context reports {problems[0][:80]}"
+
+    carried = set()
+    for factory in ctx.get("factories") or []:
+        for lane in factory.get("lanes") or []:
+            if lane.get("session_id"):
+                carried.add(
+                    (
+                        str(lane.get("chat_id")),
+                        lane.get("thread_id"),
+                        str(lane["session_id"]),
+                    )
+                )
+    if not carried:
+        return None, "no declared lane resolved to a binding, so no binding reaches the render"
+
+    for index in range(len(bindings) - 1, -1, -1):
+        row = bindings[index]
+        if not isinstance(row, dict):
+            continue
+        key = (str(row.get("chat_id")), row.get("thread_id"), str(row.get("session_id")))
+        if key in carried:
+            return index, (
+                f"binding[{index}] (chat {row.get('chat_id')} thread {row.get('thread_id')}) "
+                f"resolves a declared lane, so its values reach both artifacts"
+            )
+    return None, (
+        f"{len(carried)} declared lane(s) resolved, but no snapshot binding carries those "
+        f"identities — the snapshot and its own lanes disagree"
+    )
+
 def probe_a_mutated_snapshot_is_named() -> None:
     """Criterion 2, leg 1 — a MUTATED snapshot must be REPORTED, never silently replayed.
 
@@ -735,6 +806,12 @@ def probe_a_mutated_snapshot_is_named() -> None:
     both sides render from the SAME snapshot) and a state-bearing key (`bindings`). Each
     must be reported in BOTH artifacts — the two-artifact shape is asserted, not assumed,
     because a mutation reaching one artifact would still pass a one-artifact assertion.
+
+    The binding to mutate is chosen by the PREDICATE that makes it render-relevant, never
+    by its POSITION in the list (#151, ruled n=988). `render_carried_binding_index` reads
+    the renderer's own lane resolution and returns a row whose removal must change the
+    bytes; the probe asserts it FOUND such a row BEFORE mutating, so a snapshot with none
+    fails on its own precondition instead of reporting a clean verdict it never earned.
     """
     revision, blobs, snapshot, problems = _committed_replay()
     if problems:
@@ -758,13 +835,24 @@ def probe_a_mutated_snapshot_is_named() -> None:
         f"{len(drift)} problem(s) reported",
     )
 
+    target, why = render_carried_binding_index(snapshot)
+    check(
+        "the state-bearing mutation TARGETS a binding the render carries, so the probe can bite",
+        target is not None,
+        why[:110],
+    )
+    if target is None:
+        return
+
     keyed = copy.deepcopy(snapshot)
-    keyed["bindings"] = keyed["bindings"][:-1]
+    keyed["bindings"] = [
+        row for index, row in enumerate(snapshot["bindings"]) if index != target
+    ]
     drift = gate_a_problems(blobs, keyed, revision)
     check(
         "...and a STATE-BEARING key mutated is NAMED too, so no key is normalized away",
         len(drift) == 2,
-        f"{len(drift)} problem(s) reported",
+        f"{len(drift)} problem(s) reported after dropping {why}",
     )
 
 def probe_a_hand_edited_committed_artifact_is_named() -> None:
