@@ -118,11 +118,47 @@ defect as a core file that does.
 Every pack — binding or domain — is a page with these headings:
 
 **take it when · what it binds / adds · rules · costs · what changes if you
-swap it.**
+swap it · artifacts.**
 
-A binding's last heading is the important one: it lists exactly which rules
-evaporate when the bound product is replaced. If you cannot write that list,
-the pack has leaked into the core somewhere.
+A binding's last-but-one heading is the important one: it lists exactly which
+rules evaporate when the bound product is replaced. If you cannot write that
+list, the pack has leaked into the core somewhere.
+
+### `## Artifacts` — the sixth heading, and why the tool question lives HERE
+
+A pack that ships or requires **machinery** says so in a table under
+`## Artifacts — what the template ships, and what the factory must create`:
+
+| Artifact | Status | Detail |
+|---|---|---|
+| `tools/roadmap.py` | **shipped by the template** | A paired copy. Its `CANONICAL_PRODUCTS` is the deriving factory's — replace it before the first audit |
+
+The **Status** column is the whole point, and its vocabulary is small:
+
+- **`shipped by the template`** — a paired copy the factory takes as-is
+- **`shipped as a skeleton, created by the factory`** — a `.tmpl` with placeholders to fill
+- **`the factory creates it`** — the pack needs it and the factory writes it
+
+**Why a heading and not a third class, and not a new axis** — the measurement, not
+a preference. The two classes are distinguished by **cardinality**: a binding is
+mandatory and exactly one of each kind, a domain is optional and plural. Machinery
+does not sit on that axis — a ledger is mandatory for every factory, a roadmap
+renderer is optional — so a third class would make "how many" unanswerable for the
+thing it added. A new axis would be heavier than the problem: the reader who needs
+the answer is reading ONE pack and wants to know what to create, which is a table
+in that pack, not a global taxonomy lookup.
+
+And the mechanism is not new. Measured 2026-09-25: **3 of 9 packs already carry
+this table** (`consulting`, `roadmap`, `stories`) with 9 provenance rows, and the
+Status vocabulary above is the one they already use. What was missing is that this
+section of the law named only five headings, so the sixth was a convention a pack
+could omit without anyone noticing — 6 of 9 omit it, including every binding.
+
+**A pack never ships a tool alone.** A tool has a version, a closure, a gate set and
+an update path, and those are the kit's business (`registry/kit.json`, the `class`
+field, `BOOTSTRAP.md` step 4). The Artifacts table says *what this pack needs*; the
+kit says *what a full instrument is*. A pack that shipped a bare script would be
+shipping a partial instrument — the defect the class field exists to prevent.
 
 Derive a pack from a factory that already runs it. If no factory runs it, mark
 it `status: unproven` and say what would prove it.
