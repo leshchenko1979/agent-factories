@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.23
+version: 0.1.24
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -323,6 +323,20 @@ leaning on shared memory rather than on what it said.
   must compare before and after resolves both sides to named commits. The same binds the
   RECORD: an `evidence/rework.md` entry that cites a relative-revision form must name the
   resolved absolute sha, upheld by `tests/test_rework_relative_revision.py` (#86, ruling n=558).
+- **A message addressed to one factory cites only facts measured on THAT factory.** A
+  per-factory report is a claim about a NAMED tree, so a figure, a file identity or a property
+  measured on factory A and written into factory B's message is FALSE ABOUT B however true it
+  was about A — and it is the half a reader cannot catch, because the sentence reads exactly
+  like the true ones beside it. Measured 2026-09-25, TWICE inside one hour in the kit-drift
+  round: miidas's byte-identical file was named to inferhub-watch, and infra-factory's
+  stdlib-only `ledger.py` was asserted OF inferhub's, whose `ledger.py` imports the
+  three-module closure at `:72`/`:82`/`:94`. Both were hand-composed from a pool of five
+  replies, while the DISPATCH bodies — generated from each factory's own measured data —
+  carried neither error, which is the whole finding. The form that prevents it: a per-factory
+  body is BUILT FROM that factory's own reply, and every factual claim in it is traceable to
+  that reply — a fact belonging to another factory NAMES that factory or is not written. No
+  gate can uphold this and that is stated, not implied: a notify body lives in no tree the
+  offline suite reads, so what upholds it is the build form and the reader.
 - **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
   run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
   only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,
