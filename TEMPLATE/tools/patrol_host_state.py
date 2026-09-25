@@ -69,7 +69,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import hashlib
 import importlib.util
 import json
 import re
@@ -80,6 +79,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 FIELD_PREDICATE = REPO / "tools" / "field_predicate.py"
+# The kit pin reader, loaded by path beside it rather than imported: this runner is copied
+# into every member factory where the layout above it differs, and a module-level sibling
+# import here is what broke this file's own gate (#171) the day one was added.
+KIT_PIN = REPO / "tools" / "kit_pin.py"
 
 # ---- the canonicality leg (law: SKILL.md section 8, the ladder T0-T4) --------------
 #
@@ -1109,14 +1112,6 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
         },
     }
 
-def _sha256(path: Path) -> str:
-    """The sha256 of one file, read in chunks so a large one never loads whole."""
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for block in iter(lambda: fh.read(65536), b""):
-            h.update(block)
-    return h.hexdigest()
-
 def kit_drift_leg(
     *,
     manifest_path: Path = KIT_MANIFEST,
@@ -1169,6 +1164,18 @@ def kit_drift_leg(
         return {"name": "kit-drift", "status": "ASSERTED", "problems": problems,
                 "excused": [], "coverage": {"manifest_files": 0, "read_at": read_at}}
 
+    # The shared pin reader, loaded by path (see KIT_PIN). If it cannot be loaded the leg
+    # does NOT fall back to a private loop: falling back would give this leg a second
+    # implementation of the comparison it exists to share, which is the defect the sharing
+    # prevents. It reports NOT RUN over the reason instead.
+    try:
+        kit_pin = load_module("kit_pin", KIT_PIN)
+    except BoardReadError as exc:
+        problems.append(f"{exc} — the kit-drift leg has no comparison predicate and refuses "
+                        f"to invent a private one")
+        return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": {"reason": str(KIT_PIN), "read_at": read_at}}
+
     if not fleet_path.is_file():
         problems.append(f"the fleet manifest {fleet_path} is absent — no member repo to read")
         return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
@@ -1195,17 +1202,17 @@ def kit_drift_leg(
         same = diff = absent = 0
         diff_files: list[str] = []
         absent_files: list[str] = []
-        for rel, want in files.items():
-            member_rel = rel[len("TEMPLATE/"):] if rel.startswith("TEMPLATE/") else rel
-            local = root / member_rel
-            if not local.is_file():
-                absent += 1
-                absent_files.append(member_rel)
-            elif _sha256(local) == want:
-                same += 1
-            else:
-                diff += 1
-                diff_files.append(member_rel)
+        # The comparison is the SHARED pin predicate, not a private loop: our patrol leg and
+        # a factory's own pin gate compare the same way against different references, and two
+        # implementations would make our report and theirs disagree about the same bytes
+        # (SKILL.md section 11: one field, one predicate).
+        res = kit_pin.compare(manifest, root)
+        problems.extend(res["problems"])
+        same = res["counts"]["same"]
+        diff = res["counts"]["DIFF"]
+        absent = res["counts"]["ABSENT"]
+        diff_files = res["diff_files"]
+        absent_files = res["absent_files"]
         totals["same"] += same
         totals["DIFF"] += diff
         totals["ABSENT"] += absent

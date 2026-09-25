@@ -16,6 +16,15 @@ print, so a gate that only ever saw a clean tree would pass on a check that test
 nothing. It cannot prove a member factory has PORTED anything; that is a live-state
 fact about other repos, and it belongs to the patrol leg (step 10), never here.
 
+IT ALSO PINS THE POPULATION, which is a different question from drift. The manifest
+describes the set a factory VENDORS, and the pin vehicle is outside it by
+construction — it carries the manifest's own content, so it cannot carry its own
+digest. When only the generator asked that question, the shipped hook reported a
+staged vehicle as having ESCAPED a manifest it is not part of: a FALSE FAILURE,
+worse than a lenient one, because it teaches a lane to bypass the hook. The arm
+asks `compare` directly and puts a genuine escaped file beside the vehicle, so the
+filter cannot pass by excluding everything.
+
 WHY THE MUTATION ARMS RUN ON A COPY. The subject under test is the check's
 behaviour on a drifted tree, and producing that tree in place would mean mutating
 shipped files — which another lane may be reading. The copy is built with the repo
@@ -163,7 +172,36 @@ def main() -> int:
               r.returncode == 1 and "UNLISTED" in r.stdout and UNLISTED in r.stdout,
               [l.strip() for l in r.stdout.splitlines() if "UNLISTED" in l][:1] or r.stdout[:80])
 
-    # ARM 6 — HERMETICITY: the mutation arms ran on a copy, so the live shipped file is
+        # ARM 6 — THE PIN VEHICLE IS OUTSIDE THE MANIFEST POPULATION, and it excludes
+        # NOTHING ELSE. The vehicle carries the manifest's own content, so it cannot
+        # carry its own digest; when only the generator knew that, the hook reported a
+        # staged vehicle as having ESCAPED a manifest it is not part of. That is a FALSE
+        # FAILURE — worse than a lenient one, because it teaches a lane to bypass the
+        # hook. Asked of `compare` itself, since that is the predicate the hook calls,
+        # and asked WITH a genuine escaped file beside it so the filter cannot pass by
+        # excluding everything.
+        escaped = "TEMPLATE/tools/escaped-probe.py"
+        probe_src = (
+            "import json, sys;"
+            "sys.path.insert(0, 'tools');"
+            "import kit_manifest as K;"
+            f"cur = {{'files': {{K.PIN_VEHICLE_REL: 'a'*64, '{escaped}': 'b'*64}}}};"
+            "dec = {'files': {}};"
+            "_, _, u = K.compare(cur, dec);"
+            "print(json.dumps({'in_pop': K.in_manifest_population(K.PIN_VEHICLE_REL),"
+            " 'unlisted': u}))"
+        )
+        r = subprocess.run([sys.executable, "-c", probe_src], cwd=str(root),
+                           capture_output=True, text=True)
+        try:
+            got = json.loads(r.stdout)
+        except (json.JSONDecodeError, ValueError):
+            got = {}
+        check("the pin vehicle is OUTSIDE the population, and a real escaped file is still named",
+              got.get("in_pop") is False and got.get("unlisted") == [escaped],
+              r.stdout.strip()[:140] or r.stderr.strip()[:140])
+
+    # ARM 7 — HERMETICITY: the mutation arms ran on a copy, so the live shipped file is
     # byte-identical. Measured rather than asserted.
     check("the live shipped file was never mutated",
           sha(REPO / PROBE_FILE) == live_digest_before, PROBE_FILE)

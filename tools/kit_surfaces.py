@@ -49,6 +49,8 @@ import re
 import sys
 from pathlib import Path
 
+import kit_manifest
+
 REPO = Path(__file__).resolve().parent.parent
 T = REPO / "TEMPLATE"
 
@@ -111,13 +113,12 @@ def law_corpus() -> list[Path]:
 def is_executable(src: str) -> bool:
     """An instrument a factory runs, rather than a module it imports.
 
-    Predicated on an entry point OR an argparse parser, because both are shapes this kit
-    ships: some tools carry `if __name__ == "__main__"`, others are driven only through
-    `tools/audit.py`'s registration and expose an ArgumentParser for direct use.
+    DELEGATES to `kit_manifest.is_runnable` -- one predicate, two call sites. This body
+    used to hold its own copy of the entry-point regex, and that is how this census and
+    the manifest's `class_gaps` came to give DIFFERENT answers about `tools/kit_pin.py`:
+    a duplicated predicate is a second opinion, not a second check.
     """
-    if re.search(r'^\s*if\s+__name__\s*==\s*[\'"]__main__[\'"]\s*:', src, re.M):
-        return True
-    return "ArgumentParser" in src
+    return kit_manifest.is_runnable(src)
 
 
 def local_imports(src: str, local: set[str]) -> set[str]:

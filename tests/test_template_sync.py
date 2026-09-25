@@ -99,6 +99,11 @@ PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
     ("tools/ledger_declaration.py", "TEMPLATE/tools/ledger_declaration.py"),
     ("tools/field_predicate.py", "TEMPLATE/tools/field_predicate.py"),
+    # Added with plan 2646d31a task 6. The pin reader is loaded BY PATH from
+    # tools/patrol_host_state.py (KIT_PIN), so an unpaired copy is the #171 shape again: the
+    # runner resolves tools/ beside itself, and a tree carrying only the TEMPLATE half would
+    # fail at load rather than at import.
+    ("tools/kit_pin.py", "TEMPLATE/tools/kit_pin.py"),
     ("tools/reconstruction.py", "TEMPLATE/tools/reconstruction.py"),
     ("tests/gate_fixtures.py", "TEMPLATE/tests/gate_fixtures.py"),
     ("tests/gate_registry.py", "TEMPLATE/tests/gate_registry.py"),
@@ -180,6 +185,12 @@ PAIRS = [
     # SHAPE from here and writes its own `registry/gates.json` from measurements of its
     # own box, so the example ships whole and byte-identically at both paths.
     ("registry/gates.example.json", "TEMPLATE/registry/gates.example.json"),
+    # Added with plan 2646d31a task 6. The kit PIN -- the manifest a factory vendors at
+    # the version it ported, so its own gate judges its own declaration instead of the
+    # template's working tree. Same shape as the two examples above: the SHAPE ships whole
+    # and byte-identically at both paths, and a factory writes its own `registry/kit.json`
+    # by running the generator against its tree.
+    ("registry/kit.example.json", "TEMPLATE/registry/kit.example.json"),
     ("tools/registry.py", "TEMPLATE/tools/registry.py"),
     ("tools/registry_render.py", "TEMPLATE/tools/registry_render.py"),
     ("tools/registry_attest.py", "TEMPLATE/tools/registry_attest.py"),
