@@ -406,11 +406,22 @@ def sequence_problems(
     if not claims:
         problems.append((subject, "claim",
             f"line {index + 1}: close for {subject} has no claim before it"))
-    # The order leg means nothing until both legs exist, so a subject is never
-    # reported twice for the same absence.
-    if intakes and claims and not any(k > max(intakes) for k in claims):
-        problems.append((subject, "order",
-            f"line {index + 1}: close for {subject} — its claim precedes its intake (n={max(intakes) + 1})"))
+    # THE ORDER LEG IS RETIRED (2026-09-25, plan 2646d31a step 5). It read `claim
+    # before intake` as a defect, and the clause is gone because the two rows are
+    # written by TWO LANES whose wake latencies are independent: intake is
+    # Triage's row and the claim is the implementer's, so the inversion is the
+    # designed outcome of a latency gap rather than an error by either lane.
+    # Measured before retiring it: 6 instances across 3 factories, and on #161 the
+    # claim still preceded the intake by 1m46s even though the filing lane
+    # dispatched Triage in the SAME TURN as the filing -- the implementer was idle
+    # and woke in 10s while Triage was mid-turn. A rule that fires on the outcome
+    # of that race accuses nobody and costs every occurrence a re-claim.
+    #
+    # WHAT SURVIVES IS PRESENCE, and it is the half that caught the real defect:
+    # a close must have BOTH legs somewhere before it, which is the `#137` shape
+    # that sat silent for 35 hours. Presence is checkable without asking a lane to
+    # control another lane's timing; precedence is not. A claim that lands AFTER
+    # its close is still caught, because `claims` is read positionally.
     return problems
 
 def cmd_append(args: argparse.Namespace) -> int:

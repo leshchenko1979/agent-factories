@@ -212,12 +212,27 @@ def test_a_row_written_around_the_append_path_is_still_caught() -> None:
         assert "claim" in verified.stdout, verified.stdout
 
 
-def test_the_order_leg_survives_on_verify() -> None:
-    """The pre-flight refuses this shape at the write path; verify still owns history."""
+def test_the_order_leg_is_RETIRED_and_this_shape_is_ACCEPTED() -> None:
+    """The deliberate reversal: a claim before its intake is no longer a defect.
+
+    It WAS one until 2026-09-25 (plan 2646d31a step 5). The clause is gone because
+    the two rows belong to two lanes with independent wake latencies -- intake is
+    Triage's and the claim is the implementer's -- so the inversion is the designed
+    outcome of a latency gap, not an error. Measured before retiring it: 6 instances
+    across 3 factories, and on #161 the claim still won by 1m46s even though the
+    filing lane dispatched Triage in the same turn.
+
+    THIS PROBE ASSERTS THE REVERSAL rather than deleting the case, so the reversal is
+    pinned: a future change that reintroduces the clause REDs here and has to argue
+    with this docstring. The presence checks are untouched and are pinned by the
+    sibling probe above -- a close with no legs is still refused.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _throwaway(tmp)
         write_around(ledger, [("claim", "worker"), ("intake", "triage"), ("close", "worker")])
 
         verified = run(ledger, "verify")
-        assert verified.returncode != 0, "verify must report a claim that precedes its intake"
-        assert "precedes its intake" in verified.stdout, verified.stdout
+        assert verified.returncode == 0, (
+            f"a claim preceding its intake must be ACCEPTED, not reported: {verified.stdout}"
+        )
+        assert "precedes its intake" not in verified.stdout, verified.stdout

@@ -190,35 +190,46 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
     return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s)"
 
 
-def resolve_actor(declared: str | None, redirected: bool) -> tuple[str | None, str]:
-    """The actor for a row: DERIVED from the session, never silently defaulted.
+def resolve_actor(declared: str | None, fixture: bool) -> tuple[str | None, str, str]:
+    """The actor for a row, and WHICH of the two it is: `(role, reason, origin)`.
 
-    A REDIRECTED ledger (`OC_LEDGER_PATH`) is a fixture — it is written by tests
-    and probes that must be able to name any actor — so there an explicit
-    `--actor` is the fixture's own declaration. The LIVE ledger is written by a
-    lane, and a lane's identity is mechanical, so there the actor is derived and
-    an explicit one is accepted only when it AGREES with the derivation.
+    `origin` is `"derived"` when the role came from the writing session, and
+    `"declared"` when a FIXTURE named it. The distinction is load-bearing at the
+    call site rather than here, because the two identities are subject to
+    different law: a derived role is a LANE and is checked against the
+    authorization matrix, while a declared one belongs to a fixture that is not a
+    lane at all and has no row in that matrix. Returning it from the one function
+    that knows which happened keeps the call site from re-deriving the question.
+
+    `fixture` says the target is NOT the live ledger — a redirected
+    `OC_LEDGER_PATH` or a `--subprocess` sub-ledger. A fixture names its own
+    actors: a throwaway ledger has no live lane to bind to, so a declared actor
+    there is the fixture's declaration and not a claim about who is writing. The
+    derivation is still the default when none is given, so a probe can exercise
+    it without an env var.
+
+    THE LIVE LEDGER IS UNCHANGED BY THAT CONCESSION, and the reason is the seam
+    itself: reaching the live ledger requires the absence of both overrides, so
+    the only rows the live path accepts are ones whose actor was derived. A
+    fixture cannot smuggle a role into the live ledger by declaring it, because
+    declaring it is what marks the target as a fixture.
     """
-    if redirected:
-        # A FIXTURE names its own actors: a throwaway ledger has no live lane to
-        # bind to, so a declared actor there is the fixture's declaration and not
-        # a claim about who is writing. The derivation is still the default when
-        # none is given, so a probe can exercise it without an env var.
+    if fixture:
         if declared:
-            return declared, ""
+            return declared, "", "declared"
         derived, reason = session_to_role()
         if derived:
-            return derived, ""
-        return None, f"no actor was given and none could be derived: {reason}"
+            return derived, "", "derived"
+        return None, f"no actor was given and none could be derived: {reason}", "derived"
     derived, reason = session_to_role()
     if derived:
         if declared and declared != derived:
             return None, (
                 f"actor '{declared}' does not match the role this session resolves to "
                 f"('{derived}') — identity is derived from OPENCRABS_SESSION_ID, not declared"
-            )
-        return derived, ""
-    return None, reason
+            ), "derived"
+        return derived, "", "derived"
+    return None, reason, "derived"
 
 # Closes written before the sequence check existed, keyed by (subject, leg).
 # An exemption is a dated, attributed admission, never a convenience: it names
@@ -395,24 +406,52 @@ def sequence_problems(
     if not claims:
         problems.append((subject, "claim",
             f"line {index + 1}: close for {subject} has no claim before it"))
-    # The order leg means nothing until both legs exist, so a subject is never
-    # reported twice for the same absence.
-    if intakes and claims and not any(k > max(intakes) for k in claims):
-        problems.append((subject, "order",
-            f"line {index + 1}: close for {subject} — its claim precedes its intake (n={max(intakes) + 1})"))
+    # THE ORDER LEG IS RETIRED (2026-09-25, plan 2646d31a step 5). It read `claim
+    # before intake` as a defect, and the clause is gone because the two rows are
+    # written by TWO LANES whose wake latencies are independent: intake is
+    # Triage's row and the claim is the implementer's, so the inversion is the
+    # designed outcome of a latency gap rather than an error by either lane.
+    # Measured before retiring it: 6 instances across 3 factories, and on #161 the
+    # claim still preceded the intake by 1m46s even though the filing lane
+    # dispatched Triage in the SAME TURN as the filing -- the implementer was idle
+    # and woke in 10s while Triage was mid-turn. A rule that fires on the outcome
+    # of that race accuses nobody and costs every occurrence a re-claim.
+    #
+    # WHAT SURVIVES IS PRESENCE, and it is the half that caught the real defect:
+    # a close must have BOTH legs somewhere before it, which is the `#137` shape
+    # that sat silent for 35 hours. Presence is checkable without asking a lane to
+    # control another lane's timing; precedence is not. A claim that lands AFTER
+    # its close is still caught, because `claims` is read positionally.
     return problems
 
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
-    actor, actor_why = resolve_actor(args.actor, bool(os.environ.get("OC_LEDGER_PATH")))
+    # THE TARGET DECIDES WHICH IDENTITY LAW APPLIES, and it is decided BEFORE the
+    # actor is resolved because the resolver needs to know. A `--subprocess`
+    # append writes a domain sub-ledger and a redirected `OC_LEDGER_PATH` writes a
+    # throwaway file; both are FIXTURES, and the seam that redirects them is the
+    # same seam that makes their actor declarations legitimate. Only the live
+    # ledger's path reaches the strict branch, and reaching it requires BOTH
+    # overrides to be absent — so no declaration can smuggle a role into the live
+    # ledger. Measured 2026-09-25 (#binding probes): the first cut of this change
+    # keyed on `OC_LEDGER_PATH` alone, so `--subprocess` fixtures began failing at
+    # the resolver ("no live binding was readable") — a staged tool copy has no
+    # fleet manifest to resolve against, and the seam's own probe caught it.
+    fixture = bool(os.environ.get("OC_LEDGER_PATH")) or bool(getattr(args, "subprocess", None))
+    actor, actor_why, actor_origin = resolve_actor(args.actor, fixture)
     if actor is None:
         sys.exit(f"ledger append refused: {actor_why}")
     args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
+    # THE MATRIX BINDS A LANE, NOT A FIXTURE. It answers "is this ROLE allowed to
+    # write this EVENT", and a fixture-declared actor has no row in it because a
+    # fixture is not a lane — the pinned vocabulary in `probe_actors_path` is the
+    # whole point of that seam. A derived role always has a row, because the
+    # derivation resolves through the same registry the matrix is written for.
     authorized = AUTHORIZED_ACTORS_BY_EVENT.get(args.event, ())
-    if authorized and args.actor not in authorized:
+    if authorized and actor_origin == "derived" and args.actor not in authorized:
         sys.exit(
             f"ledger append refused: actor '{args.actor}' is not authorized for a "
             f"'{args.event}' row (authorized: {', '.join(authorized)}) — membership is "
@@ -679,7 +718,9 @@ def cmd_repair(args: argparse.Namespace) -> int:
       lawful correction from a silent edit, and a silent edit of an append-only surface
       is the failure this whole section exists to prevent.
     """
-    actor, actor_why = resolve_actor(args.actor, bool(os.environ.get("OC_LEDGER_PATH")))
+    actor, actor_why, _actor_origin = resolve_actor(
+        args.actor, bool(os.environ.get("OC_LEDGER_PATH"))
+    )
     if actor is None:
         sys.exit(f"ledger repair refused: {actor_why}")
     args.actor = actor

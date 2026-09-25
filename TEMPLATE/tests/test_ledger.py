@@ -283,8 +283,17 @@ def main() -> int:
                  (("intake", "#2"), ("close", "#2")), 1, ("#2", "claim"))
         seq_case("P3 a full sequence passes",
                  (("intake", "#3"), ("claim", "#3"), ("close", "#3")), 0, ())
-        seq_case("P4 a claim before its intake is refused",
-                 (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 1, ("#4", "precedes"))
+        # P4 IS THE DELIBERATE REVERSAL, not an omission (2026-09-25, plan 2646d31a
+        # step 5). This shape WAS refused: `claim` before `intake` was read as a
+        # defect. It is not one, because the two rows belong to two lanes with
+        # independent wake latencies -- intake is Triage's and the claim is the
+        # implementer's -- so the inversion is the designed outcome of a latency gap.
+        # The case is kept and its expectation INVERTED rather than deleted, so a
+        # change that reintroduces the clause REDs here and must argue with this.
+        seq_case("P4 a claim before its intake is ACCEPTED (the deliberate reversal)",
+                 (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 0, ())
+        seq_case("P4b a claim AFTER its close is still refused (presence, positional)",
+                 (("intake", "#4b"), ("close", "#4b"), ("claim", "#4b")), 1, ("#4b", "claim"))
         print("\nreconstructed claims — declared by token, printed, never collapsed")
         # A claim stamped after the work declares itself with the token
         # `claim=reconstructed` (#98, ruling n=602 PART 5), and `verify` prints those
