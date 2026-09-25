@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.25
+version: 0.1.26
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -520,6 +520,29 @@ outside it, the issue board. Every other path to it is read-only.
 **The receipt's SUBJECT is canonical, and the reader's key is deliberately NOT widened to meet a deviation.** A receipt's subject is `<stem>-<round>`: `<stem>` is the job's own declared `receipt_subject`, and `<round>` is its own `last_run_at` UTC date. The key is a **boundary-checked prefix** — the subject must start with `<stem>-<round>`, and the character after it must not be a digit, so a different date whose subject merely extends this one's digits (`...-2026-09-250`) cannot match. That tolerance exists for **round-key variants**: an hour-bearing subject (`patrol-verify-2026-09-25T06`) names the same round, and so does a trailing word. It is never licence to decorate: a subject that puts words BETWEEN the stem and the round (`registry-attest-writeback-2026-09-25`) does not name the round at all and is **not a receipt**, and the leg reads MISSING — loud, and true. **Do not widen the key to a fuzzy token match.** A false MISSING costs one look; a false CLEAN is silent, and this leg exists precisely because silence is the failure it cannot see (#160). The writer is upstream of the reader: fix the convention, never the key.
 
 **A subject match is not a receipt — the row must DECLARE its completion.** A receipt carries `duty=completed`, `failed` or `skipped`, read through the shared positional reader (`tools/field_predicate.py::declared_duty`) against the domain declared beside it (`DUTY_DOMAIN`). A row whose subject matches the round and declares nothing is **not** a receipt: the leg's first version accepted any subject match, so a DISPATCH record written before the round completed certified it, and a round with no receipt at all read clean. Absent is not a value, an out-of-domain value is an ERROR, and `failed`/`skipped` are both findings. **The key is a distinct field, never `outcome=`:** a duty receipt is selection-biased — written by a lane that completed a duty — so folding it into the first-pass yield's population makes that metric structurally optimistic, one real lane failure diluting it roughly twofold. One number answering two questions is the #143 class.
+
+**A pacemaker's redirect log is named after ITS OWN JOB, and the leg's precondition is
+stated rather than assumed (2026-09-25, #163).** The notify-receipt leg attributes a
+trigger's log by taking the filename's stem as a **cron job name** and looking it up among
+the rows this factory declares (`patrol_host_state.py`, `NOTIFY_LOG_RE`). That makes
+*the redirect label equals the job name* a load-bearing contract between every pacemaker
+prompt and the leg — and it was written nowhere, which is how one job carried a
+hand-typed label for **16 rounds** and every one of its logs landed in `retired_logs` as
+*history, never judged*. The leg examined **nothing** and printed the same shape as a leg
+that examined everything and found it clean.
+
+**A mechanism whose precondition is undocumented is a permanent silent exclusion**, and it
+is the mirror of the receipt clauses above: there, a declaration without its instruction
+is a permanent false RED; here, a mechanism without its stated precondition is a
+permanent false CLEAN. Both are the same failure — a contract that lives only in one
+side's implementation.
+
+So a pacemaker whose prompt writes a `/tmp` log **names the redirect after the job**, never
+after a description of its cadence (`/tmp/factory-triage-patrol-<ts>.log`, never
+`/tmp/factory-triage-6h-<ts>.log`), and a label that names no row is a finding rather than
+history. When a redirect is renamed, **the prose that justified the old label is rewritten
+in the same edit** — a prompt arguing for a label it no longer carries is the half-fix
+shape this section rules against twice.
 
 **THE WRITE PATH OWNS THE ACTOR, AND THE ACTOR IS DERIVED — identity is mechanical, never declared.** A row's `actor` is a **derived** value, read from `OPENCRABS_SESSION_ID`, which the daemon exports into every tool subprocess, resolved through the registry's own lane resolver (`registry.resolve_lane`, the same code that renders `registry/state.json`). The kit never asked for it, so identity was whatever a lane typed into `--actor`: checked for **membership** in the known-actor list, never for **authorization** against the per-event matrix, which meant an unauthorized row was written **silently** and surfaced a day later when the schema gate ran. Measured: three `intake` rows in one member factory carried `actor=worker`, and `intake` is Triage's — the write path accepted every one. The tool now enforces the matrix at append, so the row is refused **when it is written** rather than reported later, and a `--actor` is accepted only when it **AGREES** with the derivation. A lane it cannot resolve is refused **by name**, never defaulted: `repair` used to default to `worker`, so omitting the flag stamped the repair as the Worker regardless of who ran it. **A FIXTURE is the one exception, and the seam is what makes it safe:** a redirected `OC_LEDGER_PATH` or a `--subprocess` sub-ledger names its own actors, because a throwaway ledger has no live lane to bind to — and reaching the **live** ledger requires both overrides to be absent, so a fixture cannot smuggle a role into it.
 
