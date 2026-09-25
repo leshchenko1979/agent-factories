@@ -21,14 +21,30 @@ same two tokens — one vocabulary, two populations, nothing new to read:
    predates the rule would be a falsified record, not a repair.
 
 THE POPULATION IS AN ACT, and it is scoped twice because one scope is not enough:
-`event == "run"` (the ledger's own vocabulary) AND `subject == SUBJECT` (below). The subject
-is this factory's insights pacemaker name — a LANE-LOCAL string, not a schema name like
-`score`, so a factory that names its pacemaker differently edits this one constant in its
-OWN copy; the entry in `tests/test_telemetry_reader_registry.py`'s `WRITER_MODULES` is the
-same shape, and for the same reason. THE BOUND, stated rather than left to be discovered: in
-such a factory this gate finds no governed row and SKIPS with its reason, so it is useful
-exactly where the subject matches and honestly silent where it does not — never a silent
-pass, because a skip prints why it examined nothing.
+`event == "run"` (the ledger's own vocabulary) AND a subject naming this pacemaker's duty
+(`subject_in_scope`, below). The subject is `<stem>-<round>` — the DATED duty-receipt form
+the pacemaker writes today — where `<stem>` is the job's own declared `receipt_subject`
+(SKILL.md section 11, the clause landed at n=1052) and `<round>` is its UTC date. That
+declaration lives in the pacemaker's own cron prompt, a surface this gate does not read, so
+the stem is RESTATED here as a LANE-LOCAL constant, not a schema name like `score` — the
+same shape as the bare job name this file carried before, and the same shape as this
+factory's entry in `tests/test_telemetry_reader_registry.py`'s `WRITER_MODULES` — and a
+factory that names its pacemaker differently edits this one constant in its OWN copy. THE
+BOUND, stated rather than left to be discovered: in such a factory this gate finds no
+governed row and SKIPS with its reason, so it is useful exactly where the subject matches
+and honestly silent where it does not — never a silent pass, because a skip prints why it
+examined nothing.
+
+THE KEY IS A BOUNDARY-CHECKED PREFIX, not equality. Equality was this gate's first key, and
+it could not match what the writer writes: the pacemaker moved to dated duty receipts
+(#159's convention, one surface over), so an exact key on the old name left the population
+empty BY CONSTRUCTION and the gate SKIPPED the round it exists to judge. The guard keeps the
+widening honest in two parts: the stem alone would admit `insights-and-growth-map` — a real
+subject in this ledger (n=36), a different thing entirely — so the form is `<stem>-<date>`;
+and the character after the date must not be a digit, because a date that merely extends
+this one's digits (`...-2026-09-250`) is a DIFFERENT date. A round-key variant of the SAME
+round (`T06`, `-writeback`, or nothing) is admitted, which is what the prefix is for. The
+pre-convention name stays in scope so the pre-boundary history keeps printing as excused.
 
 The boundary is DECLARED, and this file SHIPS
 ---------------------------------------------
@@ -75,6 +91,7 @@ from pathlib import Path
 
 import pytest
 
+import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -103,7 +120,54 @@ INVARIANT_KEY = "insights_gate_recorded"
 
 # The ACT this gate governs: a `run` row written by the insights synthesis pacemaker.
 RUN_EVENT = "run"
-SUBJECT = "weekly-insight-synthesis-pacemaker"
+
+# The subject the pacemaker WRITES today: `<stem>-<round>`, where `<stem>` is the job's own
+# declared `receipt_subject` (SKILL.md section 11, the clause landed at n=1052) and
+# `<round>` is its UTC date. That declaration lives in the pacemaker's own cron prompt — a
+# surface this gate does not read — so the stem is RESTATED here as a lane-local constant,
+# the same shape as the bare job name this file carried before.
+SUBJECT_STEM = "insights"
+
+# The subject it wrote BEFORE that convention moved: its bare job name. Kept in scope so
+# the pre-boundary history still prints as `excused:` rather than vanishing from the output
+# when the scope is re-keyed — the boundary reader's contract is that rows before the
+# boundary PRINT as excused on every run, and re-keying the scope must not quietly delete
+# the history it was printing.
+LEGACY_SUBJECT = "weekly-insight-synthesis-pacemaker"
+
+# The round is a UTC DATE, so the stem alone is not a key: this ledger carries
+# `insights-and-growth-map` (n=36, HQ's initialization row), which shares the stem's
+# characters without naming a round. Requiring a date is what separates them.
+_ROUND_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def subject_in_scope(subject: str) -> bool:
+    """True when `subject` names this pacemaker's duty — its dated form, or its old name.
+
+    THE KEY IS A BOUNDARY-CHECKED PREFIX, not equality (#159's shape, one surface over).
+    Equality was this gate's first key and it could not match what the writer writes: the
+    pacemaker moved to dated duty receipts, so an exact key on the old name left the
+    population empty BY CONSTRUCTION and the gate SKIPPED the round it exists to judge.
+
+    THE GUARD is what keeps the widening honest, in two parts. A bare
+    `startswith(f"{SUBJECT_STEM}-")` would admit `insights-and-growth-map`, a real subject
+    in this ledger and a different thing entirely — so the form is `<stem>-<date>`. And the
+    character after the date must not be a digit, because a date that merely EXTENDS this
+    one's digits (`...-2026-09-250`) is a DIFFERENT date, not this round. Any other
+    continuation is a round-key variant of the same round (`T06`, `-writeback`, or
+    nothing), which is exactly what the prefix is for.
+    """
+    s = str(subject or "")
+    if s == LEGACY_SUBJECT:
+        return True
+    prefix = f"{SUBJECT_STEM}-"
+    if not s.startswith(prefix):
+        return False
+    rest = s[len(prefix):]
+    match = _ROUND_RE.match(rest)
+    if match is None:
+        return False
+    return not rest[match.end():match.end() + 1].isdigit()
 
 # The closing verdict, in the score gate's own vocabulary — one vocabulary, two gates.
 VERDICT_FIELD = "workspace_gate"
@@ -161,7 +225,7 @@ def run_verdict_problems(
     excused: list[str] = []
 
     for row in rows:
-        if row.get("event") != RUN_EVENT or row.get("subject") != SUBJECT:
+        if row.get("event") != RUN_EVENT or not subject_in_scope(row.get("subject")):
             continue
         n, ts = row.get("n"), row.get("ts", "")
         try:
@@ -207,14 +271,15 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
     population = [
         row
         for row in post_boundary_rows(rows, boundary, RUN_EVENT)
-        if row.get("subject") == SUBJECT
+        if subject_in_scope(row.get("subject"))
     ]
     reason = population_skip_reason(population, boundary_text, RUN_EVENT)
     if reason:
         # The shared guard's sentence names the event scope; the subject scope is this
         # gate's own, and an unstated scope reads as a narrower population than the one
         # that was measured.
-        return "skip", f"{reason} (scoped to subject {SUBJECT!r})", [], excused, 0
+        scope = f"{SUBJECT_STEM!r}-<round> or the legacy {LEGACY_SUBJECT!r}"
+        return "skip", f"{reason} (scoped to subject {scope})", [], excused, 0
     return "pass", "", [], excused, len(population)
 
 # --- live gate -------------------------------------------------------------------
@@ -239,7 +304,7 @@ def test_live_ledger_records_the_closing_verdict() -> None:
 
 # --- probes: the tree the gate runs in, then the predicate it applies --------------
 
-def _run(n: int, ts: str, detail: str, subject: str = SUBJECT) -> dict:
+def _run(n: int, ts: str, detail: str, subject: str = f"{SUBJECT_STEM}-2026-09-22") -> dict:
     return {
         "n": n,
         "ts": ts,
@@ -254,7 +319,7 @@ _OK = {
     "ts": "2026-09-22T18:00:00Z",
     "event": RUN_EVENT,
     "actor": "surveys",
-    "subject": SUBJECT,
+    "subject": f"{SUBJECT_STEM}-2026-09-22",
     "detail": "insight_appended=23-some-insight — workspace_gate=rc=0 "
     "head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e",
 }
@@ -329,7 +394,8 @@ def test_probe_an_empty_population_skips_rather_than_passing(tmp_path: Path) -> 
     )
     status, reason, problems, excused, checked = evaluate(tree)
     assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
-    assert "population is empty" in reason and SUBJECT in reason, reason
+    assert "population is empty" in reason, reason
+    assert SUBJECT_STEM in reason and LEGACY_SUBJECT in reason, reason
     assert len(excused) == 1, excused
 
 def test_probe_an_empty_ledger_skips(tmp_path: Path) -> None:
@@ -428,13 +494,74 @@ def test_probe_ignores_other_subjects_and_other_events() -> None:
     problems, excused = run_verdict_problems([other_subject, other_event], _PROBE_BOUNDARY)
     assert problems == [] and excused == [], (problems, excused)
 
+def test_probe_governs_the_dated_subject_the_pacemaker_writes_today() -> None:
+    """THE NON-VACUITY PROOF, and the regression this gate was filed for (#167).
+
+    The pacemaker writes `<stem>-<round>`; the gate's first key was exact equality on the
+    bare job name it stopped writing, so the population was empty BY CONSTRUCTION and the
+    gate SKIPPED the very round it exists to judge. A probe driven from the live ledger
+    would have passed VACUOUSLY here — the whole point is that the live population was the
+    empty one — so the proof rides this synthetic row.
+    """
+    dated = {**_OK, "subject": f"{SUBJECT_STEM}-2026-09-22",
+             "detail": "insight_appended=23 — head=deadbeef985b"}
+    problems, _ = run_verdict_problems([dated], _PROBE_BOUNDARY)
+    assert problems and VERDICT_KEY in problems[0], problems
+
+    governed = {**_OK, "subject": f"{SUBJECT_STEM}-2026-09-22"}
+    problems, _ = run_verdict_problems([governed], _PROBE_BOUNDARY)
+    assert problems == [], problems
+
+
+def test_probe_a_round_key_variant_names_the_same_round() -> None:
+    """#159's tolerance, one surface over: an hour-bearing or word-decorated subject names
+    the SAME round, so it must stay in scope rather than read as absent."""
+    for variant in (f"{SUBJECT_STEM}-2026-09-22T06", f"{SUBJECT_STEM}-2026-09-22-writeback"):
+        row = {**_OK, "subject": variant}
+        problems, _ = run_verdict_problems([row], _PROBE_BOUNDARY)
+        assert problems == [], (variant, problems)
+
+
+def test_probe_a_digit_extended_date_is_a_different_round() -> None:
+    """The boundary guard. A bare `startswith(f"{SUBJECT_STEM}-")` would admit a subject
+    whose date merely EXTENDS this one's digits — a different date, not this round."""
+    row = {**_OK, "subject": f"{SUBJECT_STEM}-2026-09-220"}
+    problems, excused = run_verdict_problems([row], _PROBE_BOUNDARY)
+    assert problems == [] and excused == [], (problems, excused)
+
+
+def test_probe_the_stem_alone_does_not_admit_a_stem_sharing_subject() -> None:
+    """`insights-and-growth-map` (n=36) shares the stem's characters without naming a
+    round, so the key is `<stem>-<date>` and not `<stem>-`. Without this arm the widening
+    would swallow a neighbouring subject — the #159 class, in the other direction."""
+    row = {**_OK, "subject": f"{SUBJECT_STEM}-and-growth-map", "detail": "initialized"}
+    problems, excused = run_verdict_problems([row], _PROBE_BOUNDARY)
+    assert problems == [] and excused == [], (problems, excused)
+
+    assert subject_in_scope(f"{SUBJECT_STEM}-and-growth-map") is False
+    assert subject_in_scope(f"{SUBJECT_STEM}-") is False
+    assert subject_in_scope("") is False
+
+
+def test_probe_the_matcher_is_a_predicate_and_not_a_position() -> None:
+    """Every arm of the key in one place, so a future edit to `subject_in_scope` that
+    widens or narrows it cannot pass unnoticed."""
+    assert subject_in_scope(f"{SUBJECT_STEM}-2026-09-22") is True
+    assert subject_in_scope(f"{SUBJECT_STEM}-2026-09-22T06") is True
+    assert subject_in_scope(f"{SUBJECT_STEM}-2026-09-22-writeback") is True
+    assert subject_in_scope(LEGACY_SUBJECT) is True
+    assert subject_in_scope(f"{SUBJECT_STEM}-2026-09-220") is False
+    assert subject_in_scope(f"{SUBJECT_STEM}-and-growth-map") is False
+    assert subject_in_scope("patrol-verify-2026-09-22") is False
+
+
 def test_probe_excuses_pre_boundary_rows_without_calling_them_clean() -> None:
     legacy = {
         "n": 241,
         "ts": "2026-09-18T15:32:02Z",
         "event": RUN_EVENT,
         "actor": "surveys",
-        "subject": SUBJECT,
+        "subject": LEGACY_SUBJECT,
         "detail": "insight_appended=22-metric-population-mismatch-false-alarm",
     }
     problems, excused = run_verdict_problems([legacy], _PROBE_BOUNDARY)
