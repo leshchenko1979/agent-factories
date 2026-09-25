@@ -98,15 +98,14 @@
   ],
   "announcements": [
     {
-      "id": "bot-repo-origin-is-live-not-legacy",
-      "text": "The bot-repo clone carries TWO remotes and origin is NOT a legacy path. origin = leshchenko1979/ai-antispam is PUBLIC, receives pushes (bot-repo pushes go to BOTH remotes), hosts the production landing page ai-antispam.ru from its own gh-pages branch (re-verified 2026-09-24: HTTP 200), and publishes the ghcr.io/leshchenko1979/ai-antispam image the fleet still pulls. Do not delete, drop or force-push it. Its issue numbering is SEPARATE from the canonical board, and gh run from inside /root/ai-antispam defaults to origin - pass --repo alexeyleshchenko/ai-antispam for canonical service-board work.",
+      "id": "bot-repo-canonical-account-and-deploy-home",
+      "text": "leshchenko1979 is the CANONICAL GitHub account for this factory (owner ruling 2026-09-25), and leshchenko1979/ai-antispam is the canonical repo: it hosts the production landing page ai-antispam.ru, publishes the image (ghcr.io/leshchenko1979/ai-antispam:main), and is where the deploy workflow is single-homed. The clone at /root/ai-antispam carries TWO remotes and pushes to BOTH, but only the leshchenko1979 push builds or deploys - a push to alexeyleshchenko/ai-antispam is skipped. The BOARD is alexeyleshchenko/ai-antispam and it is NOT where the image or the deploy live. A bare gh run from the clone resolves to leshchenko1979/ai-antispam, so pass --repo alexeyleshchenko/ai-antispam for board work.",
       "severity": "warning",
-      "since": "2026-01-12",
+      "since": "2026-09-25",
       "affects": [
-        "ai-antispam",
-        "infra-factory"
+        "profile"
       ],
-      "evidence": "Pages API 2026-09-24: leshchenko1979/ai-antispam -> cname ai-antispam.ru, status built, source gh-pages; alexeyleshchenko/ai-antispam -> cname null, source main. https://ai-antispam.ru HTTP 200, last-modified 2026-09-11T21:57:55Z == mirror head 02d743b. Domain carried on origin's gh-pages since c3f37e5 (2026-01-12, Create CNAME). Image derivation: 87b6d35 (2026-08-13). Separate numbering measured: canonical #41 = the moderation defect closed 2026-09-24; mirror #41 = a merged PR. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z)."
+      "evidence": "owner ruling 2026-09-25 (canonical account, board unchanged); deploy.yml now pins image_repo to ghcr.io/leshchenko1979/ai-antispam instead of deriving it from github.repository_owner, and gates both jobs on github.repository == 'leshchenko1979/ai-antispam'; verified live runs 36185290979 (canonical: build-push success, deploy success) and 36185287619 (board: build-push skipped, deploy skipped); container on apps runs ghcr.io/leshchenko1979/ai-antispam:main, healthy, started 2026-09-25T20:23:39Z"
     },
     {
       "id": "gh-pages-origin-ahead-not-diverged",
@@ -168,5 +167,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-24T23:00:12Z"
+  "attested_at": "2026-09-25T20:42:08Z"
 }
