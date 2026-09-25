@@ -438,6 +438,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # factory exactly as it does here. It is byte-paired with a TEMPLATE twin, so the
     # manifest grain is what keeps a factory from dropping the runner.
     "test_commit_session_trailer.py",
+    # Added with its registration (issue #138, ruling n=928; plan 2646d31a step 8).
+    # REQUIRED is the correct grain and OPTIONAL is not, for the same deciding fact as the
+    # three entries above it: its boundary is FORWARD-ONLY in effect, because the write path
+    # is what it pins and a factory that ships the tool without the pin can write an
+    # unauthorized row and never learn of it. It SKIPS WITH A STATED REASON when the lane
+    # resolver cannot be read (a bootstrapped factory has no fleet manifest), which is the
+    # same shape the registry gates use -- never a silent pass, and never another factory's
+    # data. It is byte-paired with a TEMPLATE twin.
+    "test_ledger_identity.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
     # Added with its registration (issue #54, P7 + P28). REQUIRED is the correct grain and

@@ -162,6 +162,7 @@ PAIRS = [
     # reason every other gate is: the hook it pins ships from TEMPLATE, so a factory
     # that takes the hook must take its pin too.
     ("tests/test_commit_session_trailer.py", "TEMPLATE/tests/test_commit_session_trailer.py"),
+    ("tests/test_ledger_identity.py", "TEMPLATE/tests/test_ledger_identity.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names
     # one side of a declared pair without its twin, and its table is THIS one — it

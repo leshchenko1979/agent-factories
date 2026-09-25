@@ -1581,6 +1581,27 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_commit_session_trailer.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_commit_session_trailer.py"])
 
+    # 51. Ledger-identity gate (issue #138, ruled at ledger n=928; plan 2646d31a step 8).
+    #     The ledger's `actor` is DERIVED from `OPENCRABS_SESSION_ID` and the per-event
+    #     authorization matrix is enforced at the write path, because identity was
+    #     previously whatever a lane typed into `--actor` and was checked for membership
+    #     only -- measured: three `intake` rows in one member factory carried
+    #     `actor=worker`, and `intake` is Triage's, so the write path accepted every one
+    #     and the schema gate reported them a day later.
+    #     EVERY ARM RUNS IN A STAGED TREE, and the reason is structural: the strict branch
+    #     (derivation, agreement, matrix) is reachable ONLY when `OC_LEDGER_PATH` is
+    #     absent, and with it absent the tool's target is its own `REPO/evidence/ledger.jsonl`.
+    #     So the strict path cannot be exercised against a redirected ledger by
+    #     construction -- either the redirect is set and the fixture branch runs, or it is
+    #     absent and the write goes to the live ledger. `gate_fixtures.stage_tool` builds
+    #     the only tree where the live path is a temp file. This was found by writing the
+    #     arms the wrong way first: the contradiction arm through `OC_LEDGER_PATH` returned
+    #     rc=0, and the cause was the PROBE, not the tool.
+    #     It SKIPS WITH A STATED REASON when the lane resolver cannot be read, which is
+    #     what a bootstrapped factory with no fleet manifest looks like.
+    if (repo_root / "tests/test_ledger_identity.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_identity.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
