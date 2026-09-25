@@ -231,6 +231,16 @@ def undeclared_divergence(pin: dict, root: Path) -> dict:
 
     ABSENT is therefore not a verdict at all — it is the population filter — and a path the
     factory never took cannot diverge from anything.
+
+    `factory`-CLASS PATHS ARE NOT JUDGED, which is what the class means rather than a
+    convenience: the class doc says such a file "is never compared byte-for-byte, because the
+    factory's copy legitimately differs". The first version of this predicate compared them
+    anyway, so the class map and the predicate disagreed -- and the disagreement was not
+    theoretical: `TEMPLATE/README.md` maps to `README.md`, so EVERY factory would have been
+    reported as diverging on its own README, a document it is supposed to own. They are
+    COUNTED in `skipped_class` rather than dropped, because an exclusion nobody can see is
+    the silent-exclusion shape this kit's law refuses: a caller can print how many paths left
+    the population and why.
     """
     files: dict[str, str] = pin.get("files") or {}
     classes: dict[str, str] = pin.get("classes") or {}
@@ -244,10 +254,14 @@ def undeclared_divergence(pin: dict, root: Path) -> dict:
                 declared.add(e)
 
     carried = 0
+    skipped_class = 0
     diverging: list[dict] = []
     for rel, want in files.items():
         local = root / member_path(rel)
         if not local.is_file():
+            continue
+        if classes.get(rel) == "factory":
+            skipped_class += 1
             continue
         carried += 1
         got = sha256_of(local)
@@ -261,6 +275,7 @@ def undeclared_divergence(pin: dict, root: Path) -> dict:
     return {
         "pin_version": pin.get("kit_version"),
         "carried": carried,
+        "skipped_class": skipped_class,
         "declared": len(declared),
         "exemption_problem": exempt_problem,
         "diverging": sorted(diverging, key=lambda d: d["path"]),

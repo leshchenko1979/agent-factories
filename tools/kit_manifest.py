@@ -186,6 +186,15 @@ CLOSURE_MODULES = frozenset({
 # `*.example.json` which is in fact a shipped instrument cannot sneak out of the
 # comparison on a naming accident -- and so that adding a seed is a decision.
 FACTORY_SEEDS = frozenset({
+    # The template DIRECTORY's own README, and it is a seed because the mapping is
+    # `TEMPLATE/README.md` -> `README.md`: a factory's root README is its OWN document
+    # describing its own factory, and it legitimately differs from this one. Measured
+    # 2026-09-25 while building the member-side gate: classed `shared`, it made EVERY
+    # member red falsely -- the repo's own README differs from the template's by design,
+    # and a member's would too. `BOOTSTRAP.md` never instructs a factory to copy it (its
+    # only mention is a leak-test link), which is what settles the class rather than the
+    # similarity of the filenames.
+    "TEMPLATE/README.md",
     "TEMPLATE/AGENTS.md.tmpl",
     "TEMPLATE/ONTOLOGY.md.tmpl",
     "TEMPLATE/SKILL.md.tmpl",

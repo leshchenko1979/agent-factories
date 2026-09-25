@@ -200,6 +200,10 @@ PAIRS = [
     # and lose the twin, and nothing would say so.
     ("tests/test_registry_attest.py", "TEMPLATE/tests/test_registry_attest.py"),
     ("tests/test_registry_render.py", "TEMPLATE/tests/test_registry_render.py"),
+    # Added with plan 2646d31a task 8 (2026-09-25). The member-side pin gate: a factory
+    # judges ITSELF against the pin IT vendored, so its verdict moves only when its own tree
+    # diverges from its own declaration. It ships, so the twin is held here.
+    ("tests/test_kit_pin.py", "TEMPLATE/tests/test_kit_pin.py"),
     ("tests/test_ledger_close_preflight.py", "TEMPLATE/tests/test_ledger_close_preflight.py"),
     # The telemetry-reader registry gate (#99). It classifies the tools the template
     # SHIPS, so its allow-list is structural and must travel byte-identically with the

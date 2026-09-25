@@ -1725,6 +1725,29 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_deliver.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_deliver.py"])
 
+    # 56. Member-side pin gate (plan 2646d31a step 8). The SELF-JUDGEMENT half of drift:
+    #     gate 52 measures what every member has ported (ours), while this one lets a factory
+    #     judge ITSELF against the pin IT vendored — so a member's verdict moves only when its
+    #     own tree diverges from its own declaration, never when we move. A gate against OUR
+    #     live manifest would make a member's audit a function of our working tree and our
+    #     backlog, which is the coupling the vendored pin exists to remove.
+    #     IT JUDGES THREE POPULATIONS AND PRINTS ALL THREE, because each is an exclusion a
+    #     reader must be able to see: ABSENT paths are the population filter (a factory ports
+    #     a SUBSET, so reddening on those would punish the behaviour the port rule asks for);
+    #     `factory`-class paths are excluded BY CLASS, since those are seeds the factory owns
+    #     and its copy legitimately differs; the rest are judged byte-for-byte.
+    #     BUILDING IT EXPOSED A DEFECT IN THE PREDICATE IT CALLS. `undeclared_divergence`
+    #     compared `factory`-class paths byte-for-byte while the class doc says such a file
+    #     "is never compared byte-for-byte, because the factory's copy legitimately differs" —
+    #     and `TEMPLATE/README.md` maps to `README.md`, so EVERY factory would have been
+    #     reported as diverging on its own README. Both were fixed in this change, and the
+    #     arm that keeps it from regressing asserts the fixture's differing README is green
+    #     BECAUSE it was excluded, not merely that a count is printed.
+    #     REQUIRED, not OPTIONAL: the file is byte-paired into TEMPLATE, so a manifest that
+    #     omitted it would let a factory drop the runner and keep the file (issue #107).
+    if (repo_root / "tests/test_kit_pin.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_pin.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

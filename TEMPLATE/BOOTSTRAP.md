@@ -557,6 +557,48 @@ file's form matches its registration.
 
 ---
 
+## Step 4f — Vendor the pin, so you can judge yourself
+
+Copy [`registry/kit.example.json`](registry/kit.example.json) to `registry/kit.json`, and
+port [`tools/kit_pin.py`](tools/kit_pin.py) with the gate
+[`tests/test_kit_pin.py`](tests/test_kit_pin.py).
+
+**The pin is the record of WHICH kit state you ported.** It is the manifest rendered for a
+factory to vendor, and the direction its verdict points is the whole reason it exists. A
+gate against the meta-factory's live manifest makes YOUR audit go red when THEY move — so
+your verdict becomes a function of someone else's working tree and someone else's backlog,
+and you cannot act on it. A gate against your own pin goes red only when your tree diverges
+from your own declaration, which is the only thing you can act on.
+
+**Move it only when you deliberately port a new state.** The pin is not a file to keep
+current; it is a statement of what you took. `python3 tools/kit_deliver.py --to .` (run by
+the meta-factory, or handed to you) writes the bytes and the pin in ONE run, which is what
+keeps the pair consistent — a state where the bytes moved and the pin did not reds your own
+gate for a reason you did not cause.
+
+**`tools/kit_pin.py` is the gate's closure, and the gate says so if it is absent.** It has
+no CLI of its own: it is classed `closure` in the pin, it is loaded by path by
+`tools/patrol_host_state.py`'s drift leg, and a factory that ports the gate without it gets
+a named failure rather than a traceback. Compare `tools/ledger.py`, which needs six modules.
+
+**Two populations the gate excludes, and both are printed.** ABSENT is not a verdict — you
+port a SUBSET of the kit, so a fresh factory is ~104 absent cells over the whole manifest,
+and a gate that reddened on those would punish exactly the behaviour this step asks for.
+`factory`-class paths are not judged either: those are seeds you own, and your copy
+legitimately differs. A green over an EMPTY judged population is refused as vacuous rather
+than reported, because it would read identically to a green over a clean one.
+
+**A deliberate fork is a declaration, not a source edit.** If you must keep your own bytes
+for a kit path — your own event set, your own actors, your own box's measurements — declare
+it in `registry/kit-exemptions.json` with a reason. The gate then reads it as declared, and
+a fork that is NOT declared stays red, which is the point.
+
+**Evidence:** `python3 tests/test_kit_pin.py` exits 0 and prints three populations — the
+paths judged, the `factory`-class paths excluded by class, and the paths you declared
+exempt. An absent pin is a stated SKIP naming the absence, never a clean read.
+
+---
+
 ## Step 5 — Wire the board
 
 File the first issues on `{{REPO}}`, using title prefixes that encode kind

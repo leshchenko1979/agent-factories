@@ -473,6 +473,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # It is byte-paired with a TEMPLATE twin, so the manifest grain is what keeps a factory
     # from dropping the runner and keeping the file.
     "test_insights_gate_recorded.py",
+    # Added with plan 2646d31a task 8 (2026-09-25). This is the MEMBER-side half of drift:
+    # `test_kit_manifest.py` measures what every member has ported (ours), while this one
+    # lets a factory judge ITSELF against the pin IT vendored — so a member's verdict moves
+    # only when its own tree diverges from its own declaration, never when we move.
+    # REQUIRED, and the deciding fact is the one that put its siblings here: the gate is
+    # byte-paired into TEMPLATE, so a manifest that omitted it would let a factory drop the
+    # runner and keep the file (issue #107, ruling n=639).
+    # Building it exposed a defect in the predicate it calls: `undeclared_divergence`
+    # compared `factory`-class paths byte-for-byte while the class doc says such a file "is
+    # never compared byte-for-byte, because the factory's copy legitimately differs". The
+    # consequence was not theoretical — `TEMPLATE/README.md` maps to `README.md`, so EVERY
+    # factory would have been reported as diverging on its own README. Both were fixed in the
+    # change that shipped this gate.
+    "test_kit_pin.py",
     "test_law_structure.py",
     "test_ledger.py",
     "test_ledger_close_preflight.py",
