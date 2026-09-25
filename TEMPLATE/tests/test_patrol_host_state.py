@@ -1012,7 +1012,13 @@ def _duty_row(name="factory-registry-attest", *, prompt=_RECEIPT_PROMPT,
     }
 
 def _receipt_row(subject="registry-attest-2026-09-25",
-                 detail="the round completed.", n=1) -> dict:
+                 detail="the round completed. duty=completed", n=1) -> dict:
+    """A receipt row. The `duty=` token is what MAKES it a receipt (#160).
+
+    The default carries it, because a row that declares nothing is not a receipt at all —
+    the leg's first version accepted any subject match, which is how a dispatch record
+    written before the round completed certified the round.
+    """
     return {"n": n, "ts": "2026-09-25T06:14:25Z", "event": "run", "actor": "delegate",
             "subject": subject, "detail": detail}
 
@@ -1046,14 +1052,146 @@ def test_the_duty_leg_passes_when_the_round_left_its_receipt() -> None:
     assert leg["coverage"]["duties_judged"][0]["receipts"] == 1
 
 def test_the_duty_leg_reports_a_FAILED_receipt_not_only_a_missing_one() -> None:
-    """A receipt that declares a non-success outcome is a FAILED duty, never a clean one."""
+    """A receipt that declares a non-success is a FAILED duty, never a clean one."""
     leg = _duty_leg(
         [_duty_row()],
-        [_receipt_row(detail="the round did not complete. outcome=failed")],
+        [_receipt_row(detail="the round did not complete. duty=failed")],
     )
     assert len(leg["problems"]) == 1, leg["problems"]
-    assert "FAILED" in leg["problems"][0], leg["problems"][0]
-    assert "outcome=failed" in leg["problems"][0], leg["problems"][0]
+    assert "did NOT complete" in leg["problems"][0], leg["problems"][0]
+    assert "duty=failed" in leg["problems"][0], leg["problems"][0]
+
+def test_a_SKIPPED_receipt_is_a_finding_too() -> None:
+    """`skipped` is in the domain and is NOT a completion — it must not pass silently.
+
+    The domain is completed|failed|skipped, so the leg owes an answer for each member. A
+    receipt declaring `skipped` says the duty did not run, which is exactly what this leg
+    exists to surface.
+    """
+    leg = _duty_leg([_duty_row()], [_receipt_row(detail="nothing ran today. duty=skipped")])
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "duty=skipped" in leg["problems"][0], leg["problems"][0]
+
+def test_a_duty_value_OUTSIDE_the_domain_is_an_ERROR_never_a_silent_pass() -> None:
+    """The `declared_outcome` precedent: an unrecognised value is REPORTED, never bucketed.
+
+    A reader that silently accepted `duty=done` would let a typo read as a completion, which
+    is the fabrication direction #53 clause 4 removed from the outcome reader.
+    """
+    leg = _duty_leg([_duty_row()], [_receipt_row(detail="the round finished. duty=done")])
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "outside the domain" in leg["problems"][0], leg["problems"][0]
+    assert "duty=done" in leg["problems"][0], leg["problems"][0]
+
+def test_a_row_that_DECLARES_NOTHING_is_NOT_a_receipt() -> None:
+    """THE false-clean fix (#160), and the probe the first version would have passed.
+
+    Measured instance: the leg accepted n=1003 — subject `registry-attest-2026-09-25`,
+    appended 06:08:53Z — as the round's receipt, while n=1003 is the DISPATCH record and the
+    completion landed later (n=1007, 06:14:25Z) under a different subject. A subject match
+    was enough, so the round reported 0 problems while it was incomplete.
+
+    The omission is the failure the mechanism cannot see: a row that declares nothing is not
+    a duty that owed nothing.
+    """
+    leg = _duty_leg(
+        [_duty_row()],
+        [_receipt_row(detail="Registry attestation — the round. NO REPLY OWED on this row.")],
+    )
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+    assert "declare no `duty=`" in leg["problems"][0], (
+        "the finding must say that a row matched and declared nothing, so the reader can "
+        f"tell this from an absent row: {leg['problems'][0]}"
+    )
+    assert leg["coverage"]["duties_judged"][0]["rows_matched"] == 1, leg["coverage"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 0, leg["coverage"]
+
+def test_a_PROSE_mention_of_the_duty_is_not_a_declaration() -> None:
+    """Positional read: a sentence that merely SAYS the round completed is not the field.
+
+    This is the n=405 clause 5 damage on a new field — the rows carrying a receipt discuss
+    completion at length in prose, so a whole-detail scan would read the discussion as the
+    declaration.
+    """
+    leg = _duty_leg(
+        [_duty_row()],
+        [_receipt_row(detail="the round completed and all six were answered. head=abc123")],
+    )
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+
+def test_an_HOUR_BEARING_subject_names_the_round() -> None:
+    """#159: the round is a DATE, so an hour-keyed receipt must still resolve.
+
+    `factory-triage-patrol` writes `patrol-verify-2026-09-25T06` — exact equality could never
+    match it, so a duty that DID complete reported MISSING.
+    """
+    leg = _duty_leg(
+        [_duty_row(name="factory-triage-patrol", prompt=_RECEIPT_PROMPT.replace(
+            "registry-attest", "patrol-verify"))],
+        [_receipt_row(subject="patrol-verify-2026-09-25T06",
+                      detail="the patrol ran. duty=completed")],
+    )
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 1, leg["coverage"]
+
+def test_a_DECORATED_AFTER_the_date_subject_names_the_round() -> None:
+    """#159: a decoration that FOLLOWS the date is reached by the ruled prefix."""
+    leg = _duty_leg(
+        [_duty_row()],
+        [_receipt_row(subject="registry-attest-2026-09-25-writeback",
+                      detail="the write-back round. duty=completed")],
+    )
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 1, leg["coverage"]
+
+def test_an_INFIX_decorated_subject_is_NOT_reached_by_the_ruled_prefix() -> None:
+    """THE BOUND, stated so the widening is not oversold (#159).
+
+    The ruled key is `subject.startswith(f"{stem}-{round_date}")`, so a decoration AFTER the
+    date is reached (`...-2026-09-25T06`, `...-2026-09-25-writeback`) while one BEFORE it is
+    not: `registry-attest-writeback-2026-09-25` does not start with
+    `registry-attest-2026-09-25`. Measured, all four shapes, at the ruled key:
+
+        registry-attest-2026-09-25            -> reached  (exact)
+        registry-attest-2026-09-25T06         -> reached  (hour, the #159 defect)
+        registry-attest-2026-09-25-writeback  -> reached  (word suffix)
+        registry-attest-writeback-2026-09-25  -> NOT      (infix decoration)
+
+    The last is the live subject of n=1007 — the instance the coupling rationale cites — so
+    the ruled widening does not reach it. This probe PINS that bound rather than widening
+    past the ruling on this lane's own reading: the key is a ruled shape, and the
+    measurement was reported to HQ instead. It is here so a future reader cannot mistake the
+    prefix for a general "the subject mentions the round" rule.
+    """
+    leg = _duty_leg(
+        [_duty_row()],
+        [_receipt_row(subject="registry-attest-writeback-2026-09-25",
+                      detail="the write-back round. duty=completed")],
+    )
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+
+def test_the_PREFIX_IS_BOUNDARY_CHECKED_so_a_longer_date_cannot_match() -> None:
+    """#159's guard: `...-2026-09-25` must NOT match `...-2026-09-250`.
+
+    A bare `startswith` would read a DIFFERENT date's subject as this round's — the widening
+    would trade a false MISSING for a false CLEAN, which is the defect it is fixing.
+    """
+    leg = _duty_leg(
+        [_duty_row()],
+        [_receipt_row(subject="registry-attest-2026-09-250",
+                      detail="some other round. duty=completed")],
+    )
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+
+def test_the_EXACT_match_case_still_resolves() -> None:
+    """The widening is strictly more permissive — the original shape must not regress."""
+    leg = _duty_leg([_duty_row()], [_receipt_row()])
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 1, leg["coverage"]
 
 def test_a_row_declaring_no_receipt_is_NOT_JUDGED_and_is_COUNTED_by_name() -> None:
     """P29: a clean verdict over a population that declared nothing must never be the same

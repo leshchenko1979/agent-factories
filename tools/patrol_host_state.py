@@ -759,16 +759,36 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
 # would re-implement a scheduler and would be wrong for every form this parser does not
 # know; reading the row's own record cannot disagree with the row.
 #
+# **THE RECEIPT MUST DECLARE ITS COMPLETION — a subject match is not a receipt.** The row
+# the duty's lane appends carries `duty=completed|failed|skipped` in its canonical trailer,
+# read through the SHARED positional predicate (`field_predicate.declared_duty`), never a
+# private scan. This is the leg's second correction and it closes a measured false clean:
+# the first version accepted ANY ledger row whose subject matched the round, so
+# `registry-attest-2026-09-25` was certified by n=1003 — the DISPATCH record, appended
+# 06:08:53Z, before the round completed at ~06:14Z — while the real completion row (n=1007)
+# sits under a different subject. Requiring the declaration rejects a pre-completion row
+# AND makes silence unable to certify, which is the same property section 11 states for the
+# declaration itself: the omission is the failure the mechanism cannot see.
+#
+# **THE KEY IS `duty`, NOT `outcome`, and the distinction is a property of the metric.** A
+# run row declaring `outcome=` ENTERS `first_pass_yield_population` (`tools/audit.py`), and
+# a duty receipt is SELECTION-BIASED — it is written by a lane that completed a duty — so
+# receipts under `outcome` would add near-certain successes to the yield's denominator and
+# make the ratio structurally optimistic. One number would then answer two questions, which
+# is the #143 class. The yield and its published population are untouched by this leg.
+#
 # **NON-VACUITY RIDES A PROBE, NEVER A LOUD-FAIL-ON-ZERO.** A box whose duty round
 # completed cleanly has an empty problem list, so an empty read here is a normal read and
 # is PRINTED as one. The probe that drives a fired round with no receipt is what shows the
 # leg can bite (#112's shape).
 RECEIPT_DECL_RE = re.compile(r"^receipt_subject:\s*(\S+)\s*$", re.MULTILINE)
 FRAGMENT_STORE = REPO / "registry" / "factories"
-# The outcome values that mean the duty did NOT complete. Read through the SHARED
-# positional reader rather than a private scan: `outcome` is one field with one predicate
-# (SKILL.md section 11), and a regex here would drift from the ledger's own reading.
-DUTY_FAILED_OUTCOMES = ("failed", "abandoned")
+# The `duty` values that mean the round did NOT complete. The domain itself is DECLARED
+# beside the shared reader (`tools/field_predicate.py::DUTY_DOMAIN`) and read from there,
+# never retyped: one field, one predicate (SKILL.md section 11). This tuple is the SUBSET
+# that is a finding rather than a completion, and it is the leg's question, not the
+# writer's vocabulary -- which is why it lives here and the domain lives there.
+DUTY_INCOMPLETE_VALUES = ("failed", "skipped")
 
 def declared_receipt_stem(prompt: str) -> str | None:
     """The receipt stem this row declares, or None — the line `receipt_subject: <stem>`.
@@ -779,6 +799,28 @@ def declared_receipt_stem(prompt: str) -> str | None:
     """
     found = RECEIPT_DECL_RE.search(prompt or "")
     return found.group(1) if found else None
+
+def receipt_subject_matches(subject: str, stem: str, round_date: str) -> bool:
+    """True when `subject` names this round — a BOUNDARY-CHECKED PREFIX, not equality.
+
+    Equality was the leg's first key, and it could not express the shapes it governs: the
+    round is a UTC DATE (`receipt_round`), while a duty may write an hour-bearing subject
+    (`patrol-verify-2026-09-25T06`) or a decorated one (`registry-attest-writeback-
+    2026-09-25`), so four of six pacemakers could not declare at all — and declaring where
+    the key cannot match is worse than silence, because it produces a false MISSING on
+    every round (#159).
+
+    THE BOUNDARY GUARD is what keeps the widening safe. A bare `startswith` would let
+    `...-2026-09-25` match `...-2026-09-250`, a DIFFERENT date whose subject merely extends
+    the digits of this one — so the character after the prefix must not be a digit. Any
+    other continuation is a decoration of this round (`T06`, `-writeback`, or nothing at
+    all), which is exactly what the prefix is for.
+    """
+    prefix = f"{stem}-{round_date}"
+    if not str(subject).startswith(prefix):
+        return False
+    rest = str(subject)[len(prefix):]
+    return not rest[:1].isdigit()
 
 def receipt_round(last_run_at: str) -> str | None:
     """The round date a fire instant belongs to — its UTC date, `YYYY-MM-DD`.
@@ -854,27 +896,46 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                 f"instant (last_run_at={fired!r}), so no round can be named — NOT JUDGED"
             )
             continue
-        subject = f"{stem}-{round_date}"
-        receipts = [r for r in ledger_rows if str(r.get("subject") or "") == subject]
+        matched = [r for r in ledger_rows
+                   if receipt_subject_matches(str(r.get("subject") or ""), stem, round_date)]
+        # A row that declares NOTHING is not a receipt (#160). This is the false-clean fix:
+        # the leg's first version accepted any subject match, so a DISPATCH record written
+        # before the round completed certified it. The declaration is what makes a row a
+        # receipt, so the filter is the predicate and not a formatting preference.
+        receipts = [r for r in matched
+                    if predicate.declared_duty(str(r.get("detail") or ""))]
         judged.append({
             "name": name, "id": job_id, "stem": stem, "round": round_date,
-            "fired": fired, "receipts": len(receipts),
+            "fired": fired, "rows_matched": len(matched), "receipts": len(receipts),
         })
         if not receipts:
+            unmatched_note = (
+                f" {len(matched)} row(s) match the round's subject and declare no "
+                f"`{predicate.DUTY_KEY}=`, so none of them is a receipt."
+                if matched else ""
+            )
             problems.append(
                 f"{name} (cron id {job_id}): the round {round_date} has NO duty receipt — "
-                f"no ledger run row carries the subject {subject!r}. A cron run row records "
-                f"only that the TRIGGER fired, so a green run here is a MISSING duty and "
-                f"not a clean one"
+                f"no ledger run row for {stem}-{round_date}* DECLARES a completion "
+                f"(`{predicate.DUTY_KEY}=`).{unmatched_note} A cron run row records only that "
+                f"the TRIGGER fired, so a green run here is a MISSING duty and not a clean one"
             )
             continue
         for receipt in receipts:
             detail = str(receipt.get("detail") or "")
-            for value in DUTY_FAILED_OUTCOMES:
-                if predicate.declares_token(detail, "outcome", value):
+            n = receipt.get("n")
+            for value in predicate.declared_duty(detail):
+                if value not in predicate.DUTY_DOMAIN:
                     problems.append(
-                        f"{name} (cron id {job_id}): the round {round_date} FAILED — "
-                        f"receipt row n={receipt.get('n')} declares outcome={value}"
+                        f"{name} (cron id {job_id}): the round {round_date} — receipt row "
+                        f"n={n} declares {predicate.DUTY_KEY}={value}, outside the domain "
+                        f"{'/'.join(predicate.DUTY_DOMAIN)}. An unrecognised value is an "
+                        f"ERROR, never a silent pass"
+                    )
+                elif value in DUTY_INCOMPLETE_VALUES:
+                    problems.append(
+                        f"{name} (cron id {job_id}): the round {round_date} did NOT complete — "
+                        f"receipt row n={n} declares {predicate.DUTY_KEY}={value}"
                     )
 
     state, state_reason = attestation_state(store)
@@ -1083,12 +1144,16 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['jobs_unattributed']} attributed to nobody"
             )
             for name in cov.get("undeclared_jobs", []):
-                lines.append(f"    owes no receipt: {name or '(unnamed row)'}")
+                lines.append(
+                    f"    NOT JUDGED — declares no `receipt_subject:`, so this leg cannot "
+                    f"tell whether it owes one: {name or '(unnamed row)'}"
+                )
             for duty in cov.get("duties_judged", []):
                 lines.append(
                     f"    {duty['name']} (cron id {duty['id']}): round {duty['round']} "
                     f"(fired {duty['fired'] or 'unstated'}) — "
-                    f"{duty['receipts']} receipt row(s)"
+                    f"{duty['rows_matched']} row(s) match the round's subject, "
+                    f"{duty['receipts']} DECLARE a completion"
                 )
             lines.append(
                 "  attested_at (RESULTING STATE, never the receipt): "

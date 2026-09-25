@@ -449,3 +449,50 @@ def declared_verify_rows(detail: str) -> list[str]:
     strings this returns.
     """
     return _declared_values(detail, VERIFY_ROWS_KEY)
+
+# The duty receipt's `duty` field -- whether the round a thin trigger woke COMPLETED (#160,
+# ruled at ledger `n=1041`). Section 11 names the ledger's SECOND object: a `run` row
+# authored by the WOKEN LANE on behalf of the DUTY, not of the trigger. A trigger's own run
+# row records that the trigger FIRED, so a green cron run is never evidence that the duty
+# ran, and this field is what makes the difference readable.
+#
+# THE DECLARATION IS REQUIRED, and that is the whole reason for a distinct key rather than a
+# convention. The leg's first version accepted ANY ledger row whose subject matched the
+# round, so a DISPATCH record written before the round completed certified it and the leg
+# reported a false clean while the round was still incomplete -- measured live on
+# `registry-attest-2026-09-25`, where n=1003 (the dispatch, 06:08:53Z) stood in for the
+# completion that landed later as n=1007 (06:14:25Z) under a different subject. A row that
+# declares nothing is therefore NOT a receipt: the omission is the failure the mechanism
+# cannot see, which is the sentence section 11 states for this leg.
+#
+# `duty` IS NOT `outcome`, and the two are not interchangeable. `outcome` is a WORK run's
+# field: a run row declaring one ENTERS `first_pass_yield_population` (`tools/audit.py`),
+# and a duty receipt is SELECTION-BIASED -- it is written by a lane that completed a duty --
+# so putting receipts under `outcome` would add near-certain successes to the yield's
+# denominator and make the ratio structurally optimistic (a real 1-in-25 lane failure would
+# dilute from 4.0% to 1.8%). One number answering two questions is the #143 class, so the
+# second object carries its own field and the yield is untouched.
+DUTY_KEY = "duty"
+DUTY_DOMAIN: tuple[str, ...] = ("completed", "failed", "skipped")
+
+def declared_duty(detail: str) -> list[str]:
+    """Every `duty` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE read of this field, imported by the patrol's duty-receipt leg -- a private
+    `token.split("=")` there would be the class ruled at `n=405` PART 5: one field, one
+    predicate. Section 11's law binds a NEW field exactly as it binds an old one, which is
+    why the key is declared here and nowhere else.
+
+    The run is POSITIONAL (`trailer_tokens`), matching `declared_rework`,
+    `declared_telemetry_provenance` and `declared_verify_rows`: a value quoted mid-sentence
+    is prose and never a declaration. That is load-bearing for THIS field, because the rows
+    carrying it discuss completion in prose at length -- a whole-detail scan would read the
+    discussion as the declaration, which is precisely the n=405 clause 5 damage.
+
+    A LIST, for `declared_rework`'s reason: the caller must be able to REPORT two
+    declarations rather than read the first silently, because two tokens for one field have
+    no canonical reading (SKILL.md section 8). Classification of a value -- whether it is
+    one the writer may use -- is NOT here: the domain is `DUTY_DOMAIN` beside the constant,
+    exactly as `rework_bucket` sits beside `OUTCOME_DOMAIN`.
+    """
+    return _declared_values(detail, DUTY_KEY)
