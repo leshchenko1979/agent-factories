@@ -24,8 +24,30 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
-LEDGER_PATH = Path(os.environ.get("OC_LEDGER_PATH", REPO / "evidence" / "ledger.jsonl"))
+LEDGER_REL = Path("evidence") / "ledger.jsonl"
+LEDGER_PATH = Path(os.environ.get("OC_LEDGER_PATH", REPO / LEDGER_REL))
 ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", REPO / "tools" / "actors.txt"))
+
+
+class SkipGate(Exception):
+    """This tree ships no `evidence/` BY DESIGN — a STATED skip, never a silent pass.
+
+    The ledger is BOOTSTRAP-created (`TEMPLATE/BOOTSTRAP.md` step 4b), so the tree the kit
+    SHIPS has no `evidence/` at all, and a gate that reds there is red on the very tree it
+    ships to (#78, #76's class). `n=515` clause 4(a) already ruled the contract: *"the
+    reader must tolerate an absent or empty ledger by SKIPPING WITH A STATED REASON, never
+    raising"*. `tests/test_close_row_revision.py` implements it for this class, and this
+    gate was the outlier — it reported the absence as a VIOLATION, so `TEMPLATE/` carried
+    a RED that no bootstrap step can clear.
+
+    THE GUARD THAT MAKES IT SAFE, and the reason it is raised from the LOADER rather than
+    returned early: the skip is for a tree that ships no `evidence/` BY DESIGN. A live
+    tree that HAS the directory and has LOST its ledger is a real problem and still REDs —
+    otherwise a missing live ledger hides behind "nothing to judge", which is the vacuity
+    this clause exists to prevent. Raising from the loader also keeps the checks in front
+    of it: a defect the audit would have found is never suppressed by a skip.
+    """
+
 
 # The ONE field predicate, shared with the other two call sites of this class
 # (`tests/test_close_row_revision.py`, `tools/ledger.py`). Imported by module name, not
@@ -147,8 +169,24 @@ def validate_domain_invariants(row: dict[str, Any], line_num: int) -> list[str]:
 
 
 def validate_ledger_file(ledger_path: Path) -> tuple[int, list[str]]:
-    """Audit the complete ledger file."""
-    if not ledger_path.exists():
+    """Audit the complete ledger file, or `SkipGate` when the tree ships none BY DESIGN.
+
+    The absence has two shapes and they are NOT the same reading:
+      * the `evidence/` directory ITSELF is absent — the kit's own tree, where the ledger
+        is bootstrap-created and there is legitimately nothing to audit yet -> SKIP, with
+        the reason stated;
+      * the directory is PRESENT and the ledger is gone — a live factory that lost it,
+        which is a real problem -> a violation, exactly as before.
+
+    Collapsing the two is the vacuity this split exists to prevent: a live tree that has
+    lost its ledger must never read as "nothing to judge".
+    """
+    if not ledger_path.is_file():
+        if not ledger_path.parent.is_dir():
+            raise SkipGate(
+                f"no {LEDGER_REL} in this tree — the ledger is BOOTSTRAP-created, so there "
+                f"is nothing to audit yet (BOOTSTRAP.md step 4b creates it)"
+            )
         return 0, [f"ledger file not found: {ledger_path}"]
 
     known_actors = get_known_actors()
@@ -174,6 +212,22 @@ def validate_ledger_file(ledger_path: Path) -> tuple[int, list[str]]:
         errors.extend(validate_domain_invariants(row, idx))
 
     return len(lines), errors
+
+
+def evaluate(repo: Path) -> tuple[str, str, list[str]]:
+    """`(status, reason, problems)` over `repo` — the core, so probes can drive it.
+
+    `status` is `"pass"`, `"skip"` or `"fail"`. A real problem always outranks a skip: the
+    skip is raised from the LOADER, so it can only fire where there is no ledger to judge,
+    and never suppresses a defect the audit would have found.
+    """
+    try:
+        row_count, errors = validate_ledger_file(repo / LEDGER_REL)
+    except SkipGate as exc:
+        return "skip", str(exc), []
+    if errors:
+        return "fail", "", errors
+    return "pass", f"{row_count} row(s) audited", []
 
 
 def run_self_probes() -> bool:
@@ -274,17 +328,71 @@ def run_self_probes() -> bool:
          "subject": "#88", "detail": "Closed. gate=all-pass outcome=accepted tokens_out="},
     )
 
+    # ── The absence contract (n=515 clause 4(a); #83's class) ──────────────────────────
+    # A gate that RAISED on an absent ledger was RED on the very tree it ships to, because
+    # the ledger is BOOTSTRAP-created and `TEMPLATE/` carries no `evidence/` at all. BOTH
+    # directions are pinned below: a skip that swallowed a REAL absence would be the vacuity
+    # this clause exists to prevent, so the guard is probed as hard as the skip.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # (i) A tree that ships no `evidence/` BY DESIGN -> SKIP, with the reason STATED.
+        #     THIS IS ALSO THE MUTATION CONTROL: revert the loader's by-design branch to
+        #     `return 0, [f"ledger file not found: …"]` and this probe REDs, because the
+        #     status becomes "fail" where a skip is owed.
+        bare = Path(tmp) / "ships-no-evidence"
+        bare.mkdir()
+        status, reason, problems = evaluate(bare)
+        if status != "skip" or problems:
+            print(f"  FAIL self-probe 'a tree shipping no evidence/ skips': "
+                  f"got status={status!r} problems={problems}")
+            probes_passed = False
+        elif not (str(LEDGER_REL) in reason and "BOOTSTRAP" in reason):
+            print(f"  FAIL self-probe 'the skip STATES its reason': reason={reason!r} does "
+                  f"not name {str(LEDGER_REL)!r} and BOOTSTRAP")
+            probes_passed = False
+
+        # (i-b) The MECHANISM, not merely the status: the loader must RAISE. A control that
+        #       only read `evaluate`'s status could pass under a loader that returned a
+        #       violation and an evaluator that mapped it to "skip" — this pins the loader.
+        try:
+            validate_ledger_file(bare / LEDGER_REL)
+        except SkipGate:
+            pass
+        else:
+            print("  FAIL self-probe 'the loader RAISES SkipGate for a by-design tree': it "
+                  "returned instead, so the skip is not raised from the loader")
+            probes_passed = False
+
+        # (ii) THE VACUITY GUARD. A live tree that HAS `evidence/` and lost its ledger is a
+        #      real problem: it must still RED, never read as "nothing to judge".
+        lost = Path(tmp) / "lost-its-ledger"
+        (lost / "evidence").mkdir(parents=True)
+        status, reason, problems = evaluate(lost)
+        if status != "fail" or not problems:
+            print(f"  FAIL self-probe 'a live tree that LOST its ledger still reds': "
+                  f"got status={status!r} problems={problems}")
+            probes_passed = False
+
     return probes_passed
 
 
 def main() -> int:
-    # 1. Run internal self-probes
+    # 1. Run internal self-probes — ALWAYS, and BEFORE the ledger read. The skip below is
+    #    raised from the LOADER, so it can never stand in front of a defect these catch.
     if not run_self_probes():
         print("ledger schema gate self-probes FAILED", file=sys.stderr)
         return 1
 
-    # 2. Audit live ledger
-    row_count, errors = validate_ledger_file(LEDGER_PATH)
+    # 2. Audit live ledger. An absent `evidence/` is a STATED SKIP, never a violation: the
+    #    ledger is bootstrap-created, and the tree the kit SHIPS has none (#78's class).
+    #    A tree that HAS the directory and lost the ledger still reds — see SkipGate.
+    try:
+        row_count, errors = validate_ledger_file(LEDGER_PATH)
+    except SkipGate as exc:
+        print(f"ledger schema gate SKIPPED: {exc}")
+        return 0
+
     if errors:
         print(f"ledger schema violations ({len(errors)} problem(s) in {LEDGER_PATH}):")
         for err in errors:
