@@ -805,10 +805,15 @@ def receipt_subject_matches(subject: str, stem: str, round_date: str) -> bool:
 
     Equality was the leg's first key, and it could not express the shapes it governs: the
     round is a UTC DATE (`receipt_round`), while a duty may write an hour-bearing subject
-    (`patrol-verify-2026-09-25T06`) or a decorated one (`registry-attest-writeback-
-    2026-09-25`), so four of six pacemakers could not declare at all — and declaring where
-    the key cannot match is worse than silence, because it produces a false MISSING on
-    every round (#159).
+    (`patrol-verify-2026-09-25T06`) or a decorated one
+    (`registry-attest-2026-09-25-writeback`), so four of six pacemakers could not declare
+    at all — and declaring where the key cannot match is worse than silence, because it
+    produces a false MISSING on every round (#159).
+
+    WHAT IT DOES NOT REACH, and the law states it in terms (SKILL.md v0.1.22): a subject
+    that puts words BETWEEN the stem and the round does not name the round and is NOT a
+    receipt, so the leg reads MISSING — loud, and true. A false MISSING costs one look; a
+    false CLEAN is silent, which is the failure this leg exists to catch.
 
     THE BOUNDARY GUARD is what keeps the widening safe. A bare `startswith` would let
     `...-2026-09-25` match `...-2026-09-250`, a DIFFERENT date whose subject merely extends
