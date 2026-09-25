@@ -1,0 +1,82 @@
+{
+  "_note": "THIS IS OUR RECORD OF WHAT EACH MEMBER DECLARED, not a surface a member writes. A kit-drift FIGURE alone cannot be acted on: '5 DIFF' does not say whether the member considered the file, declined it, or never saw it — and a member that declared a fork and one that silently diverged produce the same figure. Each entry carries the source that recorded it and the instant, so a reader can check it rather than trust it. AUTHORITY: once a member vendors its own pin (registry/kit.json, from the vehicle TEMPLATE/registry/kit.example.json), ITS registry/kit-exemptions.json becomes authoritative for that member and this record defers to it — see tools/kit_pin.py, the one comparison predicate.",
+  "as_of": "2026-09-25T23:30:00Z",
+  "source_of_round": "the 2026-09-25 kit-drift dispatch round: five member HQs each re-measured the same ten bootstrap-named files and returned per-file dispositions, ledger n=1093 (tool-full-set-census) and n=1086 (ledger-adoption-census) carry the measured halves",
+  "members": {
+    "ai-antispam": {
+      "declared_at": "2026-09-25T12:20:00Z",
+      "figure_at_declaration": "same=0 DIFF=5 ABSENT=5 of 10",
+      "forks_declared": [
+        "tools/ledger.py", "tools/audit.py", "tests/test_ledger.py",
+        "tests/test_ontology.py", "tests/test_rework.py"
+      ],
+      "decisions": [
+        "the five DIFF are deliberate forks, not drift: ledger.py lacks the write-path refusal (#144) and audit.py carries the #38 yield fix the template still lacks (#143)",
+        "no deliberate absences: all five ABSENT are real gaps, tracked on its own #40",
+        "port order defended: field_predicate first (fixes a live false-RED class — its audit parses detail.split() naively at :102 and :145), then rework_table (it carries TWO inline parsers of evidence/rework.md), then the two hooks, then gate_budget last (needs a per-gate measurement pass it has not taken)"
+      ]
+    },
+    "infra-factory": {
+      "declared_at": "2026-09-25T12:20:00Z",
+      "figure_at_declaration": "same=0 DIFF=5 ABSENT=5 of 10",
+      "forks_declared": [
+        "tools/ledger.py", "tools/audit.py", "tests/test_ledger.py",
+        "tests/test_ontology.py", "tests/test_rework.py"
+      ],
+      "decisions": [
+        "the five DIFF are its own gates for its own code: DO NOT PORT — replacing working gates with ones bound to files it does not carry trades a green gate for an unknown one",
+        "one decision the dispatch expected is NOT NEEDED: EVENTS is IDENTICAL (both eight events), so there is nothing to decide there",
+        "copying the template ledger.py over its own would INTRODUCE imports it lacks (its copy is 311 lines, stdlib-only) and break verify (its EXEMPTIONS is a 4-tuple where the template's is a 5-tuple)",
+        "hooks/pre-commit NOT APPLICABLE: it is a template-sync concern and this factory is not template-synced",
+        "field_predicate and rework_table NOT NEEDED standalone: nothing in its tree imports either",
+        "ADOPT hooks/commit-msg AND its predicate (two files): 12 of its last 40 subjects cite a row number, and it has a first-hand instance of the exact failure the rule names (committed n=353 when the row was 354)",
+        "CANDIDATE gate_budget: needs registry/gates.json authored from measurements it has not taken"
+      ]
+    },
+    "inferhub-watch": {
+      "declared_at": "2026-09-25T12:2xZ",
+      "figure_at_declaration": "same=1 DIFF=5 ABSENT=4 of 10",
+      "forks_declared": [
+        "tools/ledger.py", "tools/audit.py", "tests/test_ledger.py",
+        "tests/test_ontology.py", "tests/test_rework.py"
+      ],
+      "decisions": [
+        "the five DIFF are deliberate: its EVENTS carries `ack`, a member-added event the template does not ship — a faithful copy drops it and takes 5 of 7 ack probes red against 8 live rows (the defect it filed upstream as agent-factories #137)",
+        "BLOCKER 1: commit-msg cannot be ported as-is — its predicate would refuse 114 of its last 200 subjects because this repo is append-then-cite (the number is a RECEIPT read from the tool's own output, not a prediction)",
+        "BLOCKER 2: pre-commit was unportable AS SHIPPED — its PAIRS dependency sat in neither TEMPLATE/tests nor the manifest, so a port got a hook that warned and refused nothing (fixed at db9b658; both legs now skip silently where TEMPLATE/ is absent)",
+        "BLOCKER 3: gate_budget needs registry/gates.json and this tree has no registry/ directory",
+        "deliberate absences declared: tools/hygiene.py (local #105), tests/test_single_writer.py (local #106), tests/test_template_sync.py (meta-factory-only), docs/ledger-commit-exemptions.json",
+        "CAN TAKE tests/test_ledger.py, whose closure includes tests/hook_installation.py"
+      ]
+    },
+    "miidas": {
+      "declared_at": "2026-09-25T12:3xZ",
+      "figure_at_declaration": "same=0 DIFF=5 ABSENT=5 of 10",
+      "forks_declared": [
+        "tools/ledger.py", "tools/audit.py", "tests/test_ledger.py",
+        "tests/test_ontology.py", "tests/test_rework.py"
+      ],
+      "decisions": [
+        "genuinely deliberate forks: its ledger imports tools/subject_law.py (its #28, repo-qualified subjects) and carries a row-scoped EXEMPTIONS shape its #36 landed — a wholesale copy drops both",
+        "NOT deliberate, and stated as such: the template grew a TELEMETRY + PREDICATE layer it never adopted (cost_usd 0, tokens_in 0, tokens_out 0 against turns 32 on its last 100 rows) — a feature gap, not drift",
+        "commit-msg is its STRONGEST port, with one collision: the row-number refusal would refuse 10 of its last 60 subjects, so it wants the trailer alone — adopt the trailer, keep append-then-cite, exempt rather than rewrite",
+        "gate_budget PARTIAL: it closed its #42 implementing the verdict half (per-gate budget, three-way PASS/FAIL/UNKNOWN, margin x measured); the MANIFEST half is absent",
+        "rework_table: it already has tools/rework_entries.py arrived at independently — RECONCILE, not copy (its column_index is hardcoded where the template derives from the header)",
+        "pre-commit: not assessed either way, and it does not claim otherwise"
+      ]
+    },
+    "opencrabs-dev": {
+      "declared_at": "2026-09-25T12:2xZ",
+      "figure_at_declaration": "10 ABSENT of 10 in /root/opencrabs and in the skill repo tools/",
+      "forks_declared": [],
+      "decisions": [
+        "all ten recorded as DELIBERATE ABSENCE, not drift: our tools/ is a different OBJECT (the oc-* fleet, 51 entries versioned in the skill repo, shared by every lane — there is no per-factory toolkit by design)",
+        "its ledger is a different OBJECT too: workers-ledger.json is a skill-version ACK dict with no `n` ordinal, not an event ledger",
+        "the repo SPLIT is deliberate (v0.4.60): tools+law versioned in the skill repo, runtime state in the state repo",
+        "it asked that the measured tree be NAMED in any report, because measuring /root/opencrabs will always return 10-of-10 ABSENT — that tree has no tools/ at all, so the reading is structural and carries no information",
+        "on the substrate-independent half it measured rather than agreed: 8 of its last 400 subjects cite n=<digits> and every cited row PREDATES its commit (no phantoms), but the invariant is UNENFORCED — queued to its Toolsmith as a tools/** change",
+        "the Session-Id trailer is already its law and working: fork repo 197/200, skill repo 147/200"
+      ]
+    }
+  }
+}

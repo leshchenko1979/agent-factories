@@ -1748,6 +1748,14 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_pin.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_pin.py"])
 
+    # `test_kit_census.py` (plan 2646d31a step 9) publishes the fleet census that a plan is
+    # corrected against, so it is registered HERE rather than left to a by-hand run: a gate
+    # nobody invokes has twelve arms that never execute. OPTIONAL, and the deciding fact is
+    # its population -- it sweeps the FIVE MEMBER repositories, which a member does not have.
+    # A member running it would be census-taking a fleet it is not part of.
+    if (repo_root / "tests/test_kit_census.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_census.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

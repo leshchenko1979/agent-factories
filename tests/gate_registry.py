@@ -593,6 +593,15 @@ OPTIONAL_GATES: dict[str, str] = {
         "is not supposed to carry. Same grain as test_kit_manifest.py, and declared here "
         "rather than left to a by-hand run so its twelve arms actually execute."
     ),
+    "test_kit_census.py": (
+        "meta-factory-only (plan 2646d31a step 9) — its POPULATION is the five MEMBER "
+        "repositories, read through `registry/fleet.json`. A member does not sweep the "
+        "fleet, so it has neither the tool (`tools/kit_census.py`, repo-side and unshipped) "
+        "nor the population; it is this factory's instrument for publishing what every "
+        "member has adopted, and the artifact is what a plan is corrected against. Its "
+        "verdict is a REFUSAL when the leg reached no member, so an absent fleet fails "
+        "loudly rather than publishing an empty census that reads as a clean one."
+    ),
 }
 
 REQUIRED_PREDICATE = (
