@@ -362,22 +362,35 @@ than asserted; `test_ledger.py` is the one that bites a live lane's own row.
 Create `evidence/rework.md` and copy the gate that judges it, then make the log
 the **input to the improvement loop** rather than a diary.
 
-**The gate needs SEVEN paths, and copying one of them is not enough.** The gate
-imports two shared modules, and one of those imports two more, so a factory that
-copies `tests/test_rework.py` alone gets `ModuleNotFoundError: No module named
-'audit'` — raised at import, *before* the gate can report anything, so the error
-names no remedy. Five of the seven paths ship with this template and two are
-created here:
+**The gate needs EIGHT paths, and copying one of them is not enough.** The gate
+imports two shared modules, one of those imports two more, and `tools/audit.py`
+imports a third — so a factory that copies `tests/test_rework.py` alone gets
+`ModuleNotFoundError: No module named 'audit'` — raised at import, *before* the
+gate can report anything, so the error names no remedy. Six of the eight paths
+ship with this template and two are created here. The **class** column is the
+machine-readable answer to "is this file mine to change?": `shared` and `closure`
+ship byte-identical from here, `factory` means the file is yours and a copy of
+someone else's is wrong for it.
 
-| Path | Where it comes from |
-|---|---|
-| `tests/test_rework.py` | **ships** — the gate itself |
-| `tests/rework_table.py` | **ships** — the shared entries-table parser, imported by the gate and by `tests/gate_registry.py`, so the table has ONE parser rather than two that drift |
-| `tools/audit.py` | **ships** — the coverage predicate and the subject vocabulary are imported from it, never re-typed, so one number cannot have two implementations |
-| `tools/field_predicate.py` | **ships** — imported by `tools/audit.py` |
-| `tools/gate_budget.py` | **ships** — imported by `tools/audit.py` |
-| `evidence/rework.md` | **created here** — the log itself |
-| `evidence/ledger.jsonl` | **created in Step 4b** — the denominator the resolution leg reads |
+| Path | Class | Where it comes from |
+|---|---|---|
+| `tests/test_rework.py` | `shared` | **ships** — the gate itself |
+| `tests/rework_table.py` | `closure` | **ships** — the shared entries-table parser, imported by the gate and by `tests/gate_registry.py`, so the table has ONE parser rather than two that drift |
+| `tools/audit.py` | `shared` | **ships** — the coverage predicate and the subject vocabulary are imported from it, never re-typed, so one number cannot have two implementations |
+| `tools/field_predicate.py` | `closure` | **ships** — imported by `tools/audit.py` |
+| `tools/gate_budget.py` | `closure` | **ships** — imported by `tools/audit.py` |
+| `tools/kit_identity.py` | `closure` | **ships** — imported by `tools/audit.py`; it is the one place a shipped tool's version and kit digest are computed, so ten executables do not each hand-roll the lookup |
+| `evidence/rework.md` | `factory` | **created here** — the log itself |
+| `evidence/ledger.jsonl` | `factory` | **created in Step 4b** — the denominator the resolution leg reads |
+
+**This list is a snapshot, and it has already moved once.** It said seven paths
+until 2026-09-25, when `tools/kit_identity.py` entered `tools/audit.py`'s imports
+and the count became eight — a doc step naming a closure goes stale the moment
+anything in it changes, and nothing in the tree tells the reader it is stale. So
+do not take this table as the definition. The definition is
+`registry/kit.json`'s `classes` map, and the closure is derivable from the import
+graph. What this table buys you is the *reason* each path matters, which no
+manifest carries.
 
 The log answers the two Stability measures the rubric asks for — change fail
 rate and rework rate — and neither can be computed from memory. The log is the
