@@ -76,7 +76,6 @@ import re
 import sqlite3
 import subprocess
 from pathlib import Path
-from kit_identity import VersionAction
 
 REPO = Path(__file__).resolve().parent.parent
 LEDGER = REPO / "evidence" / "ledger.jsonl"
@@ -1498,8 +1497,6 @@ def main(
     could only run against the live box would be measuring whatever those trees happen to
     hold rather than the leg's behaviour."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
 

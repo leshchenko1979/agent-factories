@@ -41,6 +41,7 @@ complete while it cannot run.
 
 Run:  python3 tools/kit_manifest.py            # regenerate registry/kit.json
       python3 tools/kit_manifest.py --check    # exit 1 naming every drifted file
+      python3 tools/kit_manifest.py --identity tools/ledger.py   # which copy is this?
 Exit: 0 in agreement (or after a successful regenerate); 1 drift, each file named.
 """
 
@@ -49,6 +50,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import pathlib
 import sys
 from pathlib import Path
 
@@ -107,9 +109,6 @@ CLOSURE_MODULES = frozenset({
     # tools/ -- imported by the executables, never invoked directly
     "TEMPLATE/tools/field_predicate.py",     # imported_by 10 shipped files
     "TEMPLATE/tools/gate_budget.py",         # imported by tools/audit.py
-    "TEMPLATE/tools/kit_identity.py",        # imported by all 10 executables, so the
-                                             # version predicate has ONE implementation
-                                             # rather than ten that drift
     "TEMPLATE/tools/ledger_declaration.py",  # the HARD tier: raises at import
     "TEMPLATE/tools/reconstruction.py",      # the HARD tier: raises at import
     "TEMPLATE/tools/registry_render.py",     # imported by tools/registry.py
@@ -189,13 +188,70 @@ def kit_paths() -> list[str]:
         out.append(str(path.relative_to(REPO)))
     return sorted(out)
 
-def digest(rel: str) -> str:
-    """The sha256 of one shipped file, read in chunks so a large one never loads whole."""
+def digest_path(path: Path) -> str:
+    """The sha256 of one file, read in chunks so a large one never loads whole."""
     h = hashlib.sha256()
-    with open(REPO / rel, "rb") as fh:
+    with open(path, "rb") as fh:
         for block in iter(lambda: fh.read(65536), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def digest(rel: str) -> str:
+    """The sha256 of one shipped file, at its repo-relative path."""
+    return digest_path(REPO / rel)
+
+
+def manifest_key(local: str) -> str:
+    """The manifest key for a file the caller holds.
+
+    The manifest is keyed TEMPLATE-relative, because that is where the kit lives in THIS
+    repo; a factory that ported a file holds it at the UNprefixed path (`tools/ledger.py`)
+    and often has no TEMPLATE/ directory at all. So one rule: strip a leading TEMPLATE/,
+    then re-prefix it. Stated here rather than in a caller, because a second copy of this
+    rule is how a lookup starts answering `not-in-kit` for a file the kit does ship.
+    """
+    parts = [p for p in pathlib.PurePosixPath(local).parts if p != "."]
+    if parts and parts[0] == "TEMPLATE":
+        parts = parts[1:]
+    return "TEMPLATE/" + "/".join(parts)
+
+
+def identity(paths: list[str]) -> int:
+    """Print, per file, the digest the caller holds and what the kit says about it."""
+    if not MANIFEST.is_file():
+        print(f"kit identity: {MANIFEST.relative_to(REPO)} is absent, so there is no "
+              "reference to answer against. A factory that never vendored the pin lands "
+              "here -- see BOOTSTRAP step 4b and registry/kit.json.")
+        return 1
+    declared = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    files = declared.get("files") or {}
+    classes = declared.get("classes") or {}
+    kit = declared.get("kit_version")
+    bad = 0
+    for local in paths:
+        p = pathlib.Path(local)
+        if not p.is_file():
+            print(f"{local}: UNREADABLE — no such file")
+            bad = 1
+            continue
+        key = manifest_key(local)
+        mine = digest_path(p.resolve())
+        cls = classes.get(key)
+        want = files.get(key)
+        tail = f"class={cls}" if cls else "class=?"
+        if want is None:
+            # Not a failure: the kit does not ship this path, so there is nothing to
+            # compare. Naming the key that was looked up is what lets a reader tell
+            # "the kit lacks it" from "my prefix rule is wrong".
+            print(f"{local}: sha256={mine} not-in-kit (looked up {key}) "
+                  f"kit_version={kit}")
+        elif mine == want:
+            print(f"{local}: sha256={mine} matches-kit {tail} kit_version={kit}")
+        else:
+            print(f"{local}: sha256={mine} differs-from-kit "
+                  f"declared={want} {tail} kit_version={kit}")
+    return bad
 
 def kit_version(files: dict[str, str], classes: dict[str, str] | None = None) -> str:
     """A digest over the manifest's own (path, sha256, class) triples.
@@ -259,7 +315,14 @@ def main(argv: list[str] | None = None) -> int:
         "--check", action="store_true",
         help="verify the tree against the manifest instead of regenerating it",
     )
+    parser.add_argument(
+        "--identity", nargs="+", metavar="PATH",
+        help="print which kit copy each PATH is, and exit (a query, not a gate)",
+    )
     args = parser.parse_args(argv)
+
+    if args.identity:
+        return identity(args.identity)
 
     if not KIT_ROOT.is_dir():
         print(

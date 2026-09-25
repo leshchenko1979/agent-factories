@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -86,6 +87,34 @@ def main() -> int:
     check("transient artifacts are excluded, not shipped as kit",
           not any("__pycache__" in p or p.endswith(".pyc") or ".pytest_cache" in p for p in files),
           "no cache or bytecode paths")
+
+    # ARM 1b — THE IDENTITY QUERY, whose answer must be CHECKABLE rather than trusted.
+    # `--identity` reports which copy of a shipped file the caller holds, and it is not a
+    # gate (it exits 0 for a mismatch too), so nothing else here would notice it drifting
+    # away from the manifest it reads. The digest it prints for a shipped file must EQUAL
+    # the manifest's entry byte for byte, and it must name the kit_version — otherwise a
+    # caller can only eyeball a prefix, which is the human-checkable form this project
+    # exists to replace.
+    proc = subprocess.run([sys.executable, str(TOOL), "--identity", "tools/ledger.py"],
+                          cwd=str(REPO), capture_output=True, text=True)
+    _want = files.get(PROBE_FILE, "")
+    _got = re.search(r"sha256=([0-9a-f]{64})", proc.stdout)
+    check("the identity query prints the FULL digest, equal to the manifest entry",
+          proc.returncode == 0 and bool(_got) and _got.group(1) == _want
+          and str(declared.get("kit_version", "")) in proc.stdout,
+          proc.stdout.strip()[:120])
+
+    # The specimen is a REAL file this repo carries and the kit does not ship — this
+    # gate itself. A path that does not exist would land on UNREADABLE instead, which
+    # is a different branch and would make this arm pass for the wrong reason.
+    check("this gate's own file is a real path the kit does not ship",
+          (REPO / "tests/test_kit_manifest.py").is_file()
+          and not (REPO / "TEMPLATE/tests/test_kit_manifest.py").exists(),
+          "tests/test_kit_manifest.py exists here and is not in TEMPLATE/")
+    proc = subprocess.run([sys.executable, str(TOOL), "--identity", "tests/test_kit_manifest.py"],
+                          cwd=str(REPO), capture_output=True, text=True)
+    check("a real path the kit does not ship is reported, not silently matched",
+          proc.returncode == 0 and "not-in-kit" in proc.stdout, proc.stdout.strip()[:120])
 
     live_digest_before = sha(REPO / PROBE_FILE)
 

@@ -235,7 +235,7 @@ paths runs the six gates, and anything left out shows up as a failure naming its
 | what | paths | why it travels with the ledger |
 |---|---|---|
 | the tool | `tools/ledger.py` | the only append path |
-| its closure | `tools/field_predicate.py`, `tools/ledger_declaration.py`, `tools/reconstruction.py`, `tools/registry.py`, `tools/registry_render.py`, `tools/telemetry.py`, `tools/kit_identity.py` | a bare copy dies at import — the `#137` finding. `registry.py` and `telemetry.py` arrive through `ledger.py`, and `kit_identity.py` carries `--version` |
+| its closure | `tools/field_predicate.py`, `tools/ledger_declaration.py`, `tools/reconstruction.py`, `tools/registry.py`, `tools/registry_render.py`, `tools/telemetry.py` | a bare copy dies at import — the `#137` finding. `registry.py` and `telemetry.py` arrive through `ledger.py` |
 | the gates | `tests/test_ledger.py`, `tests/test_ledger_schema.py`, `tests/test_ledger_commit_cites_no_rows.py`, `tests/test_ledger_no_shrink.py`, `tests/test_ledger_close_preflight.py`, `tests/test_ledger_identity.py` | six invariants; naming two installs one third of the ledger |
 | their closure | `tests/gate_fixtures.py`, `tests/hook_installation.py`, `tests/ledger_boundary.py` | imported by the gates. The second proves a hook is installed rather than assumed; the third is the SHARED boundary reader, so a gate and the repair path cannot disagree about what this factory declared |
 | the hooks | `tools/hooks/commit-msg`, `tools/hooks/pre-commit` | `test_ledger_commit_cites_no_rows.py` reads `commit-msg`'s installation, so the gate cannot pass without it |
@@ -379,14 +379,16 @@ someone else's is wrong for it.
 | `tools/audit.py` | `shared` | **ships** — the coverage predicate and the subject vocabulary are imported from it, never re-typed, so one number cannot have two implementations |
 | `tools/field_predicate.py` | `closure` | **ships** — imported by `tools/audit.py` |
 | `tools/gate_budget.py` | `closure` | **ships** — imported by `tools/audit.py` |
-| `tools/kit_identity.py` | `closure` | **ships** — imported by `tools/audit.py`; it is the one place a shipped tool's version and kit digest are computed, so ten executables do not each hand-roll the lookup |
 | `evidence/rework.md` | `factory` | **created here** — the log itself |
 | `evidence/ledger.jsonl` | `factory` | **created in Step 4b** — the denominator the resolution leg reads |
 
-**This list is a snapshot, and it has already moved once.** It said seven paths
+**This list is a snapshot, and it moved twice in one day.** It said seven paths
 until 2026-09-25, when `tools/kit_identity.py` entered `tools/audit.py`'s imports
-and the count became eight — a doc step naming a closure goes stale the moment
-anything in it changes, and nothing in the tree tells the reader it is stale. So
+and the count became eight; hours later the same day it left again, when the import
+was measured to have added a closure requirement to ten shipped tools and broken
+`tools/patrol_host_state.py`'s own gate (#171). A doc step naming a closure goes
+stale the moment anything in it changes, and nothing in the tree tells the reader
+it is stale. So
 do not take this table as the definition. The definition is
 `registry/kit.json`'s `classes` map, and the closure is derivable from the import
 graph. What this table buys you is the *reason* each path matters, which no

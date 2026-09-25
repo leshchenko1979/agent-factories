@@ -54,7 +54,6 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
-from kit_identity import VersionAction
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FRAGMENT_STORE = REPO_ROOT / "registry" / "factories"
@@ -1700,8 +1699,6 @@ def cmd_render(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="The factory registry.")
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     sub = parser.add_subparsers(dest="command", required=True)
     p_validate = sub.add_parser("validate", help="validate fragment JSON")
     p_validate.add_argument("paths", nargs="*", help="fragment files (default: both stores)")

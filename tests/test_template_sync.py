@@ -100,13 +100,6 @@ PAIRS = [
     ("tools/ledger_declaration.py", "TEMPLATE/tools/ledger_declaration.py"),
     ("tools/field_predicate.py", "TEMPLATE/tools/field_predicate.py"),
     ("tools/reconstruction.py", "TEMPLATE/tools/reconstruction.py"),
-    # The instrument identity module (plan 2646d31a step 2). Paired like every other
-    # tool, and CLOSURE of all ten executables: each imports it for `--version`, so a
-    # factory that ports an executable without it gets ModuleNotFoundError at import
-    # rather than a tool whose `--version` silently lies about which copy it is. It is
-    # the reason a version could be added at all without ten hand-written lookups --
-    # one predicate, ten readers, which is the #143 remedy applied to identity.
-    ("tools/kit_identity.py", "TEMPLATE/tools/kit_identity.py"),
     ("tests/gate_fixtures.py", "TEMPLATE/tests/gate_fixtures.py"),
     ("tests/gate_registry.py", "TEMPLATE/tests/gate_registry.py"),
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),

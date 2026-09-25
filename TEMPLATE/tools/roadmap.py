@@ -34,7 +34,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from kit_identity import VersionAction
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -233,8 +232,6 @@ def generate_roadmap_markdown(repo_root: Path, show_cadence: bool = False) -> st
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     parser.add_argument("--audit", action="store_true", help="Audit product artifact existence")
     parser.add_argument("--cadence", action="store_true", help="Audit product delivery cadence status")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON status")

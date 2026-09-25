@@ -84,7 +84,6 @@ from field_predicate import (
 # copies of one predicate drift in silence, and the drift lands on exactly the rows that
 # matter (`n=405` clause 5, `n=599`).
 from reconstruction import interval_line, reconstructed_claims
-from kit_identity import VersionAction
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -1218,8 +1217,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     ap = sub.add_parser("append", help="the only write path")

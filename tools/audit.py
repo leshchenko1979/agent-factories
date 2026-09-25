@@ -56,7 +56,6 @@ from gate_budget import (  # noqa: E402
     gate_key_for_cmd,
     load_gate_budgets,
 )
-from kit_identity import VersionAction
 
 # The `Subject` column's vocabulary, named once. `tests/test_rework.py` enforces the
 # same three values on the document; they live here as well because the audit *reads*
@@ -1819,8 +1818,6 @@ def format_report_markdown(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Operational process audit runner.")
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     parser.add_argument("--json", action="store_true", help="Output JSON results to stdout")
     parser.add_argument("--report", action="store_true", help="Write the dated report in evidence/scores/ AND record its telemetry run row")
     parser.add_argument("--output", type=str, default="", help="Custom report output path; diagnostic only: records no run row and does not satisfy the report step")

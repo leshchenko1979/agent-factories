@@ -28,7 +28,6 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
-from kit_identity import VersionAction
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -492,8 +491,6 @@ def cmd_compile(cycle_id: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Multi-Lens Review Engine")
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
     p_init = subparsers.add_parser("init", help="Initialize a new review cycle")

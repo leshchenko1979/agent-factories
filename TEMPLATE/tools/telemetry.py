@@ -21,7 +21,6 @@ import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
-from kit_identity import VersionAction
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -253,8 +252,6 @@ def format_detail_string(telemetry: dict[str, Any] | None, outcome: str = "accep
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", action=VersionAction,
-                    help="print this copy\'s identity and exit")
     parser.add_argument("--subject", help="Task subject (e.g. '#29') to compute delta since claim")
     parser.add_argument("--session", help="Filter by session UUID")
     parser.add_argument("--start", help="Start ISO timestamp (e.g. 2026-09-17T09:00:00Z)")
