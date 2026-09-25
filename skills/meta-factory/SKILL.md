@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.22
+version: 0.1.23
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -157,15 +157,25 @@ Work goes **sender → owner of the resource**, directly. No relay hops.
 **The intake leg is dispatched at FILING time, never last.** Filing a board item is a sequence
 with four legs — the board issue, the ledger intake row, the claim, and the dispatch to the lane
 that implements it. Intake is **Triage's** row, so filing a board item owes Triage a dispatch in
-the **same turn** as the filing, before the implementing lane can claim. Filed last, the intake
-row lands after the claim and **two mechanisms go RED on the one act**: `tests/test_board_intake_recorded.py`
-fails on a numeric subject **carrying a `claim` or a `close`** with no intake row of its own, and the ledger's order
-leg **refuses the close**, because the sequence predicate is bounded by the latest intake and a
-claim preceding it does not count. The remedy for the second is a fresh re-claim by the lane that
-took the work — mechanical, but a second acceptance row bought with a dispatch that cost nothing
-to send on time. Precedent: n=191 filed and dispatched intake in one breath. Origin: #113, whose
-intake leg went last (n=675, after the claim at n=673); #114 is the first item filed under this
-clause.
+the **same turn** as the filing. Filed last, the intake row lands after the claim, and
+`tests/test_board_intake_recorded.py` **fails on a numeric subject carrying a `claim` or a
+`close` with no intake row of its own**.
+
+**A CLAIM THAT PRECEDES ITS INTAKE IS ACCEPTED, AND THE RE-CLAIM IS THE DESIGNED OUTCOME OF A
+WAKE-LATENCY GAP (2026-09-25, superseding the refusal clause).** The ledger's order leg was
+PRECEDENCE — it refused a close whose claim preceded its intake. That clause is RETIRED: the two
+rows are written by **two lanes** whose wake latencies are independent, so the inversion is a
+**derived** outcome of that race — neither lane controls the other's wake latency, so it is not
+an error by either. Measured before retiring it: **6
+instances across 3 factories**, and on #161 the claim still preceded the intake by **1m46s** even
+though the filing lane dispatched Triage in the **same turn** as the filing — the implementer was
+idle and woke in 10s while Triage was mid-turn. What the leg keeps is **PRESENCE**: a close must
+have both legs somewhere before it, read positionally, which is the `#137` shape that sat silent
+for 35 hours. Presence is checkable without asking a lane to control another lane's timing;
+precedence is not. So when the inversion happens, the remedy is a **fresh re-claim** by the lane
+that took the work — mechanical, and bought with a dispatch that cost nothing to send on time.
+Precedent: n=191 filed and dispatched intake in one breath. Origin: #113, whose intake leg went
+last (n=675, after the claim at n=673); #114 is the first item filed under this clause.
 
 **The offline leg's population is narrower than "ledger activity", and by design.**
 A subject whose only rows are a `ruling` or a `dispatch` is **outside** the offline leg's
@@ -495,6 +505,10 @@ outside it, the issue board. Every other path to it is read-only.
 **The receipt's SUBJECT is canonical, and the reader's key is deliberately NOT widened to meet a deviation.** A receipt's subject is `<stem>-<round>`: `<stem>` is the job's own declared `receipt_subject`, and `<round>` is its own `last_run_at` UTC date. The key is a **boundary-checked prefix** — the subject must start with `<stem>-<round>`, and the character after it must not be a digit, so a different date whose subject merely extends this one's digits (`...-2026-09-250`) cannot match. That tolerance exists for **round-key variants**: an hour-bearing subject (`patrol-verify-2026-09-25T06`) names the same round, and so does a trailing word. It is never licence to decorate: a subject that puts words BETWEEN the stem and the round (`registry-attest-writeback-2026-09-25`) does not name the round at all and is **not a receipt**, and the leg reads MISSING — loud, and true. **Do not widen the key to a fuzzy token match.** A false MISSING costs one look; a false CLEAN is silent, and this leg exists precisely because silence is the failure it cannot see (#160). The writer is upstream of the reader: fix the convention, never the key.
 
 **A subject match is not a receipt — the row must DECLARE its completion.** A receipt carries `duty=completed`, `failed` or `skipped`, read through the shared positional reader (`tools/field_predicate.py::declared_duty`) against the domain declared beside it (`DUTY_DOMAIN`). A row whose subject matches the round and declares nothing is **not** a receipt: the leg's first version accepted any subject match, so a DISPATCH record written before the round completed certified it, and a round with no receipt at all read clean. Absent is not a value, an out-of-domain value is an ERROR, and `failed`/`skipped` are both findings. **The key is a distinct field, never `outcome=`:** a duty receipt is selection-biased — written by a lane that completed a duty — so folding it into the first-pass yield's population makes that metric structurally optimistic, one real lane failure diluting it roughly twofold. One number answering two questions is the #143 class.
+
+**THE WRITE PATH OWNS THE ACTOR, AND THE ACTOR IS DERIVED — identity is mechanical, never declared.** A row's `actor` is a **derived** value, read from `OPENCRABS_SESSION_ID`, which the daemon exports into every tool subprocess, resolved through the registry's own lane resolver (`registry.resolve_lane`, the same code that renders `registry/state.json`). The kit never asked for it, so identity was whatever a lane typed into `--actor`: checked for **membership** in the known-actor list, never for **authorization** against the per-event matrix, which meant an unauthorized row was written **silently** and surfaced a day later when the schema gate ran. Measured: three `intake` rows in one member factory carried `actor=worker`, and `intake` is Triage's — the write path accepted every one. The tool now enforces the matrix at append, so the row is refused **when it is written** rather than reported later, and a `--actor` is accepted only when it **AGREES** with the derivation. A lane it cannot resolve is refused **by name**, never defaulted: `repair` used to default to `worker`, so omitting the flag stamped the repair as the Worker regardless of who ran it. **A FIXTURE is the one exception, and the seam is what makes it safe:** a redirected `OC_LEDGER_PATH` or a `--subprocess` sub-ledger names its own actors, because a throwaway ledger has no live lane to bind to — and reaching the **live** ledger requires both overrides to be absent, so a fixture cannot smuggle a role into it.
+
+**THE SETTLEMENT RECEIPT IS THE TOOL'S, NOT THE AUTHOR'S — and this retires the self-referential count (2026-09-25, superseding the `rows=` clause in part).** Settlement is *append the close row, then verify*, so the receipt must cover the row it certifies — and it had to live **in** that row. Both cannot hold in one append, so the law asked the author to declare `rows=<count>` where the count must be at least the row's own number. **The author cannot know that number:** it is assigned inside the append lock. The only way to satisfy the predicate was to **predict** `current_count + 1`, which is right until a peer appends in between — measured across all five factory ledgers, **2 of 17 declaring closes were off by exactly one** for exactly that reason, both now permanent debt because an append-only ledger has no repair space for a wrong number. The declaration is **retired**, and `append --event close` now writes a **second row inside the same lock**: a `run` row carrying `verified_rows=N`, where N is the count the sequence check covered with the close row present. No prediction and no self-reference — a row *about* a row, written after it. It carries **no `outcome=`**, for the duty receipt's own reason: a settlement receipt is selection-biased, so admitting it to `first_pass_yield_population` would make the published yield optimistic. **The commit-msg hook already refused a subject citing a row number for this same reason** (*"the number is assigned inside the append lock, so it cannot be known before the append"*, ruled n=405) — the close-receipt was the one surface still demanding the forbidden prediction.
 
 **Which pacemakers owe a receipt.** Every pacemaker whose duty is performed by a **woken lane** — because its own run row records that the trigger fired and nothing about the work. A `trigger_cmd` gate does not exempt a job: a gate is a **pre-condition** that decides whether the trigger fires, and it says nothing about whether the lane then woken did the duty. The test is not whether the duty's work is recorded *somewhere* — a woken lane's own run row usually exists — but whether the leg can **BIND** that row to *this* job's round. Without the declaration it cannot, which is exactly why the declaration is an attribution key rather than a claim that nothing else records the work. A job that declares no stem is NOT JUDGED, and is counted and named so its silence is visible. A duty whose lane writes an undated, ad-hoc subject predating this convention owes the convention going forward: the receipt carries the round.
 

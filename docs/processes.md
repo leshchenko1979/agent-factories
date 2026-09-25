@@ -147,20 +147,9 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 | **5. Multi-Criteria Gate Evaluation** | Automated Gates | Candidate artifact | Deterministic score vector & error trace | Silent pass / false positive | Gate execution duration & exit code |
 | **6. Settlement & Release** | HQ / Carrier | All gates green | Fast-forward commit on main + `close` row (Rail 2) + Rail 1 ack + the board issue closed with its receipt | Stale sha / broken remote push / false open (`close` row written, board issue still open) | Commit sha identity & delivery trace · board/ledger close agreement |
 
-**The settlement receipt is taken AFTER the row it certifies (procedure).** The `close` row is
-appended first, then `tools/ledger.py verify` runs, and the receipt cited in the row's `detail`
-is the one that covered it. Taken before the append, the receipt is structurally incapable of
-covering the artifact it certifies: `verify` reads a subject's rows as a sequence, so a run made
-while the `close` row does not yet exist has not seen the row it is cited for. This is an ORDER
-defect, never a claim about honesty — a citation taken early is not a false citation, and the
-rows that carry one stand as written.
+**The settlement receipt is taken AFTER the row it certifies — and the TOOL takes it (procedure).** The `close` row is appended first, then the sequence check runs against a ledger that **includes** that row, and the receipt records the population it covered. Taken before the append, the receipt is structurally incapable of covering the artifact it certifies: `verify` reads a subject's rows as a sequence, so a run made while the `close` row does not yet exist has not seen the row it is cited for. This is an ORDER defect, never a claim about honesty — a citation taken early is not a false citation, and the rows that carry one stand as written.
 
-Its upholding mechanism is a gate as well as this sentence: a close row that cites a verify
-receipt must DECLARE the row count that verify measured, and that count must be at least the
-row's own number — which is exactly the statement that the verify covered the row it certifies.
-The count is read through the one shared field predicate, so the field has one reader; the gate
-is forward-only, with its boundary declared in `docs/ledger-invariants.json`, and historical
-rows are excused and printed rather than repaired (#96, ruling n=745).
+**Its upholding mechanism is the WRITE PATH, not a declaration by the author (2026-09-25, superseding the `rows=` gate).** The order above and a receipt *inside* the close row cannot both hold in one append, so the rule previously asked the author to declare `rows=<count>` at least the row's own number — a value assigned inside the append lock, which the author cannot know. Satisfying it required **predicting** `current_count + 1`, right until a peer appended in between: measured across all five factory ledgers, 2 of 17 declaring closes were off by exactly one. `append --event close` therefore writes a **second row inside the same lock** — a `run` row carrying `verified_rows=N`, N being the count the check covered with the close row present — and the declaration, its reader, its gate, its exemption files and its boundary are retired. Rows that already carry `rows=` stand as written and are never backfilled (#96, ruling n=745; simplified under plan 2646d31a).
 
 ---
 
