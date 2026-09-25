@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import re
@@ -99,6 +100,54 @@ CANONICALITY_KEY = "tier"
 CANONICALITY_TIERS = ("T0", "T1", "T2", "T3", "T4")
 CANONICALITY_UNRESOLVED = "T4"
 PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
+
+# ---- the kit-drift leg (plan 2646d31a step 10) --------------------------------------
+#
+# A member factory's drift was previously unmeasurable: the only thing that could say
+# whether a factory's copy of `tools/ledger.py` matched the template's was a person
+# reading both trees. Measured 2026-09-25 over the bootstrap's own named set across five
+# member factories: 50 cells, 1 identical, 20 drifted, 29 absent -- and three of the
+# absent ones were the write-path guards (`tools/gate_budget.py` and both
+# `tools/hooks/` refusal points), which had therefore never bound a single member.
+#
+# WHY THIS IS A PATROL LEG AND NOT A GATE, stated because the coupling is the whole
+# design. A gate reading five external repos would turn THIS factory's audit red whenever
+# a MEMBER is stale -- our verdict would become a function of another lane's backlog, and
+# the failure would be reported in the wrong factory. A patrol leg reports LIVE HOST
+# STATE, which is exactly what drift is.
+#
+# WHY DRIFT IS COVERAGE AND NOT A PROBLEM, for the same reason. The patrol's exit code is
+# the TRIAGE lane's signal, and a leg that reds on every patrol until five other
+# factories finish their ports is the permanent-false-positive class #139 names: a leg
+# with no exit teaches the next reader to ignore a red patrol. So the measurement is
+# reported in full and the PROBLEMS are reserved for the one thing that is this factory's
+# own defect -- a read that could not be taken, which is the examined-nothing case.
+#
+# THE TWO POPULATIONS ARE BOTH REPORTED, because the earlier figure was measured over a
+# NARROWER predicate and a number must travel with its own. `manifest_cells` is every
+# (member, manifest file) pair; `bootstrap_cells` is the subset restricted to the files
+# `TEMPLATE/BOOTSTRAP.md` step 4c names, which is what the 1/20/29 baseline was taken
+# over. Reporting only one of them would make the other unreproducible.
+KIT_MANIFEST = REPO / "registry" / "kit.json"
+FLEET_MANIFEST = REPO / "registry" / "fleet.json"
+
+# The files `TEMPLATE/BOOTSTRAP.md` step 4c instructs a factory to copy, by their
+# repo-relative path in a member tree. Read as a CONSTANT because the bootstrap states
+# them in prose across several paragraphs; a parser over that prose would be a second
+# derivation of a fact the document already carries, and this list is asserted against
+# the bootstrap by the leg's probe rather than trusted.
+BOOTSTRAP_NAMED = (
+    "tools/ledger.py",
+    "tools/audit.py",
+    "tools/field_predicate.py",
+    "tools/gate_budget.py",
+    "tools/hooks/commit-msg",
+    "tools/hooks/pre-commit",
+    "tests/test_ledger.py",
+    "tests/test_ontology.py",
+    "tests/test_rework.py",
+    "tests/rework_table.py",
+)
 
 # The close-board gate (#44) OWNS the definition of a close row's board
 # declaration — its whole-detail token scan (`BOARD_TOKEN`) and its invariant
@@ -1060,6 +1109,148 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
         },
     }
 
+def _sha256(path: Path) -> str:
+    """The sha256 of one file, read in chunks so a large one never loads whole."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(65536), b""):
+            h.update(block)
+    return h.hexdigest()
+
+def kit_drift_leg(
+    *,
+    manifest_path: Path = KIT_MANIFEST,
+    fleet_path: Path = FLEET_MANIFEST,
+    bootstrap_named: tuple[str, ...] = BOOTSTRAP_NAMED,
+    read_at: str = "",
+) -> dict:
+    """Per-member drift against `registry/kit.json`: same / DIFF / ABSENT, with names.
+
+    A REPORT, not a verdict on the members. `problems` carries only this factory's own
+    defects — a manifest or fleet file it cannot read, a manifest that describes no files,
+    or no reachable member at all — because those are the examined-nothing cases. A member
+    being stale is a fact about THAT member, reported in `coverage` and acted on by the
+    notify step; reddening this factory's patrol for it would make our verdict a function
+    of another lane's backlog, which is the coupling the design exists to avoid.
+
+    Each member's repo is read from `registry/fleet.json`'s own `repo` field, so a member
+    that moves is followed by the manifest rather than by a second list. A manifest path is
+    compared at `<member>/<path minus the TEMPLATE/ prefix>`, which is the path the file
+    occupies in a member tree — the prefix is an artefact of how the template is stored
+    here, never part of what a factory carries.
+    """
+    problems: list[str] = []
+    members: list[dict] = []
+    totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
+    boot_totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
+
+    if not manifest_path.is_file():
+        problems.append(
+            f"the kit manifest {manifest_path} is absent — there is no reference to measure "
+            f"drift against, so this leg examined NOTHING and says so rather than reporting "
+            f"a clean sweep over no population"
+        )
+        return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": {"reason": str(manifest_path), "read_at": read_at}}
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        problems.append(f"the kit manifest {manifest_path} could not be read: {exc}")
+        return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": {"reason": str(exc), "read_at": read_at}}
+
+    files: dict[str, str] = manifest.get("files") or {}
+    if not files:
+        problems.append(
+            f"the kit manifest {manifest_path} declares NO files — a reference over an empty "
+            f"set would agree with every tree, which is the vacuous-pass shape"
+        )
+        return {"name": "kit-drift", "status": "ASSERTED", "problems": problems,
+                "excused": [], "coverage": {"manifest_files": 0, "read_at": read_at}}
+
+    if not fleet_path.is_file():
+        problems.append(f"the fleet manifest {fleet_path} is absent — no member repo to read")
+        return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": {"reason": str(fleet_path), "read_at": read_at}}
+
+    try:
+        fleet = json.loads(fleet_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        problems.append(f"the fleet manifest {fleet_path} could not be read: {exc}")
+        return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": {"reason": str(exc), "read_at": read_at}}
+
+    for entry in fleet.get("factories") or []:
+        slug = str(entry.get("slug") or "")
+        root = Path(str(entry.get("repo") or ""))
+        if slug == "meta-factory":
+            # This factory IS the template source: comparing it against its own manifest
+            # would report 106 identical cells and inflate every total with a tautology.
+            continue
+        if not root.is_dir():
+            members.append({"slug": slug, "root": str(root), "reachable": False,
+                            "same": 0, "DIFF": 0, "ABSENT": 0, "diff_files": [], "absent_files": []})
+            continue
+        same = diff = absent = 0
+        diff_files: list[str] = []
+        absent_files: list[str] = []
+        for rel, want in files.items():
+            member_rel = rel[len("TEMPLATE/"):] if rel.startswith("TEMPLATE/") else rel
+            local = root / member_rel
+            if not local.is_file():
+                absent += 1
+                absent_files.append(member_rel)
+            elif _sha256(local) == want:
+                same += 1
+            else:
+                diff += 1
+                diff_files.append(member_rel)
+        totals["same"] += same
+        totals["DIFF"] += diff
+        totals["ABSENT"] += absent
+        for name in bootstrap_named:
+            if name in absent_files:
+                boot_totals["ABSENT"] += 1
+            elif name in diff_files:
+                boot_totals["DIFF"] += 1
+            elif (root / name).is_file():
+                boot_totals["same"] += 1
+        members.append({
+            "slug": slug, "root": str(root), "reachable": True,
+            "same": same, "DIFF": diff, "ABSENT": absent,
+            "diff_files": sorted(diff_files), "absent_files": sorted(absent_files),
+        })
+
+    reachable = [m for m in members if m["reachable"]]
+    if not reachable:
+        problems.append(
+            f"no member repository was reachable — {len(members)} declared in {fleet_path}, "
+            f"none present on this box, so the sweep examined NOTHING and reports that "
+            f"rather than a clean result"
+        )
+
+    return {
+        "name": "kit-drift",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "manifest_files": len(files),
+            "kit_version": manifest.get("kit_version"),
+            "members_declared": len(members),
+            "members_reachable": len(reachable),
+            "members_unreachable": [m["slug"] for m in members if not m["reachable"]],
+            "manifest_cells": dict(totals),
+            "manifest_cells_total": totals["same"] + totals["DIFF"] + totals["ABSENT"],
+            "bootstrap_cells": dict(boot_totals),
+            "bootstrap_cells_total": sum(boot_totals.values()),
+            "bootstrap_named": list(bootstrap_named),
+            "members": members,
+            "read_at": read_at,
+        },
+    }
+
 def deferred_legs() -> list[dict]:
     """Legs this runner does not run, each declaring its tracker and its checkable claims.
 
@@ -1186,6 +1377,45 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"resolved these, and that is a finding, not a clean result"
                 )
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "kit-drift":
+            # A leg that did NOT RUN carries a coverage of {reason, read_at} and no
+            # totals or members. Reading those unconditionally crashes the renderer on
+            # the very path that exists to REPORT the absence -- measured 2026-09-25 in
+            # the TEMPLATE twin, where registry/kit.json is factory data and therefore
+            # never ships. An absence is a NOT RUN, never a traceback.
+            if "manifest_cells" not in cov:
+                lines.append(f"  NOT RUN: {cov.get('reason', 'no reason recorded')}")
+                if cov.get("manifest_files") is not None:
+                    lines.append(f"  manifest: {cov['manifest_files']} file(s) declared")
+            else:
+                m, b = cov["manifest_cells"], cov["bootstrap_cells"]
+                lines.append(
+                    f"  manifest: {cov['manifest_files']} file(s), kit_version "
+                    f"{cov['kit_version']} — {cov['members_reachable']} of "
+                    f"{cov['members_declared']} member repo(s) reachable"
+                )
+                lines.append(
+                    f"  drift over the WHOLE manifest ({cov['manifest_cells_total']} cells): "
+                    f"{m['same']} same, {m['DIFF']} DIFF, {m['ABSENT']} ABSENT"
+                )
+                lines.append(
+                    f"  drift over the BOOTSTRAP-NAMED set ({cov['bootstrap_cells_total']} cells): "
+                    f"{b['same']} same, {b['DIFF']} DIFF, {b['ABSENT']} ABSENT — the predicate the "
+                    f"1/20/29 baseline was measured over"
+                )
+                for member in cov.get("members", []):
+                    if not member["reachable"]:
+                        lines.append(f"    {member['slug']}: UNREACHABLE ({member['root']})")
+                        continue
+                    lines.append(
+                        f"    {member['slug']}: same={member['same']} DIFF={member['DIFF']} "
+                        f"ABSENT={member['ABSENT']}"
+                    )
+                    for name in member["absent_files"][:6]:
+                        lines.append(f"      absent: {name}")
+                    if len(member["absent_files"]) > 6:
+                        lines.append(f"      ... and {len(member['absent_files']) - 6} more absent")
+            lines.append(f"  read at {cov['read_at'] or 'unstated'}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -1252,6 +1482,8 @@ def main(
     cron_rows_fn=box_cron_rows,
     prefixes_fn=declared_prefixes,
     log_dir: Path = LOG_DIR,
+    kit_manifest: Path = KIT_MANIFEST,
+    fleet_manifest: Path = FLEET_MANIFEST,
     predicate=None,
     out=print,
     err=print,
@@ -1260,7 +1492,10 @@ def main(
     without a live board — and a probe that can only run against the live board is
     a probe that cannot be run at all when the board is what is broken. The cron read
     and the prefix declaration are injected for the same reason: a probe drives the
-    cron-thinness leg with NO live database."""
+    cron-thinness leg with NO live database. The two drift manifests are injected for the
+    fourth: the kit-drift leg's population is five OTHER repositories, so a probe that
+    could only run against the live box would be measuring whatever those trees happen to
+    hold rather than the leg's behaviour."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -1290,6 +1525,8 @@ def main(
             cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at
         ),
         canonicality_leg(rows, read_at=read_at),
+        kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
+                      read_at=read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)

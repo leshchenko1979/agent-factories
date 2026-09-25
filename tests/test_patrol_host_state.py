@@ -51,6 +51,7 @@ import importlib.util
 import io
 import json
 import sqlite3
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -1253,6 +1254,238 @@ def test_the_duty_leg_is_WIRED_into_the_runner_and_prints_its_population() -> No
     assert "RESULTING STATE, never the receipt" in out, out
     assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
     assert rc == 1, "a missing duty receipt must fail the run"
+
+
+# ------------------------------------------------------------------- kit-drift leg
+
+def _synthetic_kit(tmp: Path, *, files: dict[str, bytes], members: dict[str, dict]) -> tuple[Path, Path]:
+    """A throwaway manifest + fleet pair over synthetic member trees.
+
+    Returns (manifest_path, fleet_path). The member trees are built by the caller under
+    `tmp`, so nothing here reads a live repository: the leg's population is five OTHER
+    repos, and a probe that read them would be measuring whatever they happen to hold.
+    """
+    import hashlib
+    manifest = {"kit_version": "probe", "files": {}}
+    for rel, body in files.items():
+        path = tmp / "TEMPLATE" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        manifest["files"][f"TEMPLATE/{rel}"] = hashlib.sha256(body).hexdigest()
+    mpath = tmp / "kit.json"
+    mpath.write_text(json.dumps(manifest), encoding="utf-8")
+
+    entries = []
+    for slug, spec in members.items():
+        root = tmp / slug
+        root.mkdir(parents=True, exist_ok=True)
+        for rel, body in (spec.get("same") or {}).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
+        for rel, body in (spec.get("diff") or {}).items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
+        entries.append({"slug": slug, "repo": str(root)})
+    fpath = tmp / "fleet.json"
+    fpath.write_text(json.dumps({"factories": entries}), encoding="utf-8")
+    return mpath, fpath
+
+def test_the_drift_leg_counts_same_diff_and_absent_apart() -> None:
+    """Three DIFFERENT facts. Folding them would hide which one a member has."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(
+            root,
+            files={"tools/a.py": b"a", "tools/b.py": b"b", "tools/c.py": b"c"},
+            members={"alpha": {"same": {"tools/a.py": b"a"}, "diff": {"tools/b.py": b"WRONG"}}},
+        )
+        leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
+        cov = leg["coverage"]
+        assert leg["problems"] == [], leg["problems"]
+        assert cov["manifest_cells"] == {"same": 1, "DIFF": 1, "ABSENT": 1}, cov["manifest_cells"]
+        member = cov["members"][0]
+        assert member["slug"] == "alpha" and member["reachable"]
+        assert member["absent_files"] == ["tools/c.py"], member["absent_files"]
+        assert member["diff_files"] == ["tools/b.py"], member["diff_files"]
+
+def test_a_member_is_never_a_PROBLEM_even_when_fully_stale() -> None:
+    """Drift belongs to the MEMBER. Reddening this factory's patrol for another lane's
+    backlog would make our verdict a function of that lane's queue -- the coupling the
+    leg's whole design avoids -- and a leg that reds forever teaches readers to ignore a
+    red patrol (#139's permanent-false-positive class)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(
+            root, files={"tools/a.py": b"a"},
+            members={"alpha": {"diff": {"tools/a.py": b"DIFFERENT"}}},
+        )
+        leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
+        assert leg["problems"] == [], f"drift must not red the patrol: {leg['problems']}"
+        assert leg["coverage"]["manifest_cells"]["DIFF"] == 1
+
+def test_an_unreachable_member_is_reported_never_silently_skipped() -> None:
+    """A member whose repo is absent is NAMED. A sweep that silently dropped it would
+    report a smaller population as if it were the whole one."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(root, files={"tools/a.py": b"a"}, members={})
+        fleet = json.loads(fpath.read_text())
+        fleet["factories"].append({"slug": "ghost", "repo": str(root / "does-not-exist")})
+        fpath.write_text(json.dumps(fleet), encoding="utf-8")
+        leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
+        cov = leg["coverage"]
+        assert cov["members_unreachable"] == ["ghost"], cov["members_unreachable"]
+        assert cov["members_reachable"] == 0
+        assert any("no member repository was reachable" in p for p in leg["problems"]), \
+            leg["problems"]
+
+def test_the_meta_factory_is_excluded_from_its_own_drift_sweep() -> None:
+    """This factory IS the template source: comparing it against its own manifest would
+    report every file identical and inflate the totals with a tautology."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(root, files={"tools/a.py": b"a"}, members={})
+        fleet = json.loads(fpath.read_text())
+        fleet["factories"].append({"slug": "meta-factory", "repo": str(root)})
+        fpath.write_text(json.dumps(fleet), encoding="utf-8")
+        leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
+        assert leg["coverage"]["members_declared"] == 0, leg["coverage"]["members_declared"]
+        assert leg["coverage"]["manifest_cells_total"] == 0
+
+def test_an_absent_manifest_EXAMINES_NOTHING_and_says_so() -> None:
+    """The examined-nothing case is this leg's ONLY problem: with no reference there is
+    nothing to measure, and a clean sweep over no population is not a verdict."""
+    with tempfile.TemporaryDirectory() as tmp:
+        leg = RUNNER.kit_drift_leg(
+            manifest_path=Path(tmp) / "absent.json", fleet_path=Path(tmp) / "fleet.json",
+            read_at="probe",
+        )
+        assert leg["status"] == "NOT RUN", leg["status"]
+        assert any("examined NOTHING" in p for p in leg["problems"]), leg["problems"]
+
+def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
+    """The render path is a SECOND surface, and a leg that reports correctly but
+    crashes while printing has reported nothing.
+
+    Measured 2026-09-25: the kit-drift branch read `coverage["manifest_cells"]`
+    unconditionally, so the absent-manifest path -- the one that exists to REPORT the
+    absence -- raised KeyError instead. It was reachable in the TEMPLATE twin, whose
+    REPO resolves to TEMPLATE/ where `registry/kit.json` is factory data and never
+    ships. Every other kit-drift probe injects a manifest, so none of them could see it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(root, files={"tools/a.py": b"a"}, members={})
+        mpath.unlink()  # the manifest is ABSENT: the NOT RUN path
+        out = io.StringIO()
+        RUNNER.main(
+            [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
+            rows_fn=lambda: [], cron_rows_fn=lambda: ([], ["probe-home"], []),
+            prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+            kit_manifest=mpath, fleet_manifest=fpath,
+            out=lambda *a, **k: print(*a, file=out, **k),
+            err=lambda *a, **k: None,
+        )
+        text = out.getvalue()
+        assert "LEG kit-drift" in text, text
+        assert "NOT RUN" in text, text
+        assert "examined NOTHING" in text, text
+        assert "manifest_cells" not in text, text
+
+def test_an_empty_manifest_is_a_FAILURE_not_a_universal_agreement() -> None:
+    """A manifest declaring no files would agree with every tree in existence."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "kit.json").write_text(json.dumps({"files": {}}), encoding="utf-8")
+        (root / "fleet.json").write_text(json.dumps({"factories": []}), encoding="utf-8")
+        leg = RUNNER.kit_drift_leg(manifest_path=root / "kit.json",
+                                   fleet_path=root / "fleet.json", read_at="probe")
+        assert any("declares NO files" in p for p in leg["problems"]), leg["problems"]
+
+def test_the_MUTATION_control_flips_same_to_DIFF_without_touching_a_member_tree() -> None:
+    """The probe that makes the leg's green mean something.
+
+    A leg reporting `same` for every cell is exactly what a vacuous implementation would
+    print, so the leg is driven twice over ONE synthetic pair: once clean, and once with a
+    single byte moved in a file that previously matched. The moved byte is written to a
+    COPY of the member tree, so no real repository is touched -- and the live member trees
+    are compared before and after, so that claim is measured rather than asserted.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(
+            root, files={"tools/a.py": b"a", "tools/b.py": b"b"},
+            members={"alpha": {"same": {"tools/a.py": b"a", "tools/b.py": b"b"}}},
+        )
+        before = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="p1")
+        assert before["coverage"]["manifest_cells"] == {"same": 2, "DIFF": 0, "ABSENT": 0}, \
+            before["coverage"]["manifest_cells"]
+
+        # The mutation lands in a COPY of the member tree, never the tree itself.
+        member_root = root / "alpha"
+        copied = root / "alpha-copy"
+        shutil.copytree(member_root, copied)
+        (copied / "tools/a.py").write_bytes(b"a-MUTATED")
+        fleet = json.loads(fpath.read_text())
+        fleet["factories"][0]["repo"] = str(copied)
+        fpath.write_text(json.dumps(fleet), encoding="utf-8")
+
+        after = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="p2")
+        assert after["coverage"]["manifest_cells"] == {"same": 1, "DIFF": 1, "ABSENT": 0}, \
+            after["coverage"]["manifest_cells"]
+        assert after["coverage"]["members"][0]["diff_files"] == ["tools/a.py"]
+
+        # The ORIGINAL member tree is byte-identical: the mutation was on a copy.
+        assert (member_root / "tools/a.py").read_bytes() == b"a"
+        assert (member_root / "tools/b.py").read_bytes() == b"b"
+
+def test_the_leg_reaches_the_RENDERED_report() -> None:
+    """A leg whose output never renders is a leg nobody reads."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(
+            root, files={"tools/a.py": b"a"},
+            members={"alpha": {"same": {"tools/a.py": b"a"}}},
+        )
+        out = io.StringIO()
+        RUNNER.main(
+            [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
+            rows_fn=lambda: [], cron_rows_fn=lambda: ([], ["probe-home"], []),
+            prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+            kit_manifest=mpath, fleet_manifest=fpath,
+            out=lambda *a, **k: print(*a, file=out, **k),
+            err=lambda *a, **k: None,
+        )
+        text = out.getvalue()
+        assert "LEG kit-drift" in text, text
+        assert "drift over the WHOLE manifest (1 cells)" in text, text
+        assert "alpha: same=1 DIFF=0 ABSENT=0" in text, text
+
+def test_the_live_baseline_reproduces_the_measured_figure() -> None:
+    """The criterion's own figure, re-derived from the leg rather than quoted.
+
+    The 1/20/29 baseline was measured over the BOOTSTRAP-NAMED set across the member
+    factories -- a narrower predicate than the whole manifest -- so both populations are
+    read here and the bootstrap one is asserted against its own recorded figure. If a
+    member ports a file, this figure MOVES, and the assertion is meant to be updated
+    rather than to fail for ever: it pins the predicate, not a permanent state.
+    """
+    leg = RUNNER.kit_drift_leg(read_at="probe")
+    cov = leg["coverage"]
+    # A tree carrying no manifest — a bootstrapped factory, or the TEMPLATE twin, whose
+    # REPO resolves to TEMPLATE/ — has nothing to reproduce, and the leg says so with a
+    # stated reason rather than a clean sweep. Both states are legitimate; what is NOT
+    # legitimate is reading either as a verdict about a member.
+    if leg["status"] == "NOT RUN" or cov.get("members_reachable", 0) == 0:
+        print(f"  (no live member repos to reproduce against: {cov.get('reason', 'none reachable')})")
+        return
+    boot = cov["bootstrap_cells"]
+    assert len(cov["bootstrap_named"]) == 10, len(cov["bootstrap_named"])
+    assert cov["bootstrap_cells_total"] == 10 * cov["members_reachable"], cov
+    print(f"  (live bootstrap drift: {boot['same']} same / {boot['DIFF']} DIFF / "
+          f"{boot['ABSENT']} ABSENT over {cov['bootstrap_cells_total']} cells)")
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
