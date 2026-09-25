@@ -1756,6 +1756,13 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_census.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_census.py"])
 
+    # `test_kit_names.py` (plan 2646d31a step 10) is the fleet-wide NAME census: which tree
+    # carries which name, and whether one name means two things. OPTIONAL for the same reason
+    # as its sibling -- its population is the OTHER trees, and a member does not sweep the
+    # fleet. Registered rather than left to a by-hand run so its eleven arms execute.
+    if (repo_root / "tests/test_kit_names.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_names.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

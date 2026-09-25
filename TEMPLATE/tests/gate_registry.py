@@ -593,6 +593,14 @@ OPTIONAL_GATES: dict[str, str] = {
         "is not supposed to carry. Same grain as test_kit_manifest.py, and declared here "
         "rather than left to a by-hand run so its twelve arms actually execute."
     ),
+    "test_kit_names.py": (
+        "meta-factory-only (plan 2646d31a step 10) — its POPULATION is the other trees, read "
+        "through `registry/fleet.json`. A member does not sweep the fleet, so it has neither "
+        "the tool (`tools/kit_names.py`, repo-side and unshipped) nor the population. It is "
+        "this factory's instrument for measuring naming criterion 2 (non-conflicting) against "
+        "the fleet rather than against this repo alone, which is the only way a name meaning "
+        "two different instruments in two trees can be seen at all."
+    ),
     "test_kit_census.py": (
         "meta-factory-only (plan 2646d31a step 9) — its POPULATION is the five MEMBER "
         "repositories, read through `registry/fleet.json`. A member does not sweep the "
