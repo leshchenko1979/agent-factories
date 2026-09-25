@@ -80,6 +80,45 @@ QUESTION 2 — YOUR ANNOUNCEMENTS. Confirm each still holds, or expire it.
   If you have nothing to announce, an empty list is the honest answer — do not
   inflate it.
 
+  AMENDING AN ENTRY THAT IS ALREADY THERE. The object is on disk and only its words
+  change, so the new `text` IS the whole answer: name the entry and send the
+  replacement words. Nothing else is required.
+
+  ADDING AN ENTRY — your list is empty, or you are adding a further notice. Prose is
+  NOT sufficient here, because there is no object for the words to amend. The loader
+  requires an OBJECT and rejects a bare string with
+  `announcements[0]: must be an object`. Send these fields:
+
+    required   id        a short stable slug, unique within your fragment
+               text      the fact itself, one or two sentences
+               severity  one of: info | warning | critical
+               since     the date the fact BEGAN to hold, ISO-8601
+               affects   a non-empty list of factory slugs, or the literal
+                         `profile` for a notice that concerns the whole box
+    optional   scope     one of: profile | factory | lane. A fragment's root admits
+                         profile | factory; `lane` belongs inside a lane block
+               evidence  a citation a peer can check. REQUIRED when severity is
+                         warning or critical — peers act on those, so the notice
+                         must carry the thing that supports it
+               review_by when this should be looked at again, ISO-8601. It must not
+                         precede `since`
+               check     the name of a predicate that answers it
+    forbidden  session_id, uuid, session — a session is resolved LIVE from
+               session_bindings, so a declared one is stale on arrival
+
+  One entry, as it goes into the fragment:
+    {{"id": "attest-paused", "text": "Attestation is paused until X.",
+      "severity": "warning", "since": "2026-09-25", "affects": ["miidas"],
+      "evidence": "ledger n=1234"}}
+
+  THE ENVELOPE IS NOT YOURS TO INVENT. Send the fields you CHANGED — the words, how
+  strongly a peer should act, and whom it concerns. The writer derives the rest:
+  `id` and `since` are ENVELOPE, and `since` is the instant of THIS answering
+  declaration. If a notice began earlier than you can evidence, say so plainly and
+  let the writer record the answering instant — do not invent a fact-origin date,
+  because a `since` nobody established is a false record and this brief would rather
+  have your honest instant than your guess.
+
 QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. Confirm the prefix, report what you
   cannot place. Your factory's jobs are named `<your prefix>-<what-it-does>`, and the
   prefix is the one your `registry/fleet.json` record declares in `job_prefixes` — the
