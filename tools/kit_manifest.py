@@ -21,8 +21,23 @@ shipped file cannot escape the manifest by being forgotten.
 THE VERSION IS DERIVED FROM THE CONTENT, and that is deliberate. A hand-typed kit
 version is a claim about the tree that nothing can test, so it drifts the moment
 someone edits a shipped file and forgets the number. This one is a digest over
-the manifest's own (path, sha256) pairs: it cannot be stale, and two trees with
-the same version are the same kit by construction rather than by assertion.
+the manifest's own (path, sha256, CLASS) triples: it cannot be stale, and two trees with
+the same version are the same kit by construction rather than by assertion. The class is
+inside the digest because it is part of what the reference SAYS about a path -- moving
+`shared` to `factory` switches a cell from a finding to no comparison at all, and a
+version that did not move would let that happen invisibly.
+
+EVERY SHIPPED PATH CARRIES A CLASS, and a path without one is a failure, not a default.
+This manifest was 106 flat `path -> sha256` entries with no per-file predicate, so a
+factory's own gate list scored as drift against the template's and a missing dependency
+scored the same as a missing instrument: over the ten bootstrap-named files across five
+factories the figure was 1 same / 20 DIFF / 29 ABSENT, and four of the five DIFFs were
+deliberate, reasoned forks. `shared` / `closure` / `factory` say what a MISSING FILE
+MEANS -- behind, broken parent, or not applicable -- and the table is DECLARED per path
+below rather than derived from the import graph, because a static walk is blind to the
+dependencies loaded through `importlib` from a string constant
+(`tools/hooks/commit-msg:121`, `tools/hooks/pre-commit:175`) and would report a hook
+complete while it cannot run.
 
 Run:  python3 tools/kit_manifest.py            # regenerate registry/kit.json
       python3 tools/kit_manifest.py --check    # exit 1 naming every drifted file
@@ -48,16 +63,114 @@ EXCLUDED_DIRS = frozenset({"__pycache__", ".pytest_cache"})
 EXCLUDED_FILES = frozenset({".audit.lock"})
 EXCLUDED_SUFFIXES = (".pyc", ".pyo")
 
+# ---------------------------------------------------------------------------
+# THE CLASS TABLE -- DECLARED PER PATH, never derived from the import graph.
+# ---------------------------------------------------------------------------
+# WHY A CLASS AT ALL. `registry/kit.json` was 106 flat `path -> sha256` entries with
+# no per-file predicate, so a factory's OWN gate list scored as drift against the
+# template's, and a missing dependency scored the same as a missing instrument. The
+# measured consequence: over the ten bootstrap-named files across five factories the
+# figure was 1 same / 20 DIFF / 29 ABSENT, and FOUR of the five DIFFs were deliberate,
+# reasoned forks (miidas' `subject_law.py` import, inferhub's `ack` event). A number
+# that cannot say which of its cells mean something cannot be acted on per file.
+#
+# WHY DECLARED AND NOT DERIVED (owner ruling, 2026-09-25). An import-graph walk is
+# blind to the dependencies that matter most: `tools/hooks/commit-msg:121` and
+# `tools/hooks/pre-commit:175` load their predicates through
+# `importlib.util.spec_from_file_location` from a STRING CONSTANT, so a static walk
+# reports a hook complete while it is missing the file it cannot run without -- and
+# the hook degrades to a WARNING rather than crashing. A declaration cannot miss it.
+#
+# WHAT EACH CLASS ANSWERS. The class is not about imports, it is about what a MISSING
+# FILE MEANS, because that is the difference a member has to act on:
+#   shared  -- a standalone instrument or document. Absent from a factory means the
+#              factory is BEHIND: it never adopted it, or dropped it.
+#   closure -- a module with no interface of its own, present only to be imported.
+#              Absent means the factory ported its PARENT without its closure, so the
+#              parent is BROKEN at import: the measured `#137` defect, where a faithful
+#              copy of `tools/ledger.py` died with ModuleNotFoundError on three modules
+#              the template imports at :63, :73 and :85.
+#   factory -- a seed the factory instantiates under a DIFFERENT name with its own
+#              placeholders filled. It is never compared byte-for-byte, because the
+#              factory's copy legitimately differs: `processes.md.tmpl` is BOOTSTRAP
+#              line 60's "Add `processes.md` from processes.md.tmpl", and a member's
+#              `processes.md` is its own law, not a stale copy of ours.
+#
+# THE DISCRIMINATOR FOR `closure`, measured and stated so it is reproducible: a shipped
+# `.py` that has NO `ArgumentParser` and is imported by another shipped file. Presence
+# of an `ArgumentParser` is the objective mark of "this has an interface of its own",
+# which is why `tools/registry.py` and `tools/telemetry.py` are `shared` even though
+# `tools/ledger.py` imports them -- a factory missing `registry.py` is behind on an
+# instrument, not missing a dependency. The ten below carry no CLI and no importer of
+# their own would work without them.
+CLOSURE_MODULES = frozenset({
+    # tools/ -- imported by the executables, never invoked directly
+    "TEMPLATE/tools/field_predicate.py",     # imported_by 10 shipped files
+    "TEMPLATE/tools/gate_budget.py",         # imported by tools/audit.py
+    "TEMPLATE/tools/ledger_declaration.py",  # the HARD tier: raises at import
+    "TEMPLATE/tools/reconstruction.py",      # the HARD tier: raises at import
+    "TEMPLATE/tools/registry_render.py",     # imported by tools/registry.py
+    # tests/ -- helper modules the gates import rather than run
+    "TEMPLATE/tests/gate_fixtures.py",       # imported_by 5 gates
+    "TEMPLATE/tests/gate_registry.py",       # the gate roster, read by audit.py's gate
+    "TEMPLATE/tests/hook_installation.py",   # imported by 2 gates
+    "TEMPLATE/tests/ledger_boundary.py",     # imported_by 7 gates
+    "TEMPLATE/tests/rework_table.py",        # the ONE entries-table parser (miidas
+                                             # arrived at the same module independently
+                                             # as tools/rework_entries.py -- Phase D
+                                             # candidate, and the reason a second
+                                             # parser is the drift class)
+})
+
+# The seeds. Declared per path rather than matched on suffix, so that a file named
+# `*.example.json` which is in fact a shipped instrument cannot sneak out of the
+# comparison on a naming accident -- and so that adding a seed is a decision.
+FACTORY_SEEDS = frozenset({
+    "TEMPLATE/AGENTS.md.tmpl",
+    "TEMPLATE/ONTOLOGY.md.tmpl",
+    "TEMPLATE/SKILL.md.tmpl",
+    "TEMPLATE/growth-stages.md.tmpl",
+    "TEMPLATE/processes.md.tmpl",
+    "TEMPLATE/docs/ledger-commit-exemptions.example.json",
+    "TEMPLATE/docs/ledger-invariants.example.json",
+    "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
+    "TEMPLATE/docs/ledger-retirements.example.json",
+    "TEMPLATE/docs/products.example.json",
+    "TEMPLATE/docs/rework-relative-revision-exemptions.example.json",
+    "TEMPLATE/registry/fleet.example.json",
+    "TEMPLATE/registry/gates.example.json",
+})
+
+CLASSES = ("shared", "closure", "factory")
+
+
+def classify(rel: str) -> str:
+    """One class per shipped path. `shared` is the residual, so a NEW file is never
+    silently unclassified -- and `--check` refuses a closure/seed path that is no
+    longer shipped, which is how the declaration itself cannot rot."""
+    if rel in CLOSURE_MODULES:
+        return "closure"
+    if rel in FACTORY_SEEDS:
+        return "factory"
+    return "shared"
+
 NOTE = (
     "Reference manifest of the shipped kit: every file under TEMPLATE/, with its "
-    "sha256. GENERATED by tools/kit_manifest.py -- never hand-edited, because a "
-    "hand-kept list of shipped files is a second copy of the tree that goes stale "
-    "silently. `kit_version` is a digest over the manifest's own (path, sha256) "
-    "pairs, so it cannot describe a tree other than the one it was computed from. "
-    "Transient artifacts (__pycache__, .pytest_cache, .audit.lock, *.pyc) are "
-    "excluded: they are build residue, not kit. Regenerate with "
-    "`python3 tools/kit_manifest.py`; verify with `--check`, which names every "
-    "drifted, missing and unlisted file."
+    "sha256 AND its class. GENERATED by tools/kit_manifest.py -- never hand-edited, "
+    "because a hand-kept list of shipped files is a second copy of the tree that goes "
+    "stale silently. `kit_version` is a digest over the manifest's own "
+    "(path, sha256, class) triples, so it cannot describe a tree other than the one it "
+    "was computed from. `files` maps each path to its sha256; `classes` maps each path "
+    "to what a MISSING FILE MEANS in a factory: `shared` = a standalone instrument, so "
+    "its absence means the factory is BEHIND; `closure` = a module with no interface of "
+    "its own, so its absence means the factory ported its parent without its closure and "
+    "the parent is BROKEN at import (the #137 defect); `factory` = a seed the factory "
+    "instantiates under a different name, never compared byte-for-byte. Every shipped "
+    "path carries a class and a path without one is a `--check` failure, not a default. "
+    "Transient artifacts (__pycache__, .pytest_cache, .audit.lock, *.pyc) are excluded: "
+    "they are build residue, not kit. Regenerate with `python3 tools/kit_manifest.py`; "
+    "verify with `--check`, which names every drifted, missing, unlisted and unclassified "
+    "file."
 )
 
 def kit_paths() -> list[str]:
@@ -81,24 +194,46 @@ def digest(rel: str) -> str:
             h.update(block)
     return h.hexdigest()
 
-def kit_version(files: dict[str, str]) -> str:
-    """A digest over the manifest's own pairs — a version that cannot be stale.
+def kit_version(files: dict[str, str], classes: dict[str, str] | None = None) -> str:
+    """A digest over the manifest's own (path, sha256, class) triples.
 
-    Built from the SORTED (path, sha256) pairs with an explicit separator, so two
-    different trees cannot produce the same digest by concatenation ambiguity.
+    Built from the SORTED triples with an explicit separator, so two different trees
+    cannot produce the same digest by concatenation ambiguity.
+
+    The CLASS IS IN THE DIGEST, and that is deliberate rather than incidental: the
+    class is part of what the reference SAYS about a path, so reclassifying a file
+    changes the reference and must move its version. A version that covered only the
+    bytes would let `shared` become `factory` -- which switches a cell from a finding
+    to no comparison at all -- without any consumer noticing that the meaning of the
+    manifest had moved.
     """
     h = hashlib.sha256()
     for rel, sha in sorted(files.items()):
-        h.update(f"{rel}\0{sha}\n".encode())
+        h.update(f"{rel}\0{sha}\0{(classes or {}).get(rel, '')}\n".encode())
     return h.hexdigest()[:12]
+
+def class_gaps(classes: dict[str, str], files: dict[str, str]) -> tuple[list[str], list[str]]:
+    """(unclassified, stale) -- paths in the kit with no class, and classes naming
+    paths the kit no longer ships.
+
+    Both are refusals rather than notes, and each is the failure of ONE direction:
+    an unclassified shipped file would be compared by a consumer with no predicate to
+    apply, and a stale class entry is a declaration that outlived the file it described
+    -- the phantom-artefact shape, in the manifest.
+    """
+    unclassified = sorted(rel for rel in files if rel not in classes)
+    stale = sorted(rel for rel in classes if rel not in files)
+    return unclassified, stale
 
 def build() -> dict:
     files = {rel: digest(rel) for rel in kit_paths()}
+    classes = {rel: classify(rel) for rel in files}
     return {
         "_note": NOTE,
-        "kit_version": kit_version(files),
+        "kit_version": kit_version(files, classes),
         "file_count": len(files),
         "files": files,
+        "classes": classes,
     }
 
 def compare(current: dict, declared: dict) -> tuple[list[str], list[str], list[str]]:
@@ -155,13 +290,34 @@ def main(argv: list[str] | None = None) -> int:
     for rel in unlisted:
         print(f"  UNLISTED  {rel} — in the tree but not in the manifest (escaped it)")
 
-    if changed or missing or unlisted:
+    # The class check is SEPARATE from `compare`, which the shipped pre-commit hook
+    # unpacks as a 3-tuple; widening that arity would break a consumer this file does
+    # not own. A path with no class is a path a member cannot be judged on.
+    unclassified, stale = class_gaps(declared.get("classes") or {}, declared.get("files") or {})
+    for rel in unclassified:
+        print(f"  NO-CLASS  {rel} — shipped, but carrying no class, so a consumer has no "
+              f"predicate to apply to it")
+    for rel in stale:
+        print(f"  STALE-CLASS {rel} — a class is declared for a path the manifest no longer "
+              f"ships")
+    bad_class = sorted(
+        f"{rel}={cls}" for rel, cls in (declared.get("classes") or {}).items() if cls not in CLASSES
+    )
+    for entry in bad_class:
+        print(f"  BAD-CLASS {entry} — not one of {', '.join(CLASSES)}")
+
+    if changed or missing or unlisted or unclassified or stale or bad_class:
         print(f"kit manifest DRIFTED: {len(changed)} changed, {len(missing)} missing, "
-              f"{len(unlisted)} unlisted — regenerate with `python3 tools/kit_manifest.py`")
+              f"{len(unlisted)} unlisted, {len(unclassified)} unclassified, "
+              f"{len(stale)} stale-class — regenerate with `python3 tools/kit_manifest.py`")
         return 1
 
+    counts: dict[str, int] = {}
+    for cls in (declared.get("classes") or {}).values():
+        counts[cls] = counts.get(cls, 0) + 1
+    breakdown = ", ".join(f"{c}={counts[c]}" for c in CLASSES if counts.get(c))
     print(f"kit manifest in agreement: {current['file_count']} file(s), "
-          f"kit_version {declared.get('kit_version')}")
+          f"kit_version {declared.get('kit_version')}, classes {breakdown}")
     return 0
 
 if __name__ == "__main__":
