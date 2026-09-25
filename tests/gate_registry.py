@@ -547,6 +547,13 @@ OPTIONAL_GATES: dict[str, str] = {
         "meta-factory-only (n=432 Part 5) — its subject tool tools/synthesize_insights.py "
         "is live-only and does not ship."
     ),
+    "test_synthesize_insights.py": (
+        "meta-factory-only — its subject tool tools/synthesize_insights.py is live-only and "
+        "does not ship, the same reason its sibling test_synthesize_interface.py is OPTIONAL. "
+        "It carries the fixture-driven non-vacuity proofs for #166 and #168, so it is "
+        "DECLARED rather than left to a by-hand run: a probe the audit never executes is "
+        "dead text."
+    ),
     "test_template_sync.py": (
         "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "
         "need its own pair-guard."

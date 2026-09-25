@@ -1663,6 +1663,23 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_manifest.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_manifest.py"])
 
+    # 53. Synthesizer unit gate: the tool's own behaviour, including the two non-vacuity
+    #     proofs its #166 and #168 closes owe. The classifier's key must match the WORD and
+    #     never a word that CONTAINS it -- `lock` matched `block` and `clock`, `race` matched
+    #     `trace`/`traceback`/`brace`, and because the chain is `elif` each such entry was
+    #     DIVERTED from its true bucket and never reached it. The dedup guard must read the
+    #     PERSISTED file, not the list it just built in the same call, which was a tautology
+    #     that could never fire. Both probes are FIXTURE-driven, because on the live tree
+    #     every id is already persisted and both predicates return the same empty answer --
+    #     the arms would be indistinguishable and the gate would pass vacuously.
+    #     It is DECLARED HERE rather than left to a by-hand `pytest` run because a probe the
+    #     audit never runs is dead text: the two items above closed on non-vacuity that
+    #     nothing would have executed. Registered as OPTIONAL, not REQUIRED -- its subject
+    #     tool `tools/synthesize_insights.py` is meta-factory-only and does not ship, which
+    #     is the same reason `tests/test_synthesize_interface.py` sits in OPTIONAL_GATES.
+    if (repo_root / "tests/test_synthesize_insights.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_synthesize_insights.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
