@@ -520,6 +520,43 @@ fleet, and a committed `docs/factory-registry.md` that reproduces from
 
 ---
 
+## Step 4e — Install the resource-safety and measurement instruments
+
+Copy [`tools/hygiene.py`](tools/hygiene.py) and
+[`tools/brain_metrics.py`](tools/brain_metrics.py) with their gates
+[`tests/test_hygiene_inflight.py`](tests/test_hygiene_inflight.py),
+[`tests/test_hygiene_namespace.py`](tests/test_hygiene_namespace.py) and
+[`tests/test_brain_metrics.py`](tests/test_brain_metrics.py).
+
+**Why this step did not exist until now.** Both tools ship in the kit and both are
+mandated by law — `hygiene.py` is **Process 4, Workspace Hygiene Sweep**, HQ-owned on a
+daily cadence (`docs/processes.md`), and the scratch-file and garbage-collection rows of
+the same table name it as their implementer; `brain_metrics.py` is the instrument
+`docs/measurement-procedure.md` §5 declares for the law-floor measure, with its gate
+named beside it. Measured at `n=1130`, **no step in this document installed either one**:
+they are in `TEMPLATE/tools/`, in the kit manifest, and in the law, and the entry path
+named them nowhere. A factory bootstrapped before this step carried the law's mandate and
+none of its instruments, and its own audit read green over the gap — because nothing was
+asked to look.
+
+**Neither has a closure to bring.** Measured by AST walk: both are stdlib-only, zero local
+imports, so each travels as one file. This is the asymmetry that matters when you port
+anything else — the closure requirement belongs to the **file**, not to the name, so a
+step that says "bring its closure" for a stdlib-only tool is describing a defect it does
+not have. Compare `tools/ledger.py`, which needs six modules.
+
+**Wire the cadences, not the files.** Step 6 adds the cron trigger; Process 4's sweep and
+§5's reading are the two cadences this step's tools exist to serve. A tool installed with
+no cadence is the same decorative adoption as a gate registered with no runner.
+
+**Evidence:** `python3 tools/hygiene.py --audit` and `python3 tools/brain_metrics.py`
+both exit 0 in your tree, and `python3 -m pytest tests/test_hygiene_inflight.py
+tests/test_hygiene_namespace.py` plus `python3 tests/test_brain_metrics.py` exit 0 —
+note the runner forms differ, and `tests/gate_registry.py` direction 4 asserts each
+file's form matches its registration.
+
+---
+
 ## Step 5 — Wire the board
 
 File the first issues on `{{REPO}}`, using title prefixes that encode kind

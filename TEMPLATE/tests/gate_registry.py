@@ -491,6 +491,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_rework_declared_landed.py",
     "test_rework_relative_revision.py",
     "test_registry.py",
+    # Added with plan 2646d31a task 5 (2026-09-25). `tools/registry_attest.py` ships in the kit and
+    # is installed by BOOTSTRAP step 4d, while NO gate named it and NO gate imported it — measured
+    # 0 and 0 at n=1130. That is the decorative-instrument hole this project exists to close: file
+    # presence reads as adoption. REQUIRED because the gate is byte-paired into TEMPLATE, so a
+    # manifest that omitted it would let a factory drop the runner and keep the file
+    # (issue #107, ruling n=639).
+    "test_registry_attest.py",
     # Added with its registration (issue #107, ruling n=639). It was ALREADY shipped by
     # the template — byte-paired at `tests/test_template_sync.py` — while no runner ran it
     # and no manifest named it, so every factory carried the file and none executed it.

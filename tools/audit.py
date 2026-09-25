@@ -1679,6 +1679,35 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_synthesize_insights.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_synthesize_insights.py"])
 
+    # 54. Attestation-dispatch gate: the registry clock's OWN logic, which shipped to every
+    #     factory with no gate of any kind. `tools/registry_attest.py` is installed by
+    #     BOOTSTRAP step 4d, wakes every factory HQ with the three attestation questions, and
+    #     until issue #162's parent work measured it carried ZERO gates -- no gate named for
+    #     it, and no gate importing it (n=1130). That is the exact hole this project was
+    #     opened to close: an instrument that reads as ADOPTED because the file is present,
+    #     while nothing exercises what it promises. The brief it sends is the declared half's
+    #     whole anti-rot surface, so a silent drop of one question is invisible from the send
+    #     side -- the send still succeeds.
+    #     WHAT IT PROBES that the resolver's own gate cannot: `test_registry.py` covers
+    #     `resolve_lane`. Under test here is the dispatcher layered ON TOP -- fail-open (one
+    #     malformed fragment must not silence the fleet's clock), ambiguity refusal (two lanes
+    #     claiming `hq` must never silently pick one), and the brief's three questions
+    #     surviving `format`. The fail-open arm is ordering-robust ON PURPOSE: a resolvable
+    #     fragment sits AFTER each problem branch, because the first version placed it last
+    #     and so passed on an early `return` that lost nothing downstream -- decorative, caught
+    #     only by running the mutation control. All five mutants are caught by their intended
+    #     arm.
+    #     THE FORM IS PYTEST, AND THAT IS NOT A STYLE CHOICE. The file defines `def test_*` at
+    #     module level with NO `__main__` block, so `python3 tests/test_registry_attest.py`
+    #     binds its 9 test functions and EXECUTES NONE -- it exits 0 with empty output, which
+    #     is the class this registration exists to close. `tests/gate_registry.py` direction 4
+    #     asserts the pairing mechanically.
+    #     REQUIRED, not OPTIONAL: the file is byte-paired into TEMPLATE and shipped by step 4d,
+    #     so a manifest that omitted it would let a factory drop the runner and keep the file
+    #     (issue #107, ruling n=639).
+    if (repo_root / "tests/test_registry_attest.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_registry_attest.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

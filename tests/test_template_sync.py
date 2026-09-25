@@ -184,6 +184,10 @@ PAIRS = [
     ("tools/registry_render.py", "TEMPLATE/tools/registry_render.py"),
     ("tools/registry_attest.py", "TEMPLATE/tools/registry_attest.py"),
     ("tests/test_registry.py", "TEMPLATE/tests/test_registry.py"),
+    # Added with plan 2646d31a task 5. The gate ships byte-paired into TEMPLATE alongside the
+    # tool it exercises, so an unpaired copy is the #107 class: a factory could keep the file
+    # and lose the twin, and nothing would say so.
+    ("tests/test_registry_attest.py", "TEMPLATE/tests/test_registry_attest.py"),
     ("tests/test_registry_render.py", "TEMPLATE/tests/test_registry_render.py"),
     ("tests/test_ledger_close_preflight.py", "TEMPLATE/tests/test_ledger_close_preflight.py"),
     # The telemetry-reader registry gate (#99). It classifies the tools the template
