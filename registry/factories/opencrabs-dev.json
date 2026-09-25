@@ -51,6 +51,12 @@
       "audience": "agent",
       "entry": "the Triage lane on leshchenko1979/opencrabs",
       "cadence": "on request"
+    },
+    {
+      "name": "Owner decision surfacing (Open Questions register)",
+      "audience": "agent",
+      "entry": "oc_questions ask --factory <KEY> (dynamic tool; the asking session comes from OPENCRABS_SESSION_ID and must NOT be passed by the caller)",
+      "cadence": "on request"
     }
   ],
   "substrates_owned": [
@@ -296,5 +302,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-24T06:08:47Z"
+  "attested_at": "2026-09-25T06:09:13Z"
 }

@@ -72,7 +72,7 @@
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -116,6 +116,12 @@
       "announcements": []
     },
     {
+      "topic": "Manager",
+      "thread_id": 9,
+      "role": null,
+      "announcements": []
+    },
+    {
       "topic": "Worker",
       "thread_id": 56,
       "role": "worker",
@@ -129,5 +135,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-23T11:33:47Z"
+  "attested_at": "2026-09-25T06:10:32Z"
 }

@@ -89,6 +89,16 @@
       "affects": [
         "profile"
       ]
+    },
+    {
+      "id": "inferhub-root-credential-in-shared-compose",
+      "text": "LIVE ROOT CREDENTIALS ARE COMMITTED in files this factory and infra-factory both touch, and a rotation is pending owner authorisation. /root/inferhub-watch scripts carry the New-API ROOT access token as an os.getenv fallback at three call sites (NEW_API_ROOT_TOKEN is set nowhere, so the committed literal IS the credential in use; verified live - it authenticates as id=1, role=100). The same commit 452b08c8 in leshchenko1979/servers carries THREE more literals at new-api/docker-compose.yml lines 7-11: SQL_DSN (whose password is digest-identical to the PGPASSWORD this factory's own */10 data leg uses), INITIAL_ROOT_ACCESS_TOKEN (its first 32 chars authenticate as root; the full 48-char value is rejected 401), INITIAL_ROOT_PASSWORD (verified a LIVE console login - POST /api/user/login returns success), and SESSION_SECRET (root-equivalent: a holder can mint a valid session cookie for user 1 without presenting any credential). DO NOT edit, rotate or scrub any of these surfaces independently: the change is a five-consumer sequence and a partial rotation produces 401s. Consumers: new-api, grafana (2 datasources), mixpanel-pipeline, ai-antispam, and this factory's data-leg env file. Owner-gated; tracked as inferhub-watch #138. Values are NOT reproduced here - digests only.",
+      "severity": "warning",
+      "since": "2026-09-17T01:08:46Z",
+      "affects": [
+        "infra-factory"
+      ],
+      "evidence": "Commit 452b08c8 in leshchenko1979/servers (2026-09-17) - the `since` is that commit's instant, the moment the literals landed; it is the one date I can stand behind and I am NOT inventing a second. New-API half committed in inferhub-watch 5fb4f2f (2026-09-17T01:08:46Z). Liveness measured 2026-09-24/25 digest-only: root token sha256_8 de0d7f4c authenticates id=1/role=100; INITIAL_ROOT_ACCESS_TOKEN first-32 -> HTTP 200, full 48 -> 401; INITIAL_ROOT_PASSWORD -> POST /api/user/login HTTP 200; SQL_DSN password sha256_8 d5bae8c3 == PGPASSWORD in /root/.inferhub_pg.env. Re-measured 2026-09-25: the two inferhub-watch literals are STILL present (sha256_8 de0d7f4c, both files). Config.Entrypoint=[/new-api] Cmd=[] closes the re-seed question structurally (PID 1 IS the binary; nothing can re-read those env names at boot). Scanned by digest only; no value printed, none on any command line."
     }
   ],
   "lanes": [
@@ -118,5 +128,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-24T06:09:49Z"
+  "attested_at": "2026-09-25T06:10:55Z"
 }

@@ -1,12 +1,12 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-24T23:03:38Z",
+  "resolved_at": "2026-09-25T06:13:02Z",
   "counts": {
     "factories": 6,
     "attested": 6,
-    "lanes": 61,
-    "announcements": 14,
+    "lanes": 62,
+    "announcements": 15,
     "jobs": 58,
     "unattributed_jobs": 4
   },
@@ -51,7 +51,7 @@
       "scope": "profile",
       "text": "A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.",
       "since": "2026-09-19",
-      "review_by": "2026-09-26",
+      "review_by": "2026-10-07",
       "check": null,
       "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md",
       "affects": [
@@ -97,6 +97,23 @@
       "conflict": []
     },
     {
+      "id": "inferhub-root-credential-in-shared-compose",
+      "severity": "warning",
+      "scope": null,
+      "text": "LIVE ROOT CREDENTIALS ARE COMMITTED in files this factory and infra-factory both touch, and a rotation is pending owner authorisation. /root/inferhub-watch scripts carry the New-API ROOT access token as an os.getenv fallback at three call sites (NEW_API_ROOT_TOKEN is set nowhere, so the committed literal IS the credential in use; verified live - it authenticates as id=1, role=100). The same commit 452b08c8 in leshchenko1979/servers carries THREE more literals at new-api/docker-compose.yml lines 7-11: SQL_DSN (whose password is digest-identical to the PGPASSWORD this factory's own */10 data leg uses), INITIAL_ROOT_ACCESS_TOKEN (its first 32 chars authenticate as root; the full 48-char value is rejected 401), INITIAL_ROOT_PASSWORD (verified a LIVE console login - POST /api/user/login returns success), and SESSION_SECRET (root-equivalent: a holder can mint a valid session cookie for user 1 without presenting any credential). DO NOT edit, rotate or scrub any of these surfaces independently: the change is a five-consumer sequence and a partial rotation produces 401s. Consumers: new-api, grafana (2 datasources), mixpanel-pipeline, ai-antispam, and this factory's data-leg env file. Owner-gated; tracked as inferhub-watch #138. Values are NOT reproduced here - digests only.",
+      "since": "2026-09-17T01:08:46Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "Commit 452b08c8 in leshchenko1979/servers (2026-09-17) - the `since` is that commit's instant, the moment the literals landed; it is the one date I can stand behind and I am NOT inventing a second. New-API half committed in inferhub-watch 5fb4f2f (2026-09-17T01:08:46Z). Liveness measured 2026-09-24/25 digest-only: root token sha256_8 de0d7f4c authenticates id=1/role=100; INITIAL_ROOT_ACCESS_TOKEN first-32 -> HTTP 200, full 48 -> 401; INITIAL_ROOT_PASSWORD -> POST /api/user/login HTTP 200; SQL_DSN password sha256_8 d5bae8c3 == PGPASSWORD in /root/.inferhub_pg.env. Re-measured 2026-09-25: the two inferhub-watch literals are STILL present (sha256_8 de0d7f4c, both files). Config.Entrypoint=[/new-api] Cmd=[] closes the re-seed question structurally (PID 1 IS the binary; nothing can re-read those env names at boot). Scanned by digest only; no value printed, none on any command line.",
+      "affects": [
+        "infra-factory"
+      ],
+      "origins": [
+        "inferhub-watch"
+      ],
+      "conflict": []
+    },
+    {
       "id": "two-files-named-skill-md",
       "severity": "warning",
       "scope": null,
@@ -117,7 +134,7 @@
       "id": "miidas-volume-namespace-on-apps",
       "severity": "warning",
       "scope": "profile",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
       "since": "2026-09-13T09:56:00Z",
       "review_by": null,
       "check": null,
@@ -169,7 +186,7 @@
       "id": "brain-metrics-baseline-measured",
       "severity": "info",
       "scope": "profile",
-      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. Read 2026-09-23T11:28:08Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md, named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 698 lines / 133877 bytes / about 38250 tokens = 19.12 percent of a 200k window — AGENTS.md alone is 641 lines / 129188 bytes, 91.83 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 755 lines / 74467 bytes / about 21276 tokens = 10.64 percent; skills/meta-factory/SKILL.md alone is 755 lines, 255 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1453 lines / 208344 bytes / about 59526 tokens = 29.76 percent of the window, paid before a session reads its first message. The previous read in this notice (2026-09-21T22:48:40Z: 1337 / 171399 / 24.48 percent) is kept as the step this one follows, never overwritten: the floor rose 5.28 points in about 1.7 days and AGENTS.md is most of it. LEG C IS CURRENTLY UNREADABLE, and this notice therefore carries NO leg-C figure. Its needle is the summarizer line 'Compaction: sending N / N messages to summarizer (X / Y input tokens, reserving Z for output)' at src/brain/agent/service/context.rs:1084. Measured 2026-09-23: that needle occurs 28 to 2330 times per day across the ops logs of 09-16 through 09-21, and ZERO times in the 09-22 and 09-23 logs — the population collapsed at that boundary and has not returned. The emitting call is tracing::info! and the configured level is info, and the string is present in the running binary (v0.5.3), so this is NOT a logging-level change; the cause is not yet established, and both a superseded compaction path and an emission regression fit. The instrument handles it correctly: it prints 'no event in this window this run' and exits 4 rather than returning a silent zero. Treat any leg-C figure dated before 2026-09-22 as un-refreshable from this surface. CAUTION: the trigger line 'Context at NN percent' at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
+      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN, and this replaces the earlier cause-not-established text. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-25T06:08:47Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 758 lines / 167701 bytes / about 47914 tokens = 23.96 percent of a 200k window — AGENTS.md alone is 701 lines / 163012 bytes, 92.48 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 756 lines / 77067 bytes / about 22019 tokens = 11.01 percent; skills/meta-factory/SKILL.md alone is 756 lines, 256 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1514 lines / 244768 bytes / about 69933 tokens = 34.97 percent of the window, paid before a session reads its first message. The previous read in this notice (2026-09-23T11:28:08Z: 29.76 percent) is kept as the step this one follows, never overwritten: the floor rose 5.21 points in about 1.9 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
       "since": "2026-09-19T14:20:00Z",
       "review_by": null,
       "check": null,
@@ -401,7 +418,7 @@
           "session_id": "6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T18:16:40Z",
+          "bound_at": "2026-09-24T23:45:58Z",
           "announcements": []
         },
         {
@@ -462,11 +479,11 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-09-24T06:09:49Z",
+      "attested_at": "2026-09-25T06:10:55Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.66",
+      "skill_revision": "1.0.67",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -600,6 +617,19 @@
             "profile"
           ],
           "evidence": null
+        },
+        {
+          "id": "inferhub-root-credential-in-shared-compose",
+          "severity": "warning",
+          "text": "LIVE ROOT CREDENTIALS ARE COMMITTED in files this factory and infra-factory both touch, and a rotation is pending owner authorisation. /root/inferhub-watch scripts carry the New-API ROOT access token as an os.getenv fallback at three call sites (NEW_API_ROOT_TOKEN is set nowhere, so the committed literal IS the credential in use; verified live - it authenticates as id=1, role=100). The same commit 452b08c8 in leshchenko1979/servers carries THREE more literals at new-api/docker-compose.yml lines 7-11: SQL_DSN (whose password is digest-identical to the PGPASSWORD this factory's own */10 data leg uses), INITIAL_ROOT_ACCESS_TOKEN (its first 32 chars authenticate as root; the full 48-char value is rejected 401), INITIAL_ROOT_PASSWORD (verified a LIVE console login - POST /api/user/login returns success), and SESSION_SECRET (root-equivalent: a holder can mint a valid session cookie for user 1 without presenting any credential). DO NOT edit, rotate or scrub any of these surfaces independently: the change is a five-consumer sequence and a partial rotation produces 401s. Consumers: new-api, grafana (2 datasources), mixpanel-pipeline, ai-antispam, and this factory's data-leg env file. Owner-gated; tracked as inferhub-watch #138. Values are NOT reproduced here - digests only.",
+          "scope": null,
+          "since": "2026-09-17T01:08:46Z",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "infra-factory"
+          ],
+          "evidence": "Commit 452b08c8 in leshchenko1979/servers (2026-09-17) - the `since` is that commit's instant, the moment the literals landed; it is the one date I can stand behind and I am NOT inventing a second. New-API half committed in inferhub-watch 5fb4f2f (2026-09-17T01:08:46Z). Liveness measured 2026-09-24/25 digest-only: root token sha256_8 de0d7f4c authenticates id=1/role=100; INITIAL_ROOT_ACCESS_TOKEN first-32 -> HTTP 200, full 48 -> 401; INITIAL_ROOT_PASSWORD -> POST /api/user/login HTTP 200; SQL_DSN password sha256_8 d5bae8c3 == PGPASSWORD in /root/.inferhub_pg.env. Re-measured 2026-09-25: the two inferhub-watch literals are STILL present (sha256_8 de0d7f4c, both files). Config.Entrypoint=[/new-api] Cmd=[] closes the re-seed question structurally (PID 1 IS the binary; nothing can re-read those env names at boot). Scanned by digest only; no value printed, none on any command line."
         }
       ]
     },
@@ -607,7 +637,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-09-23T11:32:57Z",
+      "attested_at": "2026-09-25T06:10:44Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -687,6 +717,12 @@
           "audience": "agent",
           "entry": "cron be4c38ce-d8f6-4d64-b4fe-eaa711af71cc - thin trigger that wakes the TG Hub lane (a360e13f-4e34-4fac-8a1d-770644040903) when a downstream handler goes unactioned past 24 h; delivers no report of its own",
           "cadence": "daily 00:00 (0 0 * * *)"
+        },
+        {
+          "name": "questions.l1979.ru answer surface",
+          "audience": "owner",
+          "entry": "vpn: /etc/caddy/Caddyfile vhost questions.l1979.ru -> reverse_proxy 127.0.0.1:8099 (/opt/questions/backend.py under questions-backend.service), serving /srv/questions. Pages and register are pushed agents -> vpn by the oc-questions-push.path systemd USER unit on agents.",
+          "cadence": "continuous; accepts a posted answer and returns it to the asking lane session"
         }
       ],
       "lanes": [
@@ -748,7 +784,7 @@
           "text": "A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.",
           "scope": "profile",
           "since": "2026-09-19",
-          "review_by": "2026-09-26",
+          "review_by": "2026-10-07",
           "check": null,
           "affects": [
             "profile"
@@ -787,7 +823,7 @@
       "factory": "meta-factory",
       "display_name": "Factories",
       "status": "attested",
-      "attested_at": "2026-09-23T11:39:29Z",
+      "attested_at": "2026-09-25T06:12:02Z",
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
@@ -870,7 +906,7 @@
           "session_id": "f4c192c9-a8e9-4268-9026-ee3e4970cc8a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T21:00:20Z",
+          "bound_at": "2026-09-25T06:00:49Z",
           "announcements": []
         },
         {
@@ -880,7 +916,7 @@
           "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T22:21:02Z",
+          "bound_at": "2026-09-25T06:01:40Z",
           "announcements": []
         },
         {
@@ -921,7 +957,7 @@
         {
           "id": "brain-metrics-baseline-measured",
           "severity": "info",
-          "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. Read 2026-09-23T11:28:08Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md, named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 698 lines / 133877 bytes / about 38250 tokens = 19.12 percent of a 200k window — AGENTS.md alone is 641 lines / 129188 bytes, 91.83 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 755 lines / 74467 bytes / about 21276 tokens = 10.64 percent; skills/meta-factory/SKILL.md alone is 755 lines, 255 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1453 lines / 208344 bytes / about 59526 tokens = 29.76 percent of the window, paid before a session reads its first message. The previous read in this notice (2026-09-21T22:48:40Z: 1337 / 171399 / 24.48 percent) is kept as the step this one follows, never overwritten: the floor rose 5.28 points in about 1.7 days and AGENTS.md is most of it. LEG C IS CURRENTLY UNREADABLE, and this notice therefore carries NO leg-C figure. Its needle is the summarizer line 'Compaction: sending N / N messages to summarizer (X / Y input tokens, reserving Z for output)' at src/brain/agent/service/context.rs:1084. Measured 2026-09-23: that needle occurs 28 to 2330 times per day across the ops logs of 09-16 through 09-21, and ZERO times in the 09-22 and 09-23 logs — the population collapsed at that boundary and has not returned. The emitting call is tracing::info! and the configured level is info, and the string is present in the running binary (v0.5.3), so this is NOT a logging-level change; the cause is not yet established, and both a superseded compaction path and an emission regression fit. The instrument handles it correctly: it prints 'no event in this window this run' and exits 4 rather than returning a silent zero. Treat any leg-C figure dated before 2026-09-22 as un-refreshable from this surface. CAUTION: the trigger line 'Context at NN percent' at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
+          "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN, and this replaces the earlier cause-not-established text. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-25T06:08:47Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 758 lines / 167701 bytes / about 47914 tokens = 23.96 percent of a 200k window — AGENTS.md alone is 701 lines / 163012 bytes, 92.48 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 756 lines / 77067 bytes / about 22019 tokens = 11.01 percent; skills/meta-factory/SKILL.md alone is 756 lines, 256 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1514 lines / 244768 bytes / about 69933 tokens = 34.97 percent of the window, paid before a session reads its first message. The previous read in this notice (2026-09-23T11:28:08Z: 29.76 percent) is kept as the step this one follows, never overwritten: the floor rose 5.21 points in about 1.9 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
           "scope": "profile",
           "since": "2026-09-19T14:20:00Z",
           "review_by": null,
@@ -937,11 +973,11 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-23T11:33:47Z",
+      "attested_at": "2026-09-25T06:10:32Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.15",
+      "skill_revision": "1.1.18",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
@@ -1029,6 +1065,16 @@
           "announcements": []
         },
         {
+          "topic": "Manager",
+          "thread_id": 9,
+          "role": null,
+          "session_id": "b64ca6ba-9ec0-47f7-8450-0d25b6c1d854",
+          "status": "resolved",
+          "channel": "telegram",
+          "bound_at": "2026-09-24T23:26:18Z",
+          "announcements": []
+        },
+        {
           "topic": "Worker",
           "thread_id": 56,
           "role": "worker",
@@ -1045,7 +1091,7 @@
           "session_id": "39d2b612-dbfc-4953-ae02-609267c68c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T11:43:22Z",
+          "bound_at": "2026-09-24T23:25:29Z",
           "announcements": []
         }
       ],
@@ -1053,7 +1099,7 @@
         {
           "id": "miidas-volume-namespace-on-apps",
           "severity": "warning",
-          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-23: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_probe-gw-1789692412-data); miidas-pixel-data present, unowned and untouched.",
+          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
           "scope": "profile",
           "since": "2026-09-13T09:56:00Z",
           "review_by": null,
@@ -1095,7 +1141,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-24T06:08:47Z",
+      "attested_at": "2026-09-25T06:09:13Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -1150,6 +1196,12 @@
           "name": "Fork issue intake and triage",
           "audience": "agent",
           "entry": "the Triage lane on leshchenko1979/opencrabs",
+          "cadence": "on request"
+        },
+        {
+          "name": "Owner decision surfacing (Open Questions register)",
+          "audience": "agent",
+          "entry": "oc_questions ask --factory <KEY> (dynamic tool; the asking session comes from OPENCRABS_SESSION_ID and must NOT be passed by the caller)",
           "cadence": "on request"
         }
       ],
@@ -1221,7 +1273,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-24T22:56:13Z",
+          "bound_at": "2026-09-25T05:45:02Z",
           "announcements": []
         },
         {
@@ -1231,7 +1283,7 @@
           "session_id": "a5b34466-1c14-441f-b2c6-6eaf4f316dde",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T12:06:46Z",
+          "bound_at": "2026-09-25T05:47:48Z",
           "announcements": []
         },
         {
@@ -1241,7 +1293,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T22:43:53Z",
+          "bound_at": "2026-09-25T05:46:52Z",
           "announcements": []
         },
         {
@@ -1371,7 +1423,7 @@
           "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T20:57:38Z",
+          "bound_at": "2026-09-25T05:58:35Z",
           "announcements": []
         },
         {
@@ -1451,7 +1503,7 @@
           "session_id": "6630dc9a-0eeb-46c2-95b8-bfae43e0766b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T22:03:01Z",
+          "bound_at": "2026-09-25T05:49:16Z",
           "announcements": []
         },
         {
@@ -1567,8 +1619,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-24T06:00:55Z",
+      "next_run_at": "2026-09-26T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": "telegram:-1003993000918:10784",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1615,8 +1667,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-24T09:27:02Z",
+      "next_run_at": "2026-09-26T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1631,8 +1683,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-23T06:00:24Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1647,8 +1699,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:00:00+00:00",
-      "last_run_at": "2026-09-24T18:20:23Z",
+      "next_run_at": "2026-09-26T00:00:00+00:00",
+      "last_run_at": "2026-09-25T00:00:49Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1663,8 +1715,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:07:00+00:00",
-      "last_run_at": "2026-09-24T18:07:23Z",
+      "next_run_at": "2026-09-25T12:07:00+00:00",
+      "last_run_at": "2026-09-25T06:07:13Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1695,8 +1747,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T05:50:00+00:00",
-      "last_run_at": "2026-09-24T05:50:55Z",
+      "next_run_at": "2026-09-26T05:50:00+00:00",
+      "last_run_at": "2026-09-25T05:50:12Z",
       "deliver_to": "session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1711,8 +1763,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:40:00+00:00",
-      "last_run_at": "2026-09-24T18:40:25Z",
+      "next_run_at": "2026-09-25T06:40:00+00:00",
+      "last_run_at": "2026-09-25T00:40:11Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -1730,7 +1782,7 @@
       "next_run_at": "2026-09-25T12:00:00+00:00",
       "last_run_at": "2026-09-24T12:00:03Z",
       "deliver_to": "telegram:-1003993000918:10784",
-      "trigger_cmd": "ssh apps 'docker logs --since 2026-09-24T21:45:37 ai-antispam 2>&1 | awk \"/app.agents: Gateway spam classification failed/{n++} END{print n+0}\"' > /tmp/ai_antispam_fallbacks && ssh apps 'docker exec postgres psql -U postgres -d ai_spam_bot -At -F \"|\" -c \"SELECT count(*) AS total, count(*) FILTER (WHERE status='\"'\"'decided'\"'\"') AS decided, count(*) FILTER (WHERE status='\"'\"'failed'\"'\"') AS failed FROM classification_verdicts WHERE created_at >= TIMESTAMPTZ '\"'\"'2026-09-24T21:45:37Z'\"'\"';\"' > /tmp/ai_antispam_verdicts && printf 'deploy 2026-09-24T21:45:37Z | gateway_fallbacks=%s | verdicts total|decided|failed=%s\\n' \"$(cat /tmp/ai_antispam_fallbacks)\" \"$(cat /tmp/ai_antispam_verdicts)\" && rm -f /tmp/ai_antispam_fallbacks /tmp/ai_antispam_verdicts",
+      "trigger_cmd": "START=$(ssh apps \"docker inspect -f '{{.State.StartedAt}}' ai-antispam\") && ssh apps \"docker logs --since $START ai-antispam 2>&1 | awk '/app.agents: Gateway spam classification failed/{n++} END{print n+0}'\" > /tmp/oc_tm_fb && ssh apps 'docker exec postgres psql -U postgres -d ai_spam_bot -At -c \"SELECT '\"'\"'all='\"'\"'||count(*)||'\"'\"' decided='\"'\"'||count(*) FILTER (WHERE status='\"'\"'decided'\"'\"')||'\"'\"' failed='\"'\"'||count(*) FILTER (WHERE status='\"'\"'failed'\"'\"')||'\"'\"' | pre-pool n='\"'\"'||count(*) FILTER (WHERE created_at < TIMESTAMPTZ '\"'\"'2026-09-24T21:45:37Z'\"'\"')||'\"'\"' failed='\"'\"'||count(*) FILTER (WHERE created_at < TIMESTAMPTZ '\"'\"'2026-09-24T21:45:37Z'\"'\"' AND status='\"'\"'failed'\"'\"')||'\"'\"' | post-pool n='\"'\"'||count(*) FILTER (WHERE created_at >= TIMESTAMPTZ '\"'\"'2026-09-24T21:45:37Z'\"'\"')||'\"'\"' failed='\"'\"'||count(*) FILTER (WHERE created_at >= TIMESTAMPTZ '\"'\"'2026-09-24T21:45:37Z'\"'\"' AND status='\"'\"'failed'\"'\"')||'\"'\"' | span '\"'\"'||to_char(min(created_at),'\"'\"'MM-DD HH24:MI'\"'\"')||'\"'\"' .. '\"'\"'||to_char(max(created_at),'\"'\"'MM-DD HH24:MI'\"'\"') FROM classification_verdicts;\"' > /tmp/oc_tm_v && printf 'container-start %s | gateway_fallbacks=%s (since container start) | %s\\n' \"$START\" \"$(cat /tmp/oc_tm_fb)\" \"$(cat /tmp/oc_tm_v)\" && rm -f /tmp/oc_tm_fb /tmp/oc_tm_v",
       "profile": "ops",
       "owner": "ai-antispam",
       "owner_basis": "deliver_to -> chat"
@@ -1743,8 +1795,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:25:00+00:00",
-      "last_run_at": "2026-09-24T18:25:23Z",
+      "next_run_at": "2026-09-25T06:25:00+00:00",
+      "last_run_at": "2026-09-25T00:25:49Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
@@ -1823,8 +1875,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T05:00:00+00:00",
-      "last_run_at": "2026-09-24T05:00:55Z",
+      "next_run_at": "2026-09-26T05:00:00+00:00",
+      "last_run_at": "2026-09-25T05:00:12Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1839,8 +1891,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:00:00+00:00",
-      "last_run_at": "2026-09-24T18:00:22Z",
+      "next_run_at": "2026-09-25T12:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1855,8 +1907,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-24T06:00:55Z",
+      "next_run_at": "2026-09-26T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1871,8 +1923,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:23:00+00:00",
-      "last_run_at": "2026-09-24T18:23:23Z",
+      "next_run_at": "2026-09-25T06:23:00+00:00",
+      "last_run_at": "2026-09-25T00:23:49Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1887,8 +1939,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:00:00+00:00",
-      "last_run_at": "2026-09-24T00:00:53Z",
+      "next_run_at": "2026-09-26T00:00:00+00:00",
+      "last_run_at": "2026-09-25T00:00:49Z",
       "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
@@ -1919,8 +1971,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-24T06:00:55Z",
+      "next_run_at": "2026-09-26T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1935,8 +1987,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-25T00:00:00+00:00",
-      "last_run_at": "2026-09-24T18:00:22Z",
+      "next_run_at": "2026-09-25T12:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -1983,8 +2035,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-24T06:00:55Z",
+      "next_run_at": "2026-09-26T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1999,8 +2051,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T06:00:00+00:00",
-      "last_run_at": "2026-09-24T06:00:55Z",
+      "next_run_at": "2026-09-26T06:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2031,8 +2083,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-25T00:00:00+00:00",
-      "last_run_at": "2026-09-24T18:00:22Z",
+      "next_run_at": "2026-09-25T12:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -2367,8 +2419,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-25T00:00:00+00:00",
-      "last_run_at": "2026-09-24T18:00:22Z",
+      "next_run_at": "2026-09-25T12:00:00+00:00",
+      "last_run_at": "2026-09-25T06:00:13Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",

@@ -73,6 +73,12 @@
       "audience": "agent",
       "entry": "cron be4c38ce-d8f6-4d64-b4fe-eaa711af71cc - thin trigger that wakes the TG Hub lane (a360e13f-4e34-4fac-8a1d-770644040903) when a downstream handler goes unactioned past 24 h; delivers no report of its own",
       "cadence": "daily 00:00 (0 0 * * *)"
+    },
+    {
+      "name": "questions.l1979.ru answer surface",
+      "audience": "owner",
+      "entry": "vpn: /etc/caddy/Caddyfile vhost questions.l1979.ru -> reverse_proxy 127.0.0.1:8099 (/opt/questions/backend.py under questions-backend.service), serving /srv/questions. Pages and register are pushed agents -> vpn by the oc-questions-push.path systemd USER unit on agents.",
+      "cadence": "continuous; accepts a posted answer and returns it to the asking lane session"
     }
   ],
   "substrates_owned": [
@@ -91,7 +97,7 @@
         "profile"
       ],
       "since": "2026-09-19",
-      "review_by": "2026-09-26",
+      "review_by": "2026-10-07",
       "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md"
     },
     {
@@ -150,5 +156,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-23T11:32:57Z"
+  "attested_at": "2026-09-25T06:10:44Z"
 }
