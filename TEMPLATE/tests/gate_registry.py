@@ -551,6 +551,13 @@ OPTIONAL_GATES: dict[str, str] = {
         "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "
         "need its own pair-guard."
     ),
+    "test_kit_manifest.py": (
+        "meta-factory-only (plan 2646d31a step 9) — its POPULATION is `TEMPLATE/`, the "
+        "reference manifest of the shipped kit. A bootstrapped factory has no TEMPLATE/ "
+        "tree, so there is no manifest for it to agree with; it is this factory's own "
+        "instrument for measuring what every member has ported, and it skips with that "
+        "reason rather than passing silently."
+    ),
 }
 
 REQUIRED_PREDICATE = (

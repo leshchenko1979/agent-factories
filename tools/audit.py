@@ -1602,6 +1602,19 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_identity.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_identity.py"])
 
+    # 52. Kit-manifest gate (plan 2646d31a step 9). `registry/kit.json` is the reference the
+    #     cross-factory drift leg measures against, and it is GENERATED from `TEMPLATE/` rather
+    #     than hand-kept -- because a hand-kept list of shipped files is a second copy of the
+    #     tree that goes stale silently, which is the class this factory has ruled against
+    #     repeatedly. The gate proves the manifest AGREES with the tree AND, by mutation on a
+    #     copy, that the check REJECTS a drifted, a deleted and an unlisted file, each named:
+    #     `--check` returning 0 is exactly what a vacuous implementation would print, so the
+    #     mutation arms are what make the agreement arm mean anything.
+    #     Its population is `TEMPLATE/`, so a bootstrapped factory has no such tree and the
+    #     gate SKIPS WITH ITS REASON rather than passing silently.
+    if (repo_root / "tests/test_kit_manifest.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_manifest.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
