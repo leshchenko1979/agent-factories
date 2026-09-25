@@ -1708,6 +1708,23 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_registry_attest.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_registry_attest.py"])
 
+    # 55. Kit-delivery gate (plan 2646d31a step 7). The kit could TELL a factory it had drifted
+    #     and had no mechanism to hand it the update: the law corpus carried `vendor` 0,
+    #     `re-sync` 0, `propagat` 0-1, and `registry/kit.json` is a manifest, not a channel.
+    #     `tools/kit_deliver.py` is that transport, and this gate is its evidence -- a
+    #     transport that ships without a gate is a mechanism whose only proof is its author's
+    #     word.
+    #     WHAT IT PROVES: a factory at an older kit state RECEIVES the update; its OWN gate is
+    #     green after, with a NEGATIVE CONTROL showing that same gate reds on the state a
+    #     non-atomic update would leave (bytes moved, pin not) -- so "green after" is measured
+    #     rather than a property the gate could never fail; its `factory`-class declarations
+    #     and its own data are BYTE-UNCHANGED by digest; a local fork is SKIPPED, not
+    #     overwritten; and `--dry-run` writes nothing.
+    #     IT IS NOT A KIT FILE, and that is why it is OPTIONAL rather than REQUIRED: a member
+    #     delivers to nobody, so the transport must not ship. Same grain as gate 52.
+    if (repo_root / "tests/test_kit_deliver.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_deliver.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

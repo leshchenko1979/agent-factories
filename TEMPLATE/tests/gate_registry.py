@@ -572,6 +572,13 @@ OPTIONAL_GATES: dict[str, str] = {
         "instrument for measuring what every member has ported, and it skips with that "
         "reason rather than passing silently."
     ),
+    "test_kit_deliver.py": (
+        "meta-factory-only (plan 2646d31a step 7) — its subject tool tools/kit_deliver.py "
+        "is the TRANSPORT that hands a member an update, and it does not ship: a member "
+        "delivers to nobody, so a member running this gate would be exercising a tool it "
+        "is not supposed to carry. Same grain as test_kit_manifest.py, and declared here "
+        "rather than left to a by-hand run so its twelve arms actually execute."
+    ),
 }
 
 REQUIRED_PREDICATE = (
