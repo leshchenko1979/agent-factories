@@ -43,10 +43,24 @@ What this gate asserts
    sites, because two implementations of one predicate drift and the drift is
    silent.
 
+5. **The shipped kit and its manifest move together.** `registry/kit.json` is
+   GENERATED from `TEMPLATE/` by `tools/kit_manifest.py`, and it is the reference
+   every member factory is measured against — a stale one reports a factory DIFF
+   against a file it ported byte-identically, a false accusation produced by our
+   own commit. Measured 2026-09-25: 4 of its 106 entries described a tree that had
+   already moved on, and the gate that catches it was RED on `main` until a reader
+   noticed. Probed with synthetic sets against the generator's own `compare`, so
+   the hook and `--check` cannot disagree about what drift is; skipped where the
+   generator is absent, because a bootstrapped factory carries neither.
+
 Scope statement: a factory bootstrapped from the template has no `TEMPLATE/` and
 therefore no declared pairs. Its `PAIRS` is absent and the hook correctly fails
-open. This gate states that condition and passes the table-dependent legs rather
-than reporting a defect that is not one — the same reasoning `tests/test_close_row_revision.py`
+open — and it fails open SILENTLY, because with no `TEMPLATE/` neither leg can
+fire, so there is nothing to warn about. A warning on every commit naming a file
+that factory was never asked to create is noise, and noise teaches lanes to ignore
+the hook; measured across four member factories, none of which carries a
+`TEMPLATE/`. This gate states that condition and passes the table-dependent legs
+rather than reporting a defect that is not one — the same reasoning `tests/test_close_row_revision.py`
 applies to the BOOTSTRAP-created ledger. The installation legs still bite there,
 because a hook is a mechanism everywhere.
 
@@ -59,8 +73,10 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -70,6 +86,7 @@ HOOK_TWIN = "TEMPLATE/tools/hooks/pre-commit"
 PAIR_TABLE_RELATIVE = "tests/test_template_sync.py"
 TABLE_NAME = "PAIRS"
 HOOKS_PATH_CONFIG = "tools/hooks"
+GENERATOR_RELATIVE = "tools/kit_manifest.py"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -193,6 +210,141 @@ def probe(hook_mod, pairs: list[tuple[str, str]]) -> list[str]:
 
     return failures
 
+def kit_leg_probes(hook_mod, top: Path) -> list[str]:
+    """The shipped-kit leg, driven by SYNTHETIC state. Returns failure strings.
+
+    `touches_kit` and `kit_present` are pure and bind everywhere. `manifest_lines`
+    needs the generator, which is a meta-factory file: a bootstrapped factory does
+    not carry it, and the leg is skipped there rather than reported as a defect —
+    the same scope rule the staged-set legs follow.
+    """
+    failures: list[str] = []
+
+    # --- the commit-scope predicate, PURE ------------------------------------
+    for staged, expected, why in (
+        ([], False, "an empty index must not touch the kit"),
+        (["docs/x.md"], False, "an unrelated commit must not touch the kit"),
+        (["tools/a.py"], False, "a repo twin alone must not touch the kit"),
+        (["TEMPLATE.md"], False, "a TEMPLATE-prefixed SIBLING is not under TEMPLATE/"),
+        (["TEMPLATE/tools/a.py"], True, "a shipped file must touch the kit"),
+        (["registry/kit.json"], True, "the manifest itself must touch the kit"),
+    ):
+        got = hook_mod.touches_kit(staged)
+        if got != expected:
+            failures.append(
+                f"probe: {why} — touches_kit({staged!r}) got {got!r}, expected {expected!r}"
+            )
+
+    # --- a tree with no shipped kit, LIVE ------------------------------------
+    with tempfile.TemporaryDirectory() as empty:
+        if hook_mod.kit_present(Path(empty)):
+            failures.append(
+                "probe: a directory with no TEMPLATE/ must report no shipped kit — a "
+                "bootstrapped factory would otherwise be warned on every commit"
+            )
+    if not hook_mod.kit_present(REPO):
+        failures.append(
+            "probe: this tree carries TEMPLATE/ but kit_present reports none — both legs "
+            "would be skipped silently in the factory that has the kit"
+        )
+
+    # --- the drift predicate, PURE, against the generator's own `compare` -----
+    generator = load_module(top / GENERATOR_RELATIVE, "oc_kit_manifest_expected")
+    if generator is None:
+        return failures
+    same = "0" * 64
+    for files, declared, expected, why in (
+        ({"TEMPLATE/a": same}, {"files": {"TEMPLATE/a": same}}, [], "an agreeing set"),
+        ({"TEMPLATE/a": "1" * 64}, {"files": {"TEMPLATE/a": same}}, ["DRIFTED"], "a moved file"),
+        ({}, {"files": {"TEMPLATE/a": same}}, ["MISSING"], "a file the index lacks"),
+        (
+            {"TEMPLATE/a": same, "TEMPLATE/b": same},
+            {"files": {"TEMPLATE/a": same}},
+            ["UNLISTED"],
+            "a file that escaped the manifest",
+        ),
+    ):
+        got = hook_mod.manifest_lines(generator, files, declared)
+        if expected:
+            absent = [e for e in expected if not any(e in line for line in got)]
+            if absent:
+                failures.append(f"probe: {why} must be reported — got {got!r}")
+        elif got:
+            failures.append(f"probe: {why} must be clean — got {got!r}")
+
+    return failures
+
+def hook_wiring_probes(top: Path) -> list[str]:
+    """Drive the REAL hook in a throwaway repo — the wiring, not just the predicates.
+
+    A gate that only calls the pure predicates passes on a hook whose `main` has
+    stopped calling them. Measured 2026-09-25: with leg 2's wiring removed, every
+    predicate probe stayed green and the gate reported ok — a probe that cannot
+    bite is a receipt for a check that is not running. The predicates are the law;
+    this arm is the proof the law is REACHED.
+
+    Skipped where the generator is absent: a bootstrapped factory carries neither
+    the kit nor `tools/kit_manifest.py`, so the leg cannot exist there.
+    """
+    generator_src = top / GENERATOR_RELATIVE
+    if not generator_src.is_file():
+        return []
+    failures: list[str] = []
+
+    def git(repo: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+    def run(repo: Path) -> int:
+        return subprocess.run(
+            [sys.executable, str(repo / HOOK_PATH)],
+            capture_output=True,
+            text=True,
+            cwd=str(repo),
+        ).returncode
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "r"
+        for sub in ("TEMPLATE/tools", "tools/hooks", "tests", "registry"):
+            (repo / sub).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(top / HOOK_PATH, repo / HOOK_PATH)
+        shutil.copy2(generator_src, repo / GENERATOR_RELATIVE)
+        (repo / "TEMPLATE" / "tools" / "a.py").write_text("v1\n", encoding="utf-8")
+        # An empty table is enough: these arms must not be decided by leg 1.
+        (repo / "tests" / "test_template_sync.py").write_text("PAIRS = []\n", encoding="utf-8")
+        git(repo, "init", "-q")
+        git(repo, "config", "user.email", "probe@probe.invalid")
+        git(repo, "config", "user.name", "probe")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "init")
+        subprocess.run(
+            [sys.executable, str(repo / GENERATOR_RELATIVE)], cwd=str(repo), capture_output=True
+        )
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "manifest")
+
+        # --- arm 1: a shipped file moved, the manifest did not -----------------
+        (repo / "TEMPLATE" / "tools" / "a.py").write_text("v2\n", encoding="utf-8")
+        git(repo, "add", "TEMPLATE/tools/a.py")
+        rc = run(repo)
+        if rc != 1:
+            failures.append(
+                "probe: a shipped file staged with a STALE manifest must be REFUSED — "
+                f"the real hook returned {rc}, so leg 2 is not reached from main"
+            )
+
+        # --- arm 2: regenerate, stage both, and it must pass -------------------
+        subprocess.run(
+            [sys.executable, str(repo / GENERATOR_RELATIVE)], cwd=str(repo), capture_output=True
+        )
+        git(repo, "add", "TEMPLATE/tools/a.py", "registry/kit.json")
+        rc = run(repo)
+        if rc != 0:
+            failures.append(
+                f"probe: a regenerated and staged manifest must PASS — the real hook returned {rc}"
+            )
+
+    return failures
+
 def main() -> int:
     top = repo_toplevel() or REPO
     problems: list[str] = []
@@ -213,6 +365,8 @@ def main() -> int:
     else:
         problems.extend(probe(hook_mod, pairs))
 
+    problems.extend(kit_leg_probes(hook_mod, top))
+    problems.extend(hook_wiring_probes(top))
     problems.extend(hook_installation_problems(top, HOOK_PATH, HOOKS_PATH_CONFIG))
 
     if problems:

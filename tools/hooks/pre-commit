@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""pre-commit hook: refuse a staged set that names one side of a byte pair.
+"""pre-commit hook: refuse a staged set that is not self-consistent.
 
-The refusal point for the one-sided pair class (issue #92, ruled at n=630). The
-class has recurred — #80, then c3b60d5 — and `tests/test_template_sync.py` caught
-every occurrence, but only AFTER the commit landed, leaving a red on `main` for
-the hours until the next audit ran.
+Two refusals live here, and they are one family: the pending commit contradicts
+itself, and the contradiction is visible at pre-commit and nowhere later.
+
+  leg 1  a declared byte pair is staged on ONE side only
+  leg 2  the shipped kit moved and `registry/kit.json` did not follow it
+
+Leg 1 — the one-sided pair class (issue #92, ruled at n=630)
+------------------------------------------------------------
+The class has recurred — #80, then c3b60d5 — and `tests/test_template_sync.py`
+caught every occurrence, but only AFTER the commit landed, leaving a red on
+`main` for the hours until the next audit ran.
 
 Why a `pre-commit` hook can do this job when `commit-msg` could not
 ------------------------------------------------------------------
@@ -14,32 +21,50 @@ pair is visible at pre-commit. The pending commit is exactly what is staged, so
 the question "does this commit name one side without its twin?" is answerable
 there and nowhere later.
 
+Leg 2 — the manifest that did not follow the kit
+------------------------------------------------
+`registry/kit.json` is GENERATED from `TEMPLATE/` by `tools/kit_manifest.py`, and
+it is the reference every member factory is measured against. Measured
+2026-09-25: 4 of its 106 entries described a tree that had already moved on —
+two generated from the parent commit before their own commit's edits landed, two
+left behind when a later commit touched `TEMPLATE/`. The gate
+(`tests/test_kit_manifest.py`) caught it and was RED on `main`, but only a reader
+noticed, and every member measured against it in the meantime was told it DIFFERS
+from a file it may have ported byte-identically. A stale reference does not fail;
+it accuses.
+
 Why the naive hook would be worse than none
 -------------------------------------------
 Running `tests/test_template_sync.py` here would read the WORKING TREE, not the
 INDEX. A lane that staged one side and fixed the other side on disk without
 staging it would get a PASS on a one-sided commit — a green light on the exact
 defect this hook exists to catch. So this hook never consults the working tree:
-it reads `git diff --cached --name-only`, which is the pending commit itself.
-That makes it unable to false-pass, and unable to false-fire on an unrelated
-commit that merely leaves an already-drifted tree untouched.
+it reads `git diff --cached --name-only`, which is the pending commit itself, and
+leg 2 hashes the INDEX's blobs rather than the files on disk. That makes it unable
+to false-pass, and unable to false-fire on an unrelated commit that merely leaves
+an already-drifted tree untouched.
 
 **One pair table, two call sites.** This hook does not restate the pairs. It
 loads `PAIRS` from `tests/test_template_sync.py` — the same table the gate reads
 — because two copies drift and the drift is silent (the `n=405` PART 5 rule).
-A pair added to the gate is enforced here with no second edit.
+A pair added to the gate is enforced here with no second edit. Leg 2 likewise
+restates no predicate: it imports `compare` from `tools/kit_manifest.py`, the same
+function `--check` uses.
 
 **Refusal, not rewrite.** The hook prints the remedy and exits non-zero; it
 never edits the index. Staging is the author's act.
 
-**Fail open, and loudly.** If the pair table cannot be loaded — the gate file is
-absent, or this is not a git work tree — the hook prints a WARNING naming what it
-could not read and exits 0. A hook that refuses every commit on a packaging bug
-blocks the factory's own repair path, and it is not the authority: the audit gate
-(`tools/audit.py`) is, and `tests/test_template_sync.py` fails loudly on its own.
-What this hook must never do is pass SILENTLY, which is why the warning is the
-point. A factory with no `TEMPLATE/` has an empty or absent table and correctly
-commits freely.
+**Silent where the class cannot exist; loud where it can.** A factory that carries
+no `TEMPLATE/` has no byte pairs and no shipped kit, so both legs are skipped
+WITHOUT a warning — the absence is not a gap, and a warning on every commit about
+a file that factory was never asked to create is noise that teaches lanes to
+ignore this hook. Where `TEMPLATE/` IS present and a table or the generator cannot
+be read, the hook prints a WARNING naming what it could not read and exits 0. A
+hook that refuses every commit on a packaging bug blocks the factory's own repair
+path, and it is not the authority: the audit gate (`tools/audit.py`) is, and both
+`tests/test_template_sync.py` and `tests/test_kit_manifest.py` fail loudly on
+their own. What this hook must never do is pass SILENTLY on a defect it can see,
+which is why the warning is the point.
 
 Install — versioned in the repo, so the template ships the mechanism and not only
 the law:
@@ -54,18 +79,24 @@ The class this belongs to is stated as P37 in `docs/best-practices.md`: a check
 that judges a COMMIT reads the index, a check that judges LIVE state says so.
 
 Run:  invoked by git, with no arguments
-Exit: 0 the staged set names both sides of every pair it touches; 1 it does not.
+Exit: 0 the staged set is self-consistent; 1 it is not.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 PAIR_TABLE_RELATIVE = "tests/test_template_sync.py"
 TABLE_NAME = "PAIRS"
+
+KIT_ROOT_RELATIVE = "TEMPLATE"
+MANIFEST_RELATIVE = "registry/kit.json"
+GENERATOR_RELATIVE = "tools/kit_manifest.py"
 
 REMEDY = """pre-commit: REFUSED — a declared byte pair was staged on ONE side only.
 
@@ -82,6 +113,21 @@ Stage the twin in this commit, or unstage the side you staged:
     git restore --staged {staged}
 
 The index was NOT rewritten — stage the twin and commit again."""
+
+MANIFEST_REMEDY = """pre-commit: REFUSED — the shipped kit moved and {manifest} did not follow it.
+
+  {manifest} is GENERATED from {kit_root} by {generator}. It is the reference every
+  member factory is measured against, so a stale one reports a factory DIFF against
+  a file it ported byte-identically — a false accusation produced by our own commit.
+
+{detail}
+
+Regenerate and stage it in this commit:
+
+    python3 {generator}
+    git add {manifest}
+
+The index was NOT rewritten — staging is your act."""
 
 def repo_toplevel() -> Path | None:
     """The git top level, so the hook resolves wherever it was invoked."""
@@ -108,20 +154,27 @@ def staged_paths(top: Path) -> list[str] | None:
         return None
     return [p for p in proc.stdout.split("\0") if p]
 
-def load_pairs(top: Path) -> list[tuple[str, str]] | None:
-    """`PAIRS` from the gate module, or None if it cannot be read.
+def load_module(top: Path, relative: str, name: str):
+    """Import a module by path, or None if it cannot be read.
 
-    Imported by path rather than by package: this file lives in `tools/hooks/` and
-    the gate in `tests/`, and neither directory is a package.
+    By path rather than by package: `tools/hooks/`, `tests/` and `tools/` are not
+    packages, so a plain import would depend on how the hook was invoked.
     """
-    table = top / PAIR_TABLE_RELATIVE
-    if not table.is_file():
+    source = top / relative
+    if not source.is_file():
         return None
-    spec = importlib.util.spec_from_file_location("oc_pair_table", table)
+    spec = importlib.util.spec_from_file_location(name, source)
     if spec is None or spec.loader is None:
         return None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+def load_pairs(top: Path) -> list[tuple[str, str]] | None:
+    """`PAIRS` from the gate module, or None if it cannot be read."""
+    module = load_module(top, PAIR_TABLE_RELATIVE, "oc_pair_table")
+    if module is None:
+        return None
     pairs = getattr(module, TABLE_NAME, None)
     if not pairs:
         return None
@@ -144,6 +197,99 @@ def one_sided(pairs: list[tuple[str, str]], staged: list[str]) -> list[tuple[str
             split.append((b, a))
     return split
 
+def index_bytes(top: Path, relative: str) -> bytes | None:
+    """The INDEX's content for one path, or None when the index does not hold it."""
+    proc = subprocess.run(
+        ["git", "-C", str(top), "show", f":{relative}"], capture_output=True
+    )
+    return proc.stdout if proc.returncode == 0 else None
+
+def staged_kit(top: Path) -> dict[str, str] | None:
+    """`{path: sha256}` for the shipped set as the INDEX holds it.
+
+    `git ls-files -s` gives the SET the index holds, so a staged addition appears
+    and a staged deletion drops out; each entry's CONTENT comes from the index,
+    never the disk. A lane that staged one side and fixed the other on disk would
+    otherwise get a pass on a stale commit.
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(top), "ls-files", "-s", "-z", "--", KIT_ROOT_RELATIVE],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    files: dict[str, str] = {}
+    for entry in proc.stdout.split("\0"):
+        if not entry:
+            continue
+        _meta, _tab, relative = entry.partition("\t")
+        if not relative:
+            continue
+        body = index_bytes(top, relative)
+        if body is None:
+            return None
+        files[relative] = hashlib.sha256(body).hexdigest()
+    return files
+
+def manifest_lines(generator, files: dict[str, str], declared: dict) -> list[str]:
+    """The drift lines between a shipped set and a manifest — PURE.
+
+    PURE so the probes drive it with synthetic sets and a synthetic manifest
+    rather than by staging real files. The predicate is the generator's own
+    `compare`, so the hook and `--check` cannot disagree about what drift is.
+    """
+    current = {"file_count": len(files), "files": files}
+    changed, missing, unlisted = generator.compare(current, declared)
+    lines: list[str] = []
+    for relative in changed:
+        lines.append(f"  DRIFTED   {relative}")
+    for relative in missing:
+        lines.append(f"  MISSING   {relative} — named by the manifest, absent from the index")
+    for relative in unlisted:
+        lines.append(f"  UNLISTED  {relative} — in the index but not in the manifest")
+    return lines
+
+def kit_present(top: Path) -> bool:
+    """Whether this tree carries a shipped kit at all.
+
+    A factory bootstrapped from the template has no `TEMPLATE/`, so no byte pair
+    and no shipped set can exist there: neither leg has anything to judge, and
+    saying so on every commit would be noise rather than information.
+    """
+    return (top / KIT_ROOT_RELATIVE).is_dir()
+
+def kit_drift(top: Path, generator) -> list[str] | None:
+    """The drift lines between the staged shipped set and the staged manifest.
+
+    `None` means the tree cannot be judged — the index is unreadable. An EMPTY
+    list means judged and in agreement.
+    """
+    files = staged_kit(top)
+    if files is None:
+        return None
+    declared_bytes = index_bytes(top, MANIFEST_RELATIVE)
+    if declared_bytes is None:
+        return [f"{MANIFEST_RELATIVE} is not in the index — the reference is absent"]
+    try:
+        declared = json.loads(declared_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"{MANIFEST_RELATIVE} is not readable JSON: {exc}"]
+    return manifest_lines(generator, files, declared)
+
+def touches_kit(staged: list[str]) -> bool:
+    """Whether this commit moves the shipped set or its manifest at all.
+
+    PURE. An unrelated commit is not this hook's business: the staged kit equals
+    the committed kit, which was already checked when it landed, so re-hashing it
+    on every commit would buy nothing and would false-fire on a tree some earlier
+    commit left drifted.
+    """
+    return any(
+        path == MANIFEST_RELATIVE or path.startswith(f"{KIT_ROOT_RELATIVE}/")
+        for path in staged
+    )
+
 def main(argv: list[str]) -> int:
     top = repo_toplevel()
     if top is None:
@@ -153,6 +299,23 @@ def main(argv: list[str]) -> int:
         )
         return 0
 
+    staged = staged_paths(top)
+    if staged is None:
+        print(
+            "pre-commit: WARNING — the index could not be read; the staged set was "
+            "NOT checked.",
+            file=sys.stderr,
+        )
+        return 0
+
+    # A tree without `TEMPLATE/` has no byte pairs and no shipped kit, so neither
+    # leg can fire: there is simply nothing here to check, and saying so on every
+    # commit would be noise that teaches lanes to ignore this hook.
+    if not kit_present(top):
+        return 0
+
+    problems: list[str] = []
+
     pairs = load_pairs(top)
     if pairs is None:
         print(
@@ -161,27 +324,36 @@ def main(argv: list[str]) -> int:
             "pair. tools/audit.py still carries the gate.",
             file=sys.stderr,
         )
-        return 0
+    else:
+        for staged_side, twin in one_sided(pairs, staged):
+            problems.append(
+                REMEDY.format(staged=staged_side, twin=twin, table=PAIR_TABLE_RELATIVE)
+            )
 
-    staged = staged_paths(top)
-    if staged is None:
-        print(
-            "pre-commit: WARNING — the index could not be read; the staged set was "
-            "NOT checked for a one-sided pair.",
-            file=sys.stderr,
-        )
-        return 0
+    if (top / MANIFEST_RELATIVE).is_file() and touches_kit(staged):
+        generator = load_module(top, GENERATOR_RELATIVE, "oc_kit_manifest")
+        if generator is None:
+            print(
+                f"pre-commit: WARNING — {GENERATOR_RELATIVE} is absent, so the shipped "
+                f"kit was NOT checked against {MANIFEST_RELATIVE}. tools/audit.py still "
+                "carries the gate.",
+                file=sys.stderr,
+            )
+        else:
+            drift = kit_drift(top, generator)
+            if drift:
+                problems.append(
+                    MANIFEST_REMEDY.format(
+                        manifest=MANIFEST_RELATIVE,
+                        kit_root=KIT_ROOT_RELATIVE,
+                        generator=GENERATOR_RELATIVE,
+                        detail="\n".join(drift),
+                    )
+                )
 
-    split = one_sided(pairs, staged)
-    if not split:
-        return 0
-
-    for staged_side, twin in split:
-        print(
-            REMEDY.format(staged=staged_side, twin=twin, table=PAIR_TABLE_RELATIVE),
-            file=sys.stderr,
-        )
-    return 1
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    return 1 if problems else 0
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
