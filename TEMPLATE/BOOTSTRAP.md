@@ -223,16 +223,76 @@ bureaucracy.
 
 ## Step 4b — Stand up the state surface
 
-Copy [`tools/ledger.py`](tools/ledger.py) and
-[`tests/test_ledger.py`](tests/test_ledger.py), create `evidence/ledger.jsonl`,
-and write the genesis row:
+**The ledger is SIX gates, not one, and this step named two of them.** Measured
+2026-09-25 on a clean fixture: a factory following the old text carried four unenforced
+invariants — independently corroborated by the member census, whose ledger gate sets
+read 2 / 2 / 1 / 0 of 6. The gate set grew one file at a time AFTER each factory copied,
+so the missing gates are a function of *when* a factory bootstrapped rather than of care.
+
+Copy all of it. The list is measured, not transcribed: a fixture built from exactly these
+paths runs the six gates, and anything left out shows up as a failure naming itself.
+
+| what | paths | why it travels with the ledger |
+|---|---|---|
+| the tool | `tools/ledger.py` | the only append path |
+| its closure | `tools/field_predicate.py`, `tools/ledger_declaration.py`, `tools/reconstruction.py`, `tools/registry.py`, `tools/registry_render.py`, `tools/telemetry.py`, `tools/kit_identity.py` | a bare copy dies at import — the `#137` finding. `registry.py` and `telemetry.py` arrive through `ledger.py`, and `kit_identity.py` carries `--version` |
+| the gates | `tests/test_ledger.py`, `tests/test_ledger_schema.py`, `tests/test_ledger_commit_cites_no_rows.py`, `tests/test_ledger_no_shrink.py`, `tests/test_ledger_close_preflight.py`, `tests/test_ledger_identity.py` | six invariants; naming two installs one third of the ledger |
+| their closure | `tests/gate_fixtures.py`, `tests/hook_installation.py`, `tests/ledger_boundary.py` | imported by the gates. The second proves a hook is installed rather than assumed; the third is the SHARED boundary reader, so a gate and the repair path cannot disagree about what this factory declared |
+| the hooks | `tools/hooks/commit-msg`, `tools/hooks/pre-commit` | `test_ledger_commit_cites_no_rows.py` reads `commit-msg`'s installation, so the gate cannot pass without it |
+| a gate's own dependency | `tools/audit.py`, `tools/gate_budget.py` | `test_ledger.py` imports `audit.py`; `audit.py` imports `gate_budget.py` |
+
+**Create three data surfaces, and copy two seeds:**
+
+```sh
+cp TEMPLATE/docs/ledger-invariants.example.json docs/ledger-invariants.json
+cp TEMPLATE/registry/fleet.example.json         registry/fleet.json
+printf 'hq\ntriage\nworker\ndelegate\nsurveys\nowner\n' > tools/actors.txt
+```
+
+- **`tools/actors.txt`** — declare every lane the closed core set does not carry. A lane
+  that cannot be declared cannot record its rows.
+- **`docs/ledger-invariants.json`** — the boundary each invariant landed at **here**. The
+  example ships with `invariants: {}` and that is correct: add a key only once you have
+  adopted that invariant, and the key is the name of the gate that asserts it.
+- **`registry/fleet.json`** — the lane resolver reads it, and since identity is now derived
+  from `OPENCRABS_SESSION_ID` the resolver is on the genesis path too.
+
+**Re-anchor the commit-cites marker.** `tests/test_ledger_commit_cites_no_rows.py` pins a
+`MARKER` commit — the first ledger commit obeying the no-row-number clause — and the
+shipped sha belongs to the template's own history. Its docstring says a bootstrapped
+factory re-anchors it at birth; set `MARKER` to your own first ledger commit once this
+step's commit exists.
+
+Then write the genesis row and verify:
 
 ```sh
 python3 tools/ledger.py append --event genesis --actor hq \
   --subject evidence/ledger.jsonl --detail "state surface created"
 python3 tools/ledger.py verify
-python3 tests/test_ledger.py
 ```
+
+**The genesis row is the one row whose actor may be declared.** Identity is derived from
+`OPENCRABS_SESSION_ID` for every other append, and the derivation resolves a session
+against the lane fragments — which step 4d enrolls, AFTER this step. So at this instant
+there is no lane to resolve against, and the append is accepted with `--actor` when the
+live ledger is **empty**. It is reachable exactly once per factory: the no-shrink gate
+forbids a live ledger returning to empty, so the concession cannot be re-entered.
+
+**Run all six, and expect two of them to be blocked today:**
+
+```sh
+for g in tests/test_ledger*.py; do python3 "$g"; done
+```
+
+- **`test_ledger.py`** currently raises `KeyError: 'close_row_revision'` on a fresh factory.
+  Its own shipped example promises the gate *SKIPS with a stated reason* when a factory
+  has declared no invariant, and the shared reader (`tests/ledger_boundary.py`) implements
+  that skip — this gate indexes the declaration directly instead. Filed as a kit defect.
+- **`test_ledger_no_shrink.py`**'s live-history probe needs a commit that actually deleted
+  ledger rows, which no fresh factory has. Filed with it.
+- The other four pass on a clean fixture: `test_ledger_schema.py`,
+  `test_ledger_close_preflight.py`, `test_ledger_identity.py`, and `test_ledger.py` once
+  the skip is honoured.
 
 **Clear the exemption list when you copy it.** The shipped `tools/ledger.py` is a
 byte-identical copy of the one this template was built from, so it also carries
@@ -290,9 +350,10 @@ look correct in isolation.
 fill it in when you add a surface, not after. A surface with no named writer is
 one that will acquire two.
 
-**Evidence:** `python3 tools/ledger.py verify` exiting 0, and
-`python3 tests/test_ledger.py` passing — the second is what makes the
-single-writer claim *tested* rather than asserted.
+**Evidence:** `python3 tools/ledger.py verify` exiting 0, and the six
+`tests/test_ledger*.py` gates run — with the two blocked ones named above rather than
+silently skipped. The schema gate is what makes the single-writer claim *tested* rather
+than asserted; `test_ledger.py` is the one that bites a live lane's own row.
 
 ---
 

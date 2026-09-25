@@ -191,7 +191,9 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
     return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s)"
 
 
-def resolve_actor(declared: str | None, fixture: bool) -> tuple[str | None, str, str]:
+def resolve_actor(
+    declared: str | None, fixture: bool, bootstrap: bool = False
+) -> tuple[str | None, str, str]:
     """The actor for a row, and WHICH of the two it is: `(role, reason, origin)`.
 
     `origin` is `"derived"` when the role came from the writing session, and
@@ -214,8 +216,25 @@ def resolve_actor(declared: str | None, fixture: bool) -> tuple[str | None, str,
     the only rows the live path accepts are ones whose actor was derived. A
     fixture cannot smuggle a role into the live ledger by declaring it, because
     declaring it is what marks the target as a fixture.
+
+    `bootstrap` is the ONE case the live path cannot derive, and it is the row
+    that BRINGS THE SURFACE INTO EXISTENCE. The derivation reads fragments to map
+    a session to a lane; a factory's fragment is enrolled at BOOTSTRAP step 4d,
+    which comes AFTER step 4b writes the genesis row — so at that instant the
+    resolver is asked a question its own input does not yet exist to answer.
+    Measured 2026-09-25 on a clean fixture built from step 4b: the genesis append
+    was REFUSED (`matches no lane declared in 0 fragment(s)`), so a factory
+    following the step exactly could not stand up its own ledger.
+
+    IT IS BOUNDED BY AN EMPTY LEDGER, never by the event name alone, and that is
+    what keeps it from being a hole: the caller sets `bootstrap` only when the
+    target is the live ledger AND carries zero rows. So it is reachable exactly
+    once per factory — and the no-shrink gate forbids a live ledger returning to
+    empty, which closes the only route by which it could be re-entered. A
+    declared actor here is a statement about who ran the bootstrap, which is the
+    best available answer at the one instant where no lane exists to be asked.
     """
-    if fixture:
+    if fixture or bootstrap:
         if declared:
             return declared, "", "declared"
         derived, reason = session_to_role()
@@ -440,7 +459,18 @@ def cmd_append(args: argparse.Namespace) -> int:
     # the resolver ("no live binding was readable") — a staged tool copy has no
     # fleet manifest to resolve against, and the seam's own probe caught it.
     fixture = bool(os.environ.get("OC_LEDGER_PATH")) or bool(getattr(args, "subprocess", None))
-    actor, actor_why, actor_origin = resolve_actor(args.actor, fixture)
+    # BOOTSTRAP — the one live-path case that cannot be derived, and it is bounded by an
+    # EMPTY ledger rather than by the event name. A factory's fragment is enrolled at
+    # step 4d, after step 4b writes this row, so the resolver has nothing to resolve
+    # against; measured 2026-09-25, the genesis append was refused and a factory could
+    # not stand up its own ledger. Requiring zero rows makes it reachable exactly once
+    # per factory, and the no-shrink gate forbids a live ledger returning to empty.
+    bootstrap = (
+        not fixture
+        and args.event == "genesis"
+        and not read_rows(LEDGER)
+    )
+    actor, actor_why, actor_origin = resolve_actor(args.actor, fixture, bootstrap)
     if actor is None:
         sys.exit(f"ledger append refused: {actor_why}")
     args.actor = actor

@@ -50,6 +50,8 @@ LOCAL_TOOLS = REPO / "tools"
 # ledger defect rather than a fixture one.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gate_fixtures import stage_tool  # noqa: E402
+import ledger_boundary  # noqa: E402 — the SHARED boundary reader, so this
+# gate and `tools/ledger.py repair` cannot disagree about what was declared
 
 failures: list[str] = []
 
@@ -650,272 +652,292 @@ def main() -> int:
         # timestamp: a probe that hardcodes the boundary reds the day the factory
         # moves its own declaration, and that red would name this gate instead of
         # the decision it is describing (#87).
-        declared = json.loads(
-            (REPO / "docs" / "ledger-invariants.json").read_text(encoding="utf-8")
-        )["invariants"]["close_row_revision"]
-        boundary_dt = dt.datetime.fromisoformat(declared.replace("Z", "+00:00"))
-        post_ts = (boundary_dt + dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        #
+        # AND READ IT THROUGH THE SHARED READER, which is the part this probe got
+        # wrong: indexing the declaration directly raised `KeyError: 'close_row_revision'`
+        # on a bootstrapped factory, which has adopted no invariant yet. Measured
+        # 2026-09-25 on a clean fixture built from BOOTSTRAP step 4b — so a factory
+        # following the step exactly could not run its own ledger gate, and the failure
+        # named this gate rather than the absence it was describing. The shipped example
+        # PROMISES the skip ("the gate SKIPS with a stated reason when a key is absent"),
+        # and `tests/ledger_boundary.py` implements it; this call site bypassed it.
+        # `SkipGate` carries the stated reason, and the caller prints it and exits 0 —
+        # an absence, never a silent pass.
+        try:
+            declared_dt, declared = ledger_boundary.declared_boundary(REPO, "close_row_revision")
+        except ledger_boundary.SkipGate as exc:
+            print(f"  SKIP  the repair-path probes — {exc}")
+            declared_dt = None
+        boundary_dt = declared_dt
+        if boundary_dt is not None:
+            post_ts = (boundary_dt + dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         probe_sha = "a" * 40
 
-        def write_repair_ledger(path: Path, ts: str) -> None:
-            """intake/claim/close for one subject, every row at `ts`."""
-            path.write_text(
-                "\n".join(
-                    json.dumps({
-                        "n": i, "ts": ts, "event": event, "actor": "worker",
-                        "subject": "#80", "detail": "probe",
-                    })
-                    for i, event in enumerate(("intake", "claim", "close"), 1)
-                ) + "\n",
-                encoding="utf-8",
-            )
+        if boundary_dt is None:
+            # No declared boundary, so the repair path cannot be exercised: the
+            # declaration is factory data and its absence is a legitimate state.
+            # Stated, never silent — the same contract the shipped example promises.
+            pass
+        else:
+            def write_repair_ledger(path: Path, ts: str) -> None:
+                """intake/claim/close for one subject, every row at `ts`."""
+                path.write_text(
+                    "\n".join(
+                        json.dumps({
+                            "n": i, "ts": ts, "event": event, "actor": "worker",
+                            "subject": "#80", "detail": "probe",
+                        })
+                        for i, event in enumerate(("intake", "claim", "close"), 1)
+                    ) + "\n",
+                    encoding="utf-8",
+                )
 
-        # A row that PREDATES the declared boundary is refused, and the refusal
-        # names the boundary it refuses on. `write_ledger` stamps 2026-09-12, which
-        # is before every boundary this factory has declared.
-        write_ledger(ledger, ("intake", "#1"), ("claim", "#1"), ("close", "#1"))
-        r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
-                "--note", "probe")
-        err = r.stderr.strip()
-        check("a pre-boundary row refuses repair", r.returncode != 0, err[:90])
-        check("the refusal names the boundary it refuses on", declared in err, err[:170])
-        check("the refused repair wrote nothing", len(rows(ledger)) == 3,
-              f"{len(rows(ledger))} row(s)")
-
-        # A repair with no stated reason is refused. Run against a POST-boundary
-        # row, so the only thing the refusal can be about is the missing note.
-        write_repair_ledger(ledger, post_ts)
-        r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}")
-        err = r.stderr.strip()
-        check("a repair with no --note is refused", r.returncode != 0, err[:90])
-        check("the refusal names --note as what is missing", "--note" in err, err[:140])
-        check("the refused repair wrote nothing", len(rows(ledger)) == 3,
-              f"{len(rows(ledger))} row(s)")
-
-        # A lawful repair lands, changes only `detail`, appends exactly one `run`
-        # row naming the row and the note, and `verify` accepts the result.
-        identity = ("n", "ts", "event", "actor", "subject")
-        before = rows(ledger)[2]
-        r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
-                "--note", "the row omitted the revision its receipts describe")
-        err = r.stderr.strip()
-        check("a post-boundary repair succeeds", r.returncode == 0, err[:140])
-        after_rows = rows(ledger)
-        after = after_rows[2]
-        moved = [f for f in identity if before[f] != after[f]]
-        check("the repaired row's identity is untouched", not moved,
-              f"{[(f, before[f], after[f]) for f in moved]}")
-        check("the detail gained the appended field",
-              after["detail"].endswith(f"head={probe_sha}"), after["detail"][-60:])
-        check("the field is a separate token, not welded to the previous one",
-              f" head={probe_sha}" in after["detail"], after["detail"][-70:])
-        run_rows = [row for row in after_rows if row["event"] == "run"]
-        check("exactly one run row was appended", len(run_rows) == 1, f"{len(run_rows)} run row(s)")
-        check("the run row names the repaired row", "n=3" in run_rows[0]["detail"],
-              run_rows[0]["detail"][:90])
-        check("the run row carries the note",
-              "the row omitted the revision its receipts describe" in run_rows[0]["detail"],
-              run_rows[0]["detail"][:90])
-        check("the ledger gained exactly one row", len(after_rows) == 4,
-              f"{len(after_rows)} row(s)")
-        v = run(ledger, "verify")
-        check("verify accepts the repaired ledger", v.returncode == 0, v.stderr.strip()[:90])
-
-        # A repair must not DISPLACE the row's canonical trailer (#91, ruled at ledger
-        # n=572 PART 3). The trailer is POSITIONAL, so text appended AFTER it terminates
-        # the run and the row's declared telemetry leaves the trailing run that every
-        # trailer-scoped reader stops at — measured on the live n=303, whose telemetry
-        # was canonical until a repair note was appended after it. Both append shapes are
-        # probed, because the tool cannot know which it was handed and must be correct
-        # for both: a PROSE note (the shape that broke n=303) and a `key=value` field
-        # (the shape that has always been safe, so a fix that only handled prose would
-        # regress it silently).
-        sys.path.insert(0, str(REPO / "tools"))
-        from field_predicate import declared_telemetry, trailer_tokens  # noqa: E402
-
-        trailer = "cost_usd=1.2500 tokens_out=111 turns=3"
-        for label, append_detail in (
-            ("a PROSE append", "REPAIR NOTE (probe): the row omitted its revision."),
-            ("a key=value append", f"head={probe_sha}"),
-        ):
-            displace = Path(tmp) / f"displace-{label.split()[1]}.jsonl"
-            write_repair_ledger(displace, post_ts)
-            written = rows(displace)
-            written[2]["detail"] = f"Closed. {trailer}"
-            displace.write_text(
-                "\n".join(json.dumps(row) for row in written) + "\n", encoding="utf-8"
-            )
-            r = run(displace, "repair", "--n", "3", "--append-detail", append_detail,
-                    "--note", "probe: the trailer must survive the repair")
+            # A row that PREDATES the declared boundary is refused, and the refusal
+            # names the boundary it refuses on. `write_ledger` stamps 2026-09-12, which
+            # is before every boundary this factory has declared.
+            write_ledger(ledger, ("intake", "#1"), ("claim", "#1"), ("close", "#1"))
+            r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+                    "--note", "probe")
             err = r.stderr.strip()
-            check(f"{label} is accepted", r.returncode == 0, err[:140])
-            detail = rows(displace)[2]["detail"]
-            keys = dict(declared_telemetry(detail))
-            check(f"{label} keeps the telemetry inside the trailing run",
-                  keys == {"cost_usd": "1.2500", "tokens_out": "111", "turns": "3"},
-                  f"declared={keys}")
-            check(f"{label} leaves the run as the detail's tail",
-                  detail.endswith(trailer), detail[-70:])
-            check(f"{label} still lands its text (the probe is not vacuous)",
-                  append_detail in detail, detail[:90])
-            check(f"{label} keeps the original telemetry as a contiguous tail of the run",
-                  " ".join(trailer_tokens(detail)).endswith(trailer),
-                  " ".join(trailer_tokens(detail)))
+            check("a pre-boundary row refuses repair", r.returncode != 0, err[:90])
+            check("the refusal names the boundary it refuses on", declared in err, err[:170])
+            check("the refused repair wrote nothing", len(rows(ledger)) == 3,
+                  f"{len(rows(ledger))} row(s)")
 
-        # The complementary half: a detail with NO canonical run has nothing to displace,
-        # so the historic append-at-the-end behaviour stands and the field still lands as
-        # its own token. Without this the fix could "protect" an absent trailer by
-        # inserting into the middle of prose.
-        norun = Path(tmp) / "displace-norun.jsonl"
-        write_repair_ledger(norun, post_ts)
-        plain = rows(norun)
-        plain[2]["detail"] = "Closed with no trailer at all"
-        norun.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
-        r = run(norun, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
-                "--note", "probe: no run to protect")
-        check("a runless detail still repairs", r.returncode == 0, r.stderr.strip()[:140])
-        check("a runless detail appends at the end, as a separate token",
-              rows(norun)[2]["detail"] == f"Closed with no trailer at all head={probe_sha}",
-              rows(norun)[2]["detail"])
+            # A repair with no stated reason is refused. Run against a POST-boundary
+            # row, so the only thing the refusal can be about is the missing note.
+            write_repair_ledger(ledger, post_ts)
+            r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}")
+            err = r.stderr.strip()
+            check("a repair with no --note is refused", r.returncode != 0, err[:90])
+            check("the refusal names --note as what is missing", "--note" in err, err[:140])
+            check("the refused repair wrote nothing", len(rows(ledger)) == 3,
+                  f"{len(rows(ledger))} row(s)")
 
-        # The RE-DECLARATION refusal (#104, ruled at ledger n=620 PART 4). A `key=value`
-        # append extends the canonical run only when the key is NEW. An append that
-        # re-declares a key the row's run already carries leaves one field with two values
-        # and no canonical reading: a consumer taking the last occurrence reads the
-        # appended one while the row's own declaration still stands beside it. The refusal
-        # happens BEFORE any write, so the ledger is byte-identical afterwards — proved by
-        # CHECKSUM, because "the file looks unchanged" is an eye, not a receipt.
-        redeclare = Path(tmp) / "redeclare.jsonl"
-        write_repair_ledger(redeclare, post_ts)
-        seeded = rows(redeclare)
-        seeded[2]["detail"] = (
-            f"Closed. Receipts taken at head={'b' * 40} cost_usd=1.2500 turns=3"
-        )
-        redeclare.write_text(
-            "\n".join(json.dumps(row) for row in seeded) + "\n", encoding="utf-8"
-        )
-        digest_before = hashlib.md5(redeclare.read_bytes()).hexdigest()
-        r = run(redeclare, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
-                "--note", "probe: a re-declaring append must be refused")
-        err = r.stderr.strip()
-        check("a re-declaring --append-detail is refused", r.returncode != 0, err[:90])
-        check("the refusal names the key it would re-declare", "'head'" in err, err[:220])
-        check("the refusal names the row", "n=3" in err, err[:220])
-        check("the refused repair left the ledger BYTE-IDENTICAL",
-              hashlib.md5(redeclare.read_bytes()).hexdigest() == digest_before,
-              f"{digest_before} -> {hashlib.md5(redeclare.read_bytes()).hexdigest()}")
-        check("the refused repair appended no run row", len(rows(redeclare)) == 3,
-              f"{len(rows(redeclare))} row(s)")
+            # A lawful repair lands, changes only `detail`, appends exactly one `run`
+            # row naming the row and the note, and `verify` accepts the result.
+            identity = ("n", "ts", "event", "actor", "subject")
+            before = rows(ledger)[2]
+            r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+                    "--note", "the row omitted the revision its receipts describe")
+            err = r.stderr.strip()
+            check("a post-boundary repair succeeds", r.returncode == 0, err[:140])
+            after_rows = rows(ledger)
+            after = after_rows[2]
+            moved = [f for f in identity if before[f] != after[f]]
+            check("the repaired row's identity is untouched", not moved,
+                  f"{[(f, before[f], after[f]) for f in moved]}")
+            check("the detail gained the appended field",
+                  after["detail"].endswith(f"head={probe_sha}"), after["detail"][-60:])
+            check("the field is a separate token, not welded to the previous one",
+                  f" head={probe_sha}" in after["detail"], after["detail"][-70:])
+            run_rows = [row for row in after_rows if row["event"] == "run"]
+            check("exactly one run row was appended", len(run_rows) == 1, f"{len(run_rows)} run row(s)")
+            check("the run row names the repaired row", "n=3" in run_rows[0]["detail"],
+                  run_rows[0]["detail"][:90])
+            check("the run row carries the note",
+                  "the row omitted the revision its receipts describe" in run_rows[0]["detail"],
+                  run_rows[0]["detail"][:90])
+            check("the ledger gained exactly one row", len(after_rows) == 4,
+                  f"{len(after_rows)} row(s)")
+            v = run(ledger, "verify")
+            check("verify accepts the repaired ledger", v.returncode == 0, v.stderr.strip()[:90])
 
-        # (c) THE GUARD IS NOT A FALSE-REFUSAL GENERATOR. A NEW key still repairs, and it
-        # still lands BEFORE the run, so the row's declared telemetry survives the repair.
-        newkey = Path(tmp) / "newkey.jsonl"
-        newkey.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
-        r = run(newkey, "repair", "--n", "3", "--append-detail", "board=closed",
-                "--note", "probe: a NEW key must still repair")
-        check("an append introducing a NEW key still repairs",
-              r.returncode == 0, r.stderr.strip()[:140])
-        newkey_detail = rows(newkey)[2]["detail"]
-        check("the new key landed and the original telemetry is still the run's tail",
-              dict(declared_telemetry(newkey_detail)).get("turns") == "3"
-              and newkey_detail.endswith("cost_usd=1.2500 turns=3"), newkey_detail[-70:])
+            # A repair must not DISPLACE the row's canonical trailer (#91, ruled at ledger
+            # n=572 PART 3). The trailer is POSITIONAL, so text appended AFTER it terminates
+            # the run and the row's declared telemetry leaves the trailing run that every
+            # trailer-scoped reader stops at — measured on the live n=303, whose telemetry
+            # was canonical until a repair note was appended after it. Both append shapes are
+            # probed, because the tool cannot know which it was handed and must be correct
+            # for both: a PROSE note (the shape that broke n=303) and a `key=value` field
+            # (the shape that has always been safe, so a fix that only handled prose would
+            # regress it silently).
+            sys.path.insert(0, str(REPO / "tools"))
+            from field_predicate import declared_telemetry, trailer_tokens  # noqa: E402
 
-        # (d) THE GUARD BITES, and an exit 0 over an unchanged file shows nothing — so the
-        # probe contrasts the SAME append against a row that does NOT declare the key.
-        # Identical text, opposite verdicts: that is the only thing showing the refusal is
-        # caused by the ROW's declaration rather than by the text alone.
-        nohead = Path(tmp) / "nohead.jsonl"
-        write_repair_ledger(nohead, post_ts)
-        plain = rows(nohead)
-        plain[2]["detail"] = "Closed with no revision field at all"
-        nohead.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
-        r = run(nohead, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
-                "--note", "probe: the same append, on a row that does not declare head")
-        check("the SAME append repairs a row that does NOT declare the key",
-              r.returncode == 0, r.stderr.strip()[:140])
-        check("...and the key it introduced is now in that row's run",
-              rows(nohead)[2]["detail"].endswith(f"head={'c' * 40}"),
-              rows(nohead)[2]["detail"][-70:])
+            trailer = "cost_usd=1.2500 tokens_out=111 turns=3"
+            for label, append_detail in (
+                ("a PROSE append", "REPAIR NOTE (probe): the row omitted its revision."),
+                ("a key=value append", f"head={probe_sha}"),
+            ):
+                displace = Path(tmp) / f"displace-{label.split()[1]}.jsonl"
+                write_repair_ledger(displace, post_ts)
+                written = rows(displace)
+                written[2]["detail"] = f"Closed. {trailer}"
+                displace.write_text(
+                    "\n".join(json.dumps(row) for row in written) + "\n", encoding="utf-8"
+                )
+                r = run(displace, "repair", "--n", "3", "--append-detail", append_detail,
+                        "--note", "probe: the trailer must survive the repair")
+                err = r.stderr.strip()
+                check(f"{label} is accepted", r.returncode == 0, err[:140])
+                detail = rows(displace)[2]["detail"]
+                keys = dict(declared_telemetry(detail))
+                check(f"{label} keeps the telemetry inside the trailing run",
+                      keys == {"cost_usd": "1.2500", "tokens_out": "111", "turns": "3"},
+                      f"declared={keys}")
+                check(f"{label} leaves the run as the detail's tail",
+                      detail.endswith(trailer), detail[-70:])
+                check(f"{label} still lands its text (the probe is not vacuous)",
+                      append_detail in detail, detail[:90])
+                check(f"{label} keeps the original telemetry as a contiguous tail of the run",
+                      " ".join(trailer_tokens(detail)).endswith(trailer),
+                      " ".join(trailer_tokens(detail)))
 
-        # The other side of the shared predicate: a prose append that merely NAMES a field
-        # declares nothing (`head=` is a MENTION — `keyed_value` returns no value for it,
-        # and `token_key` returns no key), so it must not be refused. Without this the
-        # guard could be "fixed" by scanning the whole detail for the key as a substring,
-        # which is #88's class one layer up.
-        prose_note = Path(tmp) / "prosenote.jsonl"
-        prose_note.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
-        r = run(prose_note, "repair", "--n", "3",
-                "--append-detail", "REPAIR NOTE: the row omitted the head field.",
-                "--note", "probe: a prose append declares no key")
-        check("a prose append that declares no key is not refused",
-              r.returncode == 0, r.stderr.strip()[:140])
+            # The complementary half: a detail with NO canonical run has nothing to displace,
+            # so the historic append-at-the-end behaviour stands and the field still lands as
+            # its own token. Without this the fix could "protect" an absent trailer by
+            # inserting into the middle of prose.
+            norun = Path(tmp) / "displace-norun.jsonl"
+            write_repair_ledger(norun, post_ts)
+            plain = rows(norun)
+            plain[2]["detail"] = "Closed with no trailer at all"
+            norun.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
+            r = run(norun, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+                    "--note", "probe: no run to protect")
+            check("a runless detail still repairs", r.returncode == 0, r.stderr.strip()[:140])
+            check("a runless detail appends at the end, as a separate token",
+                  rows(norun)[2]["detail"] == f"Closed with no trailer at all head={probe_sha}",
+                  rows(norun)[2]["detail"])
 
-        # The single-writer property has to survive a repair running CONCURRENTLY
-        # with appends: a repair rewrites the file, so a repair holding a different
-        # lock than `append` would interleave with it and re-issue an n.
-        #
-        # Each repair appends a key of its OWN, and that is load-bearing rather than
-        # cosmetic: ten repairs of the SAME row each appending `head=` would now be
-        # refused from the second onwards — the first lands the key, and the re-declaration
-        # refusal above then refuses the rest, because one field with two values has no
-        # canonical reading. Racing distinct keys exercises the lock, which is what this
-        # block is for, without tripping the guard whose own probe sits above.
-        race = Path(tmp) / "race.jsonl"
-        write_repair_ledger(race, post_ts)
-        race_env = {**os.environ, "OC_LEDGER_PATH": str(race),
-                    "OC_ACTORS_PATH": str(Path(tmp) / "no-actors.txt")}
-        procs = []
-        for i in range(10):
-            procs.append(subprocess.Popen(
-                [sys.executable, str(TOOL), "append", "--event", "run", "--actor", "worker",
-                 "--subject", "#race", "--detail", f"race append {i}"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
-            procs.append(subprocess.Popen(
-                [sys.executable, str(TOOL), "repair", "--n", "3",
-                 "--append-detail", f"race{i}=ok", "--note", f"race repair {i}"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
-        for p in procs:
-            p.wait()
-        raced = rows(race)
-        check("20 concurrent append+repair invocations all landed", len(raced) == 23,
-              f"{len(raced)} row(s)")
-        check("no two writers claimed the same n (append racing repair)",
-              [row["n"] for row in raced] == list(range(1, 24)),
-              f"n={[row['n'] for row in raced]}")
+            # The RE-DECLARATION refusal (#104, ruled at ledger n=620 PART 4). A `key=value`
+            # append extends the canonical run only when the key is NEW. An append that
+            # re-declares a key the row's run already carries leaves one field with two values
+            # and no canonical reading: a consumer taking the last occurrence reads the
+            # appended one while the row's own declaration still stands beside it. The refusal
+            # happens BEFORE any write, so the ledger is byte-identical afterwards — proved by
+            # CHECKSUM, because "the file looks unchanged" is an eye, not a receipt.
+            redeclare = Path(tmp) / "redeclare.jsonl"
+            write_repair_ledger(redeclare, post_ts)
+            seeded = rows(redeclare)
+            seeded[2]["detail"] = (
+                f"Closed. Receipts taken at head={'b' * 40} cost_usd=1.2500 turns=3"
+            )
+            redeclare.write_text(
+                "\n".join(json.dumps(row) for row in seeded) + "\n", encoding="utf-8"
+            )
+            digest_before = hashlib.md5(redeclare.read_bytes()).hexdigest()
+            r = run(redeclare, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
+                    "--note", "probe: a re-declaring append must be refused")
+            err = r.stderr.strip()
+            check("a re-declaring --append-detail is refused", r.returncode != 0, err[:90])
+            check("the refusal names the key it would re-declare", "'head'" in err, err[:220])
+            check("the refusal names the row", "n=3" in err, err[:220])
+            check("the refused repair left the ledger BYTE-IDENTICAL",
+                  hashlib.md5(redeclare.read_bytes()).hexdigest() == digest_before,
+                  f"{digest_before} -> {hashlib.md5(redeclare.read_bytes()).hexdigest()}")
+            check("the refused repair appended no run row", len(rows(redeclare)) == 3,
+                  f"{len(rows(redeclare))} row(s)")
 
-        # The other half of the policy split: a GATE skips when the tree declares
-        # nothing, but a REPAIR must refuse — it cannot certify a correction as
-        # lawful under a boundary it cannot read, and proceeding anyway is exactly
-        # the silent edit this command exists to make impossible. A staged tool in
-        # a tree with no declaration is that case, and this also proves the new
-        # neighbour import is staged rather than resolved from the live tree.
-        bare = Path(tmp) / "barefactory"
-        (bare / "tools").mkdir(parents=True)
-        (bare / "evidence").mkdir()
-        stage_tool(TOOL, bare / "tools", LOCAL_TOOLS)
-        bare_ledger = bare / "evidence" / "ledger.jsonl"
-        write_repair_ledger(bare_ledger, post_ts)
-        # The probe declares an actor so that it reaches the code under test.
-        # Identity is now derived from the session BEFORE the boundary is read, so
-        # in a staged tree (which carries no lane resolver) the actor guard fires
-        # first and the boundary refusal below would be unreachable — the probe
-        # would then pass on a refusal it never exercised. A REDIRECTED ledger is
-        # a fixture, so a declared actor there is the fixture's own declaration.
-        r = subprocess.run(
-            [sys.executable, str(bare / "tools" / "ledger.py"), "repair", "--n", "3",
-             "--append-detail", f"head={probe_sha}", "--note", "probe", "--actor", "hq"],
-            capture_output=True, text=True, cwd=bare,
-            env={**os.environ, "OC_LEDGER_PATH": str(bare_ledger),
-                 "OC_ACTORS_PATH": str(bare / "no-actors.txt")},
-        )
-        err = r.stderr.strip()
-        check("an undeclared boundary refuses the repair (it does not skip)",
-              r.returncode != 0, err[:90])
-        check("the refusal names the invariant it could not read",
-              "close_row_revision" in err, err[:170])
-        check("the staged tool carries its declaration reader",
-              (bare / "tools" / "ledger_declaration.py").is_file(),
-              "stage_tool must copy the new neighbour import")
+            # (c) THE GUARD IS NOT A FALSE-REFUSAL GENERATOR. A NEW key still repairs, and it
+            # still lands BEFORE the run, so the row's declared telemetry survives the repair.
+            newkey = Path(tmp) / "newkey.jsonl"
+            newkey.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
+            r = run(newkey, "repair", "--n", "3", "--append-detail", "board=closed",
+                    "--note", "probe: a NEW key must still repair")
+            check("an append introducing a NEW key still repairs",
+                  r.returncode == 0, r.stderr.strip()[:140])
+            newkey_detail = rows(newkey)[2]["detail"]
+            check("the new key landed and the original telemetry is still the run's tail",
+                  dict(declared_telemetry(newkey_detail)).get("turns") == "3"
+                  and newkey_detail.endswith("cost_usd=1.2500 turns=3"), newkey_detail[-70:])
+
+            # (d) THE GUARD BITES, and an exit 0 over an unchanged file shows nothing — so the
+            # probe contrasts the SAME append against a row that does NOT declare the key.
+            # Identical text, opposite verdicts: that is the only thing showing the refusal is
+            # caused by the ROW's declaration rather than by the text alone.
+            nohead = Path(tmp) / "nohead.jsonl"
+            write_repair_ledger(nohead, post_ts)
+            plain = rows(nohead)
+            plain[2]["detail"] = "Closed with no revision field at all"
+            nohead.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
+            r = run(nohead, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
+                    "--note", "probe: the same append, on a row that does not declare head")
+            check("the SAME append repairs a row that does NOT declare the key",
+                  r.returncode == 0, r.stderr.strip()[:140])
+            check("...and the key it introduced is now in that row's run",
+                  rows(nohead)[2]["detail"].endswith(f"head={'c' * 40}"),
+                  rows(nohead)[2]["detail"][-70:])
+
+            # The other side of the shared predicate: a prose append that merely NAMES a field
+            # declares nothing (`head=` is a MENTION — `keyed_value` returns no value for it,
+            # and `token_key` returns no key), so it must not be refused. Without this the
+            # guard could be "fixed" by scanning the whole detail for the key as a substring,
+            # which is #88's class one layer up.
+            prose_note = Path(tmp) / "prosenote.jsonl"
+            prose_note.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
+            r = run(prose_note, "repair", "--n", "3",
+                    "--append-detail", "REPAIR NOTE: the row omitted the head field.",
+                    "--note", "probe: a prose append declares no key")
+            check("a prose append that declares no key is not refused",
+                  r.returncode == 0, r.stderr.strip()[:140])
+
+            # The single-writer property has to survive a repair running CONCURRENTLY
+            # with appends: a repair rewrites the file, so a repair holding a different
+            # lock than `append` would interleave with it and re-issue an n.
+            #
+            # Each repair appends a key of its OWN, and that is load-bearing rather than
+            # cosmetic: ten repairs of the SAME row each appending `head=` would now be
+            # refused from the second onwards — the first lands the key, and the re-declaration
+            # refusal above then refuses the rest, because one field with two values has no
+            # canonical reading. Racing distinct keys exercises the lock, which is what this
+            # block is for, without tripping the guard whose own probe sits above.
+            race = Path(tmp) / "race.jsonl"
+            write_repair_ledger(race, post_ts)
+            race_env = {**os.environ, "OC_LEDGER_PATH": str(race),
+                        "OC_ACTORS_PATH": str(Path(tmp) / "no-actors.txt")}
+            procs = []
+            for i in range(10):
+                procs.append(subprocess.Popen(
+                    [sys.executable, str(TOOL), "append", "--event", "run", "--actor", "worker",
+                     "--subject", "#race", "--detail", f"race append {i}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
+                procs.append(subprocess.Popen(
+                    [sys.executable, str(TOOL), "repair", "--n", "3",
+                     "--append-detail", f"race{i}=ok", "--note", f"race repair {i}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
+            for p in procs:
+                p.wait()
+            raced = rows(race)
+            check("20 concurrent append+repair invocations all landed", len(raced) == 23,
+                  f"{len(raced)} row(s)")
+            check("no two writers claimed the same n (append racing repair)",
+                  [row["n"] for row in raced] == list(range(1, 24)),
+                  f"n={[row['n'] for row in raced]}")
+
+            # The other half of the policy split: a GATE skips when the tree declares
+            # nothing, but a REPAIR must refuse — it cannot certify a correction as
+            # lawful under a boundary it cannot read, and proceeding anyway is exactly
+            # the silent edit this command exists to make impossible. A staged tool in
+            # a tree with no declaration is that case, and this also proves the new
+            # neighbour import is staged rather than resolved from the live tree.
+            bare = Path(tmp) / "barefactory"
+            (bare / "tools").mkdir(parents=True)
+            (bare / "evidence").mkdir()
+            stage_tool(TOOL, bare / "tools", LOCAL_TOOLS)
+            bare_ledger = bare / "evidence" / "ledger.jsonl"
+            write_repair_ledger(bare_ledger, post_ts)
+            # The probe declares an actor so that it reaches the code under test.
+            # Identity is now derived from the session BEFORE the boundary is read, so
+            # in a staged tree (which carries no lane resolver) the actor guard fires
+            # first and the boundary refusal below would be unreachable — the probe
+            # would then pass on a refusal it never exercised. A REDIRECTED ledger is
+            # a fixture, so a declared actor there is the fixture's own declaration.
+            r = subprocess.run(
+                [sys.executable, str(bare / "tools" / "ledger.py"), "repair", "--n", "3",
+                 "--append-detail", f"head={probe_sha}", "--note", "probe", "--actor", "hq"],
+                capture_output=True, text=True, cwd=bare,
+                env={**os.environ, "OC_LEDGER_PATH": str(bare_ledger),
+                     "OC_ACTORS_PATH": str(bare / "no-actors.txt")},
+            )
+            err = r.stderr.strip()
+            check("an undeclared boundary refuses the repair (it does not skip)",
+                  r.returncode != 0, err[:90])
+            check("the refusal names the invariant it could not read",
+                  "close_row_revision" in err, err[:170])
+            check("the staged tool carries its declaration reader",
+                  (bare / "tools" / "ledger_declaration.py").is_file(),
+                  "stage_tool must copy the new neighbour import")
 
     print("\nprose-as-data — a mention must not suppress a field (#88, ledger n=405 clause 5)")
     # Each probe below writes its close row through the REAL append path, which since
