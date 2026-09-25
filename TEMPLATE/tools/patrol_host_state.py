@@ -1388,7 +1388,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # A leg that did NOT RUN carries a coverage of {reason, read_at} and no
             # totals or members. Reading those unconditionally crashes the renderer on
             # the very path that exists to REPORT the absence -- measured 2026-09-25 in
-            # the TEMPLATE twin, where registry/kit.json is factory data and therefore
+            # the TEMPLATE copy, where registry/kit.json is factory data and therefore
             # never ships. An absence is a NOT RUN, never a traceback.
             if "manifest_cells" not in cov:
                 lines.append(f"  NOT RUN: {cov.get('reason', 'no reason recorded')}")

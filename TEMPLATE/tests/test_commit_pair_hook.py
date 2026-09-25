@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate: a commit must not stage one side of a declared byte pair without its twin.
+"""Gate: a commit must not stage one side of a declared byte pair without its copy.
 
 Origin: #92, ruled at n=630. `tests/test_template_sync.py` has always caught a
 one-sided pair — but only AFTER the commit landed, leaving a red on `main` for
@@ -34,7 +34,7 @@ What this gate asserts
 3. **The hook is itself paired and shippable.** `tools/hooks/pre-commit` and
    `TEMPLATE/tools/hooks/pre-commit` must both be declared in `PAIRS` (so a
    future edit that drops the entry fails here rather than silently unshipping
-   the mechanism) and the twin must carry the EXECUTABLE bit. `test_template_sync.py`
+   the mechanism) and the copy must carry the EXECUTABLE bit. `test_template_sync.py`
    compares BYTES and is blind to the mode, so a non-executable twin would ship a
    hook git refuses to run — silent in every factory bootstrapped from it.
 4. **The installation facts, LIVE.** Present, executable, reachable through
@@ -82,7 +82,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 HOOK_PATH = "tools/hooks/pre-commit"
-HOOK_TWIN = "TEMPLATE/tools/hooks/pre-commit"
+HOOK_COPY = "TEMPLATE/tools/hooks/pre-commit"
 PAIR_TABLE_RELATIVE = "tests/test_template_sync.py"
 TABLE_NAME = "PAIRS"
 HOOKS_PATH_CONFIG = "tools/hooks"
@@ -99,8 +99,8 @@ def repo_toplevel() -> Path | None:
     """The git top level containing this gate, so a copy in a subdirectory works.
 
     Resolved from git rather than from `__file__` so the ORIGINAL and the
-    TEMPLATE twin judge the same repository — in this factory, both live in one
-    work tree, and a twin that judged `TEMPLATE/` as its own repo would compare
+    TEMPLATE copy judge the same repository — in this factory, both live in one
+    work tree, and a copy that judged `TEMPLATE/` as its own repo would compare
     the pair table against a tree that does not have one.
     """
     proc = subprocess.run(
@@ -144,7 +144,7 @@ def probe(hook_mod, pairs: list[tuple[str, str]]) -> list[str]:
     synthetic = [("a/one", "b/one"), ("a/two", "b/two")]
     for staged, expected, why in (
         (["a/one"], [("a/one", "b/one")], "one side staged must be reported"),
-        (["b/one"], [("b/one", "a/one")], "the twin side staged must be reported too"),
+        (["b/one"], [("b/one", "a/one")], "the copy side staged must be reported too"),
         (["a/one", "b/one"], [], "both sides staged must be clean"),
         ([], [], "an empty index must be clean"),
         (["unrelated.txt"], [], "an unrelated staged file must not false-fire"),
@@ -171,18 +171,18 @@ def probe(hook_mod, pairs: list[tuple[str, str]]) -> list[str]:
             f"hook-only {only_hook[:3]}, gate-only {only_gate[:3]}"
         )
 
-    # --- 3. the hook is itself paired, and the twin is executable ------------
-    if (HOOK_PATH, HOOK_TWIN) not in pairs:
+    # --- 3. the hook is itself paired, and the copy is executable ------------
+    if (HOOK_PATH, HOOK_COPY) not in pairs:
         failures.append(
-            f"probe: ({HOOK_PATH}, {HOOK_TWIN}) is not declared in {TABLE_NAME} — "
+            f"probe: ({HOOK_PATH}, {HOOK_COPY}) is not declared in {TABLE_NAME} — "
             "the refusal point would not ship to a bootstrapped factory"
         )
-    twin = top / HOOK_TWIN
-    if not twin.is_file():
-        failures.append(f"probe: {HOOK_TWIN} is absent — the mechanism does not ship")
-    elif not os.access(twin, os.X_OK):
+    copy = top / HOOK_COPY
+    if not copy.is_file():
+        failures.append(f"probe: {HOOK_COPY} is absent — the mechanism does not ship")
+    elif not os.access(copy, os.X_OK):
         failures.append(
-            f"probe: {HOOK_TWIN} is not executable — byte-identity is satisfied but a "
+            f"probe: {HOOK_COPY} is not executable — byte-identity is satisfied but a "
             "bootstrapped factory inherits a hook git will not run"
         )
 
@@ -224,7 +224,7 @@ def kit_leg_probes(hook_mod, top: Path) -> list[str]:
     for staged, expected, why in (
         ([], False, "an empty index must not touch the kit"),
         (["docs/x.md"], False, "an unrelated commit must not touch the kit"),
-        (["tools/a.py"], False, "a repo twin alone must not touch the kit"),
+        (["tools/a.py"], False, "a repo copy alone must not touch the kit"),
         (["TEMPLATE.md"], False, "a TEMPLATE-prefixed SIBLING is not under TEMPLATE/"),
         (["TEMPLATE/tools/a.py"], True, "a shipped file must touch the kit"),
         (["registry/kit.json"], True, "the manifest itself must touch the kit"),

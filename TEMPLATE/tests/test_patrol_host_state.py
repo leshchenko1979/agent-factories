@@ -1371,7 +1371,7 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
 
     Measured 2026-09-25: the kit-drift branch read `coverage["manifest_cells"]`
     unconditionally, so the absent-manifest path -- the one that exists to REPORT the
-    absence -- raised KeyError instead. It was reachable in the TEMPLATE twin, whose
+    absence -- raised KeyError instead. It was reachable in the TEMPLATE copy, whose
     REPO resolves to TEMPLATE/ where `registry/kit.json` is factory data and never
     ships. Every other kit-drift probe injects a manifest, so none of them could see it.
     """
@@ -1474,7 +1474,7 @@ def test_the_live_baseline_reproduces_the_measured_figure() -> None:
     """
     leg = RUNNER.kit_drift_leg(read_at="probe")
     cov = leg["coverage"]
-    # A tree carrying no manifest — a bootstrapped factory, or the TEMPLATE twin, whose
+    # A tree carrying no manifest — a bootstrapped factory, or the TEMPLATE copy, whose
     # REPO resolves to TEMPLATE/ — has nothing to reproduce, and the leg says so with a
     # stated reason rather than a clean sweep. Both states are legitimate; what is NOT
     # legitimate is reading either as a verdict about a member.

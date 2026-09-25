@@ -170,7 +170,7 @@ PAIRS = [
     ("tests/test_ledger_identity.py", "TEMPLATE/tests/test_ledger_identity.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names
-    # one side of a declared pair without its twin, and its table is THIS one — it
+    # one side of a declared pair without its copy, and its table is THIS one — it
     # loads `PAIRS` from this file rather than keeping a copy, so a pair added here
     # is enforced at commit time with no second edit.
     ("tools/hooks/pre-commit", "TEMPLATE/tools/hooks/pre-commit"),
@@ -197,12 +197,12 @@ PAIRS = [
     ("tests/test_registry.py", "TEMPLATE/tests/test_registry.py"),
     # Added with plan 2646d31a task 5. The gate ships byte-paired into TEMPLATE alongside the
     # tool it exercises, so an unpaired copy is the #107 class: a factory could keep the file
-    # and lose the twin, and nothing would say so.
+    # and lose the copy, and nothing would say so.
     ("tests/test_registry_attest.py", "TEMPLATE/tests/test_registry_attest.py"),
     ("tests/test_registry_render.py", "TEMPLATE/tests/test_registry_render.py"),
     # Added with plan 2646d31a task 8 (2026-09-25). The member-side pin gate: a factory
     # judges ITSELF against the pin IT vendored, so its verdict moves only when its own tree
-    # diverges from its own declaration. It ships, so the twin is held here.
+    # diverges from its own declaration. It ships, so the copy is held here.
     ("tests/test_kit_pin.py", "TEMPLATE/tests/test_kit_pin.py"),
     ("tests/test_ledger_close_preflight.py", "TEMPLATE/tests/test_ledger_close_preflight.py"),
     # The telemetry-reader registry gate (#99). It classifies the tools the template
@@ -217,7 +217,7 @@ PAIRS = [
     ("tests/test_commit_pair_hook.py", "TEMPLATE/tests/test_commit_pair_hook.py"),
     # The skill-version contract gate (#71, ruling n=455). It DISCOVERS the law file rather
     # than hardcoding the slug, so it ships in the template and every bootstrapped factory
-    # inherits it — the discovery leg is what makes a byte-identical twin meaningful here:
+    # inherits it — the discovery leg is what makes a byte-identical copy meaningful here:
     # a factory's own `skills/<slug>/SKILL.md` is judged by the same file.
     ("tests/test_skill_version_contract.py", "TEMPLATE/tests/test_skill_version_contract.py"),
     # The cron-thinness predicate (#54, P7 + P28). It is PURE over a LIST of cron rows
@@ -227,7 +227,7 @@ PAIRS = [
     # and REQUIRED in `gate_registry.REQUIRED_GATES` for the same reason.
     ("tests/test_cron_thinness.py", "TEMPLATE/tests/test_cron_thinness.py"),
     # The close-telemetry provenance gate (#130). Paired for the same reason as the
-    # cron-thinness predicate above, and with one property of its own that makes the twin
+    # cron-thinness predicate above, and with one property of its own that makes the copy
     # load-bearing: it carries NO date. Its boundary is a DECLARED FACTORY PARAMETER read
     # from `docs/ledger-invariants.json`, so a bootstrapped factory inherits a gate that
     # judges ITS OWN ledger from ITS OWN declaration — a hardcoded boundary here would RED
@@ -258,7 +258,7 @@ PAIRS = [
     # a convenience: a bootstrapped factory inherits the INSTRUMENT, and an instrument whose
     # arithmetic nothing checks is the shape this factory has already paid for — a gate that
     # ran nowhere while the audit printed HEALTHY over it (issue #59). Its probes are fixtures
-    # and offline by construction, so the twin passes in a factory tree for the same reason it
+    # and offline by construction, so the copy passes in a factory tree for the same reason it
     # does here: the live figures are properties of an INSTANT and are REPORTED by the
     # instrument, never asserted by this gate. That is also why no criterion in this change
     # pins a live figure — the fixture leg is the only pass/fail available (see the rationale

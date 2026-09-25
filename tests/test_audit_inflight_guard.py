@@ -322,10 +322,10 @@ def probe_the_guard_is_whole_run() -> str:
     return "the lock is taken in main() before the ledger read, gated only on --no-gates"
 
 def probe_the_gate_is_registered_and_paired() -> str:
-    """The gate runs, and its TEMPLATE twin is byte-identical.
+    """The gate runs, and its TEMPLATE copy is byte-identical.
 
     A gate that never runs is indistinguishable from a gate that passes (#59), so this
-    file asserts its own registration in the tool it guards — and in the TEMPLATE twin,
+    file asserts its own registration in the tool it guards — and in the TEMPLATE copy,
     because `tools/audit.py` is a paired file and a factory that copies one without the
     other carries a guard nothing proves.
     """
@@ -333,13 +333,13 @@ def probe_the_gate_is_registered_and_paired() -> str:
     assert any(
         GATE_CMD in ln and "gates_to_run.append" in ln for ln in src.splitlines()
     ), f"{GATE_CMD} is not registered in the audit gate list"
-    twin = REPO / "TEMPLATE" / "tools" / "audit.py"
-    if twin.is_file():
+    copy = REPO / "TEMPLATE" / "tools" / "audit.py"
+    if copy.is_file():
         assert twin.read_bytes() == AUDIT.read_bytes(), (
             "tools/audit.py and TEMPLATE/tools/audit.py must be byte-identical"
         )
-        return f"{GATE_CMD} is registered, and the audit twins are byte-identical"
-    return f"{GATE_CMD} is registered (no TEMPLATE twin in this tree)"
+        return f"{GATE_CMD} is registered, and the audit copies are byte-identical"
+    return f"{GATE_CMD} is registered (no TEMPLATE copy in this tree)"
 
 def probe_the_lock_acquisition_is_non_blocking() -> str:
     """The probe's own acquisition must not BLOCK — the deadlock this gate shipped with.

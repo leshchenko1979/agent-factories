@@ -368,7 +368,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # is the ledger, and that is handled by SKIPPING WITH ITS REASON rather than asserting it
     # (`TEMPLATE/` ships no `evidence/`; `BOOTSTRAP.md` creates it), which is the discipline
     # `tests/ledger_boundary.py` exists to enforce after #76/#78. It is byte-paired with a
-    # TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the runner
+    # TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the runner
     # and keeping the file. THE LOAD-BEARING HALF is that `tests/test_audit_rates.py` — an
     # entry already in this tuple — is a registered gate that runs `audit.py --json --no-gates`
     # and asserts rc==0, so the two gates constrain each other: this one proves the exemption
@@ -382,7 +382,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # keep a binding that promises an isolation seam nothing proves exists, and the harm that
     # promise prevents is UNRECOVERABLE rather than merely unrecorded: a probe that ignores the
     # seam appends to LIVE state, so the rows it leaves are indistinguishable from real
-    # transitions and no later gate can separate them. It is byte-paired with a TEMPLATE twin,
+    # transitions and no later gate can separate them. It is byte-paired with a TEMPLATE copy,
     # so the manifest grain is what keeps a factory from dropping the runner and keeping the file.
     "test_binding_mechanism_exists.py",
     "test_board_intake_recorded.py",
@@ -392,7 +392,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # is PURE AND FIXTURE-DRIVEN over the instrument's own arithmetic — it reads no live
     # database, opens no socket and shells out to nothing — so it passes in a bootstrapped
     # factory exactly as it does here, with no box-local fixture and no TEMPLATE comparison to
-    # make it red. It is byte-paired with a TEMPLATE twin, so the manifest grain is what keeps
+    # make it red. It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps
     # a factory from dropping the runner and keeping the file; and the file it guards is the
     # ONLY mechanism behind a standing reading the law already tells every factory to owe, so
     # a factory that dropped the runner would carry a declared reading with nothing measuring
@@ -409,7 +409,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # counter-argument, that a factory whose close rows all predate its declaration
     # carries a gate that only ever skips, describes every gate whose population is an
     # event: it skips with a STATED reason, and no boundary key means no declaration
-    # rather than a silent pass. It is byte-paired with a TEMPLATE twin, so the manifest
+    # rather than a silent pass. It is byte-paired with a TEMPLATE copy, so the manifest
     # grain is what keeps a factory from dropping the runner and keeping the file.
     "test_close_telemetry_provenance.py",
     # Added with its registration (issue #112, ruling n=657; amended under issue #115, ruling
@@ -422,7 +422,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # skips, describes every gate whose population is an event: it skips with a STATED reason
     # and no boundary key means no declaration rather than a silent pass, which is the same
     # shape `test_subject_form.py` and `test_close_row_revision.py` already carry in this
-    # tuple. It is also byte-paired with a TEMPLATE twin, so the manifest grain is what keeps
+    # tuple. It is also byte-paired with a TEMPLATE copy, so the manifest grain is what keeps
     # a factory from dropping the runner and keeping the file (the `test_registry_render.py`
     # reasoning above). RENAMED from `test_claim_gap_declared.py` by #115: the gate no longer
     # judges the `claim_gap` token, so the old name described a predicate it no longer
@@ -435,7 +435,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # factory that drops the runner and keeps the hook has an unpinned hook. It drives
     # the hook directly with a synthetic message and a synthetic session -- no live
     # board, no fleet manifest, no box-local fixture -- so it passes in a bootstrapped
-    # factory exactly as it does here. It is byte-paired with a TEMPLATE twin, so the
+    # factory exactly as it does here. It is byte-paired with a TEMPLATE copy, so the
     # manifest grain is what keeps a factory from dropping the runner.
     "test_commit_session_trailer.py",
     # Added with its registration (issue #138, ruling n=928; plan 2646d31a step 8).
@@ -445,7 +445,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # unauthorized row and never learn of it. It SKIPS WITH A STATED REASON when the lane
     # resolver cannot be read (a bootstrapped factory has no fleet manifest), which is the
     # same shape the registry gates use -- never a silent pass, and never another factory's
-    # data. It is byte-paired with a TEMPLATE twin.
+    # data. It is byte-paired with a TEMPLATE copy.
     "test_ledger_identity.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
@@ -453,7 +453,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # OPTIONAL is not: the predicate is PURE over a LIST of cron rows and reads no live
     # table, so it passes in a bootstrapped factory exactly as it does here — there is no
     # `TEMPLATE` comparison or box-local fixture that would make it red. It is byte-paired
-    # with a TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the
+    # with a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
     # runner and keeping the file.
     "test_cron_thinness.py",
     "test_docs_sync.py",
@@ -470,7 +470,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # backfilled, and a ledger row is immutable — so a factory that ships the gate OPTIONAL
     # and omits it writes its next synthesis run ungoverned and can never repair that,
     # because the record it did not take is the one thing that cannot be reconstructed.
-    # It is byte-paired with a TEMPLATE twin, so the manifest grain is what keeps a factory
+    # It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory
     # from dropping the runner and keeping the file.
     "test_insights_gate_recorded.py",
     # Added with plan 2646d31a task 8 (2026-09-25). This is the MEMBER-side half of drift:
@@ -532,7 +532,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # factory which keeps its version line honest carries a gate that always skips, describes
     # every gate whose population is an event: it skips with a STATED reason, and a missing
     # boundary key means no declaration rather than a silent pass. It is byte-paired with a
-    # TEMPLATE twin, so the manifest grain is what keeps a factory from dropping the runner
+    # TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the runner
     # and keeping the file.
     "test_skill_version_contract.py",
     "test_subject_form.py",
@@ -547,7 +547,7 @@ REQUIRED_GATES: tuple[str, ...] = (
 # `test_close_row_revision.py` and `test_score_gate_recorded.py` were the first two entries
 # here, held against n=432 Part 5's propagation order. That order is now EXECUTED: ruled at
 # n=515 clause 4 in its DECLARED-factory-parameter form, both files moved into
-# REQUIRED_GATES and gained their TEMPLATE twins in one change (issue #78). Nothing is
+# REQUIRED_GATES and gained their TEMPLATE copys in one change (issue #78). Nothing is
 # held here any more, so every entry below is a settled classification.
 #
 # `test_registry.py` was held here for the same reason and has now moved the same way: the

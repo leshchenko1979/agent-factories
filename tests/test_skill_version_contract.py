@@ -383,7 +383,7 @@ def main(repo: Path | None = None) -> int:
     """Script form: the same verdict, with the population on STDOUT.
 
     `repo` is a parameter so a probe can exercise the printed form against a synthetic
-    history — the TEMPLATE twin has no law history of its own to print.
+    history — the TEMPLATE copy has no law history of its own to print.
     """
     if repo is None:
         try:

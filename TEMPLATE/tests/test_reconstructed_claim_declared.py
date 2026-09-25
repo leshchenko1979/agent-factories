@@ -83,7 +83,7 @@ such row is the one that answered it.
 THE BOUNDARY IS DECLARED, AND THIS FILE SHIPS
 ---------------------------------------------
 The boundary lives in the factory's own `docs/ledger-invariants.json`, read through
-`tests/ledger_boundary.py`. This file is paired byte-identically with its TEMPLATE twin, so
+`tests/ledger_boundary.py`. This file is paired byte-identically with its TEMPLATE copy, so
 it may not carry one factory's history: a key that is absent SKIPS with its reason stated,
 and the value is that factory's own instant.
 
@@ -253,7 +253,7 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int, list[str]
 def _live_rows() -> list[dict]:
     """The live ledger's rows, or a pytest SKIP when this tree has none.
 
-    The TEMPLATE twin resolves `REPO` to `TEMPLATE/`, whose ledger is BOOTSTRAP-created and
+    The TEMPLATE copy resolves `REPO` to `TEMPLATE/`, whose ledger is BOOTSTRAP-created and
     therefore absent. That is the P35 class — a byte-paired gate asserting a live-tree fact
     its own tree cannot satisfy — so the live probes below STATE that reason instead of
     asserting a fact their tree cannot produce.
@@ -641,7 +641,7 @@ def test_probe_the_boundary_comes_from_the_declaration_not_this_file(tmp_path: P
 
 
 def test_probe_a_tree_with_no_ledger_skips_with_its_reason(tmp_path: Path) -> None:
-    """The TEMPLATE twin's own state: no ledger, so no verdict. Stated, never silent."""
+    """The TEMPLATE copy's own state: no ledger, so no verdict. Stated, never silent."""
     tree = _probe_tree(tmp_path / "empty", [])
     (tree / "evidence" / "ledger.jsonl").unlink()
     status, reason, problems, _, checked, _ = evaluate(tree)
@@ -738,7 +738,7 @@ def main(repo: Path = REPO) -> int:
     STDOUT.
 
     `repo` is a parameter so a probe can exercise the printed form against a synthetic tree
-    — the TEMPLATE twin has no ledger of its own to print.
+    — the TEMPLATE copy has no ledger of its own to print.
     """
     status, reason, problems, excused, checked, intervals = evaluate(repo)
     for line in excused:

@@ -203,7 +203,7 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
 def _live_rows() -> list[dict]:
     """The live ledger's rows, or a pytest SKIP when this tree has none.
 
-    The TEMPLATE twin resolves `REPO` to `TEMPLATE/`, whose ledger is BOOTSTRAP-created and
+    The TEMPLATE copy resolves `REPO` to `TEMPLATE/`, whose ledger is BOOTSTRAP-created and
     therefore absent. That is #78's class (P35) — a byte-paired gate asserting a live-tree
     fact its own tree cannot satisfy — so the live probes below STATE that reason instead
     of asserting a fact their tree cannot produce.
@@ -475,7 +475,7 @@ def main(repo: Path = REPO) -> int:
     Criterion 1 of issue #80: a clean run prints the rows EXAMINED, the HITS and the
     EXCUSED set separately, so a clean run and a run that examined nothing are never the
     same output. `repo` is a parameter so a probe can exercise the printed form against a
-    synthetic tree — the TEMPLATE twin has no ledger of its own to print.
+    synthetic tree — the TEMPLATE copy has no ledger of its own to print.
     """
     status, reason, problems, excused, checked = evaluate(repo)
     for line in excused:

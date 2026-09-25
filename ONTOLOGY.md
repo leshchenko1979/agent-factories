@@ -447,7 +447,7 @@ keep their own band — and the register itself is not yet written.
 
 ### Terms that are not synonyms
 
-Five pairs look interchangeable and are not. Conflating them is how work gets
+Six pairs look interchangeable and are not. Conflating them is how work gets
 duplicated and claims get filed against the wrong object:
 
 | Pair | The difference |
@@ -456,6 +456,7 @@ duplicated and claims get filed against the wrong object:
 | `binding` vs `add-on` | Every binding is an add-on; not every add-on is a binding. A binding names the substrate and there is exactly one of each kind; a domain add-on is optional and plural |
 | `subagent` vs `lane` | A subagent has no channel binding and finishes. A lane is bound to a place and persists. A subagent id recorded as a lane is a defect — six member-HQ replies parked against one on 2026-09-11 |
 | `epistemic_failure` vs `context_capacity_failure` | Both leave a wrong statement behind, and only one is a hallucination. The first is generation ungrounded in facts — the fact was never in context. The second is a fact that *was* in context and is gone. The counters differ (a receipt vs a flush), so calling a lost fact a hallucination prescribes prompt-bloat that cannot work. Run the `mirror_test` before naming either |
+| `pair` vs `twin` | A **pair** is the byte-identical relation between a shipped file and its template copy — the term the manifest, the gate and the hook already use (`PAIRS`, `test_template_sync.py`). **`twin` names a different object in every live use**: in the Telegram surface add-on it is a migrated group that is not a twin, and in the registry's own history it is a commit sharing a patch-id. Neither is the pair relation, so a sentence using `twin` for a paired file sends a reader to the wrong surface. Measured over the law corpus (73 files): `pair` 34, `twin` 15, and after the split `twin` survives only in the two senses above |
 | `canonicality` vs `ownership` | Ownership answers WHO may write a surface (§11) — it is authority over a surface. Canonicality answers WHICH of two contradicting states stands — it is truth about a pair. Ownership supplies ONE of T1's precedence forms, so it decides a disagreement only when one side is a derivation of the other. Two readings of the SAME surface have the same owner, so ownership cannot choose between them: the `23.67 %` ↔ `23.73 %` pair was settled by freshness, not by authorship. And where no surface records the actor at all (#138), ownership is ABSENT — the honest verdict is `UNRESOLVED`, not a named culprit. Reading the two as one turns "who is answerable" into "whose number wins", which freezes a stale value the moment its owner is named |
 
 ---
@@ -520,6 +521,13 @@ enforces is law. Do not claim the second while shipping the first.
 
 Rename on close; never re-create. A work unit's address is stable across
 renames, which is what scheduled deliveries point at.
+
+**One spelling split is not a split, measured so the next reader does not chase it.**
+`add-on` is canonical (60 uses over 30 law files) and its banned synonyms are `plugin`,
+`extension`, `module`, `adapter`. The string `AddOn` appears 4 times and **all four are
+a Mermaid class identifier**, where a hyphen is not expressible in the syntax — so they
+are not prose uses of a rival spelling. A census that counted `addon` against `add-on`
+would report a split that does not exist.
 
 > The **exact** naming mechanics — what a named place is, how its address is
 > obtained, what a delivery target looks like — belong to the surface binding,

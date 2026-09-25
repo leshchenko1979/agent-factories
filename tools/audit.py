@@ -1558,7 +1558,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     is no boundary to declare and nothing to grandfather. Its non-vacuity is shown by
     #     construction rather than by a probe over history — it asserts the binding named at
     #     least one variable, so a table it could not parse FAILS loudly instead of passing over
-    #     an empty population (P29). It is byte-paired with a TEMPLATE twin, so the manifest
+    #     an empty population (P29). It is byte-paired with a TEMPLATE copy, so the manifest
     #     grain is what keeps a factory from dropping the runner and keeping the file.
     if (repo_root / "tests/test_binding_mechanism_exists.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_binding_mechanism_exists.py"])

@@ -45,17 +45,17 @@ exemptions in `docs/*.json`, because those exemptions name pre-gate INSTANCES in
 factory's own history. This list names a CLASSIFICATION of the tools the template SHIPS:
 `telemetry.py` is the writer in every tree, so its entry is structural and must travel
 byte-identically with the code it describes. Hence the inline dict, and hence the
-byte-identical twin — the alternative, factory data with a skeleton, would RED in a fresh
+byte-identical copy — the alternative, factory data with a skeleton, would RED in a fresh
 bootstrapped factory until the factory declared a writer the template already ships.
 
 A factory that adds its own writer edits this dict in its own copy; the meta-factory's
-twin stays byte-identical because the meta-factory does not carry a member's tools.
+copy stays byte-identical because the meta-factory does not carry a member's tools.
 
 BOOTSTRAPPED-FACTORY CLASSIFICATION: the gate scans `tools/` relative to the repo root and
 carries no meta-factory-only dependency, so it RUNS in a bootstrapped factory and PASSES
 there — measured, not assumed: `TEMPLATE/tools/` yields the same candidate set minus
 `synthesize_insights.py`, which does not ship, and its one writer is the same
-`telemetry.py`. So it ships as a twin and is classified REQUIRED in
+`telemetry.py`. So it ships as a copy and is classified REQUIRED in
 `tests/gate_registry.py`. The TEMPLATE coupling leg below runs only where a `TEMPLATE/`
 tree exists, and SKIPS with its reason stated elsewhere.
 

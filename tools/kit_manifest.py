@@ -75,7 +75,7 @@ EXCLUDED_SUFFIXES = (".pyc", ".pyo")
 # (generated factory data, not shipped kit), so this is a principled exception and not the
 # "forgot to list it" case the completeness rule exists to refuse.
 PIN_VEHICLE_REL = "TEMPLATE/registry/kit.example.json"
-# The repo-side twin of the vehicle. The registry examples are PAIRED (fleet, gates, and
+# The repo-side copy of the vehicle. The registry examples are PAIRED (fleet, gates, and
 # now the pin), so the repo's own tree carries the example too -- which means the vehicle
 # must be written at BOTH paths by the ONE command that renders it, or every regeneration
 # drifts the pair.
