@@ -593,8 +593,70 @@ def cmd_append(args: argparse.Namespace) -> int:
             fh.flush()
             os.fsync(fh.fileno())
 
+        # THE SETTLEMENT RECEIPT, AND WHY IT IS THE TOOL'S TO WRITE (#96, ruling n=745;
+        # superseded in part by the simplification this block implements).
+        #
+        # WHAT WAS WRONG. Settlement is `append the close row, then verify`, so the receipt
+        # must cover the row it certifies -- and the receipt has to live IN that row. Those
+        # two requirements cannot both hold in one append, so the law resolved it by asking
+        # the AUTHOR to declare `rows=<count>` where the count must be at least the row's
+        # own number. The author cannot know that number: it is assigned three lines above,
+        # INSIDE this lock. The only way to satisfy the predicate was to PREDICT
+        # `current_count + 1`, which is right until a peer appends in between -- measured
+        # across all five factory ledgers, 2 of 17 declaring closes were off by exactly one
+        # for exactly that reason, and both are recorded as permanent debt because an
+        # append-only ledger has no repair space for a wrong number.
+        #
+        # So the declaration was retired and the guarantee moved HERE, where the value is
+        # not a prediction but a fact this function already holds: `row["n"]` IS the count
+        # the sequence check above covered, because the check ran with the close row present
+        # at index `len(rows)`. The receipt is therefore a SECOND row -- the law's own
+        # framing, a `run` row authored on behalf of the settlement -- and it is written
+        # inside the SAME lock as the row it receipts, so no peer can interleave.
+        #
+        # WHY A SECOND ROW AND NOT A FIELD IN THE FIRST. A field would have to state the
+        # count of a ledger that includes the row carrying it, which is the self-reference
+        # that produced the prediction in the first place. The receipt is a row ABOUT a row,
+        # so it sits after it and needs no such trick: `verified_rows=N` in row N+1 is a
+        # claim about rows 1..N, every one of which already existed when it was written.
+        #
+        # WHY `run` AND NOT `close`. A second close row would re-enter the sequence index
+        # for the subject and be read by `verify` as another settlement of the same unit.
+        # `run` is the event this ledger already uses for "the tool did something and says
+        # so" -- `repair` writes its own beside the row it corrects, and this mirrors that.
+        #
+        # WHY IT CARRIES NO `outcome=`. A run row declaring an outcome ENTERS
+        # `first_pass_yield_population` (`tools/audit.py`), and a settlement receipt is
+        # SELECTION-BIASED -- it is written only where a settlement ran -- so admitting it
+        # would make the published yield structurally optimistic. Same reasoning as the
+        # duty receipt's `duty=` key (ruled at ledger n=1041); the field is absent by
+        # construction, not by convention.
+        #
+        # MAIN LEDGER ONLY, matching the sequence check above: a sub-ledger is a domain
+        # event stream whose vocabulary has no `close`, so there is no sequence to receipt.
+        receipt = None
+        if args.event == "close" and target_ledger == LEDGER:
+            receipt = {
+                "n": row["n"] + 1,
+                "ts": now_iso(),
+                "event": "run",
+                "actor": args.actor,
+                "subject": args.subject,
+                "detail": (
+                    f"SETTLEMENT RECEIPT for the close row at n={row['n']} — the sequence "
+                    f"check ran with that row present and covered verified_rows={row['n']} "
+                    f"row(s) of {args.subject}, and found no problem"
+                ),
+            }
+            with open(target_ledger, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(receipt, ensure_ascii=False) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+
     prefix = f"[{args.subprocess}] " if getattr(args, "subprocess", None) else ""
     print(f"{prefix}n={row['n']} {row['event']} {row['subject']} — {row['detail']}")
+    if receipt is not None:
+        print(f"{prefix}n={receipt['n']} run {receipt['subject']} — {receipt['detail']}")
     return 0
 
 def cmd_repair(args: argparse.Namespace) -> int:

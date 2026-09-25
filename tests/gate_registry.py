@@ -412,21 +412,6 @@ REQUIRED_GATES: tuple[str, ...] = (
     # rather than a silent pass. It is byte-paired with a TEMPLATE twin, so the manifest
     # grain is what keeps a factory from dropping the runner and keeping the file.
     "test_close_telemetry_provenance.py",
-    # Added with its registration (issue #96, ruling n=745). REQUIRED is the correct grain
-    # and OPTIONAL is not, and the deciding fact is the same one the three entries above
-    # name: its boundary is FORWARD-ONLY. The rule governs close rows written at or after
-    # the instant a factory declares, nothing is ever backfilled, and a ledger row is
-    # immutable — so a factory that ships the gate OPTIONAL and omits it writes its next
-    # close row with no stated verify count and can never repair that, because the count in
-    # question is the one the row did not take. It is byte-paired with a TEMPLATE twin, so
-    # the manifest grain is what keeps a factory from dropping the runner and keeping the
-    # file. ONE PROPERTY THAT IS THIS ENTRY'S ALONE, stated because a reader of the family
-    # needs the exception: it REFUSES the proportional skip. Its population is the whole
-    # close history rather than one event's tail, so a ledger carrying rows and no close
-    # row FAILS loudly instead of skipping with a reason (n=745; contrast
-    # `test_reconstructed_claim_declared.py`, whose population a factory may legitimately
-    # never produce and which is therefore proven by its probe instead).
-    "test_close_verify_count_declared.py",
     # Added with its registration (issue #112, ruling n=657; amended under issue #115, ruling
     # n=687). REQUIRED is the correct grain and OPTIONAL is not, and the deciding fact is
     # that its boundary is FORWARD-ONLY: the rule governs rows written at or after the

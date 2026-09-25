@@ -123,6 +123,17 @@ def rows(ledger: Path) -> list[dict]:
         return []
     return [json.loads(line) for line in ledger.read_text().splitlines() if line.strip()]
 
+def close_row(ledger: Path) -> dict:
+    """The CLOSE row a probe just appended — never simply the last row.
+
+    `append --event close` writes TWO rows: the close itself, then the SETTLEMENT RECEIPT
+    that records the verified population the sequence check covered. The receipt follows
+    the row it receipts by construction, so `[-1]` is the receipt and a probe asking about
+    the close row's own detail must NAME the row it means. This helper is that name.
+    """
+    closes = [r for r in rows(ledger) if r.get("event") == "close"]
+    return closes[-1] if closes else {}
+
 def write_ledger(path: Path, *events: tuple[str, str]) -> None:
     """Write an explicit ledger from (event, subject) pairs, numbered 1..N.
 
@@ -926,7 +937,7 @@ def main() -> int:
         )
         check("a close row whose prose mentions the keys is accepted",
               r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
-        detail = (rows(prose) or [{}])[-1].get("detail", "")
+        detail = close_row(prose).get("detail", "")
         for key, want in (("cost_usd", "1.2500"), ("tokens_in", "111"),
                           ("tokens_out", "222"), ("turns", "3")):
             check(f"a prose mention did not suppress {key}",
@@ -941,7 +952,7 @@ def main() -> int:
         run(stated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The author stated turns=7 and cost_usd=9.99 before the append",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
-        detail = (rows(stated) or [{}])[-1].get("detail", "")
+        detail = close_row(stated).get("detail", "")
         check("a DECLARED measurement is not duplicated",
               detail.count("cost_usd=") == 1 and "cost_usd=9.99" in detail, detail[-100:])
         check("a declared count is not replaced by the tool's own",
@@ -962,7 +973,7 @@ def main() -> int:
         run(punctuated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The author stated turns=7.",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
-        detail = (rows(punctuated) or [{}])[-1].get("detail", "")
+        detail = close_row(punctuated).get("detail", "")
         check("a punctuated stated value does not suppress the append (pinned boundary)",
               "turns=7." in detail and "turns=3" in detail, detail[-100:])
         gate = subprocess.run(
@@ -984,7 +995,7 @@ def main() -> int:
         run(quoted, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The quoted trailer read turns=36' before the repair.",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
-        detail = (rows(quoted) or [{}])[-1].get("detail", "")
+        detail = close_row(quoted).get("detail", "")
         check("a quoted unparseable value does not suppress the measurement",
               "turns=3" in detail, detail[-100:])
 
@@ -1043,7 +1054,7 @@ def main() -> int:
         )
         check("a close row whose window yielded nothing is accepted",
               r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
-        detail = (rows(silent) or [{}])[-1].get("detail", "")
+        detail = close_row(silent).get("detail", "")
         check("an empty window states the window it used",
               declares_field(detail, "duration"), detail[-100:])
         for key in ("cost_usd", "tokens_in", "tokens_out", "turns"):
@@ -1061,7 +1072,7 @@ def main() -> int:
             "--detail", "Closed. The author stated duration=42s before the append.",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
         )
-        detail = (rows(stated) or [{}])[-1].get("detail", "")
+        detail = close_row(stated).get("detail", "")
         check("a stated window is not duplicated",
               detail.count("duration=") == 1 and "duration=42s" in detail, detail[-100:])
 
@@ -1134,7 +1145,7 @@ def main() -> int:
         # below would then be proving the wrong thing.
         r = absent_run("append", "--event", "close", "--actor", "worker",
                        "--subject", "#91", "--detail", "Closed with the extractor present.")
-        detail = (rows(absent_ledger) or [{}])[-1].get("detail", "")
+        detail = close_row(absent_ledger).get("detail", "")
         check("extractor present: the row does not claim it was unavailable",
               r.returncode == 0 and "telemetry=unavailable" not in detail, detail[-90:])
         check("extractor present: the window was measured and stated",
@@ -1153,7 +1164,7 @@ def main() -> int:
         )
         r = absent_run("append", "--event", "close", "--actor", "worker",
                        "--subject", "#91", "--detail", "Closed with no extractor at all.")
-        detail = (rows(absent_ledger) or [{}])[-1].get("detail", "")
+        detail = close_row(absent_ledger).get("detail", "")
         check("an unimportable extractor is stated, never silent",
               r.returncode == 0 and "telemetry=unavailable" in detail, detail[-90:])
         # #130: the third provenance value, and the same one-token invariant. Without this

@@ -1516,48 +1516,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_binding_mechanism_exists.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_binding_mechanism_exists.py"])
 
-    # 47. Close-row verify-count gate (issue #96, ruled at ledger n=745). A close row's
-    #     cited `tools/ledger.py verify` receipt is taken BEFORE the row exists, so the
-    #     receipt structurally cannot cover the artifact it certifies: verify reads a
-    #     subject's rows as a SEQUENCE, and a run made while the close row is absent has
-    #     not seen the row it is cited for. The repair is that the row STATES what the
-    #     receipt measured -- a close row that cites a verify receipt must declare
-    #     `verify_rows=` in its canonical trailer, and that count must be AT LEAST the
-    #     row's own number. A declared count of n-1 is not a MALFORMED row: it is a row
-    #     that has TOLD you its verify predated the append, which is why this is an ORDER
-    #     gate and not an accusation -- a citation taken early is not a false citation,
-    #     and the rows that carry one stand as written.
-    #
-    #     The field's token is `rows` -- the spelling the ledger ALREADY carries (`n=761`
-    #     declares it, `n=762` is the repair row that put it there, both naming this ruling)
-    #     -- so no second spelling is invented for the datum. It is read through
-    #     `tools/field_predicate.py` and NOTHING else (§11's one-field-one-predicate law
-    #     binds a NEW field exactly as an old one), and the read is POSITIONAL -- the
-    #     canonical trailer -- so prose can never SATISFY it.
-    #
-    #     THE POPULATION IS EVERY CLOSE ROW, not only the rows that mention verify: verify
-    #     is part of settlement for every close, so the case worth catching is the close
-    #     where it did not run, which a citation-filtered population cannot see by
-    #     construction. One predicate, and it is the writer's own guarantee.
-    #
-    #     The boundary is a DECLARED FACTORY PARAMETER read from
-    #     `docs/ledger-invariants.json`, never a date hardcoded here: this gate file is
-    #     paired byte-identically into `TEMPLATE/tests/`, and a baked-in date would RED in
-    #     the tree it ships to (#76's class, P35). It is FORWARD-ONLY: the close rows
-    #     written before the boundary -- including the five known instances that cite
-    #     verify in prose with no declared count, `n=746`/`n=749`/`n=752`/`n=763`/`n=783`
-    #     -- print as `excused:` on every run and are never backfilled.
-    #
-    #     THE ONE PLACE IT REFUSES THE FAMILY'S PROPORTIONAL SKIP, and n=745 rules it: its
-    #     population is the WHOLE close history, so a ledger carrying rows and NOT ONE
-    #     close row FAILS loudly rather than skipping. A clean verdict over a population
-    #     that was never judged is what P29 forbids -- contrast #112, whose population a
-    #     factory may legitimately never produce and which is therefore proven by its
-    #     probe instead.
-    if (repo_root / "tests/test_close_verify_count_declared.py").is_file():
-        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_close_verify_count_declared.py"])
-
-    # 48. Brain-metrics gate: the standing-reading instrument measures what it says.
+    # 47. Brain-metrics gate: the standing-reading instrument measures what it says.
     #     Registered because a gate that never runs is indistinguishable from a gate that
     #     passes (#59's class, P29): `docs/measurement-procedure.md` §5 declares the
     #     brain-metrics COMPANION readings as a standing obligation every factory owes, and
@@ -1573,7 +1532,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_brain_metrics.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_brain_metrics.py"])
 
-    # 49. In-flight guard gate: two audit runs contending for one cgroup is real load —
+    # 48. In-flight guard gate: two audit runs contending for one cgroup is real load —
     #     17 cron jobs fired inside a 19-second window on 2026-09-22 after the scheduler
     #     starvation filed as opencrabs#504, and the pile included audits from MORE THAN
     #     ONE repository. The contended unit is the RUN, not the gate: the loop below is

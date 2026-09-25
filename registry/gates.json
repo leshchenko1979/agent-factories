@@ -34,12 +34,6 @@
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
       "margin_x": 4.17
     },
-    "tests/test_close_verify_count_declared.py": {
-      "budget_sec": 17.59,
-      "measured_sec": 4.21,
-      "measured_at": "0886cb62fe7e2ab2c399dc6e2bea1a57baf458e5",
-      "margin_x": 4.178
-    },
     "tests/test_commit_pair_hook.py": {
       "budget_sec": 2.19,
       "measured_sec": 0.36,

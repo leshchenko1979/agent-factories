@@ -185,7 +185,17 @@ def test_a_close_with_both_legs_preceding_is_accepted() -> None:
 
         closed = append(ledger, "close", "worker", "close probe")
         assert closed.returncode == 0, f"a lawful close must land: {closed.stdout}{closed.stderr}"
-        assert len(rows(ledger)) == 3, f"expected 3 rows, got {len(rows(ledger))}"
+        # A lawful close writes TWO rows: the close, then the SETTLEMENT RECEIPT recording
+        # the verified population the sequence check covered. Both halves are asserted --
+        # the count alone would pass on a tree where the receipt never landed, which is
+        # the failure this change exists to make impossible.
+        landed = rows(ledger)
+        assert len(landed) == 4, f"expected 4 rows (2 legs + close + receipt), got {len(landed)}"
+        assert [r["event"] for r in landed] == ["intake", "claim", "close", "run"], \
+            f"unexpected row sequence: {[r['event'] for r in landed]}"
+        receipt = landed[-1]
+        assert receipt["subject"] == SUBJECT and "SETTLEMENT RECEIPT" in receipt["detail"], receipt
+        assert "verified_rows=3" in receipt["detail"], receipt["detail"]
 
         verified = run(ledger, "verify")
         assert verified.returncode == 0, verified.stdout

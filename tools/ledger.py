@@ -190,35 +190,46 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
     return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s)"
 
 
-def resolve_actor(declared: str | None, redirected: bool) -> tuple[str | None, str]:
-    """The actor for a row: DERIVED from the session, never silently defaulted.
+def resolve_actor(declared: str | None, fixture: bool) -> tuple[str | None, str, str]:
+    """The actor for a row, and WHICH of the two it is: `(role, reason, origin)`.
 
-    A REDIRECTED ledger (`OC_LEDGER_PATH`) is a fixture — it is written by tests
-    and probes that must be able to name any actor — so there an explicit
-    `--actor` is the fixture's own declaration. The LIVE ledger is written by a
-    lane, and a lane's identity is mechanical, so there the actor is derived and
-    an explicit one is accepted only when it AGREES with the derivation.
+    `origin` is `"derived"` when the role came from the writing session, and
+    `"declared"` when a FIXTURE named it. The distinction is load-bearing at the
+    call site rather than here, because the two identities are subject to
+    different law: a derived role is a LANE and is checked against the
+    authorization matrix, while a declared one belongs to a fixture that is not a
+    lane at all and has no row in that matrix. Returning it from the one function
+    that knows which happened keeps the call site from re-deriving the question.
+
+    `fixture` says the target is NOT the live ledger — a redirected
+    `OC_LEDGER_PATH` or a `--subprocess` sub-ledger. A fixture names its own
+    actors: a throwaway ledger has no live lane to bind to, so a declared actor
+    there is the fixture's declaration and not a claim about who is writing. The
+    derivation is still the default when none is given, so a probe can exercise
+    it without an env var.
+
+    THE LIVE LEDGER IS UNCHANGED BY THAT CONCESSION, and the reason is the seam
+    itself: reaching the live ledger requires the absence of both overrides, so
+    the only rows the live path accepts are ones whose actor was derived. A
+    fixture cannot smuggle a role into the live ledger by declaring it, because
+    declaring it is what marks the target as a fixture.
     """
-    if redirected:
-        # A FIXTURE names its own actors: a throwaway ledger has no live lane to
-        # bind to, so a declared actor there is the fixture's declaration and not
-        # a claim about who is writing. The derivation is still the default when
-        # none is given, so a probe can exercise it without an env var.
+    if fixture:
         if declared:
-            return declared, ""
+            return declared, "", "declared"
         derived, reason = session_to_role()
         if derived:
-            return derived, ""
-        return None, f"no actor was given and none could be derived: {reason}"
+            return derived, "", "derived"
+        return None, f"no actor was given and none could be derived: {reason}", "derived"
     derived, reason = session_to_role()
     if derived:
         if declared and declared != derived:
             return None, (
                 f"actor '{declared}' does not match the role this session resolves to "
                 f"('{derived}') — identity is derived from OPENCRABS_SESSION_ID, not declared"
-            )
-        return derived, ""
-    return None, reason
+            ), "derived"
+        return derived, "", "derived"
+    return None, reason, "derived"
 
 # Closes written before the sequence check existed, keyed by (subject, leg).
 # An exemption is a dated, attributed admission, never a convenience: it names
@@ -405,14 +416,31 @@ def sequence_problems(
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
-    actor, actor_why = resolve_actor(args.actor, bool(os.environ.get("OC_LEDGER_PATH")))
+    # THE TARGET DECIDES WHICH IDENTITY LAW APPLIES, and it is decided BEFORE the
+    # actor is resolved because the resolver needs to know. A `--subprocess`
+    # append writes a domain sub-ledger and a redirected `OC_LEDGER_PATH` writes a
+    # throwaway file; both are FIXTURES, and the seam that redirects them is the
+    # same seam that makes their actor declarations legitimate. Only the live
+    # ledger's path reaches the strict branch, and reaching it requires BOTH
+    # overrides to be absent — so no declaration can smuggle a role into the live
+    # ledger. Measured 2026-09-25 (#binding probes): the first cut of this change
+    # keyed on `OC_LEDGER_PATH` alone, so `--subprocess` fixtures began failing at
+    # the resolver ("no live binding was readable") — a staged tool copy has no
+    # fleet manifest to resolve against, and the seam's own probe caught it.
+    fixture = bool(os.environ.get("OC_LEDGER_PATH")) or bool(getattr(args, "subprocess", None))
+    actor, actor_why, actor_origin = resolve_actor(args.actor, fixture)
     if actor is None:
         sys.exit(f"ledger append refused: {actor_why}")
     args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
+    # THE MATRIX BINDS A LANE, NOT A FIXTURE. It answers "is this ROLE allowed to
+    # write this EVENT", and a fixture-declared actor has no row in it because a
+    # fixture is not a lane — the pinned vocabulary in `probe_actors_path` is the
+    # whole point of that seam. A derived role always has a row, because the
+    # derivation resolves through the same registry the matrix is written for.
     authorized = AUTHORIZED_ACTORS_BY_EVENT.get(args.event, ())
-    if authorized and args.actor not in authorized:
+    if authorized and actor_origin == "derived" and args.actor not in authorized:
         sys.exit(
             f"ledger append refused: actor '{args.actor}' is not authorized for a "
             f"'{args.event}' row (authorized: {', '.join(authorized)}) — membership is "
@@ -593,8 +621,70 @@ def cmd_append(args: argparse.Namespace) -> int:
             fh.flush()
             os.fsync(fh.fileno())
 
+        # THE SETTLEMENT RECEIPT, AND WHY IT IS THE TOOL'S TO WRITE (#96, ruling n=745;
+        # superseded in part by the simplification this block implements).
+        #
+        # WHAT WAS WRONG. Settlement is `append the close row, then verify`, so the receipt
+        # must cover the row it certifies -- and the receipt has to live IN that row. Those
+        # two requirements cannot both hold in one append, so the law resolved it by asking
+        # the AUTHOR to declare `rows=<count>` where the count must be at least the row's
+        # own number. The author cannot know that number: it is assigned three lines above,
+        # INSIDE this lock. The only way to satisfy the predicate was to PREDICT
+        # `current_count + 1`, which is right until a peer appends in between -- measured
+        # across all five factory ledgers, 2 of 17 declaring closes were off by exactly one
+        # for exactly that reason, and both are recorded as permanent debt because an
+        # append-only ledger has no repair space for a wrong number.
+        #
+        # So the declaration was retired and the guarantee moved HERE, where the value is
+        # not a prediction but a fact this function already holds: `row["n"]` IS the count
+        # the sequence check above covered, because the check ran with the close row present
+        # at index `len(rows)`. The receipt is therefore a SECOND row -- the law's own
+        # framing, a `run` row authored on behalf of the settlement -- and it is written
+        # inside the SAME lock as the row it receipts, so no peer can interleave.
+        #
+        # WHY A SECOND ROW AND NOT A FIELD IN THE FIRST. A field would have to state the
+        # count of a ledger that includes the row carrying it, which is the self-reference
+        # that produced the prediction in the first place. The receipt is a row ABOUT a row,
+        # so it sits after it and needs no such trick: `verified_rows=N` in row N+1 is a
+        # claim about rows 1..N, every one of which already existed when it was written.
+        #
+        # WHY `run` AND NOT `close`. A second close row would re-enter the sequence index
+        # for the subject and be read by `verify` as another settlement of the same unit.
+        # `run` is the event this ledger already uses for "the tool did something and says
+        # so" -- `repair` writes its own beside the row it corrects, and this mirrors that.
+        #
+        # WHY IT CARRIES NO `outcome=`. A run row declaring an outcome ENTERS
+        # `first_pass_yield_population` (`tools/audit.py`), and a settlement receipt is
+        # SELECTION-BIASED -- it is written only where a settlement ran -- so admitting it
+        # would make the published yield structurally optimistic. Same reasoning as the
+        # duty receipt's `duty=` key (ruled at ledger n=1041); the field is absent by
+        # construction, not by convention.
+        #
+        # MAIN LEDGER ONLY, matching the sequence check above: a sub-ledger is a domain
+        # event stream whose vocabulary has no `close`, so there is no sequence to receipt.
+        receipt = None
+        if args.event == "close" and target_ledger == LEDGER:
+            receipt = {
+                "n": row["n"] + 1,
+                "ts": now_iso(),
+                "event": "run",
+                "actor": args.actor,
+                "subject": args.subject,
+                "detail": (
+                    f"SETTLEMENT RECEIPT for the close row at n={row['n']} — the sequence "
+                    f"check ran with that row present and covered verified_rows={row['n']} "
+                    f"row(s) of {args.subject}, and found no problem"
+                ),
+            }
+            with open(target_ledger, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(receipt, ensure_ascii=False) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+
     prefix = f"[{args.subprocess}] " if getattr(args, "subprocess", None) else ""
     print(f"{prefix}n={row['n']} {row['event']} {row['subject']} — {row['detail']}")
+    if receipt is not None:
+        print(f"{prefix}n={receipt['n']} run {receipt['subject']} — {receipt['detail']}")
     return 0
 
 def cmd_repair(args: argparse.Namespace) -> int:
@@ -617,7 +707,9 @@ def cmd_repair(args: argparse.Namespace) -> int:
       lawful correction from a silent edit, and a silent edit of an append-only surface
       is the failure this whole section exists to prevent.
     """
-    actor, actor_why = resolve_actor(args.actor, bool(os.environ.get("OC_LEDGER_PATH")))
+    actor, actor_why, _actor_origin = resolve_actor(
+        args.actor, bool(os.environ.get("OC_LEDGER_PATH"))
+    )
     if actor is None:
         sys.exit(f"ledger repair refused: {actor_why}")
     args.actor = actor

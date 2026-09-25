@@ -212,16 +212,6 @@ PAIRS = [
     # ships the file but drops the runner writes its first close row with no provenance
     # and can never repair that.
     ("tests/test_close_telemetry_provenance.py", "TEMPLATE/tests/test_close_telemetry_provenance.py"),
-    # The close-row verify-count gate (#96, ruling n=745). Same shape as the provenance
-    # gate above and paired for the same reason: it carries NO date of its own, reading its
-    # boundary from `docs/ledger-invariants.json`, so a bootstrapped factory judges ITS OWN
-    # close rows from ITS OWN declaration rather than a foreign one (#76's class, P35). Its
-    # field token is `rows` likewise by inheritance -- the ledger's own incumbent spelling --
-    # so the twin is also what keeps a factory from re-spelling the field the invariant is
-    # about. REQUIRED in `gate_registry.REQUIRED_GATES`, because its boundary is
-    # FORWARD-ONLY: a factory that ships the file but drops the runner writes its next close
-    # row with no stated verify count and can never repair that.
-    ("tests/test_close_verify_count_declared.py", "TEMPLATE/tests/test_close_verify_count_declared.py"),
     # The brain-metrics standing reading (P29 — no board issue: it ships under the standing
     # obligation `docs/measurement-procedure.md` §5 already declares). Paired because the
     # WHOLE value of a standing reading is that two factories compute the SAME predicate the
