@@ -298,12 +298,32 @@ single-writer claim *tested* rather than asserted.
 
 ## Step 4c — Open the rework log
 
-Create `evidence/rework.md`, copy [`tests/test_rework.py`](tests/test_rework.py),
-and make the log the **input to the improvement loop** rather than a diary.
+Create `evidence/rework.md` and copy the gate that judges it, then make the log
+the **input to the improvement loop** rather than a diary.
+
+**The gate needs SEVEN paths, and copying one of them is not enough.** The gate
+imports two shared modules, and one of those imports two more, so a factory that
+copies `tests/test_rework.py` alone gets `ModuleNotFoundError: No module named
+'audit'` — raised at import, *before* the gate can report anything, so the error
+names no remedy. Five of the seven paths ship with this template and two are
+created here:
+
+| Path | Where it comes from |
+|---|---|
+| `tests/test_rework.py` | **ships** — the gate itself |
+| `tests/rework_table.py` | **ships** — the shared entries-table parser, imported by the gate and by `tests/gate_registry.py`, so the table has ONE parser rather than two that drift |
+| `tools/audit.py` | **ships** — the coverage predicate and the subject vocabulary are imported from it, never re-typed, so one number cannot have two implementations |
+| `tools/field_predicate.py` | **ships** — imported by `tools/audit.py` |
+| `tools/gate_budget.py` | **ships** — imported by `tools/audit.py` |
+| `evidence/rework.md` | **created here** — the log itself |
+| `evidence/ledger.jsonl` | **created in Step 4b** — the denominator the resolution leg reads |
 
 The log answers the two Stability measures the rubric asks for — change fail
 rate and rework rate — and neither can be computed from memory. The log is the
 numerator; the ledger is the denominator.
+
+**The entries table has SEVEN columns.** Six describe the defect; the seventh
+names the work unit it belongs to, and it is the one the reader keys on:
 
 | Column | What goes in it |
 |---|---|
@@ -313,6 +333,30 @@ numerator; the ledger is the denominator.
 | **Root cause** | The mechanism, not the symptom. "Careless" is not a root cause |
 | **Resolution** | The commit or action that fixed it |
 | **Prevented by** | The rule, test or gate that stops recurrence. `nothing yet` is a valid answer — and an important one |
+| **Subject** | The work unit this entry belongs to — `#<n>` for a board issue, or the literal `none` when the defect was caught before any change landed. It is how a reader resolves an entry against the ledger, and the gate binds its vocabulary to `tools/audit.py` rather than re-typing it |
+
+**A `## Rates` section is mandatory, and it is where the log becomes measurable.**
+Every rate it states must carry **its date** and **its predicate** — the window it
+was measured over and the formula it was computed with. A rate with neither is a
+number nobody can check, and the gate rejects it.
+
+**Recompute the coverage figure; never copy one.** The section states
+`N of M entries carry a subject`, and the gate measures both from your own file on
+every run. A figure copied from another factory's log is wrong for yours from the
+moment you write it — which is exactly why this step ships no starter
+`rework.md`: a log carrying someone else's measurement would be the
+invented-value failure this kit forbids everywhere else.
+
+**Placeholders are rejected.** `tbd`, `todo`, `n/a`, `-`, `?`, `unknown` and
+`none` are refused in the six defect columns — and `none` in the `Subject` column
+means something specific (*caught before any change landed*), not "I did not
+fill this in". A bootstrap that has recorded no defect at all is either perfect,
+which is not credible, or is not recording.
+
+**This step must stand on its own.** The gate dies at import when a path above is
+missing, so the list is here rather than in a later step: nothing else in this
+document tells you that `tools/audit.py` and its two dependencies are part of the
+rework kit.
 
 **Why this is a step and not a habit.** A defect fixed and not recorded loses its
 root cause within a day, and the factory pays for the same mistake again with the
