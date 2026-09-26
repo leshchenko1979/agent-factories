@@ -335,7 +335,7 @@ def probe_the_gate_is_registered_and_paired() -> str:
     ), f"{GATE_CMD} is not registered in the audit gate list"
     copy = REPO / "TEMPLATE" / "tools" / "audit.py"
     if copy.is_file():
-        assert twin.read_bytes() == AUDIT.read_bytes(), (
+        assert copy.read_bytes() == AUDIT.read_bytes(), (
             "tools/audit.py and TEMPLATE/tools/audit.py must be byte-identical"
         )
         return f"{GATE_CMD} is registered, and the audit copies are byte-identical"

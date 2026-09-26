@@ -115,6 +115,60 @@ from ledger_boundary import (  # noqa: E402
 # a different string than the gate's name would skip forever without saying so.
 BOUNDARY_KEY = "skill_version_contract"
 
+# The exemption surface. A decoupling that has reached history has NO repair space -- the
+# law says so: "a bump written after the fact would be a falsified record rather than a
+# repair. Nothing is backfilled." A bump-only commit would violate the contract's second
+# arm, so the only exits are (a) leave the gate permanently red, or (b) record the debt
+# visibly. (a) is the "stop with no andon cord" this repo's law forbids, so this is (b):
+# factory data in its own file, keyed by the FULL sha, printed as `excused:` on every run.
+EXEMPTIONS_PATH = "docs/skill-version-exemptions.json"
+# Marks a finding an exemption covers, so the printed form can separate visible debt from a
+# failure WITHOUT changing `evaluate`'s arity -- twenty-one call sites unpack its 5-tuple,
+# and a sixth element would break every one of them.
+EXCUSED_PREFIX = "EXCUSED:"
+EXEMPTIONS_EXAMPLE_PATH = "docs/skill-version-exemptions.example.json"
+
+
+def load_exemptions(repo: Path) -> tuple[set[tuple[str, str]], list[str]]:
+    """`({(sha, path)}, problems)` from the factory data file.
+
+    ABSENT means this factory recorded none -- the shipped state of a new factory. A file
+    that EXISTS and cannot be read is a problem, never a silent pass: "an exemption list
+    that quietly fails to load is indistinguishable from no exemptions", and only the
+    silent failure is the hazard.
+    """
+    problems: list[str] = []
+    path = repo / EXEMPTIONS_PATH
+    if not path.is_file():
+        return set(), problems
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return set(), [f"{EXEMPTIONS_PATH} could not be read: {exc}"]
+    if not isinstance(payload, dict):
+        return set(), [f"{EXEMPTIONS_PATH} must be a JSON object carrying `exempt`"]
+    rows = payload.get("exempt")
+    if not isinstance(rows, list):
+        return set(), [f"{EXEMPTIONS_PATH} carries no `exempt` list — see {EXEMPTIONS_EXAMPLE_PATH}"]
+    out: set[tuple[str, str]] = set()
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            return set(), [f"{EXEMPTIONS_PATH} exempt[{i}] is not an object"]
+        missing = [k for k in ("sha", "path", "granted", "reason", "proof") if not row.get(k)]
+        if missing:
+            return set(), [
+                f"{EXEMPTIONS_PATH} exempt[{i}] is missing {', '.join(missing)} — an "
+                f"exemption is admitted by an external receipt, so every field is required"
+            ]
+        sha = str(row["sha"])
+        if len(sha) != 40:
+            return set(), [
+                f"{EXEMPTIONS_PATH} exempt[{i}] carries sha {sha!r}, which is not the FULL "
+                f"40-character commit id — an abbreviated sha is not a durable key"
+            ]
+        out.add((sha, str(row["path"])))
+    return out, problems
+
 # The law surfaces this repo ships: a factory's own law lives at `skills/<slug>/SKILL.md`,
 # and the template's ships as `TEMPLATE/SKILL.md.tmpl`. The globs are the DISCOVERY rule —
 # a second law file added under `skills/` is found with no edit here.
@@ -288,7 +342,11 @@ def first_parent(repo: Path, sha: str) -> str | None:
 def history_problems(
     repo: Path, since: datetime, paths: list[str]
 ) -> tuple[list[str], list[tuple[str, str]]]:
-    """`(problems, examined)` for the commits at or after `since` touching `paths`.
+    """`(findings, examined)` for the commits at or after `since` touching `paths`.
+
+    A finding is a `(sha, path, message)` triple rather than a bare message, because the
+    exemption surface is keyed by `(sha, path)` and a message alone cannot say which commit
+    it came from — two commits can produce identical text for the same file.
 
     The boundary is compared as a PARSED datetime, never as a string: git renders the
     committer date as `%cI` with a `+00:00` offset while the declaration parses to a
@@ -300,7 +358,7 @@ def history_problems(
     it read: a clean verdict over a population the run does not name is indistinguishable
     from a run that examined nothing.
     """
-    problems: list[str] = []
+    problems: list[tuple[str, str, str]] = []
     examined: list[tuple[str, str]] = []
     for sha, when in commits_touching(repo, paths):
         try:
@@ -316,11 +374,10 @@ def history_problems(
         if parent is None:
             continue
         for path in paths:
-            problems.extend(
-                contract_problems(
-                    path, blob_at(repo, parent, path), blob_at(repo, sha, path)
-                )
-            )
+            for message in contract_problems(
+                path, blob_at(repo, parent, path), blob_at(repo, sha, path)
+            ):
+                problems.append((sha, path, message))
     return problems, examined
 
 
@@ -368,12 +425,37 @@ def evaluate(
     since = boundary if boundary.tzinfo else boundary.replace(tzinfo=timezone.utc)
 
     try:
-        problems, examined = history_problems(repo, since, paths)
+        findings, examined = history_problems(repo, since, paths)
     except GateError as err:
         return "fail", "", err.problems, [], paths
 
-    if problems:
-        return "fail", declared, problems, examined, paths
+    if findings:
+        exempt, exempt_problems = load_exemptions(repo)
+        problems: list[str] = []
+        if exempt_problems:
+            problems.extend(exempt_problems)
+        matched: set[tuple[str, str]] = set()
+        for sha, path, message in findings:
+            if (sha, path) in exempt:
+                matched.add((sha, path))
+                problems.append(f"{EXCUSED_PREFIX}{message} [{sha[:8]}]")
+            else:
+                problems.append(message)
+        unused = sorted(exempt - matched)
+        for sha, path in unused:
+            problems.append(
+                f"{EXEMPTIONS_PATH} exempts {path} at {sha[:8]}, but no decoupling of that "
+                f"file was found in the window — a stale entry inflates the visible debt "
+                f"while excusing nothing")
+        # "fail" means a problem nobody recorded; an excused finding is DEBT, which is a
+        # third state and not a failure. It is expressed as `clean` carrying problems --
+        # rather than as its own status -- because a sixth tuple element would break the
+        # twenty-one call sites that unpack this return, and the printed form can tell the
+        # two apart from the EXCUSED marker without a new status.
+        fatal = [x for x in problems if not x.startswith(EXCUSED_PREFIX)]
+        if fatal:
+            return "fail", declared, problems, examined, paths
+        return "clean", declared, problems, examined, paths
     if not examined:
         return "empty", declared, [], [], paths
     return "clean", declared, [], examined, paths
@@ -409,10 +491,27 @@ def main(repo: Path | None = None) -> int:
         )
         return 0
 
-    if status == "fail":
+    if status == "fail" or problems:
+        # `clean`, `excused` and `FAIL` are three distinct outputs, so a reader can never
+        # mistake recorded debt for a passing run -- the same rule the ledger's exemption
+        # surfaces follow. The exit code reflects only UNEXCUSED problems, and the excused
+        # lines print for a `clean` verdict too, because debt that stops being printed the
+        # moment it is no longer fatal is the silent-excuse failure this surface forbids.
+        fatal = 0
         for problem in problems:
-            print(f"  FAIL {problem}")
-        return 1
+            if problem.startswith(EXCUSED_PREFIX):
+                print(f"  excused: {problem[len(EXCUSED_PREFIX):].strip()}")
+            else:
+                print(f"  FAIL {problem}")
+                fatal += 1
+        if fatal:
+            return 1
+        print(
+            f"  clean (with recorded debt) — {len(problems)} decoupling(s) are excused by "
+            f"{EXEMPTIONS_PATH} and are permanent: the version no longer identifies the "
+            f"bytes, and the law forbids backfilling a bump"
+        )
+        return 0
 
     print(
         "  clean — every law-file change in the window moved its BODY and its version "

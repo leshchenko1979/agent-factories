@@ -206,6 +206,7 @@ FACTORY_SEEDS = frozenset({
     "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
     "TEMPLATE/docs/ledger-retirements.example.json",
     "TEMPLATE/docs/products.example.json",
+    "TEMPLATE/docs/skill-version-exemptions.example.json",
     "TEMPLATE/docs/rework-relative-revision-exemptions.example.json",
     "TEMPLATE/registry/fleet.example.json",
     "TEMPLATE/registry/gates.example.json",

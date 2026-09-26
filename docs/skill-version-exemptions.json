@@ -1,0 +1,19 @@
+{
+  "_note": "THIS factory's recorded law-version decouplings — permanent debt, not forgiveness. Each entry is a commit whose law-file BODY moved while its `version:` stayed, which leaves that version naming two different bodies forever: a lane holding it cannot tell which bytes it has. The law forbids backfilling a bump ('a bump written after the fact would be a falsified record rather than a repair'), and a bump-only commit would violate the contract's second arm, so the repair space is genuinely empty. These print as `excused:` lines on every run. Skeleton and field rules: docs/skill-version-exemptions.example.json.",
+  "exempt": [
+    {
+      "sha": "24a5231729763acc286bfa68bf9e4d9369add00a",
+      "path": "skills/meta-factory/SKILL.md",
+      "granted": "2026-09-26",
+      "reason": "the twin-to-copy canonisation changed the law body without moving version 0.1.26; the task-11 verification set omitted this gate, so it was not seen until the next full audit",
+      "proof": "the ledger row that records the finding and this exemption: ledger n=1144"
+    },
+    {
+      "sha": "24a5231729763acc286bfa68bf9e4d9369add00a",
+      "path": "TEMPLATE/SKILL.md.tmpl",
+      "granted": "2026-09-26",
+      "reason": "the same commit changed the template law body without moving version 0.1.12; the two law files carry their OWN versions because they are not byte-paired, so each needs its own entry",
+      "proof": "the ledger row that records the finding and this exemption: ledger n=1144"
+    }
+  ]
+}
