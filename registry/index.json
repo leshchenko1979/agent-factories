@@ -1,16 +1,50 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-25T20:45:23Z",
+  "resolved_at": "2026-09-26T10:46:21Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 62,
-    "announcements": 15,
-    "jobs": 58,
+    "announcements": 17,
+    "jobs": 59,
     "unattributed_jobs": 4
   },
   "announcements": [
+    {
+      "id": "mac-cdp-tunnels-flap-on-sleep",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.",
+      "since": "2026-09-26",
+      "review_by": "2026-10-10",
+      "check": null,
+      "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493.",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "infra-factory"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "miidas-platform-compose-is-repo-written",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+      "since": "2026-09-26",
+      "review_by": null,
+      "check": null,
+      "evidence": "deploy_lib.sh:148-152 — miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time).",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "miidas"
+      ],
+      "conflict": []
+    },
     {
       "id": "bot-repo-canonical-account-and-deploy-home",
       "severity": "warning",
@@ -49,7 +83,7 @@
       "id": "pacemaker-triggers-still-pass-mode-quiet",
       "severity": "warning",
       "scope": "profile",
-      "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's four were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved). CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet.",
+      "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-26T06:20Z: of 57 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous census in this notice (2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) is kept as the step this one follows, never overwritten.",
       "since": "2026-09-19T03:36:54Z",
       "review_by": null,
       "check": null,
@@ -100,7 +134,7 @@
       "id": "inferhub-autoswitcher-retired",
       "severity": "warning",
       "scope": null,
-      "text": "The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-24: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-24 — the tier channels this notice named are no longer in the table (live new_api.channels holds exactly two rows: id 43 gemini, status 3 disabled, priority 300, auto_ban 1; id 44 iq-75-plus, status 1 enabled, priority 200, auto_ban 0), and because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is now PERSISTENT, not transient. That inversion is the thing to know.",
+      "text": "The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-26: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-26 — the tier channels this notice named are no longer in the table and the row count has moved: live new_api.channels holds THREE rows (id 43 gemini, status 1 ENABLED, priority 300, auto_ban 1 — re-enabled since the 09-24 read, and that change is UNATTRIBUTED; id 44 iq-75-plus, status 1, priority 200; id 46 iq-80-plus, status 1, priority 210, created 09-25). Because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is PERSISTENT, not transient. That inversion is the thing to know. Channel 43 currently fails 82% of its consumes (871 failures against 197 successes over 8h) and sits first in the priority order, so an `auto` request takes two doomed hops before channel 44 serves; tracked as inferhub-watch #151.",
       "since": "2026-09-18T22:51:42Z",
       "review_by": null,
       "check": null,
@@ -185,7 +219,7 @@
       "id": "brain-metrics-baseline-measured",
       "severity": "info",
       "scope": "profile",
-      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN, and this replaces the earlier cause-not-established text. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-25T06:08:47Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 758 lines / 167701 bytes / about 47914 tokens = 23.96 percent of a 200k window — AGENTS.md alone is 701 lines / 163012 bytes, 92.48 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 756 lines / 77067 bytes / about 22019 tokens = 11.01 percent; skills/meta-factory/SKILL.md alone is 756 lines, 256 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1514 lines / 244768 bytes / about 69933 tokens = 34.97 percent of a 200k window, and 6.99 percent of the 1M window now configured (the two differ by exactly 5.0x, so always read the denominator beside the figure) - paid before a session reads its first message. The previous read in this notice (2026-09-23T11:28:08Z: 29.76 percent) is kept as the step this one follows, never overwritten: the floor rose 5.21 points in about 1.9 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
+      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — confirmed again 2026-09-26T06:2xZ, the newest is 2026-09-21.md — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-26T06:21:02Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 769 lines / 185339 bytes / about 52953 tokens = 26.48 percent of a 200k window — AGENTS.md alone is 712 lines / 180650 bytes, 92.59 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 866 lines / 94441 bytes / about 26983 tokens = 13.49 percent; skills/meta-factory/SKILL.md alone is 866 lines, 366 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1635 lines / 279780 bytes / about 79936 tokens = 39.97 percent of a 200k window, and 7.99 percent of the 1M window now configured (the two differ by exactly 5.0x, so always read the denominator beside the figure) - paid before a session reads its first message. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z) then 34.97 percent (2026-09-25T06:08:47Z) then this one, so the floor has risen 10.21 points in about 2.8 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
       "since": "2026-09-19T14:20:00Z",
       "review_by": null,
       "check": null,
@@ -272,7 +306,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-09-25T20:42:08Z",
+      "attested_at": "2026-09-26T06:20:28Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -284,7 +318,7 @@
           "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
           "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
           "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-          "this factory's own chat (-1003993000918), its topics and its 14 cron rows (10 enabled, 4 disabled: three fired one-shots parked for 2027, plus outreach-db-sync suspended pending an owner ruling on campaign-repo push policy)"
+          "this factory's own chat (-1003993000918), its topics and its 16 cron rows (14 enabled, 2 disabled one-shots parked for 2027)"
         ],
         "does_not_own": [
           "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -367,6 +401,30 @@
           "audience": "agent",
           "entry": "cron 61fcbbfc-e365-4db0-926b-2ad13873a517",
           "cadence": "Tue 12:00 MSK"
+        },
+        {
+          "name": "ai-antispam-timeout-monitor",
+          "audience": "agent",
+          "entry": "cron ai-antispam-timeout-monitor",
+          "cadence": "daily 12:00 UTC"
+        },
+        {
+          "name": "ai-antispam-43-close-gate",
+          "audience": "agent",
+          "entry": "cron ai-antispam-43-close-gate",
+          "cadence": "daily 12:05 UTC, trigger-gated"
+        },
+        {
+          "name": "ai-antispam-outreach-stream-joins",
+          "audience": "agent",
+          "entry": "cron ai-antispam-outreach-stream-joins",
+          "cadence": "daily 00:00 UTC"
+        },
+        {
+          "name": "ai-antispam-outreach-db-sync",
+          "audience": "agent",
+          "entry": "cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4",
+          "cadence": "daily 09:00 MSK — ENABLED"
         }
       ],
       "lanes": [
@@ -397,7 +455,7 @@
           "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T19:18:34Z",
+          "bound_at": "2026-09-26T10:37:31Z",
           "announcements": []
         },
         {
@@ -477,18 +535,18 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-09-25T06:10:55Z",
+      "attested_at": "2026-09-26T06:19:04Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.77",
+      "skill_revision": "1.0.81",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
           "leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law",
           "Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
           "Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
-          "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in the current fragment NO LONGER EXISTS. Measured 2026-09-24 the table holds exactly two rows: id 43 gemini (status 3 = disabled, priority 300, auto_ban 1) and id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0). No automatic writer runs since the switcher retirement",
+          "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in the current fragment NO LONGER EXISTS. Measured 2026-09-26 the table holds exactly THREE rows: id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1 — it read status 3 disabled on 09-24 and the change is UNATTRIBUTED: no ledger row and no admin-API event), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0) and id 46 iq-80-plus (status 1 = enabled, priority 210, auto_ban 0, created 2026-09-25 on owner order; it is bid-starved and returns 503 no_capacity by design, tracked as inferhub-watch #151). No automatic writer runs since the switcher retirement",
           "Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)",
           "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
           "This factory's own crons and its daily GitHub Actions sweep"
@@ -507,7 +565,7 @@
         "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship",
         "Postgres inferhub_logs on apps — route_metrics, usage_logs, model_rollup",
         "Grafana dashboard inferhub-watch — panels and queries",
-        "The new_api channels table — priority, auto_ban and model_mapping policy (the tier ladder is gone; two rows today)"
+        "The new_api channels table — priority, auto_ban and model_mapping policy (the tier ladder is gone; three rows today, and id 43 was re-enabled since the 09-24 read — that change is unattributed)"
       ],
       "services": [
         {
@@ -585,7 +643,7 @@
           "session_id": "1122b15e-0b26-420f-a7b3-d0719479bbd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T16:48:03Z",
+          "bound_at": "2026-09-26T10:35:05Z",
           "announcements": []
         }
       ],
@@ -593,7 +651,7 @@
         {
           "id": "inferhub-autoswitcher-retired",
           "severity": "warning",
-          "text": "The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-24: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-24 — the tier channels this notice named are no longer in the table (live new_api.channels holds exactly two rows: id 43 gemini, status 3 disabled, priority 300, auto_ban 1; id 44 iq-75-plus, status 1 enabled, priority 200, auto_ban 0), and because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is now PERSISTENT, not transient. That inversion is the thing to know.",
+          "text": "The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-26: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-26 — the tier channels this notice named are no longer in the table and the row count has moved: live new_api.channels holds THREE rows (id 43 gemini, status 1 ENABLED, priority 300, auto_ban 1 — re-enabled since the 09-24 read, and that change is UNATTRIBUTED; id 44 iq-75-plus, status 1, priority 200; id 46 iq-80-plus, status 1, priority 210, created 09-25). Because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is PERSISTENT, not transient. That inversion is the thing to know. Channel 43 currently fails 82% of its consumes (871 failures against 197 successes over 8h) and sits first in the priority order, so an `auto` request takes two doomed hops before channel 44 serves; tracked as inferhub-watch #151.",
           "scope": null,
           "since": "2026-09-18T22:51:42Z",
           "review_by": null,
@@ -635,7 +693,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-09-25T06:10:44Z",
+      "attested_at": "2026-09-26T06:21:03Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -719,7 +777,7 @@
         {
           "name": "questions.l1979.ru answer surface",
           "audience": "owner",
-          "entry": "vpn: /etc/caddy/Caddyfile vhost questions.l1979.ru -> reverse_proxy 127.0.0.1:8099 (/opt/questions/backend.py under questions-backend.service), serving /srv/questions. Pages and register are pushed agents -> vpn by the oc-questions-push.path systemd USER unit on agents.",
+          "entry": "vpn: /etc/caddy/Caddyfile vhost questions.l1979.ru -> reverse_proxy 127.0.0.1:8099 (/opt/questions/backend.py under questions-backend.service), serving /srv/questions; the site is basic_auth gated (401 without credentials). Pages and register are pushed agents -> vpn by the oc-questions-push.path systemd USER unit on agents.",
           "cadence": "continuous; accepts a posted answer and returns it to the asking lane session"
         }
       ],
@@ -731,7 +789,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T11:19:26Z",
+          "bound_at": "2026-09-26T10:34:50Z",
           "announcements": []
         },
         {
@@ -741,7 +799,7 @@
           "session_id": "fb67ca75-8735-4c39-80be-06b59bd4365f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-21T08:56:20Z",
+          "bound_at": "2026-09-26T08:21:48Z",
           "announcements": []
         },
         {
@@ -761,7 +819,7 @@
           "session_id": "8b278a4f-531d-4d7b-8c79-87d30f9257bd",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-18T09:30:14Z",
+          "bound_at": "2026-09-26T08:23:17Z",
           "announcements": []
         },
         {
@@ -814,6 +872,19 @@
             "profile"
           ],
           "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file."
+        },
+        {
+          "id": "mac-cdp-tunnels-flap-on-sleep",
+          "severity": "warning",
+          "text": "The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.",
+          "scope": "profile",
+          "since": "2026-09-26",
+          "review_by": "2026-10-10",
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493."
         }
       ]
     },
@@ -821,11 +892,11 @@
       "factory": "meta-factory",
       "display_name": "Factories",
       "status": "attested",
-      "attested_at": "2026-09-25T06:12:02Z",
+      "attested_at": "2026-09-26T06:29:30Z",
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.26",
+      "skill_revision": "0.1.27",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -904,7 +975,7 @@
           "session_id": "f4c192c9-a8e9-4268-9026-ee3e4970cc8a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T06:00:49Z",
+          "bound_at": "2026-09-26T09:12:12Z",
           "announcements": []
         },
         {
@@ -914,7 +985,7 @@
           "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T19:54:02Z",
+          "bound_at": "2026-09-26T09:11:48Z",
           "announcements": []
         },
         {
@@ -924,7 +995,7 @@
           "session_id": "23549292-77ff-40d1-97e3-5aa0bdd19d74",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T14:44:19Z",
+          "bound_at": "2026-09-26T10:41:51Z",
           "announcements": []
         },
         {
@@ -942,7 +1013,7 @@
         {
           "id": "pacemaker-triggers-still-pass-mode-quiet",
           "severity": "warning",
-          "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's four were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved). CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet.",
+          "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-26T06:20Z: of 57 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous census in this notice (2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) is kept as the step this one follows, never overwritten.",
           "scope": "profile",
           "since": "2026-09-19T03:36:54Z",
           "review_by": null,
@@ -955,7 +1026,7 @@
         {
           "id": "brain-metrics-baseline-measured",
           "severity": "info",
-          "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN, and this replaces the earlier cause-not-established text. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-25T06:08:47Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 758 lines / 167701 bytes / about 47914 tokens = 23.96 percent of a 200k window — AGENTS.md alone is 701 lines / 163012 bytes, 92.48 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 756 lines / 77067 bytes / about 22019 tokens = 11.01 percent; skills/meta-factory/SKILL.md alone is 756 lines, 256 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1514 lines / 244768 bytes / about 69933 tokens = 34.97 percent of a 200k window, and 6.99 percent of the 1M window now configured (the two differ by exactly 5.0x, so always read the denominator beside the figure) - paid before a session reads its first message. The previous read in this notice (2026-09-23T11:28:08Z: 29.76 percent) is kept as the step this one follows, never overwritten: the floor rose 5.21 points in about 1.9 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
+          "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — confirmed again 2026-09-26T06:2xZ, the newest is 2026-09-21.md — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-26T06:21:02Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 769 lines / 185339 bytes / about 52953 tokens = 26.48 percent of a 200k window — AGENTS.md alone is 712 lines / 180650 bytes, 92.59 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 866 lines / 94441 bytes / about 26983 tokens = 13.49 percent; skills/meta-factory/SKILL.md alone is 866 lines, 366 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1635 lines / 279780 bytes / about 79936 tokens = 39.97 percent of a 200k window, and 7.99 percent of the 1M window now configured (the two differ by exactly 5.0x, so always read the denominator beside the figure) - paid before a session reads its first message. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z) then 34.97 percent (2026-09-25T06:08:47Z) then this one, so the floor has risen 10.21 points in about 2.8 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
           "scope": "profile",
           "since": "2026-09-19T14:20:00Z",
           "review_by": null,
@@ -971,11 +1042,11 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-25T06:10:32Z",
+      "attested_at": "2026-09-26T06:31:01Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.21",
+      "skill_revision": "1.1.26",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
@@ -1079,7 +1150,7 @@
           "session_id": "b57efabd-85df-4467-bed7-f5a596285f68",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T10:46:50Z",
+          "bound_at": "2026-09-25T22:49:43Z",
           "announcements": []
         },
         {
@@ -1089,7 +1160,7 @@
           "session_id": "39d2b612-dbfc-4953-ae02-609267c68c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T19:19:44Z",
+          "bound_at": "2026-09-25T22:48:21Z",
           "announcements": []
         }
       ],
@@ -1132,6 +1203,19 @@
             "profile"
           ],
           "evidence": null
+        },
+        {
+          "id": "miidas-platform-compose-is-repo-written",
+          "severity": "warning",
+          "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+          "scope": "profile",
+          "since": "2026-09-26",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "deploy_lib.sh:148-152 — miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
         }
       ]
     },
@@ -1139,16 +1223,16 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-25T06:09:13Z",
+      "attested_at": "2026-09-26T06:41:11Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.257",
+      "skill_revision": "0.4.263",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
           "the OpenCrabs source fork leshchenko1979/opencrabs and its carrier build and swap pipeline",
-          "the opencrabs-dev skill set: SKILL.md, the four role files, fleet-directives.md and the runbooks",
+          "the opencrabs-dev skill set: SKILL.md, the five role files, fleet-directives.md and the runbooks",
           "the workers-ledger and skill-version consensus",
           "the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory",
           "the fork issue board on leshchenko1979/opencrabs"
@@ -1169,7 +1253,7 @@
         {
           "name": "Build and swap a new daemon binary",
           "audience": "agent",
-          "entry": "the Editor lane's oc-deploy ship <full-sha>",
+          "entry": "the Editor lane's oc-deploy ship --sha <full-sha> --execute",
           "cadence": "on request"
         },
         {
@@ -1271,7 +1355,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-25T20:33:22Z",
+          "bound_at": "2026-09-26T09:24:24Z",
           "announcements": []
         },
         {
@@ -1291,7 +1375,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T19:47:10Z",
+          "bound_at": "2026-09-25T21:31:18Z",
           "announcements": []
         },
         {
@@ -1311,7 +1395,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T13:06:52Z",
+          "bound_at": "2026-09-25T21:52:59Z",
           "announcements": []
         },
         {
@@ -1361,7 +1445,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T16:23:15Z",
+          "bound_at": "2026-09-26T09:20:08Z",
           "announcements": []
         },
         {
@@ -1461,7 +1545,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T20:32:17Z",
+          "bound_at": "2026-09-26T09:55:15Z",
           "announcements": []
         },
         {
@@ -1511,7 +1595,7 @@
           "session_id": "a38499fc-76a4-4aff-8953-fa5931ad0e5c",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T20:44:58Z",
+          "bound_at": "2026-09-25T21:05:31Z",
           "announcements": []
         },
         {
@@ -1551,7 +1635,7 @@
           "session_id": "2ed8adeb-4784-4159-b68f-0e552490641e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T18:51:10Z",
+          "bound_at": "2026-09-25T21:32:43Z",
           "announcements": []
         },
         {
@@ -1617,8 +1701,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:00:00+00:00",
-      "last_run_at": "2026-09-25T06:00:13Z",
+      "next_run_at": "2026-09-27T06:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": "telegram:-1003993000918:10784",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1649,8 +1733,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T07:00:00+00:00",
-      "last_run_at": "2026-09-25T07:00:15Z",
+      "next_run_at": "2026-09-27T07:00:00+00:00",
+      "last_run_at": "2026-09-26T07:00:38Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1665,8 +1749,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:00:00+00:00",
-      "last_run_at": "2026-09-25T06:00:13Z",
+      "next_run_at": "2026-09-27T06:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1697,8 +1781,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:00:00+00:00",
-      "last_run_at": "2026-09-25T00:00:49Z",
+      "next_run_at": "2026-09-27T00:00:00+00:00",
+      "last_run_at": "2026-09-26T00:00:33Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1713,8 +1797,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:07:00+00:00",
-      "last_run_at": "2026-09-25T18:07:58Z",
+      "next_run_at": "2026-09-26T12:07:00+00:00",
+      "last_run_at": "2026-09-26T06:07:36Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1729,8 +1813,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:30:00+00:00",
-      "last_run_at": "2026-09-25T06:30:14Z",
+      "next_run_at": "2026-09-27T06:30:00+00:00",
+      "last_run_at": "2026-09-26T06:30:36Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1745,8 +1829,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T05:50:00+00:00",
-      "last_run_at": "2026-09-25T05:50:12Z",
+      "next_run_at": "2026-09-27T05:50:00+00:00",
+      "last_run_at": "2026-09-26T05:50:35Z",
       "deliver_to": "session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1761,8 +1845,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:40:00+00:00",
-      "last_run_at": "2026-09-25T18:40:00Z",
+      "next_run_at": "2026-09-26T12:40:00+00:00",
+      "last_run_at": "2026-09-26T06:40:37Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -1793,8 +1877,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:25:00+00:00",
-      "last_run_at": "2026-09-25T18:25:59Z",
+      "next_run_at": "2026-09-26T12:25:00+00:00",
+      "last_run_at": "2026-09-26T06:25:36Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
@@ -1825,8 +1909,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T09:00:00+00:00",
-      "last_run_at": "2026-09-25T09:00:16Z",
+      "next_run_at": "2026-09-27T09:00:00+00:00",
+      "last_run_at": "2026-09-26T09:00:39Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1873,8 +1957,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T05:00:00+00:00",
-      "last_run_at": "2026-09-25T05:00:12Z",
+      "next_run_at": "2026-09-27T05:00:00+00:00",
+      "last_run_at": "2026-09-26T05:00:35Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1889,8 +1973,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:00:00+00:00",
-      "last_run_at": "2026-09-25T18:00:57Z",
+      "next_run_at": "2026-09-26T12:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1905,8 +1989,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:00:00+00:00",
-      "last_run_at": "2026-09-25T06:00:13Z",
+      "next_run_at": "2026-09-27T06:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1921,8 +2005,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:23:00+00:00",
-      "last_run_at": "2026-09-25T18:23:59Z",
+      "next_run_at": "2026-09-26T12:23:00+00:00",
+      "last_run_at": "2026-09-26T06:23:36Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1937,8 +2021,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:00:00+00:00",
-      "last_run_at": "2026-09-25T00:00:49Z",
+      "next_run_at": "2026-09-27T00:00:00+00:00",
+      "last_run_at": "2026-09-26T00:00:33Z",
       "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
@@ -1969,8 +2053,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:00:00+00:00",
-      "last_run_at": "2026-09-25T06:00:13Z",
+      "next_run_at": "2026-09-27T06:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1985,8 +2069,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-26T00:00:00+00:00",
-      "last_run_at": "2026-09-25T18:00:57Z",
+      "next_run_at": "2026-09-26T12:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:36Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -2033,8 +2117,24 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:00:00+00:00",
-      "last_run_at": "2026-09-25T06:00:13Z",
+      "next_run_at": "2026-09-27T06:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
+      "deliver_to": null,
+      "trigger_cmd": null,
+      "profile": "ops",
+      "owner": "meta-factory",
+      "owner_basis": "name prefix"
+    },
+    {
+      "id": "e30bfc83-3fee-400a-945d-e74b962c142e",
+      "name": "factory-publish",
+      "cron_expr": "0 */6 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-26T12:00:00+00:00",
+      "last_run_at": null,
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2049,8 +2149,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:00:00+00:00",
-      "last_run_at": "2026-09-25T06:00:13Z",
+      "next_run_at": "2026-09-27T06:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2081,8 +2181,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T00:00:00+00:00",
-      "last_run_at": "2026-09-25T18:00:57Z",
+      "next_run_at": "2026-09-26T12:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:35Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -2097,8 +2197,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T09:00:00+00:00",
-      "last_run_at": "2026-09-25T09:00:16Z",
+      "next_run_at": "2026-09-27T09:00:00+00:00",
+      "last_run_at": "2026-09-26T09:00:39Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2417,8 +2517,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-26T00:00:00+00:00",
-      "last_run_at": "2026-09-25T18:00:57Z",
+      "next_run_at": "2026-09-26T12:00:00+00:00",
+      "last_run_at": "2026-09-26T06:00:36Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2433,8 +2533,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T06:30:00+00:00",
-      "last_run_at": "2026-09-25T06:30:14Z",
+      "next_run_at": "2026-09-27T06:30:00+00:00",
+      "last_run_at": "2026-09-26T06:30:36Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",

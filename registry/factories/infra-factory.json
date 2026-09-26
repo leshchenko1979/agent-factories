@@ -77,7 +77,7 @@
     {
       "name": "questions.l1979.ru answer surface",
       "audience": "owner",
-      "entry": "vpn: /etc/caddy/Caddyfile vhost questions.l1979.ru -> reverse_proxy 127.0.0.1:8099 (/opt/questions/backend.py under questions-backend.service), serving /srv/questions. Pages and register are pushed agents -> vpn by the oc-questions-push.path systemd USER unit on agents.",
+      "entry": "vpn: /etc/caddy/Caddyfile vhost questions.l1979.ru -> reverse_proxy 127.0.0.1:8099 (/opt/questions/backend.py under questions-backend.service), serving /srv/questions; the site is basic_auth gated (401 without credentials). Pages and register are pushed agents -> vpn by the oc-questions-push.path systemd USER unit on agents.",
       "cadence": "continuous; accepts a posted answer and returns it to the asking lane session"
     }
   ],
@@ -121,6 +121,18 @@
       "since": "2026-09-23",
       "review_by": "2026-10-07",
       "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file."
+    },
+    {
+      "id": "mac-cdp-tunnels-flap-on-sleep",
+      "scope": "profile",
+      "severity": "warning",
+      "text": "The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-09-26",
+      "review_by": "2026-10-10",
+      "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493."
     }
   ],
   "lanes": [
@@ -156,5 +168,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-25T06:10:44Z"
+  "attested_at": "2026-09-26T06:21:03Z"
 }

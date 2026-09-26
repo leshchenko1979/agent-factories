@@ -8,7 +8,7 @@
   "zone": {
     "owns": [
       "the OpenCrabs source fork leshchenko1979/opencrabs and its carrier build and swap pipeline",
-      "the opencrabs-dev skill set: SKILL.md, the four role files, fleet-directives.md and the runbooks",
+      "the opencrabs-dev skill set: SKILL.md, the five role files, fleet-directives.md and the runbooks",
       "the workers-ledger and skill-version consensus",
       "the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory",
       "the fork issue board on leshchenko1979/opencrabs"
@@ -25,7 +25,7 @@
     {
       "name": "Build and swap a new daemon binary",
       "audience": "agent",
-      "entry": "the Editor lane's oc-deploy ship <full-sha>",
+      "entry": "the Editor lane's oc-deploy ship --sha <full-sha> --execute",
       "cadence": "on request"
     },
     {
@@ -302,5 +302,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-25T06:09:13Z"
+  "attested_at": "2026-09-26T06:41:11Z"
 }

@@ -100,6 +100,17 @@
         "profile"
       ],
       "scope": "factory"
+    },
+    {
+      "id": "miidas-platform-compose-is-repo-written",
+      "scope": "profile",
+      "severity": "warning",
+      "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-09-26",
+      "evidence": "deploy_lib.sh:148-152 — miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
     }
   ],
   "lanes": [
@@ -135,5 +146,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-25T06:10:32Z"
+  "attested_at": "2026-09-26T06:31:01Z"
 }
