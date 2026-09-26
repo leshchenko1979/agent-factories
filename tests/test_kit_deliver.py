@@ -42,7 +42,7 @@ TOOL = REPO / "tools/kit_deliver.py"
 STALE = "TEMPLATE/tools/kit_pin.py"
 # A file the fixture has forked: it differs from BOTH its pin and the delivered bytes.
 FORK = "TEMPLATE/tools/field_predicate.py"
-# A `factory`-class path the fixture carries and has edited. The transport must not write it.
+# A `seed`-class path the fixture carries and has edited. The transport must not write it.
 DECLARATION = "TEMPLATE/registry/gates.example.json"
 # The factory's own data, in no manifest at all.
 OWN_DATA = "tools/actors.txt"
@@ -148,7 +148,7 @@ def main() -> int:
               f"{STALE} == delivered bytes")
 
         # ARM 3 — DECLARATIONS AND FORKS ARE UNTOUCHED. Digests, not eyeballs.
-        check("a `factory`-class declaration is BYTE-UNCHANGED",
+        check("a `seed`-class declaration is BYTE-UNCHANGED",
               sha(root / DECLARATION[len("TEMPLATE/"):])
               == hashlib.sha256(b'{"gates": "this factory\'s own declaration"}\n').hexdigest(),
               DECLARATION)

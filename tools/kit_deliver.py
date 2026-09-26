@@ -8,8 +8,8 @@ drifted and had no mechanism to hand it the update — the law corpus carried `v
 `re-sync` 0, `propagat` 0-1, and `registry/kit.json` is a manifest, not a channel.
 
 WHAT IT MOVES, AND WHY THOSE CLASSES. The `classes` map in the pin decides:
-`shared` and `closure` are delivered (a tool and the modules it needs to run);
-`factory` is NEVER written, because those are the factory's own law and data — its
+`standalone` and `closure` are delivered (a tool and the modules it needs to run);
+`seed` is NEVER written, because those are the factory's own law and data — its
 `SKILL.md`, its `gates.json`, its exemption lists. An update that overwrote a declaration
 would destroy the thing the declaration exists to record.
 
@@ -42,10 +42,10 @@ sys.path.insert(0, str(REPO / "tools"))
 import kit_manifest as KM  # noqa: E402
 import kit_pin as KP  # noqa: E402
 
-# The classes an update may write. `factory` is absent on purpose -- see the docstring.
-DELIVERED_CLASSES = ("shared", "closure")
+# The classes an update may write. `seed` is absent on purpose -- see the docstring.
+DELIVERED_CLASSES = ("standalone", "closure")
 
-# What the plan says about each path. `factory` and `LOCAL-MODIFICATION` are both refusals
+# What the plan says about each path. `seed` and `LOCAL-MODIFICATION` are both refusals
 # to write, but they are DIFFERENT facts and a reader must be able to tell them apart.
 WRITTEN = ("ADD", "UPDATE")
 
@@ -73,7 +73,7 @@ def plan(target: Path) -> dict:
         cls = classes.get(rel, "?")
         local = KP.member_path(rel)
         src = files[rel]
-        if cls == "factory":
+        if cls == "seed":
             rows.append({"rel": rel, "local": local, "verdict": "DECLARATION",
                          "cls": cls, "why": "the factory's own — never written"})
             continue
@@ -159,7 +159,7 @@ def deliver(target: Path, dry_run: bool) -> int:
     merged_classes = dict(classes)
     for rel in planned["retired"]:
         merged_files[rel] = (pin.get("files") or {})[rel]
-        merged_classes[rel] = (pin.get("classes") or {}).get(rel, "factory")
+        merged_classes[rel] = (pin.get("classes") or {}).get(rel, "seed")
     pin["files"] = merged_files
     pin["classes"] = merged_classes
     pin["file_count"] = len(merged_files)

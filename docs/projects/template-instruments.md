@@ -56,7 +56,7 @@ The owner asked for better names and terms, so the vocabulary is fixed first and
 | **full set** | the nine parts in Phase A | "the script plus whatever it imports" |
 | **executable** | the runnable entry point inside an instrument | the instrument |
 | **closure** | everything a tool needs that is not the tool. Measured on `tools/ledger.py`: 67,382 B alone, **243,559 B across 7 files** — the tool is **27.7%** of what it needs. It is **not a flat set — it is two tiers**, and the tier that fails silently is **3.7x larger** than the tier that fails loudly: **HARD** (top-level import — `ledger_declaration`, `field_predicate`, `reconstruction`, 37,372 B): a missing one raises `ModuleNotFoundError` at import, which is the `#137` finding; **LAZY** (imported inside a function and caught — `registry`, `telemetry`, `registry_render`, 138,805 B): a missing one does **not** crash, it degrades to a *message*, and the message blames the **data** rather than the missing file. `ledger.py:519` is the specimen: a missing `telemetry.py` sets `extract_task_telemetry = None`, and the code's own comment reads *A telem of None is NOT an empty measurement: it is the extractor saying it has NO WINDOW BASIS* — so the factory's ledger runs green and reports no window basis forever, indistinguishably from a genuine one | a shared library — a closure is *specific* to its parent |
-| **class** | `shared` \| `closure` \| `factory` — the per-file predicate the manifest lacks today | a directory or a naming convention |
+| **class** | `standalone` \| `closure` \| `seed` — the per-file predicate the manifest lacks today | a directory or a naming convention |
 | **call site** | a place that invokes the instrument; **mandated** (a gate must register it) or **recommended** (a lane may use it) | documentation |
 | **extension point** | a declared seam a factory may fill without editing the instrument | a fork |
 | **fork** | a declared, dated divergence recorded in the factory's own data | drift (undeclared divergence) |
@@ -143,7 +143,7 @@ So the owner's plugin question has **no existing home to extend**. It is either 
 
 `registry/kit.json` is 106 flat `path → sha256` entries with **no per-file class**, so a factory's own gate list is scored as drift against the template's. Four of five forks are deliberate and reasoned, and the current figure both overstates the problem and cannot be acted on per file.
 
-The three classes (see Terms): `shared` — byte-identical everywhere or a finding; `closure` — travels with its parent; `factory` — never compared, and the template ships an `.example`.
+The three classes (see Terms): `standalone` — byte-identical everywhere or a finding; `closure` — travels with its parent; `seed` — never compared, and the template ships an `.example`.
 
 ### B.2 — what rests where
 

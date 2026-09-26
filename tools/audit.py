@@ -1749,7 +1749,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     WHAT IT PROVES: a factory at an older kit state RECEIVES the update; its OWN gate is
     #     green after, with a NEGATIVE CONTROL showing that same gate reds on the state a
     #     non-atomic update would leave (bytes moved, pin not) -- so "green after" is measured
-    #     rather than a property the gate could never fail; its `factory`-class declarations
+    #     rather than a property the gate could never fail; its `seed`-class declarations
     #     and its own data are BYTE-UNCHANGED by digest; a local fork is SKIPPED, not
     #     overwritten; and `--dry-run` writes nothing.
     #     IT IS NOT A KIT FILE, and that is why it is OPTIONAL rather than REQUIRED: a member
@@ -1766,10 +1766,10 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     IT JUDGES THREE POPULATIONS AND PRINTS ALL THREE, because each is an exclusion a
     #     reader must be able to see: ABSENT paths are the population filter (a factory ports
     #     a SUBSET, so reddening on those would punish the behaviour the port rule asks for);
-    #     `factory`-class paths are excluded BY CLASS, since those are seeds the factory owns
+    #     `seed`-class paths are excluded BY CLASS, since those are seeds the factory owns
     #     and its copy legitimately differs; the rest are judged byte-for-byte.
     #     BUILDING IT EXPOSED A DEFECT IN THE PREDICATE IT CALLS. `undeclared_divergence`
-    #     compared `factory`-class paths byte-for-byte while the class doc says such a file
+    #     compared `seed`-class paths byte-for-byte while the class doc says such a file
     #     "is never compared byte-for-byte, because the factory's copy legitimately differs" —
     #     and `TEMPLATE/README.md` maps to `README.md`, so EVERY factory would have been
     #     reported as diverging on its own README. Both were fixed in this change, and the

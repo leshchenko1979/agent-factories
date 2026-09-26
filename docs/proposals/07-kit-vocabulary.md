@@ -22,6 +22,35 @@ canonisation landed this week and left the term **live in code**, then denied it
 
 ---
 
+## Status — landed 2026-09-26 (#179), and one of the three renames is DECLINED on measurement
+
+| proposal | verdict | evidence |
+|---|---|---|
+| `factory` (class) → `seed` | **LANDED** | the class owner already used the word — `kit_manifest.py:149,185,187,189,242,260` |
+| `shared` → `standalone` | **LANDED** | the manifest's own `_note` glossed it *"a standalone instrument"*; 277 label sites vs 122 other-sense |
+| `closure` → `support` | **DECLINED** | see below |
+
+**Why `closure` stays.** The proposal's central argument was that `closure` collides with
+work-unit closure and so is the worst of the three. Measured over the corpus at 22:03Z,
+that is false: **work-unit-closure uses number 2**, and both are the *concept*, not the
+class (`roles/triage.md:27` *"Every closure that resolved a defect"*, `BOOTSTRAP.md:633`
+*"the mechanical-closure check"*). Against them stand **53 import-closure uses** — the same
+concept the class names — plus 60 label sites. So `closure` is not ambiguous in this
+corpus; it is the term for the dependency set, and the class is named after it. Renaming
+would have traded a word that means one thing for one that means nothing else, and it
+would have detached the class from `gate_fixtures.py`'s `stage_tool` closure walker,
+`test_gate_fixtures_closure.py`, and P35 — all of which speak of a tool's *closure*.
+
+**What the rename did NOT remove.** `factory` survives as a **scope** value
+(`registry.py:264 SCOPES = ("profile","factory","lane")`) and as the **fragment field**
+name (`fragment["factory"]`, `KNOWN_FACTORY_SLUGS`). So the class no longer shares its
+word with those two — the ambiguity the proposal named is reduced, not eliminated, and a
+reader meeting `factory` in `registry.py` is reading a scope, not a class.
+
+**The two ONTOLOGY corrections this proposal's review found are landed separately** as
+task 2 of #179 — they are false claims about the tree in the file whose job is to settle
+vocabulary, and they were mine.
+
 ## 1. Two contradictions in `ONTOLOGY.md` that I introduced — verified, not inferred
 
 `ONTOLOGY.md` is the canonical vocabulary: *"Every term below is the only word allowed for

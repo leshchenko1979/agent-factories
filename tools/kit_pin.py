@@ -57,7 +57,7 @@ PIN_VEHICLE_REL = "TEMPLATE/registry/kit.example.json"
 
 TEMPLATE_PREFIX = "TEMPLATE/"
 
-CLASSES = ("shared", "closure", "factory")
+CLASSES = ("standalone", "closure", "seed")
 
 
 def member_path(manifest_path: str) -> str:
@@ -232,7 +232,7 @@ def undeclared_divergence(pin: dict, root: Path) -> dict:
     ABSENT is therefore not a verdict at all — it is the population filter — and a path the
     factory never took cannot diverge from anything.
 
-    `factory`-CLASS PATHS ARE NOT JUDGED, which is what the class means rather than a
+    `seed`-CLASS PATHS ARE NOT JUDGED, which is what the class means rather than a
     convenience: the class doc says such a file "is never compared byte-for-byte, because the
     factory's copy legitimately differs". The first version of this predicate compared them
     anyway, so the class map and the predicate disagreed -- and the disagreement was not
@@ -260,7 +260,7 @@ def undeclared_divergence(pin: dict, root: Path) -> dict:
         local = root / member_path(rel)
         if not local.is_file():
             continue
-        if classes.get(rel) == "factory":
+        if classes.get(rel) == "seed":
             skipped_class += 1
             continue
         carried += 1

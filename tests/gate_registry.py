@@ -489,7 +489,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # byte-paired into TEMPLATE, so a manifest that omitted it would let a factory drop the
     # runner and keep the file (issue #107, ruling n=639).
     # Building it exposed a defect in the predicate it calls: `undeclared_divergence`
-    # compared `factory`-class paths byte-for-byte while the class doc says such a file "is
+    # compared `seed`-class paths byte-for-byte while the class doc says such a file "is
     # never compared byte-for-byte, because the factory's copy legitimately differs". The
     # consequence was not theoretical — `TEMPLATE/README.md` maps to `README.md`, so EVERY
     # factory would have been reported as diverging on its own README. Both were fixed in the

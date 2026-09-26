@@ -14,7 +14,7 @@ THE TWO POPULATION RULES, both load-bearing and both printed:
   ABSENT is not a verdict. A factory ports a SUBSET of the kit, so a fresh factory is ~104
   ABSENT cells over the whole manifest; reddening on those would punish exactly the behaviour
   the port rule asks for. A path the factory never took cannot diverge from anything.
-  `factory`-CLASS paths are not judged. Those are seeds the factory owns — its README, its
+  `seed`-CLASS paths are not judged. Those are seeds the factory owns — its README, its
   `gates.json`, its exemption lists — and the class means "never compared byte-for-byte,
   because the factory's copy legitimately differs". They are COUNTED rather than dropped, so
   the exclusion is visible: an exclusion nobody can see is the silent-exclusion shape this
@@ -195,7 +195,7 @@ def main() -> int:
         # The strong form: the fixture's factory-class path DIFFERS from the pin, and the
         # verdict is green anyway BECAUSE it was excluded. Asserting the count alone would
         # pass on a predicate that never examined the path for a different reason.
-        check("a `factory`-class path that DIFFERS is excluded by class, not reported",
+        check("a `seed`-class path that DIFFERS is excluded by class, not reported",
               code == 0 and "1 factory-class path(s) excluded" in joined
               and "README.md" not in joined,
               [ln.strip() for ln in lines if "factory-class" in ln][:1])

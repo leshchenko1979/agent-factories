@@ -378,19 +378,19 @@ imports a third — so a factory that copies `tests/test_rework.py` alone gets
 `ModuleNotFoundError: No module named 'audit'` — raised at import, *before* the
 gate can report anything, so the error names no remedy. Six of the eight paths
 ship with this template and two are created here. The **class** column is the
-machine-readable answer to "is this file mine to change?": `shared` and `closure`
-ship byte-identical from here, `factory` means the file is yours and a copy of
+machine-readable answer to "is this file mine to change?": `standalone` and `closure`
+ship byte-identical from here, `seed` means the file is yours and a copy of
 someone else's is wrong for it.
 
 | Path | Class | Where it comes from |
 |---|---|---|
-| `tests/test_rework.py` | `shared` | **ships** — the gate itself |
+| `tests/test_rework.py` | `standalone` | **ships** — the gate itself |
 | `tests/rework_table.py` | `closure` | **ships** — the shared entries-table parser, imported by the gate and by `tests/gate_registry.py`, so the table has ONE parser rather than two that drift |
-| `tools/audit.py` | `shared` | **ships** — the coverage predicate and the subject vocabulary are imported from it, never re-typed, so one number cannot have two implementations |
+| `tools/audit.py` | `standalone` | **ships** — the coverage predicate and the subject vocabulary are imported from it, never re-typed, so one number cannot have two implementations |
 | `tools/field_predicate.py` | `closure` | **ships** — imported by `tools/audit.py` |
 | `tools/gate_budget.py` | `closure` | **ships** — imported by `tools/audit.py` |
-| `evidence/rework.md` | `factory` | **created here** — the log itself |
-| `evidence/ledger.jsonl` | `factory` | **created in Step 4b** — the denominator the resolution leg reads |
+| `evidence/rework.md` | `seed` | **created here** — the log itself |
+| `evidence/ledger.jsonl` | `seed` | **created in Step 4b** — the denominator the resolution leg reads |
 
 **This list is a snapshot, and it moved twice in one day.** It said seven paths
 until 2026-09-25, when `tools/kit_identity.py` entered `tools/audit.py`'s imports
@@ -594,7 +594,7 @@ a named failure rather than a traceback. Compare `tools/ledger.py`, which needs 
 **Two populations the gate excludes, and both are printed.** ABSENT is not a verdict — you
 port a SUBSET of the kit, so a fresh factory is ~104 absent cells over the whole manifest,
 and a gate that reddened on those would punish exactly the behaviour this step asks for.
-`factory`-class paths are not judged either: those are seeds you own, and your copy
+`seed`-class paths are not judged either: those are seeds you own, and your copy
 legitimately differs. A green over an EMPTY judged population is refused as vacuous rather
 than reported, because it would read identically to a green over a clean one.
 
@@ -604,7 +604,7 @@ it in `registry/kit-exemptions.json` with a reason. The gate then reads it as de
 a fork that is NOT declared stays red, which is the point.
 
 **Evidence:** `python3 tests/test_kit_pin.py` exits 0 and prints three populations — the
-paths judged, the `factory`-class paths excluded by class, and the paths you declared
+paths judged, the `seed`-class paths excluded by class, and the paths you declared
 exempt. An absent pin is a stated SKIP naming the absence, never a clean read.
 
 ---
