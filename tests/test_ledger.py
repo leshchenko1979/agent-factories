@@ -691,7 +691,7 @@ def main() -> int:
             # names the boundary it refuses on. `write_ledger` stamps 2026-09-12, which
             # is before every boundary this factory has declared.
             write_ledger(ledger, ("intake", "#1"), ("claim", "#1"), ("close", "#1"))
-            r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+            r = run(ledger, "repair", "--actor", "worker", "--n", "3", "--append-detail", f"head={probe_sha}",
                     "--note", "probe")
             err = r.stderr.strip()
             check("a pre-boundary row refuses repair", r.returncode != 0, err[:90])
@@ -702,7 +702,7 @@ def main() -> int:
             # A repair with no stated reason is refused. Run against a POST-boundary
             # row, so the only thing the refusal can be about is the missing note.
             write_repair_ledger(ledger, post_ts)
-            r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}")
+            r = run(ledger, "repair", "--actor", "worker", "--n", "3", "--append-detail", f"head={probe_sha}")
             err = r.stderr.strip()
             check("a repair with no --note is refused", r.returncode != 0, err[:90])
             check("the refusal names --note as what is missing", "--note" in err, err[:140])
@@ -713,7 +713,7 @@ def main() -> int:
             # row naming the row and the note, and `verify` accepts the result.
             identity = ("n", "ts", "event", "actor", "subject")
             before = rows(ledger)[2]
-            r = run(ledger, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+            r = run(ledger, "repair", "--actor", "worker", "--n", "3", "--append-detail", f"head={probe_sha}",
                     "--note", "the row omitted the revision its receipts describe")
             err = r.stderr.strip()
             check("a post-boundary repair succeeds", r.returncode == 0, err[:140])
@@ -762,7 +762,7 @@ def main() -> int:
                 displace.write_text(
                     "\n".join(json.dumps(row) for row in written) + "\n", encoding="utf-8"
                 )
-                r = run(displace, "repair", "--n", "3", "--append-detail", append_detail,
+                r = run(displace, "repair", "--actor", "worker", "--n", "3", "--append-detail", append_detail,
                         "--note", "probe: the trailer must survive the repair")
                 err = r.stderr.strip()
                 check(f"{label} is accepted", r.returncode == 0, err[:140])
@@ -788,7 +788,7 @@ def main() -> int:
             plain = rows(norun)
             plain[2]["detail"] = "Closed with no trailer at all"
             norun.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
-            r = run(norun, "repair", "--n", "3", "--append-detail", f"head={probe_sha}",
+            r = run(norun, "repair", "--actor", "worker", "--n", "3", "--append-detail", f"head={probe_sha}",
                     "--note", "probe: no run to protect")
             check("a runless detail still repairs", r.returncode == 0, r.stderr.strip()[:140])
             check("a runless detail appends at the end, as a separate token",
@@ -812,7 +812,7 @@ def main() -> int:
                 "\n".join(json.dumps(row) for row in seeded) + "\n", encoding="utf-8"
             )
             digest_before = hashlib.md5(redeclare.read_bytes()).hexdigest()
-            r = run(redeclare, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
+            r = run(redeclare, "repair", "--actor", "worker", "--n", "3", "--append-detail", f"head={'c' * 40}",
                     "--note", "probe: a re-declaring append must be refused")
             err = r.stderr.strip()
             check("a re-declaring --append-detail is refused", r.returncode != 0, err[:90])
@@ -828,7 +828,7 @@ def main() -> int:
             # still lands BEFORE the run, so the row's declared telemetry survives the repair.
             newkey = Path(tmp) / "newkey.jsonl"
             newkey.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
-            r = run(newkey, "repair", "--n", "3", "--append-detail", "board=closed",
+            r = run(newkey, "repair", "--actor", "worker", "--n", "3", "--append-detail", "board=closed",
                     "--note", "probe: a NEW key must still repair")
             check("an append introducing a NEW key still repairs",
                   r.returncode == 0, r.stderr.strip()[:140])
@@ -846,7 +846,7 @@ def main() -> int:
             plain = rows(nohead)
             plain[2]["detail"] = "Closed with no revision field at all"
             nohead.write_text("\n".join(json.dumps(row) for row in plain) + "\n", encoding="utf-8")
-            r = run(nohead, "repair", "--n", "3", "--append-detail", f"head={'c' * 40}",
+            r = run(nohead, "repair", "--actor", "worker", "--n", "3", "--append-detail", f"head={'c' * 40}",
                     "--note", "probe: the same append, on a row that does not declare head")
             check("the SAME append repairs a row that does NOT declare the key",
                   r.returncode == 0, r.stderr.strip()[:140])
@@ -861,7 +861,7 @@ def main() -> int:
             # which is #88's class one layer up.
             prose_note = Path(tmp) / "prosenote.jsonl"
             prose_note.write_text(redeclare.read_text(encoding="utf-8"), encoding="utf-8")
-            r = run(prose_note, "repair", "--n", "3",
+            r = run(prose_note, "repair", "--actor", "worker", "--n", "3",
                     "--append-detail", "REPAIR NOTE: the row omitted the head field.",
                     "--note", "probe: a prose append declares no key")
             check("a prose append that declares no key is not refused",
@@ -888,7 +888,7 @@ def main() -> int:
                      "--subject", "#race", "--detail", f"race append {i}"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
                 procs.append(subprocess.Popen(
-                    [sys.executable, str(TOOL), "repair", "--n", "3",
+                    [sys.executable, str(TOOL), "repair", "--actor", "worker", "--n", "3",
                      "--append-detail", f"race{i}=ok", "--note", f"race repair {i}"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=race_env))
             for p in procs:
