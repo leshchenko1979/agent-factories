@@ -201,6 +201,7 @@ FACTORY_SEEDS = frozenset({
     "TEMPLATE/growth-stages.md.tmpl",
     "TEMPLATE/processes.md.tmpl",
     "TEMPLATE/docs/ledger-commit-exemptions.example.json",
+    "TEMPLATE/docs/ledger-exemptions.example.json",
     "TEMPLATE/docs/ledger-invariants.example.json",
     "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
     "TEMPLATE/docs/ledger-retirements.example.json",

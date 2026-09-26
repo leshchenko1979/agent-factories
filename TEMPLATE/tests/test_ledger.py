@@ -366,22 +366,19 @@ def main() -> int:
         # directions are probed, because a one-sided probe passes on a list that refuses
         # everything exactly as happily as on one that excuses everything.
         #
-        # The seam is a staged COPY of the tool: EXEMPTIONS is a module constant, so
-        # rewriting the constant in a throwaway tree varies it without giving production
-        # code a test-only switch, and the live surface is never touched.
-        def stage_with_exemptions(name: str, entries: str) -> Path:
+        # The seam is a staged COPY of the tree, and since 2026-09-25 the exemptions are a
+        # DATA FILE (`docs/ledger-exemptions.json`) rather than a module constant -- so this
+        # probe now varies exactly the surface a factory varies, and the declaration it
+        # writes is the one production reads. The live surface is still never touched.
+        def stage_with_exemptions(name: str, entries: list[dict]) -> Path:
             tree = Path(tmp) / name
             (tree / "tools").mkdir(parents=True)
             (tree / "evidence").mkdir()
+            (tree / "docs").mkdir()
             stage_tool(TOOL, tree / "tools", LOCAL_TOOLS)
-            tool = tree / "tools" / "ledger.py"
-            src = tool.read_text(encoding="utf-8")
-            head = "EXEMPTIONS: list[tuple[str, str, str, str, str]] = ["
-            start = src.index(head)
-            tool.write_text(
-                src[:start] + entries + src[src.index("\n]", start) + 2:],
-                encoding="utf-8")
-            return tool
+            (tree / "docs" / "ledger-exemptions.json").write_text(
+                json.dumps({"exempt": entries}), encoding="utf-8")
+            return tree / "tools" / "ledger.py"
 
         def exempt_run(tool: Path) -> subprocess.CompletedProcess:
             """Verify a ledger whose ONLY defect is a missing claim leg on #7."""
@@ -397,11 +394,10 @@ def main() -> int:
 
         # The subject is this probe's own, so the entry it exercises can never be a
         # live one; the omission is the #6 shape — a close with no claim before it.
-        proofless = stage_with_exemptions("exempt-proofless", (
-            'EXEMPTIONS: list[tuple[str, str, str, str, str]] = [\n'
-            '    ("#7", "claim", "2026-09-19",\n'
-            '     "post-gate omission; the leg was never written", ""),\n'
-            ']'))
+        proofless = stage_with_exemptions("exempt-proofless", [
+            {"subject": "#7", "leg": "claim", "granted": "2026-09-19",
+             "reason": "post-gate omission; the leg was never written", "proof": ""},
+        ])
         r = exempt_run(proofless)
         check("a proofless entry excuses nothing",
               r.returncode != 0 and "excused:" not in r.stdout,
@@ -410,12 +406,11 @@ def main() -> int:
               "not admittable" in r.stdout and "#7/claim" in r.stdout,
               next((l.strip() for l in r.stdout.splitlines() if "admittable" in l), "")[:110])
 
-        proven = stage_with_exemptions("exempt-proven", (
-            'EXEMPTIONS: list[tuple[str, str, str, str, str]] = [\n'
-            '    ("#7", "claim", "2026-09-19",\n'
-            '     "post-gate omission; the leg was never written",\n'
-            '     "the ruling that granted it: ledger n=318"),\n'
-            ']'))
+        proven = stage_with_exemptions("exempt-proven", [
+            {"subject": "#7", "leg": "claim", "granted": "2026-09-19",
+             "reason": "post-gate omission; the leg was never written",
+             "proof": "the ruling that granted it: ledger n=318"},
+        ])
         r = exempt_run(proven)
         check("a proof-bearing entry excuses the omission and still prints it",
               r.returncode == 0 and "excused: #7 missing claim" in r.stdout,

@@ -98,6 +98,70 @@ def parse_ts(value: str) -> dt.datetime:
     """An ISO-8601 UTC timestamp, as `tools/ledger.py` writes it."""
     return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
+EXEMPTIONS_REL = "docs/ledger-exemptions.json"
+EXEMPTIONS_EXAMPLE_REL = "docs/ledger-exemptions.example.json"
+
+
+def load_exemptions(repo: Path) -> list[tuple[str, str, str, str, str]]:
+    """The declared sequence exemptions, or a typed failure naming the skeleton.
+
+    WHY THIS IS A FILE AND NOT A CONSTANT IN THE TOOL, and the reason is law rather than
+    taste. `SKILL.md` section 11: *"an exemption table holding the entries as FACTORY DATA
+    in its own file and never inline in the gate, because the gate is paired byte-identically
+    with its template copy and a factory sha must not ship to every new factory."* The
+    ledger's `EXEMPTIONS` was the LAST surface still inline -- its three entries name
+    meta-factory's own `#6`/`#8` closes of 2026-09-12 and their granting rulings -- while
+    `docs/ledger-commit-exemptions.json`, `docs/ledger-no-shrink-exemptions.json` and
+    `docs/ledger-retirements.json` already follow the rule. So a factory that happened to
+    work on `#6` or `#8` would have had its OWN sequence defects excused by another
+    factory's history, and the two entries say so in terms: *"close written before the gate
+    existed"* is true of the template's ledger and of no other.
+
+    ABSENT MEANS NONE, and MALFORMED IS A PROBLEM -- the convention the sibling surface
+    states in its own words: *"Absent or empty data means no exemptions — the shipped state
+    of a new factory. Anything malformed is a problem, never a silent pass: an exemption
+    list that quietly fails to load is indistinguishable from no exemptions."* The law's
+    concern is the SILENT failure, and a missing file is a factory that has nothing to
+    excuse; a file that exists and cannot be read is the one that must never pass quietly.
+
+    `proof` is NOT required here, deliberately. The doctrine in `tools/ledger.py` refuses a
+    proofless entry at the point it would EXCUSE an omission -- *"refusing on the USED path
+    rather than at load keeps a fresh factory's dead entries invisible"* -- so a dead entry
+    is named where a reader is already looking, rather than failing the whole declaration.
+    """
+    path = repo / EXEMPTIONS_REL
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise DeclarationUnreadable([f"{EXEMPTIONS_REL} exists but cannot be read: {exc}"]) from exc
+    except json.JSONDecodeError as exc:
+        raise DeclarationUnreadable([f"{EXEMPTIONS_REL} is not valid JSON: {exc}"]) from exc
+    if not isinstance(payload, dict):
+        raise DeclarationUnreadable([f"{EXEMPTIONS_REL} must be a JSON object carrying `exempt`"])
+    rows = payload.get("exempt")
+    if not isinstance(rows, list):
+        raise DeclarationUnreadable([
+            f"{EXEMPTIONS_REL} carries no `exempt` list — see {EXEMPTIONS_EXAMPLE_REL}"
+        ])
+    out: list[tuple[str, str, str, str, str]] = []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise DeclarationUnreadable([f"{EXEMPTIONS_REL} exempt[{i}] is not an object"])
+        # `proof` is carried through even when blank: the USE site refuses a proofless
+        # entry by naming it, which is a better error than a whole-file rejection.
+        missing = [k for k in ("subject", "leg", "granted", "reason") if not row.get(k)]
+        if missing:
+            raise DeclarationUnreadable([
+                f"{EXEMPTIONS_REL} exempt[{i}] is missing {', '.join(missing)} — an "
+                f"exemption names what it excuses and when it was granted"
+            ])
+        out.append((str(row["subject"]), str(row["leg"]), str(row["granted"]),
+                    str(row["reason"]), str(row.get("proof") or "")))
+    return out
+
+
 def load_invariants(repo: Path) -> dict:
     """The declared `invariants` map, or `DeclarationUnavailable`/`DeclarationUnreadable`."""
     path = repo / DECLARATION_REL

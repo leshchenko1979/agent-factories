@@ -1,0 +1,26 @@
+{
+  "_note": "THIS factory's sequence exemptions — meta-factory's own, moved here from tools/ledger.py on 2026-09-25. They excuse three closes written before the sequence gate existed (2026-09-12), which is a fact about THIS ledger and about no other. Each entry is a visible debt printed as an `excused:` line on every run. Skeleton and field rules: docs/ledger-exemptions.example.json.",
+  "exempt": [
+    {
+      "subject": "#6",
+      "leg": "claim",
+      "granted": "2026-09-12",
+      "reason": "close written before the gate existed; no claim row was ever written",
+      "proof": "the ruling that granted it: ledger n=15, which records the boundary fact"
+    },
+    {
+      "subject": "#8",
+      "leg": "intake",
+      "granted": "2026-09-12",
+      "reason": "close written before the gate existed; no intake row was ever written",
+      "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
+    },
+    {
+      "subject": "#8",
+      "leg": "claim",
+      "granted": "2026-09-12",
+      "reason": "close written before the gate existed; no claim row was ever written",
+      "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
+    }
+  ]
+}

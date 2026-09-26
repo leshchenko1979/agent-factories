@@ -65,6 +65,7 @@ from ledger_declaration import (
     DeclarationUnavailable,
     DeclarationUnreadable,
     boundary_for,
+    load_exemptions,
     parse_ts,
 )
 
@@ -267,17 +268,17 @@ def resolve_actor(
 # what is broken. An entry with no proof is NOT ADMITTABLE: `verify` refuses it
 # at the point it would excuse an omission, so the omission stays a problem. That
 # is the doctrine above made mechanical rather than a rule a lane must remember.
-EXEMPTIONS: list[tuple[str, str, str, str, str]] = [
-    ("#6", "claim", "2026-09-12",
-     "close written before the gate existed; no claim row was ever written",
-     "the ruling that granted it: ledger n=15, which records the boundary fact"),
-    ("#8", "intake", "2026-09-12",
-     "close written before the gate existed; no intake row was ever written",
-     "the ruling that granted it: ledger n=14, which records the boundary fact"),
-    ("#8", "claim", "2026-09-12",
-     "close written before the gate existed; no claim row was ever written",
-     "the ruling that granted it: ledger n=14, which records the boundary fact"),
-]
+# The sequence exemptions are FACTORY DATA in their own file, loaded at the point they are
+# used -- `docs/ledger-exemptions.json`, whose skeleton is
+# `docs/ledger-exemptions.example.json`. They were inline here until 2026-09-25, carrying
+# three of THIS factory's pre-gate closes (`#6`, `#8`, both 2026-09-12) and the rulings that
+# granted them, which is a sha that must not ship to every new factory and a defect that is
+# not the member's. `SKILL.md` section 11 states the rule in terms -- "an exemption table
+# holding the entries as FACTORY DATA in its own file and never inline in the gate" -- and
+# the three sibling surfaces (`docs/ledger-commit-exemptions.json`,
+# `docs/ledger-no-shrink-exemptions.json`, `docs/ledger-retirements.json`) already followed
+# it. This was the last one inline.
+EXEMPTIONS_REL = "docs/ledger-exemptions.json"
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1156,8 +1157,20 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # keeps the refusal where the reader is already looking. This is the doctrine at
     # the top of this module made mechanical: an exemption is a visible debt, and a
     # debt nobody would defend in the output below is one that gets fixed instead.
+    # Loaded HERE rather than at import, for the module's own stated reason: refusing on
+    # the USED path keeps the refusal where the reader is already looking. ABSENT means the
+    # factory has nothing to excuse; a file that EXISTS and cannot be read is a PROBLEM,
+    # because "an exemption list that quietly fails to load is indistinguishable from no
+    # exemptions" and only the silent case is the hazard.
+    try:
+        _declared = load_exemptions(REPO)
+    except (DeclarationUnavailable, DeclarationUnreadable) as exc:
+        problems.append(
+            f"the sequence exemptions could not be read, so an omission below may be "
+            f"reported that a declaration would have excused: {exc}")
+        _declared = []
     exempt = {(s, leg): (granted, reason, proof)
-              for s, leg, granted, reason, proof in EXEMPTIONS}
+              for s, leg, granted, reason, proof in _declared}
     excused: list[tuple[str, str, str, str]] = []
     for subject, leg, message in seq_problems:
         if (subject, leg) in exempt:

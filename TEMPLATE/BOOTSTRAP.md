@@ -254,6 +254,11 @@ printf 'hq\ntriage\nworker\ndelegate\nsurveys\nowner\n' > tools/actors.txt
 - **`docs/ledger-invariants.json`** — the boundary each invariant landed at **here**. The
   example ships with `invariants: {}` and that is correct: add a key only once you have
   adopted that invariant, and the key is the name of the gate that asserts it.
+- **`docs/ledger-exemptions.json`** — which sequence omissions are excused **here**. Copy
+  the example, which ships with `exempt: []`, and leave it empty unless you have one. The
+  tool reads it at the point it would report an omission; an ABSENT file means you have
+  declared none, while a file that exists and cannot be read is a reported problem —
+  only the silent failure is the hazard.
 - **`registry/fleet.json`** — the lane resolver reads it, and since identity is now derived
   from `OPENCRABS_SESSION_ID` the resolver is on the genesis path too.
 
@@ -294,13 +299,18 @@ for g in tests/test_ledger*.py; do python3 "$g"; done
   `test_ledger_close_preflight.py`, `test_ledger_identity.py`, and `test_ledger.py` once
   the skip is honoured.
 
-**Clear the exemption list when you copy it.** The shipped `tools/ledger.py` is a
-byte-identical copy of the one this template was built from, so it also carries
-that factory's pre-gate `EXEMPTIONS` — closes written before the gate that
-enforces the sequence. A bootstrapped factory's ledger starts with a single
-genesis row, so set `EXEMPTIONS = []` when you copy, and add an entry only for a
-close that predates **your own** gate. An exemption inherited from another
-factory's history excuses a defect your ledger does not have.
+**The exemption list ships EMPTY, and it is a file, not a constant.** Copy
+`docs/ledger-exemptions.example.json` to `docs/ledger-exemptions.json` and leave
+`exempt` empty unless your factory has an omission to excuse. Until 2026-09-25 the
+three entries lived INLINE in `tools/ledger.py` — this factory's pre-gate closes of
+`#6` and `#8`, dated 2026-09-12, with the rulings that granted them — so a factory
+that happened to work on `#6` or `#8` could have had ITS sequence defects excused by
+a history that was never its own. `SKILL.md` section 11 forbids that in terms: an
+exemption table holds its entries as **factory data in its own file and never inline
+in the tool**, because the tool is paired byte-identically with its template copy.
+Add an entry only for a close that predates **your own** gate, with all five fields —
+`subject`, `leg`, `granted`, `reason`, and `proof`, which is the receipt that admits
+it. An entry with no `proof` is refused at the point it would excuse an omission.
 
 **Declare any lane the core set does not have.** The actor set in `tools/ledger.py`
 is closed, and it is exactly the four role cards in §3 plus `owner`. A factory whose
