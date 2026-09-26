@@ -300,17 +300,25 @@ migration question is therefore which SHAPE wins, not which word.
 
 ### D.2 — the criteria
 
-Five, each resting on evidence already in hand:
+Six, each resting on evidence already in hand:
 
 1. **Arrival evidence** — built independently by **two or more** factories, or one factory is demonstrably **ahead** of the template on a template instrument. The miidas rework case is the first shape (same defect, same fix, arrived at independently, under a different name); the ai-antispam yield fix is the second.
 2. **Naming** — the three criteria in A.2, applied against a **fleet-wide** census.
-3. **Review** — code **and** law, by a subagent scoped to the template's copy (D.3).
+3. **Review** — code **and** law, by a subagent scoped to the template's copy (D.3), **and the review is a CLOSE CONDITION rather than a step.** A promotion's close row cites `review=<artifact>` naming the review and where it landed, exactly as `#146`'s close must cite `head=<sha>`. A step that leaves no artifact is a step that did not happen — the `#150` lesson, one surface over. **This IS gateable and the shape already exists**: `close_row_revision` is a declared invariant with a boundary instant, read through the shared `tests/ledger_boundary.py` reader, and a `promotion_close_cites_review` entry is the same predicate over a different trailer. The boundary instant is what keeps it honest — a promotion that landed before the rule is excused by the boundary rather than by a waiver, which is the forward-bound ruling `#175` established for the duty-receipt leg. **The gate lands with the first promotion**, and this sentence is why: writing a gate for a population of zero is the speculative build KISS/YAGNI forbid, and writing the criterion without saying it is gateable would be a clause obliging a check no mechanism performs (`#48`).
 4. **Migration population named** — who must change, and what breaks if they do not.
 5. **Second vs replacement stated** — does it replace a template instrument or add one? (Correction iv; renaming is orthogonal to this.)
+6. **Vocabulary** — the instrument's **names** are read against `ONTOLOGY.md` before landing: every term it coins is either an existing canonical term or a new row, and **no term it uses means two things in the corpus**. The evidence that this is a criterion and not advice: the first vocabulary review, run over the kit's own classes, found **two false claims in ONTOLOGY.md itself**, both written the same week, one of them asserting a clean-up the tree did not have. An instrument that lands a word with two senses makes every later reader pay for it, and the cost lands on lanes who were not present when it was coined.
 
 ### D.3 — the review protocol
 
-One subagent per instrument, scoped to the **template's** copy and the template's law. It must read both; name every assumption the member's tree made that the template does not; and produce either a landed fix or a **recorded non-fix with its reason**. The member already reviewed its own copy — re-reviewing that is duplicated work.
+**Two subagent reviews per instrument, both scoped to the template's copy and the template's law**, and both owed as artifacts:
+
+- **Code and law (D.2.3).** It must read both; name every assumption the member's tree made that the template does not; and produce either a landed fix or a **recorded non-fix with its reason**. The member already reviewed its own copy — re-reviewing that is duplicated work.
+- **Vocabulary (D.2.6).** It reads the instrument's identifiers and prose against `ONTOLOGY.md` and answers three questions: does every coined term either exist canonically or deserve a row; does any term it uses carry two senses in the corpus; and is the set internally coherent (the first run's structural finding was worth more than any single rename — four anatomical parts of an instrument, described with four different phrases each).
+
+**Both artifacts are named by the promotion's close row.** Neither review is a chat report: a review that leaves no file is indistinguishable from one that was never run, which is why D.2.3 makes it a close condition rather than a step.
+
+**Why the vocabulary review is not optional, measured:** `questions` was promoted into the template and shipped with **zero gates** — nothing named `test_*questions*` exists in `TEMPLATE/tests`, and its only appearance in `tools/audit.py` is the English word in three comments. Its verification is a `selftest` subcommand that no gate invokes, so a green selftest is not evidence anything ran it. It is Phase A part 3 unmet, and it was **invisible to the census built to catch exactly that** (`tools/kit_surfaces.py`'s population was `tools/*.py` while the instrument is extensionless). One review would have caught it; two, one of them reading the names, would have caught it twice.
 
 ### D.4 — promotion is not adoption
 
