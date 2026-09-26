@@ -23,11 +23,15 @@ THE TWO PREDICATE CORRECTIONS this instrument makes over the prose it replaces:
       reached 4/4 where the old form scored 4 — and the difference is the predicate, not
       the tree.
 
-  POPULATION  was "every TEMPLATE/tools/*.py". A closure module has no CLI, so it cannot
+  POPULATION  was "every TEMPLATE/tools/*.py" -- widened TWICE, for two different
+      reasons. (i) by KIND: a closure module has no CLI, so it cannot
       carry an entry-point gate or be named in the law as an instrument. Splitting the
       population by KIND (executable | closure) is what makes the remaining gaps legible
       instead of alarming: 0 of 5 closure modules can reach 4/4 under an executable's
       predicate, and that is a shape error in the predicate, not 5 defects.
+      (ii) by EXTENSION: `TEMPLATE/tools/questions` is extensionless, so a `*.py`
+      glob could not see it and this census reported a clean population while an
+      ungated instrument sat inside it (#180 criterion 2).
 
 DECLARED EXEMPTIONS are in EXEMPTIONS below, each with the measurement that grounds it.
 An exemption is a statement that a surface DOES NOT APPLY, and it must name why; a gap
@@ -143,7 +147,18 @@ def named(stem: str, text: str) -> bool:
 
 
 def build() -> dict:
-    tools = sorted(T.glob("tools/*.py"))
+    # The population is PYTHON MODULES AND EXTENSIONLESS EXECUTABLES, not `*.py`.
+    # `TEMPLATE/tools/questions` is extensionless (shebang + chmod +x), and a `*.py`
+    # glob cannot see it, so the census that exists to find an ungated instrument
+    # reported a clean population while that instrument sat inside it unexamined
+    # (#180 criterion 2). A companion asset (e.g. `questions-render.mjs`) is
+    # deliberately out: it is not an instrument and carries no gate of its own -- it
+    # travels with the instrument it serves. Stated here because a predicate that is
+    # not written down is re-derived wrongly by the next reader.
+    tools = sorted(
+        q for q in T.glob("tools/*")
+        if q.is_file() and q.suffix in (".py", "")
+    )
     local = {p.stem for p in tools}
     tests = sorted(p.name for p in T.glob("tests/*.py"))
     kit = json.loads((REPO / "registry" / "kit.json").read_text())
@@ -220,11 +235,11 @@ def build() -> dict:
 
 def print_report(data: dict) -> int:
     rows = data["rows"]
-    print("A.0 surface census — TEMPLATE/tools/*.py")
+    print("A.0 surface census — TEMPLATE/tools/ (modules and extensionless executables)")
     print()
     print("POPULATION PREDICATE")
-    print("  a shipped tool is a .py under TEMPLATE/tools/; its KIND decides which")
-    print("  surfaces can apply:")
+    print("  a shipped tool is a Python module or an extensionless executable under")
+    print("  TEMPLATE/tools/; its KIND decides which surfaces can apply:")
     for k in ("executable", "closure"):
         sub = [r for r in rows if r["kind"] == k]
         print("    %-11s %2d  %s" % (k, len(sub), ", ".join(r["tool"] for r in sub)))
