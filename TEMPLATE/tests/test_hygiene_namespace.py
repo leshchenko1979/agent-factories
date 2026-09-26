@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,6 +28,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 HYGIENE = REPO / "tools" / "hygiene.py"
 AUDIT = REPO / "tools" / "audit.py"
+TOOLS = REPO / "tools"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gate_fixtures import stage_tool  # noqa: E402
 
 FOREIGN_PREFIX = "oc-snap-oc-deploy-"
 
@@ -267,10 +270,12 @@ def test_namespace_flag_overrides_the_run_site() -> None:
     defect it exists for would go unexercised.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        elsewhere = Path(tmp) / "not-this-factory" / "tools"
-        elsewhere.mkdir(parents=True)
-        shutil.copy2(HYGIENE, elsewhere / "hygiene.py")
-        tool = elsewhere / "hygiene.py"
+        # Staged WITH ITS IMPORT CLOSURE, never copied alone (P35, meta-factory
+        # #60): a fixture that copies a tool by itself assumes a self-containment
+        # nothing states, and breaks the moment the tool gains a neighbour import.
+        tools_dir = Path(tmp) / "not-this-factory" / "tools"
+        stage_tool(HYGIENE, tools_dir, TOOLS)
+        tool = tools_dir / "hygiene.py"
 
         defaulted = _audit(tool=tool)
         assert "hygiene namespace: not-this-factory (default" in defaulted, (
