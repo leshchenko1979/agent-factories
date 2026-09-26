@@ -128,6 +128,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         log_dir=log_dir,
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
+        publish_fn=_stub_publish_leg,
     )
     return rc, out.getvalue(), err.getvalue()
 
@@ -215,6 +216,7 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
         rows_fn=lambda: [],
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
+        publish_fn=_stub_publish_leg,
     )
     assert rc == 2, f"an unreadable board must exit 2, got rc={rc}"
     assert "FAILED" in err.getvalue(), err.getvalue()
@@ -1390,6 +1392,7 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             kit_manifest=mpath, fleet_manifest=fpath,
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
+            publish_fn=_stub_publish_leg,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -1460,6 +1463,7 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             kit_manifest=mpath, fleet_manifest=fpath,
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
+            publish_fn=_stub_publish_leg,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -1489,6 +1493,28 @@ def test_the_live_baseline_reproduces_the_measured_figure() -> None:
     assert cov["bootstrap_cells_total"] == 10 * cov["members_reachable"], cov
     print(f"  (live bootstrap drift: {boot['same']} same / {boot['DIFF']} DIFF / "
           f"{boot['ABSENT']} ABSENT over {cov['bootstrap_cells_total']} cells)")
+
+def _stub_publish_leg(*, read_at: str) -> dict:
+    """A publish leg that reads NOTHING, for probes that drive `main()`.
+
+    The real leg reads the remote (`git ls-remote`), so leaving it live would make every
+    probe that drives `main()` perform a network call -- measured at ~2s each, which took
+    this gate from 3s to 40s against a 17s budget. The file's own doctrine is that every
+    dependency is injectable for exactly this reason: a probe must not measure the box.
+
+    The leg's OWN behaviour is proved by the six probes below, which drive it directly
+    against synthetic repositories.
+    """
+    return {
+        "name": "publish-freshness",
+        "status": "ASSERTED",
+        "problems": [],
+        "excused": [],
+        "coverage": {"read_at": read_at, "stubbed": True, "unpushed": 0, "shas": [],
+                     "stale": [], "remote": "origin", "branch": "main",
+                     "remote_tip": None, "residual_secs": 22500},
+    }
+
 
 # --- the publish-freshness leg (issue #146) ------------------------------------------
 #
@@ -1653,7 +1679,13 @@ def test_the_publish_leg_is_WIRED_into_the_runner_and_prints_its_population() ->
     """A leg that is not wired is a leg nobody runs; a leg whose population never renders
     is a leg nobody reads. A count without its predicate is unreadable."""
     source = RUNNER_PATH.read_text(encoding="utf-8")
-    assert "publish_freshness_leg(read_at=read_at)," in source, "not wired into main()"
+    # The property is WIRED **and** INJECTABLE, not a literal: the leg reads the remote, so
+    # the seam that lets a probe stub it is part of what must be true (see the 40s-to-4s
+    # measurement in the stub's own docstring).
+    assert "(publish_fn or publish_freshness_leg)(read_at=read_at)," in source, (
+        "not wired into main(), or wired without the injection seam"
+    )
+    assert "publish_fn=None," in source, "main() must accept a publish_fn"
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)

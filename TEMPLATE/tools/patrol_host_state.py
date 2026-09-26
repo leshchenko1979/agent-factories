@@ -1522,23 +1522,32 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             lines.append(f"  read at {cov['read_at']}")
         elif leg["name"] == "publish-freshness":
-            if "reason" in cov and cov["unpushed"] == 0 and not cov.get("remote_tip"):
+            # `.get` throughout, for the reason the kit-drift branch below states: a leg
+            # whose coverage is PARTIAL -- a NOT RUN, or a leg injected for a probe -- must
+            # render as NOT RUN rather than crash the renderer on the very path that exists
+            # to REPORT the absence. An absence is a NOT RUN, never a traceback.
+            if "reason" in cov and cov.get("unpushed", 0) == 0 and not cov.get("remote_tip"):
                 lines.append(f"  NOT RUN: {cov['reason']}")
+            elif cov.get("stubbed"):
+                lines.append(
+                    f"  injected for this run: {cov.get('unpushed', 0)} unpushed commit(s) "
+                    f"-- the live leg reads the remote, which no probe may do"
+                )
             else:
                 lines.append(
-                    f"  {cov['remote']}/{cov['branch']}: remote tip "
-                    f"{cov['remote_tip'] or 'unread'}, {cov['unpushed']} unpushed "
-                    f"commit(s)"
-                    + (f" {', '.join(cov['shas'])}" if cov["shas"] else "")
+                    f"  {cov.get('remote', 'origin')}/{cov.get('branch', 'main')}: remote "
+                    f"tip {cov.get('remote_tip') or 'unread'}, "
+                    f"{cov.get('unpushed', 0)} unpushed commit(s)"
+                    + (f" {', '.join(cov.get('shas') or [])}" if cov.get("shas") else "")
                 )
                 lines.append(
-                    f"  residual window: {cov['residual_secs']}s "
-                    f"({cov['cadence_secs']}s cadence + {cov['grace_secs']}s grace); "
-                    f"{len(cov['stale'])} commit(s) past it"
+                    f"  residual window: {cov.get('residual_secs', 0)}s "
+                    f"({cov.get('cadence_secs', 0)}s cadence + {cov.get('grace_secs', 0)}s "
+                    f"grace); {len(cov.get('stale') or [])} commit(s) past it"
                 )
                 for entry in cov.get("commits", []):
                     lines.append(
-                        f"    {'STALE' if entry in cov['stale'] else 'within window'}: "
+                        f"    {'STALE' if entry in (cov.get('stale') or []) else 'within window'}: "
                         f"{entry['sha']} age "
                         f"{entry['age_secs'] if entry['age_secs'] is not None else 'unreadable'}s"
                         f" -- {entry['session_id'] or 'no lane trailer'}: "
@@ -1546,7 +1555,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     )
                 if leg.get("reason"):
                     lines.append(f"  {leg['reason']}")
-            lines.append(f"  read at {cov['read_at']}")
+            lines.append(f"  read at {cov.get('read_at')}")
 
         elif leg["name"] == "kit-drift":
             # A leg that did NOT RUN carries a coverage of {reason, read_at} and no
@@ -1656,6 +1665,7 @@ def main(
     kit_manifest: Path = KIT_MANIFEST,
     fleet_manifest: Path = FLEET_MANIFEST,
     predicate=None,
+    publish_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -1666,7 +1676,10 @@ def main(
     cron-thinness leg with NO live database. The two drift manifests are injected for the
     fourth: the kit-drift leg's population is five OTHER repositories, so a probe that
     could only run against the live box would be measuring whatever those trees happen to
-    hold rather than the leg's behaviour."""
+    hold rather than the leg's behaviour. The publish leg is injected for the fifth and
+    the most practical reason of all: it reads the remote, so a probe that did not stub it
+    would make a NETWORK call on every run of every probe that drives this function --
+    measured at ~2s each, which is how a 3s gate becomes a 40s one."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -1698,7 +1711,7 @@ def main(
         canonicality_leg(rows, read_at=read_at),
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
-        publish_freshness_leg(read_at=read_at),
+        (publish_fn or publish_freshness_leg)(read_at=read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)
