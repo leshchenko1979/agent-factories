@@ -1763,6 +1763,19 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_names.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_names.py"])
 
+    # 56. Publish gate (issue #146, ruling n=1168): the pusher holds a commit inside its
+    #     grace window, publishes one past it, reports a diverged branch without resolving
+    #     it, and carries no force or rebase in its executable path. Registered rather than
+    #     left to a by-hand run because the mechanism it guards runs from a CLOCK with no
+    #     lane watching it: a probe the audit never runs is dead text, and this is the only
+    #     surface that would notice a pusher that stopped working.
+    #     REQUIRED, not OPTIONAL: the gate drives synthetic repositories under a temp dir --
+    #     no live board, no fleet manifest, no box-local fixture -- so it passes in a
+    #     bootstrapped factory exactly as it does here, and it is byte-paired into TEMPLATE
+    #     so a factory cannot drop the runner and keep the file.
+    if (repo_root / "tests/test_publish.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_publish.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

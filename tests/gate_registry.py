@@ -360,6 +360,14 @@ def gate_registration_problems(tests_dir: Path, audit_path: Path) -> tuple[list[
 # defined by file-shipping would demand it, and could then never equal the registered set.
 # Part 1's derivation and Part 3's equality leg meet only at the declared-gate grain.
 REQUIRED_GATES: tuple[str, ...] = (
+    "test_publish.py",
+    # Added with its registration (issue #146, ruling n=1168). REQUIRED is the correct
+    # grain: the gate drives SYNTHETIC repositories under a temp directory, so it reads no
+    # live board, no fleet manifest and no box-local fixture and passes in a bootstrapped
+    # factory exactly as it does here. It is byte-paired with a TEMPLATE copy, so the
+    # manifest grain is what keeps a factory from dropping the runner and keeping the file.
+    # The mechanism it guards is the one surface with NO other observer: the pusher runs
+    # from a clock, so a pusher that stopped working is visible here and nowhere else.
     "test_audit_rates.py",
     # Added with its registration (issue #145, ruling n=940). REQUIRED is the correct grain
     # and OPTIONAL is not: the gate drives the tool's own mechanism against a THROWAWAY copy

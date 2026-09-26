@@ -50,10 +50,13 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import sqlite3
 import shutil
+import subprocess
 import sys
 import tempfile
+import datetime as dt
 from pathlib import Path
 from unittest import mock
 
@@ -1486,6 +1489,190 @@ def test_the_live_baseline_reproduces_the_measured_figure() -> None:
     assert cov["bootstrap_cells_total"] == 10 * cov["members_reachable"], cov
     print(f"  (live bootstrap drift: {boot['same']} same / {boot['DIFF']} DIFF / "
           f"{boot['ABSENT']} ABSENT over {cov['bootstrap_cells_total']} cells)")
+
+# --- the publish-freshness leg (issue #146) ------------------------------------------
+#
+# The leg's live population is "unpushed commits older than the residual window", and on a
+# healthy box that is ZERO -- so a probe that only read the live tree would pass by
+# examining nothing. Non-vacuity therefore rides these probes, driven from synthetic
+# repositories, exactly as the notify-receipt leg's does (#112's opposite call is the
+# cron-thinness leg, whose empty population IS a finding).
+
+
+def _git(repo: Path, *args: str, env: dict | None = None) -> str:
+    merged = dict(os.environ)
+    merged.update(env or {})
+    proc = subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, env=merged, timeout=120
+    )
+    assert proc.returncode == 0, f"git {' '.join(args)}: {proc.stderr.strip()}"
+    return proc.stdout.strip()
+
+
+def _bare(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "--bare", "-q")
+    _git(path, "symbolic-ref", "HEAD", "refs/heads/main")
+    return path
+
+
+def _work(path: Path, remote: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-q")
+    _git(path, "symbolic-ref", "HEAD", "refs/heads/main")
+    _git(path, "config", "user.email", "probe@probe.invalid")
+    _git(path, "config", "user.name", "probe")
+    _git(path, "remote", "add", "origin", str(remote))
+    return path
+
+
+def _commit(repo: Path, name: str, *, when: dt.datetime | None = None,
+            trailer: str | None = None) -> str:
+    (repo / name).write_text(f"{name}\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    env = {}
+    if when is not None:
+        stamp = when.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        env = {"GIT_AUTHOR_DATE": stamp, "GIT_COMMITTER_DATE": stamp}
+    message = name if trailer is None else f"{name}\n\nSession-Id: {trailer}\n"
+    _git(repo, "commit", "-q", "-m", message, env=env)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _seeded(root: Path):
+    """A bare remote carrying one commit, and a clone of it. Returns (remote, work)."""
+    remote = _bare(root / "remote.git")
+    seed = _work(root / "seed", remote)
+    _commit(seed, "a.txt")
+    _git(seed, "push", "-q", "origin", "main:main")
+    work = root / "work"
+    _git(root, "clone", "-q", str(remote), str(work))
+    _git(work, "config", "user.email", "probe@probe.invalid")
+    _git(work, "config", "user.name", "probe")
+    return remote, work
+
+
+def test_the_publish_leg_BITES_when_a_commit_has_been_unpushed_past_the_window() -> None:
+    """The leg's whole purpose: a commit no healthy pusher can explain, NAMED."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        now = dt.datetime.now(dt.timezone.utc)
+        stale = now - dt.timedelta(seconds=RUNNER.PUBLISH_RESIDUAL_SECS * 2)
+        sha = _commit(work, "b.txt", when=stale, trailer="deadbeef-lane")
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg["problems"], "an unpushed commit past the window must be a problem"
+        assert any(sha in problem for problem in leg["problems"]), leg["problems"]
+        assert any("deadbeef-lane" in problem for problem in leg["problems"]), (
+            f"a finding must NAME the lane that authored it: {leg['problems']}"
+        )
+        assert leg["coverage"]["unpushed"] == 1 and leg["coverage"]["shas"] == [sha]
+        assert len(leg["coverage"]["stale"]) == 1
+
+
+def test_the_publish_leg_HOLDS_a_commit_inside_the_residual_window_and_still_names_it() -> None:
+    """The control. Without it, a leg that flagged EVERY unpushed commit would pass the
+    arm above -- and would red the patrol on every round between two healthy pushes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        now = dt.datetime.now(dt.timezone.utc)
+        fresh = now - dt.timedelta(seconds=60)
+        sha = _commit(work, "b.txt", when=fresh)
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg["problems"] == [], leg["problems"]
+        assert leg["coverage"]["unpushed"] == 1, leg["coverage"]
+        assert leg["coverage"]["shas"] == [sha]
+        assert leg["coverage"]["stale"] == []
+        assert leg["coverage"]["residual_secs"] == RUNNER.PUBLISH_RESIDUAL_SECS
+
+
+def test_the_publish_leg_reports_an_UNREACHABLE_remote_as_a_finding() -> None:
+    """'I could not ask' and 'there is nothing to publish' are different facts. A leg
+    that read an unreachable remote as in-sync would report a clean result over a
+    question it never got an answer to."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        work = _work(root / "work", root / "does-not-exist.git")
+        _commit(work, "a.txt")
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe"
+        )
+        assert leg["problems"], "an unreadable remote must be a finding"
+        assert any("could not be read" in p for p in leg["problems"]), leg["problems"]
+        assert leg["coverage"]["remote_tip"] is None
+
+
+def test_the_publish_leg_reads_the_REMOTE_not_the_local_ref() -> None:
+    """`origin/main` is a cache updated only by a fetch. A leg reading it would report the
+    fact in doubt -- the same substitution the pusher itself refuses."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        stale_ref = _git(work, "rev-parse", "origin/main")
+
+        peer = root / "peer"
+        _git(root, "clone", "-q", str(remote), str(peer))
+        _git(peer, "config", "user.email", "probe@probe.invalid")
+        _git(peer, "config", "user.name", "probe")
+        _commit(peer, "peer.txt")
+        _git(peer, "push", "-q", "origin", "main:main")
+        moved = _git(remote, "rev-parse", "refs/heads/main")
+
+        assert moved != stale_ref, "the arm's own precondition: the local ref is stale"
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe"
+        )
+        assert leg["coverage"]["remote_tip"] == moved, (
+            f"reported {leg['coverage']['remote_tip']} but the remote tip is {moved}"
+        )
+
+
+def test_the_publish_leg_shares_the_PUSHER_own_predicate() -> None:
+    """One predicate, two call sites. A private `git` call here would let the leg and the
+    mechanism disagree about what 'unpushed' means -- the drift the kit-drift leg avoids
+    by reading through `tools/kit_pin.py`."""
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    start = source.index("def publish_freshness_leg")
+    end = source.index("def deferred_legs")
+    body = source[start:end]
+    assert 'load_module("publish"' in body, "the leg must load the pusher's own module"
+    assert 'pub.remote_tip(' in body and 'pub.unpushed_commits(' in body, body[:400]
+    assert '"ls-remote"' not in body, "the leg must not restate the remote read"
+    assert '"rev-list"' not in body, "the leg must not restate the unpushed read"
+
+
+def test_the_publish_leg_is_WIRED_into_the_runner_and_prints_its_population() -> None:
+    """A leg that is not wired is a leg nobody runs; a leg whose population never renders
+    is a leg nobody reads. A count without its predicate is unreadable."""
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    assert "publish_freshness_leg(read_at=read_at)," in source, "not wired into main()"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        now = dt.datetime.now(dt.timezone.utc)
+        stale = now - dt.timedelta(seconds=RUNNER.PUBLISH_RESIDUAL_SECS * 2)
+        sha = _commit(work, "b.txt", when=stale, trailer="cafebabe-lane")
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        text = RUNNER.render(
+            [leg], [], slug="owner/repo", read_at="2026-09-26T00:00:00Z", issues=[]
+        )
+        assert "LEG publish-freshness" in text, text
+        assert "residual window" in text, text
+        assert sha in text and "cafebabe-lane" in text, text
+        assert "STALE" in text, text
+
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

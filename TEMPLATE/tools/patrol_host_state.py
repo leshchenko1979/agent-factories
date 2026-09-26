@@ -84,6 +84,26 @@ FIELD_PREDICATE = REPO / "tools" / "field_predicate.py"
 # import here is what broke this file's own gate (#171) the day one was added.
 KIT_PIN = REPO / "tools" / "kit_pin.py"
 
+# ---- the publish-freshness leg (issue #146, ruled at ledger n=1168) ----------------
+#
+# The pusher (`tools/publish.py`) is the MECHANISM that gets a commit to origin; this leg
+# is the FRESHNESS SURFACE that notices when it has not. Both are needed and neither
+# substitutes for the other: the pusher runs from a clock with no lane watching it, so a
+# pusher that stopped working is invisible except here.
+#
+# THE RESIDUAL WINDOW, stated because a threshold without its derivation is unreadable.
+# The pusher runs at the 6h cadence floor and holds any commit younger than its grace
+# window, so an unpushed commit younger than CADENCE + GRACE is EXPECTED — flagging it
+# would red this leg on every round between two healthy pushes and teach the next reader
+# to ignore it. Older than that, and no healthy pusher can explain it. The window is
+# ACCEPTED and STATED, never hidden: `residual_secs` travels in the coverage.
+PUBLISH_REMOTE = "origin"
+PUBLISH_BRANCH = "main"
+PUBLISH_PUSHER = REPO / "tools" / "publish.py"
+PUBLISH_CADENCE_SECS = 6 * 3600
+PUBLISH_GRACE_SECS = 900
+PUBLISH_RESIDUAL_SECS = PUBLISH_CADENCE_SECS + PUBLISH_GRACE_SECS
+
 # ---- the canonicality leg (law: SKILL.md section 8, the ladder T0-T4) --------------
 #
 # A check that reports a discrepancy names the TIER that resolved it (law section 8), and
@@ -1258,6 +1278,123 @@ def kit_drift_leg(
         },
     }
 
+def publish_freshness_leg(
+    *,
+    repo: Path = REPO,
+    remote: str = PUBLISH_REMOTE,
+    branch: str = PUBLISH_BRANCH,
+    read_at: str,
+    now=None,
+    pusher: Path = PUBLISH_PUSHER,
+) -> dict:
+    """Every commit that has not reached `origin`, NAMED, with the instant read.
+
+    The predicate is the pusher's own (`tools/publish.py::remote_tip` and
+    `::unpushed_commits`), loaded by path rather than restated, so this leg and the
+    mechanism cannot disagree about what "unpushed" means -- the same one-predicate rule
+    the kit-drift leg follows against `tools/kit_pin.py`. The remote tip is read FROM THE
+    REMOTE: `origin/main` is a cache updated only by a fetch, so a leg reading it would
+    report the fact in doubt rather than the fact.
+
+    A finding NAMES each offending sha with its age and its lane trailer. A count alone
+    cannot be dispatched, claimed or closed; a named commit can be all three (#148).
+    """
+    now = now or dt.datetime.now(dt.timezone.utc)
+    coverage = {
+        "remote": remote,
+        "branch": branch,
+        "read_at": read_at,
+        "residual_secs": PUBLISH_RESIDUAL_SECS,
+        "grace_secs": PUBLISH_GRACE_SECS,
+        "cadence_secs": PUBLISH_CADENCE_SECS,
+        "unpushed": 0,
+        "shas": [],
+        "stale": [],
+        "remote_tip": None,
+    }
+    problems: list[str] = []
+
+    if not Path(pusher).is_file():
+        return {
+            "name": "publish-freshness",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {**coverage, "reason": (
+                f"{pusher} is absent, so this leg has no predicate to read with -- a "
+                f"bootstrapped factory carries the pusher only if it adopted it"
+            )},
+        }
+
+    try:
+        pub = load_module("publish", Path(pusher))
+    except BoardReadError as exc:
+        problems.append(f"the pusher's own predicate could not be loaded: {exc}")
+        return {
+            "name": "publish-freshness", "status": "ASSERTED",
+            "problems": problems, "excused": [], "coverage": coverage,
+        }
+
+    tip, why = pub.remote_tip(Path(repo), remote, branch)
+    if tip is None:
+        # An unreachable remote is a FINDING, not an absence: "I could not ask" and
+        # "there is nothing to publish" are different facts and must never render alike.
+        problems.append(
+            f"{remote}/{branch} could not be read: {why} -- an unreadable remote is a "
+            f"finding, never a clean result"
+        )
+        return {
+            "name": "publish-freshness", "status": "ASSERTED",
+            "problems": problems, "excused": [], "coverage": {**coverage, "reason": why},
+        }
+    coverage["remote_tip"] = tip
+
+    rc, _, _ = pub._git(Path(repo), "merge-base", "--is-ancestor", tip, "HEAD")
+    if rc != 0:
+        problems.append(
+            f"{remote}/{branch} ({tip}) is not an ancestor of HEAD -- the branch has "
+            f"DIVERGED, and the pusher reports rather than resolves by design"
+        )
+        coverage["diverged"] = True
+
+    commits, why = pub.unpushed_commits(Path(repo), tip)
+    if commits is None:
+        problems.append(f"the unpushed set could not be read: {why}")
+        return {
+            "name": "publish-freshness", "status": "ASSERTED",
+            "problems": problems, "excused": [], "coverage": coverage,
+        }
+
+    coverage["unpushed"] = len(commits)
+    coverage["shas"] = [c["sha"] for c in commits]
+    for commit in commits:
+        age = pub.age_secs(commit.get("committed_at") or "", now)
+        entry = {
+            "sha": commit["sha"],
+            "age_secs": None if age is None else int(age),
+            "session_id": commit.get("session_id") or "",
+            "subject": commit.get("subject") or "",
+        }
+        coverage.setdefault("commits", []).append(entry)
+        if age is None or age > PUBLISH_RESIDUAL_SECS:
+            coverage["stale"].append(entry)
+            problems.append(
+                f"{commit['sha']} has been unpushed for "
+                f"{'an unreadable age' if age is None else f'{int(age)}s'}, past the "
+                f"{PUBLISH_RESIDUAL_SECS}s residual window (6h cadence + "
+                f"{PUBLISH_GRACE_SECS}s grace) -- no healthy pusher explains this; "
+                f"lane {entry['session_id'] if entry['session_id'] else 'no lane trailer'} -- {entry['subject'][:60]}"
+            )
+
+    return {
+        "name": "publish-freshness",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": coverage,
+    }
+
+
 def deferred_legs() -> list[dict]:
     """Legs this runner does not run, each declaring its tracker and its checkable claims.
 
@@ -1384,6 +1521,33 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"resolved these, and that is a finding, not a clean result"
                 )
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "publish-freshness":
+            if "reason" in cov and cov["unpushed"] == 0 and not cov.get("remote_tip"):
+                lines.append(f"  NOT RUN: {cov['reason']}")
+            else:
+                lines.append(
+                    f"  {cov['remote']}/{cov['branch']}: remote tip "
+                    f"{cov['remote_tip'] or 'unread'}, {cov['unpushed']} unpushed "
+                    f"commit(s)"
+                    + (f" {', '.join(cov['shas'])}" if cov["shas"] else "")
+                )
+                lines.append(
+                    f"  residual window: {cov['residual_secs']}s "
+                    f"({cov['cadence_secs']}s cadence + {cov['grace_secs']}s grace); "
+                    f"{len(cov['stale'])} commit(s) past it"
+                )
+                for entry in cov.get("commits", []):
+                    lines.append(
+                        f"    {'STALE' if entry in cov['stale'] else 'within window'}: "
+                        f"{entry['sha']} age "
+                        f"{entry['age_secs'] if entry['age_secs'] is not None else 'unreadable'}s"
+                        f" -- {entry['session_id'] or 'no lane trailer'}: "
+                        f"{entry['subject'][:60]}"
+                    )
+                if leg.get("reason"):
+                    lines.append(f"  {leg['reason']}")
+            lines.append(f"  read at {cov['read_at']}")
+
         elif leg["name"] == "kit-drift":
             # A leg that did NOT RUN carries a coverage of {reason, read_at} and no
             # totals or members. Reading those unconditionally crashes the renderer on
@@ -1534,6 +1698,7 @@ def main(
         canonicality_leg(rows, read_at=read_at),
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
+        publish_freshness_leg(read_at=read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)
