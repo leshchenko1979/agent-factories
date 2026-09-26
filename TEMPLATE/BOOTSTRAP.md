@@ -609,6 +609,40 @@ exempt. An absent pin is a stated SKIP naming the absence, never a clean read.
 
 ---
 
+## Step 4g — Install the questions register
+
+Copy [`tools/questions`](tools/questions) and its sibling
+[`tools/questions-render.mjs`](tools/questions-render.mjs). The register is how a lane
+surfaces a decision **only the owner can make** without spending a turn's prose on it: the
+lane records the question, the owner answers on a page, and the answer is delivered back to
+the asking lane.
+
+**The two files move together.** The tool resolves its renderer as a SIBLING by absolute
+path, so a tool without its `.mjs` publishes nothing and reports a render failure rather
+than a clean page — the same closure shape as `ledger.py`, and the same rule: a bare copy is
+not an install.
+
+**What it needs from you, and it will refuse without it:** the register reads
+`registry/fleet.json` for this factory's own slug, so **Step 4d must have run first**. With
+no manifest it falls back to requiring `--factory` on every call rather than publishing
+under a name that is not yours — which is exactly the defect it was fixed for: the
+instrument used to default to the slug of the factory it was written for.
+
+**Two declarations are yours, and both are factory parameters rather than law:**
+
+- `OC_QUESTIONS_TRACKER` — the issue tracker the mechanical-closure check asks whether a
+  question's subject has moved. It defaults to the tracker this instrument was derived
+  against; a factory filing its work units elsewhere sets its own, or the check answers
+  about a repo that is not yours.
+- `OC_QUESTIONS_DIR` — where the register and its pages live. Defaults under your profile
+  home, so a factory needs nothing here.
+
+**Evidence:** `python3 tools/questions selftest` exits 0. Then `python3 tools/questions ask
+--factory <your-slug> …` records a question and `list --json` reports it with its lane's
+open count.
+
+---
+
 ## Step 5 — Wire the board
 
 File the first issues on `{{REPO}}`, using title prefixes that encode kind

@@ -1,0 +1,3455 @@
+#!/usr/bin/env python3
+# =============================================================================
+# questions — the Open Questions register (#547, adopted into the template 2026-09-26)
+#
+# The sanctioned "blocked on you" channel (fleet-directives.md §Open Questions
+# register). A lane that needs an owner decision registers an ORDERED set of
+# questions in the same turn it parks; a renderer emits a card in the CALLING
+# session's own topic plus a short-lived public page; answers return to the
+# calling session.
+#
+# Store: <profile home>/questions/open.json, answered sets -> archive.jsonl
+# Single writer: flock + atomic replace (tmp -> rename). Two concurrent `ask`
+# calls must lose NEITHER set — that is a selftest criterion, not a comment.
+#
+# Verbs: ask · answer · amend · list · publish · lint · gc · notify
+#
+# rc vocabulary (tools/docs/RC-CONTRACT.md): 0 ok / 1 finding-or-not-found /
+# 2 usage / 3 state-refused (already answered, expired) / 4 store-or-IO fault.
+# =============================================================================
+
+import datetime
+import fcntl
+import html
+import json
+import os
+import re
+import secrets
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+
+PROG = "questions"
+VERSION = "2.0.0"
+
+# The verb set, named once so the selftest can assert a DELETED verb stays
+# deleted rather than merely unrouted (#547 C3).
+_VERBS = ("ask", "answer", "amend", "withdraw", "list", "publish", "lint",
+          "gc", "notify")
+
+DEFAULT_TTL_DAYS = 7
+
+# The issue tracker the mechanical-closure check (C6) asks whether the thing a
+# question was about has moved. The answer is never inferred from prose, so the
+# tracker has to be NAMED -- and which tracker is a FACTORY PARAMETER, not a law:
+# a factory that files its work units elsewhere gets no answer from this repo's
+# fork. Overridable per factory; the default is the tracker this instrument was
+# derived against, kept so a factory that shares it needs no configuration.
+FORK_REPO = os.environ.get("OC_QUESTIONS_TRACKER") or "leshchenko1979/opencrabs"
+ISSUE_RE = re.compile(r"#(\d{1,6})\b")
+# Every network or shell predicate is bounded. An unbounded probe inside a
+# register mutation would stall the caller's turn, which is the failure the
+# whole tool exists to avoid.
+PREDICATE_TIMEOUT = 15
+
+# A lane NAME, never a uuid (fleet-directives: "Refer to workers by TOPIC/CHAT
+# NAME only"). The lint verb enforces it rather than trusting the caller.
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+# Secrets/no-secrets lint (#547 risk table: the page is world-readable).
+SECRET_RE = re.compile(
+    r"(?:/root/|/home/[a-z0-9_-]+/|api[_-]?key|bearer\s+[A-Za-z0-9._-]{16,}|"
+    r"[0-9]{6,}:[A-Za-z0-9_-]{30,}|ssh\s+-i\s|BEGIN [A-Z ]*PRIVATE KEY)",
+    re.I,
+)
+
+
+def profile_home():
+    prof = os.environ.get("OC_PROFILE") or os.environ.get("OPENCRABS_PROFILE") or "ops"
+    return os.path.join(os.path.expanduser("~"), ".opencrabs", "profiles", prof)
+
+
+def store_dir():
+    override = os.environ.get("OC_QUESTIONS_DIR")
+    if override:
+        return override
+    return os.path.join(profile_home(), "questions")
+
+
+def store_path():
+    return os.path.join(store_dir(), "open.json")
+
+
+def archive_path():
+    return os.path.join(store_dir(), "archive.jsonl")
+
+
+def pages_dir():
+    return os.path.join(store_dir(), "pages")
+
+def slugify(text):
+    """lowercase, non-alnum -> hyphen. ONE home for the page slug AND the lane
+    anchors, so a rename cannot make the two disagree about the same lane."""
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "lane"
+
+def lane_anchor(lane):
+    """The STABLE per-lane anchor (owner order 2026-09-25). The same lane must
+    yield the same id across re-renders and across publishes, so a URL handed
+    to the owner for one lane keeps pointing at that lane."""
+    return "lane-" + slugify(lane)
+
+def page_slug(factory):
+    """The page path is a CONSTANT slug -- never a rotating token. Owner order
+    2026-09-25: the link is bookmarked, so a fresh URL per publish 404s it.
+    One home: every caller derives the path from here."""
+    return slugify(factory)
+
+def _declared_slug():
+    """This factory's OWN slug, read from its `registry/fleet.json`.
+
+    The first publish has no set to derive a slug from, and the instrument used to
+    fall back to the slug of the factory it was WRITTEN for -- so a new factory's
+    very first page was published under another factory's name. A factory's slug is
+    already declared in `registry/fleet.json` (the file the lane resolver reads), so
+    it is read here rather than restated. Returns "" when the tree carries no
+    manifest, and the caller then requires `--factory` explicitly rather than
+    guessing.
+    """
+    try:
+        manifest = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "registry", "fleet.json")
+        with open(manifest, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return ""
+    for record in data.get("factories") or []:
+        # A factory's own manifest declares ITS record; when a manifest carries
+        # several (this repo is one of the factories it names), the record whose
+        # `repo` is this tree is the one that describes us.
+        if record.get("repo") and os.path.realpath(record["repo"]) == os.path.realpath(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+            return str(record.get("slug") or "")
+    records = data.get("factories") or []
+    return str(records[0].get("slug") or "") if len(records) == 1 else ""
+
+
+# The slug used when the register holds no set to derive one from -- i.e. the very
+# first publish. A factory set is never auto-archived, so once one exists the slug
+# always comes from the register. Env override wins, then this factory's own declared
+# slug, then EMPTY -- and an empty value makes `ask` require `--factory` rather than
+# silently publishing under a name that is not the caller's.
+DEFAULT_FACTORY = (os.environ.get("OC_QUESTIONS_FACTORY") or _declared_slug())
+
+# The retired rotating-token shape (secrets.token_urlsafe(24) -> 32 chars).
+# Pruning keys on the SHAPE, not on "anything that is not the current slug", so
+# a future second factory's readable slug can never be swept by accident.
+LEGACY_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{32}$")
+
+def page_slug_for(entries):
+    """The page slug. STABLE by construction.
+
+    A slug derived from the register alone would MOVE when a set is added or
+    removed -- the first open set by asked_at changes, the path changes, and the
+    owner's bookmark 404s. So the slug is recorded in pages/latest.json on the
+    first publish and REUSED from then on; the register only supplies it when
+    there is no pointer yet.
+
+    That is the same reuse discipline the retired token had (C7), which is what
+    made the URL stable; dropping it here would have reintroduced the churn the
+    constant-slug order exists to remove.
+    """
+    pointer = read_pointer()
+    if pointer and pointer.get("slug"):
+        return pointer["slug"]
+    for entry in entries:
+        key = entry.get("factory") or entry.get("id")
+        if key:
+            return page_slug(key)
+    return page_slug(os.environ.get("OC_QUESTIONS_FACTORY") or DEFAULT_FACTORY)
+
+def questions_db_path():
+    return (os.environ.get("OC_QUESTIONS_DB")
+            or os.path.join(profile_home(), "opencrabs.db"))
+
+def resolve_lane(session):
+    """(lane_name, reason) -- the DISPLAY name of the session's OWN topic.
+
+    Resolved from the live binding, never from the caller: a lane that could
+    name itself could mislabel where an answer came from (owner order
+    2026-09-25: "Session can be derived from the env").
+
+    The name comes from channel_messages.topic_name -- the bot-observed topic
+    name. sessions.title is deliberately NOT used: it carries auto-generated
+    titles for some lanes (measured: a bound lane titled "Telegram flow card
+    metrics telemetry bar #232"), so it is not a topic name.
+
+    An unbound session returns (None, reason). The caller REFUSES, because an
+    unbound session can never receive the answer: registering a question
+    against it strands the question permanently.
+    """
+    path = questions_db_path()
+    if not os.path.isfile(path):
+        return None, "no session DB at %s" % path
+    try:
+        conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True)
+    except sqlite3.Error as exc:
+        return None, "session DB unreadable (%s)" % exc.__class__.__name__
+    try:
+        row = conn.execute(
+            "select chat_id, thread_id from session_bindings "
+            "where session_id=? and channel='telegram'", (session,)).fetchone()
+        if row is None:
+            return None, "session %s has no session_bindings row" % session
+        chat_id, thread_id = row
+        name = conn.execute(
+            "select topic_name from channel_messages "
+            "where channel='telegram' and channel_chat_id=? "
+            "and cast(thread_id as integer)=? and topic_name is not null "
+            "and topic_name<>'' order by created_at desc limit 1",
+            (chat_id, thread_id)).fetchone()
+    except sqlite3.Error as exc:
+        return None, "session DB query failed (%s)" % exc.__class__.__name__
+    finally:
+        conn.close()
+    if name is None or not (name[0] or "").strip():
+        return None, ("binding found (chat %s thread %s) but no topic_name "
+                      "observed for it yet" % (chat_id, thread_id))
+    return name[0].strip(), None
+
+
+PRODUCTION_BASE_URL = "https://questions.l1979.ru"
+DEFAULT_BASE_URL = PRODUCTION_BASE_URL
+
+def base_url():
+    """The public origin the pages are served from. Overridable so a selftest
+    never asserts against the production hostname."""
+    return (os.environ.get("OC_QUESTIONS_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+
+def page_url(token):
+    return "%s/%s/" % (base_url(), token)
+
+def latest_pointer_path():
+    return os.path.join(pages_dir(), "latest.json")
+
+BUTTON_LABEL_MAX = 28
+
+def button_label(option):
+    """Word-boundary truncation, MARKED. A bare slice rendered the recommended
+    option "Keep frozen until the fence clears" as "Keep frozen until the fence "
+    -- an unfinished instruction rather than a visible abbreviation, because
+    nothing said the text had been cut."""
+    text = " ".join(str(option).split())
+    if len(text) <= BUTTON_LABEL_MAX:
+        return text
+    cut = text[:BUTTON_LABEL_MAX - 1]        # the ellipsis is part of the budget
+    space = cut.rfind(" ")
+    if space > 0:
+        cut = cut[:space]
+    return cut.rstrip() + "\u2026"
+
+
+def now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+
+
+def parse_iso(text):
+    try:
+        return datetime.datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def age_hours(asked_at):
+    dt = parse_iso(asked_at)
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    delta = datetime.datetime.now(datetime.timezone.utc) - dt
+    return round(delta.total_seconds() / 3600.0, 1)
+
+
+def fmt_age(asked_at):
+    hours = age_hours(asked_at)
+    if hours is None:
+        return "age unknown"
+    if hours < 1:
+        return f"{int(hours * 60)}m ago"
+    if hours < 48:
+        return f"{hours:g}h ago"
+    return f"{hours / 24:.1f}d ago"
+
+
+def empty_register():
+    return {"version": 1, "sets": []}
+
+
+def read_register():
+    """Read the register. A MISSING store is an empty register; a CORRUPT one is
+    an error, never silently replaced — overwriting it would destroy the only
+    copy of a parked question."""
+    path = store_path()
+    if not os.path.exists(path):
+        return empty_register()
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception as exc:
+        die(4, f"register unreadable at {path}: {exc}")
+    if not isinstance(data, dict) or not isinstance(data.get("sets"), list):
+        die(4, f"register malformed at {path} (expected an object with a sets array)")
+    return data
+
+
+def write_register_atomic(data):
+    """tmp -> os.replace, so a reader never observes a half-written register."""
+    directory = store_dir()
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".open.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, store_path())
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+class RegisterLock(object):
+    """Single-writer guard: a read-modify-write must hold this for the WHOLE
+    cycle, or two concurrent `ask` calls interleave and one set is lost."""
+
+    def __init__(self, timeout=10.0):
+        self.timeout = timeout
+        self.fh = None
+
+    def __enter__(self):
+        os.makedirs(store_dir(), exist_ok=True)
+        path = os.path.join(store_dir(), ".lock")
+        self.fh = open(path, "a+")
+        deadline = None
+        import time as _time
+        deadline = _time.time() + self.timeout
+        while True:
+            try:
+                fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError:
+                if _time.time() >= deadline:
+                    die(4, f"register lock not acquired within {self.timeout:g}s "
+                           f"({path}) — another writer is mid-cycle")
+                _time.sleep(0.05)
+
+    def __exit__(self, *exc):
+        try:
+            fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.fh.close()
+        return False
+
+
+
+def die(rc, message):
+    sys.stderr.write(f"{PROG}: {message}\n")
+    sys.exit(rc)
+
+
+def open_sets(data):
+    return [s for s in data["sets"] if s.get("status") == "open"]
+
+
+def find_set(data, set_id):
+    for entry in data["sets"]:
+        if entry.get("id") == set_id:
+            return entry
+    return None
+
+
+def find_question(entry, qid):
+    for question in entry.get("questions", []):
+        if question.get("qid") == qid:
+            return question
+    return None
+
+def question_return_address(entry, qid):
+    """(session, lane, reason) -- the RETURN ADDRESS for one answer.
+
+    PER QUESTION, not per set: one standing factory set holds questions from
+    many lanes, and the answer must reach the lane that ASKED it rather than
+    whoever created the set. Falls back to the set's own session for questions
+    recorded before the factory model."""
+    if qid:
+        question = find_question(entry, qid)
+        if question is None:
+            return None, None, "no question %r in set %s" % (qid, entry.get("id"))
+        return ((question.get("session") or entry.get("session") or "").strip(),
+                question.get("lane") or entry.get("lane") or "", None)
+    return ((entry.get("session") or "").strip(),
+            entry.get("lane") or "", None)
+
+
+# A question is CLOSED only once it is answered, withdrawn or expired.
+# "clarifying" is NOT closed: a Clarify request means the owner asked for more
+# context and is still waiting. Counting it as closed archived the WHOLE set and
+# silently removed it from the live register — the opposite of the contract
+# ("a Clarify request ... never silently closes the question").
+CLOSED_STATUSES = ("answered", "withdrawn", "expired")
+
+def question_is_closed(question):
+    return question.get("status") in CLOSED_STATUSES
+
+
+def fork_issue_state(number):
+    """('OPEN'|'CLOSED', None) or (None, reason). NEVER guesses: an unreadable
+    probe yields a reason, and the caller reports a SKIP rather than closing."""
+    try:
+        proc = subprocess.run(
+            ["gh", "issue", "view", str(number), "--repo", FORK_REPO,
+             "--json", "state"],
+            capture_output=True, text=True, timeout=PREDICATE_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, "gh unavailable (%s)" % exc.__class__.__name__
+    if proc.returncode != 0:
+        return None, "gh rc=%d" % proc.returncode
+    try:
+        state = (json.loads(proc.stdout).get("state") or "").upper()
+    except ValueError:
+        return None, "gh output unparseable"
+    return (state or None), None
+
+
+def mechanical_close(entry, question):
+    """(reason, note) — whether a predicate now closes this question.
+
+    C6 (owner order: "why not close the questions mechanically?"). Two arms:
+      * default — the question's text (or the set subject) names a fork issue
+        that reads CLOSED;
+      * explicit — close_when is a shell command whose rc=0 closes.
+    An unreadable predicate returns a NOTE, never a close: a question must not
+    disappear because a probe failed."""
+    when = str(question.get("close_when") or "").strip()
+    if when:
+        try:
+            proc = subprocess.run(["/bin/sh", "-c", when], capture_output=True,
+                                  text=True, timeout=PREDICATE_TIMEOUT)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return None, "close-when SKIPPED (%s)" % exc.__class__.__name__
+        if proc.returncode == 0:
+            return "close-when predicate returned rc=0", None
+        return None, None
+
+    blob = " ".join(str(x) for x in (
+        question.get("title"), question.get("description"), entry.get("subject"))
+        if x)
+    match = ISSUE_RE.search(blob)
+    if not match:
+        return None, None
+    number = match.group(1)
+    state, why = fork_issue_state(number)
+    if why:
+        return None, "issue-state SKIPPED (#%s: %s)" % (number, why)
+    if state == "CLOSED":
+        return "fork issue #%s is CLOSED" % number, None
+    return None, None
+
+
+def apply_mechanical_closures(data):
+    """Walk every open question, close the ones whose predicate now holds.
+    Returns (closed, notes). Caller MUST hold the lock."""
+    closed, notes = [], []
+    for entry in data["sets"]:
+        if entry.get("status") != "open":
+            continue
+        for question in entry.get("questions", []):
+            if question_is_closed(question):
+                continue
+            reason, note = mechanical_close(entry, question)
+            if note:
+                notes.append("%s/%s %s" % (entry.get("id"), question.get("qid"), note))
+            if reason:
+                question["status"] = "resolved_mechanically"
+                question["closed_at"] = now_iso()
+                question["closed_reason"] = reason
+                closed.append("%s/%s -> %s (%s)"
+                              % (entry.get("id"), question.get("qid"),
+                                 question["status"], reason))
+        if entry.get("questions") and all(question_is_closed(q)
+                                          for q in entry["questions"]):
+            entry["status"] = "answered"
+            entry["closed_at"] = now_iso()
+    return closed, notes
+
+def set_is_closed(entry):
+    questions = entry.get("questions") or []
+    return bool(questions) and all(question_is_closed(q) for q in questions)
+
+
+
+
+# =============================================================================
+# Unified tools log (parity with tools/lib/oc-log.sh, schema per RC-CONTRACT)
+# =============================================================================
+_LOG_ENABLED = False
+_LOG_ARGS = ""
+_LOG_EXTRA = {}
+_LOG_START = 0.0
+_LOG_FINISHED = False
+
+
+def _is_selftest():
+    return "--selftest" in sys.argv[1:] or (len(sys.argv) > 1 and sys.argv[1] == "selftest")
+
+
+def oc_log_init():
+    global _LOG_ENABLED, _LOG_ARGS, _LOG_EXTRA, _LOG_START, _LOG_FINISHED
+    _LOG_ARGS = " ".join(sys.argv[1:])
+    _LOG_EXTRA = {}
+    _LOG_FINISHED = False
+    if "--no-log" in sys.argv[1:] or _is_selftest():
+        os.environ["OC_TOOLS_NOLOG"] = "1"
+    if os.environ.get("OC_TOOLS_NOLOG", "0") == "1":
+        return
+    _LOG_ENABLED = True
+    _LOG_START = time.time()
+
+
+def oc_log_extra(key, value):
+    if _LOG_ENABLED:
+        _LOG_EXTRA[key] = value
+
+
+def oc_log_finish(exit_code):
+    global _LOG_FINISHED
+    if not _LOG_ENABLED or _LOG_FINISHED:
+        return
+    _LOG_FINISHED = True
+    logf = os.environ.get(
+        "OC_TOOLS_LOG",
+        os.path.join(
+            os.environ.get("OC_DEV_STATE",
+                           os.path.expanduser("~/.opencrabs/profiles/ops/opencrabs-dev")),
+            "tools.log",
+        ),
+    )
+    entry = {
+        "ts": now_iso(),
+        "tool": PROG,
+        "actor": os.environ.get("OPENCRABS_SESSION_ID", "unknown"),
+        "args": _LOG_ARGS[:500],
+        "exit": int(exit_code) if isinstance(exit_code, int) else 1,
+        "secs": round(time.time() - _LOG_START, 3),
+        "extra": _LOG_EXTRA,
+    }
+    try:
+        os.makedirs(os.path.dirname(logf), exist_ok=True)
+        with open(logf, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, separators=(",", ":")) + "\n")
+    except Exception:
+        pass
+
+
+# =============================================================================
+# Argument helpers
+# =============================================================================
+def parse_flags(argv, valued, boolean=()):
+    """Return (positional, {flag: value}). Unknown flags are a usage error —
+    silently ignoring one would let a typo register a question with no
+    recommendation while appearing to succeed."""
+    valued = set(valued)
+    boolean = set(boolean)
+    positional, flags, index = [], {}, 0
+    while index < len(argv):
+        token = argv[index]
+        if token in boolean:
+            flags[token] = True
+            index += 1
+            continue
+        if token in valued:
+            if index + 1 >= len(argv):
+                die(2, f"{token} requires a value")
+            if token in flags:
+                existing = flags[token]
+                flags[token] = existing + [argv[index + 1]] if isinstance(existing, list) \
+                    else [existing, argv[index + 1]]
+            else:
+                flags[token] = argv[index + 1]
+            index += 2
+            continue
+        if token.startswith("--"):
+            die(2, f"unknown flag {token} (see {PROG} --help)")
+        positional.append(token)
+        index += 1
+    return positional, flags
+
+
+def flag_list(flags, name):
+    value = flags.get(name)
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def normalise_questions(raw):
+    """Validate and normalise the ordered question array. Order is the contract
+    (#547: 'questions[] in call order'), so nothing here reorders."""
+    if not isinstance(raw, list) or not raw:
+        die(2, "at least one question is required")
+    out = []
+    for position, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            die(2, f"question {position} must be an object")
+        title = str(item.get("title") or "").strip()
+        description = str(item.get("description") or "").strip()
+        if not title:
+            die(2, f"question {position}: title is required")
+        if not description:
+            die(2, f"question {position}: description is required")
+        options = item.get("options") or []
+        if not isinstance(options, list):
+            die(2, f"question {position}: options must be an array")
+        options = [str(o) for o in options]
+        recommended = item.get("recommended")
+        if recommended is not None:
+            if not isinstance(recommended, int) or isinstance(recommended, bool):
+                die(2, f"question {position}: recommended must be an integer index")
+            if not options:
+                die(2, f"question {position}: recommended is set but the question "
+                       f"carries no options — there is nothing to recommend")
+            if not 0 <= recommended < len(options):
+                die(2, f"question {position}: recommended {recommended} is outside "
+                       f"options (0..{len(options) - 1})")
+        out.append({
+            "qid": f"q{position}",
+            "title": title,
+            "description": description,
+            "options": options,
+            "recommended": recommended,
+            "clarify": bool(item.get("clarify", True)),
+            "status": "open",
+            "answer": None,
+            "answered_at": None,
+            "answered_by": None,
+        })
+    return out
+
+
+def questions_from_flags(flags):
+    path = flags.get("--questions-file")
+    inline = flags.get("--questions-json")
+    if path:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception as exc:
+            die(2, f"--questions-file unreadable: {exc}")
+    if inline:
+        try:
+            return json.loads(inline)
+        except Exception as exc:
+            die(2, f"--questions-json is not valid JSON: {exc}")
+    if flags.get("--title") or flags.get("--description"):
+        return [{
+            "title": flags.get("--title", ""),
+            "description": flags.get("--description", ""),
+            "options": flag_list(flags, "--option"),
+            "recommended": int(flags["--recommended"]) if "--recommended" in flags else None,
+            "clarify": "--no-clarify" not in flags,
+        }]
+    die(2, "supply --questions-file, --questions-json, or --title/--description")
+
+
+# =============================================================================
+# ask — register an ordered question set (the single-writer cycle)
+# =============================================================================
+def cmd_ask(argv):
+    _, flags = parse_flags(
+        argv,
+        valued=["--factory", "--session", "--questions-file", "--questions-json",
+                "--title", "--description", "--option", "--recommended",
+                "--ttl-days", "--subject", "--close-when"],
+        boolean=["--no-clarify", "--json", "--no-publish"],
+    )
+    # --lane was REMOVED (owner order 2026-09-25): the lane is resolved from the
+    # asking session's own binding, so a caller cannot mislabel itself. parse_flags
+    # rejects it as an unknown flag, rc 2.
+    factory = (flags.get("--factory") or "").strip()
+    if not factory:
+        die(2, "ask requires --factory <KEY> — the factory key IS the standing "
+               "set id (e.g. --factory opencrabs-dev)")
+    # The asking session is read from the ENV (C1, owner order 2026-09-24) so a
+    # lane cannot register a question whose answer has nowhere to go.
+    session = (flags.get("--session")
+               or os.environ.get("OPENCRABS_SESSION_ID") or "").strip()
+    if not session:
+        die(2, "ask requires --session, and OPENCRABS_SESSION_ID is not set — "
+               "the register must record a RETURN ADDRESS")
+    if not UUID_RE.fullmatch(session):
+        die(2, f"--session must be a session UUID (got {session!r}); the return "
+               f"path delivers to this id")
+    lane, why = resolve_lane(session)
+    if lane is None:
+        # Owner order 2026-09-25: an unbound session can never receive the
+        # answer, so registering against it strands the question. Measured:
+        # 8 notify_queue rows across 5 zero-binding cron sessions, none
+        # drainable.
+        die(2, "refusing: %s. An unbound session can never receive the answer, "
+               "so a question registered against it would be stranded." % why)
+    questions = normalise_questions(questions_from_flags(flags))
+    try:
+        ttl_days = int(flags.get("--ttl-days", DEFAULT_TTL_DAYS))
+    except ValueError:
+        die(2, "--ttl-days must be an integer")
+    if not 1 <= ttl_days <= 365:
+        die(2, "--ttl-days must be between 1 and 365")
+    close_when = (flags.get("--close-when") or "").strip()
+
+    with RegisterLock():
+        data = read_register()
+        entry = find_set(data, factory)
+        created = entry is None
+        if entry is None:
+            entry = {
+                "id": factory,
+                "factory": factory,
+                # The lane that CREATED the standing set. Per-question lanes are
+                # authoritative for grouping; this field records provenance.
+                "lane": lane,
+                "session": session,
+                "subject": flags.get("--subject"),
+                "asked_at": now_iso(),
+                "ttl_days": ttl_days,
+                "status": "open",
+                "questions": [],
+            }
+            data["sets"].append(entry)
+        if entry.get("status") != "open":
+            # A factory set is never auto-closed, so this only happens after an
+            # explicit archive. Reopening silently would resurrect questions the
+            # owner already dismissed.
+            die(1, f"factory set {factory!r} is {entry.get('status')!r} — reopen "
+                   f"it explicitly before adding questions")
+        # qids must be UNIQUE across the standing set, and order is the contract,
+        # so the new questions continue the existing numbering rather than
+        # restarting at q1.
+        base = len(entry.get("questions", []))
+        for offset, question in enumerate(questions):
+            question["qid"] = "q%d" % (base + offset + 1)
+            # Each question carries its OWN lane and session: one standing set
+            # holds questions from many lanes, and the answer must return to the
+            # lane that asked it, not to whoever created the set.
+            question["lane"] = lane
+            question["session"] = session
+            question["asked_at"] = now_iso()
+            if close_when:
+                question.setdefault("close_when", close_when)
+        entry["questions"].extend(questions)
+        entry["updated_at"] = now_iso()
+        write_register_atomic(data)
+
+    oc_log_extra("set", factory)
+    oc_log_extra("questions", str(len(questions)))
+    oc_log_extra("lane", lane)
+    meta = republish(flags)
+    page = (meta or {}).get("url")
+    total, sets = open_totals()
+    oc_log_extra("open_total", str(total))
+    if flags.get("--json"):
+        print(json.dumps({"set": factory, "factory": factory, "lane": lane,
+                          "created": created, "registered": len(questions),
+                          "open_questions": total, "open_sets": sets,
+                          "page": page, "entry": entry},
+                         indent=2, ensure_ascii=False))
+    else:
+        # C2 (owner order): give back the TOTAL, not a card payload. The page is
+        # the surface now; the caller needs the count and the link.
+        print(f"registered {len(questions)} question(s) in {factory} "
+              f"(lane {lane}, ttl {ttl_days}d)")
+        print(f"{total} open question(s) across {sets} factory set(s)")
+        if page:
+            print(f"page {page}")
+    return 0
+
+# =============================================================================
+# list — every parked decision, OLDEST FIRST (that ordering is the instrument)
+# =============================================================================
+def cmd_list(argv):
+    _, flags = parse_flags(argv, valued=["--lane", "--session"],
+                           boolean=["--json", "--all", "--quiet"])
+    with RegisterLock():
+        data = read_register()
+    entries = data["sets"]
+    if "--all" not in flags:
+        entries = [s for s in entries if s.get("status") == "open"]
+    if flags.get("--session"):
+        entries = [s for s in entries if s.get("session") == flags["--session"]]
+
+    # Group by LANE, not by set (owner order 2026-09-25): one standing factory
+    # set holds questions from many lanes, so the SET is not the unit a reader
+    # cares about.
+    lanes = {}
+    for entry in entries:
+        for question in entry.get("questions", []):
+            lane = question.get("lane") or entry.get("lane") or "unknown"
+            lanes.setdefault(lane, []).append((entry, question))
+
+    if flags.get("--lane"):
+        lanes = {k: v for k, v in lanes.items() if k == flags["--lane"]}
+
+    # Counted AFTER the filter: the header must describe what is SHOWN, not the
+    # fleet. Pre-fix `list --lane X` printed the fleet total against the
+    # filtered lane count ("7 open ... across 1 lane(s)" for a lane holding
+    # zero), which sends a reader looking for questions that are not there.
+    # Same mis-scope reached --json (open_questions vs a filtered lanes[]).
+    total_open = sum(1 for pairs in lanes.values() for (_e, q) in pairs
+                     if not question_is_closed(q))
+
+    if flags.get("--json"):
+        rows = []
+        for lane in sorted(lanes):
+            pairs = lanes[lane]
+            rows.append({
+                "lane": lane,
+                "anchor": lane_anchor(lane),
+                "open": sum(1 for (_e, q) in pairs if not question_is_closed(q)),
+                "total": len(pairs),
+                "questions": [
+                    {"set": entry.get("id"), "qid": question.get("qid"),
+                     "title": question.get("title"),
+                     "status": question.get("status"),
+                     "age": fmt_age(question.get("asked_at")
+                                    or entry.get("asked_at"))}
+                    for (entry, question) in pairs],
+            })
+        print(json.dumps({"open_questions": total_open, "lanes": rows},
+                         indent=2, ensure_ascii=False))
+        return 0
+
+    # C2 (owner order): the OPEN COUNT is the primary output.
+    print(f"{total_open} open question(s) across {len(lanes)} lane(s)")
+    for lane in sorted(lanes):
+        pairs = lanes[lane]
+        n_open = sum(1 for (_e, q) in pairs if not question_is_closed(q))
+        n_closed = len(pairs) - n_open
+        # A lane with 0 open still lists its answered rows (unless --quiet), so
+        # the subtotal names that history rather than reading as a disagreement
+        # between the heading and the rows beneath it.
+        suffix = f", {n_closed} closed (history)" if n_closed and "--quiet" not in flags else ""
+        print(f"{lane} — {n_open} open{suffix}")
+        for (entry, question) in pairs:
+            if "--quiet" in flags and question_is_closed(question):
+                continue
+            detail = (f"    {entry.get('id')} {question.get('qid')}  "
+                      f"{question.get('title')}")
+            if question.get("status") == "open":
+                options = question.get("options") or []
+                recommended = question.get("recommended")
+                if options and recommended is not None and 0 <= recommended < len(options):
+                    detail += f"  (recommended: {options[recommended]})"
+            else:
+                detail += f"  -> {question.get('status')}"
+                if question.get("answer") is not None:
+                    detail += f": {question.get('answer')}"
+            print(detail)
+    return 0
+
+def archive_entries(data, entries):
+    """Append closed sets to archive.jsonl, then drop them from the live
+    register. Caller MUST hold the lock. Append-only, so an archive write
+    cannot destroy a previously archived set."""
+    if not entries:
+        return 0
+    ids = {e.get("id") for e in entries}
+    os.makedirs(store_dir(), exist_ok=True)
+    with open(archive_path(), "a", encoding="utf-8") as fh:
+        for entry in entries:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    data["sets"] = [s for s in data["sets"] if s.get("id") not in ids]
+    return len(ids)
+
+# =============================================================================
+# answer — record an answer against ONE question (card tap or page submit)
+# =============================================================================
+def cmd_answer(argv):
+    positional, flags = parse_flags(
+        argv,
+        valued=["--text", "--via", "--by"],
+        boolean=["--json", "--clarify", "--no-publish"],
+    )
+    if len(positional) < 2:
+        die(2, "answer requires <set-id> <question-id> [choice-index|clarify]")
+    set_id, qid = positional[0], positional[1]
+    choice = positional[2] if len(positional) > 2 else None
+    if flags.get("--clarify"):
+        choice = "clarify"
+    if choice is None and flags.get("--text") is None:
+        die(2, "supply a choice index, the literal 'clarify', or --text")
+    via = flags.get("--via") or "cli"
+    if via not in ("card", "page", "cli"):
+        die(2, "--via must be card, page or cli")
+
+    with RegisterLock():
+        data = read_register()
+        entry = find_set(data, set_id)
+        if entry is None:
+            die(1, f"no question set {set_id!r} in the register")
+        question = find_question(entry, qid)
+        if question is None:
+            die(1, f"set {set_id} has no question {qid!r}")
+        if question_is_closed(question):
+            # Idempotent by contract: a re-submit says so, it does not mutate.
+            # NOTE the predicate is CLOSED, not "not open": a CLARIFYING question
+            # is still awaiting the owner's real answer and MUST stay answerable.
+            # Keying on "not open" made a clarified question unanswerable forever.
+            if flags.get("--json"):
+                print(json.dumps({"set": set_id, "qid": qid,
+                                  "status": question.get("status"),
+                                  "answer": question.get("answer"),
+                                  "idempotent": True}, indent=2))
+            else:
+                print(f"{set_id}/{qid} is already {question.get('status')} "
+                      f"({question.get('answer')!r}) — re-submit ignored")
+            return 3
+
+        is_clarify = (str(choice).lower() == "clarify")
+        text = (flags.get("--text") or "").strip()
+        if is_clarify:
+            # AN EMPTY CLARIFY IS NOT A REQUEST (owner report 2026-09-25).
+            # Tapping Clarify with an empty box flipped status to "clarifying"
+            # and stored answer=None: a state change carrying no content, so the
+            # asking lane received "CLARIFY REQUESTED" with nothing to act on and
+            # the owner's real intent was lost. A clarify exists to ask a
+            # question; refuse one that asks nothing.
+            if not text:
+                die(2, "clarify requires --text: say what you want clarified "
+                       "(an empty Clarify tap records nothing)")
+            question["status"] = "clarifying"
+            question["answer"] = text
+            question["answer_kind"] = "clarify"
+        else:
+            options = question.get("options") or []
+            index = None
+            if choice is not None:
+                try:
+                    index = int(choice)
+                except ValueError:
+                    die(2, f"{choice!r} is neither an option index nor 'clarify'")
+                if not options:
+                    die(2, f"set {set_id}/{qid} has no options; answer with --text")
+                if not 0 <= index < len(options):
+                    die(2, f"option {index} is outside 0..{len(options) - 1}")
+            # A TYPED ANSWER IS NEVER DISCARDED (owner report 2026-09-25). The
+            # page pre-checks the recommended radio, so the browser always posts
+            # a choice index; a filled text box therefore arrives with BOTH
+            # fields set, and the old code took the index and dropped the text
+            # silently. Text WINS when present; the selected index is kept as
+            # context rather than lost.
+            if text:
+                question["answer"] = text
+                question["answer_kind"] = "text"
+                if index is not None:
+                    question["selected_option"] = index
+            elif index is not None:
+                question["answer"] = options[index]
+                question["answer_kind"] = "option"
+            else:
+                question["answer"] = flags.get("--text")
+                question["answer_kind"] = "text"
+            question["status"] = "answered"
+        question["answered_at"] = now_iso()
+        question["answered_by"] = flags.get("--by")
+        question["answered_via"] = via
+
+        remaining = [q for q in entry.get("questions", [])
+                     if not question_is_closed(q)]
+        # A factory set is NEVER auto-archived (owner order 2026-09-25): it stays
+        # open at 0..N questions, so the page, its lane sections and their
+        # anchors are permanent. Answering the last question leaves the set OPEN
+        # with 0 open questions.
+        archived = 0
+        entry["updated_at"] = now_iso()
+        write_register_atomic(data)
+
+    oc_log_extra("set", set_id)
+    oc_log_extra("qid", qid)
+    oc_log_extra("via", via)
+    meta = republish(flags)
+    page = (meta or {}).get("url")
+    total, sets = open_totals()
+    if flags.get("--json"):
+        print(json.dumps({"set": set_id, "qid": qid, "status": question["status"],
+                          "answer": question.get("answer"),
+                          "remaining": len(remaining), "archived": archived,
+                          "open_questions": total, "open_sets": sets,
+                          "page": page},
+                         indent=2, ensure_ascii=False))
+    else:
+        print(f"{set_id}/{qid} -> {question['status']}: {question.get('answer')!r}")
+        if remaining:
+            print(f"  {len(remaining)} question(s) still open in {set_id}")
+        else:
+            print(f"  {set_id} has no open questions (the set stays open)")
+        print(f"{total} open question(s) across {sets} set(s)")
+        if page:
+            print(f"  page {page}")
+    return 0
+
+# =============================================================================
+# amend — the CLARIFY path's return leg (#547 C5)
+#
+# A Clarify click records status=clarifying and the loop used to dead-end there:
+# the owner never saw the answer and the question could not be answered again.
+# amend edits the question and returns it to "open", so the loop closes.
+# =============================================================================
+def cmd_amend(argv):
+    _, flags = parse_flags(argv, valued=["--set", "--qid", "--title",
+                                         "--description", "--option",
+                                         "--recommended", "--by"],
+                           boolean=["--json", "--clear-options"])
+    set_id = (flags.get("--set") or "").strip()
+    qid = (flags.get("--qid") or "").strip()
+    if not set_id or not qid:
+        die(2, "amend requires --set <id> --qid <qid>")
+    fields = [k for k in ("--title", "--description", "--option",
+                          "--recommended", "--clear-options")
+              if k in flags]
+    if not fields:
+        die(2, "amend requires at least one of --title --description "
+               "--option --recommended --clear-options")
+
+    with RegisterLock():
+        data = read_register()
+        entry = next((s for s in data["sets"] if s.get("id") == set_id), None)
+        if entry is None:
+            die(1, f"no open question set {set_id!r}")
+        question = next((q for q in entry.get("questions", [])
+                         if q.get("qid") == qid), None)
+        if question is None:
+            die(1, f"set {set_id} has no question {qid!r}")
+
+        changed = []
+        if flags.get("--title"):
+            question["title"] = flags["--title"]
+            changed.append("title")
+        if flags.get("--description"):
+            question["description"] = flags["--description"]
+            changed.append("description")
+        if flags.get("--clear-options"):
+            question["options"] = []
+            question["recommended"] = None
+            changed.append("options")
+        options = flags.get("--option")
+        if options:
+            question["options"] = options if isinstance(options, list) else [options]
+            changed.append("options")
+        if flags.get("--recommended") is not None:
+            try:
+                index = int(flags["--recommended"])
+            except (TypeError, ValueError):
+                die(2, "--recommended must be an integer index")
+            count = len(question.get("options") or [])
+            if not 0 <= index < count:
+                die(2, f"--recommended {index} is outside 0..{max(count - 1, 0)}")
+            question["recommended"] = index
+            changed.append("recommended")
+
+        # The whole point: the question becomes ANSWERABLE again.
+        was = question.get("status")
+        question["status"] = "open"
+        question.pop("answer", None)
+        # answer_kind must go WITH the answer. Leaving "clarify" (or "text" /
+        # "option") on an OPEN, unanswered question is a record asserting
+        # something untrue -- the same class this register exists to remove.
+        # Found live 2026-09-25: q14 read status=open, answer=None, but
+        # answer_kind="clarify" after a clarify was amended back open.
+        question.pop("answer_kind", None)
+        question["amended_at"] = now_iso()
+        question["amend_count"] = int(question.get("amend_count") or 0) + 1
+        if flags.get("--by"):
+            question["amended_by"] = flags["--by"]
+        entry["status"] = "open"
+        write_register_atomic(data)
+
+    oc_log_extra("set", set_id)
+    oc_log_extra("qid", qid)
+    meta = republish(flags)
+    page = (meta or {}).get("url")
+    if flags.get("--json"):
+        print(json.dumps({"set": set_id, "qid": qid, "changed": changed,
+                          "status": question["status"], "was": was,
+                          "amend_count": question["amend_count"], "page": page},
+                         indent=2, ensure_ascii=False))
+    else:
+        print(f"{set_id}/{qid} amended ({', '.join(changed)}) — "
+              f"{was} -> open, amend #{question['amend_count']}")
+        if page:
+            print(f"  page {page}")
+    return 0
+
+# =============================================================================
+# withdraw — retract a question that has become moot (HQ 2026-09-25)
+#
+# "withdrawn" was in CLOSED_STATUSES and named by the law, but NOTHING WROTE IT
+# and --help listed no verb, so a lane whose question went moot had no way to
+# take it off the owner's page: it sat there until TTL expired. A register the
+# asker cannot correct is the noise it exists to remove.
+# =============================================================================
+def cmd_withdraw(argv):
+    _, flags = parse_flags(argv, valued=["--set", "--qid", "--text", "--by"],
+                           boolean=["--json", "--no-publish"])
+    set_id = (flags.get("--set") or "").strip()
+    qid = (flags.get("--qid") or "").strip()
+    if not set_id or not qid:
+        die(2, "withdraw requires --set <id> --qid <qid>")
+
+    with RegisterLock():
+        data = read_register()
+        entry = next((s for s in data["sets"] if s.get("id") == set_id), None)
+        if entry is None:
+            die(1, f"no open question set {set_id!r}")
+        question = next((q for q in entry.get("questions", [])
+                         if q.get("qid") == qid), None)
+        if question is None:
+            die(1, f"set {set_id} has no question {qid!r}")
+        if question_is_closed(question):
+            # Idempotent, like answer: a re-withdraw says so, it does not mutate.
+            if flags.get("--json"):
+                print(json.dumps({"set": set_id, "qid": qid,
+                                  "status": question.get("status"),
+                                  "idempotent": True}, indent=2))
+            else:
+                print(f"{set_id}/{qid} is already {question.get('status')} "
+                      f"-- re-withdraw ignored")
+            return 3
+        was = question.get("status")
+        question["status"] = "withdrawn"
+        question["withdrawn_at"] = now_iso()
+        if flags.get("--text"):
+            question["withdrawn_reason"] = flags["--text"]
+        if flags.get("--by"):
+            question["withdrawn_by"] = flags["--by"]
+        entry["updated_at"] = now_iso()
+        write_register_atomic(data)
+
+    oc_log_extra("set", set_id)
+    oc_log_extra("qid", qid)
+    meta = republish(flags)
+    page = (meta or {}).get("url")
+    total, sets = open_totals()
+    if flags.get("--json"):
+        print(json.dumps({"set": set_id, "qid": qid, "status": "withdrawn",
+                          "was": was, "open_questions": total,
+                          "open_sets": sets, "page": page},
+                         indent=2, ensure_ascii=False))
+    else:
+        print(f"{set_id}/{qid} withdrawn ({was} -> withdrawn)")
+        print(f"{total} open question(s) across {sets} set(s)")
+        if page:
+            print(f"  page {page}")
+    return 0
+
+# =============================================================================
+# lint — the register must not carry a uuid, a secret, or a broken predicate
+# =============================================================================
+def cmd_lint(argv):
+    _, flags = parse_flags(argv, valued=[], boolean=["--json"])
+    with RegisterLock():
+        data = read_register()
+    findings = []
+    for entry in data["sets"]:
+        set_id = entry.get("id")
+        lane = str(entry.get("lane") or "")
+        if UUID_RE.search(lane):
+            findings.append({"set": set_id, "qid": "-",
+                             "why": "lane is a session id, not a topic NAME"})
+        if not str(entry.get("session") or "").strip():
+            findings.append({"set": set_id, "qid": "-",
+                             "why": "missing return address (session)"})
+        for question in entry.get("questions", []):
+            qid = question.get("qid")
+            blob = f"{question.get('title', '')}\n{question.get('description', '')}"
+            if SECRET_RE.search(blob):
+                findings.append({"set": set_id, "qid": qid,
+                                 "why": "text matches the no-secrets pattern"})
+            options = question.get("options") or []
+            if options and question.get("recommended") is None:
+                findings.append({"set": set_id, "qid": qid,
+                                 "why": "options without a recommendation"})
+    if flags.get("--json"):
+        print(json.dumps({"findings": findings, "count": len(findings)}, indent=2))
+    elif not findings:
+        print("lint clean — no uuid lanes, no secrets, no unresolved predicates")
+    else:
+        for item in findings:
+            print(f"FINDING {item['set']}/{item['qid']}: {item['why']}")
+        print(f"-- {len(findings)} finding(s)")
+    return 1 if findings else 0
+
+# =============================================================================
+# gc — archive expired and fully-closed sets
+# =============================================================================
+def cmd_gc(argv):
+    _, flags = parse_flags(argv, valued=[], boolean=["--json", "--dry-run",
+                                                     "--no-publish",
+                                                     "--archive-closed"])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    with RegisterLock():
+        data = read_register()
+        mechanical, pred_notes = apply_mechanical_closures(data)
+        expired = []
+        for entry in data["sets"]:
+            if entry.get("status") != "open":
+                continue
+            ttl = int(entry.get("ttl_days") or DEFAULT_TTL_DAYS)
+            for question in entry.get("questions", []):
+                if question_is_closed(question):
+                    continue
+                asked = parse_iso(question.get("asked_at") or entry.get("asked_at"))
+                if not asked:
+                    continue
+                if asked.tzinfo is None:
+                    asked = asked.replace(tzinfo=datetime.timezone.utc)
+                if now >= asked + datetime.timedelta(days=ttl):
+                    # TTL expires the QUESTION, never the SET (owner order
+                    # 2026-09-25). A factory set stays open at 0..N so the page
+                    # and its lane anchors remain permanent.
+                    question["status"] = "expired"
+                    question["expired_at"] = now_iso()
+                    expired.append("%s %s" % (entry.get("id"), question.get("qid")))
+        closed = [s for s in data["sets"] if set_is_closed(s)]
+        closed_ids = {s.get("id") for s in closed}
+        if flags.get("--dry-run"):
+            moved = 0
+        else:
+            if mechanical or pred_notes or expired:
+                write_register_atomic(data)
+            # A factory set is NEVER auto-archived: only an explicit request
+            # moves one out of the live register.
+            victims = closed if flags.get("--archive-closed") else []
+            moved = archive_entries(data, victims)
+            if moved:
+                write_register_atomic(data)
+    if flags.get("--json"):
+        print(json.dumps({"expired": len(expired),
+                          "expired_questions": expired,
+                          "closed": len(closed_ids),
+                          "mechanically_closed": mechanical,
+                          "predicate_notes": pred_notes,
+                          "archived": moved,
+                          "dry_run": bool(flags.get("--dry-run"))}, indent=2))
+    else:
+        print(f"gc: {len(expired)} question(s) expired, {len(closed_ids)} "
+              f"set(s) with no open questions, {moved} archived"
+              + (" (dry run — nothing written)" if flags.get("--dry-run") else ""))
+        for item in expired:
+            print(f"  expired: {item}")
+        for item in mechanical:
+            print(f"  closed mechanically: {item}")
+        for note in pred_notes:
+            print(f"  SKIP {note}")
+    return 0
+
+# =============================================================================
+# notify — the RETURN PATH (#547). An answer must reach the calling session.
+# =============================================================================
+# Delivery is a SEPARATE verb, never folded into `answer`. `answer` is a pure
+# state mutation that holds RegisterLock; a network call inside that lock would
+# hold it for up to A2A_TIMEOUT seconds and block every other lane's ask/list —
+# on a store whose entire point is concurrent safety. Keeping it separate also
+# keeps rc honest: a delivery fault must not read as an answer fault.
+#
+# The destination is ALWAYS the session recorded in the register — never a
+# caller-supplied id, never a field from a browser. That is the security
+# property: a page or a card tap cannot redirect an answer to a third party.
+# There is deliberately no --session flag on this verb.
+#
+# Transport is the A2A gateway, NOT `opencrabs session notify`: the CLI hangs on
+# this host (rc=124, enqueues nothing) — fork issue #412.
+A2A_URL = os.environ.get("OC_QUESTIONS_A2A") or "http://127.0.0.1:18791/a2a/v1"
+A2A_TIMEOUT = int(os.environ.get("OC_QUESTIONS_A2A_TIMEOUT") or "20")
+NOTIFY_BODY_MAX = 3000
+
+def load_all_sets():
+    """Open sets PLUS archived ones. An answered set is normally ARCHIVED, so a
+    reader that only opens open.json cannot deliver the one answer that matters."""
+    sets = list(read_register()["sets"])
+    try:
+        with open(archive_path(), encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    sets.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except FileNotFoundError:
+        pass
+    return sets
+
+def find_set_anywhere(set_id):
+    for entry in load_all_sets():
+        if entry.get("id") == set_id:
+            return entry
+    return None
+
+def compose_answer_body(entry, qid=None):
+    questions = entry.get("questions") or []
+    if qid:
+        questions = [q for q in questions if q.get("qid") == qid]
+    answered = [q for q in questions
+                if q.get("answer") is not None
+                or q.get("status") in ("clarifying", "clarified")]
+    if not answered:
+        return None
+    # The lane comes from the ANSWERING questions, not from the set: one
+    # standing factory set holds questions from many lanes, and the set's own
+    # lane is only whoever created it. Naming the set's lane here would
+    # misattribute the answer to the wrong lane.
+    lanes = []
+    for question in answered:
+        lane = question.get("lane") or entry.get("lane") or "unknown"
+        if lane not in lanes:
+            lanes.append(lane)
+    lines = ["Open Questions — answer received (set %s, lane %s)"
+             % (entry.get("id"), ", ".join(lanes)), ""]
+    for question in answered:
+        lines.append("%s. %s" % (question.get("qid"), question.get("title")))
+        if question.get("answer") is None:
+            lines.append("   -> CLARIFY REQUESTED")
+        else:
+            lines.append("   -> %s" % (question.get("answer"),))
+        if question.get("answer_text"):
+            lines.append("   text: %s" % (question["answer_text"],))
+        lines.append("")
+    body = "\n".join(lines).strip()
+    if len(body) > NOTIFY_BODY_MAX:
+        body = body[:NOTIFY_BODY_MAX] + " (truncated)"
+    return body
+
+def a2a_deliver(session, body, mode="turn-end"):
+    import urllib.error
+    import urllib.request
+    payload = {"jsonrpc": "2.0", "id": "1", "method": "session/notify",
+               "params": {"session_id": session, "message": body, "mode": mode}}
+    request = urllib.request.Request(
+        A2A_URL, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=A2A_TIMEOUT) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001
+        return 0, "transport error: %s" % (exc,)
+
+def cmd_notify(argv):
+    positional, flags = parse_flags(
+        argv,
+        valued=["--set", "--lane", "--qid", "--mode"],
+        boolean=["--json", "--dry-run"],
+    )
+    set_id = flags.get("--set") or (positional[0] if positional else None)
+    lane = flags.get("--lane")
+    if not set_id and not lane:
+        die(2, "notify requires --set <set-id> or --lane <NAME>")
+    mode = flags.get("--mode") or "turn-end"
+    if mode not in ("turn-end", "interrupt", "quiet"):
+        die(2, "--mode must be turn-end, interrupt or quiet")
+
+    if set_id:
+        entry = find_set_anywhere(set_id)
+    else:
+        candidates = [s for s in load_all_sets() if s.get("lane") == lane]
+        entry = candidates[-1] if candidates else None
+    if entry is None:
+        die(1, "no question set %s in the register or the archive"
+            % (set_id or lane,))
+
+    session, lane_name, why = question_return_address(entry, flags.get("--qid"))
+    if why:
+        die(1, why)
+    if not UUID_RE.fullmatch(session):
+        # Refuse rather than guess: a wrong destination leaks an answer to an
+        # unrelated lane, and the register is the only authority for it.
+        die(3, "set %s records no usable calling session for qid %s — refusing "
+               "to guess a destination"
+               % (entry.get("id"), flags.get("--qid")))
+    body = compose_answer_body(entry, flags.get("--qid"))
+    if body is None:
+        die(1, "no answer recorded yet for set %s" % (entry.get("id"),))
+
+    if flags.get("--dry-run"):
+        if flags.get("--json"):
+            print(json.dumps({"set": entry.get("id"), "session": session,
+                              "mode": mode, "body": body},
+                             indent=2, ensure_ascii=False))
+        else:
+            print("would notify %s (set %s, %s):\n\n%s"
+                  % (lane_name, entry.get("id"), mode, body))
+        return 0
+
+    status, response = a2a_deliver(session, body, mode)
+    if flags.get("--json"):
+        print(json.dumps({"set": entry.get("id"), "session": session,
+                          "mode": mode, "http": status, "response": response},
+                         indent=2, ensure_ascii=False))
+    else:
+        print("notified %s (set %s) — http %s"
+              % (lane_name, entry.get("id"), status))
+    if status == 0:
+        return 4
+    if status >= 400:
+        return 3
+    return 0
+
+# =============================================================================
+# publish — static HTML into a fresh unguessable token directory (7-day TTL)
+# =============================================================================
+PAGE_TTL_DAYS = 7
+
+def inline_md(text):
+    """Escape FIRST, then apply the two inline forms worth having. The page is
+    world-readable, so nothing reaches the output unescaped."""
+    safe = html.escape(str(text), quote=False)
+    safe = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", safe)
+    safe = re.sub(r"`([^`]+?)`", r"<code>\1</code>", safe)
+    return safe
+
+_INLINE_RE = re.compile(r"(\*\*.+?\*\*|`[^`]+?`|\*[^*\n]+?\*)")
+
+def inline_spans(text):
+    """Inline emphasis -> typed SPANS, never an HTML fragment.
+
+    React escapes text nodes itself, so the old escape-then-inject round trip
+    disappears along with dangerouslySetInnerHTML. Returns a list of
+    {kind, text} dicts the renderer maps to strong/em/code/span."""
+    spans = []
+    for part in _INLINE_RE.split(str(text or "")):
+        if not part:
+            continue
+        if part.startswith("**") and part.endswith("**") and len(part) > 4:
+            spans.append({"kind": "Strong", "text": part[2:-2]})
+        elif part.startswith("`") and part.endswith("`") and len(part) > 2:
+            spans.append({"kind": "InlineCode", "text": part[1:-1]})
+        elif part.startswith("*") and part.endswith("*") and len(part) > 2:
+            spans.append({"kind": "Emphasis", "text": part[1:-1]})
+        else:
+            spans.append({"kind": "Text", "text": part})
+    return spans
+
+def parse_blocks(markdown):
+    """Markdown -> typed BLOCK DATA. A bounded parser, NOT a Markdown engine.
+
+    Fenced blocks, tables, headings, lists and paragraphs -- the same surface the
+    old HTML builder covered -- but returned as (type, props) pairs the spec turns
+    into catalog elements. An unknown type is then REJECTED by the catalog rather
+    than injected, which is the point of the rewrite.
+
+    Bounded by design: no nested lists, no block quotes, no reference links. A
+    richer parser is a renderer's job if wanted."""
+    lines = str(markdown or "").split("\n")
+    blocks, index = [], 0
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if stripped.startswith("```"):
+            lang = stripped[3:].strip()
+            body, index = [], index + 1
+            while index < len(lines) and not lines[index].strip().startswith("```"):
+                body.append(lines[index])
+                index += 1
+            index += 1
+            joined = "\n".join(body)
+            if lang == "mermaid":
+                blocks.append(("Mermaid", {"code": joined}))
+            else:
+                blocks.append(("CodeBlock", {"lang": lang, "code": joined}))
+            continue
+        if stripped.startswith("|") and stripped.endswith("|"):
+            rows = []
+            while index < len(lines) and lines[index].strip().startswith("|"):
+                rows.append(lines[index].strip())
+                index += 1
+            cells = [[c.strip() for c in r.strip("|").split("|")] for r in rows]
+            body = [c for c in cells
+                    if not all(x and set(x) <= set("-: ") for x in c)]
+            if body:
+                blocks.append(("Table", {
+                    "headers": [inline_spans(c) for c in body[0]],
+                    "rows": [[inline_spans(c) for c in row] for row in body[1:]]}))
+            continue
+        heading = re.match(r"^(#{1,3}) (.+)$", stripped)
+        if heading:
+            blocks.append(("Heading", {"level": len(heading.group(1)),
+                                       "text": heading.group(2)}))
+            index += 1
+            continue
+        bullet = re.match(r"^(?:[-*]|\d+[.)]) (.+)$", stripped)
+        if bullet:
+            ordered = bool(re.match(r"^\d+[.)] ", stripped))
+            items = []
+            while index < len(lines):
+                item = re.match(r"^(?:[-*]|\d+[.)]) (.+)$", lines[index].strip())
+                if not item:
+                    break
+                items.append(inline_spans(item.group(1)))
+                index += 1
+            blocks.append(("List", {"items": items, "ordered": ordered}))
+            continue
+        if stripped:
+            blocks.append(("Paragraph", {"spans": inline_spans(stripped)}))
+        index += 1
+    return blocks
+
+# ---------------------------------------------------------------- json-render
+# The page is built as a typed SPEC and rendered by a Node process. The catalog
+# in questions-render.mjs is a GUARDRAIL: a spec can only name a component
+# registered there, so an unknown type is rejected rather than rendering
+# nothing. The spec is therefore testable data -- its structure can be asserted
+# without parsing HTML.
+RENDER_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "questions-render.mjs")
+# The Node process needs node_modules beside it, so it runs from the build dir.
+# Overridable so the selftest can point at a scratch tree.
+RENDER_TIMEOUT = 30
+
+def render_dir():
+    return (os.environ.get("OC_QUESTIONS_RENDER_DIR")
+            or os.path.join(store_dir(), "build"))
+
+def build_spec(entries, slug, expires_at, action):
+    """The page as a json-render spec. FLAT: every element keyed in `elements`,
+    children are KEYS, and `root` names the top element.
+
+    Sections are per LANE, not per set (owner order 2026-09-25): one standing
+    factory set holds questions from many lanes, and the owner addresses a
+    sub-part of the page by LANE ANCHOR. A lane whose questions are all answered
+    STILL renders its section, so an anchor handed out yesterday keeps resolving
+    today -- the anchor's stability is the whole point of it.
+
+    `slug` rides in the form's `token` field: the answer backend's token check
+    is a SLUG check now. The field NAME is unchanged because that is the wire
+    contract the backend reads.
+    """
+    elements = {}
+    section_keys = []
+    # ONE pass, grouped by LANE across the WHOLE page. Grouping per (set, lane)
+    # made two sets from the same lane collide on one anchor: the element was
+    # overwritten and its key appended twice, so the page rendered one section
+    # N times and every other set's questions vanished. A page-wide group makes
+    # the anchor unique by construction.
+    by_lane = {}
+    for entry in entries:
+        for question in entry.get("questions", []):
+            lane = question.get("lane") or entry.get("lane") or "unknown"
+            by_lane.setdefault(lane, []).append((entry, question))
+    for lane in sorted(by_lane):
+        anchor = lane_anchor(lane)
+        question_keys = []
+        for (entry, question) in by_lane[lane]:
+                if question_is_closed(question):
+                    continue
+                set_id = entry["id"]
+                qid = question["qid"]
+                base = "%s-%s" % (set_id, qid)
+                options = question.get("options") or []
+                recommended = question.get("recommended")
+                # One element per BLOCK, in document order: the description is no
+                # longer a single opaque fragment but typed children of the question.
+                children = []
+                for position, (btype, bprops) in enumerate(
+                        parse_blocks(question.get("description") or "")):
+                    key = "%s-b%d" % (base, position)
+                    elements[key] = {"type": btype, "props": bprops, "children": []}
+                    children.append(key)
+                for index in range(len(options)):
+                    key = "%s-o%d" % (base, index)
+                    elements[key] = {
+                        "type": "Option",
+                        "props": {"label": options[index], "value": str(index),
+                                  "recommended": index == recommended},
+                        "children": []}
+                    children.append(key)
+                children.append(base + "-text")
+                children.append(base + "-submit")
+                if question.get("clarify"):
+                    children.append(base + "-clarify")
+                elements[base + "-text"] = {
+                    "type": "FreeText", "props": {"label": "free-text answer"},
+                    "children": []}
+                elements[base + "-submit"] = {
+                    "type": "Submit", "props": {"label": "Submit", "value": "submit"},
+                    "children": []}
+                if question.get("clarify"):
+                    elements[base + "-clarify"] = {
+                        "type": "Clarify", "props": {"label": "Clarify"}, "children": []}
+                elements[base] = {
+                    "type": "Question",
+                    "props": {"qid": qid, "title": question["title"],
+                              "recommendation": (options[recommended]
+                                                 if options and recommended is not None
+                                                 and 0 <= recommended < len(options)
+                                                 else None),
+                              "token": slug, "set": set_id, "action": action,
+                              "status": question.get("status") or "open",
+                              "clarifyText": (question.get("answer")
+                                              if question.get("status") == "clarifying"
+                                              else None),
+                              "footer": "asked %s / lane %s / %s %s"
+                                        % (fmt_age(question.get("asked_at")
+                                                   or entry.get("asked_at")),
+                                           lane, set_id, qid)},
+                    "children": children}
+                question_keys.append(base)
+        n_open = sum(1 for (_e, q) in by_lane[lane] if not question_is_closed(q))
+        # set_id: the section can span several sets, so it names the set only
+        # when there is exactly one. data-set is for the reader, not the tool.
+        set_ids = []
+        for (entry, _q) in by_lane[lane]:
+            if entry["id"] not in set_ids:
+                set_ids.append(entry["id"])
+        elements[anchor] = {
+            "type": "QuestionSet",
+            "props": {"set_id": ",".join(set_ids), "lane": lane, "anchor": anchor,
+                      "open": n_open},
+            "children": question_keys}
+        section_keys.append(anchor)
+    if not section_keys:
+        # Owner order 2026-09-24: the page is ALWAYS deployed, including when
+        # nothing is open. An empty register used to early-return, so the
+        # previous page kept serving a question that had already been answered
+        # and tapping it read as a failure. The empty state is typed DATA like
+        # every other block -- no second builder, no renderer change.
+        elements["empty-head"] = {
+            "type": "Heading",
+            "props": {"level": 2, "text": "No open questions"},
+            "children": []}
+        elements["empty-body"] = {
+            "type": "Paragraph",
+            "props": {"spans": [{"kind": "Text",
+                                 "text": "Nothing is waiting on you right now."}]},
+            "children": []}
+        section_keys = ["empty-head", "empty-body"]
+    elements["page"] = {
+        "type": "Page",
+        "props": {"title": "Open questions", "expires_at": expires_at},
+        "children": section_keys}
+    return {"root": "page", "elements": elements}
+
+def render_via_node(spec):
+    """(html, None) on success, (None, reason) on ANY failure.
+
+    The Node file is copied into the build dir first (write-if-different) so the
+    bare ESM imports resolve against the node_modules that lives there. Every
+    fault -- no node, no build dir, non-zero exit, timeout, empty output -- is a
+    reason, never an exception. The caller turns a reason into a NON-ZERO exit
+    and writes nothing, so a Node fault fails the command while the last good
+    page keeps serving."""
+    directory = render_dir()
+    if not os.path.isfile(RENDER_SRC):
+        return None, "renderer source missing"
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError as exc:
+        return None, "build dir unwritable (%s)" % exc.__class__.__name__
+    target = os.path.join(directory, "render.mjs")
+    try:
+        with open(RENDER_SRC, "r", encoding="utf-8") as fh:
+            wanted = fh.read()
+        current = None
+        if os.path.isfile(target):
+            with open(target, "r", encoding="utf-8") as fh:
+                current = fh.read()
+        if current != wanted:
+            with open(target, "w", encoding="utf-8") as fh:
+                fh.write(wanted)
+    except OSError as exc:
+        return None, "renderer copy failed (%s)" % exc.__class__.__name__
+    try:
+        proc = subprocess.run(
+            ["node", "render.mjs"],           # ARGV LIST: never shell=True
+            input=json.dumps(spec), capture_output=True, text=True,
+            cwd=directory,                    # explicit: never the caller's cwd
+            timeout=RENDER_TIMEOUT)
+    except FileNotFoundError:
+        return None, "node not installed"
+    except subprocess.TimeoutExpired:
+        return None, "renderer timed out"
+    except OSError as exc:
+        return None, "renderer spawn failed (%s)" % exc.__class__.__name__
+    if proc.returncode != 0:
+        # The LAST stderr line of a Node fault is its version banner, which says
+        # nothing about the cause. Prefer the Error line.
+        lines = [l for l in (proc.stderr or "").strip().splitlines() if l.strip()]
+        cause = next((l for l in lines if "Error" in l), None)
+        if cause is None and lines:
+            cause = lines[-1]
+        return None, "renderer rc=%d%s" % (proc.returncode,
+                                           (": " + cause.strip()) if cause else "")
+    if not proc.stdout.strip():
+        return None, "renderer produced no output"
+    return proc.stdout, None
+
+
+# The answer form is upgraded to an inline swap by htmx (owner question
+# 2026-09-24). It is VENDORED into the token dir and served from our own origin
+# rather than pulled from a CDN: the reader is in Russia, and a third-party
+# script the reader's browser must fetch is a dependency this page cannot
+# verify. Without the file the attributes are inert and the form still submits
+# as a normal POST, so the no-JS path degrades rather than breaks.
+HTMX_FILE = "htmx.min.js"
+HTMX_VERSION = "2.0.4"
+HTMX_URL = "https://unpkg.com/htmx.org@%s/dist/htmx.min.js" % HTMX_VERSION
+
+# The radio/text exclusivity affordance (owner report 2026-09-25). The page
+# pre-checks the recommended radio, so a reader who TYPES an answer was left
+# with a radio still selected -- confusing to the reader and, before the CLI
+# fix, destructive: the typed answer was discarded. This file makes the two
+# inputs visibly exclusive. It is a form AFFORDANCE, not client-side logic:
+# the page still submits and still works with no JS at all.
+UI_FILE = "questions.js"
+UI_JS = """(function () {
+  // htmx swaps only 2xx by default, so a REFUSED submit (400) left the reader
+  // with no feedback at all -- reported by the owner 2026-09-25 after tapping
+  // Clarify on an empty box. The backend already returns a proper swap
+  // fragment for errors; this just puts it on the page.
+  document.addEventListener('htmx:responseError', function (evt) {
+    var d = evt.detail || {};
+    var xhr = d.xhr;
+    var el = d.elt || d.target;
+    if (!xhr || !el || !xhr.responseText) return;
+    var sel = el.getAttribute && el.getAttribute('hx-target');
+    var node = sel ? document.querySelector(sel) : el;
+    if (node) node.outerHTML = xhr.responseText;
+  });
+
+  document.querySelectorAll('form').forEach(function (form) {
+    var box = form.querySelector('textarea[name="text"]');
+    var radios = form.querySelectorAll('input[name="choice"]');
+    if (!box || !radios.length) return;
+    box.addEventListener('input', function () {
+      if (box.value.trim() === '') return;
+      radios.forEach(function (r) { r.checked = false; });
+    });
+    radios.forEach(function (r) {
+      r.addEventListener('change', function () { if (r.checked) box.value = ''; });
+    });
+  });
+})();
+"""
+
+PAGE_CSS = """
+:root{
+--bg:#0f1218;--strip:#161a22;--line:#262c38;--soft:#1c212b;
+--text:#e7eaf0;--dim:#8a93a6;--amber:#f2b230;--amber-soft:rgba(242,178,48,.10);
+--teal:#3ecf9a;--teal-soft:rgba(62,207,154,.08);--on-accent:#04231a;--focus:#7aa7ff;
+--serif:'New York',ui-serif,Georgia,'Times New Roman',serif;
+--sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+--mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:light){:root{
+--bg:#f6f7f9;--strip:#fff;--line:#d9dee7;--soft:#eceff4;
+--text:#131720;--dim:#5d6678;--amber:#8a5f00;--amber-soft:rgba(138,95,0,.07);
+--teal:#0d6f4f;--teal-soft:rgba(13,111,79,.07);--on-accent:#fff;--focus:#1b5fd0;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;padding:2.25rem 1.25rem 4rem;background:var(--bg);color:var(--text);
+font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+body>*{max-width:46rem;margin-left:auto;margin-right:auto}
+.meta{font:.68rem/1.5 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+color:var(--dim);margin:0 0 .55rem}
+h1{font:600 clamp(1.5rem,4vw,1.95rem)/1.15 var(--serif);letter-spacing:-.02em;
+margin:0 0 2.25rem;padding-bottom:1.1rem;border-bottom:1px solid var(--line)}
+.set{padding-top:1.35rem;border-top:1px solid var(--line);margin:0 0 2.5rem}
+.set h2{font:600 .76rem/1.4 var(--mono);letter-spacing:.11em;text-transform:uppercase;
+color:var(--dim);margin:0 0 1.1rem;display:flex;align-items:center;gap:.55rem}
+.set h2::before{content:'';width:.5rem;height:.5rem;border-radius:50%;flex:none;
+background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
+.set.quiet h2::before{background:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.q{background:var(--strip);border:1px solid var(--line);border-left:3px solid var(--line);
+border-radius:0 7px 7px 0;padding:1.2rem 1.3rem 1.1rem;margin:0 0 .85rem}
+.qt{font:600 clamp(1.2rem,2.7vw,1.42rem)/1.3 var(--serif);letter-spacing:-.015em;margin:0}
+.rec{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;border-left:2px solid var(--amber);
+border-radius:0 5px 5px 0;background:var(--amber-soft);font-size:.95rem;line-height:1.5}
+.rec::before{content:'lane recommends';display:block;font:.6rem/1.4 var(--mono);
+letter-spacing:.15em;text-transform:uppercase;color:var(--amber);margin-bottom:.28rem}
+/* The clarifying state, made visible (owner report 2026-09-25): a question the
+reader asked to clarify rendered identically to an open one, so the state
+change was invisible and a reload looked like nothing had happened. Teal, not
+amber, so it cannot be mistaken for the recommendation band. */
+.clarifyband{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;
+border-left:2px solid var(--teal);border-radius:0 5px 5px 0;
+background:var(--teal-soft);font-size:.95rem;line-height:1.5;color:var(--text)}
+.clarifyband::before{content:'clarification requested';display:block;
+font:.6rem/1.4 var(--mono);letter-spacing:.15em;text-transform:uppercase;
+color:var(--teal);margin-bottom:.28rem}
+.opt{display:flex;gap:.65rem;align-items:flex-start;margin:.45rem 0;padding:.65rem .8rem;
+border:1px solid var(--line);border-radius:6px;cursor:pointer;
+transition:border-color .12s ease,background .12s ease}
+.opt:hover{border-color:var(--dim)}
+.opt:has(input:checked){border-color:var(--teal);background:var(--teal-soft)}
+.opt input{margin:.3rem 0 0;flex:none;accent-color:var(--teal)}
+.opt.cleared{border-style:dashed;opacity:.62}
+.chip{display:inline-block;vertical-align:middle;margin-left:.45rem;
+padding:.1rem .4rem;border-radius:3px;font:.58rem/1.5 var(--mono);
+letter-spacing:.1em;text-transform:uppercase;
+background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber)}
+form{margin:.2rem 0 0}
+textarea{display:block;width:100%;margin:1rem 0 .65rem;padding:.7rem .85rem;
+background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;
+font:inherit;resize:vertical;min-height:3.4rem}
+textarea::placeholder{color:var(--dim)}
+textarea:focus,button:focus-visible,input:focus-visible,summary:focus-visible{
+outline:2px solid var(--focus);outline-offset:2px}
+button{cursor:pointer;padding:.62rem 1.15rem;font:500 .9rem/1 var(--sans);border-radius:6px;
+border:1px solid var(--line);background:transparent;color:var(--text);
+margin:0 .5rem .35rem 0;transition:border-color .12s ease,background .12s ease,opacity .12s ease}
+button:hover{border-color:var(--dim)}
+button.primary{background:var(--teal);border-color:var(--teal);color:var(--on-accent);font-weight:600}
+button.ghost{color:var(--dim);border-style:dashed}
+.age{font:.68rem/1.5 var(--mono);color:var(--dim);margin:1rem 0 0;padding-top:.75rem;
+border-top:1px solid var(--soft)}
+.answered{border-left-color:var(--teal);background:var(--strip)}
+.answered .qt{color:var(--teal)}
+.answered p{margin:.4rem 0}
+.answered .k{font:.6rem/1.4 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+color:var(--dim);margin:.9rem 0 .1rem}
+.answered .v{font-size:.95rem;margin:0}
+.ok{color:var(--teal)}
+.warn{color:var(--amber)}
+.tblwrap{overflow-x:auto;max-width:100%;margin:.9rem 0}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{border:1px solid var(--line);padding:.5rem .7rem;text-align:left;vertical-align:top}
+th{background:var(--soft);font:600 .68rem/1.4 var(--mono);letter-spacing:.07em;
+text-transform:uppercase;color:var(--dim)}
+figure{margin:1.1rem 0;text-align:center}
+figure img{display:inline-block;max-width:100%;height:auto;border:1px solid var(--line);
+border-radius:6px;background:#fff}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.85rem;
+overflow-x:auto;font:.82rem/1.55 var(--mono)}
+code{font-family:var(--mono);font-size:.88em}
+p code,li code{background:var(--soft);padding:.08rem .3rem;border-radius:3px}
+ul,ol{margin:.7rem 0;padding-left:1.3rem}
+li{margin:.25rem 0}
+h4,h5,h6{font:600 .95rem/1.4 var(--serif);margin:1.2rem 0 .4rem}
+.empty{background:var(--strip);border:1px dashed var(--line);border-radius:7px;
+padding:2rem 1.3rem;text-align:center}
+.empty p{margin:.5rem 0;color:var(--dim)}
+@media (prefers-reduced-motion:no-preference){
+.answered{animation:rise .3s cubic-bezier(.2,.7,.3,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+}
+@media (max-width:40rem){
+body{padding:1.5rem .9rem 3rem}
+.q{padding:1rem .95rem}
+.opt{padding:.75rem .7rem}
+button{width:100%;margin:.35rem 0}
+.rec{padding:.7rem .8rem}
+}
+"""
+
+def page_wrapper(body, expires_at):
+    """The page shell. Stays in Python deliberately: the noindex directive, the
+    charset, the inline CSS and the TTL line are tested here and must not change
+    just because the BODY is now rendered from a spec.
+
+    The page is PERMANENT (owner order 2026-09-25), so the line says so rather
+    than printing an expiry that no longer exists."""
+    meta_line = (f"expires {expires_at}" if expires_at else "permanent link")
+    return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+            "<meta name=\"robots\" content=\"noindex, nofollow\">\n"
+            "<title>Open questions</title>\n"
+            # defer: the page is readable and submittable before htmx arrives,
+            # and the attributes are inert if the file never loads.
+            f'<script src="{HTMX_FILE}" defer></script>\n'
+            f'<script src="{UI_FILE}" defer></script>\n'
+            f"<style>{PAGE_CSS}</style>\n"
+            "</head><body>\n"
+            f'<p class="meta">{html.escape(meta_line)}</p>\n'
+            + body
+            + "\n</body></html>\n")
+
+
+def build_page(entries, slug, expires_at, action):
+    """The page body from a json-render spec, wrapped in the tested shell.
+
+    A renderer fault FAILS LOUDLY (owner order 2026-09-24). There is exactly one
+    builder: a second one emitting near-identical HTML made the artifact unable
+    to state its own provenance, so the fallback was deleted rather than kept as
+    a safety net. The fault exits non-zero with the reason on stderr and NOTHING
+    is written, so the previous page stays serving instead of a 404."""
+    spec = build_spec(entries, slug, expires_at, action)
+    html_body, why = render_via_node(spec)
+    if html_body is None:
+        oc_log_extra("publish_failed", why)
+        die(4, "renderer fault: %s" % why)
+    oc_log_extra("renderer", "json-render")
+    return page_wrapper(html_body, expires_at)
+
+
+# Why the last vendoring attempt ended as it did. Recorded so the selftest can
+# report the REASON rather than just the absence -- an unvendored page and a
+# failed download look identical from the artifact alone.
+_VENDOR_LAST = "not attempted"
+
+def vendor_htmx(directory):
+    global _VENDOR_LAST
+    """Copy the vendored htmx beside the page. Best-effort BY DESIGN: a failure
+    leaves the attributes inert and the form still submits normally, so this
+    must never fail a publish. Downloaded once into the build dir, then copied
+    from there -- the page never fetches it from a third party at runtime."""
+    target = os.path.join(directory, HTMX_FILE)
+    cached = os.path.join(render_dir(), HTMX_FILE)
+    try:
+        if not os.path.isfile(cached) or os.path.getsize(cached) < 10000:
+            import urllib.request
+            with urllib.request.urlopen(HTMX_URL, timeout=20) as response:
+                payload = response.read()
+            if len(payload) < 10000:
+                raise OSError("suspiciously small htmx payload")
+            with open(cached, "wb") as fh:
+                fh.write(payload)
+        with open(cached, "rb") as fh:
+            payload = fh.read()
+        if not os.path.isfile(target) or open(target, "rb").read() != payload:
+            with open(target, "wb") as fh:
+                fh.write(payload)
+        _VENDOR_LAST = "ok (%d bytes)" % len(payload)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        _VENDOR_LAST = "%s: %s" % (exc.__class__.__name__, exc)
+        oc_log_extra("htmx_vendor_failed", exc.__class__.__name__)
+        return False
+
+def vendor_ui(directory):
+    """Write the radio/text affordance beside the page. Unlike htmx this is
+    OURS, so it needs no download: it is written from the constant, which also
+    means a stale copy can never linger (the content is overwritten every
+    publish). Best-effort for the same reason as htmx: without it the form
+    still submits, the two inputs are just not visually exclusive."""
+    target = os.path.join(directory, UI_FILE)
+    try:
+        with open(target, "w", encoding="utf-8") as fh:
+            fh.write(UI_JS)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        oc_log_extra("ui_vendor_failed", exc.__class__.__name__)
+        return False
+
+def prune_pages(keep=None):
+    """Remove retired ROTATING-TOKEN directories, and only those.
+
+    The path is a constant slug now, so a token-shaped directory is residue from
+    the retired model: nothing can address it and its link is dead. The test is
+    the SHAPE (LEGACY_TOKEN_RE), never "anything that is not the current slug",
+    so a second factory's readable slug can never be swept by accident.
+
+    The live slug is NEVER removed: its link is bookmarked and permanent
+    (owner order 2026-09-25)."""
+    import shutil
+    removed = []
+    root = pages_dir()
+    if not os.path.isdir(root):
+        return removed
+    for name in sorted(os.listdir(root)):
+        if not os.path.isdir(os.path.join(root, name)):
+            continue
+        if keep and name == keep:
+            continue
+        if not LEGACY_TOKEN_RE.match(name):
+            continue
+        shutil.rmtree(os.path.join(root, name), ignore_errors=True)
+        removed.append(name)
+    return removed
+
+def page_is_live(token):
+    """(live, reason) — used by the selftest and by anything that needs to know
+    whether a token still serves."""
+    directory = os.path.join(pages_dir(), token)
+    meta_path = os.path.join(directory, "meta.json")
+    if not os.path.isfile(meta_path):
+        return False, f"no page for token {token!r}"
+    try:
+        with open(meta_path, "r", encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except Exception as exc:
+        return False, f"meta unreadable: {exc}"
+    if not os.path.isfile(os.path.join(directory, "index.html")):
+        return False, f"page directory {token!r} carries no index.html"
+    # NO expiry check: the slug is a permanent bookmark (owner order
+    # 2026-09-25). A 7-day page TTL is incompatible with a constant URL.
+    return True, "live at %s" % page_url(token)
+
+def latest_page():
+    """The current published page as (url, meta), or (None, reason).
+
+    publish records pages/latest.json so render does not have to guess which
+    token directory is current. A pointer whose token has expired or been pruned
+    reports the reason rather than omitting the link silently: a card with no
+    pointer and a card whose pointer is dead look identical otherwise, and only
+    one of them is a defect."""
+    path = latest_pointer_path()
+    if not os.path.isfile(path):
+        return None, "no page published yet (run: %s publish)" % PROG
+    try:
+        with open(path, encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return None, "pages/latest.json unreadable (%s)" % exc.__class__.__name__
+    token = meta.get("slug") or meta.get("token")
+    if not token:
+        return None, "pages/latest.json carries no slug"
+    live, why = page_is_live(token)
+    if not live:
+        return None, "the latest page is not live (%s)" % why
+    return page_url(token), None
+
+
+def open_totals():
+    """(open questions, open sets) across the WHOLE register — the number the
+    owner asked ask to return."""
+    with RegisterLock():
+        data = read_register()
+    sets = [s for s in data["sets"] if s.get("status") == "open"]
+    total = sum(1 for s in sets for q in s.get("questions", [])
+                if not question_is_closed(q))
+    return total, len(sets)
+
+
+def read_pointer():
+    """The current published page's meta, or None. Never raises: a corrupt
+    pointer is a condition to report, not a crash."""
+    path = latest_pointer_path()
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def republish(flags):
+    """C4: refresh the page after a register mutation, BEST-EFFORT.
+
+    A publish fault must never fail the mutation that triggered it — the
+    mutation is the caller's work and the page is a convenience — so this
+    swallows the fault and records it in the unified log instead."""
+    if flags.get("--no-publish"):
+        return None
+    try:
+        meta, _ = publish_page(quiet=True)
+        return meta
+    except SystemExit:
+        oc_log_extra("publish_failed", "SystemExit")
+        return None
+    except Exception as exc:
+        oc_log_extra("publish_failed", exc.__class__.__name__)
+        return None
+
+
+def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=False):
+    """Build or refresh the public page. (meta, pruned).
+
+    The path is a CONSTANT slug derived from the factory key, never a rotating
+    token (owner order 2026-09-25). A fresh URL per publish would 404 the link
+    the owner bookmarked, so re-render-on-change and a stable URL have to hold
+    together or the feature is unusable.
+
+    The page NEVER expires: a 7-day PAGE TTL is incompatible with a permanent
+    bookmark. DEFAULT_TTL_DAYS still governs QUESTION staleness -- a different
+    thing, and unchanged.
+
+    `--rotate` no longer mints a URL (there is nothing to mint). It forces a
+    full re-render and records rotated_at, which is all "rotate" can mean once
+    the path is constant. Changing the path means changing the FACTORY KEY, and
+    that has exactly one home: page_slug().
+
+    `set_id` narrows the rendered questions but NOT the path: every publish
+    writes the one shared page. republish() never passes it.
+    """
+    with RegisterLock():
+        data = read_register()
+    all_open = [s for s in data["sets"] if s.get("status") == "open"]
+    entries = all_open
+    if set_id:
+        entries = [s for s in entries if s.get("id") == set_id]
+        if not entries:
+            die(1, f"no open question set {set_id!r}")
+    entries = sorted(entries, key=lambda s: s.get("asked_at") or "")
+    slug = page_slug_for(all_open)
+    pruned = prune_pages(keep=slug)
+    # No early return on an empty register (owner order 2026-09-24): the page
+    # must always be deployed, so an empty state is rendered to the SAME slug
+    # rather than leaving the previous page serving stale questions.
+
+    created = datetime.datetime.now(datetime.timezone.utc)
+    directory = os.path.join(pages_dir(), slug)
+    # Render FIRST: a fault must leave no half-made directory behind and must
+    # leave the previous page serving (owner order 2026-09-24).
+    page = build_page(entries, slug, None, action or "/answer")
+    os.makedirs(directory, exist_ok=True)
+    vendor_htmx(directory)
+    vendor_ui(directory)
+    with open(os.path.join(directory, "index.html"), "w", encoding="utf-8") as fh:
+        fh.write(page)
+    # `expires_at` stays PRESENT and null: the live answer backend reads it and
+    # fails OPEN on an empty value (backend.py: expired() -> False when unset),
+    # so a null is "never expires" rather than "unknown".
+    meta = {"slug": slug, "token": slug,
+            "created_at": created.replace(microsecond=0).isoformat(),
+            "expires_at": None,
+            "action": action or "/answer", "sets": [e["id"] for e in entries],
+            "url": page_url(slug),
+            "rotated_at": (created.replace(microsecond=0).isoformat()
+                           if rotate else None),
+            "questions": sum(1 for e in entries for q in e.get("questions", [])
+                             if not question_is_closed(q))}
+    with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, indent=2)
+
+    # The pointer render reads. Written AFTER the page and its meta exist, so a
+    # reader never resolves a slug whose directory is still incomplete.
+    pointer = dict(meta)
+    with open(latest_pointer_path(), "w", encoding="utf-8") as fh:
+        json.dump(pointer, fh, indent=2)
+
+    oc_log_extra("slug", slug)
+    oc_log_extra("questions", str(meta["questions"]))
+    if not quiet:
+        print(f"published {meta['questions']} question(s) to {directory}")
+        print(f"  slug {slug} (permanent)")
+        print(f"  url {page_url(slug)}")
+        print(f"  action {meta['action']}")
+        for name in pruned:
+            print(f"  pruned retired token dir {name}")
+    return meta, pruned
+
+def cmd_publish(argv):
+    _, flags = parse_flags(argv, valued=["--set", "--action"],
+                           boolean=["--json", "--prune", "--rotate"])
+    action = flags.get("--action") or "/answer"
+    with RegisterLock():
+        data = read_register()
+    entries = [s for s in data["sets"] if s.get("status") == "open"]
+    if flags.get("--set"):
+        wanted = flags["--set"]
+        entries = [s for s in entries if s.get("id") == wanted]
+        if not entries:
+            die(1, f"no open question set {wanted!r}")
+    entries = sorted(entries, key=lambda s: s.get("asked_at") or "")
+
+    meta, pruned = publish_page(set_id=flags.get("--set"), action=action,
+                                prune=bool(flags.get("--prune")),
+                                rotate=bool(flags.get("--rotate")), quiet=True)
+    if flags.get("--json"):
+        print(json.dumps({"slug": meta["slug"], "token": meta["slug"],
+                          "path": os.path.join(pages_dir(), meta["slug"]),
+                          "meta": meta, "pruned": pruned}, indent=2))
+    else:
+        directory = os.path.join(pages_dir(), meta["slug"])
+        print(f"published {meta['questions']} question(s) to {directory}")
+        print(f"  slug {meta['slug']} (permanent)")
+        print(f"  url {page_url(meta['slug'])}")
+        print(f"  action {meta['action']}")
+        for name in pruned:
+            print(f"  pruned retired token dir {name}")
+    return 0
+
+# =============================================================================
+# selftest
+# =============================================================================
+def selftest():
+    import shutil
+    import subprocess
+
+    fails = []
+
+    def ck(cond, msg):
+        print(("  ok   - " if cond else "  FAIL - ") + msg)
+        if not cond:
+            fails.append(msg)
+
+    tool = os.path.abspath(__file__)
+    root = tempfile.mkdtemp(prefix="questions-selftest-")
+    env = dict(os.environ)
+    env["OC_QUESTIONS_DIR"] = os.path.join(root, "store")
+    env["OC_TOOLS_NOLOG"] = "1"
+    env["OC_QUESTIONS_BASE_URL"] = PRODUCTION_BASE_URL
+    # The asking session comes from the ENV and the lane is resolved from that
+    # session's OWN binding, so the fixture needs a REAL session DB. Two bound
+    # sessions (different lanes -- the multi-lane page) and one deliberately
+    # UNBOUND (the refusal leg).
+    session_a = "11111111-2222-3333-4444-555555555555"
+    session_b = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    session_unbound = "99999999-8888-7777-6666-555555555555"
+    fixture_db = os.path.join(root, "sessions.db")
+    env["OC_QUESTIONS_DB"] = fixture_db
+    env["OPENCRABS_SESSION_ID"] = session_a
+    import sqlite3 as _sqlite3
+    _db = _sqlite3.connect(fixture_db)
+    _db.executescript(
+        "create table session_bindings (session_id text primary key, "
+        "channel text not null, chat_id text not null, thread_id integer, "
+        "updated_at integer not null default 0);"
+        "create table channel_messages (id text primary key, channel text not null, "
+        "channel_chat_id text not null, topic_name text, created_at integer not null, "
+        "thread_id text);")
+    for _sid, _tid, _name in ((session_a, 39171, "Carrier tools"),
+                              (session_b, 43993, "Governance: Ontology & RSI")):
+        _db.execute("insert into session_bindings (session_id,channel,chat_id,"
+                    "thread_id,updated_at) values (?,?,?,?,0)",
+                    (_sid, "telegram", "-1003936827469", _tid))
+        _db.execute("insert into channel_messages (id,channel,channel_chat_id,"
+                    "topic_name,created_at,thread_id) values (?,?,?,?,?,?)",
+                    ("m-%d" % _tid, "telegram", "-1003936827469", _name, 1000,
+                     str(_tid)))
+    _db.commit()
+    _db.close()
+    # The Node renderer resolves its bare imports against node_modules BESIDE
+    # the render file, so the fixture links the real installed tree into its own
+    # render dir. A symlink keeps the test from writing the live store while
+    # still exercising the json-render path rather than silently falling back.
+    fixture_render = os.path.join(root, "render")
+    real_modules = os.path.join(profile_home(), "questions", "build", "node_modules")
+    try:
+        os.makedirs(fixture_render, exist_ok=True)
+        link = os.path.join(fixture_render, "node_modules")
+        if os.path.isdir(real_modules) and not os.path.exists(link):
+            os.symlink(real_modules, link)
+    except OSError:
+        pass
+    env["OC_QUESTIONS_RENDER_DIR"] = fixture_render
+
+    def run(*args):
+        proc = subprocess.run([tool] + list(args), env=env, capture_output=True,
+                              text=True, timeout=90)
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def store_json():
+        with open(os.path.join(env["OC_QUESTIONS_DIR"], "open.json"),
+                  encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def get_set(sid):
+        """None instead of an exception: a missing set is a FAIL row, not a
+        traceback. A selftest that dies mid-way reports nothing at all."""
+        for item in store_json()["sets"]:
+            if item.get("id") == sid:
+                return item
+        return None
+
+    try:
+        # -- 1. ask -> list -------------------------------------------------
+        rc, out, _ = run("ask", "--factory", "f-cron-lane",
+                         "--questions-json", json.dumps([
+                             {"title": "Ship the second half?",
+                              "description": "**Context:** measured.",
+                              "options": ["Ship", "Hold"], "recommended": 1},
+                             {"title": "Which cadence?",
+                              "description": "Two options.",
+                              "options": ["6h", "12h"], "recommended": 0},
+                         ]))
+        ck(rc == 0, "ask registers a set (rc=%d)" % rc)
+        rc, out, _ = run("list")
+        ck(rc == 0 and "Ship the second half?" in out and "Which cadence?" in out,
+           "list shows the registered questions")
+
+        # -- 2. ORDER + PER-QUESTION RECOMMENDATIONS (owner criterion) ------
+        sets = store_json()["sets"]
+        ck(len(sets) == 1, "exactly one set registered (%d)" % len(sets))
+        entry = sets[0] if sets else {}
+        set_id = entry.get("id", "")
+        questions = entry.get("questions", [])
+        ck([q.get("qid") for q in questions] == ["q1", "q2"],
+           "question order is CALL order (q1, q2)")
+        ck(len(questions) == 2 and questions[0].get("recommended") == 1
+           and questions[1].get("recommended") == 0,
+           "per-question recommendations preserved (1 then 0, not shared)")
+        ck(set_id == "f-cron-lane",
+           "the FACTORY KEY IS the set id (%r)" % set_id)
+
+        # -- 3. CONCURRENT ASK: two writers lose NEITHER (owner criterion) --
+        procs = [subprocess.Popen(
+            [tool, "ask", "--factory", "f-race-%d" % i,
+             "--title", "Race question %d" % i, "--description", "concurrent"],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            for i in (1, 2)]
+        codes = [p.wait(timeout=90) for p in procs]
+        ck(codes == [0, 0], "two concurrent ask calls both exit 0 (%s)" % codes)
+        racers = [s for s in store_json()["sets"] if s["id"].startswith("f-race-")]
+        ck(len(racers) == 2,
+           "NEITHER concurrent set was lost (%d of 2 present)" % len(racers))
+        ck(len({s["id"] for s in store_json()["sets"]}) == 3,
+           "…and the ids are distinct (3 sets, 3 ids)")
+        ck(os.path.isfile(os.path.join(env["OC_QUESTIONS_DIR"], "open.json")),
+           "the atomic replace left a complete register, not a .tmp")
+
+        # -- 4. C1/C2/C3: the session comes from the ENV, ask returns the
+        # TOTAL, and the card/button leg is GONE (owner order 2026-09-24:
+        # "the calling lane should not get a card with buttons. delete that leg
+        # - the user decisions are collected via the page").
+        ck("render" not in _VERBS,
+           "the card leg is DELETED -- render is not a verb any more")
+        gone = "def cmd_" + "render"
+        ck(gone not in open(os.path.abspath(__file__), encoding="utf-8").read(),
+           "\u2026and the function is gone from the source, not merely unrouted")
+        envask = dict(env)
+        envask["OPENCRABS_SESSION_ID"] = session_a
+        proc = subprocess.run([tool, "ask", "--factory", "f-env-lane",
+                               "--title", "t", "--description", "d",
+                               "--option", "a", "--option", "b",
+                               "--recommended", "0", "--no-publish", "--json"],
+                              env=envask, capture_output=True, text=True, timeout=90)
+        ck(proc.returncode == 0,
+           "ask needs NO --session when OPENCRABS_SESSION_ID is set (rc=%d)"
+           % proc.returncode)
+        envset = {}
+        try:
+            envset = json.loads(proc.stdout)
+        except ValueError:
+            pass
+        ck(envset.get("entry", {}).get("session") == session_a,
+           "\u2026and it records the ENV session as the return address (%r)"
+           % envset.get("entry", {}).get("session"))
+        ck(isinstance(envset.get("open_questions"), int)
+           and envset["open_questions"] >= 1,
+           "ask returns the OPEN-QUESTION TOTAL, not a card payload (%r)"
+           % envset.get("open_questions"))
+        ck("cards" not in envset and "buttons" not in envset,
+           "\u2026and the payload carries no card and no buttons")
+        # The owner reads the TEXT, so the total must be there too -- asserting
+        # only the JSON field let the human-readable half be removed silently.
+        proc = subprocess.run([tool, "ask", "--factory", "f-text-lane",
+                               "--title", "t", "--description", "d"],
+                              env=envask, capture_output=True, text=True, timeout=90)
+        ck(proc.returncode == 0 and "open question(s) across" in proc.stdout,
+           "ask PRINTS the open-question total, not only a json field (%r)"
+           % proc.stdout.strip().splitlines()[-2:])
+
+        # an env var that is not a UUID is refused: the register must hold a
+        # REAL return address, not a guess.
+        envbad = dict(env)
+        envbad["OPENCRABS_SESSION_ID"] = "not-a-uuid"
+        proc = subprocess.run([tool, "ask", "--factory", "f-bad-env",
+                               "--title", "t", "--description", "d"],
+                              env=envbad, capture_output=True, text=True, timeout=90)
+        ck(proc.returncode == 2,
+           "a non-UUID OPENCRABS_SESSION_ID is refused rc=2 (rc=%d)"
+           % proc.returncode)
+        envnone = dict(env)
+        envnone.pop("OPENCRABS_SESSION_ID", None)
+        proc = subprocess.run([tool, "ask", "--factory", "f-no-addr",
+                               "--title", "t", "--description", "d"],
+                              env=envnone, capture_output=True, text=True, timeout=90)
+        ck(proc.returncode == 2,
+           "with no session anywhere, ask refuses rather than registering a "
+           "question whose answer has nowhere to go (rc=%d)" % proc.returncode)
+
+        # -- 5. answer, idempotence, clarify -------------------------------
+        rc, out, _ = run("answer", set_id, "q1", "1", "--via", "card")
+        ck(rc == 0 and "Hold" in out,
+           "answer records the OPTION TEXT, not the index (%r)" % out.strip()[:40])
+        rc, out, _ = run("answer", set_id, "q1", "1", "--via", "card")
+        ck(rc == 3, "re-submit on a closed question is rc=3, idempotent (rc=%d)" % rc)
+        rc, out, _ = run("answer", set_id, "q2", "clarify", "--text", "explain 12h")
+        ck(rc == 0, "clarify is recorded (rc=%d)" % rc)
+        current = get_set(set_id)
+        q2 = (current or {}).get("questions", [{}, {}])
+        q2 = q2[1] if len(q2) > 1 else {}
+        ck(q2.get("status") == "clarifying" and q2.get("answer") == "explain 12h",
+           "clarify does NOT close the question (status=%r)" % q2.get("status"))
+        ck(set_id in {s["id"] for s in store_json()["sets"]},
+           "…and the SET stays live while a question is merely clarifying")
+        rc, _, _ = run("answer", set_id, "q2", "0")
+        ck(rc == 0, "a later real answer closes the clarifying question")
+        # Owner order 2026-09-25: a factory set is NEVER auto-archived. It
+        # stays open at 0..N questions, so the page, its lane sections and
+        # their anchors are permanent.
+        live = get_set(set_id)
+        ck(live is not None and live.get("status") == "open",
+           "a fully answered factory set STAYS OPEN (status=%r)"
+           % (live or {}).get("status"))
+        ck(sum(1 for q in (live or {}).get("questions", [])
+               if not question_is_closed(q)) == 0,
+           "…with 0 open questions, asserted on the RECORD")
+
+        # -- 5b. a TYPED answer is NEVER discarded (owner report 2026-09-25) -
+        # The page pre-checks the recommended radio, so the browser always
+        # posts a choice index; a filled text box therefore arrives with BOTH
+        # fields set. The old code took the index and dropped the text
+        # silently, so the recorded answer became the radio label. Text wins,
+        # and the selected index is kept as context rather than lost.
+        rc, out, _ = run("ask", "--factory", set_id, "--title", "typed",
+                         "--description", "d", "--option", "A", "--option", "B")
+        ck(rc == 0, "a further question joins the SAME standing set (rc=%d)" % rc)
+        rc, out, _ = run("answer", set_id, "q3", "1",
+                         "--text", "  the typed answer  ")
+        ck(rc == 0, "answer accepts a choice index AND text together (rc=%d)" % rc)
+        cur = get_set(set_id) or {}
+        q3 = next((q for q in cur.get("questions", [])
+                   if q.get("qid") == "q3"), {})
+        ck(q3.get("answer") == "the typed answer",
+           "a TYPED answer WINS over the pre-checked radio (%r)"
+           % q3.get("answer"))
+        ck(q3.get("answer_kind") == "text",
+           "\u2026and the record says which it was: answer_kind=%r"
+           % q3.get("answer_kind"))
+        ck(q3.get("selected_option") == 1,
+           "\u2026with the selected index KEPT as context (%r)"
+           % q3.get("selected_option"))
+        # The discriminator: an index with NO text must still record the option.
+        rc, out, _ = run("ask", "--factory", set_id, "--title", "index only",
+                         "--description", "d", "--option", "A", "--option", "B")
+        rc, out, _ = run("answer", set_id, "q4", "0")
+        cur = get_set(set_id) or {}
+        q4 = next((q for q in cur.get("questions", [])
+                   if q.get("qid") == "q4"), {})
+        ck(q4.get("answer") == "A" and q4.get("answer_kind") == "option",
+           "an index with NO text still records the OPTION (%r/%r)"
+           % (q4.get("answer"), q4.get("answer_kind")))
+
+        # -- 5b-2. an EMPTY clarify is refused, and the clarify STATE is visible
+        # (owner report 2026-09-25). Two halves of ONE report:
+        #   (i) tapping Clarify with an empty box recorded status=clarifying
+        #       with answer=None -- a state change carrying no content, so the
+        #       asking lane received "CLARIFY REQUESTED" with nothing to act on;
+        #   (ii) a clarifying question rendered IDENTICALLY to an open one, so
+        #       the owner reloaded and saw no change at all.
+        rc, out, _ = run("ask", "--factory", set_id, "--title", "clarify guard",
+                         "--description", "d", "--option", "A")
+        ck(rc == 0, "a question is registered to test the clarify guard (rc=%d)" % rc)
+        _cq = (get_set(set_id) or {}).get("questions", [{}])[-1].get("qid")
+        rc, out, err = run("answer", set_id, _cq, "clarify")
+        ck(rc == 2, "an EMPTY clarify is refused rc=2 (rc=%d)" % rc)
+        ck("clarify requires --text" in (err or out),
+           "\u2026naming the remedy (%r)" % (err or out).strip()[:70])
+        ck((get_set(set_id) or {}).get("questions", [{}])[-1].get("status") == "open",
+           "\u2026and the question is left OPEN, never half-transitioned")
+        rc, out, _ = run("answer", set_id, _cq, "clarify", "--text", "which option?")
+        ck(rc == 0, "a clarify WITH text is still accepted (rc=%d)" % rc)
+        ck((get_set(set_id) or {}).get("questions", [{}])[-1].get("status")
+           == "clarifying", "\u2026and records the clarifying state")
+        rc, out, _ = run("publish", "--json")
+        _uidir = json.loads(out)["path"]
+        _body = open(os.path.join(_uidir, "index.html"), encoding="utf-8").read()
+        ck("clarifyband" in _body,
+           "the page RENDERS the clarifying state, so a reload shows the change")
+        ck("Clarification requested" in _body,
+           "\u2026naming the reader's own request in the band")
+        _uijs = open(os.path.join(_uidir, "questions.js"), encoding="utf-8").read()
+        ck("htmx:responseError" in _uijs,
+           "the vendored UI surfaces a REFUSED submit -- htmx swaps only 2xx, "
+           "so a 400 was previously invisible to the reader")
+        # (iii) amend must clear answer_kind WITH the answer. Found live: q14
+        # read status=open, answer=None, answer_kind="clarify" after a clarify
+        # was amended back open -- a durable record asserting something untrue.
+        rc, out, _ = run("amend", "--set", set_id, "--qid", _cq,
+                         "--description", "d2")
+        ck(rc == 0, "a clarified question can be amended back open (rc=%d)" % rc)
+        _aq = (get_set(set_id) or {}).get("questions", [{}])[-1]
+        ck(_aq.get("status") == "open" and not _aq.get("answer")
+           and not _aq.get("answer_kind"),
+           "\u2026and amend clears answer AND answer_kind together "
+           "(status=%r answer=%r kind=%r)"
+           % (_aq.get("status"), _aq.get("answer"), _aq.get("answer_kind")))
+
+        # -- 5c. withdraw — the moot-question exit (HQ 2026-09-25) -----------
+        # "withdrawn" was in CLOSED_STATUSES and named by the law, but nothing
+        # wrote it: a lane whose question went moot had no way to retract it.
+        rc, out, _ = run("ask", "--factory", set_id, "--title", "moot",
+                         "--description", "d")
+        ck(rc == 0, "a question to withdraw registers (rc=%d)" % rc)
+        rc, out, _ = run("withdraw", "--set", set_id, "--qid", "q5",
+                         "--text", "became moot")
+        ck(rc == 0, "withdraw closes a moot question (rc=%d)" % rc)
+        cur = get_set(set_id) or {}
+        q5 = next((q for q in cur.get("questions", [])
+                   if q.get("qid") == "q5"), {})
+        ck(q5.get("status") == "withdrawn",
+           "\u2026status is withdrawn (%r)" % q5.get("status"))
+        ck(q5.get("withdrawn_reason") == "became moot",
+           "\u2026the reason is recorded (%r)" % q5.get("withdrawn_reason"))
+        ck(question_is_closed(q5),
+           "\u2026and it counts as CLOSED, so it leaves the open total")
+        rc, out, _ = run("withdraw", "--set", set_id, "--qid", "q5")
+        ck(rc == 3, "a re-withdraw is idempotent rc=3 (rc=%d)" % rc)
+        rc, out, _ = run("withdraw", "--set", set_id)
+        ck(rc == 2, "withdraw without --qid is a usage error (rc=%d)" % rc)
+
+        # -- 5d. the help text documents the flags that EXIST (HQ 2026-09-25)
+        # The help opened with `ask --lane <NAME>` -- a flag that now exits 2 --
+        # and never mentioned --factory, the one flag you cannot call without.
+        rc, out, _ = run("--help")
+        ck(rc == 0, "help exits 0 (rc=%d)" % rc)
+        ck("--factory" in out,
+           "help documents --factory (the required flag)")
+        synopsis = [ln for ln in out.splitlines()
+                    if ln.strip().startswith("ask ")][0]
+        ck("--factory" in synopsis and "--lane" not in synopsis,
+           "the ask SYNOPSIS is --factory and carries no --lane (%r)"
+           % synopsis.strip())
+        ck("withdraw" in out, "help lists the withdraw verb")
+        ck("pages/<slug>/" in out,
+           "help names the constant-slug page path, not pages/<token>/")
+
+        # -- 6. lint --------------------------------------------------------
+        # --lane was REMOVED (owner order 2026-09-25): the lane is resolved
+        # from the asking session's own binding, so a caller cannot label
+        # itself and cannot mislabel where an answer came from.
+        rc, _, err = run("ask", "--lane", "Cron lane", "--title", "t",
+                         "--description", "d")
+        ck(rc == 2 and "--lane" in err,
+           "ask REJECTS the removed --lane flag (rc=%d)" % rc)
+        rc, _, _ = run("ask", "--factory", "f-leaky-lane",
+                       "--questions-json", json.dumps([
+                           {"title": "Leak", "description": "key at /root/x"}]))
+        ck(rc == 0, "a name lane with leaky text still registers (lint, not ask, judges it)")
+        rc, out, _ = run("lint", "--json")
+        findings = json.loads(out)["findings"]
+        ck(rc == 1 and any("secret" in f["why"] for f in findings),
+           "lint finds the secret pattern and returns rc=1")
+
+        # -- 7. gc: TTL expiry ---------------------------------------------
+        path = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        data = store_json()
+        for item in data["sets"]:
+            if item["id"] == "f-leaky-lane":
+                for _q in item["questions"]:
+                    _q["asked_at"] = "2020-01-01T00:00:00+00:00"
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        rc, out, _ = run("gc", "--dry-run", "--json")
+        dry = json.loads(out)
+        ck(dry["expired"] >= 1 and dry["archived"] == 0,
+           "gc --dry-run reports the expiry without writing (expired=%d)" % dry["expired"])
+        rc, out, _ = run("gc", "--json")
+        result = json.loads(out)
+        ck(result["expired"] >= 1,
+           "gc expires the QUESTION (expired=%d)" % result["expired"])
+        ck(result["archived"] == 0,
+           "…and archives NOTHING without --archive-closed (%d)"
+           % result["archived"])
+        leaked = get_set("f-leaky-lane")
+        ck(leaked is not None and leaked.get("status") == "open",
+           "…so the factory set is STILL in the live register")
+        ck(any(q.get("status") == "expired"
+               for q in (leaked or {}).get("questions", [])),
+           "…while its question is expired")
+        rc, out, _ = run("gc", "--archive-closed", "--json")
+        ck(json.loads(out)["archived"] >= 1,
+           "gc --archive-closed archives it on EXPLICIT request (archived=%d)"
+           % json.loads(out)["archived"])
+
+        # -- 8. publish: token, noindex, TTL, prune ------------------------
+        rc, _, _ = run("ask", "--factory", "f-page-lane",
+                       "--questions-json", json.dumps([
+                           {"title": "Rendered?",
+                            "description": "| option | cost |\n|---|---|\n"
+                                           "| 6h | 4/day |\n| 12h | 2/day |\n\n"
+                                           "```mermaid\nflowchart TD\n  A --> B\n```",
+                            "options": ["6h", "12h"], "recommended": 0}]))
+        ck(rc == 0, "a description with a table and a mermaid fence registers")
+        rc, out, _ = run("publish", "--json")
+        page = json.loads(out)
+        ck(rc == 0 and page["slug"] == page_slug(page["slug"]),
+           "the page path is a SLUG, not a rotating token (%r)" % page["slug"])
+        ck(page["slug"] == page["token"],
+           "…and the retired 'token' key still mirrors it (backend compat)")
+        body = open(os.path.join(page["path"], "index.html"), encoding="utf-8").read()
+        ck("noindex" in body, "the page carries the noindex directive")
+        ck("<table>" in body, "a Markdown table in a description renders as a <table>")
+        ck("mermaid.ink" in body, "a ```mermaid fence renders through mermaid.ink")
+        ck('class="tblwrap"' in body,
+           "\u2026and the table is wrapped in a scroll container (renderer-side, "
+           "so a wide table cannot blow the viewport open)")
+        # owner report 2026-09-24 21:05Z: "not mobile friendly". Root cause: the
+        # shell declared NO viewport at all, so a phone laid the page out at a
+        # ~980px virtual width and zoomed out to fit -- tiny text, desktop
+        # geometry. The stylesheet was desktop-only besides.
+        ck('name="viewport"' in body and "width=device-width" in body,
+           "the page declares a viewport (absent it a phone renders at ~980px "
+           "and zooms out -- the owner-visible 'not mobile friendly')")
+        ck("@media (max-width:40rem)" in body,
+           "\u2026and the stylesheet carries a narrow-screen breakpoint")
+        ck("*{box-sizing:border-box}" in body,
+           "\u2026and a box-sizing reset so padding cannot overflow the viewport")
+        ck(".tblwrap{overflow-x:auto" in body,
+           "\u2026and the scroll wrapper has a rule to go with it")
+        # owner-visible misrender: the emitted form had NO stylesheet rule at
+        # all, so a bare <textarea> (inline, ~20 columns by default) collapsed
+        # the free-text field and both buttons onto one line.
+        for _rule in ("form{", "textarea{"):
+            ck(_rule in body, "the stylesheet carries the %s rule" % _rule)
+        # The button rule moved from the descendant selector `form button{` to a
+        # single `button{` when the page was restyled. Assert the PROPERTY that
+        # fixed the owner-visible collapse -- a button rule carrying padding --
+        # not the spelling of the selector, or a restyle passes on an unstyled
+        # control.
+        _btn = re.search(r"\nbutton\{([^}]*)\}", body)
+        ck(_btn is not None and "padding" in _btn.group(1),
+           "a button rule sizes the control (padding present)")
+        # the age helper already ended in a unit word, so the call sites'
+        # "asked " prefix rendered the double-worded "asked 1.7h old".
+        _ages = set(re.findall(r"asked [0-9a-z.]* (ago|old)", body))
+        ck(_ages == {"ago"},
+           "the age paragraph is not double-worded (%r)" % (sorted(_ages),))
+        # owner report 2026-09-24 22:24Z: "Why two expiration lines?" Two
+        # emitters carried the same expiry -- the shell (page_wrapper) and the
+        # Page catalog component, which rendered props.expires_at as well. The
+        # shell owns the visible line; exactly one must reach the page.
+        _ttl = body.count('class="meta">')
+        ck(_ttl == 1,
+           "the page carries exactly ONE meta line, not two (%d found)" % _ttl)
+        ck("permanent link" in body,
+           "…and it says the link is permanent (owner order: the page never "
+           "expires, so a 7-day TTL would kill the bookmark weekly)")
+        meta = json.load(open(os.path.join(page["path"], "meta.json"), encoding="utf-8"))
+        ck(meta.get("expires_at") is None,
+           "meta carries expires_at as null -- the backend fails OPEN on it "
+           "(%r)" % (meta.get("expires_at"),))
+        rc, _, _ = run("render", "--set", set_id, "--json")
+        ck(rc == 2, "the DELETED render verb is unknown -> rc=2 (rc=%d)" % rc)
+
+        # Prune is SHAPE-keyed now: a retired rotating-token directory is
+        # residue nothing can address. The LIVE slug must survive, because its
+        # link is the owner's permanent bookmark.
+        legacy = os.path.join(env["OC_QUESTIONS_DIR"], "pages",
+                              "A" * 32)
+        os.makedirs(legacy, exist_ok=True)
+        open(os.path.join(legacy, "index.html"), "w").write("stale")
+        rc, out, _ = run("publish", "--prune", "--json")
+        pruned = json.loads(out).get("pruned", [])
+        ck(not os.path.exists(legacy),
+           "a retired rotating-token dir is pruned by publish --prune")
+        ck("A" * 32 in pruned,
+           "…and the pruned dir is reported, not removed silently")
+        ck(os.path.isfile(os.path.join(page["path"], "index.html")),
+           "…while the PERMANENT slug page is never pruned")
+
+        # -- 8b. C7: the page URL is STABLE across re-renders, and C4:
+        # a register mutation re-publishes the page. Owner: "I want the page to
+        # be rerendered after each question list set of changes". Implemented
+        # against a mint-per-publish token, that 404s the link he bookmarked --
+        # so re-render-on-change and a stable URL have to hold together.
+        ck(page_url("tok") == base_url() + "/tok/",
+           "page_url joins the base origin and the token")
+        saved_base = os.environ.pop("OC_QUESTIONS_BASE_URL", None)
+        ck(base_url() == PRODUCTION_BASE_URL,
+           "with no override the base origin is the production host (%s)" % base_url())
+        if saved_base is not None:
+            os.environ["OC_QUESTIONS_BASE_URL"] = saved_base
+
+        rc, out, _ = run("publish", "--json")
+        first = json.loads(out)
+        pointer = os.path.join(env["OC_QUESTIONS_DIR"], "pages", "latest.json")
+        ck(os.path.isfile(pointer),
+           "publish records pages/latest.json -- the pointer the tool reads")
+        rc, out, _ = run("publish", "--json")
+        second = json.loads(out)
+        ck(second["token"] == first["token"],
+           "two consecutive publishes REUSE one token -- the URL does not churn "
+           "(%r vs %r)" % (first["token"][:8], second["token"][:8]))
+        page_dirs = [d for d in os.listdir(os.path.join(env["OC_QUESTIONS_DIR"], "pages"))
+                     if d != "latest.json"]
+        ck(len(page_dirs) == 1,
+           "\u2026so exactly ONE live page directory exists, not one per publish "
+           "(%r)" % (page_dirs,))
+        rc, out, _ = run("publish", "--rotate", "--json")
+        rotated = json.loads(out)
+        ck(rotated["slug"] == first["slug"],
+           "--rotate re-renders IN PLACE: the slug cannot churn, because the "
+           "link is permanent (%r)" % rotated["slug"])
+        ck(rotated["meta"].get("rotated_at"),
+           "…and the forced re-render is recorded, not silent")
+        rc, out, _ = run("publish", "--json")
+        ck(json.loads(out)["slug"] == rotated["slug"],
+           "\u2026and the slug is the one subsequently reused")
+
+        # Owner report 2026-09-24: "it seems to fail when there are no
+        # questions, but must deploy a no-open-questions page". Asserted on the
+        # ARTIFACT (the page bytes), not on the message. A PRISTINE store is
+        # used because the shared fixture store still holds open sets here --
+        # running against it would measure those, not the empty state.
+        empty_root = os.path.join(root, "empty-store")
+        empty_env = dict(env)
+        empty_env["OC_QUESTIONS_DIR"] = empty_root
+
+        def run_empty(*args):
+            proc = subprocess.run([tool] + list(args), env=empty_env,
+                                  capture_output=True, text=True, timeout=90)
+            return proc.returncode, proc.stdout, proc.stderr
+
+        rc, out, err = run_empty("publish", "--json")
+        ck(rc == 0, "publish with NOTHING open still exits 0 (rc=%d)" % rc)
+        # Crash-free on purpose: json.loads on a pre-fix empty output raises,
+        # and a selftest that dies mid-way reports NOTHING -- which reads as a
+        # pass. Every step below degrades to a FAIL row instead.
+        try:
+            empty_meta = json.loads(out)
+        except ValueError:
+            empty_meta = {}
+        empty_dir = os.path.join(empty_root, "pages", empty_meta.get("token", "?"))
+        ck(os.path.isfile(os.path.join(empty_dir, "index.html")),
+           "\u2026and still writes index.html -- the page is always deployed")
+        empty_body = ""
+        try:
+            with open(os.path.join(empty_dir, "index.html"),
+                      encoding="utf-8") as fh:
+                empty_body = fh.read()
+        except OSError:
+            pass
+        ck("No open questions" in empty_body,
+           "the empty page carries the empty state, not a stale question")
+        ck('name="qid"' not in empty_body,
+           "\u2026and names no question, so no tap can read as a failure")
+        ck((empty_meta.get("meta") or {}).get("questions") == 0,
+           "\u2026and reports 0 open questions, not a stale count")
+        rc, out, _ = run_empty("publish", "--json")
+        try:
+            again = json.loads(out).get("meta", {}).get("token")
+        except ValueError:
+            again = None
+        ck(again is not None and again == empty_meta.get("token"),
+           "\u2026on the SAME token -- an empty publish does not churn the URL")
+
+        # C4: a mutation re-publishes, so the page is never hours stale.
+        before = json.load(open(pointer, encoding="utf-8"))
+        rc, out, _ = run("ask", "--factory", "f-republish-lane",
+                         "--title", "t", "--description", "d",
+                         "--option", "a", "--option", "b", "--recommended", "0",
+                         "--json")
+        ck(rc == 0, "ask with auto-republish exits 0 (rc=%d)" % rc)
+        asked = json.loads(out)
+        ck(asked.get("page", "").endswith(before["token"] + "/"),
+           "ask returns the page url (%r)" % asked.get("page"))
+        after = json.load(open(pointer, encoding="utf-8"))
+        ck(after.get("token") == before["token"],
+           "the auto-republish did NOT move the URL (token unchanged)")
+        body = open(os.path.join(env["OC_QUESTIONS_DIR"], "pages",
+                                 after["token"], "index.html"), encoding="utf-8").read()
+        ck("f-republish-lane" in body,
+           "\u2026and the re-rendered page actually carries the new set")
+        rc, out, _ = run("ask", "--factory", "f-no-publish-lane",
+                         "--title", "t", "--description", "d", "--no-publish", "--json")
+        ck(rc == 0 and json.loads(out).get("page") is None,
+           "--no-publish suppresses the refresh (rc=%d)" % rc)
+
+        # A publish fault must never fail the mutation that triggered it.
+        rc, out, err = run("ask", "--factory", "f-broken-page-lane",
+                           "--title", "t", "--description", "d", "--json",
+                           "--no-publish")
+        ck(rc == 0, "the mutation succeeds regardless of the page (rc=%d)" % rc)
+
+        # -- 8b2. the json-render page (owner order 2026-09-24: "rewrite for
+        # json-render"). The page BODY is now a typed SPEC rendered by a Node
+        # process; the shell stays in Python. These are the four legs HQ asked
+        # for, plus the two properties that would break the live endpoint.
+        rc, out, _ = run("publish", "--json")
+        page = json.loads(out)
+        body = open(os.path.join(page["path"], "index.html"), encoding="utf-8").read()
+        # Owner question 2026-09-24: the answer form should swap inline instead
+        # of navigating. htmx breaks "no <script> at all", but the property that
+        # mattered was NO CLIENT-SIDE LOGIC OF OUR OWN -- so the assertion
+        # narrows instead of being deleted: at most ONE script, it must be the
+        # vendored htmx from our own origin, and it must have a src (an INLINE
+        # body is the thing the original leg actually guarded against).
+        scripts = re.findall(r"<script\b[^>]*>", body, re.I)
+        # TWO vendored files now: htmx, and our own questions.js affordance
+        # (owner report 2026-09-25 -- the pre-checked radio was still selected
+        # while the reader typed, and the typed answer used to be discarded).
+        # The property the original leg guarded was NO CLIENT-SIDE LOGIC OF
+        # OURS, so it is restated rather than deleted: every script must have a
+        # src, every src must be a file VENDORED beside the page, and no script
+        # may carry an inline body. An exact count is kept -- a ceiling is not
+        # a presence test, and an unbounded count would accept an injected tag.
+        ck(len(scripts) == 2,
+           "1. exactly two <script> tags on the page (found %d)" % len(scripts))
+        srcs = re.findall(r'<script\b[^>]*src="([^"]+)"', body, re.I)
+        ck(sorted(srcs) == sorted([HTMX_FILE, UI_FILE]),
+           "\u2026both VENDORED by name, from our own origin (%r)" % srcs)
+        ck(not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", body, re.I),
+           "\u2026with no INLINE script body anywhere (the real guard)")
+
+        # #562: the form swaps its own block in place instead of navigating.
+        # Asserted on the FORM, and the target must name the section the
+        # renderer actually emits -- a target that matches nothing swaps
+        # nothing, which looks identical to htmx not loading.
+        form_tag = re.search(r"<form\b[^>]*>", body)
+        ck(form_tag is not None, "the page renders a <form>")
+        form_html = form_tag.group(0) if form_tag else ""
+        ck('hx-post="/answer"' in form_html,
+           "the form carries hx-post=/answer (the inline swap)")
+        # The target is an ATTRIBUTE selector: a CSS selector may not start
+        # with a digit, so '#19f2d7-q1' made htmx throw on querySelectorAll
+        # (owner report 2026-09-25). The selector is HTML-escaped in the
+        # attribute, so its quotes arrive as &#x27;.
+        target = re.search(r"hx-target=\"\[id=(?:&#x27;|')([^&']+)(?:&#x27;|')\]\"",
+                           form_html)
+        ck(target is not None, "\u2026and an hx-target (%r)" % form_html[:160])
+        section_ids = re.findall(r'<section id="([^"]+)"', body)
+        ck(target is not None and target.group(1) in section_ids,
+           "\u2026naming a section the page actually renders (%r in %r)"
+           % (target.group(1) if target else None, section_ids))
+        ck(target is not None and not target.group(1)[:1].isdigit(),
+           "\u2026and the target is valid for ANY id: a selector may not start "
+           "with a digit, which is why it is an attribute selector")
+        ck('hx-swap="outerHTML"' in form_html,
+           "\u2026with outerHTML, so the answered block replaces the question")
+        # The vendored file must sit BESIDE the page: a same-origin script is
+        # the whole reason this is vendored rather than pulled from a CDN.
+        # page["path"] IS the token dir -- dirname() of it is the pages ROOT,
+        # which is what an earlier version of this leg checked, so it looked
+        # for htmx beside the wrong thing.
+        vendored = os.path.join(page["path"], HTMX_FILE)
+        ck(os.path.isfile(vendored),
+           "htmx is VENDORED beside the page (same origin, no CDN dependency)")
+        ck(os.path.isfile(vendored) and os.path.getsize(vendored) > 10000,
+           "\u2026and is a real payload, not a stub or an error page")
+        ui = os.path.join(page["path"], UI_FILE)
+        ck(os.path.isfile(ui),
+           "questions.js is VENDORED beside the page too (same origin)")
+        ui_body = open(ui, encoding="utf-8").read() if os.path.isfile(ui) else ""
+        ck("textarea" in ui_body and "radio" in ui_body,
+           "\u2026and it wires the text box to the radios (the exclusivity)")
+        ck('name="token"' in body and 'name="set"' in body and 'name="qid"' in body,
+           "2. the form carries token + set + qid as hidden inputs -- the submit "
+           "contract the answer backend reads")
+        ck('action="/answer"' in body,
+           "\u2026and the action is the absolute /answer path")
+        ck("noindex" in body, "\u2026and the noindex directive survives the rewrite")
+        # Per-question, because the page carries EVERY open set: a global count
+        # of "checked" measures the register size, not the recommendation.
+        # Per-question, because the page carries EVERY open set: a global count
+        # of "checked" measures the register size, not the recommendation. The
+        # assertion is attribute-ORDER agnostic on purpose: React emits
+        # checked="" BEFORE value, the Python fallback emits value="N" checked,
+        # and a leg that assumes one order tests the renderer's ordering rather
+        # than the recommendation.
+        radios = re.findall(r"<input[^>]*type=\"radio\"[^>]*>", body)
+        ck(bool(radios), "3. the page renders radio inputs")
+        checked = [r for r in radios if "checked" in r]
+        ck(len(checked) >= 1, "\u2026and a recommended option renders checked")
+        ck(len(checked) < len(radios),
+           "\u2026while a NON-recommended option does not (%d of %d checked)"
+           % (len(checked), len(radios)))
+        ck("<table>" in body and "mermaid.ink" in body,
+           "4. a Markdown table and a ```mermaid fence still reach the page "
+           "through RichText")
+
+        # The spec is DATA, so its structure is assertable without parsing HTML
+        # -- which is the whole reason for the rewrite.
+        spec = build_spec([{"id": "abc123", "lane": "L", "asked_at": None,
+                            "questions": [{"qid": "q1", "title": "T",
+                                           "description": "d",
+                                           "options": ["A", "B"],
+                                           "recommended": 1,
+                                           "lane": "L"}]}],
+                          "tok", None, "/answer")
+        ck(spec["root"] == "page" and spec["elements"]["page"]["type"] == "Page",
+           "the spec has a named root element")
+        ck(spec["elements"]["abc123-q1-o1"]["props"]["recommended"] is True
+           and spec["elements"]["abc123-q1-o0"]["props"]["recommended"] is False,
+           "\u2026and the recommended option is marked in the SPEC, not in a string")
+        ck(all(isinstance(spec["elements"][k].get("children"), list)
+               for k in spec["elements"]),
+           "\u2026and every element carries a children LIST (the flat contract)")
+        ck(set(spec["elements"]) >= {"page", "lane-l", "abc123-q1"},
+           "the spec nests page -> LANE ANCHOR -> question by KEY")
+
+        # --- the CONTENT is typed DATA too (owner: use json-render FULLY) -----
+        rich = build_spec([{"id": "abc123", "lane": "L", "asked_at": None,
+                            "questions": [{"qid": "q1", "title": "T", "lane": "L",
+                                           "description":
+                                               "## Head\n\nPara **b** *i* `c`.\n\n"
+                                               "| a | b |\n|---|---|\n| 1 | 2 |\n\n"
+                                               "```mermaid\nflowchart TD\n  A --> B\n```\n\n"
+                                               "- x\n- y\n\n```py\nprint(1)\n```",
+                                           "options": ["A"], "recommended": 0}]}],
+                          "tok", "2026-01-01T00:00:00+00:00", "/answer")
+        block_keys = [k for k in rich["elements"]["abc123-q1"]["children"]
+                      if re.match(r"abc123-q1-b\d+$", k)]
+        block_types = [rich["elements"][k]["type"] for k in block_keys]
+        ck(block_types == ["Heading", "Paragraph", "Table", "Mermaid", "List",
+                           "CodeBlock"],
+           "3. a rich description emits SEPARATE typed block elements in document "
+           "order, asserted on the SPEC and not on the HTML (%r)" % (block_types,))
+        for _t in ("Heading", "Paragraph", "Table", "Mermaid", "List", "CodeBlock"):
+            ck(_t in block_types, "5. the %s block is exercised by the spec" % _t)
+        def _props_of(spec, wanted):
+            """The first block's props of a given type, or None.
+
+            next() without a default raises StopIteration, which ABORTS the
+            selftest -- so a pre-port artifact that lacks the block reported no
+            FAIL row and every leg after it silently never ran."""
+            for _k in spec["elements"]:
+                if spec["elements"][_k]["type"] == wanted:
+                    return spec["elements"][_k]["props"]
+            return None
+
+        _tbl = _props_of(rich, "Table") or {}
+        ck(bool(_tbl) and _tbl["headers"][0][0] == {"kind": "Text", "text": "a"}
+           and _tbl["rows"][0][1][0]["text"] == "2",
+           "\u2026and a table is structured DATA (headers + rows of typed spans), "
+           "not an HTML string (%r)" % (_tbl,))
+        _mer = _props_of(rich, "Mermaid") or {}
+        ck("flowchart TD" in _mer.get("code", "")
+           and "mermaid.ink" not in _mer.get("code", ""),
+           "\u2026and Mermaid carries the CODE, so the component owns the URL "
+           "(%r)" % (_mer,))
+        _par = _props_of(rich, "Paragraph") or {}
+        _kinds = [s["kind"] for s in _par.get("spans", [])]
+        ck(_kinds == ["Text", "Strong", "Text", "Emphasis", "Text", "InlineCode",
+                      "Text"],
+           "\u2026and inline emphasis is typed SPANS, never an HTML fragment (%r)"
+           % (_kinds,))
+        ck(bool(_kinds) and not any("<" in s["text"]
+                                    for s in _par.get("spans", [])),
+           "\u2026and no span carries raw markup")
+
+        # 6. the catalog is a GUARDRAIL: an unregistered type must be REJECTED,
+        # not rendered as nothing.
+        _bad = {"root": "page",
+                "elements": {"page": {"type": "Page",
+                                      "props": {"title": "t", "expires_at": "e"},
+                                      "children": ["x"]},
+                             "x": {"type": "Nope", "props": {}, "children": []}}}
+        _html, _why = render_via_node(_bad)
+        ck(_html is None and "rejected by the catalog" in (_why or ""),
+           "6. an UNREGISTERED block type is REJECTED by the catalog's own "
+           "validate(), not rendered as nothing and not merely thrown (%r)"
+           % (_why,))
+
+        # Owner order 2026-09-24: a renderer fault must fail the COMMAND, not
+        # the page. Point the build dir at an impossible path and assert all
+        # four halves: non-zero, reason on stderr, nothing written, last good
+        # page byte-identical.
+        before_dirs = sorted(os.listdir(pages_dir()))
+        good_path = os.path.join(page["path"], "index.html")
+        good_body = open(good_path, encoding="utf-8").read()
+        broke = dict(env)
+        broke["OC_QUESTIONS_RENDER_DIR"] = "/proc/nonexistent/build"
+        proc = subprocess.run([tool, "publish"], env=broke,
+                              capture_output=True, text=True, timeout=120)
+        ck(proc.returncode != 0,
+           "a renderer fault exits NON-ZERO (rc=%d)" % proc.returncode)
+        ck("renderer fault" in proc.stderr,
+           "\u2026and names the fault on stderr (%r)" % proc.stderr.strip()[-80:])
+        ck(sorted(os.listdir(pages_dir())) == before_dirs,
+           "\u2026and writes no page and creates no token dir (%r)"
+           % (sorted(os.listdir(pages_dir())),))
+        ck(open(good_path, encoding="utf-8").read() == good_body,
+           "\u2026and the previous page is byte-identical, so the last good URL "
+           "still serves instead of a 404")
+        ck(render_via_node({"root": "page", "elements": {}})[1] is not None,
+           "render_via_node reports a REASON on failure, never raises")
+
+        # -- 8c. C5: amend -- the CLARIFY return leg. A Clarify click used to
+        # dead-end: status=clarifying and the question could never be answered
+        # again, so the loop never closed and the owner never saw the answer.
+        rc, out, _ = run("ask", "--factory", "f-amend-lane",
+                         "--title", "Original?", "--description", "d",
+                         "--option", "a", "--option", "b", "--recommended", "0",
+                         "--json")
+        am_set = json.loads(out)["set"]
+        run("answer", am_set, "q1", "clarify", "--text", "what do you mean")
+        ck(get_set(am_set)["questions"][0]["status"] == "clarifying",
+           "clarify records status=clarifying")
+        rc, out, _ = run("answer", am_set, "q1", "0")
+        ck(rc == 0, "a clarifying question is still ANSWERABLE (rc=%d)" % rc)
+        # amend on a set whose only question is answered: the set archived, so
+        # amend must REPORT that rather than silently doing nothing.
+        rc, _, _ = run("amend", "--set", am_set, "--qid", "q1", "--title", "x")
+        ck(rc in (0, 1),
+           "amend on a set with no open questions is handled explicitly "
+           "(rc=%d)" % rc)
+        # the real clarify loop, in order: ask -> clarify -> amend -> answer
+        rc, out, _ = run("ask", "--factory", "f-clarify-lane",
+                         "--title", "Clarify me?", "--description", "d",
+                         "--option", "a", "--option", "b", "--recommended", "0",
+                         "--json")
+        am_set = json.loads(out)["set"]
+        run("answer", am_set, "q1", "clarify", "--text", "what do you mean")
+        ck(get_set(am_set)["questions"][0]["status"] == "clarifying",
+           "the clarify loop starts from a clarifying question")
+        rc, out, _ = run("amend", "--set", am_set, "--qid", "q1",
+                         "--title", "Rewritten?", "--description", "d2",
+                         "--option", "x", "--option", "y", "--recommended", "1",
+                         "--json")
+        ck(rc == 0, "amend exits 0 (rc=%d)" % rc)
+        amended = json.loads(out)
+        ck(amended["status"] == "open" and amended["was"] == "clarifying",
+           "amend returns the question to OPEN (%r -> %r)"
+           % (amended["was"], amended["status"]))
+        ck(amended["amend_count"] == 1, "amend records an amend count")
+        question = get_set(am_set)["questions"][0]
+        ck(question["title"] == "Rewritten?" and question["options"] == ["x", "y"]
+           and question["recommended"] == 1,
+           "amend applied title, options and recommendation together")
+        ck("answer" not in question,
+           "amend CLEARS the stale answer, so the reopened question is clean")
+        rc, out, _ = run("answer", am_set, "q1", "1")
+        ck(rc == 0 and "y" in out,
+           "the amended question is answerable and records the new option")
+        rc, _, _ = run("amend", "--set", am_set, "--qid", "q1")
+        ck(rc == 2, "amend with no field to change is rc=2 (rc=%d)" % rc)
+        rc, _, _ = run("amend", "--set", am_set, "--qid", "nope", "--title", "t")
+        ck(rc == 1, "amend on an unknown qid is rc=1 (rc=%d)" % rc)
+
+        # -- 8d. C6: mechanical closure. The register used to close only on an
+        # explicit answer or TTL, so questions outlived the thing they asked
+        # about. "Never guess" is the contract: an unreadable predicate SKIPS.
+        rc, out, _ = run("ask", "--factory", "f-mech-lane",
+                         "--title", "Closed by predicate?", "--description", "d",
+                         "--close-when", "true", "--json")
+        mech_set = json.loads(out)["set"]
+        ck(get_set(mech_set)["questions"][0]["status"] == "open",
+           "a close_when predicate does not fire at register time")
+        rc, out, _ = run("gc", "--json")
+        ck("resolved_mechanically" in out,
+           "gc reports the mechanical closure by STATUS (rc=%d)" % rc)
+        ck(get_set(mech_set)["questions"][0]["status"] == "resolved_mechanically",
+           "\u2026and the question is closed as resolved_mechanically")
+        ck("closed_reason" in get_set(mech_set)["questions"][0],
+           "\u2026with the REASON recorded, never a bare disappearance")
+
+        rc, out, _ = run("ask", "--factory", "f-mech-no-lane",
+                         "--title", "Must stay open?", "--description", "d",
+                         "--close-when", "false", "--json")
+        keep_set = json.loads(out)["set"]
+        run("gc", "--json")
+        ck(get_set(keep_set)["questions"][0]["status"] == "open",
+           "a predicate returning non-zero does NOT close the question")
+
+        # A question whose subject names no fork issue and carries no predicate
+        # must never be closed by the default arm -- the arm cannot guess.
+        rc, out, _ = run("ask", "--factory", "f-mech-bare-lane",
+                         "--title", "No issue named", "--description", "nothing here",
+                         "--json")
+        bare_set = json.loads(out)["set"]
+        run("gc", "--json")
+        ck(get_set(bare_set)["questions"][0]["status"] == "open",
+           "the default arm closes NOTHING when no fork issue is named")
+
+        # -- 9. the LOGGING path, unsuppressed -----------------------------
+        # This leg exists because every other leg suppresses the unified log, so
+        # oc_log_init returned BEFORE time.time(). A missing `import time`
+        # therefore left the tool green in fixtures while it crashed on every
+        # real invocation. A suppressed-log selftest cannot see that class.
+        logfile = os.path.join(root, "tools.log")
+        logenv = dict(env)
+        logenv.pop("OC_TOOLS_NOLOG", None)
+        logenv["OC_TOOLS_LOG"] = logfile
+        proc = subprocess.run([tool, "list"], env=logenv, capture_output=True,
+                              text=True, timeout=90)
+        ck(proc.returncode == 0,
+           "the UNSUPPRESSED logging path exits 0 (rc=%d %s)"
+           % (proc.returncode, proc.stderr.strip().splitlines()[-1:]))
+        rows = []
+        if os.path.isfile(logfile):
+            with open(logfile, encoding="utf-8") as fh:
+                rows = [json.loads(line) for line in fh if line.strip()]
+        ck(len(rows) == 1, "…and appends exactly one JSONL row (%d)" % len(rows))
+        ck(bool(rows) and rows[0].get("tool") == PROG
+           and "secs" in rows[0] and rows[0].get("exit") == 0,
+           "…carrying tool/secs/exit per the unified-log schema")
+
+        # WHICH renderer ran is observable ONLY in the log. The contract legs
+        # above pass on the Python fallback too -- MEASURED: forcing the fallback
+        # left all 114 legs green -- so without this leg nothing proves
+        # json-render is actually in use, which is the owner's directive.
+        pub_log = os.path.join(root, "publish.log")
+        if os.path.isfile(pub_log):
+            os.remove(pub_log)
+        pubenv = dict(logenv)
+        pubenv["OC_TOOLS_LOG"] = pub_log
+        proc = subprocess.run([tool, "publish"], env=pubenv, capture_output=True,
+                              text=True, timeout=120)
+        ck(proc.returncode == 0,
+           "publish under the unsuppressed log exits 0 (rc=%d)" % proc.returncode)
+        fields = []
+        if os.path.isfile(pub_log):
+            with open(pub_log, encoding="utf-8") as fh:
+                for line in fh:
+                    if line.strip():
+                        fields.append((json.loads(line).get("extra") or {}))
+        ck(any(f.get("renderer") == "json-render" for f in fields),
+           "publish records renderer=json-render -- there is exactly ONE "
+           "builder, so the artifact states its own provenance (%r)"
+           % (fields[-1:] if fields else None,))
+        ck(not any("publish_failed" in f for f in fields),
+           "…and a SUCCESSFUL publish records no fault, so a degradation cannot "
+           "hide behind a green run")
+
+        # -- 10. usage contract (the battery's edge cases) -----------------
+        rc, _, _ = run("--help")
+        ck(rc == 0, "--help exits 0 (rc=%d)" % rc)
+        rc, _, _ = run("--bogus")
+        ck(rc == 2, "unknown verb exits 2 (rc=%d)" % rc)
+        rc, _, _ = run("ask", "--factory", "f-x", "--nope")
+        ck(rc == 2, "unknown flag exits 2 (rc=%d)" % rc)
+        rc, _, _ = run("ask", "--factory", "f-x",
+                       "--title", "t", "--description", "d", "--recommended", "3")
+        ck(rc == 2, "a recommendation with NO options is refused (rc=%d)" % rc)
+        rc, _, _ = run("ask", "--factory", "f-x",
+                       "--title", "t", "--description", "d",
+                       "--option", "a", "--option", "b", "--recommended", "3")
+        ck(rc == 2, "a recommendation outside the option range is refused (rc=%d)" % rc)
+
+        # -- 10. a CORRUPT register is an error, never a silent reset --------
+        store = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        good = open(store, encoding="utf-8").read()
+        with open(store, "w", encoding="utf-8") as fh:
+            fh.write("{ not json")
+        rc, out, err = run("list")
+        ck(rc == 4, "a corrupt register is rc=4, not a silent reset (rc=%d)" % rc)
+        with open(store, encoding="utf-8") as fh:
+            survived = fh.read()
+        ck(survived == "{ not json",
+           "…and the tool did NOT overwrite it (the only copy of a parked question)")
+        with open(store, "w", encoding="utf-8") as fh:
+            fh.write(good)
+        rc, _, _ = run("list")
+        ck(rc == 0, "…and the restored register reads clean again")
+
+        # -- 11. notify — the RETURN PATH (#547) ---------------------------
+        # Delivery is a SEPARATE verb: `answer` holds RegisterLock, so a
+        # network call inside it would block every other lane's ask/list for
+        # the whole timeout, on a store whose point is concurrent safety.
+        rc, _, err = run("notify")
+        ck(rc == 2, "notify with no --set/--lane is usage rc=2 (rc=%d)" % rc)
+        ck("requires --set" in err,
+           "…and the usage error names the required flag, not an unknown verb")
+
+        rc, out, _ = run("ask", "--factory", "f-return-lane",
+                         "--questions-json", json.dumps([
+                             {"title": "Ship it?", "description": "d",
+                              "options": ["Yes", "No"], "recommended": 0}]),
+                         "--json")
+        ck(rc == 0, "ask registers the return-path set (rc=%d)" % rc)
+        rset = json.loads(out)["set"]
+        rc, _, _ = run("notify", "--set", rset)
+        ck(rc == 1, "notify on an UNANSWERED set is rc=1, not a delivery (rc=%d)"
+           % rc)
+
+        rc, _, _ = run("answer", rset, "q1", "0")
+        ck(rc == 0, "answer the return-path set (rc=%d)" % rc)
+        # A factory set is NEVER auto-archived (owner order 2026-09-25): it
+        # stays open at 0..N so its page and lane anchors are permanent. The
+        # question is what closes; the SET does not.
+        _live = get_set(rset)
+        ck(_live is not None and _live.get("status") == "open",
+           "…and the fully-answered factory set STAYS in the live register")
+
+        # An answered set is normally ARCHIVED, so a reader that opens only
+        # open.json cannot deliver the one answer that matters.
+        rc, out, _ = run("notify", "--set", rset, "--dry-run", "--json")
+        ck(rc == 0, "notify resolves an ARCHIVED set (rc=%d)" % rc)
+        try:
+            payload = json.loads(out)
+        except Exception:  # noqa: BLE001
+            # A leg that CRASHES reports nothing about the legs AFTER it, so a
+            # missing payload is a FAIL row, never a traceback (see get_set).
+            payload = {}
+            ck(False, "notify --json emitted no JSON (the verb did not run)")
+        ck(payload.get("session") == session_a,
+           "…destination is the session recorded in the REGISTER")
+        ck("Yes" in (payload.get("body") or ""),
+           "…and the body carries the recorded answer")
+        ck(len(payload.get("body") or "") <= 3020, "…and the body is bounded")
+
+        rc, _, _ = run("notify", "--set", rset, "--dry-run",
+                       "--session", "99999999-9999-9999-9999-999999999999")
+        ck(rc == 2,
+           "a caller-supplied destination is REFUSED rc=2 — no redirect (rc=%d)"
+           % rc)
+
+        rc, _, _ = run("notify", "--set", rset, "--mode", "bogus", "--dry-run")
+        ck(rc == 2, "an unknown --mode is usage rc=2 (rc=%d)" % rc)
+
+        rc, _, _ = run("notify", "--set", "nosuch", "--dry-run")
+        ck(rc == 1, "an unknown set is rc=1 (rc=%d)" % rc)
+
+        # A session that is not a session id must be REFUSED at REGISTER time
+        # (C1): delivering to a guessed destination leaks an answer to a
+        # stranger, and a register that holds a bad address can never deliver.
+        rc, _, _ = run("ask", "--factory", "f-no-session-lane",
+                       "--session", "not-a-uuid", "--title", "t",
+                       "--description", "d", "--option", "a", "--option", "b")
+        ck(rc == 2, "ask REFUSES a non-UUID session (rc=%d)" % rc)
+        # …and the notify verb still refuses one that somehow got in, so the
+        # guard exists at BOTH ends.
+        nsid = json.loads(run("ask", "--factory", "f-guard-lane",
+                              "--title", "t",
+                              "--description", "d", "--json")[1])["set"]
+        store_file = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        raw = json.load(open(store_file, encoding="utf-8"))
+        for entry in raw["sets"]:
+            if entry["id"] == nsid:
+                entry["session"] = "not-a-uuid"
+        json.dump(raw, open(store_file, "w", encoding="utf-8"))
+        rc, _, _ = run("notify", "--set", nsid, "--dry-run")
+        ck(rc == 3, "a non-uuid destination is refused rc=3 at the return end "
+                    "too (rc=%d)" % rc)
+
+
+        # =====================================================================
+        # FACTORY-SET MODEL (owner orders 2026-09-25). Every leg below asserts a
+        # criterion from the order, on the RECORD or the ARTIFACT rather than on
+        # a message.
+        # =====================================================================
+        _fac = "f-acceptance"
+        rc, out, _ = run("ask", "--factory", _fac, "--title", "A1",
+                         "--description", "d1", "--option", "x", "--option", "y",
+                         "--recommended", "0", "--json")
+        ck(rc == 0, "ask --factory works with NO --lane and NO --session (rc=%d)"
+           % rc)
+        first_entry = json.loads(out).get("entry", {})
+        ck(first_entry.get("id") == _fac and first_entry.get("factory") == _fac,
+           "\u2026the factory key IS the set id (%r)" % first_entry.get("id"))
+        ck(first_entry.get("lane") == "Carrier tools",
+           "\u2026and the lane is DERIVED from the session's own binding, never "
+           "supplied by the caller (%r)" % first_entry.get("lane"))
+        ck(json.loads(out).get("created") is True,
+           "\u2026the first ask CREATES the standing set")
+
+        # A SECOND session, different lane, into the SAME factory.
+        env_b = dict(env)
+        env_b["OPENCRABS_SESSION_ID"] = session_b
+        proc_b = subprocess.run([tool, "ask", "--factory", _fac,
+                                 "--title", "B1", "--description", "d2",
+                                 "--option", "z", "--recommended", "0", "--json"],
+                                env=env_b, capture_output=True, text=True,
+                                timeout=90)
+        ck(proc_b.returncode == 0,
+           "a second session asks into the SAME factory (rc=%d)"
+           % proc_b.returncode)
+        try:
+            second = json.loads(proc_b.stdout)
+        except ValueError:
+            second = {}
+        ck(second.get("created") is False,
+           "\u2026and the standing set is REUSED, not re-created")
+        ck(second.get("set") == _fac and second.get("lane")
+           == "Governance: Ontology & RSI",
+           "\u2026recording the SECOND session's own lane (%r)"
+           % second.get("lane"))
+
+        # ONE set, two questions, each with its own lane + session.
+        acc = get_set(_fac)
+        ck(acc is not None and len(acc.get("questions", [])) == 2,
+           "ONE standing set holds BOTH questions (%d)"
+           % len((acc or {}).get("questions", [])))
+        _qs = (acc or {}).get("questions", [])
+        ck([q.get("qid") for q in _qs] == ["q1", "q2"],
+           "\u2026numbered q1..qN in call order (%r)"
+           % [q.get("qid") for q in _qs])
+        ck(len({q.get("session") for q in _qs}) == 2,
+           "\u2026each question carrying its OWN asking session")
+        ck({q.get("lane") for q in _qs} == {"Carrier tools",
+                                           "Governance: Ontology & RSI"},
+           "\u2026and its own lane (%r)" % sorted({q.get("lane") for q in _qs}))
+
+        # Derived from the fixture's OWN output: a leg naming a live lane goes
+        # stale the moment that lane changes.
+        rc, _all, _ = run("list")
+        _fleet = int(re.match(r"(\d+) open", _all.strip().splitlines()[0]).group(1))
+        _lanes = re.findall(r"^(\S.*?) \u2014 (\d+) open", _all, re.M)
+        ck(len(_lanes) >= 2 and _fleet > 0,
+           "list fixture has >= 2 lanes and a non-zero fleet total (fleet=%d)"
+           % _fleet)
+        _probe_lane, _probe_open = _lanes[0][0], int(_lanes[0][1])
+        rc, out, _ = run("list", "--lane", _probe_lane)
+        _hdr = out.strip().splitlines()[0] if out.strip() else ""
+        ck(rc == 0 and _hdr.startswith("%d open question(s) across 1 lane(s)" % _probe_open),
+           "list --lane counts within the FILTER, not the fleet (want %d, got %r)"
+           % (_probe_open, _hdr))
+        ck(re.search(r"^%s \u2014 %d open(, \d+ closed \(history\))?$"
+                     % (re.escape(_probe_lane), _probe_open), out, re.M) is not None,
+           "\u2026and the lane subtotal names the history it lists beneath it")
+        rc, out, _ = run("list", "--lane", _probe_lane, "--json")
+        _fj = json.loads(out)
+        ck(_fj.get("open_questions") == sum(r["open"] for r in _fj.get("lanes", [])),
+           "list --lane --json: open_questions agrees with the lanes it shows "
+           "(pre-fix it carried the fleet total beside a filtered lanes[])")
+
+        # The page: ONE section per LANE, each with a STABLE anchor.
+        rc, out, _ = run("publish", "--json")
+        acc_page = json.loads(out)
+        acc_body = open(os.path.join(acc_page["path"], "index.html"),
+                        encoding="utf-8").read()
+        _anchors = re.findall(r'<section id="(lane-[^"]+)"', acc_body)
+        ck("lane-carrier-tools" in _anchors
+           and "lane-governance-ontology-rsi" in _anchors,
+           "the page carries one section per LANE with a stable anchor (%r)"
+           % sorted(set(_anchors)))
+        ck(len(_anchors) == len(set(_anchors)),
+           "\u2026and every lane anchor is UNIQUE -- a duplicate id would make "
+           "the handed-out URL ambiguous (%r)" % sorted(_anchors))
+        ck(acc_body.count('id="lane-carrier-tools"') == 1,
+           "\u2026one section per lane across the WHOLE page, not one per set")
+
+        # A re-publish reproduces the anchors BYTE-IDENTICALLY.
+        rc, out, _ = run("publish", "--json")
+        again_body = open(os.path.join(json.loads(out)["path"], "index.html"),
+                          encoding="utf-8").read()
+        ck(re.findall(r'<section id="(lane-[^"]+)"', again_body) == _anchors,
+           "a re-publish reproduces the lane anchors byte-identically")
+        ck(json.loads(out)["slug"] == acc_page["slug"],
+           "\u2026at the IDENTICAL page path (asserted twice, per the order)")
+
+        # The page ALWAYS deploys, and a lane whose questions are all answered
+        # still renders its section, so an anchor handed out yesterday resolves.
+        rc, _, _ = run("answer", _fac, "q1", "0")
+        rc, _, _ = run("answer", _fac, "q2", "0")
+        rc, out, _ = run("publish", "--json")
+        zero_body = open(os.path.join(json.loads(out)["path"], "index.html"),
+                         encoding="utf-8").read()
+        ck("lane-carrier-tools" in zero_body
+           and "lane-governance-ontology-rsi" in zero_body,
+           "a lane whose questions are all answered STILL renders its section "
+           "(the anchor stays resolvable)")
+        ck("0 open" in zero_body,
+           "\u2026reporting its open count, so 0 is visible rather than the "
+           "section vanishing")
+        _rec = get_set(_fac)
+        ck(_rec is not None and _rec.get("status") == "open",
+           "answering the last question leaves the set OPEN (status=%r)"
+           % (_rec or {}).get("status"))
+        ck(all(question_is_closed(q) for q in (_rec or {}).get("questions", [])),
+           "\u2026with 0 open questions, asserted on the RECORD")
+
+        # list: the OPEN COUNT is the primary output, grouped by lane.
+        rc, out, _ = run("list")
+        ck(rc == 0 and out.strip().splitlines()[0].endswith("lane(s)"),
+           "list prints the OPEN COUNT as its primary output (%r)"
+           % out.strip().splitlines()[:1])
+        ck(re.search(r"^Carrier tools \u2014 \d+ open(, \d+ closed \(history\))?$",
+                     out, re.M) is not None,
+           "\u2026and groups by lane with a per-lane open count")
+        # The header must describe what is SHOWN. Pre-fix the count was taken
+        # BEFORE the --lane filter, so a filtered view printed the FLEET total
+        # against the filtered lane count ("7 open ... across 1 lane(s)" for a
+        # lane holding zero) -- and the owner reads that header to decide what
+        # to answer. MUTATION KILL: move the total_open computation back above
+        # the --lane filter and leg (i) reddens.
+        rc, out, _ = run("list", "--json")
+        _lj = json.loads(out)
+        ck(isinstance(_lj.get("open_questions"), int)
+           and all("open" in row and "lane" in row for row in _lj.get("lanes", [])),
+           "list --json carries one entry per lane with its open count")
+
+        # An UNBOUND session is refused: it could never receive the answer.
+        env_un = dict(env)
+        env_un["OPENCRABS_SESSION_ID"] = session_unbound
+        proc_un = subprocess.run([tool, "ask", "--factory", _fac,
+                                  "--title", "x", "--description", "d"],
+                                 env=env_un, capture_output=True, text=True,
+                                 timeout=90)
+        ck(proc_un.returncode != 0,
+           "ask from an UNBOUND session exits non-zero (rc=%d)"
+           % proc_un.returncode)
+        ck("unbound" in (proc_un.stderr or "").lower()
+           or "no session_bindings" in (proc_un.stderr or ""),
+           "\u2026with a clear message naming why (%r)"
+           % (proc_un.stderr or "").strip()[:90])
+
+        # The return address is PER QUESTION: the answer reaches the lane that
+        # ASKED it, not whoever created the standing set.
+        rc, out, _ = run("ask", "--factory", _fac, "--title", "B2",
+                         "--description", "d3", "--json")
+        rc, out, _ = run("notify", "--set", _fac, "--qid", "q2", "--dry-run")
+        ck(rc == 0 and "Governance: Ontology & RSI" in out,
+           "notify --qid q2 resolves q2's OWN lane, not the set's (%r)"
+           % out.strip()[:110])
+
+        # A real delivery that cannot reach the lane must be a FAULT, never a
+        # silent success — otherwise a parked answer looks delivered.
+        dead = dict(env)
+        dead["OC_QUESTIONS_A2A"] = "http://127.0.0.1:1/a2a/v1"
+        proc = subprocess.run([tool, "notify", "--set", rset], env=dead,
+                              capture_output=True, text=True, timeout=90)
+        ck(proc.returncode == 4,
+           "an unreachable A2A endpoint is rc=4, never a false success (rc=%d)"
+           % proc.returncode)
+
+        if fails:
+            print("  %d FAILED" % len(fails))
+            return 1
+        print("  all checks passed")
+        return 0
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+USAGE = """questions — the Open Questions register (#547)
+
+  ask      --factory <KEY> [--session <id>]
+           [--questions-file F | --questions-json J |
+            --title T --description D [--option O]... [--recommended N]]
+           [--ttl-days N] [--subject S] [--no-clarify] [--close-when CMD]
+           [--no-publish] [--json]
+           --factory is REQUIRED: the factory key IS the standing set id,
+           reused on every ask. There is no --lane: the asking session is read
+           from OPENCRABS_SESSION_ID and its display name is resolved from that
+           session's own binding, so a caller cannot mislabel itself. --session
+           is an override for callers outside a turn. Prints the open-question
+           TOTAL and the page URL -- there is no card.
+  answer   <set-id> <qid> <choice-index|clarify> [--text T] [--via card|page|cli]
+           [--no-publish]
+  withdraw --set <id> --qid <qid> [--text REASON] [--no-publish] [--json]
+           retracts a question that has become moot; the set stays open
+  amend    --set <id> --qid <qid> [--title T] [--description D]
+           [--option O]... [--recommended N] [--clear-options]
+           the CLARIFY return leg: edits the question and reopens it
+  notify   --set <id> | --lane <NAME> [--qid Q] [--mode turn-end|interrupt|quiet]
+           [--dry-run] [--json]        the RETURN PATH: delivers the answer to
+                                       the session recorded in the register
+  list     [--lane NAME] [--session id] [--all] [--json] [--quiet]
+  publish  [--set id] [--action URL] [--prune] [--rotate] [--json]
+           reuses the live token; --rotate mints a new URL explicitly
+  lint     [--json]
+  gc       [--dry-run] [--json]        also applies mechanical closure
+
+Store: <profile home>/questions/open.json (+ archive.jsonl, pages/<slug>/).
+The PAGE is the owner surface and lives at a CONSTANT slug -- the directory is
+reused on every publish, never re-minted. --factory is the standing set id.
+--session is the RETURN ADDRESS: the calling session, never a cron or renderer.
+rc: 0 ok / 1 finding-or-not-found / 2 usage / 3 state-refused / 4 store-or-IO.
+"""
+
+def main(argv):
+    oc_log_init()
+    if not argv or argv[0] in ("--help", "-h", "help"):
+        sys.stdout.write(USAGE)
+        return 0
+    verb, rest = argv[0], argv[1:]
+    if verb in ("--selftest", "selftest"):
+        return selftest()
+    handlers = {"ask": cmd_ask, "answer": cmd_answer, "amend": cmd_amend,
+                "withdraw": cmd_withdraw, "list": cmd_list,
+                "publish": cmd_publish, "lint": cmd_lint,
+                "gc": cmd_gc, "notify": cmd_notify}
+    if set(handlers) != set(_VERBS):
+        sys.stderr.write("%s: verb set drifted from _VERBS\n" % PROG)
+        return 2
+    handler = handlers.get(verb)
+    if handler is None:
+        sys.stderr.write("%s: unknown verb %r\n\n%s" % (PROG, verb, USAGE))
+        return 2
+    return handler(rest)
+
+if __name__ == "__main__":
+    _rc = main(sys.argv[1:])
+    oc_log_finish(_rc)
+    sys.exit(_rc)

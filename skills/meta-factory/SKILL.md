@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.26
+version: 0.1.27
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -446,6 +446,48 @@ leaning on shared memory rather than on what it said.
   **What this does NOT do:** it never pre-writes canonical state per surface. That is the one
   approach that goes stale silently, which is the disease rather than the cure; the ladder is
   walked lazily, at the site, only where a disagreement actually exists.
+
+**FOUR SHAPES OF THE SAME FAILURE — a surface that reports SUCCESS while the work did not
+happen (derived 2026-09-25 from the question register's own defects, agent-factories#165).**
+They are one family and each is a distinct mechanism, so the family is stated once and the
+shapes are named. The common thread with *a green receipt over an unverifiable check* is
+that the surface is not merely wrong: it is **confidently wrong in the direction that stops
+anyone looking**. And the measured weight of the family: **three of the four were found by
+the human, not by a gate**, while the register's own selftests were green throughout.
+
+- **(a) A state transition must carry the content that justifies it, or be refused.** A
+  transition to `awaiting_clarification` with an empty payload is a *drop wearing a status
+  field*: the machine changed state, the reader was told nothing, and the lane that owns the
+  question received a request with nothing to act on. The test is mechanical — **name the
+  payload the transition carries, and refuse the transition if it is empty.**
+- **(b) Every state a machine can enter must be distinguishable in the surface the human
+  reads.** If the renderer does not read the status field, the status does not exist for its
+  only reader: a clarifying question rendered IDENTICALLY to an open one, so the human could
+  not tell whether his own earlier tap had registered. **The renderer is the reader; a state
+  with no reader is a state the human cannot act on, and the defect is invisible from the
+  machine's side because the machine's own tests assert the value it wrote.**
+- **(c) An error path must be rendered by the surface that triggers it.** Where a transport
+  swaps only success responses, a refusal produces NO visible change — and **an invisible
+  refusal reads as a no-op, so the user repeats the action**, which is worse than an error
+  message because it also destroys his model of what the control does. The rule binds the
+  transport, not the handler: a handler that returns a correct refusal has not rendered it.
+- **(d) A field written but never read is a record that can only lie.** Before adding a
+  state field, **name its reader**; if it has none, the field is a liability rather than a
+  record, because it will be read by whoever finds it next and believed. Two instances of
+  this shape in one day, on two different surfaces: `answer_kind` left stale by `amend`,
+  asserting a state the question was not in, and the duty receipt's `outcome=` measured as
+  dead code on real receipts (so a row declaring nothing certified the duty). **The check is
+  cheap and it is the one nobody runs: grep for a reader before you write the field, and
+  again when you change what writes it.**
+
+**Why these belong in this section rather than in a testing section.** Each is a *claim* the
+system makes about itself — the status says awaiting, the page says open, the transport says
+nothing, the field says completed — and a claim with no reader is the failure mode this
+whole section governs. A gate can hold (d) once the reader is named, and can hold (a) once
+the payload is declared; **(b) and (c) are not gate-able at all**, because their subject is
+what a HUMAN sees, and no offline suite reads the human's screen. That is why three of the
+four were found by the human, and it is the reason the four are stated as design obligations
+rather than as gates: the remedy is to name the reader while the surface is being built.
 
 ---
 
