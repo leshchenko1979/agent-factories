@@ -50,16 +50,29 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 SCORES = REPO / "evidence" / "scores"
 PROCEDURE = REPO / "docs" / "measurement-procedure.md"
+CRITERIA = REPO / "docs" / "quality-criteria.md"
 
 # The day this requirement lands. The boundary is EXCLUSIVE: an artifact dated
 # strictly after this day must comply; this day's artifact and earlier are excused,
 # because the landing day's artifact is already written and is never backfilled.
 INVARIANT_LANDED = dt.date(2026, 9, 19)
+
+# The day the maturity-band requirement lands, for the leg added by issue #154.
+# EXCLUSIVE on the same terms, and placed a day earlier than the section boundary
+# for a measured reason: the artifacts at 2026-09-22, -23 and -24 carry real band
+# mismatches (Miidas 60/76 and InferHub Watch 58/76 both labelled "Scalable"),
+# they predate the law, and a band rewritten into a dated artifact would be a
+# falsified record rather than a repair -- so they are EXCUSED AND PRINTED, never
+# repaired. 2026-09-25 is the first artifact written under the law and is the
+# brief's own acceptance case, so it is CHECKED rather than excused.
+BAND_LANDED = dt.date(2026, 9, 24)
 
 _ARTIFACT_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})\.md$")
 
@@ -179,6 +192,147 @@ def artifacts() -> list[tuple[dt.date, Path]]:
     return out
 
 
+# --- the maturity band, computed from the rubric rather than typed -----------
+#
+# Filed as issue #154. Each scorecard states a maturity band beside its score, and
+# until this leg the band was TYPED -- nothing computed it, so nothing could catch
+# it drifting. One table in one run labelled Miidas (60/76 = 78.9%) and InferHub
+# Watch (58/76 = 76.3%) "Scalable" while OpenCrabs dev (62/76 = 81.6%) read
+# "Optimizing": the same band, three factories, two labels, and the score column
+# correct in every case. The defect is in the label, never the measurement, and no
+# score moves -- the fleet total is unchanged.
+#
+# The thresholds are READ from `docs/quality-criteria.md`, never restated here. A
+# hardcoded copy would pass a rubric change silently, which is the class this leg
+# exists to close -- and a probe drives a MUTATED rubric to prove the read.
+
+_BAND_ROW = re.compile(
+    r"^\|\s*\*\*(?P<name>[^*]+)\*\*\s*\|\s*"
+    r"(?P<lo>\d+)[–-](?P<hi>\d+)%\s*\((?P<raw_lo>\d+)[–-](?P<raw_hi>\d+)\)\s*\|"
+)
+_RUBRIC_MAX = re.compile(r"maximum is \*\*(\d+)\*\*")
+
+# `### 1. Meta-factory (`/root/agent-factories`) — 70 / 76 (92.1%), Optimizing`
+# and the movement form `... (71%), Scalable ⬇`. The trailing arrow is REAL in two
+# committed artifacts (2026-09-17 and -18, two headings each), so an end-anchored
+# pattern would silently skip those headings and a band could leave the population
+# with no error -- the failure this leg cannot see. The band group therefore takes
+# whatever trails the comma and the arrow is stripped from it.
+_SCORECARD_BAND = re.compile(
+    r"^### \d+\.\s+(?P<name>.+?)\s+—\s+(?P<score>\d+)\s*/\s*(?P<den>\d+)\s*"
+    r"\((?P<pct>\d+(?:\.\d+)?)%\)\s*(?:,\s*(?P<band>.*))?$"
+)
+_MOVEMENT = re.compile(r"[⬆⬇↑↓]")
+
+def _shown(path: Path) -> str:
+    """A path as it reads in a message: relative when it is inside the repo.
+
+    Probes drive `read_bands` from a temporary directory, so a bare
+    `relative_to(REPO)` would raise `ValueError` in exactly the case the message
+    exists to report.
+    """
+    try:
+        return str(path.relative_to(REPO))
+    except ValueError:
+        return str(path)
+
+def read_bands(path: Path) -> tuple[list[tuple[str, int, int]], int | None, list[str]]:
+    """`(bands, max_score, problems)`, READ from the criteria document.
+
+    An ABSENT document is not a problem: a factory that ships no rubric has
+    declared no bands, which is the undeclared path `declared()` already takes. A
+    PRESENT document whose table will not parse IS a problem -- the two are
+    different facts and must never render the same way (the #164 split).
+    """
+    if not path.is_file():
+        return [], None, []
+    text = path.read_text(encoding="utf-8")
+    bands: list[tuple[str, int, int]] = []
+    for line in text.splitlines():
+        match = _BAND_ROW.match(line.strip())
+        if match is not None:
+            bands.append(
+                (match.group("name").strip(), int(match.group("lo")), int(match.group("hi")))
+            )
+    max_match = _RUBRIC_MAX.search(text)
+    problems: list[str] = []
+    if not bands:
+        problems.append(
+            f"{_shown(path)}: the maturity band table did not parse "
+            f"-- no band row matched"
+        )
+    if max_match is None:
+        problems.append(f"{_shown(path)}: the rubric maximum did not parse")
+    return bands, (int(max_match.group(1)) if max_match else None), problems
+
+def band_for(pct: float, bands: list[tuple[str, int, int]]) -> str | None:
+    """The band the rubric assigns to `pct`, or None if it falls in no band."""
+    for name, low, high in bands:
+        if low <= pct <= high:
+            return name
+    return None
+
+def band_problems(
+    text: str, bands: list[tuple[str, int, int]], max_score: int | None
+) -> list[str]:
+    """Problems in one artifact's scorecard bands. Pure: no file system, no clock.
+
+    Three ways a heading is wrong, and each names the heading and both values:
+      - its denominator is not the rubric's maximum. The band table is calibrated
+        to that maximum, so a different denominator bands on the wrong scale;
+      - it states no band at all -- silence is not compliance;
+      - it states a band the rubric does not compute from its own score.
+    """
+    problems: list[str] = []
+    for line in text.splitlines():
+        match = _SCORECARD_BAND.match(line.strip())
+        if match is None:
+            continue
+        name = match.group("name").strip()
+        denominator = int(match.group("den"))
+        pct = float(match.group("pct"))
+        band = _MOVEMENT.sub("", match.group("band") or "").strip()
+        if max_score is not None and denominator != max_score:
+            problems.append(
+                f"{name}: scored out of {denominator}, but the rubric's maximum is "
+                f"{max_score} -- the band table is calibrated to {max_score}, so this "
+                f"heading bands on the wrong scale"
+            )
+            continue
+        if not band:
+            problems.append(f"{name}: states no maturity band beside its {pct}%")
+            continue
+        expected = band_for(pct, bands)
+        if expected is None:
+            problems.append(f"{name}: {pct}% falls in no band the rubric declares")
+        elif band != expected:
+            problems.append(f"{name}: labelled {band}, but {pct}% is {expected}")
+    return problems
+
+def band_leg() -> tuple[list[str], list[str], list[str], bool]:
+    """`(excused, checked, problems, declared)` over the live tree.
+
+    `declared` is False when the factory ships no rubric: nothing is asserted, and
+    the caller says so rather than printing a clean verdict over a population that
+    was never named.
+    """
+    bands, max_score, problems = read_bands(CRITERIA)
+    if not bands and max_score is None and not problems:
+        return [], [], [], False
+    excused: list[str] = []
+    checked: list[str] = []
+    found: list[str] = list(problems)
+    for day, path in artifacts():
+        if day <= BAND_LANDED:
+            excused.append(path.name)
+            continue
+        checked.append(path.name)
+        found.extend(
+            f"{path.name}: {problem}"
+            for problem in band_problems(path.read_text(encoding="utf-8"), bands, max_score)
+        )
+    return excused, checked, found, True
+
 # The synthetic artifact the probes build from. One entry per required section, so
 # omitting an entry is exactly how a probe makes one section absent. The key set is
 # asserted EQUAL to the required labels: the fixture cannot drift from the rule.
@@ -249,6 +403,183 @@ def test_a_related_but_unnamed_heading_does_not_count() -> None:
     text += "\n## Gate Status\n"
     assert "self-audit verdict" in missing_sections(text)
 
+
+# --- probes: the maturity band leg (issue #154) -----------------------------
+
+_GOOD_HEADING = "### 1. Meta-factory (`/root/agent-factories`) — 70 / 76 (92.1%), Optimizing"
+
+def band_declared() -> bool:
+    """Whether this factory declares a maturity band rubric at all.
+
+    The bands and the rubric maximum are declared by docs/quality-criteria.md,
+    which the template does not ship. A factory without it has declared no band
+    law, so the band probes assert nothing and say so -- the same undeclared path
+    `declared()` takes for the section law, and the reason the TEMPLATE twin does
+    not RED where it is copied (the #78 class).
+    """
+    return CRITERIA.is_file()
+
+def _artifact_with(heading: str) -> str:
+    return f"# Factory scores — 2026-09-20\n\n{heading}\n"
+
+def _bands_from_the_rubric() -> tuple[list[tuple[str, int, int]], int | None]:
+    """The live rubric's bands and maximum, for probes that need a real set."""
+    bands, max_score, problems = read_bands(CRITERIA)
+    assert problems == [], problems
+    assert bands, "the live rubric must declare bands"
+    return bands, max_score
+
+def test_the_live_rubric_declares_four_bands_covering_every_percent() -> None:
+    """The read is a property of the document, so it is asserted as one.
+
+    Contiguous and exhaustive over 0-100: a gap would silently admit a score with
+    no band, and `band_for` would return None for a legitimate score.
+    """
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    assert len(bands) == 4, bands
+    assert max_score == 76, max_score
+    assert bands[0][1] == 0, bands
+    assert bands[-1][2] == 100, bands
+    for (_n1, _lo1, hi1), (_n2, lo2, _hi2) in zip(bands, bands[1:]):
+        assert lo2 == hi1 + 1, bands
+
+def test_a_correct_band_reports_nothing() -> None:
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    assert band_problems(_artifact_with(_GOOD_HEADING), bands, max_score) == []
+
+def test_a_wrong_band_bites() -> None:
+    """The filed instance: Miidas 60/76 = 78.9% labelled `Scalable`."""
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    text = _artifact_with("### 4. Miidas (`/root/miidas`) — 60 / 76 (78.9%), Scalable")
+    problems = band_problems(text, bands, max_score)
+    assert len(problems) == 1, problems
+    assert "Scalable" in problems[0] and "Optimizing" in problems[0], problems[0]
+    assert "78.9" in problems[0], problems[0]
+
+def test_the_band_is_computed_from_the_score_not_the_neighbours() -> None:
+    """The 09-25 case: 58/76 = 76.3% is Optimizing even beside a 65.8% Scalable."""
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    text = _artifact_with(
+        "### 3. InferHub Watch (`/root/inferhub-watch`) — 58 / 76 (76.3%), Optimizing"
+    ) + "\n### 6. AI AntiSpam (`/root/ai-antispam`) — 50 / 76 (65.8%), Scalable\n"
+    assert band_problems(text, bands, max_score) == []
+
+def test_a_missing_band_bites() -> None:
+    """Silence is not compliance: a scorecard that states no band is a problem."""
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    text = _artifact_with("### 1. Meta-factory — 70 / 76 (92.1%)")
+    problems = band_problems(text, bands, max_score)
+    assert len(problems) == 1 and "states no maturity band" in problems[0], problems
+
+def test_a_wrong_denominator_bites() -> None:
+    """The 09-16 shape: a 68-max rubric bands on a scale this table is not."""
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    text = _artifact_with("### 1. Meta-factory — 62 / 68 (91.2%), Optimizing")
+    problems = band_problems(text, bands, max_score)
+    assert len(problems) == 1 and "maximum is 76" in problems[0], problems
+
+def test_a_trailing_movement_arrow_still_parses() -> None:
+    """Two committed artifacts carry `⬇`, so an end-anchored pattern would skip them.
+
+    Without this the heading leaves the population silently: the band could then
+    drift with nothing to catch it, which is the failure this leg cannot see.
+    """
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    assert band_problems(_artifact_with(_GOOD_HEADING + " ⬇"), bands, max_score) == []
+    wrong = _artifact_with("### 1. Meta-factory — 70 / 76 (92.1%), Scalable ⬇")
+    problems = band_problems(wrong, bands, max_score)
+    assert len(problems) == 1 and "Optimizing" in problems[0], problems
+
+def test_the_rubric_is_read_and_not_restated() -> None:
+    """A mutated rubric moves the band, which a hardcoded copy could not do.
+
+    This is the criterion's own proof: the thresholds live in the document, so
+    changing the document changes the verdict. A literal table in this file would
+    pass the mutation and fail here.
+    """
+    if not band_declared():
+        return
+    bands, max_score = _bands_from_the_rubric()
+    assert band_for(78.9, bands) == "Optimizing"
+    with tempfile.TemporaryDirectory() as tmp:
+        moved = Path(tmp) / "quality-criteria.md"
+        moved.write_text(
+            "| Band | Score | Reading |\n|---|---|---|\n"
+            "| **Provisional** | 0–50% (0–38) | moved |\n"
+            "| **Operational** | 51–75% (39–57) | moved |\n"
+            "| **Scalable** | 76–90% (58–68) | moved |\n"
+            "| **Optimizing** | 91–100% (69–76) | moved |\n"
+            "\nThe maximum is **76**.\n",
+            encoding="utf-8",
+        )
+        moved_bands, moved_max, moved_problems = read_bands(moved)
+        assert moved_problems == [], moved_problems
+        assert moved_max == 76
+        assert band_for(78.9, moved_bands) == "Scalable", moved_bands
+        # 78.9% is Optimizing under the live rubric and Scalable under the mutated
+        # one, so the same heading flips: proof the thresholds came from the FILE
+        # rather than from a literal in this one. A score in a band both rubrics
+        # agree on (92.1% is Optimizing under either) would prove nothing.
+        miidas = _artifact_with("### 4. Miidas — 60 / 76 (78.9%), Optimizing")
+        assert band_problems(miidas, bands, max_score) == []
+        moved_found = band_problems(miidas, moved_bands, moved_max)
+        assert len(moved_found) == 1, moved_found
+        assert "Scalable" in moved_found[0], moved_found[0]
+
+def test_a_present_but_unparseable_rubric_is_a_problem_not_a_skip() -> None:
+    """The #164 split: by-design absence passes, a lost table is a real problem."""
+    with tempfile.TemporaryDirectory() as tmp:
+        missing = Path(tmp) / "quality-criteria.md"
+        assert read_bands(missing) == ([], None, [])
+        broken = Path(tmp) / "broken.md"
+        broken.write_text("# Quality criteria\n\nno table here\n", encoding="utf-8")
+        bands, max_score, problems = read_bands(broken)
+        assert bands == [] and max_score is None
+        assert len(problems) == 2, problems
+        assert any("band table did not parse" in p for p in problems), problems
+        assert any("maximum did not parse" in p for p in problems), problems
+
+def test_the_band_boundary_excuses_the_pre_law_artifacts() -> None:
+    """Forward-only: the artifacts that predate the law are excused, never repaired.
+
+    Asserted over whatever the tree holds, with this factory's own instances named
+    as the concrete case: 09-22/-23/-24 carry real mismatches and are excused,
+    while 09-25 -- the first written under the law -- is CHECKED.
+    """
+    excused, checked, _problems, declared_here = band_leg()
+    if not declared_here:
+        return
+    assert set(excused) | set(checked) == {p.name for _d, p in artifacts()}
+    assert not (set(excused) & set(checked))
+    present = {p.name for _d, p in artifacts()}
+    for name in ("2026-09-22.md", "2026-09-23.md", "2026-09-24.md"):
+        if name in present:
+            assert name in excused, f"{name} predates the band law and must be excused"
+    for name in ("2026-09-25.md", "2026-09-26.md"):
+        if name in present:
+            assert name in checked, f"{name} is written under the band law and is checked"
+
+def test_the_live_band_population_is_clean() -> None:
+    """The live check is non-vacuous and green -- the brief's own acceptance case."""
+    _excused, checked, problems, declared_here = band_leg()
+    if not declared_here:
+        return
+    assert checked, "the band leg must examine a population, not report a clean zero"
+    assert problems == [], "\n".join(problems)
 
 def declared() -> bool:
     """Whether this factory declares required sections at all.
@@ -348,8 +679,32 @@ def main() -> int:
     for name in excused:
         print(f"excused: {name} — predates the required-section invariant")
 
+    # The maturity band leg (issue #154). It reports its OWN population, because a
+    # clean verdict over a population that was never named is indistinguishable
+    # from one that examined nothing (P29).
+    band_excused, band_checked, band_found, band_declared = band_leg()
+    if not band_declared:
+        print(
+            f"no {CRITERIA.relative_to(REPO)} — no maturity band law is declared; "
+            f"nothing to assert about bands"
+        )
+    else:
+        for name in band_excused:
+            print(f"excused (band): {name} — predates the maturity-band invariant")
+        if band_checked:
+            print(
+                f"maturity band leg: {len(band_checked)} artifact(s) checked "
+                f"({', '.join(band_checked)}), {len(band_excused)} excused"
+            )
+        else:
+            print(
+                "maturity band leg: 0 artifact(s) checked — the post-boundary "
+                "population is EMPTY, so no band was verified"
+            )
+        problems.extend(f"band: {problem}" for problem in band_found)
+
     if problems:
-        print("required sections absent from a post-boundary artifact:", file=sys.stderr)
+        print("score artifact problems:", file=sys.stderr)
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
         return 1
