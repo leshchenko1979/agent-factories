@@ -24,7 +24,7 @@ What this gate asserts
 1. **The predicate, against synthetic state.** `one_sided` is exercised on
    synthetic pair lists and synthetic index contents, because a rule that has
    only ever seen good input has not been shown to reject bad input. Four cases:
-   one side staged (reported, naming the staged path AND its twin), both sides
+   one side staged (reported, naming the staged path AND its pair side), both sides
    (clean), neither (clean — no false fire on an unrelated commit), and an
    unrelated file staged (clean).
 2. **One pair table, two call sites.** The hook must load the SAME `PAIRS` the
@@ -35,7 +35,7 @@ What this gate asserts
    `TEMPLATE/tools/hooks/pre-commit` must both be declared in `PAIRS` (so a
    future edit that drops the entry fails here rather than silently unshipping
    the mechanism) and the copy must carry the EXECUTABLE bit. `test_template_sync.py`
-   compares BYTES and is blind to the mode, so a non-executable twin would ship a
+   compares BYTES and is blind to the mode, so a non-executable pair side would ship a
    hook git refuses to run — silent in every factory bootstrapped from it.
 4. **The installation facts, LIVE.** Present, executable, reachable through
    `core.hooksPath`. The predicate is shared with `tests/test_ledger_commit_cites_no_rows.py`

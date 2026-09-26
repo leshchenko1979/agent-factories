@@ -18,7 +18,7 @@ Why a `pre-commit` hook can do this job when `commit-msg` could not
 `#66` ruled the subject gate into `commit-msg` because at pre-commit time the
 pending subject does not exist yet. That reasoning does not transfer: a STAGED
 pair is visible at pre-commit. The pending commit is exactly what is staged, so
-the question "does this commit name one side without its twin?" is answerable
+the question "does this commit name one side without its pair?" is answerable
 there and nowhere later.
 
 Leg 2 — the manifest that did not follow the kit
@@ -101,18 +101,18 @@ GENERATOR_RELATIVE = "tools/kit_manifest.py"
 REMEDY = """pre-commit: REFUSED — a declared byte pair was staged on ONE side only.
 
   staged:  {staged}
-  twin:    {twin}   (not staged)
+  pair side: {pair_side}   (not staged)
 
 These two files are declared byte-identical in {table}. A commit that moves one
 side without the other puts a red on main for every reader until the next audit
 runs, and the pair is the mechanism that keeps them one thing rather than two.
 
-Stage the twin in this commit, or unstage the side you staged:
+Stage the pair's other side in this commit, or unstage the side you staged:
 
-    git add {twin}
+    git add {pair_side}
     git restore --staged {staged}
 
-The index was NOT rewritten — stage the twin and commit again."""
+The index was NOT rewritten — stage the pair's other side and commit again."""
 
 MANIFEST_REMEDY = """pre-commit: REFUSED — the shipped kit moved and {manifest} did not follow it.
 
@@ -181,7 +181,7 @@ def load_pairs(top: Path) -> list[tuple[str, str]] | None:
     return [(str(a), str(b)) for a, b in pairs]
 
 def one_sided(pairs: list[tuple[str, str]], staged: list[str]) -> list[tuple[str, str]]:
-    """`[(staged_side, twin)]` for every pair this commit splits.
+    """`[(staged_side, pair_side)]` for every pair this commit splits.
 
     PURE, so the probes drive it with synthetic pairs and synthetic index
     contents rather than by staging real files. The predicate is the law; the
@@ -325,9 +325,9 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     else:
-        for staged_side, twin in one_sided(pairs, staged):
+        for staged_side, pair_side in one_sided(pairs, staged):
             problems.append(
-                REMEDY.format(staged=staged_side, twin=twin, table=PAIR_TABLE_RELATIVE)
+                REMEDY.format(staged=staged_side, pair_side=pair_side, table=PAIR_TABLE_RELATIVE)
             )
 
     if (top / MANIFEST_RELATIVE).is_file() and touches_kit(staged):

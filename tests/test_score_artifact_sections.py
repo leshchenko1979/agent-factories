@@ -414,7 +414,7 @@ def band_declared() -> bool:
     The bands and the rubric maximum are declared by docs/quality-criteria.md,
     which the template does not ship. A factory without it has declared no band
     law, so the band probes assert nothing and say so -- the same undeclared path
-    `declared()` takes for the section law, and the reason the TEMPLATE twin does
+    `declared()` takes for the section law, and the reason the TEMPLATE pair does
     not RED where it is copied (the #78 class).
     """
     return CRITERIA.is_file()

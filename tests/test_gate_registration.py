@@ -1114,7 +1114,7 @@ def _audit_module():
     Imported lazily and by the module's own NAME rather than through a file loader, so
     the runner under probe is the one the audit runs. `tools/` is APPENDED, never
     inserted, so the repo's own `registry/` keeps its precedence over the same-named
-    module beside it. Twin of `_gate_budget_module` above.
+    module beside it. Pair of `_gate_budget_module` above.
     """
     tools = str(REPO / "tools")
     if tools not in sys.path:

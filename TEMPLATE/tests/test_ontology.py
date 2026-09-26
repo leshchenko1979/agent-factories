@@ -160,7 +160,7 @@ def is_exempt(rel: str, line: str) -> bool:
     and `tests/test_docs_sync.py` already requires the two to be byte-identical.
     So a justification that holds for one holds for the other, and keying the
     list on the exact path would force a duplicate entry per mirrored path —
-    a duplicate that can drift from its twin while both read as justified. The
+    a duplicate that can drift from its pair while both read as justified. The
     `TEMPLATE/` prefix is therefore stripped before the lookup, which covers
     every current and future mirror without weakening the list: the exemption
     still needs its own file, its own substring, and its own reason.
