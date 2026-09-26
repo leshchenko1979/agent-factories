@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HYGIENE = REPO / "tools" / "hygiene.py"
+AUDIT = REPO / "tools" / "audit.py"
 
 FOREIGN_PREFIX = "oc-snap-oc-deploy-"
 
@@ -190,3 +192,146 @@ def test_cli_audit_never_reports_foreign_litter() -> None:
             assert name.startswith(f"{REPO.name}-"), (
                 f"audit reported a scratch file outside our namespace: {name!r}"
             )
+
+
+def _audit(*, namespace: str | None = None, tool: Path | None = None) -> str:
+    """Run the hygiene audit through its CLI and return the combined output.
+
+    `tool` exists so a probe can drive a COPY of the tool living elsewhere: the
+    namespace default is derived from the tool's OWN path, so the only way to
+    exercise the run-site defect is to move the tool, never the cwd.
+    """
+    cmd = [sys.executable, str(tool or HYGIENE), "--audit"]
+    if namespace is not None:
+        cmd += ["--namespace", namespace]
+    res = subprocess.run(
+        cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    return res.stdout + res.stderr
+
+
+def _load_audit():
+    """Import tools/audit.py as a module without it being a package."""
+    spec = importlib.util.spec_from_file_location("audit_under_test", AUDIT)
+    assert spec and spec.loader, f"cannot load {AUDIT}"
+    module = importlib.util.module_from_spec(spec)
+    # Registered BEFORE exec: the module's dataclasses resolve their own
+    # `__module__` through sys.modules, and an unregistered module raises
+    # AttributeError inside dataclasses._is_type.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_namespace_flag_moves_the_population() -> None:
+    """`--namespace` must MOVE what is globbed, or it does nothing (#174).
+
+    A flag whose population does not follow it is indistinguishable from a flag
+    that is ignored, so BOTH directions are asserted. Both runs use a PROBE-ONLY
+    namespace, never this factory's own, so a concurrent audit on a shared box
+    cannot observe the planted file.
+    """
+    ns = f"hygiene-probe-{os.getpid()}"
+    planted = Path("/tmp") / f"{ns}-stale.bin"
+    try:
+        planted.write_text("planted by the #174 probe\n")
+        stale = time.time() - (24 + 6) * 3600
+        os.utime(planted, (stale, stale))
+
+        seen = _audit(namespace=ns)
+        assert f"{ns}-stale.bin" in seen, (
+            f"--namespace {ns!r} did not move the population — the planted "
+            f"stale file was not reported:\n{seen}"
+        )
+
+        elsewhere = _audit(namespace=f"{ns}-empty")
+        assert f"{ns}-stale.bin" not in elsewhere, (
+            f"a namespace that does not own the file reported it anyway:\n{elsewhere}"
+        )
+        # Asserted on the NAMESPACE LINE, never on the audit being wholly clean:
+        # the tree inspection is cwd-relative, so a run from a subdirectory
+        # reports path artifacts that have nothing to do with the population
+        # this probe moves.
+        assert f"hygiene namespace: {ns}-empty (declared)" in elsewhere, elsewhere
+    finally:
+        planted.unlink(missing_ok=True)
+
+
+def test_namespace_flag_overrides_the_run_site() -> None:
+    """The declared namespace WINS over the directory the tool sits in (#174).
+
+    The pair is the whole point: the same copy of the tool, run with the same
+    cwd, reports the run site's directory name by DEFAULT and the declared
+    namespace once the flag is given. Without the first arm this probe would pass
+    on a tool whose default had silently become canonical, and the worktree
+    defect it exists for would go unexercised.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        elsewhere = Path(tmp) / "not-this-factory" / "tools"
+        elsewhere.mkdir(parents=True)
+        shutil.copy2(HYGIENE, elsewhere / "hygiene.py")
+        tool = elsewhere / "hygiene.py"
+
+        defaulted = _audit(tool=tool)
+        assert "hygiene namespace: not-this-factory (default" in defaulted, (
+            f"the default no longer follows the run site, so this probe has "
+            f"stopped exercising the defect it was written for:\n{defaulted}"
+        )
+
+        declared = _audit(tool=tool, namespace=REPO.name)
+        assert f"hygiene namespace: {REPO.name} (declared)" in declared, (
+            f"--namespace did not override the run site:\n{declared}"
+        )
+
+
+def test_audit_resolves_the_canonical_namespace() -> None:
+    """The audit grades the namespace this factory OWNS, from any run site (#174).
+
+    `Path.name` is the naive derivation and it is WRONG for any run site other
+    than the main worktree: from `tools/` it grades a namespace called `tools`,
+    and from a linked worktree the worktree's own directory name. The canonical
+    name comes from the main worktree, which `git rev-parse --git-common-dir`
+    resolves from either.
+
+    The probe is written as a PROPERTY, never as this repo's directory name: this
+    file is byte-paired into `TEMPLATE/`, whose canonical namespace is still the
+    main worktree's, so an assertion on `REPO.name` would red where it is copied.
+    Both arms are asserted, because an invariant answer that happened to BE the
+    run site's directory name would satisfy the invariance arm alone.
+    """
+    audit = _load_audit()
+
+    # Arm 1 — a tree that is not a checkout falls back to its own directory name.
+    # The fallback is the documented behaviour, so it is asserted rather than
+    # left as the branch nobody exercises.
+    with tempfile.TemporaryDirectory() as tmp:
+        plain = Path(tmp) / "not-a-checkout"
+        plain.mkdir()
+        assert audit.hygiene_namespace(plain) == "not-a-checkout", (
+            f"a tree that is not a checkout returned "
+            f"{audit.hygiene_namespace(plain)!r} instead of its directory name"
+        )
+
+    # Arm 2 — inside a checkout the answer must NOT follow the run site.
+    probe = subprocess.run(
+        ["git", "rev-parse", "--git-common-dir"],
+        cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    if probe.returncode != 0:
+        print(
+            "note: this tree is not a git checkout, so the run-site invariance "
+            "is unobservable here — arm 1 covered the fallback instead"
+        )
+        return
+
+    root = audit.hygiene_namespace(audit.REPO_ROOT)
+    nested = audit.hygiene_namespace(audit.REPO_ROOT / "tools")
+    assert root, "the helper returned an empty namespace"
+    assert nested == root, (
+        f"a run site inside the tree resolved to {nested!r} while the root "
+        f"resolved to {root!r} — the namespace must not follow the run site"
+    )
+    assert root != (audit.REPO_ROOT / "tools").name, (
+        f"the namespace followed the run site: {root!r} is the run site's own "
+        f"directory name, which is the #174 defect"
+    )

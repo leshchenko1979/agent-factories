@@ -69,9 +69,18 @@ import time
 # namespaces are declared with --scratch-glob, never by widening this list to a
 # prefix somebody else already uses.
 NAMESPACE = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRATCH_PATTERNS = [
-    f"/tmp/{NAMESPACE}-*",
-]
+
+def scratch_patterns_for(namespace: str) -> list[str]:
+    """The scratch globs a factory owning `namespace` may inspect.
+
+    Factored out of the module constant so `--namespace` moves the population
+    through the SAME expression the default uses. A second copy of the glob
+    shape would let the flag and the default drift apart, which is the class
+    this factory files against.
+    """
+    return [f"/tmp/{namespace}-*"]
+
+SCRATCH_PATTERNS = scratch_patterns_for(NAMESPACE)
 
 MAX_AGE_HOURS = 24
 
@@ -218,6 +227,15 @@ def main() -> int:
         "Never pass a prefix another tool already writes to.",
     )
     parser.add_argument(
+        "--namespace",
+        default=NAMESPACE,
+        metavar="NAME",
+        help=f"The scratch namespace this factory OWNS (default: the repository "
+        f"directory name, {NAMESPACE!r}). Pass it explicitly when running from a "
+        f"worktree: the default follows the directory the TOOL sits in, so a "
+        f"worktree measures a namespace belonging to nobody.",
+    )
+    parser.add_argument(
         "--grace-minutes",
         type=int,
         default=DEFAULT_GRACE_MINUTES,
@@ -243,7 +261,16 @@ def main() -> int:
     REQUIRED_COMMITTED = list(args.require_committed)
 
     dry_run = args.audit and not args.clean
-    patterns = list(SCRATCH_PATTERNS) + list(args.scratch_glob or [])
+    # The namespace is PRINTED on every run, with its provenance: a verdict over
+    # a namespace the reader cannot see is unreproducible, and a worktree's run
+    # site is exactly how the wrong one got measured in silence (#174).
+    origin = (
+        "default, the repository directory name"
+        if args.namespace == NAMESPACE
+        else "declared"
+    )
+    print(f"hygiene namespace: {args.namespace} ({origin})")
+    patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
     count, items = reap_stale_scratch(dry_run=dry_run, patterns=patterns)
     violations, advisories, explanations = inspect_git_working_tree()
 

@@ -34,6 +34,32 @@ from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+def hygiene_namespace(repo_root: Path) -> str:
+    """The scratch namespace this factory OWNS, resolved from ANY worktree (#174).
+
+    `tools/hygiene.py` derives its own namespace from the directory the tool
+    sits in, which is right only in the MAIN worktree: run from a linked
+    worktree it globs `/tmp/<worktree-dir>-*`, a namespace belonging to nobody,
+    and returns a clean verdict over a population it never examined. The
+    canonical namespace is the main worktree's directory name, and
+    `git rev-parse --git-common-dir` resolves it from either. A tree that is not
+    a checkout at all falls back to its own directory name, which is the
+    pre-#174 behaviour and the correct one there.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=repo_root, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return repo_root.name
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return repo_root.name
+    git_dir = Path(proc.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = repo_root / git_dir
+    return git_dir.resolve().parent.name
+
 # The telemetry reader is the SHARED predicate, never a local re-parse (issue #90).
 # `n=405` PART 5 rules the CLASS — "it is why the class, not the three call sites, is
 # the ruling" — so a fourth site may not carry its own scan. The path insert is the
@@ -1001,7 +1027,13 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
 
     # 7. Workspace hygiene audit
     if (repo_root / "tools/hygiene.py").is_file():
-        gates_to_run.append([sys.executable, "tools/hygiene.py", "--audit"])
+        # The namespace is passed EXPLICITLY. The tool's own default follows its
+        # RUN SITE, so an audit run from a worktree would grade a namespace
+        # belonging to nobody and read clean (#174).
+        gates_to_run.append([
+            sys.executable, "tools/hygiene.py", "--audit",
+            "--namespace", hygiene_namespace(repo_root),
+        ])
 
     # 8. Visual roadmap and process-to-product matrix audit
     if (repo_root / "tools/roadmap.py").is_file():
