@@ -50,11 +50,13 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 # A gate may only glob a namespace this factory OWNS.
 #
@@ -82,6 +84,65 @@ def scratch_patterns_for(namespace: str) -> list[str]:
 
 SCRATCH_PATTERNS = scratch_patterns_for(NAMESPACE)
 
+# The declaration the reaper consults before it unlinks. AGE ALONE cannot tell a
+# stale scratch file from LIVE STATE: a lock created once and held long-term has
+# an mtime nothing refreshes, so it is indistinguishable from litter by the only
+# discriminator this tool has. The file is FACTORY DATA and never ships; the
+# skeleton beside it (`docs/hygiene-protected.example.json`) is what a factory
+# copies. An ABSENT file means this factory has declared no live paths, which is
+# the shipped state of a new factory; a file that EXISTS and cannot be read is a
+# reported problem, because only the silent failure is the hazard.
+PROTECTED_REL = "docs/hygiene-protected.json"
+
+def repo_root() -> Path:
+    """The tree this copy of the tool belongs to."""
+    return Path(__file__).resolve().parent.parent
+
+def load_declaration(root: Path | None = None) -> tuple[list[dict], list[dict], list[str]]:
+    """(protected, scratch, problems) read from the factory's declaration.
+
+    `protected` entries name paths the reaper must SKIP; `scratch` entries name
+    paths that are genuinely reapable, classified so the classifier gate can tell
+    a declared literal from a new one. Both are lists of dicts with `path` and
+    `why`; `why` is REQUIRED, because an entry nobody could defend in the output
+    is one that should be fixed instead.
+
+    An entry that matches nothing is PRINTED but is NOT a problem: this is a
+    PREVENTION surface, and the point is to declare a path BEFORE the code that
+    creates it lands. That is the one deliberate difference from the exemption
+    surfaces, where an unmatched entry is a stale debt.
+    """
+    root = root or repo_root()
+    path = root / PROTECTED_REL
+    if not path.is_file():
+        return [], [], []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [], [], [f"{PROTECTED_REL} exists but cannot be read: {exc}"]
+
+    problems: list[str] = []
+    out: dict[str, list[dict]] = {"protected": [], "scratch": []}
+    for kind in ("protected", "scratch"):
+        entries = data.get(kind, [])
+        if not isinstance(entries, list):
+            problems.append(f"{PROTECTED_REL}: `{kind}` must be a list")
+            continue
+        for i, entry in enumerate(entries):
+            where = f"{PROTECTED_REL}: {kind}[{i}]"
+            if not isinstance(entry, dict):
+                problems.append(f"{where} must be an object")
+                continue
+            p, why = entry.get("path"), entry.get("why")
+            if not isinstance(p, str) or not p.startswith("/tmp/"):
+                problems.append(f"{where}: `path` must be an absolute /tmp path")
+                continue
+            if not isinstance(why, str) or not why.strip():
+                problems.append(f"{where} ({p}): `why` is required and blank")
+                continue
+            out[kind].append(entry)
+    return out["protected"], out["scratch"], problems
+
 MAX_AGE_HOURS = 24
 
 # How long a dirty path may be explained as a lane still working on it. The
@@ -92,20 +153,28 @@ DEFAULT_GRACE_MINUTES = 60
 LITTER_SUFFIXES = (".bak", ".tmp", ".log", ".orig")
 
 def reap_stale_scratch(
-    dry_run: bool = False, patterns: list[str] | None = None
+    dry_run: bool = False,
+    patterns: list[str] | None = None,
+    protected: set[str] | None = None,
 ) -> tuple[int, list[str]]:
     """Audit and optionally reap scratch artifacts older than MAX_AGE_HOURS.
 
     Only the namespaces passed in (default: the ones this factory owns) are
-    inspected; a foreign prefix is never globbed.
+    inspected; a foreign prefix is never globbed. `protected` is the set of paths
+    DECLARED LIVE (`docs/hygiene-protected.json`): a protected path is skipped
+    entirely — never reported as stale, never unlinked — because age alone cannot
+    tell it from litter (#153).
     """
     now = time.time()
     cutoff = now - (MAX_AGE_HOURS * 3600)
+    protected = protected or set()
     found: list[str] = []
     reaped = 0
 
     for pattern in (patterns or SCRATCH_PATTERNS):
         for path in glob.glob(pattern):
+            if path in protected:
+                continue
             try:
                 mtime = os.path.getmtime(path)
                 if mtime < cutoff:
@@ -270,8 +339,23 @@ def main() -> int:
         else "declared"
     )
     print(f"hygiene namespace: {args.namespace} ({origin})")
+    protected_entries, scratch_entries, decl_problems = load_declaration()
+    if decl_problems:
+        for problem in decl_problems:
+            print(f"hygiene declaration problem: {problem}", file=sys.stderr)
+        return 1
+    protected = {e["path"] for e in protected_entries}
+    # The declaration's population is PRINTED on every run, with the counts a
+    # reader needs to tell "nothing is declared live" from "the file was never
+    # found": a reaper that silently protects nothing is the defect itself.
+    print(
+        f"hygiene declaration: {len(protected)} path(s) declared live, "
+        f"{len(scratch_entries)} declared scratch ({PROTECTED_REL})"
+    )
     patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
-    count, items = reap_stale_scratch(dry_run=dry_run, patterns=patterns)
+    count, items = reap_stale_scratch(
+        dry_run=dry_run, patterns=patterns, protected=protected
+    )
     violations, advisories, explanations = inspect_git_working_tree()
 
     if dry_run:

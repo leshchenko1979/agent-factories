@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -340,3 +341,226 @@ def test_audit_resolves_the_canonical_namespace() -> None:
         f"the namespace followed the run site: {root!r} is the run site's own "
         f"directory name, which is the #174 defect"
     )
+
+# --- the classifier (#153) -------------------------------------------------
+#
+# Every literal in tracked sources that names a path inside this factory's OWNED
+# scratch namespace must be CLASSIFIED in the declaration. An unclassified one is
+# a NEW live artifact: it fails CI rather than being reaped in silence. The
+# predicate is one function, driven by the live leg AND by the probes below, so
+# the probes cannot drift from the check they exist to probe.
+
+# Read from the tool's own constant, never restated: a second copy would drift
+# from the file the reaper actually consults.
+DECLARATION_REL = _load_hygiene().PROTECTED_REL
+
+def owned_literals(text: str, namespace: str) -> list[tuple[int, str]]:
+    """Every (line number, literal) naming a path inside `namespace`."""
+    pattern = re.compile(r"/tmp/" + re.escape(namespace) + r"-[A-Za-z0-9_.\-]*")
+    out: list[tuple[int, str]] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for match in pattern.finditer(line):
+            out.append((lineno, match.group(0)))
+    return out
+
+def classify(
+    texts: dict[str, str], namespace: str, protected: set[str], scratch: set[str]
+) -> tuple[list[str], int]:
+    """(problems, literals examined) over {relative path: file text}.
+
+    A literal is classified when it appears in EITHER list. Both lists are
+    consulted, because a `scratch` entry is a literal somebody considered and
+    decided was litter, which is exactly what a bare "protected" list could not
+    express without a false declaration.
+    """
+    declared = set(protected) | set(scratch)
+    problems: list[str] = []
+    examined = 0
+    for rel, body in sorted(texts.items()):
+        for lineno, literal in owned_literals(body, namespace):
+            examined += 1
+            if literal not in declared:
+                problems.append(
+                    f"{rel}:{lineno}: {literal} is in this factory's scratch "
+                    f"namespace and is NOT classified — declare it in "
+                    f"{DECLARATION_REL} as `protected` (live state, never reaped) or "
+                    f"`scratch` (genuinely reapable)"
+                )
+    return problems, examined
+
+RECORD_PREFIX = "evidence/"
+
+def _tracked_texts() -> dict[str, str]:
+    """Every tracked file that decodes as UTF-8, as {relative path: text}.
+
+    The append-only RECORD is excluded, and the distinction is principled rather
+    than a carve-out: the evidence tree holds what was done and said — ledger
+    rows, score artifacts, the rework log, delivered specs — and no file there
+    can CREATE an artifact. A path merely MENTIONED in a ledger row is prose, not
+    a live artifact, and the record is forward-only: it must never be edited to
+    satisfy a gate. Measured when this leg was written: all six literals the scan
+    first found were prose in the evidence tree, none of them a creator. The
+    classifier exists to catch the file that MAKES the path.
+    """
+    res = subprocess.run(
+        ["git", "ls-files"], cwd=REPO, stdout=subprocess.PIPE, text=True
+    )
+    assert res.returncode == 0, "git ls-files failed — the classifier cannot read the tree"
+    out: dict[str, str] = {}
+    for rel in res.stdout.splitlines():
+        if rel.startswith(RECORD_PREFIX):
+            continue
+        path = REPO / rel
+        try:
+            out[rel] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+    return out
+
+def test_every_owned_namespace_literal_is_classified() -> None:
+    """Live leg — the population is PRINTED, so a clean verdict is never vacuous.
+
+    This factory's namespace holds no literal today, which is the normal read for
+    a forward-only surface: the check exists so the FIRST one cannot land
+    unclassified. The population is printed for exactly that reason — "nothing to
+    classify" and "a classifier that cannot see" must never be the same output.
+    """
+    hygiene = _load_hygiene()
+    protected, scratch, problems = hygiene.load_declaration(REPO)
+    assert not problems, f"the declaration is malformed: {problems}"
+
+    found, examined = classify(
+        _tracked_texts(),
+        hygiene.NAMESPACE,
+        {e["path"] for e in protected},
+        {e["path"] for e in scratch},
+    )
+    print(
+        f"hygiene classifier: {examined} literal(s) in the owned namespace "
+        f"/tmp/{hygiene.NAMESPACE}-* over {len(_tracked_texts())} tracked file(s), "
+        f"{len(protected)} declared live, {len(scratch)} declared scratch, "
+        f"{len(found)} unclassified"
+    )
+    assert not found, "\n".join(found)
+
+def test_a_new_owned_literal_is_unclassified() -> None:
+    """The non-vacuity leg: a NEW live artifact must RED, not be reaped in silence.
+
+    The literal is DERIVED, never written as one: this file is itself tracked, so a
+    literal here would be a real member of the population the live leg classifies,
+    and the probe would be testing its own fixture rather than the predicate.
+    """
+    hygiene = _load_hygiene()
+    ns = hygiene.NAMESPACE
+    new_live = "/tmp/" + ns + "-manager.lock"
+    problems, examined = classify(
+        {"tools/manager.py": f'LOCK = "{new_live}"\n'},
+        ns, set(), set(),
+    )
+    assert examined == 1, f"the classifier did not see the literal: examined={examined}"
+    assert problems, "a NEW literal in the owned namespace was classified by nothing"
+    assert new_live in problems[0], problems[0]
+
+def test_a_classified_literal_passes() -> None:
+    """The control: the same literal, declared, is clean — so the RED above is a finding."""
+    hygiene = _load_hygiene()
+    ns = hygiene.NAMESPACE
+    new_live = "/tmp/" + ns + "-manager.lock"
+    problems, examined = classify(
+        {"tools/manager.py": f'LOCK = "{new_live}"\n'},
+        ns, {new_live}, set(),
+    )
+    assert examined == 1
+    assert not problems, problems
+
+    # And the `scratch` class is consulted too, or a factory could only ever
+    # classify a path by falsely declaring it live.
+    problems2, _ = classify(
+        {"tools/manager.py": f'SCRATCH = "{new_live}"\n'},
+        ns, set(), {new_live},
+    )
+    assert not problems2, problems2
+
+def test_a_foreign_namespace_literal_is_not_ours() -> None:
+    """A literal in ANOTHER factory's namespace is not this factory's to classify.
+
+    This is the property the gate's own name is about: the reaper never globs a
+    foreign prefix, so the classifier must not demand a declaration for one.
+    """
+    hygiene = _load_hygiene()
+    foreign = "/tmp/" + "some-other-factory" + "-thing.lock"
+    problems, examined = classify(
+        {"tools/other.py": f'X = "{foreign}"\n'}, hygiene.NAMESPACE, set(), set()
+    )
+    assert examined == 0, f"a foreign literal was counted as ours: {examined}"
+    assert not problems, problems
+
+
+def test_a_protected_path_survives_the_reap() -> None:
+    """The reaper SKIPS a declared-live path — the whole point of #153.
+
+    Driven through `reap_stale_scratch` itself, with both arms in one probe: a
+    protected stale file must survive, and an undeclared stale file beside it must
+    be reaped in the same call. Without the second arm the probe would pass on a
+    reaper that had simply stopped reaping.
+    """
+    hygiene = _load_hygiene()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        protected = tmpdir / f"{REPO.name}-live.lock"
+        litter = tmpdir / f"{REPO.name}-scratch.log"
+        stale = time.time() - (hygiene.MAX_AGE_HOURS + 6) * 3600
+        for f in (protected, litter):
+            f.write_text("probe\n")
+            os.utime(f, (stale, stale))
+
+        pattern = str(tmpdir / f"{REPO.name}-*")
+        reaped, found = hygiene.reap_stale_scratch(
+            dry_run=False, patterns=[pattern], protected={str(protected)}
+        )
+
+        assert protected.exists(), (
+            "a path DECLARED LIVE was unlinked — the declaration did not hold"
+        )
+        assert not litter.exists(), "the undeclared stale file survived the reap"
+        assert str(litter) in " ".join(found), (
+            f"the reaped file was not reported: {found}"
+        )
+        assert str(protected) not in " ".join(found), (
+            f"a PROTECTED path was reported as stale scratch: {found}"
+        )
+        assert reaped == 1, f"expected exactly one reap, got {reaped}"
+
+
+def test_the_declaration_refuses_a_blank_why() -> None:
+    """An entry nobody could defend in the output is refused, not honoured.
+
+    `why` is the field that makes the declaration reviewable, so a blank one is a
+    problem rather than an empty string that reads as satisfied.
+    """
+    hygiene = _load_hygiene()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "docs").mkdir()
+        decl = root / hygiene.PROTECTED_REL
+        decl.write_text(
+            '{"protected": [{"path": "/tmp/x-live.lock", "why": "   "}], "scratch": []}',
+            encoding="utf-8",
+        )
+        protected, scratch, problems = hygiene.load_declaration(root)
+        assert problems, "a blank `why` was accepted"
+        assert not protected, "the malformed entry was still honoured"
+        assert not scratch
+
+        # The control: a well-formed entry loads, so the refusal above is a
+        # finding rather than a loader that rejects everything.
+        decl.write_text(
+            '{"protected": [{"path": "/tmp/x-live.lock", "why": "held long-term"}],'
+            ' "scratch": []}',
+            encoding="utf-8",
+        )
+        protected2, _scratch2, problems2 = hygiene.load_declaration(root)
+        assert not problems2, problems2
+        assert [e["path"] for e in protected2] == ["/tmp/x-live.lock"]
