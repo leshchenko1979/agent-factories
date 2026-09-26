@@ -406,6 +406,21 @@ REQUIRED_GATES: tuple[str, ...] = (
     # a factory that dropped the runner would carry a declared reading with nothing measuring
     # it — dead text, which is the failure P29 names.
     "test_brain_metrics.py",
+    # Added with its registration (board #149, ruling n=1158). REQUIRED is the correct grain
+    # and OPTIONAL is not, for the reason that decides the entries around it: the gate drives
+    # synthetic rubrics and synthetic manifests under a TEMP DIRECTORY — no live fleet, no
+    # board, no box-local fixture — so it passes in a bootstrapped factory exactly as it does
+    # here, and it is byte-paired with a TEMPLATE copy so the manifest grain is what keeps a
+    # factory from dropping the runner and keeping the file. What it guards is the instrument
+    # behind a DECLARED anchor: the rubric's D1 criterion stopped resolving against the path
+    # `docs/subject/` and started resolving against a declared accepted set, and the ruling's
+    # done criterion 4 — the measurement run prints WHICH artefact resolved per factory — is
+    # the half that stops a floor reading the same as a missing file. A factory that dropped
+    # the runner would carry the declaration with nothing measuring it, which is the dead text
+    # P29 names. Its live reading is REPORTED, never asserted, because every figure it prints
+    # is a property of an INSTANT: a factory's tree moves, and a criterion pinned to one of
+    # those numbers would fail a CORRECT instrument.
+    "test_subject_anchor.py",
     "test_close_board_recorded.py",
     "test_close_row_revision.py",
     # Added with its registration (issue #130). REQUIRED is the correct grain and OPTIONAL
@@ -472,7 +487,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_hygiene_inflight.py",
     "test_hygiene_namespace.py",
     # Added with its registration (issue #46). REQUIRED is the correct grain and OPTIONAL
-    # is not, and the deciding fact is the same one that put the score-run twin
+    # is not, and the deciding fact is the same one that put the score-run pair
     # (`test_score_gate_recorded.py`) in this tuple: its boundary is FORWARD-ONLY. The rule
     # governs rows written at or after the instant a factory declares, nothing is ever
     # backfilled, and a ledger row is immutable — so a factory that ships the gate OPTIONAL

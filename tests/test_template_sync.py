@@ -266,6 +266,21 @@ PAIRS = [
     # pins a live figure — the fixture leg is the only pass/fail available (see the rationale
     # on the instrument's own pair above).
     ("tests/test_brain_metrics.py", "TEMPLATE/tests/test_brain_metrics.py"),
+    # The subject-anchor instrument and its gate (board #149, ruling n=1158). Paired for the
+    # reason that makes the instrument portable: it reads only artifacts a bootstrapped
+    # factory already has -- its own `registry/fleet.json` (or the shipped example) and the
+    # files its own factories declare -- and imports nothing from this repository, so two
+    # factories compute the SAME predicate and their D1 resolutions stay comparable. The
+    # rubric itself does NOT ship (a bootstrapped factory keeps its criteria in the template
+    # project, as `tests/test_criteria_count.py` states), so where it is absent the instrument
+    # takes the STATED-SKIP path rather than falling back to a copy of the accepted set that
+    # could drift from the declaration -- which is why no default member list ships at all.
+    # A reader can reject the pairing on the two limits it actually carries: the live reading
+    # is a property of THIS box's fleet at THIS instant and is therefore REPORTED by the
+    # instrument rather than asserted by the gate, and a factory that never adopts the rubric
+    # runs an instrument that always skips with its reason.
+    ("tools/subject_anchor.py", "TEMPLATE/tools/subject_anchor.py"),
+    ("tests/test_subject_anchor.py", "TEMPLATE/tests/test_subject_anchor.py"),
 ]
 
 

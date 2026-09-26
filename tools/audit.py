@@ -1808,6 +1808,33 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_publish.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_publish.py"])
 
+    # 57. Subject-anchor gate (board #149, ruling n=1158). The rubric's D1 anchor became a
+    #     DECLARED ACCEPTED SET stated in `docs/quality-criteria.md`, and done criterion 4 is
+    #     the load-bearing half: the measurement run must print WHICH artefact resolved per
+    #     factory, because a floor that reads the same as a missing file is how the defect
+    #     stayed invisible for four runs. `tools/subject_anchor.py` is that instrument and
+    #     this gate is its evidence -- a declared anchor with no instrument is dead text, and
+    #     an instrument with no gate is a reading nobody can check (P29).
+    #     WHAT IT PROVES that nothing else can: the accepted set is READ from the document and
+    #     never restated (two declarations, two answers), the parse is SECTION-SCOPED (an
+    #     unscoped row predicate matched FIFTEEN rows on the live document during this
+    #     instrument's own construction), a member's declared minimum is enforced, a factory
+    #     that resolves nothing is NAMED member by member, and an absent rubric SKIPS with its
+    #     reason while a present-but-unparseable one REDs -- the #164 split.
+    #     REQUIRED, not OPTIONAL, for the reason that decides every entry around it: the gate
+    #     drives synthetic rubrics and synthetic manifests under a temp directory -- no live
+    #     fleet, no box-local fixture -- so it passes in a bootstrapped factory exactly as it
+    #     does here, and it is byte-paired into TEMPLATE so a factory cannot drop the runner
+    #     and keep the file. Where no rubric ships it takes the stated-skip path, which is what
+    #     a bootstrapped factory looks like by design.
+    #     THE LIVE FLEET READING IS REPORTED, NEVER ASSERTED, and that is deliberate: every
+    #     figure the instrument prints is a property of an INSTANT (a factory's tree moves), so
+    #     an acceptance criterion pinned to one would fail a CORRECT instrument. The gate
+    #     asserts the instrument's arithmetic against fixtures and the instrument reports
+    #     freshness -- the same division `tests/test_brain_metrics.py` (gate 48) draws.
+    if (repo_root / "tests/test_subject_anchor.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_subject_anchor.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

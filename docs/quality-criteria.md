@@ -119,7 +119,33 @@ self-scoring.
 ### The Subject Matter Consulting Gate (Hard Rule)
 > **A factory is strictly barred from receiving substantive consulting, diagnostic audits, or bottleneck recommendations until its Documentation Quality achieves baseline calibration ($\ge 2/4$ across D1, D2, D3).**
 
-Consulting on process without knowing what the process builds produces ungrounded bureaucracy. An auditor cannot diagnose whether a defect was caused by an ambiguous prompt, a broken model, or a domain misunderstanding if the domain requirements and schemas (`docs/subject/`) are not codified.
+Consulting on process without knowing what the process builds produces ungrounded bureaucracy. An auditor cannot diagnose whether a defect was caused by an ambiguous prompt, a broken model, or a domain misunderstanding if the domain is not codified. The anchor is the **declared accepted set** below — `docs/subject/` is one acceptable location for it, never the anchor itself.
+
+### The declared accepted set — what D1 resolves against
+
+*Owner ruling 2026-09-26, amending board #20's implemented form: no consulting without subject-matter documentation stands; what changed is that one path stopped being the only evidence of it.*
+
+A criterion that resolves against a **path** measures a filename. This one resolves against a **declared accepted set**: four facets of domain grounding, each resolving at whichever declared artefact exists — in the factory's own repo, or in the directory its declared skill lives in. A factory is grounded when the artefacts are there, not when a particular directory name is.
+
+| Member | What it grounds | Declared patterns — the member resolves at the first that exists |
+|---|---|---|
+| **Controlled vocabulary** | the domain's nouns — what the factory's own terms mean | `ONTOLOGY.md` |
+| **Domain model** | entities, schemas, business logic, deliverables | `docs/subject/domain-model.md` · `docs/subject/client-requirements.md` · `docs/**/*domain-model*.md` |
+| **Methodology core** | LLM-weakness counters and the harness binding | `docs/methodology/*.md` |
+| **Role cards** | who owns what — the roles and their boundaries | `roles/*.md` · `{hq,triage,worker,carrier,editor,harvest,toolsmith}.md` (≥2) |
+
+The set has **4** members, and the score is the count that resolved:
+
+| Members resolved | Score | Reading |
+|---|---|---|
+| 0 | 1 | Ad-hoc — the domain is written down nowhere the factory can point at |
+| 1 | 2 | Defined — one facet written down. The consulting floor |
+| 2–3 | 3 | Measured — grounded from more than one angle |
+| 4 | 4 | Self-correcting — the whole set, so the grounding can be checked against itself |
+
+**The resolver is `tools/subject_anchor.py`**, and it prints, per factory, **which artefact resolved** — so a floor is never again indistinguishable from a missing file, which is how this defect stayed invisible for four runs.
+
+**An inadequate cell is a signal, not a fine.** A 2/4 means the factory cannot yet be consulted about its own domain, and the remedy is an **interview** with that factory's owner to elicit process structure, goals, criteria and strategies — not a directory created to satisfy a filename. Creating `docs/subject/` to move the number, when the substance already lives elsewhere, is compliance theatre.
 
 ---
 
@@ -140,7 +166,7 @@ what must be in place before the first task runs versus what is earned over time
 
 | Criterion | What it measures | What it prevents |
 |---|---|---|---|
-| **Subject matter specification** (D1) | Presence and completeness of `docs/subject/` (domain entities, API schemas, business logic, client deliverables, and SLAs) | The factory that builds the wrong thing. An agent that generates syntactically valid pipelines that solve non-existent domain problems or hallucinate API structures |
+| **Subject matter specification** (D1) | Presence and completeness of **domain grounding** — the declared accepted set above (controlled vocabulary, a domain model, the methodology core, role cards), resolved at whichever declared artefact exists in the factory's repo or skill directory. `docs/subject/` is one accepted location, not the anchor | The factory that builds the wrong thing. An agent that generates syntactically valid pipelines that solve non-existent domain problems or hallucinate API structures |
 | **Process specification & criteria** (D2) | All declared processes have atomic subprocess decompositions, explicit input/output contracts, and measurable custom acceptance criteria | The un-auditable monolith. Cascading failures where spec ambiguity is falsely diagnosed as model hallucination |
 | **Methodology core conformance** (D3) | Documentation of LLM weakness counters (amnesia, concurrency, locking, receipts) and substrate/harness bindings (`docs/methodology/`) | Repeating generic AI failure modes. A factory that loses state on compaction, hangs on stdin, or suffers race conditions |
 | **Documentation consistency** (D4) | Cross-document semantic non-contradiction, strict ontology vocabulary alignment (`test_ontology.py`), template byte-sync (`test_template_sync.py`), and grounding between declared process contracts and live test gates | The schizophrenic agent. Prompt files and process registers giving conflicting instructions, leading to execution loops, thrashing, and unverified assumptions |
@@ -382,4 +408,3 @@ decisions has stopped measuring and started meddling.
 - Anthropic, *How we built our multi-agent research system* — https://www.anthropic.com/engineering/multi-agent-research-system
 - CNCF TAG App Delivery, *Platform Engineering Maturity Model* — https://tag-app-delivery.cncf.io/whitepapers/platform-eng-maturity-model/
 - Team Topologies, *Thinnest Viable Platform* — https://teamtopologies.com/key-concepts-content/what-is-a-thinnest-viable-platform-tvp
-
