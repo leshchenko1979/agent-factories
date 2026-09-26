@@ -1858,10 +1858,15 @@ button{width:100%;margin:.35rem 0}
 }
 """
 
-def page_wrapper(body, expires_at):
+def page_wrapper(body, expires_at, title):
     """The page shell. Stays in Python deliberately: the noindex directive, the
     charset, the inline CSS and the TTL line are tested here and must not change
     just because the BODY is now rendered from a spec.
+
+    `title` is the BROWSER TAB's title, and the shell is its ONE home. The
+    spec's Page.title is a DIFFERENT surface -- the renderer emits it as the
+    <h1> inside the body -- so the two are not two homes for one fact: the tab
+    names the page and its open count, the heading names the page.
 
     The page is PERMANENT (owner order 2026-09-25), so the line says so rather
     than printing an expiry that no longer exists."""
@@ -1869,7 +1874,7 @@ def page_wrapper(body, expires_at):
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
             "<meta name=\"robots\" content=\"noindex, nofollow\">\n"
-            "<title>Open questions</title>\n"
+            f"<title>{html.escape(title)}</title>\n"
             # defer: the page is readable and submittable before htmx arrives,
             # and the attributes are inert if the file never loads.
             f'<script src="{HTMX_FILE}" defer></script>\n'
@@ -1895,7 +1900,12 @@ def build_page(entries, slug, expires_at, action):
         oc_log_extra("publish_failed", why)
         die(4, "renderer fault: %s" % why)
     oc_log_extra("renderer", "json-render")
-    return page_wrapper(html_body, expires_at)
+    # The tab title names the page AND how much is waiting on it, so a browser
+    # with several factory pages open says which one has questions (owner order
+    # 2026-09-26). The count is the OPEN QUESTIONS count, the same predicate the
+    # pointer publishes -- never len(entries), which counts sets.
+    title = "%s (%d) - Factory Open Questions" % (slug, open_question_count(entries))
+    return page_wrapper(html_body, expires_at, title)
 
 
 # Why the last vendoring attempt ended as it did. Recorded so the selftest can
@@ -2016,15 +2026,24 @@ def latest_page():
     return page_url(token), None
 
 
+def open_question_count(sets):
+    """Open QUESTIONS across `sets` — the ONE predicate the page title, the
+    pointer's `questions` field and `open_totals` all read.
+
+    NOT len(sets): that counts question SETS and is a different number. The live
+    register holds 3 open sets carrying 5 open questions, so a title built from
+    the set count would read (3) while the page renders 5."""
+    return sum(1 for s in sets for q in s.get("questions", [])
+               if not question_is_closed(q))
+
+
 def open_totals():
     """(open questions, open sets) across the WHOLE register — the number the
     owner asked ask to return."""
     with RegisterLock():
         data = read_register()
     sets = [s for s in data["sets"] if s.get("status") == "open"]
-    total = sum(1 for s in sets for q in s.get("questions", [])
-                if not question_is_closed(q))
-    return total, len(sets)
+    return open_question_count(sets), len(sets)
 
 
 def read_pointer():
@@ -2114,8 +2133,7 @@ def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=Fals
             "url": page_url(slug),
             "rotated_at": (created.replace(microsecond=0).isoformat()
                            if rotate else None),
-            "questions": sum(1 for e in entries for q in e.get("questions", [])
-                             if not question_is_closed(q))}
+            "questions": open_question_count(entries)}
     with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)
 
@@ -2759,6 +2777,53 @@ def selftest():
         rc, out, _ = run("publish", "--json")
         page = json.loads(out)
         body = open(os.path.join(page["path"], "index.html"), encoding="utf-8").read()
+        # The BROWSER TAB title names the page and how much is waiting on it
+        # (owner order 2026-09-26), so a browser with several factory pages open
+        # says which one has questions. Read from the RENDERED page, not the
+        # source: the title is emitted by the shell, and only the artifact shows
+        # whether the derivation reached it.
+        _t = re.search(r"<title>([^<]*)</title>", body)
+        ck(_t is not None, "the page carries a <title>")
+        ck(_t.group(1) == "%s (%d) - Factory Open Questions"
+           % (page["slug"], page["meta"]["questions"]),
+           "the tab title is '<slug> (<n>) - Factory Open Questions' (%r)"
+           % (_t.group(1),))
+        # NON-VACUITY, in a fixture BUILT to distinguish the two counts: ONE
+        # open set holding TWO open questions. The assertion above cannot see
+        # the difference, because the main fixture happens to hold exactly one
+        # question per set -- sets and questions are both 9 there, so a title
+        # built from the set count would satisfy it. len(sets) is the tempting
+        # wrong answer: it is the count build_page already holds.
+        _count_store = os.path.join(root, "count-store")
+        os.makedirs(_count_store, exist_ok=True)
+        with open(os.path.join(_count_store, "open.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump({"sets": [{
+                "id": "f-count-lane", "status": "open", "lane": "Count Lane",
+                "asked_at": None,
+                "questions": [
+                    {"qid": "c1", "title": "one", "status": "open",
+                     "lane": "Count Lane", "asked_at": None},
+                    {"qid": "c2", "title": "two", "status": "open",
+                     "lane": "Count Lane", "asked_at": None}]}]}, fh)
+        _saved_dir = env["OC_QUESTIONS_DIR"]
+        env["OC_QUESTIONS_DIR"] = _count_store
+        try:
+            rc, out, err = run("publish", "--json")
+            ck(rc == 0, "a one-set/two-question register publishes (rc=%d)" % rc)
+            _p = json.loads(out)
+            ck(len(_p["meta"]["sets"]) == 1 and _p["meta"]["questions"] == 2,
+               "\u2026and the fixture distinguishes them (sets=%d questions=%d)"
+               % (len(_p["meta"]["sets"]), _p["meta"]["questions"]))
+            _html = open(os.path.join(_p["path"], "index.html"),
+                         encoding="utf-8").read()
+            _t2 = re.search(r"<title>([^<]*)</title>", _html)
+            ck(_t2 is not None
+               and _t2.group(1).endswith("(2) - Factory Open Questions"),
+               "the tab counts OPEN QUESTIONS, never sets (%r)"
+               % (_t2.group(1) if _t2 else None,))
+        finally:
+            env["OC_QUESTIONS_DIR"] = _saved_dir
         # Owner question 2026-09-24: the answer form should swap inline instead
         # of navigating. htmx breaks "no <script> at all", but the property that
         # mattered was NO CLIENT-SIDE LOGIC OF OUR OWN -- so the assertion
