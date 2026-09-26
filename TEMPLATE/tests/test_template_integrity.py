@@ -89,6 +89,18 @@ DECLARED: dict[str, str] = {
     "topics.md": (
         "a pointer to the surface binding, kept so the old path still resolves"
     ),
+    "tools/questions": (
+        "the questions register, ADOPTED into the template from the opencrabs-dev skill "
+        "repo (plan 2646d31a step 15), so it has no factory-side copy to pair with — the "
+        "pair relation is 'a factory file and its template copy', and this direction is the "
+        "reverse: the template is now the origin"
+    ),
+    "tools/questions-render.mjs": (
+        "the register's renderer, adopted with it in the same step. It is not a `.tmpl` "
+        "skeleton and pairs with nothing, and the two move together: the tool resolves this "
+        "file as a SIBLING by absolute path, so a copy without it publishes nothing and "
+        "reports a render failure rather than a clean page"
+    ),
 }
 
 SKELETON_SUFFIX = ".tmpl"
