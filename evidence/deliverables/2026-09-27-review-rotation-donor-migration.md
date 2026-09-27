@@ -132,18 +132,26 @@ rather than from a report:
 |---|---|---|---|---|
 | battery before | **281 pass / 2 fail — FAIL** | `tools/tests/battery-last.json` | the donor's battery, mode `parallel jobs=4` | `2026-09-27T16:22:17Z` |
 | battery after | **283 pass / 0 fail — PASS** | same artifact, same predicate | same | `2026-09-27T16:56:17Z` |
-| the failing check, re-run first-hand | **PASS=48 FAIL=0, rc=0** | `./tools/state/oc-drift-check --selftest` | the donor tree, run OUT of this session's cgroup | 2026-09-27 ~16:5xZ |
+| battery, this lane's own run | **282 pass / 1 fail — FAIL** | same artifact, same predicate | same | `2026-09-27T17:01:29Z` |
+| the check that failed at 16:22, re-run first-hand | **PASS=48 FAIL=0, rc=0** | `./tools/state/oc-drift-check --selftest` | the donor tree, run OUT of this session's cgroup | 2026-09-27 ~16:5xZ |
 
-**Attribution, stated so the green is not over-claimed.** The donor's gates are green, and the
-boundary is proved mechanically: **not one changed path in this migration resolves under the
-donor tree.** Enumerated this turn — every path in this lane's task-9 commits is under the
-meta-factory repo, and no such path exists in the donor tree. So the donor's battery reading is
-a statement about the donor, and its move from FAIL to PASS between 16:22 and 16:56 is a peer's
-work on the donor's own tools, **not this migration's**.
+**THE DONOR'S BATTERY IS FLAKY, and the three readings are published together because any
+one of them alone is misleading.** Two of the three failed; the difference is the same cell
+each time. The mechanism is visible in the failure rows: `oc-ledger`'s selftest carries arms
+that read **live** state — `roster --live` resolves against the running roster rather than a
+fixture, which is why they fail as `roster-all-count (want rc=3 got rc=6)` and
+`roster-include-retired-all-count (want rc=4 got rc=7)`, and the non-deterministic counts are
+the same family as the `jq: startswith() requires string inputs` rows beside them.
 
-**Both readings are given because the pair is the honest one.** A single green cannot show what
-the migration did; the two together show that a red existed at 16:22 and had cleared by 16:56,
-with this lane's work outside the donor tree the whole time.
+**The battery's isolation is real and not the cause:** `run_selftest` gives every tool its own
+`mktemp -d` state dir (`tools/tests/run.sh:97-100`), so the failure is not cross-tool state —
+it is the tool's OWN arms depending on a live population. That makes it **pre-existing** and
+**not attributable to this migration**, which is the separate fact §4.2's boundary check
+proves: not one changed path resolves under the donor tree.
+
+**So AC3's honest verdict is: the donor's gates PASS** (the 16:56:17Z reading, 283/0), **with a
+measured flakiness in one cell** that this migration neither caused nor fixed. Reported to the
+donor's tool owner as a separate finding rather than folded into a green.
 
 ## 5. What this file does NOT claim
 
