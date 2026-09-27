@@ -237,6 +237,17 @@ count is not a probe set stated by name: `test_review_lifecycle`, `test_schema_a
 the shipped artifact on every invocation of the gate, so a stale artifact fails rather than passing
 quietly. A gate that only compared two stored copies would be the vacuity this part prevents.
 
+**A shipped gate judges the ADOPTER** (frame §5.5, cited not restated). Clause 1 — fixtures derived
+from the tree under test — holds here by construction: `REPO_ROOT` resolves from `__file__`, every
+cycle the probes use is built by the probe itself under a test-local id (`test-cycle-01`,
+`test-migrate-synonym`, `test-lens-key-rename`), and no probe reads a kit or donor tree. The dates and
+tokens those fixtures carry are the donor's **shape**, reproduced as input, never a value read back
+from the donor's state. Measured: the suite returns **21 passed** in a foreign copy materialized with
+no `.git` and no history — so the verdict is a reading of the tree it runs in, which is the property
+the clause exists to secure. Clauses 2 and 3 are **N/A**: there is no hand-rolled probe driver and no
+hand-rolled runner — the gate is `pytest`, which honours its readers' declared skip vocabulary
+natively.
+
 ## 8. Update path and the member's adoption — part 9
 
 **The deferred state is defined in frame §7.2 and cited here: a member behind on this instrument
