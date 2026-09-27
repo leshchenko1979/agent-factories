@@ -25,7 +25,7 @@ Per the frame's §1 (what an instrument is) and §2 (the full set), this instrum
 |---|---|
 | **name** | `ledger` |
 | **executable(s)** | `tools/ledger.py` — the only write path and the read path (`append`, `tail`, `verify`, `repair`). `tools/ledger-index.py` — the derived index (build/find/subject/touching/check) |
-| **closure** | `tools/ledger_declaration.py` (the authorized-actor matrix and the declaration readers), `tools/field_predicate.py`, `tools/reconstruction.py`, `tools/telemetry.py`, `tools/registry*.py` — HARD tier; a tree missing any of them fails at import |
+| **closure** | **§2 rows 3–7** — `tools/ledger_declaration.py` (the authorized-actor matrix and the declaration readers), `tools/field_predicate.py`, `tools/reconstruction.py`, `tests/ledger_boundary.py`, `tests/gate_fixtures.py`. HARD tier: measured 2026-09-27 by the **import graph**, `ledger.py` imports rows 3–5 (`:73`, `:87`, `:100`) and `test_ledger.py` imports rows 6–7 (`:53`, `:52`), so a tree missing any of them fails at import. **Two paths previously named here — `tools/telemetry.py` and `tools/registry*.py` — are NOT in the closure:** grepped over every surface file (`grep -nE '^(import\|from) (telemetry\|registry\|kit_pin)'` across `ledger.py`, `ledger-index.py`, `ledger_declaration.py`, `field_predicate.py`, `reconstruction.py`, `ledger_boundary.py`) returns **0 hits**. They were asserted rather than measured; corrected here instead of silently overwritten. |
 | **gate set** | six gates, named in §5 below |
 | **version source** | `registry/kit.json` → `kit_version`, derived from the manifest, never hand-typed (frame §7.1) |
 | **data surfaces** | `evidence/ledger.jsonl` (factory-owned, never overwritten by an update); `docs/ledger-*.json` (factory-owned declarations, shipped as `.example.json` — including `ledger-refs-kinds.json` for vocabulary and `ledger-authorizations.json` for a factory's own lanes); `evidence/.ledger-index.sqlite` (derived, gitignored, deletable) |
@@ -41,7 +41,57 @@ edit mid-flight, not a defect in this figure.
 
 ---
 
-## 2. The write path's identity law — `actor` and `session`
+## 2. The declared file set — and the write path's identity law
+
+**Predicate:** the shipped paths `registry/kit.json` classifies `standalone` or `closure` that carry
+this instrument. **Scope:** the manifest at the instant named in §5. Both halves are listed because
+the pair is what a member adopts; the manifest hashes the `TEMPLATE/` half (frame §7.1).
+
+| # | path (member half ↔ TEMPLATE half) | class | what it is |
+|---|---|---|---|
+| 1 | `tools/ledger.py` ↔ `TEMPLATE/tools/ledger.py` | `standalone` | **the write path and the read path** — `append`, `tail`, `verify`, `repair` |
+| 2 | `tools/ledger-index.py` ↔ `TEMPLATE/tools/ledger-index.py` | `standalone` | the derived index (§8) — `build`, `find`, `subject`, `touching`, `check` |
+| 3 | `tools/ledger_declaration.py` ↔ `TEMPLATE/tools/ledger_declaration.py` | `closure` | the authorized-actor matrix and the declaration readers (`ledger.py:73`) |
+| 4 | `tools/field_predicate.py` ↔ `TEMPLATE/tools/field_predicate.py` | `closure` | the shared field predicate — one field, one read (`ledger.py:87`, `reconstruction.py:26`) |
+| 5 | `tools/reconstruction.py` ↔ `TEMPLATE/tools/reconstruction.py` | `closure` | a reconstructed claim's basis, and its recomputed interval (`ledger.py:100`) |
+| 6 | `tests/ledger_boundary.py` ↔ `TEMPLATE/tests/ledger_boundary.py` | `closure` | the declared boundaries — a row before its boundary is excused (`test_ledger.py:53`); also gate 3 of §5 |
+| 7 | `tests/gate_fixtures.py` ↔ `TEMPLATE/tests/gate_fixtures.py` | `closure` | the staged-tool fixture (`test_ledger.py:52`, `test_ledger_identity.py`) — shared with other instruments' gates |
+| 8 | `tests/test_ledger.py` ↔ `TEMPLATE/tests/test_ledger.py` | `standalone` | **the gate** — the write path and the read path end to end |
+| 9 | `tests/test_ledger_identity.py` ↔ `TEMPLATE/tests/test_ledger_identity.py` | `standalone` | **the gate** — the row's own identity fields |
+| 10 | `tests/test_ledger_schema.py` ↔ `TEMPLATE/tests/test_ledger_schema.py` | `standalone` | **the gate** — the schema, the vocabularies, the authorization matrix |
+| 11 | `tests/test_ledger_no_shrink.py` ↔ `TEMPLATE/tests/test_ledger_no_shrink.py` | `standalone` | **the gate** — the ledger never returns to empty |
+| 12 | `tests/test_ledger_close_preflight.py` ↔ `TEMPLATE/tests/test_ledger_close_preflight.py` | `standalone` | **the gate** — a close's preconditions at the write path |
+| 13 | `tests/test_ledger_commit_cites_no_rows.py` ↔ `TEMPLATE/tests/test_ledger_commit_cites_no_rows.py` | `standalone` | **the gate** — a commit names no row number |
+| 14 | `tests/test_ledger_index.py` ↔ `TEMPLATE/tests/test_ledger_index.py` | `standalone` | **the gate** — a rebuild AGREES WITH A PLAIN SCAN |
+| 15 | `docs/instruments/ledger.md` ↔ `TEMPLATE/docs/instruments/ledger.md` | `standalone` | this file |
+
+**This is the ONE table the census parses** — `tools/instrument_census.py::declared_paths` reads
+the numbered rows rather than keeping a second list that would drift, so a shipped path added here
+is measured there with no second edit. **A member is HELD only when all fifteen are present.**
+
+**Rows 3–7 are the closure, and they are declared here because the census's question is *"is this
+instrument complete here?"* — a closure left out of the measured set answers it wrongly.** Measured
+2026-09-27 by the import graph, not by reading the prose: `ledger.py` imports rows 3, 4 and 5
+(`:73`, `:87`, `:100`), `test_ledger.py` imports rows 6 and 7 (`:53`, `:52`), and
+`test_ledger_identity.py` imports row 7 — so a member holding only the executables and the gates
+reads **8/8 HELD while unable to run.** Row 7 is additionally shared: four other instruments' gates
+import it too, which is why it is a `closure` row of the kit rather than this instrument's own file.
+
+**Not in the measured set, and why — recorded so a later reader does not read the list as
+accidental.** The nine `docs/ledger-*.example.json` seeds ship in the kit but are **factory-owned
+declarations**: a factory writes its own from the example, and their absence is the default state
+rather than an incomplete instrument. `evidence/ledger.jsonl` is a **data surface**, not a shipped
+path (§1). Measuring either would report every member as incomplete for declining an optional file.
+
+**Why the identity law shares §2.** Frame §1.5 puts the declared set at the **§2 coordinate**. This
+instrument's §2 was already the identity law, and renumbering §3–§10 to make room would silently
+repoint `skills/meta-factory/SKILL.md`'s `§9` citation at a different section — a stale pointer that
+lands on a plausible-but-wrong object, which is this fleet's most repeated citation failure. The
+declared set therefore **opens** §2 and the identity law follows in the same section, rather than
+every number below it moving. Measured 2026-09-27: `§9` is the only section number of this file
+cited anywhere outside it.
+
+### The write path's identity law — `actor` and `session`
 
 `actor` is the row's **capacity**: the role the write was made in. It is a role name from a set
 that is closed **PER FACTORY**, not per fleet — the core set (`hq · triage · worker · carrier ·
