@@ -91,6 +91,34 @@ A second instrument built on the same runner declares the same executable and it
 two closures overlap by construction — which is correct, and is why the closure is declared rather
 than derived (§1.1).
 
+### 1.4 The declared set — membership from what the executable LOADS, the class from the manifest
+
+A declared set derived from the manifest's **classes** under-declares by exactly the paths the
+executable reaches **indirectly**. Measured 2026-09-27: `pacemaker.md` §2 declared nine paths and the
+true set was eleven — `tests/ledger_boundary.py` and `tools/ledger_declaration.py` are reached by a
+path constant (`patrol_host_state.py:91`, loaded at `:1188`) and by `ledger_boundary.py:69`'s own
+import, and both are manifest rows of class `closure`. The kit shipped them, so membership was never
+declared because nothing asked for it. A member holding the declared nine read **HELD — complete
+set — while unable to run at all**, and the defect was in the declaration, not the tree.
+
+**Derive membership from what the executable LOADS:** every REPO-relative path constant it reads,
+and every module it imports, transitively. **Let the manifest supply each path's CLASS, never its
+MEMBERSHIP.**
+
+### 1.5 The declaration's coordinates — a set a reader cannot find is not declared
+
+The declared set lives in the law file's **§2**, as numbered rows pairing the member path with its
+template counterpart, so a reader derives it without a second list to drift. That placement is a
+**coordinate**, and a machine reader that assumes it must report when the coordinate is empty instead
+of returning a shorter set. Measured 2026-09-27: a census requiring the paired-row form in §2
+published two instruments and **refused three** — `kit.md`'s §2 is a one-sided table, `ledger.md`'s §2
+is the write-path identity law, `open-questions.md`'s §2 is the lane-side contract. Three refusals,
+three different objects, none an omission.
+
+**An aggregate reports the inputs it refused, by PATH, in the artifact a reader meets.** A short list
+and a wrong list are otherwise indistinguishable, and a refusal nobody reads is a silent coverage
+gap — the same family as a count published without its predicate.
+
 ## 2. The full set — nine parts
 
 An instrument is **complete** when all nine are present in the adopting tree. The owner named three
@@ -533,6 +561,25 @@ a mid-flight reading is a real instant that is also already superseded. Two cons
 states that its value moves whenever any shipped file moves, including files the instrument does not
 own; and (b) **to read a version, read `registry/kit.json`** — the manifest is the only surface where
 the reading and the tree are the same object.
+
+### 7.5 A measurement reads the COMMITTED revision, never a working tree on a shared repo
+
+A byte-identity or census predicate that reads a **working tree** measures a population that moves
+under it. Measured 2026-09-27: two lanes measured one member's divergence and got **4** divergent
+paths and **3**. Against `git show HEAD:TEMPLATE/<path>` the member was **byte-identical**
+(md5 `dd0005c251eb377ced61097886adb494` on both sides); the fourth "divergence" was another lane's 36
+uncommitted lines. Had the higher figure been written, a member's durable declaration would have
+recorded a divergence against a revision that **exists nowhere in git**, and it would have been false
+against HEAD from the moment it was written. **A figure that cannot be reproduced from the commit is
+not a measurement.**
+
+Read `git show HEAD:<path>`, or a clean worktree at HEAD (§7.3). A count that moves minutes apart is
+not two readings; it is one reading of a moving object.
+
+**A count still owes its predicate.** `behind_by` is validated only as an integer
+(`tools/registry.py:350`), so nothing defines what it counts — every divergent path, or genuine lags
+only, excluding a member's declared forks? The count is a measurement; the classification is the
+member's reading. State both, or the number is unreproducible behind a judgement call.
 
 ## 8. Ownership and scope
 
