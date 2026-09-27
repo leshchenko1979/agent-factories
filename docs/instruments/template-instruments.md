@@ -256,6 +256,34 @@ A promotion lands the instrument with its **full set** (§2), its **class** (§3
 (§7) and its promotion record. **The contributing member becomes the evidence, not automatically the
 upstream** — unless criterion 5 says the template's copy should be replaced outright.
 
+### 5.4 A promotion is verified against the donor's DATA, not only its code
+
+The two reviews (§5.2) read the code and the law; neither reads the donor's records, and a donor's
+records are a different question. Every promotion has a donor, and a donor's corpus carries shapes
+the declared contract does not enumerate — so the promotion owes a **read-only replay over the
+donor's own data**, and that replay finds a class of defect no review finds.
+
+Measured 2026-09-27 on the review-rotation promotion (donor: opencrabs-dev). Predicate: the key
+shape and the value set of every declared status field over the donor's cycle records. Scope: 17
+`reviews/*/state.json`, 88 lens entries. Instant: 2026-09-27T17:06Z.
+- cycle `status` carries **SIX** values: `COMPLETED` 9, `IN_PROGRESS` 4, `reports_persisted` 1,
+  `intake_complete` 1, `VALIDATED` 1, `COMPLETE` 1.
+- lens entry `status` carries **FOUR**: `COMPLETED` 66, `COMPLETE` 11, `PENDING` 7, `PERSISTED` 4.
+- a lens entry has **THREE** key shapes — `(report_path, status, verdict)` 73, `(path, status)` 11,
+  `(findings_count, report_path, status)` 4 — and `sha256` appears in **0 of 88**.
+
+The declared contract enumerates none of it. All three defects the replay found were invisible to
+reading the code: a render indexed an **absent field** directly and every migrated cycle died on its
+first read; a terminal **synonym** (`COMPLETE` for `COMPLETED`) went unmapped; and the rest were
+absorbed **silently**.
+
+Two obligations, and they are what make a replay a verification rather than a demonstration:
+- **An unrecognised value is MAPPED or NAMED — never absorbed.** A migration that is silent about
+  the values it did not recognise publishes a clean migration over a lossy one, and from the
+  migrated side the two are indistinguishable.
+- **The replay READS the donor; it never writes into the donor's tree.** The donor-side change is
+  the donor's own act in the donor's own tree (§6.1, O2).
+
 ## 6. Distribution — where an instrument's law lives
 
 An instrument's law file is **one artifact in two trees plus a reload path**, and all three are
