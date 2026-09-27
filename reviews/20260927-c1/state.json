@@ -173,26 +173,26 @@
     {
       "id": "0001-promotion-close-row-gate",
       "source": "dir",
-      "path": "/tmp/rr-self/reviews/20260927-c1/proposals/0001-promotion-close-row-gate.md",
-      "recorded_at": "2026-09-27T21:33:25Z",
+      "path": "/tmp/rr-f3/reviews/20260927-c1/proposals/0001-promotion-close-row-gate.md",
+      "recorded_at": "2026-09-27T21:42:38Z",
       "op": "ADD",
       "target": "tests/",
-      "dated": false
+      "dated": true
     },
     {
       "id": "0002-review-rotation-has-no-close-row",
       "source": "dir",
-      "path": "/tmp/rr-self/reviews/20260927-c1/proposals/0002-review-rotation-has-no-close-row.md",
-      "recorded_at": "2026-09-27T21:33:25Z",
+      "path": "/tmp/rr-f3/reviews/20260927-c1/proposals/0002-review-rotation-has-no-close-row.md",
+      "recorded_at": "2026-09-27T21:42:38Z",
       "op": "CHANGE",
       "target": "evidence/ledger.jsonl",
-      "dated": false
+      "dated": true
     },
     {
       "id": "0003-date-token-rejects-iso-instant",
       "source": "dir",
-      "path": "/tmp/rr-self/reviews/20260927-c1/proposals/0003-date-token-rejects-iso-instant.md",
-      "recorded_at": "2026-09-27T21:33:25Z",
+      "path": "/tmp/rr-f3/reviews/20260927-c1/proposals/0003-date-token-rejects-iso-instant.md",
+      "recorded_at": "2026-09-27T21:42:38Z",
       "op": "CHANGE",
       "target": "tools/review.py:1525",
       "dated": true
@@ -226,7 +226,32 @@
         "S"
       ],
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
+    },
+    {
+      "at": "2026-09-27T21:42:54Z",
+      "status": "IN_PROGRESS",
+      "frozen": false,
+      "completed": 0,
+      "waived": 0,
+      "pending": 14,
+      "pending_lenses": [
+        "A",
+        "B",
+        "G",
+        "J",
+        "P",
+        "C",
+        "E",
+        "F",
+        "D",
+        "H",
+        "M",
+        "T",
+        "I",
+        "S"
+      ],
+      "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-09-27T21:33:25Z"
+  "updated_at": "2026-09-27T21:42:54Z"
 }

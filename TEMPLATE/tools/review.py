@@ -1522,7 +1522,14 @@ PROPOSAL_FORMAT = re.compile(
     r"^(?P<op>ADD|CHANGE)\s+(?P<rule>.+?)\s+in\s+(?P<target>[^\s]+)\s+BECAUSE\s+(?P<evidence>.+)$",
     re.DOTALL,
 )
-DATE_TOKEN = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})\b")
+# The trailing guard is `(?!\d)`, never `\b`. A published reading carries its instant in
+# the ISO-8601 `T` form — the form used throughout
+# docs/instruments/template-instruments.md §7.4 — and `\b` cannot match between the
+# final digit and that `T` (both are word characters), so the mandated form read UNDATED
+# while a bare date read DATED, flagging every adopter who followed the dating
+# discipline. The lookahead still refuses a partial digit run (`2026-09-271`), the one
+# thing that boundary covered.
+DATE_TOKEN = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})(?!\d)")
 INTAKE_DECL_NAME = "intake.json"
 PROPOSAL_KIND_DEFAULT = "proposal"
 
