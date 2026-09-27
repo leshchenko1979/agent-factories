@@ -343,7 +343,11 @@ that leaves the member's own suite permanently red.
 the one it came from.**
 
 - **HELD** — `os.path.isfile(member.repo / p)` for each of §2's **eleven** declared paths. This is
-  `tools/instrument_census.py`'s predicate, and its published artifact is the citable form.
+  `tools/instrument_census.py`'s predicate, and its published artifact is the citable form. It reads
+  a **working tree**, so a member reads 11/11 while its own **commit** carries fewer: measured
+  2026-09-27, `inferhub-watch` reads 11/11 held and a clone of its `HEAD` carries **6 of the 11**
+  (five are untracked). Read HELD as *present on disk*, never as *in the repo* — a third axis
+  beside held-vs-current, and the one a fresh clone settles.
 - **CURRENT** — byte-identity of each held file against the template half (`cmp -s`). A member can
   hold every path and still be **behind**: adoption is a revision, not a copy.
 
