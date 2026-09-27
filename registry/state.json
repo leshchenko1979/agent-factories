@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T22:20:51Z",
+  "resolved_at": "2026-09-27T22:25:20Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -544,7 +544,7 @@
             "state": "adopted",
             "green": true,
             "behind_by": 0,
-            "reason": "behind_by 0 counts UNDECLARED lag only. Basis: the ELEVEN declared paths of docs/instruments/pacemaker.md section 2, measured on BOTH predicates (on-disk, and against my own HEAD) at 2026-09-27T22:12Z — 10 byte-identical to TEMPLATE HEAD, 1 differing. The single difference is a DECLARED FORK, not a lag: tests/gate_registry.py. The template revision (3809561e2a22) registers two gates as REQUIRED that this tree cannot run — test_audit_tree_condition.py imports `from audit import render_tree_line, tree_condition`, and tools/audit.py here carries 0 of both symbols; test_gate_invocation_mode.py resolves `<cwd>/tools/audit.py`, which from this repo is /root/tools/audit.py, absent. Adopting the registry would register two REQUIRED gates that fail by construction, and gate_registry.py's own law at :671 states each absent declared gate FAILS naming it. Porting the two gate files does not fix it, because their dependencies are absent here.",
+            "reason": "behind_by 0 counts UNDECLARED lag only. Basis: the ELEVEN declared paths of docs/instruments/pacemaker.md section 2, measured on BOTH predicates (on-disk, and against my own HEAD) at 2026-09-27T22:12Z — 11 byte-identical to TEMPLATE HEAD, 0 differing. A TWELFTH path, tests/gate_registry.py, belongs to the ADOPTION's closure rather than section 2 (the doc states this at section 8 step 5) and DOES differ: it is a DECLARED FORK, not a lag. The template revision (3809561e2a22) registers two gates as REQUIRED that this tree cannot run — test_audit_tree_condition.py imports `from audit import render_tree_line, tree_condition`, and tools/audit.py here carries 0 of both symbols; test_gate_invocation_mode.py resolves `<cwd>/tools/audit.py`, which from this repo is /root/tools/audit.py, absent. Adopting the registry would register two REQUIRED gates that fail by construction, and gate_registry.py's own law at :671 states each absent declared gate FAILS naming it. Porting the two gate files does not fix it, because their dependencies are absent here.",
             "measured_at": "2026-09-27T22:12Z"
           }
         }
@@ -2040,7 +2040,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790547429,
+      "session_updated_at": 1790547874,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2560,7 +2560,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790547573,
+      "session_updated_at": 1790547835,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2586,7 +2586,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790547574,
+      "session_updated_at": 1790547739,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2677,7 +2677,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744]",
-      "session_updated_at": 1790544540,
+      "session_updated_at": 1790547860,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2820,7 +2820,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
-      "session_updated_at": 1790545597,
+      "session_updated_at": 1790547747,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2911,7 +2911,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Open Questions Instrument [chat:-1004497192134:topic:4087]",
-      "session_updated_at": 1790546974,
+      "session_updated_at": 1790547729,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }

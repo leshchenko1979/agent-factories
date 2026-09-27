@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T22:20:51Z",
+  "resolved_at": "2026-09-27T22:25:20Z",
   "counts": {
     "factories": 6,
     "attested": 6,
