@@ -622,6 +622,23 @@ held-complete over a commit that cannot run the instrument at all. A census figu
 this axis is the same defect as a count without its predicate: not wrong, but quoted as something it
 is not.
 
+**The two readings are not merely different in strictness — on one row they point in OPPOSITE
+directions, and that state is actionable.** Measured 2026-09-27 on `infra-factory`, predicate member
+bytes vs `git show HEAD:TEMPLATE/<path>`: row 8's gate is **identical on disk** (`e3fd9f1a…` both
+sides — the member did repair it) while the member's **own HEAD** carries `49ed31df…` and the path
+reads `M`. So the on-disk reading **flatters** (10/11, and cannot see that the repair is invisible to
+every consumer) while the committed reading **punishes** (9/11, and cannot see that the operator
+already fixed it) — and the member is in a state neither describes. *"The member repaired it"* and
+*"a clone has the repair"* are different facts, and only the second survives a fresh checkout. The
+remedy is therefore a **COMMIT, not a re-copy** — a distinguishable state rather than a lag, and the
+reason a census owes its axis even when both readings are individually correct.
+
+**Resolve the population from the member's own declaration, never from a naming convention.**
+Measured the same day: a probe resolved each member repo as `/root/<slug>`, which is wrong for
+`infra-factory` (`/root/vds-servers`, per its own registry fragment), and returned a clean *"all
+eleven absent"* for a directory that **never existed** — a verdict indistinguishable from a member
+that adopted nothing. The member's fragment names its repo; the slug is a label, not a path.
+
 ## 8. Ownership and scope
 
 | who | what |
