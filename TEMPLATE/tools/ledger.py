@@ -415,7 +415,7 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
     try:
         rel_path = path.resolve().relative_to(REPO).as_posix()
     except ValueError:
-        print("warning: ledger guard: cannot read committed lineage (proceeding fail-open)")
+        sys.stderr.write("warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n")
         return None, None
     for ref in ("origin/main", "HEAD"):
         text = _git_show(ref, rel_path)
@@ -435,7 +435,7 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
         if parsed:
             return rows, ref
         break
-    print("warning: ledger guard: cannot read committed lineage (proceeding fail-open)")
+    sys.stderr.write("warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n")
     return None, None
 
 def lineage_divergence(
