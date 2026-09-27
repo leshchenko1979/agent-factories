@@ -1,14 +1,14 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T18:58:34Z",
+  "resolved_at": "2026-09-27T20:56:17Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 65,
     "announcements": 21,
-    "jobs": 62,
-    "unattributed_jobs": 4
+    "jobs": 63,
+    "unattributed_jobs": 5
   },
   "announcements": [
     {
@@ -607,7 +607,7 @@
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.84",
+      "skill_revision": "1.0.86",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -1562,7 +1562,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T14:27:58Z",
+          "bound_at": "2026-09-27T20:25:16Z",
           "announcements": []
         },
         {
@@ -2761,6 +2761,22 @@
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> lane"
+    },
+    {
+      "id": "eeefa5f3-3202-4adc-8f2d-e3a86b02d848",
+      "name": "oc626-resolve-probe",
+      "cron_expr": "0 4 1 1 *",
+      "timezone": "UTC",
+      "enabled": 0,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2027-01-01T04:00:00+00:00",
+      "last_run_at": null,
+      "deliver_to": null,
+      "trigger_cmd": "true",
+      "profile": "ops",
+      "owner": null,
+      "owner_basis": "unattributed"
     },
     {
       "id": "0333b707-8652-42f9-8e91-61194e1f99ec",
