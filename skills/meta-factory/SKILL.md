@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.28
+version: 0.1.29
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -538,6 +538,8 @@ State that lives only in chat is not state. It is a memory of a conversation, an
 survives exactly as long as the context does. Every durable fact therefore lives on a
 surface with **one named writer** — in the repo, or in the one surface this factory keeps
 outside it, the issue board. Every other path to it is read-only.
+
+**An instrument's own law lives in its own file, and this section keeps what is THIS factory's.** The contract for an instrument — its verbs, store path, gates and closure — ships as a doc pair (`docs/instruments/<instrument>.md` + `TEMPLATE/docs/instruments/<instrument>.md`) and reloads into this skill through a relative symlink (`skills/meta-factory/<instrument>.md`), so the law survives a compaction without a second copy in this file. What stays here is the surface table below, its one-writer rule, and the process law that binds a lane. Where a clause below restates an instrument's own contract, the shipped doc is the **delivery** home and this file is the **authority** — a member reads the doc, never a citation into this file (the §8 split, exercised in §9).
 
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
