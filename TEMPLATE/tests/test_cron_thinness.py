@@ -72,6 +72,36 @@ three against the live table (`cron_jobs`, `enabled=1`, 23 rows, 2026-09-18):
                          2026-09-20T11:45Z, exactly one unbaked row box-wide, the ops home
                          carrying zero.
 
+SHAPE 3 IS NOT ONE SHAPE, AND THE SPLIT IS #177. A no-wake row is a P7 violation by
+default, because the cron's own session is the only executor. But #118's own key is that a
+thin trigger whose logic lives "in a repo script rather than in the payload" IS the cron
+doing its bounded job — and the two were reported with the SAME line, so a bounded
+mechanical pusher and an unbounded inline `git pull --rebase && git push` looked
+identical in the report. So a no-wake row is EXCUSED, visibly, when the CONJUNCTION of
+three holds — none droppable:
+
+  (i)   `is_wake_only(prompt)` — the row DECLARES itself wake-only. The EXISTING predicate,
+        reused and never re-implemented: excusing on the marker ALONE is a question #118
+        already refused verbatim, and this does not reopen it.
+  (ii)  exactly ONE command line, and that line is not CHAINED. `cd X && git pull && git
+        push` is three commands wearing one line, and a job whose length is not bounded by
+        its text is not a bounded job.
+  (iii) that command's logic is a VERSIONED REPO FILE — a path ending `.py` or `.sh` —
+        rather than inline shell. This is the half that makes the job reviewable and
+        fixable where it lives, and it is #118's stated key made checkable.
+
+A no-wake row that fails ANY conjunct still REDS, and its message names WHICH conjunct
+failed: an exemption that swallows a near-miss converts a false RED into a false clean.
+The live population is the proof it is not a blanket waiver — `factory-publish` (ops home)
+is excused, one unchained `python3 .../tools/publish.py --apply`, while `redevest-ai git
+sync` (`cd /root/redevest-ai && git pull --rebase && git push`) stays a problem and is now
+named for the three conjuncts it fails rather than by accident.
+
+WHAT CONJUNCT (iii) DOES NOT CLAIM. The predicate reads the FORM of the path, never the
+filesystem: whether the named file is under version control is not decidable from a
+prompt, and it does not try. The bound is stated because a rule that cannot be stated
+cannot be tested (#119), and a bootstrapped factory's tree is not this tree's to read.
+
 A predicate reading only `deliver_to` flags every shape-2 row; one reading only the prompt
 flags every shape-1 row. Both legs are required, and "thin" is NOT a byte count: the
 meta-factory's own correctly-thin pacemaker `factory-triage-patrol` (id
@@ -143,6 +173,107 @@ def is_wake_only(prompt: str) -> bool:
     return WAKE_ONLY_MARKER.lower() in prompt.lower()
 
 
+# --- the #177 no-wake bounded-job class -------------------------------------------
+#
+# The command words a thin trigger's single command may BEGIN with. A line beginning with
+# one of these IS a command; a line beginning with anything else is prose. The set is
+# DECLARED rather than inferred, because "a line that looks like shell" is not a
+# predicate — and a rule that cannot be stated cannot be tested (#119).
+SHELL_COMMANDS = frozenset({
+    "python", "python3", "bash", "sh", "zsh", "nohup", "env", "timeout", "make",
+    "cd", "git", "ssh", "scp", "rsync", "curl", "wget", "docker", "systemctl", "sudo",
+})
+
+# One line carrying any of these runs MORE than one command, so it is not "exactly one
+# command line" however few newlines the prompt has.
+CHAIN_RE = re.compile(r"&&|\|\||;|\|")
+
+# A leading list marker ("1. ", "2) ", "- ") is the prompt's NUMBERING, not its command.
+_LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+")
+
+# The suffixes that make a path a REPO FILE rather than an inline payload. The predicate
+# reads the FORM and never the filesystem — see the docstring's "WHAT CONJUNCT (iii) DOES
+# NOT CLAIM" for why that bound is stated rather than closed.
+SCRIPT_SUFFIXES = (".py", ".sh")
+
+def _command_lines(prompt: str) -> list[str]:
+    """The lines of `prompt` that are COMMANDS, in order.
+
+    A line is a command when its first token — after indentation and an optional list
+    marker — is a declared shell command or a path. Prose lines start with ordinary words
+    ("Thin trigger only — do NOT execute ...") and are not commands however long they are,
+    which is the same distinction `test_thinness_is_not_a_byte_count` pins: thinness is a
+    property of the CONTENT, never of the length.
+    """
+    found: list[str] = []
+    for raw in str(prompt).splitlines():
+        line = _LIST_MARKER.sub("", raw).strip()
+        if not line:
+            continue
+        first = line.split()[0]
+        if first in SHELL_COMMANDS or first.startswith(("/", "./", "../")):
+            found.append(line)
+    return found
+
+def _versioned_script(command: str) -> str | None:
+    """The repo-file path `command` names, or None when its logic is inline.
+
+    The first token ending in a script suffix, with the punctuation a sentence wraps
+    around a path stripped — the same treatment the shared `head=` reader gives a value.
+    """
+    for token in command.split():
+        cleaned = token.strip("'\"`()[]{}")
+        if cleaned.endswith(SCRIPT_SUFFIXES):
+            return cleaned
+    return None
+
+def thin_no_wake_class(prompt: str) -> tuple[bool, str, list[str]]:
+    """(excused, command, failing_conjuncts) for a row whose wake is `none`.
+
+    THE #177 CLASS — a BOUNDED MECHANICAL JOB. A no-wake row is a P7 violation by default,
+    because the cron's own session is the only executor. But a row that DECLARES itself
+    wake-only and runs exactly one unchained command whose logic lives in a versioned repo
+    file is the cron doing its bounded job — #118's own key, "in a repo script rather than
+    in the payload", made checkable. Excusing on the wake-only marker ALONE is a question
+    #118 already refused verbatim and is NOT reopened here.
+
+    The conjuncts are returned as a LIST of failures so the caller can name WHICH one
+    failed: an exemption that swallows a near-miss converts a false RED into a false clean,
+    and the negative control is the half that proves this is not a blanket waiver.
+    """
+    failures: list[str] = []
+    if not is_wake_only(prompt):
+        # The wording avoids the substring "work order" on purpose: the census probe
+        # classifies problems by that phrase, and a no-wake message carrying it would be
+        # counted as a work-order-on-a-waking-row defect — a probe corrupted by the text
+        # of an unrelated leg. Naming the marker is the same information without the
+        # collision.
+        failures.append(
+            f"it does not carry the canonical wake-only marker {WAKE_ONLY_MARKER!r}, so it "
+            f"never declares itself a thin trigger (#118)"
+        )
+    lines = _command_lines(prompt)
+    command = lines[0] if len(lines) == 1 else ""
+    if len(lines) != 1:
+        failures.append(
+            f"it carries {len(lines)} command line(s) and the class admits exactly ONE — "
+            f"a job whose length is not bounded by its text is not a bounded job"
+        )
+    else:
+        chained = list(dict.fromkeys(CHAIN_RE.findall(command)))
+        if chained:
+            failures.append(
+                f"its single command line is CHAINED ({', '.join(chained)}), so one line "
+                f"runs more than one command: {command!r}"
+            )
+        if _versioned_script(command) is None:
+            failures.append(
+                f"its command names no versioned repo file (a path ending .py or .sh), so "
+                f"the logic is INLINE shell and cannot be reviewed or fixed where it "
+                f"lives: {command!r}"
+            )
+    return (not failures), command, failures
+
 def pacemaker_problems(rows: list[dict]) -> tuple[list[str], list[str]]:
     """Return (problems, excused) for a list of cron rows.
 
@@ -179,10 +310,26 @@ def pacemaker_problems(rows: list[dict]) -> tuple[list[str], list[str]]:
             )
             continue
         if wake == "none":
+            # THE #177 CLASS IS TESTED BEFORE THE DEFAULT VERDICT, because a no-wake row is
+            # not necessarily the #50 shape: a BOUNDED mechanical job has no lane to wake
+            # and is the cron doing its own work correctly. The excuse is VISIBLE and NAMES
+            # the command — a count cannot be dispatched, claimed or closed, and an
+            # exemption that prints nothing is the defect this item exists to avoid.
+            excused_thin, command, failed = thin_no_wake_class(prompt)
+            if excused_thin:
+                excused.append(
+                    f"{name}: no wake, and none is needed — a BOUNDED mechanical job "
+                    f"(#177 class): one unchained command whose logic is the versioned repo "
+                    f"file it names, so the cron does its own bounded work and has no lane "
+                    f"to wake. command: {command!r} (bound: exactly one command, not "
+                    f"chained, logic in a repo file)"
+                )
+                continue
             problems.append(
                 f"{name}: no wake — deliver_to is {deliver_to or 'NULL'} and the prompt "
                 f"invokes no session notify, so this job's own session is the only "
-                f"executor (P7: cron is a thin pacemaker trigger, not the worker)"
+                f"executor (P7: cron is a thin pacemaker trigger, not the worker). It is "
+                f"not the #177 bounded-job class either: " + "; ".join(failed)
             )
             continue
         if not is_wake_only(prompt):
@@ -365,6 +512,93 @@ def test_an_unbaked_target_is_reported_even_when_the_prompt_carries_a_wake() -> 
     assert "unbaked" in problems[0], problems
     assert "work order" not in problems[0], problems
     assert excused == [], excused
+
+_THIN_JOB_HEAD = (
+    "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, "
+    "do NOT write a report. Run exactly ONE bash command, then stop:\n\n"
+)
+_THIN_JOB_TAIL = "\n\nThen state its one-line verdict and nothing else."
+
+def _thin_job(body: str) -> str:
+    """A wake-only prompt carrying `body` as its command block."""
+    return _THIN_JOB_HEAD + body + _THIN_JOB_TAIL
+
+def test_the_bounded_job_class_excuses_and_NAMES_the_command() -> None:
+    """#177: wake-only AND one unchained command AND logic in a versioned repo file.
+
+    The live shape is `factory-publish` (ops home). The assertion that matters is that the
+    excuse NAMES THE COMMAND: a count cannot be dispatched, claimed or closed, and an
+    exemption that prints nothing converts a false RED into a false clean.
+    """
+    rows = [_row("factory-publish", _thin_job(
+        "  python3 /root/agent-factories/tools/publish.py --apply"), None)]
+    assert row_wake(rows[0]) == "none", row_wake(rows[0])
+    problems, excused = pacemaker_problems(rows)
+    assert problems == [], problems
+    assert len(excused) == 1, excused
+    assert "factory-publish" in excused[0], excused
+    assert "publish.py" in excused[0], excused
+    assert "BOUNDED" in excused[0], excused
+
+def test_the_bounded_job_class_names_WHICH_conjunct_failed() -> None:
+    """The negative control, and it is LOAD-BEARING (#177).
+
+    A no-wake row failing ANY conjunct must still RED, and its message must name which one
+    — else the exemption converts a false RED into a false clean. Each arm isolates ONE
+    conjunct, and the four messages must be pairwise DISTINGUISHABLE: four arms that all
+    said "problem" would prove only that something is wrong somewhere, not that the class
+    discriminates.
+    """
+    arms = {
+        "chained": _thin_job("  cd /root/x && python3 /root/x/tools/publish.py --apply"),
+        "inline": _thin_job("  git -C /root/redevest-ai pull --ff-only"),
+        "two-lines": _thin_job(
+            "  python3 /root/x/tools/publish.py --apply\n  python3 /root/x/other.py"),
+        "marker-only": _thin_job(""),
+    }
+    problems, excused = pacemaker_problems([_row(k, v, None) for k, v in arms.items()])
+    assert excused == [], excused
+    assert len(problems) == len(arms), problems
+    named = {k: next(p for p in problems if f"{k}:" in p) for k in arms}
+    assert "CHAINED" in named["chained"], named["chained"]
+    assert "INLINE" in named["inline"], named["inline"]
+    assert "2 command line(s)" in named["two-lines"], named["two-lines"]
+    assert "0 command line(s)" in named["marker-only"], named["marker-only"]
+    assert len(set(named.values())) == len(arms), "the arms must be distinguishable"
+
+def test_the_live_negative_specimen_stays_a_problem_for_the_right_reason() -> None:
+    """`redevest-ai git sync` — no marker, chained, inline, and it rebases.
+
+    It is the row that proves the class is not a blanket waiver. Before #177 the gate
+    reported it correctly BY ACCIDENT (every no-wake row was reported); it must now be
+    reported for the RIGHT reason, and the reason must name the conjuncts it fails.
+    """
+    rows = [_row("redevest-ai git sync",
+                 "cd /root/redevest-ai && git pull --rebase && git push", None)]
+    assert row_wake(rows[0]) == "none", row_wake(rows[0])
+    problems, excused = pacemaker_problems(rows)
+    assert excused == [], excused
+    assert len(problems) == 1, problems
+    assert "redevest-ai git sync" in problems[0], problems[0]
+    assert "no wake" in problems[0], problems[0]
+    assert "wake-only" in problems[0], problems[0]     # conjunct (i)
+    assert "CHAINED" in problems[0], problems[0]        # conjunct (ii)
+    assert "INLINE" in problems[0], problems[0]         # conjunct (iii)
+
+def test_the_class_reads_the_command_and_not_the_line_length() -> None:
+    """The class keys on the COMMAND, so a long thin prompt is still excused.
+
+    A prompt padded with prose the way a real thin trigger is padded must not be pushed
+    out of the class by its width — the same distinction `test_thinness_is_not_a_byte_count`
+    pins one leg over.
+    """
+    padded = _thin_job(
+        "  python3 /root/agent-factories/tools/publish.py --apply"
+    ) + "\n\n" + ("Explanatory prose a real thin trigger carries. " * 20)
+    problems, excused = pacemaker_problems([_row("factory-publish", padded, None)])
+    assert problems == [], problems
+    assert len(excused) == 1, excused
+    assert "publish.py" in excused[0], excused
 
 def test_probe_is_offline() -> None:
     tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
