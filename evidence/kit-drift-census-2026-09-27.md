@@ -1,72 +1,112 @@
 # Kit-drift census — member adoption of the template's shipped set
 
-Read at **2026-09-27T06:57:51Z** by `tools/kit_census.py`, which calls the patrol's
-`kit_drift_leg` — this artifact renders that leg's own result and adds no
-comparison of its own.
+Read at **2026-09-27T09:35:38Z** by `tools/kit_census.py`, which calls the patrol's
+`kit_drift_leg` — this artifact renders that leg's own result. It adds ONE
+measurement of its own (section 2, the answering path), which is a DIFFERENT
+predicate and not a second comparison of the same bytes.
 
 ## 1. The reference, stated first
 
 Every figure below compares a member's tree against **OUR** `registry/kit.json`
-(`kit_version` `59d7e004c777`, 127 paths). That is a
+(`kit_version` `a49eaba9ada7`, 128 paths). That is a
 fact about our shipped bytes as much as about their tree, and it moves when
 **we** move — so a DIFF here is not a member's to act on. A member acts on
 its own vendored pin, judged by `tests/test_kit_pin.py`.
 
-## 2. The population
+## 2. The answering path — which copy an owner's tap reaches
+
+A DIFFERENT PREDICATE FROM EVERY NUMBER ELSEWHERE IN THIS ARTIFACT, and that is
+why it is here: the figures below say what a member HOLDS, this one says what an
+owner's tap REACHES. On 2026-09-27 the two disagreed in BOTH directions — one
+factory held a copy that had never executed, and a copy can execute with no tree
+copy at all — so neither can be read off the other.
+
+- resolved by the backend's own search — /opt/questions/backend.py (CLI_ROOT default + the CLI_RESOLVE glob)
+- CLI root searched: `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools`
+- candidates: **1** — the backend requires exactly one, so a count
+  other than 1 is reported above as a refusal, not as a partial reading
+- **executing copy**: `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/state/oc-questions`
+  - **187971 B**, mtime **2026-09-27T08:05:39Z** — size and time only, no digest: this copy
+    moved twice inside one day, so a fixed hash here would be a stale
+    claim rather than a measurement
+
+Each leg is probed with ITS OWN control and reported on its own row:
+
+| leg | control | fix marker | old marker | reads |
+|---|---|---|---|---|
+| clarify — what an owner's empty tap does | 1 | 4 | 0 | **fixed** |
+| publisher fault — what a caller learns when a page fails to build | 1 | 0 | 1 | **PRE-FIX** |
+
+One row per leg because the legs can DISAGREE — on 2026-09-27 this copy
+carried the clarify fix and NOT the publisher-fault fix, so a single marker
+summarised as one verdict would have cleared the leg it cannot see. A marker
+is evidence about the leg it measures, never about the instrument.
+
+**The tree holding that copy**: NONE of the declared members. The
+executing copy sits outside every member root, so no row in section 4
+can read LIVE — and a member's own copy, however current it is, is
+inert for owner taps.
+
+## 3. The population
 
 - members declared: **5**, reachable: **5**
-- **every manifest cell** (635 pairs): same 21 · DIFF 48 · ABSENT 566
-- **bootstrap-named subset** (50 cells, the 10 files
-  `TEMPLATE/BOOTSTRAP.md` names): same 2 · DIFF 20 · ABSENT 28
+- **every manifest cell** (640 pairs): same 21 · DIFF 51 · ABSENT 568
+- **bootstrap-named subset** (50 cells, the 10 files `TEMPLATE/BOOTSTRAP.md` names): same 3 · DIFF 20 · ABSENT 27
 
 Two populations are reported because a number must travel with its own predicate:
 the bootstrap subset is what the earlier 1/20/29 baseline was taken over, and quoting
 only one of them would leave the other unreproducible.
 
-## 3. Per member — the figure AND the declaration
+## 4. Per member — the figure AND the declaration
 
-| member | same | DIFF | ABSENT | own pin | zone own/not | declared |
-|---|---|---|---|---|---|---|
-| `ai-antispam` | 2 | 9 | 116 | **none** | 5/6 | 2026-09-26T06:20:28Z · attested |
-| `infra-factory` | 10 | 15 | 102 | vendored · 0 exempt | 6/8 | 2026-09-26T06:21:03Z · attested |
-| `inferhub-watch` | 4 | 8 | 115 | vendored · 0 exempt | 7/6 | 2026-09-26T06:19:04Z · attested |
-| `miidas` | 5 | 15 | 107 | vendored · 14 exempt | 8/5 | 2026-09-26T06:31:01Z · attested |
-| `opencrabs-dev` | 0 | 1 | 126 | **none** | 5/5 | 2026-09-26T06:41:11Z · attested |
+| member | same | DIFF | ABSENT | own pin | own copy | zone own/not | declared |
+|---|---|---|---|---|---|---|---|
+| `ai-antispam` | 2 | 9 | 117 | **none** | ABSENT | 5/6 | 2026-09-26T06:20:28Z · attested |
+| `infra-factory` | 10 | 17 | 101 | vendored · 0 exempt | ABSENT | 6/8 | 2026-09-26T06:21:03Z · attested |
+| `inferhub-watch` | 4 | 8 | 116 | vendored · 0 exempt | ABSENT | 7/6 | 2026-09-26T06:19:04Z · attested |
+| `miidas` | 5 | 16 | 107 | vendored · 14 exempt | inert | 8/5 | 2026-09-26T06:31:01Z · attested |
+| `opencrabs-dev` | 0 | 1 | 127 | **none** | ABSENT | 5/5 | 2026-09-26T06:41:11Z · attested |
 
-Three columns carry the point. **own pin** is the member-actionable half: a
+Four columns carry the point. **own pin** is the member-actionable half: a
 member with no pin has no figure of its own, and the DIFF beside it is against
-OUR manifest. **declared** is when it last attested. A member that has DECLARED
-a fork and one that has silently diverged produce the same figure, and must not
-read the same — which is why section 5 carries what each one said.
+OUR manifest. **own copy** is a DIFFERENT PREDICATE from every figure beside it
+— not a comparison of the same bytes but a statement about which copy an
+owner's tap REACHES: LIVE (it is that copy), inert (off that path, so it reaches
+no owner tap), ABSENT (there is no copy to reach with), or undetermined when the
+path itself was not measured. It is read from section 2, so it moves when the
+answering path moves and not when a member's tree does. **declared** is when it
+last attested. A member that has DECLARED a fork and one that has silently
+diverged produce the same figure, and must not read the same — which is why
+section 6 carries what each one said.
 
-## 4. Declared detail
+## 5. Declared detail
 
 ### `ai-antispam`
 
 - attested: **2026-09-26T06:20:28Z** · status `attested`
 - declared surfaces: zone owns 5 / not-owns 6 · services 15 · lanes 6 · announcements 3
 - DIFF: `tests/test_close_board_recorded.py`, `tests/test_hygiene_namespace.py`, `tests/test_ledger.py`, `tests/test_ledger_schema.py`, `tests/test_ontology.py`, `tests/test_rework.py`, `tools/audit.py`, `tools/hygiene.py` (+1 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+108 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+109 more)
 
 ### `infra-factory`
 
 - attested: **2026-09-26T06:21:03Z** · status `attested`
 - declared surfaces: zone owns 6 / not-owns 8 · services 9 · lanes 5 · announcements 4
-- DIFF: `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `roles/carrier.md`, `roles/hq.md`, `roles/triage.md`, `roles/worker.md` (+7 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+94 more)
+- DIFF: `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `roles/carrier.md`, `roles/hq.md`, `roles/triage.md`, `roles/worker.md` (+9 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+93 more)
 
 ### `inferhub-watch`
 
 - attested: **2026-09-26T06:19:04Z** · status `attested`
 - declared surfaces: zone owns 7 / not-owns 6 · services 6 · lanes 4 · announcements 3
 - DIFF: `README.md`, `tests/test_ontology.py`, `tests/test_rework.py`, `tests/test_single_writer.py`, `tools/audit.py`, `tools/field_predicate.py`, `tools/ledger.py`, `tools/ledger_declaration.py`
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+107 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+108 more)
 
 ### `miidas`
 
 - attested: **2026-09-26T06:31:01Z** · status `attested`
 - declared surfaces: zone owns 8 / not-owns 5 · services 6 · lanes 5 · announcements 4
-- DIFF: `README.md`, `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `docs/subject/client-requirements.md`, `docs/subject/domain-model.md`, `tests/test_ledger.py` (+7 more)
+- DIFF: `README.md`, `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `docs/subject/client-requirements.md`, `docs/subject/domain-model.md`, `tests/test_ledger.py` (+8 more)
 - ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+99 more)
 
 ### `opencrabs-dev`
@@ -74,9 +114,9 @@ read the same — which is why section 5 carries what each one said.
 - attested: **2026-09-26T06:41:11Z** · status `attested`
 - declared surfaces: zone owns 5 / not-owns 5 · services 6 · lanes 37 · announcements 1
 - DIFF: `README.md`
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+118 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+119 more)
 
-## 5. Declared decisions — what each member SAID about its own figure
+## 6. Declared decisions — what each member SAID about its own figure
 
 Read from `registry/kit-decisions.json` — OUR record of what each member
 declared, not a surface a member writes. Each entry names its source and
@@ -144,7 +184,7 @@ MEMBER STATED THEM, so some are approximate; the round's own ledger rows
 - the Session-Id trailer is already its law and working: fork repo 197/200, skill repo 147/200
 - **2026-09-26 wave**, declared 2026-09-26T22:44:00Z: **ask1** declaration STANDS — no target owed; its tree carries no ledger of this object (workers-ledger.json is a skill-version ACK ledger); **ask2** QUESTIONS ADOPT AS A UNION — template base plus its own batch_return_address
 
-## 6. Bounds — what this census does not say
+## 7. Bounds — what this census does not say
 
 - **DIFF is measured; behind-vs-forked is not.** The leg compares bytes. It
   cannot say whether a member is BEHIND the template or has deliberately
