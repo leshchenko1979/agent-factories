@@ -87,7 +87,7 @@ A mutation that auto-publishes SWALLOWS a render fault: the publish leg catches 
 - **The reason survives and is logged.** The fix records the reason in a module-level slot (`_LAST_RENDER_FAULT`), names it on stderr via `_note_publish_fault()`, and logs it with `oc_log_extra("publish_failed", why)`. The log helper now writes the reason, but note the unified tools log is still disabled by default (`--no-log`), so on the ordinary daemon path the fault reaches nobody via the log.
 - **The instrument's own suite now accepts both properties.** The standalone `publish` verb still fails loudly on a fault (die(4)), while the mutation path treats the page as optional and names the fault on stderr — so one instrument has two entry points with context-appropriate verdicts.
 
-**Landed fix:** commit `b16451e` (2026-09-27T04:51:55Z) implements the above. The exit code stays 0 by design, the fault reason is named on the mutation's own stderr, and stdout stays parseable so a caller reading `--json` is unaffected. The ruled acceptance criterion named stdout; the implementation chose stderr deliberately to preserve `--json` usability — that divergence is HQ's/Worker's to adjudicate, not mine to encode as satisfied.
+**Landed fix:** commit `b16451e` (2026-09-27T04:51:55Z) implements the above. The exit code stays 0 by design, the fault reason is named on the mutation's own stderr, and stdout stays parseable so a caller reading `--json` is unaffected. The item's acceptance is channel-agnostic — "the property to satisfy, not the channel" — so naming the fault on stderr satisfies it; a relayed restatement of the criterion named stdout, which the implementation deliberately did not take, to keep the `--json` payload usable.
 
 ### 4.4 Rollout and adoption
 
