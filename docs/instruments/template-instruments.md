@@ -406,6 +406,24 @@ every entry's committed blob must equal the committed manifest, which is a diffe
 owns. **A generated artifact is a function of the COMMITTED tree; a manifest built from anything else
 describes a tree that does not exist.**
 
+### 7.4 A law file cannot publish its own version — the self-reference regress
+
+**A law doc that is itself a manifest path cannot state the current version of itself, and that is a
+PROPERTY of the measurement, not a defect of it.** Measured 2026-09-27 on `review-rotation.md`,
+standing on the commit that ships it: a controlled probe moving ONE byte of the doc moved the doc's
+own sha256 and the manifest's `kit_version` in the same step — the reading moved because the writer
+wrote. This is the sharper form of §7.1: there a hand-typed number was untestable because nothing
+checked it, while here the DERIVED number is untestable from inside the file that carries it. Every
+instrument law doc is a `standalone` manifest path, so every one of them has this regress, and a
+clause stated per-instrument would be coined once per file.
+
+**What to publish instead:** the reading WITH its instant and its predicate, never as a claim of
+currency — and **the row a reviewer can reproduce is the one at the COMMIT the doc ships in**, since
+a mid-flight reading is a real instant that is also already superseded. Two consequences: (a) the doc
+states that its value moves whenever any shipped file moves, including files the instrument does not
+own; and (b) **to read a version, read `registry/kit.json`** — the manifest is the only surface where
+the reading and the tree are the same object.
+
 ## 8. Ownership and scope
 
 | who | what |
