@@ -7,6 +7,7 @@
   "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
   "zone": {
     "owns": [
+      "the template instrument surface — methodology, development and cross-member deployment (owner-commissioned 2026-09-27)",
       "the ASIF template and rulebook (TEMPLATE/ and the derived laws)",
       "the fleet registry (registry/)",
       "member-factory surveys, scores and the measurement cadence",
@@ -57,6 +58,12 @@
       "audience": "agent",
       "entry": "cron factory-registry-attest",
       "cadence": "daily 06:00Z"
+    },
+    {
+      "name": "factory-publish",
+      "audience": "agent",
+      "entry": "cron factory-publish",
+      "cadence": "every 6h (UTC)"
     }
   ],
   "substrates_owned": [
@@ -78,7 +85,7 @@
     },
     {
       "id": "brain-metrics-baseline-measured",
-      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so no daily note has been written since 2026-09-21 — confirmed again 2026-09-26T06:2xZ, the newest is 2026-09-21.md — and memory_search's DEFAULT scope is exactly those notes, so default-scope recall for 09-22 onward is blind while memory.db keeps indexing. Fresh reading 2026-09-26T06:21:02Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 769 lines / 185339 bytes / about 52953 tokens = 26.48 percent of a 200k window — AGENTS.md alone is 712 lines / 180650 bytes, 92.59 percent of injected lines. LEG B, every skills/*/SKILL.md at depth 1, 866 lines / 94441 bytes / about 26983 tokens = 13.49 percent; skills/meta-factory/SKILL.md alone is 866 lines, 366 over the owner's 500-line budget marker (the marker is PRINTED, never gated). TOGETHER 1635 lines / 279780 bytes / about 79936 tokens = 39.97 percent of a 200k window, and 7.99 percent of the 1M window now configured (the two differ by exactly 5.0x, so always read the denominator beside the figure) - paid before a session reads its first message. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z) then 34.97 percent (2026-09-25T06:08:47Z) then this one, so the floor has risen 10.21 points in about 2.8 days and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
+      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so a note exists only for a day in which compaction fired — and at a 1M window that is rare. Measured 2026-09-27: notes exist for 09-19, 09-20, 09-21 and 09-26 only; 09-22 through 09-25 have none. memory_search's DEFAULT scope is exactly those notes, so default-scope recall is blind for every day that has none, while memory.db keeps indexing. The pipeline is STARVED, NOT STOPPED. Fresh reading 2026-09-27T11:10:23Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 813 lines / 205148 bytes / about 58614 tokens = 29.31 percent of a 200k window — AGENTS.md alone is 756 lines / 200459 bytes = 97.71 percent of leg-A bytes and 92.99 percent of its lines — 256 lines over the owner's 500-line budget marker, which is PRINTED and never gated. LEG B, every skills/*/SKILL.md at depth 1: 869 lines / 95510 bytes / about 27289 tokens = 13.64 percent. TOGETHER 1682 lines / 300658 bytes / about 85903 tokens = 42.95 percent of a 200k window, which is 8.59 percent of the 1M window now configured. The two differ by exactly 5.0x, so always read the denominator beside the figure. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z), then 34.97 percent (2026-09-25T06:08:47Z), then 39.97 percent (2026-09-26T06:21:02Z), then this one. That is +2.98 points in one day and +13.19 points in four, and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
       "severity": "info",
       "since": "2026-09-19T14:20:00Z",
       "affects": [
@@ -117,8 +124,32 @@
       "thread_id": 1271,
       "role": "worker",
       "announcements": []
+    },
+    {
+      "topic": "Factories / Ledger",
+      "thread_id": 3981,
+      "role": "ledger",
+      "announcements": []
+    },
+    {
+      "topic": "Factories / Open Question Tool",
+      "thread_id": 4087,
+      "role": "questions",
+      "announcements": []
+    },
+    {
+      "topic": "Factories / Pacemakers / Crons",
+      "thread_id": 4223,
+      "role": "pacemakers",
+      "announcements": []
+    },
+    {
+      "topic": "Factories / Instruments methodology",
+      "thread_id": 4186,
+      "role": "methodology",
+      "announcements": []
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-26T06:29:30Z"
+  "attested_at": "2026-09-27T11:10:23Z"
 }
