@@ -1204,7 +1204,7 @@ _RECEIPT_PROMPT = (
 )
 
 def _duty_row(name="factory-registry-attest", *, prompt=_RECEIPT_PROMPT,
-              last_run_at="2026-09-25T06:00:13Z",
+              last_run_at="2026-09-25T07:30:00Z",  # AFTER the #175 bound, see _DUTY_BOUND
               row_id="9ec28cec-100c-4325-ba3e-62972351ff0d") -> dict:
     return {
         "id": row_id, "name": name, "deliver_to": "", "prompt": prompt,
@@ -1219,14 +1219,40 @@ def _receipt_row(subject="registry-attest-2026-09-25",
     the leg's first version accepted any subject match, which is how a dispatch record
     written before the round completed certified the round.
     """
-    return {"n": n, "ts": "2026-09-25T06:14:25Z", "event": "run", "actor": "delegate",
+    return {"n": n, "ts": "2026-09-25T07:41:00Z", "event": "run", "actor": "delegate",
             "subject": subject, "detail": detail}
 
-def _duty_leg(cron_rows, ledger_rows, *, store=None) -> dict:
+# THE FORWARD BOUND the duty probes are driven against (#175). Declared HERE rather than
+# read from the live tree, because this file is a SHIPPED PAIR: a member factory that has
+# not adopted the convention declares no key, and criterion 4 makes that a REFUSAL — so a
+# probe that inherited the live declaration would fail in the very tree it ships to.
+# The instant is the one this factory declares in docs/ledger-invariants.json, so the
+# probes exercise the same boundary the live leg does without depending on it.
+_DUTY_BOUND = "2026-09-25T07:01:07Z"
+
+
+def _duty_tree(*, invariants=None, declaration=None) -> Path:
+    """A factory tree carrying exactly the bound the caller names — the P35 fixture.
+
+    Reached through the RUNNER's own loader, so the probe and the leg resolve the boundary
+    reader by ONE path: a second loader here would be a second predicate for one field.
+    """
+    reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
+    if declaration is None and invariants is None:
+        invariants = {"duty_receipt_declared": _DUTY_BOUND}
+    return reader.synthetic_tree(Path(tempfile.mkdtemp()), rows=[],
+                                 invariants=invariants, declaration=declaration)
+
+
+_DUTY_TREE = _duty_tree()
+
+
+def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None) -> dict:
     return RUNNER.duty_receipt_leg(
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
-        read_at="2026-09-25T06:31:48Z",
+        read_at="2026-09-25T08:00:00Z",
         store=store if store is not None else Path(tempfile.mkdtemp()),
+        repo=repo if repo is not None else _DUTY_TREE,
     )
 
 def test_the_duty_leg_BITES_when_a_fired_round_left_no_receipt() -> None:
@@ -1412,10 +1438,25 @@ def test_the_duty_leg_reports_NOT_RUN_when_no_row_declares_a_receipt() -> None:
     assert leg["problems"] == [], leg["problems"]
 
 def test_the_round_comes_from_the_rows_own_fire_instant_never_a_parsed_schedule() -> None:
-    """`last_run_at` is stamped at DISPATCH, so it names the round the trigger woke."""
-    leg = _duty_leg([_duty_row(last_run_at="2026-09-24T06:00:11Z")], [])
+    """`last_run_at` is stamped at DISPATCH, so it names the round the trigger woke.
+
+    The tree is pinned to an EARLIER declared bound rather than moving the fixture instant,
+    because the assertion's whole power is that the round date (09-24) differs from the read
+    instant (09-25) — a schedule parse would name 09-25. Moving the instant forward to clear
+    the #175 bound would have made the probe unable to tell the two derivations apart.
+
+    The second arm is the same row under this factory's real bound: 09-24 predates it, so
+    the round is EXCUSED and never judged. One row, two bounds, two outcomes — which is the
+    property #175 exists to establish.
+    """
+    early = _duty_tree(invariants={"duty_receipt_declared": "2026-09-20T00:00:00Z"})
+    leg = _duty_leg([_duty_row(last_run_at="2026-09-24T06:00:11Z")], [], repo=early)
     assert leg["coverage"]["duties_judged"][0]["round"] == "2026-09-24", leg["coverage"]
     assert "registry-attest-2026-09-24" in leg["problems"][0], leg["problems"][0]
+
+    bounded = _duty_leg([_duty_row(last_run_at="2026-09-24T06:00:11Z")], [])
+    assert bounded["coverage"]["duties_judged"] == [], bounded["coverage"]
+    assert bounded["coverage"]["rounds_excused_by_bound"] == 1, bounded["coverage"]
 
 def test_a_row_with_no_fire_instant_is_EXCUSED_and_never_guessed() -> None:
     """A round that cannot be READ is never NAMED: the row is excused with its reason."""
@@ -1898,6 +1939,123 @@ def test_the_publish_leg_is_WIRED_into_the_runner_and_prints_its_population() ->
         assert "residual window" in text, text
         assert sha in text and "cafebabe-lane" in text, text
         assert "STALE" in text, text
+
+
+# --- the duty-receipt leg's FORWARD BOUND (#175) --------------------------------
+#
+# The law is forward-looking: SKILL.md section 11 says a duty whose lane writes an
+# undated, ad-hoc subject predating the convention "owes the convention going forward".
+# So a round that fired BEFORE this factory adopted the convention could not have carried
+# a receipt, and judging it is a FALSE MISSING. These probes pin the bound, and — the half
+# that matters more — pin that the bound NARROWS the population without silencing the leg.
+
+def test_a_round_that_fired_BEFORE_the_declared_bound_is_EXCUSED_and_named() -> None:
+    """Acceptance 1: a pre-bound round is excused, and the excuse NAMES it.
+
+    The measured instances are `factory-template-weekly` (round 2026-09-21, four days
+    before the convention) and `factory-growth-map-biweekly` (round 2026-09-16, nine days
+    before). Both fired when no receipt was possible, and both were reported MISSING.
+    """
+    leg = _duty_leg([_duty_row(last_run_at="2026-09-21T06:00:27Z")], [])
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["duties_judged"] == [], "a pre-bound round is NOT judged"
+    assert leg["coverage"]["rounds_excused_by_bound"] == 1, leg["coverage"]
+    excuse = [e for e in leg["excused"] if "BEFORE the declared" in e]
+    assert len(excuse) == 1, leg["excused"]
+    text = excuse[0]
+    assert "factory-registry-attest" in text, text
+    assert "9ec28cec" in text, "the excuse must name the cron row it excused, by id"
+    assert _DUTY_BOUND in text, f"the excuse must print the bound it applied: {text}"
+    assert "NEVER backfilled" in text, text
+
+
+def test_the_bound_NARROWS_the_population_and_the_leg_STILL_REDs_after_it() -> None:
+    """Acceptance 2, the negative control — the bound must not silence the leg.
+
+    A bound that excused everything would pass acceptance 1 and read as a clean run, so
+    the two rounds are driven TOGETHER: the pre-bound one excused, the post-bound one
+    still RED. This is the arm that proves the bound narrows rather than hides.
+    """
+    leg = _duty_leg(
+        [_duty_row(name="factory-old", last_run_at="2026-09-21T06:00:27Z",
+                   row_id="aaaa1111-0000-0000-0000-000000000001"),
+         _duty_row(name="factory-new", last_run_at="2026-09-25T09:00:00Z",
+                   row_id="bbbb2222-0000-0000-0000-000000000002")],
+        [],
+    )
+    assert leg["coverage"]["rounds_excused_by_bound"] == 1, leg["coverage"]
+    problems = [p for p in leg["problems"] if "NO duty receipt" in p]
+    assert len(problems) == 1, problems
+    assert "factory-new" in problems[0], problems
+    assert "factory-old" not in problems[0], "the excused round must not also be a problem"
+
+
+def test_an_UNDECLARED_bound_REFUSES_instead_of_judging_every_round() -> None:
+    """Acceptance 4: no declaration is a REFUSAL, never the pre-fix behaviour arriving
+    as a clean run. Judging the whole population unbounded is exactly what #175 exists
+    to stop, so a tree that declares nothing must be told so rather than shown green.
+    """
+    leg = _duty_leg([_duty_row()], [], repo=_duty_tree(invariants={}))
+    assert len(leg["problems"]) == 1, leg["problems"]
+    refusal = leg["problems"][0]
+    assert "duty_receipt_declared" in refusal, refusal
+    assert "REFUSED" in refusal, refusal
+    assert leg["coverage"]["duties_judged"] == [], (
+        "no round may be judged while the bound is unreadable — that is the unbounded "
+        "pre-fix behaviour arriving silently")
+    assert leg["coverage"]["bound"] == "", leg["coverage"]
+    assert leg["coverage"]["bound_refusal"], leg["coverage"]
+
+
+def test_a_MALFORMED_bound_REFUSES_with_the_reader_s_own_problems() -> None:
+    """A declared-but-unreadable bound is a DEFECT, never a skip and never a pass.
+
+    The reader's own policy (absent SKIPS, malformed FAILS) is mapped here onto
+    refuse-vs-refuse, because for this leg an absent declaration is also not a licence to
+    judge unbounded. The distinction survives in the WORDING, which is what a reader of
+    the report needs in order to act on it.
+    """
+    leg = _duty_leg([_duty_row()], [], repo=_duty_tree(declaration="not json {{{"))
+    assert len(leg["problems"]) == 1, leg["problems"]
+    refusal = leg["problems"][0]
+    assert "cannot be read" in refusal, refusal
+    assert leg["coverage"]["duties_judged"] == [], leg["coverage"]
+
+
+def test_the_bound_is_FACTORY_DATA_read_through_the_ONE_reader() -> None:
+    """Acceptance 3: the instant is declared factory data, never a second constant.
+
+    A bootstrapped factory's history is its own, so a leg that hardcoded this factory's
+    date would judge a tree it does not describe — the same reason the boundary-reading
+    gates declare theirs. The grep is the whole probe: no instant of the bound may appear
+    in the runner, and the key must resolve through `tests/ledger_boundary.py`.
+    """
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    assert "2026-09-25T07:01:07" not in source, (
+        "the bound instant is hardcoded in the leg; it belongs in docs/ledger-invariants.json")
+    assert RUNNER.DUTY_RECEIPT_BOUNDARY_KEY == "duty_receipt_declared", source
+    reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
+    bound, text = reader.declared_boundary(REPO, RUNNER.DUTY_RECEIPT_BOUNDARY_KEY)
+    assert text == _DUTY_BOUND, f"the probes and the live declaration disagree: {text}"
+
+
+def test_the_leg_prints_the_bound_beside_the_population_it_judged() -> None:
+    """Acceptance 1's second half: the bound is PRINTED, so a clean verdict can never be
+    mistaken for an unbounded one that happened to find nothing.
+
+    Driven through main() rather than the leg alone, because a bound that exists only in
+    the data and never reaches the report is a bound nobody can audit. The assertion is
+    portable on purpose: a bootstrapped factory declares no key and prints UNDECLARED,
+    which satisfies the same property — the reader is always told WHICH bound applied.
+    """
+    rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"])
+    assert rc == 1, (rc, out[-2000:], err[-2000:])  # the fixture round carries no receipt
+    assert "LEG duty-receipt" in out, out
+    assert "forward bound `duty_receipt_declared`" in out, out[-3000:]
+    assert (_DUTY_BOUND in out) or ("UNDECLARED" in out), (
+        "the run must print either the instant it bounded against or say plainly that "
+        f"no bound is declared: {out[-3000:]}")
+
 
 
 def main() -> int:

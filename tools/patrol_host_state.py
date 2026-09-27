@@ -86,6 +86,9 @@ FIELD_PREDICATE = REPO / "tools" / "field_predicate.py"
 # into every member factory where the layout above it differs, and a module-level sibling
 # import here is what broke this file's own gate (#171) the day one was added.
 KIT_PIN = REPO / "tools" / "kit_pin.py"
+# The boundary reader (#175). Reached by PATH through `load_module`, never imported:
+# this runner is copied into every member factory, where the layout above it differs.
+LEDGER_BOUNDARY = REPO / "tests" / "ledger_boundary.py"
 
 # ---- the publish-freshness leg (issue #146, ruled at ledger n=1168) ----------------
 #
@@ -1015,6 +1018,11 @@ FRAGMENT_STORE = REPO / "registry" / "factories"
 # that is a finding rather than a completion, and it is the leg's question, not the
 # writer's vocabulary -- which is why it lives here and the domain lives there.
 DUTY_INCOMPLETE_VALUES = ("failed", "skipped")
+# The invariant whose declared instant is this leg's forward bound (#175). The KEY is
+# a constant here; the INSTANT is factory data in docs/ledger-invariants.json and is
+# never written into this file, because a bootstrapped factory's history is its own:
+# a leg that hardcoded this factory's date would judge a tree it does not describe.
+DUTY_RECEIPT_BOUNDARY_KEY = "duty_receipt_declared"
 
 def declared_receipt_stem(prompt: str) -> str | None:
     """The receipt stem this row declares, or None — the line `receipt_subject: <stem>`.
@@ -1088,10 +1096,67 @@ def attestation_state(store: Path = FRAGMENT_STORE) -> tuple[dict, str | None]:
             read[str(data.get("factory") or path.stem)] = data.get("attested_at")
     return read, None
 
+_BOUNDARY_READER = None
+
+
+def boundary_reader():
+    """The boundary reader, loaded ONCE and cached (#175).
+
+    `load_module` RE-EXECUTES the module on every call, and this leg reaches the reader
+    once per declared round, so an uncached accessor would re-import the closure for
+    every row on a box carrying several factories. Loaded by PATH through the same
+    accessor the leg uses, so there is still exactly one way to reach it.
+    """
+    global _BOUNDARY_READER
+    if _BOUNDARY_READER is None:
+        _BOUNDARY_READER = load_module("ledger_boundary", LEDGER_BOUNDARY)
+    return _BOUNDARY_READER
+
+
+def duty_receipt_bound(repo: Path) -> tuple[dt.datetime | None, str, str]:
+    """The forward bound this leg judges against, as `(instant, text, refusal)`.
+
+    Read through the ONE boundary reader (`tests/ledger_boundary.py`), so the leg and
+    the boundary-reading gates cannot disagree about what this factory declared — one
+    field, one predicate (SKILL.md section 11).
+
+    The reader's own policy is absent SKIPS / malformed FAILS; this leg maps BOTH onto
+    a REFUSAL, and that is deliberate. For a gate, an absent declaration is a legitimate
+    state (the invariant has not been adopted). For this leg it is not: judging every
+    fired round against no bound is precisely the unbounded read #175 exists to stop, so
+    a tree that declares nothing is TOLD so rather than shown a clean run. The
+    distinction survives in the WORDING, which is what a reader needs in order to act.
+    """
+    try:
+        reader = boundary_reader()
+    except Exception as exc:  # noqa: BLE001 — any load failure is the same refusal
+        return None, "", (
+            f"the boundary reader cannot be loaded from {LEDGER_BOUNDARY} ({exc}) — "
+            f"REFUSED: without it `{DUTY_RECEIPT_BOUNDARY_KEY}` cannot be read, and a "
+            f"leg that judges every round against a bound it could not read is the "
+            f"unbounded behaviour #175 exists to stop"
+        )
+    try:
+        instant, text = reader.declared_boundary(repo, DUTY_RECEIPT_BOUNDARY_KEY)
+    except reader.SkipGate as exc:
+        return None, "", (
+            f"`{DUTY_RECEIPT_BOUNDARY_KEY}` is UNDECLARED in this tree ({exc}) — "
+            f"REFUSED: a round fired before a convention could not have carried its "
+            f"receipt, and this tree has not declared when that convention began, so "
+            f"no round is judged rather than every round being judged unbounded"
+        )
+    except reader.GateError as exc:
+        return None, "", (
+            f"`{DUTY_RECEIPT_BOUNDARY_KEY}` is declared in this tree but cannot be "
+            f"read: {'; '.join(str(p) for p in exc.problems)} — REFUSED: a malformed "
+            f"bound is a DEFECT, never a licence to judge unbounded"
+        )
+    return instant, text, ""
+
 def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                      prefixes: list[str], ledger_rows: list[dict], *,
                      read_at: str = "", store: Path = FRAGMENT_STORE,
-                     predicate=None) -> dict:
+                     predicate=None, repo: Path = REPO) -> dict:
     """The duty-completion leg: did the round each thin trigger woke LEAVE A RECEIPT?
 
     POPULATION. The ENABLED cron rows this factory DECLARES that carry a receipt
@@ -1116,6 +1181,17 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     problems: list[str] = []
     excused: list[str] = []
     judged: list[dict] = []
+    rounds_excused_by_bound = 0
+    # A leg that judges NOTHING owes no bound: computing one anyway would hand a member
+    # factory with zero declared receipts a REFUSED line for a duty it never owed.
+    if declared:
+        bound_instant, bound_text, bound_refusal = duty_receipt_bound(repo)
+    else:
+        bound_instant, bound_text, bound_refusal = None, "", ""
+    if bound_refusal:
+        # A REFUSAL is not a skip and not a pass: no round may be judged while the
+        # bound is unreadable, or the unbounded pre-fix behaviour returns silently.
+        problems.append(bound_refusal)
     for row, stem in declared:
         name = str(row.get("name") or "(unnamed row)")
         job_id = str(row.get("id") or "unstated")
@@ -1125,6 +1201,26 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             excused.append(
                 f"{name} (cron id {job_id}): declares a receipt but records no fire "
                 f"instant (last_run_at={fired!r}), so no round can be named — NOT JUDGED"
+            )
+            continue
+        if bound_refusal:
+            continue
+        try:
+            fired_instant = reader_parse_ts(fired)
+        except (ValueError, TypeError):
+            excused.append(
+                f"{name} (cron id {job_id}): the round {round_date} records a fire "
+                f"instant this leg cannot date ({fired!r}), so it cannot be placed "
+                f"against the declared bound either — NOT JUDGED"
+            )
+            continue
+        if bound_instant is not None and fired_instant < bound_instant:
+            rounds_excused_by_bound += 1
+            excused.append(
+                f"{name} (cron id {job_id}): the round {round_date} (fired {fired}) "
+                f"is BEFORE the declared bound {bound_text} for "
+                f"`{DUTY_RECEIPT_BOUNDARY_KEY}`, so no receipt was possible for it — "
+                f"NOT JUDGED, and NEVER backfilled"
             )
             continue
         matched = [r for r in ledger_rows
@@ -1191,12 +1287,24 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "undeclared_jobs": [str(r.get("name") or "") for r in undeclared],
             "jobs_unattributed": len(foreign),
             "duties_judged": judged,
+            "bound": bound_text,
+            "bound_refusal": bound_refusal,
+            "rounds_excused_by_bound": rounds_excused_by_bound,
             "duties_missing": len([p for p in problems if "NO duty receipt" in p]),
             "attested_at_state": state,
             "attested_at_not_read": state_reason,
             "read_at": read_at,
         },
     }
+
+def reader_parse_ts(text: str):
+    """Parse an RFC3339 instant through the reader's own predicate (#175).
+
+    The reader is shared with the boundary gates, so this is the SAME parse that places
+    a row against a boundary — a second parse here would be a second predicate for one
+    field (SKILL.md section 11).
+    """
+    return boundary_reader().parse_ts(text)
 
 def field_predicate_readers():
     """The shared detail-field predicate, loaded by path so no import path is assumed.
@@ -1672,6 +1780,15 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"(fired {duty['fired'] or 'unstated'}) — "
                     f"{duty['rows_matched']} row(s) match the round's subject, "
                     f"{duty['receipts']} DECLARE a completion"
+                )
+            lines.append(
+                f"  forward bound `{DUTY_RECEIPT_BOUNDARY_KEY}`: "
+                f"{cov.get('bound') or 'UNDECLARED'}"
+            )
+            if cov.get("rounds_excused_by_bound"):
+                lines.append(
+                    f"    {cov['rounds_excused_by_bound']} round(s) fired BEFORE that "
+                    f"bound and are excused by it, NAMED above — never backfilled"
                 )
             lines.append(
                 "  attested_at (RESULTING STATE, never the receipt): "
