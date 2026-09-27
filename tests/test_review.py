@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the Multi-Lens Review Engine (tools/review.py / P32)."""
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -335,6 +336,160 @@ def test_verify_reports_unreceipted_lenses() -> None:
             shutil.rmtree(cycle_dir)
 
 
+def _fresh_cycle(cycle_id: str) -> Path:
+    """Init a cycle and return its dir, for tests that need a clean tree."""
+    cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    if cycle_dir.exists():
+        shutil.rmtree(cycle_dir)
+    subprocess.run(cmd_base + ["init", cycle_id], cwd=REPO_ROOT, capture_output=True, text=True)
+    return cycle_dir
+
+def test_intake_refuses_with_no_declarations() -> None:
+    """A tree that declares no input channel is REFUSED, not read as empty.
+
+    This is the class the leg exists to prevent: nothing declared, read as
+    "nobody submitted", reported as a clean pass. `init` alone creates no
+    intake channel, so the refusal is the default state rather than an edge.
+    """
+    cycle_id = "test-intake-nodecl"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["intake", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode != 0, res.stdout
+        assert "INTAKE REFUSED" in res.stderr, res.stderr
+        assert not (cycle_dir / "proposals").is_dir()
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_intake_is_read_only_over_member_data(tmp_path: Path) -> None:
+    """Intake reads the member's data and never writes it.
+
+    The proposals and the ledger are the FACTORY's, not the instrument's: an
+    intake that touched either would corrupt the evidence it exists to collect.
+    """
+    cycle_id = "test-intake-ro"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        proposals = cycle_dir / "proposals"
+        proposals.mkdir(parents=True, exist_ok=True)
+        (proposals / "w1.md").write_text(
+            "ADD a naming criterion in docs/x.md#4 BECAUSE the census missed a shadow on 2026-09-27.\n",
+            encoding="utf-8",
+        )
+        ledger = tmp_path / "ledger.jsonl"
+        ledger.write_text(
+            json.dumps({"n": 1, "kind": "proposal", "t": "2026-09-27T10:00:00Z",
+                        "note": "CHANGE the cadence predicate in tools/review.py#cadence "
+                                "BECAUSE the donor used a different column on 2026-09-27."}) + "\n",
+            encoding="utf-8",
+        )
+        (cycle_dir / "intake.json").write_text(
+            json.dumps({"ledger": str(ledger), "ledger_kind": "proposal"}), encoding="utf-8")
+
+        watched = [proposals / "w1.md", ledger]
+        before = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in watched}
+
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["intake", cycle_id, "--record"], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "INTAKE COMPLETE" in res.stdout
+        assert "2 proposal(s)" in res.stdout
+
+        after = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in watched}
+        assert before == after, "intake wrote to factory-owned data"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_intake_names_empty_and_incomplete() -> None:
+    """Zero submissions and a malformed one are DIFFERENT named states, both non-pass."""
+    cycle_id = "test-intake-states"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        proposals = cycle_dir / "proposals"
+        proposals.mkdir(parents=True, exist_ok=True)
+
+        res = subprocess.run(cmd_base + ["intake", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 1, res.stdout
+        assert "INTAKE EMPTY" in res.stdout
+
+        (proposals / "bad.md").write_text("not a proposal at all\n", encoding="utf-8")
+        res = subprocess.run(cmd_base + ["intake", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 1, res.stdout
+        assert "INTAKE INCOMPLETE" in res.stdout
+        assert "bad.md" in res.stderr and "format" in res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_intake_refuses_a_declared_channel_that_is_absent(tmp_path: Path) -> None:
+    """A declared channel the tree cannot honour is a REFUSAL, not an empty read."""
+    cycle_id = "test-intake-absent"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        (cycle_dir / "proposals").mkdir(parents=True, exist_ok=True)
+        (cycle_dir / "intake.json").write_text(
+            json.dumps({"ledger": str(tmp_path / "nope.jsonl")}), encoding="utf-8")
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["intake", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout
+        assert "INTAKE REFUSED" in res.stderr
+        assert "cannot honour" in res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_intake_receipts_validate_against_the_schema() -> None:
+    """Every key a receipt carries is DECLARED by the shipped schema."""
+    cycle_id = "test-intake-schema"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        proposals = cycle_dir / "proposals"
+        proposals.mkdir(parents=True, exist_ok=True)
+        (proposals / "w1.md").write_text(
+            "ADD a rule in docs/x.md#4 BECAUSE it was missing on 2026-09-27.\n", encoding="utf-8")
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["intake", cycle_id, "--record"], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+
+        schema = json.loads(subprocess.run(cmd_base + ["schema"], cwd=REPO_ROOT,
+                                           capture_output=True, text=True).stdout)
+        item = schema["properties"]["proposals"]["items"]
+        declared = set(item["properties"])
+        required = set(item["required"])
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["proposals"], "intake --record wrote no receipts"
+        for receipt in state["proposals"]:
+            undeclared = set(receipt) - declared
+            assert not undeclared, f"receipt carries undeclared keys {undeclared}"
+            assert required <= set(receipt), f"receipt misses required {required - set(receipt)}"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_shipped_executable_carries_no_donor_tokens() -> None:
+    """The shipped executable names no donor surface.
+
+    The donor's recipients, session uuids, board ids and lane names are its
+    process law, not this instrument's: a member has its own lanes and its own
+    board, and a shipped literal would send a member's work to the donor's.
+    """
+    source = (REPO_ROOT / "tools" / "review.py").read_text(encoding="utf-8")
+    tokens = ["4515ea72", "d6cfd3f7", "37e71e03", "2646d31a", "30220",
+              "oc-notify-fanout", "session_notify", "hq.md", "fleet-directives"]
+    found = {t: source.count(t) for t in tokens if source.count(t)}
+    assert not found, f"donor tokens in the shipped executable: {found}"
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -342,4 +497,10 @@ if __name__ == "__main__":
     test_legacy_state_is_refused_and_migrated_explicitly(Path("/tmp"))
     test_close_sets_both_durations(Path("/tmp"))
     test_verify_reports_unreceipted_lenses()
+    test_intake_refuses_with_no_declarations()
+    test_intake_is_read_only_over_member_data(Path("/tmp"))
+    test_intake_names_empty_and_incomplete()
+    test_intake_refuses_a_declared_channel_that_is_absent(Path("/tmp"))
+    test_intake_receipts_validate_against_the_schema()
+    test_shipped_executable_carries_no_donor_tokens()
     print("ALL TESTS PASSED")

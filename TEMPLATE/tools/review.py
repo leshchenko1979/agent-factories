@@ -16,6 +16,9 @@ Enforces:
   5. An OBSERVABLE cadence: `cadence` derives the boundary stamp from the
      ledger's own ANCHORED notes, so a member's cadence state is re-derivable
      by anyone holding the ledger instead of asserted in prose.
+  6. A DECLARED intake: `intake` reads the cycle's input channels and reports a
+     NAMED state.  Nothing declared, nothing submitted and a malformed
+     submission are three different states, and none of them is a pass.
 
 Usage:
   python3 tools/review.py init <cycle_id>
@@ -27,6 +30,7 @@ Usage:
   python3 tools/review.py compile <cycle_id>
   python3 tools/review.py close <cycle_id> [--status COMPLETED|ABANDONED] [--stamp --ledger F]
   python3 tools/review.py cadence --ledger <ledger.jsonl> [--every N] [--write <cycle_id>] [--json]
+  python3 tools/review.py intake <cycle_id> [--record]
   python3 tools/review.py schema
   python3 tools/review.py migrate <cycle_id> [--dry-run]
 """
@@ -407,6 +411,12 @@ STATE_SCHEMA: dict[str, Any] = {
                     "source": {"type": "string", "enum": ["dir", "ledger", "declared"]},
                     "path": {"type": ["string", "null"]},
                     "recorded_at": {"type": "string", "format": "date-time"},
+                    "op": {"type": "string", "enum": ["ADD", "CHANGE"],
+                           "description": "The proposal's operation, from the strict intake format."},
+                    "target": {"type": "string",
+                               "description": "The file+section the proposal names, from the strict intake format."},
+                    "dated": {"type": "boolean",
+                              "description": "Whether the evidence carried a date. An undated proposal is RECEIVED and WARNED, never silently accepted as evidenced."},
                 },
             },
         },
@@ -1171,6 +1181,211 @@ def cmd_migrate(cycle_id: str, dry_run: bool) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Duty-4 intake — the member-facing input leg
+# ---------------------------------------------------------------------------
+
+PROPOSAL_FORMAT = re.compile(
+    r"^(?P<op>ADD|CHANGE)\s+(?P<rule>.+?)\s+in\s+(?P<target>[^\s]+)\s+BECAUSE\s+(?P<evidence>.+)$",
+    re.DOTALL,
+)
+DATE_TOKEN = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})\b")
+INTAKE_DECL_NAME = "intake.json"
+PROPOSAL_KIND_DEFAULT = "proposal"
+
+def _intake_declaration(cycle_dir: Path) -> dict[str, Any]:
+    """The member's declaration of where its input lands.
+
+    Absent is a STATE, not an error: a member with no ledger says so by not
+    declaring one, and the leg NAMES the absent channel rather than reading
+    nothing from it and calling that a clean zero.
+
+    A DECLARED channel the tree cannot honour is a REFUSAL, not an empty read.
+    That distinction is the whole point — the false-negative this leg exists to
+    prevent is a declared channel that silently yields nothing, which is
+    indistinguishable from a genuine "nobody submitted".
+    """
+    decl_file = cycle_dir / INTAKE_DECL_NAME
+    if not decl_file.is_file():
+        return {"declared": False, "ledger": None, "ledger_kind": PROPOSAL_KIND_DEFAULT,
+                "decl_file": None, "error": None}
+    try:
+        raw = json.loads(decl_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"declared": True, "ledger": None, "ledger_kind": PROPOSAL_KIND_DEFAULT,
+                "decl_file": str(decl_file), "error": str(exc)}
+    if not isinstance(raw, dict):
+        return {"declared": True, "ledger": None, "ledger_kind": PROPOSAL_KIND_DEFAULT,
+                "decl_file": str(decl_file), "error": "top level is not an object"}
+    ledger = raw.get("ledger")
+    kind = raw.get("ledger_kind")
+    return {
+        "declared": True,
+        "ledger": ledger if isinstance(ledger, str) and ledger.strip() else None,
+        "ledger_kind": kind if isinstance(kind, str) and kind.strip() else PROPOSAL_KIND_DEFAULT,
+        "decl_file": str(decl_file),
+        "error": None,
+    }
+
+def _parse_proposal(text: str) -> dict[str, Any]:
+    """Validate one proposal against the strict format, or say why it is INVALID.
+
+    `ADD|CHANGE <rule> in <file+section> BECAUSE <gap actually hit>` with a date
+    in the evidence. A malformed proposal is INVALID and REPORTED — never
+    skipped. A file quietly passed over reads exactly like one that was never
+    written, which is the same false-negative shape as an unread channel.
+    """
+    m = PROPOSAL_FORMAT.match(text.strip())
+    if not m:
+        return {"valid": False, "reason": "format"}
+    evidence = m.group("evidence").strip()
+    if not evidence:
+        return {"valid": False, "reason": "empty-evidence"}
+    return {
+        "valid": True,
+        "op": m.group("op"),
+        "rule": m.group("rule").strip(),
+        "target": m.group("target"),
+        "evidence": evidence,
+        "dated": bool(DATE_TOKEN.search(evidence)),
+    }
+
+def _proposal_rows_from_ledger(ledger_path: Path, kind: str) -> list[tuple[str, str]]:
+    """The ledger channel's proposal rows, as (id, text).
+
+    The KIND is declared, never assumed: the template's ledger vocabulary is
+    `event`, the donor's is `kind`, and a member may name its own. `_row_kind`
+    reads both, so one predicate serves every adopter.
+    """
+    out: list[tuple[str, str]] = []
+    for row in _ledger_rows(str(ledger_path)):
+        if _row_kind(row) != kind:
+            continue
+        text = _ledger_text(row)
+        if not text:
+            continue
+        ref = row.get("n") or row.get("id") or row.get("ts") or row.get("t") or "?"
+        out.append((str(ref), text))
+    return out
+
+def cmd_intake(cycle_id: str, record: bool = False) -> int:
+    """Read the cycle's input channels and report a NAMED intake state.
+
+    TWO channels, and the difference between them is load-bearing:
+
+    - the `proposals/` DIRECTORY is authoritative and always current;
+    - a LEDGER is OPTIONAL and must be DECLARED. A member with no ledger is not
+      a member with no input, so an undeclared ledger is named ABSENT rather
+      than read as empty.
+
+    READ-ONLY over every factory-owned byte. The proposal files and the ledger
+    are the member's data, and this leg never writes them; the receipt index it
+    produces goes into the cycle STATE, which is the instrument's own.
+
+    Exit: 0 COMPLETE · 1 EMPTY or INCOMPLETE (a named state, never a pass) ·
+          2 REFUSED (nothing declared, or a declared channel the tree lacks).
+    """
+    cycle_dir = get_cycle_dir(cycle_id)
+    if not cycle_dir.is_dir():
+        print(f"INTAKE REFUSED: cycle '{cycle_id}' has no directory at {cycle_dir}.",
+              file=sys.stderr)
+        return 2
+
+    decl = _intake_declaration(cycle_dir)
+    proposals_dir = cycle_dir / "proposals"
+
+    if decl["error"]:
+        print(f"INTAKE REFUSED: {INTAKE_DECL_NAME} is unreadable — {decl['error']}",
+              file=sys.stderr)
+        return 2
+    if not decl["declared"] and not proposals_dir.is_dir():
+        print(
+            "INTAKE REFUSED: no intake declarations — neither "
+            f"{proposals_dir} nor {cycle_dir / INTAKE_DECL_NAME} exists. "
+            "A member declares where its input lands; nothing declared is nothing to read.",
+            file=sys.stderr,
+        )
+        return 2
+
+    receipts: list[dict[str, Any]] = []
+    invalid: list[tuple[str, str]] = []
+    channels: list[str] = []
+
+    if proposals_dir.is_dir():
+        channels.append(f"dir:{proposals_dir} ({len(list(proposals_dir.glob('*.md')))} file(s))")
+        for path in sorted(proposals_dir.glob("*.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                invalid.append((path.name, f"unreadable: {exc}"))
+                continue
+            parsed = _parse_proposal(text)
+            if parsed["valid"]:
+                receipts.append({
+                    "id": path.stem, "source": "dir", "path": str(path),
+                    "recorded_at": _now(),
+                    "op": parsed["op"], "target": parsed["target"],
+                    "dated": parsed["dated"],
+                })
+            else:
+                invalid.append((path.name, parsed["reason"]))
+    else:
+        channels.append(f"dir:{proposals_dir} ABSENT (not present)")
+
+    if decl["ledger"]:
+        ledger_path = Path(decl["ledger"])
+        if not ledger_path.is_absolute():
+            ledger_path = REPO_ROOT / ledger_path
+        if not ledger_path.is_file():
+            print(
+                f"INTAKE REFUSED: {INTAKE_DECL_NAME} declares ledger "
+                f"'{decl['ledger']}' but no such file exists. A declared channel "
+                "the tree cannot honour is a refusal, not an empty read.",
+                file=sys.stderr,
+            )
+            return 2
+        rows = _proposal_rows_from_ledger(ledger_path, decl["ledger_kind"])
+        channels.append(f"ledger:{ledger_path} (kind={decl['ledger_kind']}, {len(rows)} row(s))")
+        for ref, text in rows:
+            parsed = _parse_proposal(text)
+            if parsed["valid"]:
+                receipts.append({
+                    "id": ref, "source": "ledger", "path": str(ledger_path),
+                    "recorded_at": _now(),
+                    "op": parsed["op"], "target": parsed["target"],
+                    "dated": parsed["dated"],
+                })
+            else:
+                invalid.append((f"ledger row {ref}", parsed["reason"]))
+    else:
+        channels.append("ledger ABSENT (not declared)")
+
+    for line in channels:
+        print(f"  channel {line}")
+    undated = [r["id"] for r in receipts if not r["dated"]]
+
+    if invalid:
+        for name, reason in invalid:
+            print(f"  INVALID {name}: {reason}", file=sys.stderr)
+        print(f"INTAKE INCOMPLETE: {len(receipts)} valid, {len(invalid)} invalid.")
+        rc = 1
+    elif not receipts:
+        print("INTAKE EMPTY: channels read, 0 proposals. Nothing submitted is a state, not a pass.")
+        rc = 1
+    else:
+        print(f"INTAKE COMPLETE: {len(receipts)} proposal(s).")
+        if undated:
+            print(f"  WARNING undated evidence: {', '.join(undated)}")
+        rc = 0
+
+    if record:
+        state = read_state(cycle_id)
+        state["proposals"] = receipts
+        state["status"] = state.get("status") or "IN_PROGRESS"
+        save_state(cycle_id, state)
+        print(f"  recorded {len(receipts)} receipt(s) in the cycle state")
+    return rc
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Multi-Lens Review Engine")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
@@ -1230,6 +1445,13 @@ def main() -> int:
     p_migrate.add_argument("cycle_id", help="Cycle identifier")
     p_migrate.add_argument("--dry-run", action="store_true", help="Print the mapping, write nothing")
 
+    p_intake = subparsers.add_parser(
+        "intake", help="Read the cycle's input channels and report a named intake state"
+    )
+    p_intake.add_argument("cycle_id", help="Cycle identifier")
+    p_intake.add_argument("--record", action="store_true",
+                          help="Write the receipt index into the cycle state (read-only over member data)")
+
     args = parser.parse_args()
 
     if args.subcommand == "init":
@@ -1254,6 +1476,8 @@ def main() -> int:
         return cmd_close(args.cycle_id, args.status, args.stamp, args.ledger)
     elif args.subcommand == "migrate":
         return cmd_migrate(args.cycle_id, args.dry_run)
+    elif args.subcommand == "intake":
+        return cmd_intake(args.cycle_id, args.record)
     return 1
 
 

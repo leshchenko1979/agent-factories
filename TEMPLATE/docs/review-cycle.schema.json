@@ -321,6 +321,22 @@
           "recorded_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "ADD",
+              "CHANGE"
+            ],
+            "description": "The proposal's operation, from the strict intake format."
+          },
+          "target": {
+            "type": "string",
+            "description": "The file+section the proposal names, from the strict intake format."
+          },
+          "dated": {
+            "type": "boolean",
+            "description": "Whether the evidence carried a date. An undated proposal is RECEIVED and WARNED, never silently accepted as evidenced."
           }
         }
       }
