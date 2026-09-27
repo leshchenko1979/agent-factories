@@ -212,18 +212,69 @@ def test_probe_every_entry_reports_the_key_that_put_it_there():
     entries = S.classify_rework_entries()
     assert entries, "the live rework table must classify to something"
     for entry in entries:
-        assert set(entry) == {"category", "key", "defect"}, entry
+        assert set(entry) == {"category", "key", "defect", "mined"}, entry
         if entry["category"] == "generic":
             assert entry["key"] is None, entry
         else:
             assert entry["key"], f"a classified entry must name its key: {entry}"
 
-    # The live regression this item was filed for: no entry may fire on `race` as a
-    # containment artefact. Under the substring predicate seven did.
-    race_only = [e for e in entries if e["key"] == "race"]
-    for entry in race_only:
-        assert S.key_fires("race", entry["defect"].lower()), entry
+    # The key is validated against the RECORDED MINED TEXT, never the defect cell alone
+    # (#194). Validating against the defect cell is a scope mismatch between two surfaces
+    # of one predicate, and it fails toward a FALSE RED on correct prose: the classifier
+    # mines the Defect, Root cause and Prevented-by cells, so an entry whose key fires in
+    # its Root-cause cell classifies normally and red a probe reading the defect cell.
+    for entry in entries:
+        if entry["key"]:
+            assert S.key_fires(entry["key"], entry["mined"]), entry
 
+
+def test_the_key_is_validated_against_the_RECORDED_mined_text_never_the_defect_cell():
+    """#194: the classifier MINES three cells and must RECORD what it mined.
+
+    The defect is a scope mismatch between two surfaces of ONE predicate: the classifier
+    builds its text from the Defect, Root cause and Prevented-by cells, while the probe
+    validated the key against the Defect cell ALONE. An entry whose key fires only in its
+    Root-cause cell therefore classified normally and red this gate — a FALSE RED ON
+    CORRECT PROSE, measured live (#142: category concurrency_locking, key=race, mined from
+    a Root-cause cell reading "race guard", with no "race" anywhere in the defect cell).
+
+    Driven from a CONSTRUCTED row rather than from live prose, because the shipped probe
+    could not fail on this shape until such a row existed — before #142 landed there was
+    none, which is why the gate stayed green while the mismatch was already there.
+    """
+    import synthesize_insights as S
+
+    defect = "the leg skipped a round it should have judged"
+    cause = "the race guard fired before the round was stamped"
+    prevented = "a left-boundary predicate now rejects the containment form"
+    mined = f"{defect} {cause} {prevented}".lower()
+
+    category, key = S.classify_defect(mined)
+    assert key == "race", f"the fixture must classify through the Root-cause cell: {category}/{key}"
+
+    # THE BITE, both halves: the key fires in the mined text (so the record is the right
+    # thing to validate against) and NOT in the defect cell alone (so the old form reds on
+    # this correct row, and the fixture is not vacuous).
+    assert S.key_fires(key, mined), "the key must fire on the recorded mined text"
+    assert not S.key_fires(key, defect.lower()), (
+        "the fixture is vacuous unless the key fires ONLY outside the defect cell"
+    )
+
+def test_every_entry_records_the_mined_text_and_the_record_is_faithful():
+    """#194's second half: the RECORD is what makes the class auditable.
+
+    The recorded text must be the text the classifier actually read, built from the row's
+    own cells in order — a record that merely resembles it would put the same gap back one
+    layer down. This is also why no entry's category can move when the record is added: the
+    mined expression is untouched, and every recorded text begins with the defect cell it
+    was built from, so the population only ever WIDENED relative to the defect cell alone.
+    """
+    import synthesize_insights as S
+
+    entries = S.classify_rework_entries()
+    assert entries, "the live rework table must classify to something"
+    for entry in entries:
+        assert entry["mined"].startswith(entry["defect"].lower()), entry
 
 def test_cli_execution():
     import subprocess

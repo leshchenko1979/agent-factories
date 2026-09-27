@@ -146,11 +146,22 @@ def persisted_insight_ids() -> set[str]:
 
 
 def classify_rework_entries() -> list[dict]:
-    """Every parsed rework entry with its bucket and the KEY that put it there.
+    """Every parsed rework entry with its bucket, the KEY that put it there, and the text.
 
     THE PURE CORE of the classifier, factored out of `mine_rework_defects` so the firing
     token is available to the OUTPUT (#168) and so a probe can drive it directly rather
     than only through a whole synthesis pass.
+
+    THE MINED POPULATION, chosen deliberately and recorded per entry (#194). The text the
+    classifier reads is the **Defect, Root cause and Prevented-by** cells concatenated —
+    cells 3, 4 and 7 of the row — because a defect's CLASS is carried as much by what
+    caused it and by what now prevents it as by the sentence describing the symptom. What
+    was not defensible was mining three cells and RECORDING one: the entry kept only the
+    defect cell, so a reader could see the class and not the words that produced it, and a
+    probe validating the key against the defect cell alone red on entries whose key fired
+    in a cell the entry never carried (measured on the live table, 32 of 130 entries have
+    a key that fires ONLY outside the defect cell). The entry therefore records `mined`,
+    and the key is validated against THAT.
     """
     if not REWORK_PATH.is_file():
         return []
@@ -179,6 +190,9 @@ def classify_rework_entries() -> list[dict]:
                 "category": category,
                 "key": fired,
                 "defect": defect,
+                # The text the classification actually read, recorded so the class is
+                # auditable from the row rather than only from the code that made it.
+                "mined": text,
             })
 
     return classified
@@ -422,9 +436,19 @@ def main() -> int:
     print("## Autonomous Telemetry Mining & Insight Synthesis\n")
     print(f"**Timestamp:** {now_iso()}\n")
     print(f"### Rework Classification - the key that fired, per entry ({len(classification)})\n")
+    print(
+        "Mined population: the Defect, Root cause and Prevented-by cells concatenated, "
+        "because cause and prevention carry class information; each entry records that "
+        "text, so the class is auditable from the row.\n"
+    )
     for entry in classification:
         key = entry["key"] or "none"
         print(f"- **[{entry['category']}]** key={key} - {entry['defect'][:120]}")
+        if entry["key"] and not key_fires(entry["key"], entry["defect"].lower()):
+            print(
+                "    the key fired OUTSIDE the defect cell, in the mined text: "
+                f"{entry['mined'][:160]}"
+            )
     print()
 
     print(f"### Detected Friction Patterns ({len(rework_patterns) + len(ledger_patterns)})\n")
