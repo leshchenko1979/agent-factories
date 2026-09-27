@@ -4,7 +4,7 @@ Writer: Open Questions instrument lane — authors this file.
 Frame: docs/instruments/template-instruments.md — cross-instrument definitions are cited from there, never restated here.
 Authority: cross-factory clauses, and process law about instruments, rest with meta-factory HQ.
 
-**Owns:** this instrument — its contract, its rollout, and this file. **Re-homed from** `skills/opencrabs-dev/fleet-directives.md` §Open Questions register (owner order 2026-09-27, 05:41 MSK). The source keeps a `[LANE]` pointer to this file, and that pointer is what preserves the contract's reach across the skill-reload path — see §5.
+**Owns:** this instrument — its contract, its rollout, and this file. **Re-homed from** `skills/opencrabs-dev/fleet-directives.md` §Open Questions register (owner order 2026-09-27, 05:41 MSK). The source keeps a `[LANE]` pointer to this file, and that pointer is what preserves the contract's reach across the skill-reload path — see §6.
 
 ## 1. The instrument, declared
 
@@ -13,17 +13,39 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 | field (frame §1) | this instrument |
 |---|---|
 | **name** | Open Questions register |
-| **executable(s)** | the CLI; verbs `ask` · `answer` · `amend` · `notify` · `list` · `publish` · `lint` · `gc`. Its path law is §4.1 |
-| **closure** | the render asset that must sit BESIDE the binary, and `node` on PATH — declared, never derived (frame §1.1). A one-file install is INCOMPLETE, not minimal: it registers happily and publishes nothing (§4.2) |
+| **executable(s)** | the CLI; verbs `ask` · `answer` · `amend` · `notify` · `list` · `publish` · `lint` · `gc`. Its path law is §5.1 |
+| **closure** | the render asset that must sit BESIDE the binary, and `node` on PATH — declared, never derived (frame §1.1). A one-file install is INCOMPLETE, not minimal: it registers happily and publishes nothing (§5.2) |
 | **gate set** | the instrument's own suite, `tests/test_questions.py`; this law pair is gated by `tests/test_docs_sync.py` |
 | **version source** | the kit manifest — DERIVED, never hand-typed (frame §7.1) |
-| **data surfaces** | the register store in the profile home, shared by every install shape, so no member owes a migration; shipped `.example` versus factory-owned is declared at adoption (§4.4) |
+| **data surfaces** | the register store in the profile home, shared by every install shape, so no member owes a migration; shipped `.example` versus factory-owned is declared at adoption (§5.4) |
 
 ---
 
-## 2. The lane-side contract
+## 2. The declared file set
 
-> **Re-homed verbatim, with THREE departures carried INTO the text rather than appended:** the page-URL mechanism (§3, corrected from the tool rather than from either prose), one pinned line citation de-positioned per §4.5, and the source's own heading demoted so it sits under this section. Everything else below is the source's wording.
+**Predicate:** the shipped paths the kit manifest classifies `standalone` that carry this instrument —
+plus, per frame §1.4, every path the executable reaches **indirectly**, which here is **none**: the CLI
+imports only the standard library and its one repo-relative path constant is the render asset that must
+sit beside it. **Scope:** `registry/kit.json`, whose population is the `TEMPLATE/` half. Both halves are
+listed because the pair is what a member adopts; the manifest hashes the `TEMPLATE/` half.
+
+| # | path (root half ↔ TEMPLATE half) | class | what it is |
+|---|---|---|---|
+| 1 | `tools/questions` ↔ `TEMPLATE/tools/questions` | `standalone` | **the executable** — every verb: `ask` · `answer` · `amend` · `notify` · `list` · `publish` · `lint` · `gc` · `selftest` |
+| 2 | `tools/questions-render.mjs` ↔ `TEMPLATE/tools/questions-render.mjs` | `standalone` | **the render asset**, resolved beside the binary — a one-file install registers happily and publishes nothing (§5.2) |
+| 3 | `tests/test_questions.py` ↔ `TEMPLATE/tests/test_questions.py` | `standalone` | **the gate** — invokes the tool's own `selftest` |
+| 4 | `docs/instruments/open-questions.md` ↔ `TEMPLATE/docs/instruments/open-questions.md` | `standalone` | this file |
+
+**A reader holding this file and a tree can answer *"is this instrument complete here?"* without
+enumerating imports**, which is what frame §1 requires of a declaration. The member's reload link
+(`skills/<skill dir>/open-questions.md`) is deliberately **not** in this set: it is the member's own
+act under frame §6.1, and the transport creates no links.
+
+---
+
+## 3. The lane-side contract
+
+> **Re-homed verbatim, with THREE departures carried INTO the text rather than appended:** the page-URL mechanism (§4, corrected from the tool rather than from either prose), one pinned line citation de-positioned per §5.5, and the source's own heading demoted so it sits under this section. Everything else below is the source's wording.
 
 ### Open Questions register — the sanctioned "blocked on you" channel (owner-commissioned 2026-09-24) [LANE]
 
@@ -42,9 +64,9 @@ The owner cannot see which lane is blocked on him: a parked decision exists only
 - **Closure is mechanical wherever it can be.** Beyond an explicit answer or withdrawal, a question closes when the thing it asked about has moved: a named fork issue reading CLOSED closes it as `resolved_mechanically`, and an explicit `close_when` predicate closes on rc=0. An unreadable predicate prints a SKIP note and closes nothing — never a silent close. Silence is still not an answer.
 - **The page is re-rendered on every register mutation** — a new question, an answer, a clarify, an amendment — so it is never stale. The twice-daily cron sweeps expiry and mechanical closure; it is NOT the refresh path.
 
-Store: `~/.opencrabs/profiles/ops/questions/open.json`, with answered sets archived to `archive.jsonl` and the rendered page under `pages/<pointer-slug>/` — the slug READ from the pointer, never assembled from the factory key (correction in §3). Tool: `skills/opencrabs-dev/tools/state/oc-questions` — verbs `ask` · `answer` · `amend` · `notify` · `list` · `publish` · `lint` · `gc` (Toolsmith, `tools/**` carve-out); its path law is §4.1, because the path is resolved at call time rather than assumed. Fork issue #547 carries the build. Live page: the URL recorded in `pages/latest.json` (lane anchors `#lane-<lane-slug>`).
+Store: `~/.opencrabs/profiles/ops/questions/open.json`, with answered sets archived to `archive.jsonl` and the rendered page under `pages/<pointer-slug>/` — the slug READ from the pointer, never assembled from the factory key (correction in §4). Tool: `skills/opencrabs-dev/tools/state/oc-questions` — verbs `ask` · `answer` · `amend` · `notify` · `list` · `publish` · `lint` · `gc` (Toolsmith, `tools/**` carve-out); its path law is §5.1, because the path is resolved at call time rather than assumed. Fork issue #547 carries the build. Live page: the URL recorded in `pages/latest.json` (lane anchors `#lane-<lane-slug>`).
 
-## 3. The page URL — corrected from the tool, and whose law it is
+## 4. The page URL — corrected from the tool, and whose law it is
 
 The re-homed contract above states the page URL law. Its **mechanism** was wrong in the source, and it was wrong in the one direction that reaches the owner: a lane following it assembles a URL from its own factory key and hands the owner a dead link.
 
@@ -60,7 +82,7 @@ The re-homed contract above states the page URL law. Its **mechanism** was wrong
 
 **No clause authored in this file binds a member factory.** Every clause above governs how this instrument behaves for the lane that invokes it; a member that adopts the instrument inherits that behaviour and takes on no new cross-factory duty. Where a clause would bind member factories it is HQ's, and is cited rather than authored.
 
-### 3.1 The page model — ONE page, honestly titled, filterable per factory
+### 4.1 The page model — ONE page, honestly titled, filterable per factory
 
 The instrument publishes ONE page and it carries every open factory's questions. That was always the design — one pointer, one directory, populated from the register's own set list — but the page did not SAY so, and the gap reached the owner as a false statement about the instrument.
 
@@ -70,7 +92,7 @@ The instrument publishes ONE page and it carries every open factory's questions.
 - **The filter defaults to "All", and the page works with scripting disabled.** The control is built by the script, so the delivered HTML carries none: with scripting off the reader sees the full page rather than a dead bar. That property is asserted, not assumed.
 - **The URL does not change, and that is deliberate.** The bookmarked path keeps serving the whole page — the owner order that pins the pointer's slug as a permanent bookmark is cited here, not restated. The filter changes what the page SHOWS; it does not repurpose the path.
 
-### 3.2 The `--set` contract change
+### 4.2 The `--set` contract change
 
 `publish` no longer accepts `--set`. It is REFUSED non-zero with the reason named: the page carries every open set, so a narrowing flag has nothing to address. The verb's contract is now the whole register, and a caller wanting one factory's questions asks for a VIEW (the filter above), never a narrower publish.
 
@@ -78,7 +100,7 @@ The instrument publishes ONE page and it carries every open factory's questions.
 
 `--set` remains the ADDRESSING flag on the set-scoped verbs; only `publish` loses it.
 
-### 3.3 The addressing key — `qid`
+### 4.3 The addressing key — `qid`
 
 Every question carries a **`qid`**, and it is the key a consumer must address it by.
 
@@ -86,11 +108,11 @@ Every question carries a **`qid`**, and it is the key a consumer must address it
 - **`--qid` is its flag.** The set-scoped verbs address a question by `--qid`; the set itself is addressed by `--factory`.
 - **Do not reach for `id`.** The set-level field is `id` and it names the SET, so a consumer who reads the law and reaches for the question's `id` gets a missing key — and a missing key reads exactly like an absent value. Stated because it has already happened: a peer enumerated the question object, read `id`, found nothing, and reported that questions carry no identifier at all, while `qid` was present on every row. The failure is silent in both directions and cost a full round.
 
-## 4. Operational law
+## 5. Operational law
 
-Each section below exists because it has already cost a real cycle. All of it asserts SHAPE — never a byte size, a digest, or a line number (§4.5).
+Each section below exists because it has already cost a real cycle. All of it asserts SHAPE — never a byte size, a digest, or a line number (§5.5).
 
-### 4.1 The executing path is RESOLVED, never assumed
+### 5.1 The executing path is RESOLVED, never assumed
 
 The CLI is located by a glob under the skill's tools root, and the resolution demands EXACTLY ONE match: zero or two-or-more is a hard exit, not a fallback. Two consequences bind every reader of this file:
 
@@ -99,13 +121,13 @@ The CLI is located by a glob under the skill's tools root, and the resolution de
 
 The path is resolved at call time, so no clause in this file may pin it.
 
-### 4.2 The install closure is TWO files, and the failure is SILENT
+### 5.2 The install closure is TWO files, and the failure is SILENT
 
 The binary resolves its render asset BESIDE ITSELF, by a name that tracks the binary's own name. The closure is therefore the tool PLUS that asset, and the two names are coupled: renaming or relocating one leg without the other breaks the render path.
 
 The hazard is NAMING, not content — a rename separates the halves while each file remains individually correct. And the failure is soft: a half-install registers a question happily and publishes nothing, so a caller checking only the exit code reads a stranded question as a success. This is why §1's `closure` field is DECLARED rather than derived (frame §1.1), and why a one-file install is INCOMPLETE rather than minimal.
 
-### 4.3 The stranded question — a fault that reaches nobody (#189)
+### 5.3 The stranded question — a fault that reaches nobody (#189)
 
 A mutation that auto-publishes SWALLOWS a render fault: the publish leg catches its own fatal exit and reports "no page", and the mutation path then treats the page as optional. The consequences compound:
 
@@ -115,7 +137,7 @@ A mutation that auto-publishes SWALLOWS a render fault: the publish leg catches 
 
 **Landed fix:** commit `b16451e` (2026-09-27T04:51:55Z) implements the above. The exit code stays 0 by design, the fault reason is named on the mutation's own stderr, and stdout stays parseable so a caller reading `--json` is unaffected. The item's acceptance is channel-agnostic — "the property to satisfy, not the channel" — so naming the fault on stderr satisfies it; a relayed restatement of the criterion named stdout, which the implementation deliberately did not take, to keep the `--json` payload usable.
 
-### 4.4 Rollout and adoption
+### 5.4 Rollout and adoption
 
 **declaration → install → verify.** The shape is each member's OWN decision (frame §3, §6.1), and two rules bind this lane:
 
@@ -124,11 +146,11 @@ A mutation that auto-publishes SWALLOWS a render fault: the publish leg catches 
 
 The member leg is an ADOPTION STEP, not a push from here: the transport copies files and creates no links, so a member that wants its law doc on a skill-reload path creates its OWN relative link (frame §6.1).
 
-### 4.5 Assert SHAPE, not hash
+### 5.5 Assert SHAPE, not hash
 
 Every copy named in this file MOVES — one of them moved twice while this file was being written. So no clause here may pin a byte size, a digest, or a line number of any copy. Derive a boundary at run time from heading text rather than from a remembered position, and state the PROPERTY that must hold — the pointer is read first, the closure is two files, exactly one CLI resolves — never the measurement that happened to hold at writing time.
 
-### 4.6 The ontology collapse — fields that were written and never read
+### 5.6 The ontology collapse — fields that were written and never read
 
 The register carried fields no consumer reads, and one of them produced a false finding before it was removed. They are gone; this records which, and the bar for keeping one: a READER, never a writer.
 
@@ -149,7 +171,7 @@ The register carried fields no consumer reads, and one of them produced a false 
 
 **A write-only field is not merely unused bytes — it is a trap for the next reader.** One removed timestamp disagreed with its question's own status on a handful of rows, because an amendment re-opens a question and leaves the earlier stamp behind. The rows were healthy and the FIELD was the defect: a reader comparing the two reports a contradiction that does not exist. This lane filed precisely that false finding before the field was removed.
 
-## 5. Ownership, and the reload leg
+## 6. Ownership, and the reload leg
 
 | who | what |
 |---|---|
@@ -159,7 +181,7 @@ The register carried fields no consumer reads, and one of them produced a false 
 
 **Out of scope for this lane, by role (frame §8):** `tools/**` code (Toolsmith — file the defect, never edit it), daemon and core source (Editor), and the surface an instrument runs on where that belongs to another factory. This lane supplies TEXT to the lane that owns a file; it does not land it there.
 
-### 5.1 The reload leg — why the source keeps a pointer, and the order of the move
+### 6.1 The reload leg — why the source keeps a pointer, and the order of the move
 
 This file is canonical here, and it reaches the skill-reload path through a RELATIVE symlink from the skill directory — so one inode carries two paths and the halves cannot drift. That link is a THIRD artifact: it is not in the kit manifest (whose population is the template tree) and not in the law pair's twin gate, so nothing checks it but the reader, which is why it is stated here.
 
