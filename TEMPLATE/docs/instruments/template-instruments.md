@@ -110,10 +110,20 @@ MEMBERSHIP.**
 The declared set lives in the law file's **§2**, as numbered rows pairing the member path with its
 template counterpart, so a reader derives it without a second list to drift. That placement is a
 **coordinate**, and a machine reader that assumes it must report when the coordinate is empty instead
-of returning a shorter set. Measured 2026-09-27: a census requiring the paired-row form in §2
-published two instruments and **refused three** — `kit.md`'s §2 is a one-sided table, `ledger.md`'s §2
-is the write-path identity law, `open-questions.md`'s §2 is the lane-side contract. Three refusals,
-three different objects, none an omission.
+of returning a shorter set. **A reading is superseded beside its predecessor, never over it.**
+Measured 2026-09-27 at 19:5xZ: a census requiring the paired-row form in §2 published two instruments
+and **refused three** — `kit.md`'s §2 is a one-sided table, `ledger.md`'s §2 is the write-path identity
+law, `open-questions.md`'s §2 is the lane-side contract. Three refusals, three different objects, none
+an omission.
+
+**Superseded at 2026-09-27T20:11:01Z — the refusing set is ONE.** `ledger.md` filled its coordinate at
+`4dbe5c1` and `open-questions.md` at `5daf6ee`, each by writing its declared set as numbered paired
+rows at the coordinate the census parses, so the census now publishes four and refuses only `kit.md`.
+Predicate: `python3 tools/instrument_census.py <slug> --out <path>`, run over all five law files;
+scope: the five `docs/instruments/*.md`; instant above. The finding was the THREE DIFFERENT OBJECTS:
+each lane corrected its own §2 rather than the frame homing an exception, and `ledger.md`'s correction
+also moved its §3 to keep the write-path law in the same section — after measuring that §9 is the only
+section number that file cites outward.
 
 **An aggregate reports the inputs it refused, by PATH, in the artifact a reader meets.** A short list
 and a wrong list are otherwise indistinguishable, and a refusal nobody reads is a silent coverage
