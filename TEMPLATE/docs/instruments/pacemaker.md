@@ -312,9 +312,10 @@ the one it came from.**
   hold every path and still be **behind**: adoption is a revision, not a copy.
 
 **Scope:** the member fragments in `registry/factories/*.json`. **Instant:** HELD read by
-`tools/instrument_census.py` at **2026-09-27T17:36:50Z**
-(`evidence/instrument-census-pacemaker-2026-09-27.md`); CURRENT by `cmp` at 17:37Z. Earlier instants:
-07:27:09Z, 08:38Z, 15:19:17Z.
+`tools/instrument_census.py` at **2026-09-27T17:38:02Z** — the stamp the committed artifact
+`evidence/instrument-census-pacemaker-2026-09-27.md` carries on its own first line, so this citation
+resolves to a receipt that agrees with it. **CURRENT** read by `cmp -s` at **2026-09-27T17:37Z** over
+the same nine paths in the same five member repos. Earlier instants: 07:27:09Z, 08:38Z, 15:19:17Z.
 
 | factory | held | current | disposition |
 |---|---|---|---|
