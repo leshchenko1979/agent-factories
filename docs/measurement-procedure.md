@@ -167,6 +167,22 @@ flowchart TD
    - Verifies ledger sequence monotonicity, single-writer locking, and gate bite.
    - Derives operational measures: first-pass yield, rework rate, lead time.
    - Records run telemetry into `evidence/ledger.jsonl`.
+   - **Records the tree condition it read, and prints it beside the verdict** (#150). The
+     audit reads the *working tree* — it must, since that is the only tree a run has — so a
+     peer lane's half-written file would otherwise produce a verdict about the repository
+     that the repository does not have. Measured twice (2026-09-23 and 09-24): a `DEGRADED`
+     verdict named one failing gate whose file was **valid at HEAD** and invalid only in an
+     uncommitted edit, and settling which tree the run read was manual work done *by the
+     run* rather than by the tool. So the JSON carries `tree.head_sha`,
+     `tree.modified_count` and `tree.modified_paths`, the report prints them on the line
+     directly under the status, and the value is computed **once** and printed *from* that
+     value — a reader that recomputes the condition can disagree with the run that
+     experienced it. A tree git cannot answer for renders `HEAD UNREADABLE, modification
+     count UNKNOWN`, never `0 modified tracked path(s)`: an unreadable tree is not a clean
+     one, and a zero there would assert the strongest provenance claim on the weakest
+     evidence. This does **not** mean auditing HEAD instead of the working tree, and does
+     not mean refusing to run on a dirty tree — it means the verdict *says which tree it
+     was read on*. Upheld by `tests/test_audit_tree_condition.py`.
 
 2. **Tier 2 — Meta-Audit of Member Factories (By Surveys Lane):**
    For each surveyed member factory:

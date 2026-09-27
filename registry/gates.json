@@ -297,6 +297,7 @@
     "tests/test_docs_sync.py": "script",
     "tests/test_hygiene_namespace.py": "pytest",
     "tests/test_audit_rates.py": "pytest",
+    "tests/test_audit_tree_condition.py": "script",
     "tests/test_score_gate_recorded.py": "pytest",
     "tests/test_hq_delegation.py": "pytest",
     "tests/test_template_integrity.py": "pytest",

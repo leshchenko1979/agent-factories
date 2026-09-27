@@ -175,6 +175,10 @@ PAIRS = [
     # reason every other gate is: the hook it pins ships from TEMPLATE, so a factory
     # that takes the hook must take its pin too.
     ("tests/test_commit_session_trailer.py", "TEMPLATE/tests/test_commit_session_trailer.py"),
+    # The audit tree-condition gate (board #150, ruling n=919). Paired for the same reason
+    # every other gate is: the audit ships from TEMPLATE, so a factory that takes the audit
+    # must take the gate that pins its verdict's provenance.
+    ("tests/test_audit_tree_condition.py", "TEMPLATE/tests/test_audit_tree_condition.py"),
     ("tests/test_ledger_identity.py", "TEMPLATE/tests/test_ledger_identity.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names

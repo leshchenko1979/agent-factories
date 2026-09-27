@@ -369,6 +369,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # The mechanism it guards is the one surface with NO other observer: the pusher runs
     # from a clock, so a pusher that stopped working is visible here and nowhere else.
     "test_audit_rates.py",
+    # Added with its registration (board #150, ruling n=919). REQUIRED is the correct grain
+    # and OPTIONAL is not: its seven probes drive a synthetic dirty repo and a synthetic
+    # unreadable one, so it reads no live board, no fleet manifest and no box-local fixture,
+    # and it passes in a bootstrapped factory exactly as it does here. It is byte-paired with
+    # a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the runner
+    # and keeping the file. THE MECHANISM IT GUARDS: the audit's own verdict carried no record
+    # of the tree it read, so a peer lane's half-written file read as a repository defect, and
+    # attributing it was manual work done by the run rather than by the tool.
+    "test_audit_tree_condition.py",
     # Added with its registration (issue #145, ruling n=940). REQUIRED is the correct grain
     # and OPTIONAL is not: the gate drives the tool's own mechanism against a THROWAWAY copy
     # of its tree — it reads no live board, no fleet manifest and no box-local fixture — so it

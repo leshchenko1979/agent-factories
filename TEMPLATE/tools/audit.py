@@ -60,6 +60,47 @@ def hygiene_namespace(repo_root: Path) -> str:
         git_dir = repo_root / git_dir
     return git_dir.resolve().parent.name
 
+
+def tree_condition(repo_root: Path) -> dict[str, Any]:
+    """The tree condition this run READ, so a verdict carries its own provenance (#150).
+
+    The audit reads the WORKING TREE -- it must, since that is the only tree a run has --
+    so a peer lane's half-written file produces a verdict about the repository that the
+    repository does not have. Measured twice, on the 2026-09-23 and 09-24 runs: a DEGRADED
+    verdict naming one failure whose file was VALID at HEAD and invalid only in an
+    uncommitted working-tree edit, so a reader took a lane's mid-turn state for a defect
+    of the repository.
+
+    The value is computed ONCE and both surfaces print FROM it, never re-deriving it: a
+    reader that recomputes the condition can disagree with the run that experienced it
+    (HQ ruling n=1167).
+
+    A tree that is not a checkout, or a git that cannot answer, yields `None` for the sha
+    and an EMPTY list. An unreadable tree is not a clean one, and `head_sha: None` says so
+    rather than rendering as zero modifications.
+    """
+    head_sha: str | None = None
+    modified: list[str] = []
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root, capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            head_sha = proc.stdout.strip()
+        proc = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=repo_root, capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode == 0:
+            for line in proc.stdout.splitlines():
+                if len(line) > 3:
+                    modified.append(line[3:].strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"head_sha": head_sha, "modified_count": len(modified), "modified_paths": modified}
+
+
 # The telemetry reader is the SHARED predicate, never a local re-parse (issue #90).
 # `n=405` PART 5 rules the CLASS — "it is why the class, not the three call sites, is
 # the ruling" — so a fourth site may not carry its own scan. The path insert is the
@@ -896,6 +937,33 @@ def judge_gates(
     else:
         status = "GREEN"
     return GateVerdict(status, status == "GREEN", all_known_pass, passed, failed, unknown)
+
+
+def render_tree_line(tree: dict[str, Any]) -> str:
+    """The provenance line beside the verdict (#150 criterion 2).
+
+    `DEGRADED` must never be readable without the tree it was read on: the measured
+    instance was a verdict that named a peer's half-written file, which a reader took as
+    a statement about HEAD. The count comes FIRST because it is the fact that decides
+    whether the failure list describes the repository or a lane's mid-turn edit, and the
+    paths follow so the reader can attribute without a second `git status`.
+    """
+    sha = tree.get("head_sha")
+    sha_txt = sha[:9] if sha else "UNREADABLE"
+    count = tree.get("modified_count", 0)
+    if not sha:
+        # NO COUNT HERE, and the omission is the point: git could not answer, so the
+        # modification count is UNKNOWN rather than zero. Printing "0 modified tracked
+        # path(s)" would assert the strongest provenance claim -- a clean tree -- on the
+        # weakest evidence, which is the false clean this whole field exists to prevent.
+        return (f"  - Tree read: HEAD UNREADABLE, modification count UNKNOWN "
+                f"\u2014 the verdict names no revision, so it is not a claim about any")
+    if count:
+        return (f"  - Tree read: HEAD {sha_txt} with {count} modified tracked path(s) "
+                f"\u2014 the verdict describes THIS tree, not necessarily HEAD: "
+                + ", ".join(tree.get("modified_paths", [])))
+    return (f"  - Tree read: HEAD {sha_txt}, 0 modified tracked path(s) "
+            f"\u2014 the verdict describes HEAD")
 
 
 def render_status_line(verdict: GateVerdict) -> str:
@@ -1946,6 +2014,19 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_gate_invocation_mode.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_gate_invocation_mode.py"])
 
+    # 62. Audit tree condition (board #150, ruling n=919). The audit reads the WORKING TREE
+    #     -- it must, since that is the only tree a run has -- so a peer lane's half-written
+    #     file produced a verdict about the repository that the repository did not have.
+    #     Measured twice (2026-09-23 and 09-24): a DEGRADED verdict named one failing gate
+    #     whose file was VALID at HEAD and invalid only in an uncommitted edit, and settling
+    #     which tree the run read was manual work done by the run rather than by the tool.
+    #     The gate asserts the JSON carries tree.head_sha / tree.modified_count /
+    #     tree.modified_paths and that the render prints them; its seven probes drive a
+    #     synthetic dirty repo and a synthetic unreadable one, so it reads no live board, no
+    #     fleet manifest and no box-local fixture, and it passes in a bootstrapped factory.
+    if (repo_root / "tests/test_audit_tree_condition.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_audit_tree_condition.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
@@ -2156,6 +2237,13 @@ def main() -> int:
     # traceback whose only readable line is its last. Exit 2 is DISTINCT from the 1 a gate
     # failure returns, because "the audit could not read its budgets" is not "the audit ran
     # and a gate failed" -- a consumer reading a bare 1 would record a verdict nobody took.
+    # THE TREE CONDITION THIS RUN READ (#150, ruling n=1167). Read immediately BEFORE the
+    # gate suite, because that is the tree the gates are pointed at -- the audit reads the
+    # WORKING TREE, which it must, since that is the only tree a run has. Computed ONCE
+    # here and printed FROM this value by both surfaces: a reader that recomputes the
+    # condition can disagree with the run that experienced it.
+    tree = tree_condition(REPO_ROOT)
+
     try:
         if args.no_gates:
             gate_results, gate_budgets = [], None
@@ -2191,6 +2279,7 @@ def main() -> int:
         payload = {
             "date": today,
             "ledger_read_at": ledger_read_at,
+            "tree": tree,
             "healthy": healthy,
             "status": verdict.status,
             "all_gates_pass": all_gates_pass,
@@ -2207,6 +2296,7 @@ def main() -> int:
     # Text summary output
     print(f"=== Factory Operational Self-Audit ({today}) ===")
     print(render_status_line(verdict))
+    print(render_tree_line(tree))
     print(f"  - First-Pass Yield: {format_yield_text(ledger_stats)}")
     print(f"  - Cost / Successful Task: {format_cost_per_success_text(ledger_stats)}")
     print(f"  - Telemetry Outside the Trailer: {ledger_stats.get('out_of_trailer_count', 0)} row(s) — {format_out_of_trailer_note(ledger_stats)}")
