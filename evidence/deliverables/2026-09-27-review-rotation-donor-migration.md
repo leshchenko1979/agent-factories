@@ -135,23 +135,78 @@ rather than from a report:
 | battery, this lane's own run | **282 pass / 1 fail — FAIL** | same artifact, same predicate | same | `2026-09-27T17:01:29Z` |
 | the check that failed at 16:22, re-run first-hand | **PASS=48 FAIL=0, rc=0** | `./tools/state/oc-drift-check --selftest` | the donor tree, run OUT of this session's cgroup | 2026-09-27 ~16:5xZ |
 
-**THE DONOR'S BATTERY IS FLAKY, and the three readings are published together because any
-one of them alone is misleading.** Two of the three failed; the difference is the same cell
-each time. The mechanism is visible in the failure rows: `oc-ledger`'s selftest carries arms
-that read **live** state — `roster --live` resolves against the running roster rather than a
-fixture, which is why they fail as `roster-all-count (want rc=3 got rc=6)` and
-`roster-include-retired-all-count (want rc=4 got rc=7)`, and the non-deterministic counts are
-the same family as the `jq: startswith() requires string inputs` rows beside them.
+**THE DONOR'S BATTERY IS NOT DETERMINISTIC ACROSS THESE THREE READINGS**, and all three are
+published together because any one of them alone is misleading. The mechanism this file first
+gave for that drift has since been **falsified and root-caused**, and the correction is written
+beside the original reading rather than over it.
 
-**The battery's isolation is real and not the cause:** `run_selftest` gives every tool its own
-`mktemp -d` state dir (`tools/tests/run.sh:97-100`), so the failure is not cross-tool state —
-it is the tool's OWN arms depending on a live population. That makes it **pre-existing** and
-**not attributable to this migration**, which is the separate fact §4.2's boundary check
-proves: not one changed path resolves under the donor tree.
+- **The rev.1 hypothesis — FALSIFIED.** This file read the drift as `oc-ledger`'s selftest carrying
+  arms that consult **live roster state** (`roster --live` resolving against the running roster
+  rather than a fixture), citing `roster-all-count (want rc=3 got rc=6)` and
+  `roster-include-retired-all-count (want rc=4 got rc=7)` as the visible symptom. The Toolsmith
+  root-caused it as a **SIGPIPE** class (#537) in a textual shape its earlier 137-site sweep did not
+  match: `tools/state/oc-ledger:140` sets `set -o pipefail`, while the selftest asserted with
+  `printf '%s' "$out" | grep -q PAT`. `grep -q` exits at the FIRST match, `printf` then takes
+  SIGPIPE, and `pipefail` returns the pipeline as FAILED **despite the match** — so a leg reports
+  FAIL on a payload that visibly contains the pattern. It is per-site and probabilistic, which is
+  what made a loaded run flip several arms at once.
+- **Reproduced first-hand by this lane — and the controlling variable is PAYLOAD SIZE, not the
+  match's position.** Same script, same payload shape, 60 trials per row, `set -o pipefail`, pattern
+  first: pipeline form **0/60 at 8 KiB** · **7/60 at 56 KiB** · **33/60 at 64 KiB** · **60/60 at
+  128 KiB**, against the here-string form **0/60 at every size**. Two conditions are both necessary:
+  grep must exit while `printf` is still writing (so the match is early), *and* the payload must exceed
+  what `printf` can hand the pipe before grep is scheduled — the kernel's **64 KiB** pipe buffer.
+  Below it the write completes and SIGPIPE cannot fire; above it the writer blocks on a full pipe and
+  the failure is certain. Two runs of the sweep sit in the script's own header, because the per-row
+  **rate** is load-dependent (the same payload gave 1/60, 11/60, 2/60 and 48/60 at different instants)
+  while the **shape** is stable. Quote the shape and the boundary, never a row's rate.
+  Reproduce: `bash evidence/deliverables/2026-09-27-sigpipe-repro.sh` — it prints its own instant,
+  trials and buffer size, and flags any run in which the here-string form also failed.
+- **The fix is at the donor's HEAD — and the class has already returned: 4 sites in 36 minutes.**
+  Donor root, because `tools/` is not unique on this box:
+  `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/` (`/root/opencrabs/tools/` does not exist — a
+  probe there returns silence, not a verdict). Predicate and instant:
+  `grep -rnP "printf[^\n|]*\|\s*grep\s+-q" tools/` at `2026-09-27T19:0xZ` → **7** hits; the here-string
+  form → **93**. This file's rev.2 published **0** for the first number, measured at ~18:3xZ against a
+  tree that has since moved: correct for its instant, and stale. Composition, classified per site:
+  - **2 are the Toolsmith's own named exceptions** — `tools/audit/oc-lint-laws:179,180`, both
+    `[ -n ]`-guarded and already using `printf '%s\n%s'`; #660 declared this class left in place.
+  - **1 is a comment, not a site** — `tools/ship/oc-ship-chain:356` documents the class in prose.
+  - **4 are live reintroductions, all landing AFTER `879cc6b3` (`18:07:54Z`)** —
+    `tools/state/oc-ledger:2663,2669` from `525b6ee3` (`18:43:27Z`) and `:3664,3673` from `8e1d9567`
+    (`18:43:47Z`), both ancestors of donor HEAD `ba453da5`. `set -o pipefail` is unchanged at
+    `oc-ledger:140`; the assertion form moved, not the guard.
+  **The gap is a missing CARRIER, not a missed sweep.** #660 replaced 92 sites and named no rule
+  preventing the 93rd, so two peer commits 36 minutes later restored the exact form in the exact file
+  the fix had just cleaned. No lint rule for the class exists anywhere in the corpus
+  (`grep -rniE 'sigpipe|pipefail' tools/audit/oc-lint-laws` → only that file's own `set -o pipefail`
+  at :52). Routed to the Toolsmith as a follow-up to #660.
+  **Risk, and it is NOT where the form's wrongness is.** Every site standing in the tree today pipes a
+  small payload — a few lines of tool output, or (for the two named exceptions) one fixture's linter
+  run at `oc-lint-laws:173` — so **none can flip at its current payload size**, however wrong the form.
+  The threshold above is what makes the difference: a future assertion over a whole-corpus or
+  whole-ledger output would exceed 64 KiB and flip deterministically. So the class is latent, not live,
+  and the reason to remove the form is that nothing stops a payload from growing.
+- **A red recurred AFTER the fix, and it is not a survivor of it.**
+  `tools/tests/battery-last.json` at `2026-09-27T18:27:35Z` reads **282 pass / 1 fail — FAIL**,
+  failing arm `enroll-dead-topic-rc0 (want rc=0 got rc=2)`, carrying **`"tree_changed": true`** —
+  the tree-fingerprint leg the Toolsmith landed for exactly this complaint fired on a live
+  concurrent edit. Attributed first-hand at the read: `tools/state/oc-ledger` was `M` in the donor
+  tree and a peer's `run.sh` / `oc-ledger --selftest` processes were in flight. So that reading
+  describes a partial read of a file being edited, not a defect the fix missed.
 
-**So AC3's honest verdict is: the donor's gates PASS** (the 16:56:17Z reading, 283/0), **with a
-measured flakiness in one cell** that this migration neither caused nor fixed. Reported to the
-donor's tool owner as a separate finding rather than folded into a green.
+**The battery's isolation is real and was never the cause:** `run_selftest` gives every tool its own
+`mktemp -d` state dir (`tools/tests/run.sh:97-100`). The flake lived in the assertion **form**, not
+in shared or live state. Either way the instability is **pre-existing** and **not attributable to
+this migration**, which is the separate fact §4.2's boundary check proves: not one changed path
+resolves under the donor tree.
+
+**So AC3's honest verdict is unchanged: the donor's gates PASS** (the 16:56:17Z reading, 283/0),
+**with a measured non-determinism in one cell** that this migration neither caused nor fixed. It was
+reported to the donor's tool owner as a separate finding rather than folded into a green, and that
+owner has since root-caused and fixed it (#660) — a fix that replaced 92 sites and, by 36 minutes
+later, had already been partly re-introduced (4 sites, above). The verdict here is about the
+migration; the state of the donor's tool tree is recorded beside it and is the Toolsmith's to hold.
 
 ## 5. What this file does NOT claim
 
