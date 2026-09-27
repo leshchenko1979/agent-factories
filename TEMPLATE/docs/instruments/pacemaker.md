@@ -221,21 +221,30 @@ that leaves the member's own suite permanently red.
 (a member counts as present only if the path is there — the closure of §3 is measured separately,
 because a partially-ported closure is a crash rather than a smaller number).
 **Scope:** all five member manifests in `registry/factories/*.json` (the key is `factory`, not `slug`).
-**Instant:** 2026-09-27T07:27:09Z.
+**Instant:** 2026-09-27T07:27:09Z; dispositions re-measured 2026-09-27T08:38Z after the adoption
+round (all five member HQs briefed, one nudged). The declared-set counts are unchanged between the
+two reads; only two disposition rows moved.
 
 | factory | declared set | own `fleet.json` | disposition |
 |---|---|---|---|
 | `infra-factory` | **3/3** | **written** | **ADOPTED** — commits `e334161e` + `5cd8aefe`, pushed 0/0; closure 11 of 12 paths present (the twelfth is `registry/factories/`, the fragment store). Its own runner gate passes **86 check(s), rc=0**, and the runner itself executes all **eight legs** in its tree. |
 | `ai-antispam` | 0/3 | absent | DEFER (declared) — behind by 3/3, closure 1/6; `registry/fleet.json` owed as a PREREQUISITE (§9.1 item 1); blocked on its own project-write gate |
 | `inferhub-watch` | 0/3 | absent | DEFER (declared) — behind by 8 of 9 declared paths; re-entry scoped against two adjacent instruments first |
-| `miidas` | 0/3 | absent | DEFER (declared) — behind by 8 of 9; blocked because the transport is kit-wide and offers no per-instrument selector |
-| `opencrabs-dev` | 0/3 | absent | BRIEFED — no disposition returned at this instant |
+| `miidas` | 0/3 | absent | DEFER (declared) — behind by 8 of 9. Its **transport blocker is discharged**: the manual port proved in `infra-factory` needs no selector (§9.1 item 3), and the requirement was relayed to it 2026-09-27T08:35:59Z. The **board-convention prerequisite** (§9.1 item 4) stands, and its own board-vs-ledger unit remains owed regardless of branch. |
+| `opencrabs-dev` | 0/3 | absent | BRIEFED and NUDGED — no disposition yet. The brief landed 2026-09-27T06:40:25Z; the nudge landed 2026-09-27T08:38:05Z, and the lane was **mid-turn** at that instant (`run_tool_loop` span live), so the ask is in flight rather than declined. |
 
 **One of five members has adopted it; three have declared a deferral with a reason and a re-entry
 condition; one has not yet answered.** The distinction is the point of frame §7.2: a declared deferral
 is a *state*, and only undeclared divergence reds. A census that reported "1 of 5" alone would erase
 the difference between a member that measured itself and said why, and one that has gone quiet — so
 the disposition column is not decoration, it is the half of the figure that a bare count destroys.
+
+**The live path for a member that cannot take the whole kit is the MANUAL PORT, and it is the only
+one.** `infra-factory` is the worked example: it took the declared set plus the closure as ordinary
+files, wrote its own `registry/fleet.json`, and its runner executes all eight legs. No per-instrument
+selector exists on the transport (§9.1 item 3) and none is required — which matters because a selector
+would hand a member a *subset* of the closure, the exact partial-copy state §3 says raises rather than
+degrades. A member adopting this instrument takes the FULL closure, by hand if necessary.
 
 ### 9.1 Five corrections from the adoption round, all measured
 
