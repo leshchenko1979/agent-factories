@@ -186,8 +186,8 @@
       "state": "adopted",
       "green": true,
       "behind_by": 0,
-      "reason": "instrument gate rc=0 (101 checks, 1 SKIPPED); cron_thinness rc=0. Two declared board paths (test_board_intake_recorded.py, test_close_board_recorded.py) are RED on a DECLARED INAPPLICABILITY not a defect: this factory board IS the ledger, one surface, so a board/ledger close-agreement predicate has nothing to agree about (ledger n=611; routed to Instruments-methodology). behind_by 0 = all 9 declared paths byte-identical to the TEMPLATE half at 2026-09-27T18:19Z, re-copied that turn (n=638).",
-      "measured_at": "2026-09-27T18:35:18Z"
+      "reason": "behind_by 0 counts UNDECLARED lag only. Basis: the ELEVEN declared paths of docs/instruments/pacemaker.md section 2, measured on BOTH predicates (on-disk, and against my own HEAD) at 2026-09-27T22:12Z — 10 byte-identical to TEMPLATE HEAD, 1 differing. The single difference is a DECLARED FORK, not a lag: tests/gate_registry.py. The template revision (3809561e2a22) registers two gates as REQUIRED that this tree cannot run — test_audit_tree_condition.py imports `from audit import render_tree_line, tree_condition`, and tools/audit.py here carries 0 of both symbols; test_gate_invocation_mode.py resolves `<cwd>/tools/audit.py`, which from this repo is /root/tools/audit.py, absent. Adopting the registry would register two REQUIRED gates that fail by construction, and gate_registry.py's own law at :671 states each absent declared gate FAILS naming it. Porting the two gate files does not fix it, because their dependencies are absent here.",
+      "measured_at": "2026-09-27T22:12Z"
     }
   }
 }

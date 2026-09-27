@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T20:56:17Z",
+  "resolved_at": "2026-09-27T22:20:51Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -607,7 +607,7 @@
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.86",
+      "skill_revision": "1.0.87",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -990,7 +990,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.31",
+      "skill_revision": "0.1.32",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -1126,7 +1126,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T15:39:16Z",
+          "bound_at": "2026-09-27T22:09:31Z",
           "announcements": []
         },
         {
@@ -1146,7 +1146,7 @@
           "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T15:06:37Z",
+          "bound_at": "2026-09-27T21:20:27Z",
           "announcements": []
         }
       ],
