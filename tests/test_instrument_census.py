@@ -3,7 +3,7 @@
 
 WHY THIS GATE EXISTS. The census is the artifact a member's adoption is read off, and its
 DECLARED leg is the half a reader is most likely to over-read: a complete set of files with no
-decision behind it is not an adoption (frame §1.3), and a declaration that no longer satisfies
+decision behind it is not an adoption (template-instruments.md §1.3), and a declaration that no longer satisfies
 the registry's predicate is not a disposition either. A census that absorbed either would render
 a full-looking table and manufacture an adoption nobody decided — silent, and in the flattering
 direction.
@@ -25,9 +25,12 @@ WHAT IT PINS, and why each arm is here:
      examined-nothing class;
   7. HERMETICITY — every arm runs in a TemporaryDirectory, so the live `evidence/` gains
      nothing;
-  8. a REFUSAL IS PUBLISHED, naming the refused input by path (frame §1.5) — an exit code
-     reaches a caller and a reader meets artifacts, so a refusal that wrote nothing would make
-     a short list and a wrong list indistinguishable.
+  8. a REFUSAL IS PUBLISHED, naming the refused input by path (template-instruments.md §1.5) —
+     an exit code reaches a caller and a reader meets artifacts, so a refusal that wrote nothing
+     would make a short list and a wrong list indistinguishable;
+  9. the `held` figures are published WITH THEIR AXIS (template-instruments.md §7.5): `held`
+     reads a WORKING TREE, so a declared path may be present and untracked, and the figure may
+     never be quoted as a fact about the member's repository.
 
 THE PREDICATE IS REUSED, NOT RESTATED. These arms run against the REPO'S OWN
 `tools/registry.py`, so the refusal wording asserted below is the registry's real one: if the
@@ -130,6 +133,17 @@ def main() -> int:
         line = row((tmp / "b.md").read_text(encoding="utf-8"), "m1")
         check("NON-VACUITY: adopted + green over a complete set reads ADOPTED",
               rc == 0 and "**ADOPTED**" in line, line.strip())
+        # ARM 2b — the AXIS the `held` column owes (template-instruments.md §7.5). `held` reads a
+        # WORKING TREE, so a declared path can be present and untracked, and a member can read
+        # held-complete over a commit that cannot run the instrument from a clone. The figure is
+        # legitimate; quoting it as a repository fact is not. Stated in the artifact that carries
+        # the figure, because a requirement that reaches no assertion is the class the arm above
+        # cannot catch.
+        body_a = (tmp / "b.md").read_text(encoding="utf-8")
+        check("the published artifact states the WORKING-TREE axis and the prohibition",
+              "WORKING TREE" in body_a and "untracked" in body_a
+              and "never a" in body_a and "template-instruments.md §7.5" in body_a,
+              "the `held` figures are published without their axis")
 
         # ARM 3 — a declaration cannot MANUFACTURE a set. Same lawful declaration, incomplete set.
         root = build_tree(tmp / "c",
@@ -175,8 +189,8 @@ def main() -> int:
         check("a deferral WITH its reason reads DECLARED-DEFERRED (rc=0)",
               rc == 0 and "DECLARED-DEFERRED" in line, line.strip())
 
-        # ARM 7 — a law doc whose §2 table does not parse is a REFUSAL, not an empty census,
-        # AND the refusal is PUBLISHED. Frame §1.5: an aggregate reports the inputs it refused,
+        # ARM 7 — a law doc whose declared-set table does not parse is a REFUSAL, not an empty census,
+        # AND the refusal is PUBLISHED. template-instruments.md §1.5: an aggregate reports the inputs it refused,
         # BY PATH, in the artifact a reader meets. An exit code reaches a caller; a reader who
         # lists the artifact directory meets files -- so a refusal that wrote nothing would make
         # a short list and a wrong list indistinguishable, which is the defect this arm pins.
@@ -206,7 +220,7 @@ def main() -> int:
             [sys.executable, "tools/instrument_census.py", "review-rotation"],
             cwd=root, capture_output=True, text=True)
         default = sorted(p.name for p in (root / "evidence").glob("instrument-census-*"))
-        check("a refusal with no --out still lands under evidence/ (frame §1.5)",
+        check("a refusal with no --out still lands under evidence/ (template-instruments.md §1.5)",
               proc.returncode == 1 and len(default) == 1, f"rc={proc.returncode}, {default}")
 
     live_after = sorted(p.name for p in (REPO / "evidence").glob("instrument-census-*"))
