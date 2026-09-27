@@ -347,6 +347,7 @@
     "tests/test_questions.py": "script",
     "tests/test_citation_clause_titles.py": "script",
     "tests/test_self_audit_instant.py": "script",
-    "tests/test_gate_invocation_mode.py": "script"
+    "tests/test_gate_invocation_mode.py": "script",
+    "tests/test_instrument_census.py": "script"
   }
 }
