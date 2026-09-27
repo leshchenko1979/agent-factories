@@ -284,6 +284,44 @@ Two obligations, and they are what make a replay a verification rather than a de
 - **The replay READS the donor; it never writes into the donor's tree.** The donor-side change is
   the donor's own act in the donor's own tree (§6.1, O2).
 
+### 5.5 A shipped gate judges the ADOPTER — its fixtures are read from the tree under test
+
+An instrument's gate ships as a **byte-identical pair** (§6), and in the half that ships, "this
+factory" is the **adopting member**, whose instants are its own. A fixture pinned to the *kit's*
+instants, or to a *donor's* data, therefore asserts the wrong tree the moment a member adopts — and
+it fails **silently in the donor's favour**: the donor's own tree is green throughout, so nothing
+surfaces it until adoption.
+
+Measured 2026-09-27 on the pacemaker instrument, rehearsed read-only against ai-antispam's
+committed state (`82d233a`). Predicate: the instrument's own gate, run in the member's tree with the
+shipped pair laid over it. Scope: 102 checks. Instant: 2026-09-27T17:2xZ.
+- in the member's tree: **8 failed of 102** before the fix; **rc=0, 102 checks** after.
+- in the donor half, which by design carries no pin: **14 of 102** read red for the kit leg's reason,
+  and **13 of them cleared the moment a manifest pair was supplied** — so probes about the board,
+  the cron leg and the duty leg had been measuring the kit leg.
+
+Three root causes, all three in the gate and none in the member:
+1. **Fixture data pinned to the kit's instants** — its duty boundary and its close-board anchor as
+   literals, while the leg correctly reads the TREE's declaration. Two of the eight then read as
+   *"a missing duty receipt never reached the report"*, when the member's cron row had fired before
+   its own declared bound and been **correctly EXCUSED**.
+2. **A probe driver that injected every dependency except two** the runner accepts as parameters.
+3. **A runner that caught only `AssertionError`**, so a reader's declared skip escaped as a
+   traceback — the gate's declared SKIP vocabulary invisible to the gate's own runner, which renders
+   "nothing to judge" exactly like "a check failed".
+
+Three clauses:
+- **A shipped gate's fixtures are DERIVED from the tree under test**; the kit's values survive only
+  as pre-adoption fallbacks. The **token is the convention; the anchor is the tree's data**.
+- **A probe driver injects EVERY dependency the runner accepts** — a probe about one leg that was
+  not given that leg's inputs becomes an assertion about another.
+- **A runner honours the exception vocabulary its own readers declare.** A declared skip that
+  reaches the runner as a traceback is the reader's contract ignored by its consumer.
+
+The invariant behind all three: **an assertion must never report a verdict about something other
+than the thing under test** — the defect class this instrument exists to kill, turned on the
+instrument's own probes.
+
 ## 6. Distribution — where an instrument's law lives
 
 An instrument's law file is **one artifact in two trees plus a reload path**, and all three are
