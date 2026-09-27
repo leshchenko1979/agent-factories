@@ -395,6 +395,47 @@ def question_return_address(entry, qid):
     return ((entry.get("session") or "").strip(),
             entry.get("lane") or "", None)
 
+# PORTED FROM THE INSTRUMENT'S HOME (#182 item 1). This function exists in
+# `oc-questions` -- the tool's home in the opencrabs-dev skill repo, where fork
+# #612 was fixed -- and was ABSENT from this copy, so the template shipped
+# without the fix: a `notify` with no `--qid` addressed the SET's session while
+# the body named the ASKING lane, so an answer could reach a lane that never
+# asked it. Direction: source -> template. The two copies differ in their own
+# names by design (PROG, RENDER_SRC, USAGE), so what converges is the union of
+# FUNCTIONS and BEHAVIOUR, never a byte-identical copy.
+def batch_return_address(entry):
+    """(session, reason) for a notify that names NO --qid.
+
+    One body carrying several lanes' answers cannot have one destination, so
+    this REFUSES when the answered questions resolve to different sessions
+    rather than falling back to the set's own session. The set's session is the
+    CREATOR's provenance; a question asked by another lane carries its own, and
+    addressing the creator's session while the body names the asking lane sends
+    the answer to a lane that did not ask (#612).
+
+    Falls back to the set's session only when every answered question shares it
+    -- the pre-factory shape, where questions carry no session of their own.
+    """
+    answered = [q for q in (entry.get("questions") or [])
+                if q.get("answer") is not None
+                or q.get("status") in ("clarifying", "clarified")]
+    resolved = []
+    for question in answered:
+        session = (question.get("session") or entry.get("session") or "").strip()
+        if session not in resolved:
+            resolved.append(session)
+    if len(resolved) > 1:
+        return None, (
+            "set %s holds answers for %d different sessions, so one body has no "
+            "single destination; pass --qid <Q> to deliver one answer to the "
+            "lane that asked it" % (entry.get("id"), len(resolved)))
+    if resolved:
+        return resolved[0], None
+    # No answers yet: fall back to the set's own session so the caller's UUID
+    # guard still refuses a bad address (rc=3) BEFORE the missing-body check
+    # (rc=1). Returning early here reordered those two and broke that contract.
+    return (entry.get("session") or "").strip(), None
+
 
 # A question is CLOSED only once it is answered, withdrawn or expired.
 # "clarifying" is NOT closed: a Clarify request means the owner asked for more
@@ -1393,9 +1434,17 @@ def cmd_notify(argv):
         die(1, "no question set %s in the register or the archive"
             % (set_id or lane,))
 
-    session, lane_name, why = question_return_address(entry, flags.get("--qid"))
-    if why:
-        die(1, why)
+    if flags.get("--qid"):
+        session, lane_name, why = question_return_address(entry, flags.get("--qid"))
+        if why:
+            die(1, why)
+    else:
+        # No --qid: the destination must be the session every answered question
+        # shares, never the set's own by default (#612).
+        session, why = batch_return_address(entry)
+        if why:
+            die(1, why)
+        lane_name = entry.get("lane") or "unknown"
     if not UUID_RE.fullmatch(session):
         # Refuse rather than guess: a wrong destination leaks an answer to an
         # unrelated lane, and the register is the only authority for it.
@@ -3474,6 +3523,64 @@ def selftest():
            "notify --qid q2 resolves q2's OWN lane, not the set's (%r)"
            % out.strip()[:110])
 
+        # PORTED WITH batch_return_address (#182 item 1, direction source ->
+        # template): the function above had no probe here, and a gate that has
+        # only ever seen good input has not been shown to reject bad input.
+        #
+        # NO --qid: one body carrying several lanes' answers cannot have ONE
+        # destination. Pre-fix the destination fell back to the SET's session
+        # while the body named the ASKING lane, so the answer reached a lane
+        # that did not ask it (#612). MUTATION KILL: restore
+        # question_return_address(entry, None) in the no-qid branch of
+        # cmd_notify and both refusal legs redden.
+        _reg = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        with open(_reg, encoding="utf-8") as fh:
+            _saved = json.load(fh)
+        _SET_S = "11111111-1111-1111-1111-111111111111"
+        _Q_S = "22222222-2222-2222-2222-222222222222"
+
+        def _plant(questions):
+            with open(_reg, "w", encoding="utf-8") as fh:
+                json.dump({"sets": [{"id": "mixfac", "session": _SET_S,
+                                     "lane": "Creator Lane", "ttl_days": 7,
+                                     "status": "open", "questions": questions}]}, fh)
+
+        _plant([{"qid": "q1", "title": "t1", "status": "answered", "answer": "a1",
+                 "session": _SET_S, "lane": "Creator Lane"},
+                {"qid": "q2", "title": "t2", "status": "answered", "answer": "a2",
+                 "session": _Q_S, "lane": "Second Lane"}])
+        rc, out, err = run("notify", "--set", "mixfac", "--dry-run", "--json")
+        ck(rc == 1 and "--qid" in (out + err),
+           "notify with NO --qid REFUSES when the answers span sessions, naming "
+           "--qid (rc=%d, %r)" % (rc, (out + err).strip()[:100]))
+
+        _plant([{"qid": "q1", "title": "t1", "status": "answered", "answer": "a1",
+                 "session": _Q_S, "lane": "Second Lane"},
+                {"qid": "q2", "title": "t2", "status": "answered", "answer": "a2",
+                 "session": _Q_S, "lane": "Second Lane"}])
+        rc, out, _ = run("notify", "--set", "mixfac", "--dry-run", "--json")
+        try:
+            _dest = json.loads(out).get("session")
+        except Exception:
+            _dest = None
+        ck(rc == 0 and _dest == _Q_S,
+           "notify with no --qid uses the questions' SHARED session, not the "
+           "set's (%r, rc=%d)" % (_dest, rc))
+
+        _plant([{"qid": "q1", "title": "t1", "status": "answered", "answer": "a1",
+                 "lane": "Creator Lane"}])
+        rc, out, _ = run("notify", "--set", "mixfac", "--dry-run", "--json")
+        try:
+            _dest = json.loads(out).get("session")
+        except Exception:
+            _dest = None
+        ck(rc == 0 and _dest == _SET_S,
+           "a question with no session of its own still falls back to the set's "
+           "(%r, rc=%d)" % (_dest, rc))
+
+        with open(_reg, "w", encoding="utf-8") as fh:
+            json.dump(_saved, fh)
+
         # A real delivery that cannot reach the lane must be a FAULT, never a
         # silent success — otherwise a parked answer looks delivered.
         dead = dict(env)
@@ -3518,7 +3625,14 @@ USAGE = """questions — the Open Questions register (#547)
            the CLARIFY return leg: edits the question and reopens it
   notify   --set <id> | --lane <NAME> [--qid Q] [--mode turn-end|interrupt|quiet]
            [--dry-run] [--json]        the RETURN PATH: delivers the answer to
-                                       the session recorded in the register
+                                       the session recorded in the register.
+                                       With no --qid the destination is the
+                                       session every answered question SHARES;
+                                       if they differ it refuses and names
+                                       --qid, because one body cannot have one
+                                       destination. A factory set records its
+                                       CREATOR's session; each question carries
+                                       its own, and that is what routes.
   list     [--lane NAME] [--session id] [--all] [--json] [--quiet]
   publish  [--set id] [--action URL] [--prune] [--rotate] [--json]
            reuses the live token; --rotate mints a new URL explicitly
