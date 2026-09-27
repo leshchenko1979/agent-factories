@@ -312,7 +312,7 @@ the one it came from.**
   hold every path and still be **behind**: adoption is a revision, not a copy.
 
 **Scope:** the member fragments in `registry/factories/*.json`. **Instant:** HELD read by
-`tools/instrument_census.py` at **2026-09-27T17:38:02Z** — the stamp the committed artifact
+`tools/instrument_census.py` at **2026-09-27T17:49:48Z** — the stamp the committed artifact
 `evidence/instrument-census-pacemaker-2026-09-27.md` carries on its own first line, so this citation
 resolves to a receipt that agrees with it. **CURRENT** read by `cmp -s` at **2026-09-27T17:37Z** over
 the same nine paths in the same five member repos. Earlier instants: 07:27:09Z, 08:38Z, 15:19:17Z.
@@ -332,13 +332,19 @@ adopted from a revision that predates this instrument's 2026-09-27 fixes.** `inf
 port error**, and the kit's own `behind_by` field exists to declare it; what it must not be is silent,
 because a member holding a pre-fix gate reads green over a defect the fix removed.
 
-**HELD is not ADOPTED — the second leg is the reason, and on this instrument it is unestablished for
-every member.** The census reads a per-instrument disposition from the member's fragment, and the
-reader predates the `instruments` map that `tools/registry.py` gained at 17:29Z on 2026-09-27
-(19 minutes after the census tool itself, 17:10Z). So the published artifact reports the declared leg
-as `unestablished` for all six rows **as a schema fact** rather than a member's omission, and no member
-can reach `ADOPTED` on this census until that reader is extended. That is HQ's tool, not a member's
-gap, and it is reported there rather than worked around here.
+**HELD is not ADOPTED — the second leg is the reason, and it is a surface no member has yet written
+to.** The census reads the per-instrument disposition from `registry/factories/<slug>.json` →
+`instruments.<slug>`, a map `tools/registry.py` gained at 17:29:36Z on 2026-09-27 — nineteen minutes
+AFTER the census tool that must read it (17:10:24Z). The tool's own artifact reported the declared leg
+as `unestablished` for every member **as a schema fact**, which was TRUE when written and false by
+17:29, so the reader was extended and now checks the instrument's own entry first and falls back to
+`kit` **labelled as the kit's**. The distinction the original reading existed to keep therefore
+survives the fix, and it still decides the row: a `kit`-level `adopted` can never produce `ADOPTED`
+here, because a member that declared its kit adopted has said nothing about this instrument.
+
+**The reading is UNCHANGED by that fix, and that is the honest result:** every row below still reads
+`unestablished`, because no member has declared into the surface yet. That is a member's own act, not
+a gap in the reader — and the census renders the silence rather than defaulting it.
 
 **Three of five members hold the complete declared set; two have declared a deferral with a reason and
 a re-entry condition.** The distinction is the point of frame §7.2: a declared deferral
