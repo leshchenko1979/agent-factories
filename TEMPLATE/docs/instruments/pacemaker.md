@@ -289,12 +289,36 @@ dispatch):
 4. **Create your own reload link** if you want this law to survive your own compaction — the frame's
    §6.1 defines it and it is **your** act, in **your** tree; it is never installed from the template.
    Absent from your tree is a **declared state**, not a failure.
+5. **Declare the adoption, in your fragment.** A complete tree is not an adoption on the record —
+   `registry/factories/<your-slug>.json` carries an `instruments` map, and the census needs
+   `instruments.<this-instrument>` before it will read anything but silence:
 
-**Three prerequisites, and they fail in different places.** Step 1's closure fails **loud** (§3) — the
+       "instruments": {"pacemaker": {"state": "adopted", "green": true, "measured_at": "<ISO instant>"}}
+
+   - `state` is one vocabulary for every adoption declaration: `adopted` · `partial` · `deferred` ·
+     `not-applicable`. `deferred` and `not-applicable` **require a non-empty `reason`**; a reasonless
+     one is refused, because "behind by N, deferred because X" is the clause's own wording and a
+     deferral with no X is an undeclared state wearing a declared label.
+   - **`adopted` requires `green: true`** — HELD and GREEN are independent axes (frame §7.2), so
+     adoption cannot claim one and leave the other unspoken. `green` is YOUR gate's verdict over YOUR
+     tree; nobody else can measure it for you.
+   - Validate before you commit: `python3 tools/registry.py validate <your fragment>` returns rc=0 for
+     a conforming block and **rc=1 with the axis named** for one that omits `green`.
+
+   **Why this step is not optional, measured on 2026-09-27:** three members held this instrument's
+   complete nine-path set and **not one fragment in the fleet carried `instruments`**, so the census
+   reported `HELD-UNDECLARED` for all of them and could record no adoption, for any instrument,
+   whatever the trees contained. A declared `partial` or `deferred` is a **state, not a failure** — it
+   is the one thing the census can render. Silence is the only reading it cannot distinguish from a
+   member that never considered the instrument.
+
+**Four prerequisites, and they fail in different places.** Step 1's closure fails **loud** (§3) — the
 runner crashes. Step 2's manifest also fails **loud**, and earlier: the `legs = [...]` expression raises
 before any leg runs. Step 2's SECOND declaration fails loud in the other entry point: a tree with no
 `docs/ledger-invariants.json` gets `DeclarationUnavailable` from the gate rather than the runner
-(measured in `ai-antispam`, rc=1). The board convention (§9.1 item 4) fails **quiet in the legs and loud in the
+(measured in `ai-antispam`, rc=1). **Step 5 fails the opposite way — in SILENCE:** nothing crashes and
+nothing reds; the census simply reads `HELD-UNDECLARED`, which is indistinguishable in the artifact
+from a member that never looked. The board convention (§9.1 item 4) fails **quiet in the legs and loud in the
 gates**: the runner completes and honestly reports `examined 0`, while two of the discovered gates red
 on every post-invariant close row the member's ledger holds. A member whose board surface is not
 GitHub — one whose issue board *is* its own ledger — either carries the token convention or has those
