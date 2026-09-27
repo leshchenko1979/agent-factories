@@ -207,3 +207,42 @@ box's memory.
 **This is a stronger statement than "the gateway is slow":** the fault is uniform across independent
 consumers, which is the signature of a shared component, and it is NOT attributable to the
 differences between those consumers.
+
+## 10. The streaming fault, diagnosed — the upstream is SLOW, and it is variable
+
+Added 2026-09-27T18:3xZ. §9 said the fault was shared rather than per-lane; this section says what it
+IS. Measured directly against the gateway, with a real authenticated key (value never printed;
+`len 51`, `sha256_8 a06536a9` — the recorded llm-gateway credential).
+
+**The path works. It is the LATENCY that fails.** One streaming request, `model=auto`, 3 tokens:
+
+    http=200  ttfb=14.628819s  total=18.410288s
+    data: {"choices":[{"delta":{"role":"assistant"},...}],"model":"cb/deepseek-v4.1-flash",...}
+
+**14.6 seconds to first byte for a trivial request.** Then three consecutive identical probes produced
+**no output at all** inside a 50-second cap each — `timeout` killed curl before `-w` could report, so
+all three exceeded 50 s. Best case 14.6 s, common case >50 s: the upstream is slow **and variable**,
+which is exactly the distribution that produces a steady ~10/min failure rate against a fixed cap
+rather than a clean outage.
+
+**The cap it fails against:** the daemon logs `stream handshake timeout after 60s`. The provider
+config carries `timeout_secs = 120`, so the 60 s handshake cap is the *stricter* of the two — the
+declared value is not the effective one here, and the smaller binds.
+
+**The channel pool is nearly empty, which compounds it.** `GET /v1/models` returns **two** entries —
+`auto` and `ds4flash`. A request for a model outside them fails fast rather than slowly:
+
+    model=gpt-4o-mini → http=503 "No available channel for model gpt-4o-mini under group default"
+
+So the fleet has one working route (`auto` → `cb/deepseek-v4.1-flash`), it is slow and variable, and
+every lane's turn is capped at 60 s to first byte against it.
+
+**Attribution, stated with its limit.** This is measured from the client side: the gateway's HTTP
+front is fast (0.03 s connect, 0.15 s for a 401), and the slow component is whatever serves
+`cb/deepseek-v4.1-flash` behind it. Which upstream that is, and why it is slow, is NOT established
+here — that needs the gateway's own logs on `apps` (163.5.41.61), which this lane did not open.
+
+**Consequence for c1, and it is now precise:** the declaration has not landed because no lane can
+reliably reach first byte inside 60 s. The lanes are not declining, and the fault is not this box's
+memory (§9). It is one slow, variable upstream behind the gateway, and the fix is upstream of this
+lane.
