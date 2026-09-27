@@ -195,18 +195,27 @@ dispatch):
    §6.1 defines it and it is **your** act, in **your** tree; it is never installed from the template.
    Absent from your tree is a **declared state**, not a failure.
 
+**Two prerequisites, and they fail in different places.** Step 1's closure fails **loud** (§3) — the
+runner crashes. Step 2's manifest also fails **loud**, and earlier: the `legs = [...]` expression raises
+before any leg runs. The board convention (§9.1 item 4) fails **quiet in the legs and loud in the
+gates**: the runner completes and honestly reports `examined 0`, while two of the discovered gates red
+on every post-invariant close row the member's ledger holds. A member whose board surface is not
+GitHub — one whose issue board *is* its own ledger — either carries the token convention or has those
+two gates declare an INAPPLICABLE-skip carrying the reason. Adopting without deciding is the one shape
+that leaves the member's own suite permanently red.
+
 ## 9. Adoption census
 
 **Predicate:** each of the three declared paths of §2 exists in the factory's own declared `/repo`
 (a member counts as present only if the path is there — the closure of §3 is measured separately,
 because a partially-ported closure is a crash rather than a smaller number).
 **Scope:** all five member manifests in `registry/factories/*.json` (the key is `factory`, not `slug`).
-**Instant:** 2026-09-27T07:03:01Z.
+**Instant:** 2026-09-27T07:27:09Z.
 
 | factory | declared set | own `fleet.json` | disposition |
 |---|---|---|---|
-| `infra-factory` | **3/3** | **written** | **ADOPTED** — closure 10/11 + its own manifest; its own gate passes **86 check(s), rc=0**. Untracked in its tree at the instant of measurement, so this is a port in progress, not a committed one. |
-| `ai-antispam` | 0/3 | absent | DEFER (declared) — behind by 3/3, closure 1/6; blocked on its own project-write gate |
+| `infra-factory` | **3/3** | **written** | **ADOPTED** — commits `e334161e` + `5cd8aefe`, pushed 0/0; closure 11 of 12 paths present (the twelfth is `registry/factories/`, the fragment store). Its own runner gate passes **86 check(s), rc=0**, and the runner itself executes all **eight legs** in its tree. |
+| `ai-antispam` | 0/3 | absent | DEFER (declared) — behind by 3/3, closure 1/6; `registry/fleet.json` owed as a PREREQUISITE (§9.1 item 1); blocked on its own project-write gate |
 | `inferhub-watch` | 0/3 | absent | DEFER (declared) — behind by 8 of 9 declared paths; re-entry scoped against two adjacent instruments first |
 | `miidas` | 0/3 | absent | DEFER (declared) — behind by 8 of 9; blocked because the transport is kit-wide and offers no per-instrument selector |
 | `opencrabs-dev` | 0/3 | absent | BRIEFED — no disposition returned at this instant |
@@ -217,7 +226,7 @@ is a *state*, and only undeclared divergence reds. A census that reported "1 of 
 the difference between a member that measured itself and said why, and one that has gone quiet — so
 the disposition column is not decoration, it is the half of the figure that a bare count destroys.
 
-### 9.1 Three corrections from the adoption round, all measured
+### 9.1 Four corrections from the adoption round, all measured
 
 1. **A record in another factory's manifest does not satisfy step 2.** `ai-antispam` reported step 2
    already satisfied, citing a `registry/fleet.json` record carrying its own slug and job prefix. Read
@@ -226,16 +235,34 @@ the disposition column is not decoration, it is the half of the figure that a ba
    the runner will never open from ai-antispam's tree, because the runner reads `REPO / "registry" /
    "fleet.json"` where `REPO` is the *runner's* root. This is the adjacency attribution this repo keeps
    ruling against: the row was read, the row was right, and it was not the row that binds.
-2. **The declared closure of §3 is not the whole closure — it is the declared one.** `inferhub-watch`
-   measured `tools/field_predicate.py` importing `ledger_declaration` and `reconstruction` in turn, and
-   put its transitive closure at ~11 modules rather than 6. That is consistent, not contradictory: the
-   frame (§1) requires the closure be **declared, never derived**, precisely because a static walk is
-   blind to path-loaded modules. §3 declares what this instrument *loads*; a member's own transitive
-   dependencies sit beneath it.
+2. **A peer's derived closure did not reproduce on the artifact it named, so the figure is
+   withdrawn rather than restated.** `inferhub-watch` reported that `tools/field_predicate.py` imports
+   `ledger_declaration` and `reconstruction` in turn, putting the transitive closure near 11 modules
+   rather than 6. Read first-hand in their own tree, that file imports **`re` and `typing` only**
+   (`:65-70`), and neither name appears in it in any form — so the claim does not reproduce against the
+   artifact it names. Two facts sit beside it: their copy is **not** byte-identical to the template's
+   (`cmp` differs at byte 671, line 12; theirs is dated 2026-09-21), so they hold a **stale** copy of the
+   predicate; and the runner's own load resolves the name `oc_registry` to the FILE
+   `tools/registry.py`, which is why a count taken over module *names* overstates the closure. A
+   member's transitive dependencies may of course exceed §3's declared six — that is exactly why the
+   frame requires the closure be **declared, never derived** — but that is a general caveat, not a
+   figure. No figure stands here until it is measured on the tree it names.
 3. **The sanctioned transport cannot single out this instrument.** Confirmed at source:
    `tools/kit_deliver.py` accepts exactly `--to` and `--dry-run`; a grep for `instrument|--only|--paths|
    selector` returns **0** hits. A member's choice is therefore the whole population or a manual port of
    the declared set — the wave does not ask for the former, and the second is what `infra-factory` did.
+
+4. **The board legs and the two board gates need a CONVENTION, not just the files — and the gates, not
+   the legs, are what a member feels.** `miidas` measured its own and `infra-factory`'s ledgers: 0 of 34
+   and 0 of 65 post-invariant close rows carry `board=closed`, so `board_close_leg` examines 0. Those
+   figures reproduce **exactly**. They are not fleet-wide: `ai-antispam` examines 1 and the TEMPLATE home
+   examines 119 — the leg is not inert by construction, it is inert where the convention is absent. The
+   sharper half is the GATE, which neither of us had stated: `test_close_board_recorded.py`'s `main()`
+   reads the **LIVE** ledger and reds on every post-invariant close row missing the token, so the
+   adopted tree exits `rc=1` with 65 problems. A member that adopts without the convention — or without
+   deciding it is inapplicable to its board shape — turns two discovered gates permanently red. That is
+   how `infra-factory` read it, and why it declared them forks rather than deleting them: deleting would
+   fork the runner, which references both by path.
 
 ## 10. Where this instrument's law lives
 
