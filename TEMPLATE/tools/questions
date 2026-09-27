@@ -403,6 +403,21 @@ def question_return_address(entry, qid):
 # ("a Clarify request ... never silently closes the question").
 CLOSED_STATUSES = ("answered", "withdrawn", "expired")
 
+# What an empty Clarify tap MEANS (#183, 2026-09-26). The owner's click is the
+# whole request — no payload is owed — but the transition must still carry
+# content the asking lane can act on (the 2026-09-25 defect was answer=None
+# behind "CLARIFY REQUESTED"). So the tool authors the click's meaning: a
+# statement of what the lane must do. It is TOOL-AUTHORED text, deliberately
+# not starting with "clarification requested" — the page's clarifyband and the
+# notify body both prepend that phrase themselves, and a duplicated lead would
+# render twice. Wording deliberately names the ACTION owed (restate, widen,
+# re-ask) so the receiving lane can act without guessing.
+CLARIFY_EMPTY_TEXT = (
+    "this question is unclear as written — restate it with wider context "
+    "and plainer language, then re-ask (owner's Clarify tap, no text "
+    "supplied)"
+)
+
 def question_is_closed(question):
     return question.get("status") in CLOSED_STATUSES
 
@@ -923,17 +938,20 @@ def cmd_answer(argv):
         is_clarify = (str(choice).lower() == "clarify")
         text = (flags.get("--text") or "").strip()
         if is_clarify:
-            # AN EMPTY CLARIFY IS NOT A REQUEST (owner report 2026-09-25).
-            # Tapping Clarify with an empty box flipped status to "clarifying"
-            # and stored answer=None: a state change carrying no content, so the
-            # asking lane received "CLARIFY REQUESTED" with nothing to act on and
-            # the owner's real intent was lost. A clarify exists to ask a
-            # question; refuse one that asks nothing.
-            if not text:
-                die(2, "clarify requires --text: say what you want clarified "
-                       "(an empty Clarify tap records nothing)")
+            # AN EMPTY CLARIFY IS A COMPLETE REQUEST (#183, 2026-09-26,
+            # superseding the same-date refusal this block carried). Clarify
+            # means the ASKING LANE widens its own question and re-asks in
+            # clearer language; the owner's click says exactly that and owes
+            # no payload — demanding --text demanded specification from the
+            # wrong party. But the 2026-09-25 lesson underneath the old
+            # refusal still binds (process law, shape (a): a state transition
+            # must carry the content that justifies it): answer=None left the
+            # asking lane holding "CLARIFY REQUESTED" with nothing to act on.
+            # So when the owner supplies no text, the TOOL supplies the
+            # click's meaning; owner text, when present, is the request
+            # verbatim and wins.
             question["status"] = "clarifying"
-            question["answer"] = text
+            question["answer"] = text or CLARIFY_EMPTY_TEXT
             question["answer_kind"] = "clarify"
         else:
             options = question.get("options") or []
@@ -2438,26 +2456,43 @@ def selftest():
            "an index with NO text still records the OPTION (%r/%r)"
            % (q4.get("answer"), q4.get("answer_kind")))
 
-        # -- 5b-2. an EMPTY clarify is refused, and the clarify STATE is visible
-        # (owner report 2026-09-25). Two halves of ONE report:
-        #   (i) tapping Clarify with an empty box recorded status=clarifying
-        #       with answer=None -- a state change carrying no content, so the
-        #       asking lane received "CLARIFY REQUESTED" with nothing to act on;
-        #   (ii) a clarifying question rendered IDENTICALLY to an open one, so
-        #       the owner reloaded and saw no change at all.
+        # -- 5b-2. an EMPTY clarify is a COMPLETE request (#183, 2026-09-26,
+        # superseding this probe's same-titled 2026-09-25 predecessor, which
+        # asserted the refusal rc=2). The property protected — unchanged in
+        # kind, changed in mechanism: a Clarify transition must carry CONTENT
+        # the asking lane can act on. The 2026-09-25 defect was answer=None
+        # behind "CLARIFY REQUESTED"; the remedy then was to refuse the tap.
+        # #183 ruled the remedy wrong: the owner owes no payload — the click
+        # IS the request — so the tool now supplies the click's meaning
+        # (CLARIFY_EMPTY_TEXT) when no --text comes. Owner text, when
+        # supplied, is the request verbatim and wins. Half (ii) of the same
+        # 2026-09-25 report stays: the clarifying state must be VISIBLE on
+        # the page, not rendered identically to an open one.
         rc, out, _ = run("ask", "--factory", set_id, "--title", "clarify guard",
                          "--description", "d", "--option", "A")
         ck(rc == 0, "a question is registered to test the clarify guard (rc=%d)" % rc)
         _cq = (get_set(set_id) or {}).get("questions", [{}])[-1].get("qid")
         rc, out, err = run("answer", set_id, _cq, "clarify")
-        ck(rc == 2, "an EMPTY clarify is refused rc=2 (rc=%d)" % rc)
-        ck("clarify requires --text" in (err or out),
-           "\u2026naming the remedy (%r)" % (err or out).strip()[:70])
-        ck((get_set(set_id) or {}).get("questions", [{}])[-1].get("status") == "open",
-           "\u2026and the question is left OPEN, never half-transitioned")
+        ck(rc == 0, "an EMPTY clarify is ACCEPTED rc=0 (rc=%d, err=%r)"
+           % (rc, (err or "").strip()[:70]))
+        _gq = (get_set(set_id) or {}).get("questions", [{}])[-1]
+        ck(_gq.get("status") == "clarifying",
+           "\u2026the tap alone transitions the question to clarifying "
+           "(status=%r)" % (_gq.get("status"),))
+        ck(bool((_gq.get("answer") or "").strip()),
+           "\u2026and the transition CARRIES content, never answer=None "
+           "(answer=%r)" % (_gq.get("answer"),))
+        ck(_gq.get("answer") == CLARIFY_EMPTY_TEXT,
+           "\u2026naming the click's meaning via the tool default")
+        ck(_gq.get("answer_kind") == "clarify",
+           "\u2026with answer_kind=clarify")
         rc, out, _ = run("answer", set_id, _cq, "clarify", "--text", "which option?")
         ck(rc == 0, "a clarify WITH text is still accepted (rc=%d)" % rc)
-        ck((get_set(set_id) or {}).get("questions", [{}])[-1].get("status")
+        _gq2 = (get_set(set_id) or {}).get("questions", [{}])[-1]
+        ck(_gq2.get("answer") == "which option?",
+           "\u2026and OWNER text WINS over the tool default when supplied "
+           "(answer=%r)" % (_gq2.get("answer"),))
+        ck(_gq2.get("status")
            == "clarifying", "\u2026and records the clarifying state")
         rc, out, _ = run("publish", "--json")
         _uidir = json.loads(out)["path"]
@@ -3472,6 +3507,10 @@ USAGE = """questions — the Open Questions register (#547)
            TOTAL and the page URL -- there is no card.
   answer   <set-id> <qid> <choice-index|clarify> [--text T] [--via card|page|cli]
            [--no-publish]
+           clarify with NO --text is a COMPLETE request (#183): the owner's
+           click alone asks the lane to restate the question in wider context
+           and clearer language — the tool supplies that meaning; --text adds
+           the owner's own wording and wins when present
   withdraw --set <id> --qid <qid> [--text REASON] [--no-publish] [--json]
            retracts a question that has become moot; the set stays open
   amend    --set <id> --qid <qid> [--title T] [--description D]
