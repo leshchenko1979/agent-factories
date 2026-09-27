@@ -387,21 +387,116 @@ def probe_a_stale_exemption_is_an_error() -> list[str]:
     return fails
 
 
-def probe_the_walker_reads_real_history() -> list[str]:
-    """The walker is exercised against the live repo, not only against synthetic rows."""
+def _synthetic_repo_with_a_deletion(root: Path) -> tuple[Path, str, str]:
+    """A throwaway repo whose history contains exactly one ledger deletion.
+
+    `(cwd, ref, rel_path)`. The walker takes its repo as a PARAMETER -- `cwd` is the
+    seam -- so proving it needs no refactor of the walker, only an input it can be
+    pointed at (#169, ruling n=1128).
+    """
+    import subprocess
+
+    rel = LEDGER_PATH
+    ledger = root / rel
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+
+    def git(*args: str) -> None:
+        proc = subprocess.run(
+            ["git", "-c", "user.email=probe@example.invalid", "-c", "user.name=probe",
+             "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", *args],
+            cwd=root, capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
+
+    git("init", "-q")
+    ledger.write_text(
+        '{"n": 1, "event": "genesis", "ts": "2026-01-01T00:00:00Z"}\n'
+        '{"n": 2, "event": "claim", "ts": "2026-01-01T00:01:00Z"}\n',
+        encoding="utf-8",
+    )
+    git("add", "-A")
+    git("commit", "-q", "-m", "add two ledger rows")
+    # The DELETION: row 2 leaves the file, which is the transition the walker exists
+    # to report and the row identity the no-shrink invariant protects.
+    ledger.write_text('{"n": 1, "event": "genesis", "ts": "2026-01-01T00:00:00Z"}\n',
+                      encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "remove ledger row 2")
+    return root, "HEAD", rel
+
+
+def probe_the_walker_DETECTS_a_deletion_when_one_is_present() -> list[str]:
+    """The walker's OWN property, proven at ANY live-history depth (#169, ruling n=1128).
+
+    THE ASSERTION MOVED, it did not disappear. It used to read "the live history
+    contains a deletion", which is a fact about THIS repo: a bootstrapped factory has
+    one ledger commit and no deletions, so the gate shipped to every factory RED from
+    birth -- a gate that cannot pass where it is copied teaches lanes to ignore RED
+    (the #139 class). Direction 1 (SKIP when the history carries no deletion) was
+    REFUSED, because a probe that skips on a shallow history converts a false RED into
+    a false CLEAN: a predicate that examined nothing has reported nothing, not HOLDS
+    (SKILL.md section 8, the #170 class one surface over).
+
+    So the subject is now the WALKER rather than the history: seed a deletion in a
+    throwaway repo and assert the walker reports the transition. That holds at any
+    live-history depth, including one commit, and it is strictly stronger than the old
+    form -- the old one could pass on a history whose deletion the walker MISSED.
+    """
     fails: list[str] = []
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            cwd, ref, rel = _synthetic_repo_with_a_deletion(Path(tmp))
+        except RuntimeError as exc:
+            fails.append(f"the synthetic repo could not be built: {exc}")
+            return fails
+        transitions, entries, err = build_transitions(ref, rel, cwd)
+        if transitions is None:
+            fails.append(f"the synthetic walk failed: {err}")
+            return fails
+        if not entries:
+            fails.append("the synthetic walk found zero commits touching the ledger")
+            return fails
+        if not transitions:
+            fails.append(
+                "the walker MISSED a seeded deletion -- it reported no transition in a "
+                "history that contains exactly one"
+            )
+            return fails
+        first = transitions[0]
+        if len(first["after"]) >= len(first["before"]):
+            fails.append(
+                f"the transition does not show a row leaving: before={len(first['before'])} "
+                f"after={len(first['after'])}"
+            )
+    return fails
+
+
+def report_the_live_history_walk() -> str:
+    """The live-history walk, REPORTED and never asserted (#169, ruling n=1128).
+
+    It is kept because it is the only arm that reads THIS repo, and a walker that works
+    on a synthetic repo and silently returns nothing here is worth seeing. It is not
+    asserted because its depth is a property of the tree, not of the walker: a factory
+    that has just bootstrapped has one commit and no deletions, which is the expected
+    consequence of bootstrapping and not a defect. The two HARD arms are retained --
+    a walk that ERRORS and a walk that finds ZERO commits are both defects of the
+    tooling or the tree, and neither is a statement about history depth.
+    """
     cwd = repo_toplevel() or REPO
     ref = PRIMARY_REF if resolvable(PRIMARY_REF, cwd) else FALLBACK_REF
     transitions, entries, err = build_transitions(ref, LEDGER_PATH, cwd)
     if transitions is None:
-        fails.append(f"the walk failed: {err}")
-        return fails
+        return f"FAIL the live walk errored: {err}"
     if not entries:
-        fails.append("the walk found zero commits touching the ledger")
-        return fails
+        return "FAIL the live walk found zero commits touching the ledger"
     if not transitions:
-        fails.append("no commit carried a deletion — the live history has 8")
-    return fails
+        return (f"REPORTED {len(entries)} live commit(s) touch the ledger and none "
+                f"carries a deletion -- shallow history, not a defect")
+    return (f"REPORTED {len(entries)} live commit(s) touch the ledger, "
+            f"{len(transitions)} carry a deletion")
 
 
 def main() -> int:
@@ -416,8 +511,14 @@ def main() -> int:
     ):
         for line in probe():
             fails.append(f"{probe.__name__}: {line}")
-    for line in probe_the_walker_reads_real_history():
-        fails.append(f"probe_the_walker_reads_real_history: {line}")
+    for line in probe_the_walker_DETECTS_a_deletion_when_one_is_present():
+        fails.append(f"probe_the_walker_DETECTS_a_deletion_when_one_is_present: {line}")
+
+    live = report_the_live_history_walk()
+    if live.startswith("FAIL"):
+        fails.append(f"report_the_live_history_walk: {live[5:].strip()}")
+    else:
+        print(f"  {live}")
 
     cwd = repo_toplevel() or REPO
     exemptions, problems = load_exemptions(cwd / EXEMPTIONS_PATH)
