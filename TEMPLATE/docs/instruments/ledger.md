@@ -247,6 +247,17 @@ and it is the strongest single argument for the migration round.
 the other three do not. An earlier figure of "0 of 5" was read before those two vendored theirs and
 is superseded by this one.
 
+**A cross-member `verify` verdict owes its TOOL and its EXEMPTION STATE, or it merges two
+populations.** Measured 2026-09-27, corrected by the member itself: a census run over
+infra-factory's ledger reported a defect the member's own tool correctly excuses — re-run
+first-hand, `rc=0`, *"ledger clean: 590 row(s), monotonic, all event types known, sequences
+complete"*, with **three granted excusals** printed. The excusal list
+(`docs/ledger-exemptions.json`, read through `ledger_declaration.py`) is **per-member state that a
+cross-member run cannot see**, so an exemption-blind run reports a defect on precisely the members
+that have lawfully excused one — a false positive that reads as a finding. The dispatches for this
+round quoted the un-excused form of that condition; the figure was wrong, the member's `rc=0`
+stands. Name the tool and the exemption state beside any `verify` verdict.
+
 ---
 
 ## 7. The migration process — cited, not restated
