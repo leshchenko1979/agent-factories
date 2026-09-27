@@ -70,7 +70,7 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (§5).
 | # | path (root half ↔ TEMPLATE half) | class | what it is |
 |---|---|---|---|
 | 1 | `tools/review.py` ↔ `TEMPLATE/tools/review.py` | `standalone` | **the executable** — every leg of the lifecycle |
-| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **19 collected** (`pytest --collect-only`) at the instant of §5's last row |
+| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **21 collected** (`pytest --collect-only`) at the instant named in §5's last row |
 | 3 | `docs/review-cycle.schema.json` ↔ `TEMPLATE/docs/review-cycle.schema.json` | `standalone` | the state schema, **emitted** by `review.py schema`, never hand-kept |
 | 4 | `docs/review-lenses.md` ↔ `TEMPLATE/docs/review-lenses.md` | `standalone` | the lens catalogue law and the Adversarial Isolation Requirement |
 | 5 | `docs/instruments/review-rotation.md` ↔ `TEMPLATE/docs/instruments/review-rotation.md` | `standalone` | this file |
@@ -287,15 +287,39 @@ change belongs at HQ, not in this file.
 (a member counts as present only if the path is there; both halves are counted, because a member that
 took the root half and not the `TEMPLATE/` half holds a pair it cannot sync).
 **Scope:** the member manifests in `registry/factories/*.json`.
-**Instant:** the census has **not** been run for this instrument yet — the wave is step 9 of the
-promotion, and no number is published here in advance of it.
+**Instant:** **2026-09-27T17:14:21Z**, by the command that exists for this question —
+`tools/instrument_census.py review-rotation` — which also reports each member's **reload link** and
+the declaration standing behind it.
 
-**Stated as an inference with its reason, never as a bare zero.** No member holds this instrument and
-none has declared a deferral — both are **consequences of the timeline, not measurements**: the paths
-of §2 did not exist in the manifest before the commit that ships this doc, so no tree could hold them,
-and no member could have declared a deferral against an instrument that was not there. The predicates
-and the wave's readings are written here **when the wave returns them**, each with its own instant;
-until then this section carries an inference with its reason rather than a `0` dressed as a count.
+`tools/instrument_census.py` is root-only tooling (like `kit_census.py`) and is **not shipped**: the
+template does not need to census the meta-factory's members. It derives the path list FROM THIS
+FILE's §2 table rather than carrying a second list, and it refuses on zero parsed paths — a zero over
+a failed parse is otherwise indistinguishable from a zero over an empty population.
+
+**The readings, each with its own instant, and NOT a claim about now:**
+
+| member | held | reload link | disposition |
+|---|---|---|---|
+| `ai-antispam` | 3/5 | absent | PARTIAL-UNDECLARED — a divergent copy, which is frame §9 O1's case |
+| `inferhub-watch` | 0/5 | absent | ABSENT — the adoption pilot, rehearsed green |
+| `infra-factory` | 0/5 | absent | ABSENT |
+| `miidas` | 0/5 | absent | ABSENT |
+| `opencrabs-dev` (the donor) | 0/5 | absent | ABSENT — its `hq.md` carve landed 2026-09-27 |
+| `meta-factory` | 5/5 | resolves | SOURCE — the authoring tree, not an adopter |
+
+**No member is ADOPTED, and the reason is a SCHEMA fact rather than any member's omission.**
+`registry/factories/<slug>.json` carries a `kit` field whose value is the **KIT's** adoption state
+(frame §9 O6). There is **no field for a per-instrument disposition**, so a member that declared its
+kit adopted has said nothing about this instrument — and reading one as the other would manufacture
+an adoption nobody decided. The census therefore reports the declared leg `unestablished` for every
+member, and **no member can lawfully reach ADOPTED until that surface exists**. Which per-instrument
+key a member declares on is HQ's schema call; this instrument coins none.
+
+**A lone zero is not published here either.** The earlier revision of this section carried an
+inference and no figure, because the paths of §2 did not exist in the manifest before the commit
+that ships this doc; that inference is now superseded by the reading above, which is a measurement
+over a declared population with its predicate, scope and instant named.
+
 
 ## 10. Where this instrument's law lives
 
