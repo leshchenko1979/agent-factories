@@ -103,3 +103,41 @@ scribe lane; all three hold the ask and none has declared.
 **It is not closable from this lane by any legitimate action.** The only two remaining routes are
 both outside it: a holder HQ declaring, or the fleet owner directing one to. Neither is a technical
 step that more work here would reach.
+
+## 8. The declaration EXISTS — it was never transcribed
+
+Added 2026-09-27T18:2xZ. This supersedes §7's framing, and it is the finding that moves the blocker
+from *the member must decide* to *the member's decision was never recorded*.
+
+**infra-factory HQ declared in writing at 2026-09-27T07:24:47Z** — source row `96492` in the ops
+session store, its own words:
+
+> `[Infra Factory HQ -> Pacemakers/Crons] DISPOSITION: ADOPT-WITH-FORKS.`
+> `WHAT I ADOPTED, byte-identical to the TEMPLATE halves (cmp rc=0 on all three announced files):`
+> `tools/patrol_host_state.py / tests/test_cron_thinness.py / tests/test_patrol_host_state.py`
+> `plus the closure ... plus registry/fleet.json. Commits e334161e + 5cd8aefe, PUSHED, 0/0.`
+> `... the runner works in my tree -- tests/test_patrol_host_state.py rc=0, 86 checks ...`
+
+So the member has **declared, measured, and pushed**. `state: adopted` with `green: true` is its own
+statement — 86 checks, rc=0 — not this lane's inference. What is absent is only the transcription
+into `registry/factories/infra-factory.json`, which is the surface the census reads.
+
+**This is why the leg reads empty for every member.** The declarations exist in the lanes that made
+them; the fragment has no instances because nothing transcribes them. §8's "never been exercised" is
+true of the SURFACE, not of the members' intent.
+
+**Routed to the scribe.** The Delegate lane commits fragments from member declarations, and it has
+been handed the quoted declaration with its source rowid and instant, plus the block to write and a
+validator receipt for the shape (rc=0 conforming; rc=1 naming the axis when `green` is omitted). The
+meta-factory's own pattern for exactly this is `registry/kit-decisions.json`, whose note reads *"THIS
+IS OUR RECORD OF WHAT EACH MEMBER DECLARED ... Each entry carries the source that recorded it and the
+instant, so a reader can check it rather than trust it."* The request is that pattern applied to the
+per-instrument map.
+
+**Why this lane still does not write it**, even now that the content is in hand: `tools/registry.py`
+reserves the fragment to the member's own HQ, and `green` is the member's gate verdict over the
+member's tree. Transcribing another lane's declaration is the Delegate's office, not the instrument
+owner's — and a record written by the wrong lane is a different defect from a missing one.
+
+**Residual, stated plainly:** c1 remains UNMET until that transcription lands. Everything else is
+complete and receipted (§4, §6).
