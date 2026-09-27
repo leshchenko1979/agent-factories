@@ -16,7 +16,12 @@ question, and this file says so rather than quietly answering it.
 THE TWO LEGS — the counting rule, and the defect this exists to avoid. A member is counted
 **adopted** only when BOTH hold:
   1. **held** — every declared path is present at its recorded repo (the measured leg); and
-  2. **declared** — the member's own fragment carries a disposition (the declared leg).
+  2. **declared** — the member's own fragment declares a disposition at `instruments.<slug>`,
+     the per-instrument surface, and says `adopted` with `green: true` (the declared leg).
+     The shape of that declaration is NOT restated here: `tools/registry.py` owns it and this
+     file calls its predicate, so a state this census prints is one the registry gate accepts.
+     An ABSENT key is legal and reads as the member's silence; a PRESENT key the registry
+     refuses reads `DECLARED-INVALID` and is listed with the registry's own errors.
 A copy alone is not adoption: a member can hold a complete set that arrived as another
 instrument's closure (frame §1.3) with no decision behind it, and it can be green on a partial
 set because a gate judges what the tree carries and a missing file is not a failing one. So the
@@ -44,9 +49,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-# The states a module's disposition can take. `UNDECLARED` is not a disposition — it is the
-# ABSENCE of one, which is the state the frame's §7.2 forbids ("silence is not a disposition").
-DISPOSITIONS = ("adopted", "partial", "deferred", "not-applicable")
+# The declaration's shape is NOT restated here. The state set, the reason requirement and the
+# `green` axis live in `tools/registry.py::validate_disposition`, and this file calls it — a
+# second copy of those literals would drift silently, and a census printing states the registry
+# gate no longer accepts is worse than one printing none. `_REGISTRY` caches that import.
+_REGISTRY = None
 
 # The member-side path of the reload link is `<skill dir>/<instrument>.md` (frame §6.1): the
 # member's own act, in the member's own tree, and named for the instrument.
@@ -96,27 +103,59 @@ def reload_link_state(member: dict, instrument: str) -> tuple[str, str]:
     return "absent", str(link)
 
 
-def declared_disposition(member: dict) -> str:
-    """The member's DECLARED state, read from the only declaration surface the registry carries.
+def _registry_module():
+    """`tools/registry.py`, imported BY PATH so one rule keeps one home.
 
-    TWO SURFACES, AND THEY ARE NOT INTERCHANGEABLE — the distinction this function exists to
-    keep. `registry/factories/<slug>.json` carries a `kit` field (HQ's schema) whose value is
-    the **KIT's** adoption state; there is no field for a PER-INSTRUMENT disposition, so this
-    reader must never render one as the other. A member that declared its kit adopted has said
-    nothing about this instrument, and reading it across would manufacture an adoption nobody
-    decided.
-
-    So it returns the kit state LABELLED as the kit's, or `unestablished` — and the census
-    reports the instrument-level leg as unestablished for every member rather than defaulting it.
-    That is a fact about the schema (HQ's to extend), not a member's omission, and the artifact
-    says so.
+    The per-instrument declaration's shape — its state set, its reason requirement, and the
+    `green` axis `adopted` must name — is `validate_disposition` in that file. Restating any of
+    it here would split one rule across two readers, and the drift would be silent: every row
+    this census prints would describe a schema the registry gate no longer enforces. Imported by
+    path rather than as a package because `tools/` is not one — the technique the pre-commit hook
+    uses for the same reason.
     """
-    kit = member.get("kit")
-    if isinstance(kit, dict):
-        state = kit.get("state")
-        if isinstance(state, str) and state.strip():
-            return f"kit={state.strip()}"
-    return "unestablished"
+    global _REGISTRY
+    if _REGISTRY is None:
+        import importlib.util
+        src = REPO / "tools" / "registry.py"
+        spec = importlib.util.spec_from_file_location("oc_registry", src)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _REGISTRY = module
+    return _REGISTRY
+
+def declared_disposition(member: dict, instrument: str) -> tuple[str, str, list[str]]:
+    """`(label, state, errors)` — the member's declaration FOR THIS INSTRUMENT, and HQ's verdict.
+
+    THE SURFACE IS `instruments.<slug>` — a MAP on the member's fragment, keyed by slug (HQ's
+    schema, enforced in `tools/registry.py`). The `kit` key beside it is the **KIT's** adoption
+    state and says NOTHING about this instrument, so the two are read apart and never rendered as
+    each other: a member that declared its kit adopted has not declared this instrument.
+
+    An ABSENT key is a LEGAL state, not a failure — the schema makes absence valid, so a member
+    that never considered the instrument stays distinguishable from one that considered it and
+    said nothing. Absence returns `absent` with no errors, and the row reads as
+    held-with-no-declaration rather than being defaulted to a state.
+
+    A PRESENT key is validated by the registry's OWN predicate with `require_green=True` — the
+    call `validate_instruments` makes. So a deferral with no reason, or an `adopted` that leaves
+    its `green` axis unspoken, is reported here as INVALID carrying the registry's own errors,
+    never silently accepted.
+    """
+    surface = member.get("instruments")
+    if not isinstance(surface, dict) or instrument not in surface:
+        return "absent", "", []
+    disp = surface[instrument]
+    errors = _registry_module().validate_disposition(
+        str(member.get("_fragment") or "<fragment>"),
+        f"instruments.{instrument}", disp, require_green=True)
+    if errors:
+        state = disp.get("state") if isinstance(disp, dict) else None
+        return "INVALID", state if isinstance(state, str) else "", errors
+    state = str(disp.get("state"))
+    green = disp.get("green")
+    if isinstance(green, bool):
+        return f"{state} · green={str(green).lower()}", state, []
+    return state, state, []
 
 
 def census(instrument: str) -> dict:
@@ -135,7 +174,7 @@ def census(instrument: str) -> dict:
             cells.append({"path": p, "present": present})
         held = sum(1 for c in cells if c["present"])
         link_state, link_path = reload_link_state(m, instrument)
-        declared = declared_disposition(m)
+        declared, declared_state, declared_errors = declared_disposition(m, instrument)
         complete = held == len(paths)
         if repo and Path(repo, "TEMPLATE", paths[0]).is_file():
             # THIS member's tree is an AUTHORING tree — it carries the `TEMPLATE/` half, which
@@ -145,16 +184,28 @@ def census(instrument: str) -> dict:
             # than by comparing paths: this tool runs from a worktree, whose root is not the
             # member's root, so a path equality would silently miss it.
             status = "SOURCE"
-        elif declared == "unestablished":
+        elif declared == "absent":
             # BOTH LEGS, and the reason this column exists: held-with-no-declaration is the
-            # frame's §7.2 silence, and it must not read as adoption.
+            # frame's §7.2 silence, and it must not read as adoption. An absent key is LEGAL
+            # (HQ's schema), so this is a reading of the member's own silence, not a refusal.
             status = "HELD-UNDECLARED" if complete else ("PARTIAL-UNDECLARED" if held else "ABSENT")
+        elif declared_errors:
+            # The key IS there and the registry's own predicate rejects it — a deferral with no
+            # reason, or an `adopted` that left its `green` axis unspoken. Reported as its own
+            # status rather than absorbed into a state, because "declared" and "declared
+            # lawfully" are different readings and only the second one is a disposition.
+            status = "DECLARED-INVALID"
         else:
-            status = "ADOPTED" if complete else f"DECLARED-{declared.upper()}"
+            # A complete set under a declaration that says adopted; anything else keeps the
+            # state it named, so a member that declared `partial` over a complete set reads as
+            # what it said rather than as an adoption nobody decided.
+            status = ("ADOPTED" if (complete and declared_state == "adopted")
+                      else f"DECLARED-{declared_state.upper()}")
         rows.append({"member": m.get("factory") or "?", "repo": repo,
                      "fragment": m.get("_fragment"), "cells": cells, "held": held,
                      "of": len(paths), "reload_link": link_state, "reload_path": link_path,
-                     "declared": declared, "status": status})
+                     "declared": declared, "declared_state": declared_state,
+                     "declared_errors": declared_errors, "status": status})
     return {"problem": None, "instant": instant, "rows": rows, "paths": paths, "law": law}
 
 
@@ -194,24 +245,38 @@ def render(c: dict) -> str:
     for r in rows:
         lines.append(f"| `{r['member']}` | {r['held']}/{r['of']} | {r['reload_link']} | "
                      f"{r['declared']} | **{r['status']}** |")
+    rejected = [r for r in rows if r["declared_errors"]]
+    if rejected:
+        lines += [
+            "",
+            "## Declarations the registry's own predicate rejects",
+            "",
+            "The key IS present and `tools/registry.py::validate_disposition` refuses it. A",
+            "refused declaration is NOT a disposition — it is a declaration wearing a state it",
+            "has not earned — so it is listed with the registry's own errors rather than",
+            "absorbed into a state, and the row above reads `DECLARED-INVALID`.",
+            "",
+        ]
+        for r in rejected:
+            lines.append(f"**`{r['member']}`** — `instruments.<slug>`: {r['declared']}")
+            lines += [f"- {e}" for e in r["declared_errors"]]
     lines += [
         "",
         "## The two legs, and why a copy alone is not adoption",
         "",
-        "A row is **ADOPTED** only when the declared set is COMPLETE *and* the member has a",
-        "DECLARATION behind it. `HELD-UNDECLARED` is a member holding every path with no decision",
-        "behind it (frame §1.3 — the files can arrive as another instrument's closure), and",
-        "`PARTIAL-UNDECLARED` is a member holding some of them. Both are reported as what they",
-        "are: silence is a state here, never a pass.",
+        "A row is **ADOPTED** only when the declared set is COMPLETE *and* the member's own",
+        "declaration says `adopted` with `green: true`. `HELD-UNDECLARED` is a member holding",
+        "every path with no decision behind it (frame §1.3 — the files can arrive as another",
+        "instrument's closure), and `PARTIAL-UNDECLARED` is a member holding some of them. Both",
+        "are reported as what they are: silence is a state here, never a pass.",
         "",
-        "**THE DECLARED LEG IS UNESTABLISHED, FOR EVERY MEMBER, AND THAT IS A SCHEMA FACT.**",
-        "`registry/factories/<slug>.json` carries a `kit` field whose value is the **KIT's**",
-        "adoption state (obligation O6). There is no field for a PER-INSTRUMENT disposition, so a",
-        "member that declared its kit adopted has said nothing about this instrument — and reading",
-        "one as the other would manufacture an adoption nobody decided. This census therefore",
-        "reports the leg as unestablished rather than defaulting it, and **no member can reach",
-        "ADOPTED until that surface exists or a member declares on one this census can read.**",
-        "That is HQ's schema to extend, not a member's omission.",
+        "**THE DECLARED LEG IS READ FROM `instruments.<slug>`, HQ's per-instrument surface.**",
+        "The fragment's `kit` key beside it is the **KIT's** adoption state (obligation O6) and",
+        "says nothing about this instrument, so it is never read as one: a member that declared",
+        "its kit adopted has not declared this instrument. An **absent** key is a LEGAL state —",
+        "the schema makes absence valid — so it is reported as the member's silence, which is a",
+        "reading rather than a refusal, and it is what keeps a member that considered the",
+        "instrument distinguishable from one that never did.",
         "",
         "`SOURCE` marks the member whose repo IS the repo the instrument is authored in. It holds",
         "the set by construction; counting it as an adoption site would report the source as its",
