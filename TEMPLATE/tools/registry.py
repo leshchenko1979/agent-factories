@@ -286,6 +286,7 @@ FRAGMENT_KEYS = frozenset(
         "status",
         "attested_at",
         "kit",
+        "instruments",
     }
 )
 ZONE_KEYS = frozenset({"owns", "does_not_own"})
@@ -295,9 +296,93 @@ ZONE_KEYS = frozenset({"owns", "does_not_own"})
 # state. What IS enforced is the asymmetry the clause exists for: a deferral or a
 # not-applicable must carry its reason, because a member that deliberately waited
 # and one that never considered the kit are otherwise identical on this surface.
+# ONE vocabulary for every adoption declaration the fragment carries, kit-level or
+# per-instrument. Minting a second set for instruments would split one rule across two
+# constants, and the two would drift the way the two ledger readers did before #193.
+DISPOSITION_KEYS = frozenset(
+    {"state", "behind_by", "reason", "measured_at", "green"}
+)
+DISPOSITION_STATES = ("adopted", "partial", "deferred", "not-applicable")
+DISPOSITION_REASON_REQUIRED = ("deferred", "not-applicable")
+
+# The kit field's own names, kept as aliases so an existing reader does not break.
 KIT_KEYS = frozenset({"state", "behind_by", "reason", "measured_at"})
-KIT_STATES = ("adopted", "partial", "deferred", "not-applicable")
-KIT_REASON_REQUIRED = ("deferred", "not-applicable")
+KIT_STATES = DISPOSITION_STATES
+KIT_REASON_REQUIRED = DISPOSITION_REASON_REQUIRED
+
+
+def validate_disposition(
+    path: str, label: str, obj: object, *, require_green: bool = False
+) -> list[str]:
+    """One predicate for both axes of an adoption declaration.
+
+    Frame 7.2 establishes that HELD and GREEN are independent and that neither implies
+    the other, and then requires the declared state to NAME BOTH. A single `state` cannot
+    carry that, so `green` is the second field and REQUIRE_GREEN is what makes the clause
+    enforceable rather than advisory: a member cannot declare `adopted` while red on its
+    own gate, which is the manufactured adoption the frame measured on 2026-09-27.
+    """
+    errors: list[str] = []
+    if not isinstance(obj, dict):
+        return [f"{path}: {label} must be an object"]
+    for key in sorted(set(obj) - DISPOSITION_KEYS):
+        errors.append(f"{path}: {label} has unknown key `{key}`")
+    state = obj.get("state")
+    if state is None:
+        errors.append(f"{path}: {label} is missing `state`")
+    elif state not in DISPOSITION_STATES:
+        errors.append(
+            f"{path}: {label}.state `{state}` is not one of {'|'.join(DISPOSITION_STATES)}"
+        )
+    elif state in DISPOSITION_REASON_REQUIRED and not (
+        obj.get("reason") or ""
+    ).strip():
+        # The asymmetry, stated where it is enforced: "behind by N, deferred because X" is
+        # the clause's own wording, so a deferral with no X is the undeclared state
+        # wearing a declared label.
+        errors.append(f"{path}: {label}.state `{state}` requires a non-empty `reason`")
+    elif require_green and state == "adopted" and obj.get("green") is not True:
+        errors.append(
+            f"{path}: {label}.state `adopted` requires `green: true` — HELD and GREEN are"
+            " independent (frame 7.2), so adoption cannot claim one and leave the other"
+            " unspoken"
+        )
+    behind = obj.get("behind_by")
+    if behind is not None and (not isinstance(behind, int) or isinstance(behind, bool)):
+        errors.append(f"{path}: {label}.behind_by must be an integer")
+    green = obj.get("green")
+    if green is not None and not isinstance(green, bool):
+        errors.append(f"{path}: {label}.green must be a boolean")
+    if obj.get("measured_at") is not None and _iso_date(obj["measured_at"]) is None:
+        errors.append(
+            f"{path}: {label}.measured_at `{obj['measured_at']}` does not parse as ISO-8601"
+        )
+    return errors
+
+
+def validate_instruments(path: str, obj: object) -> list[str]:
+    """The per-instrument disposition map, keyed by instrument slug.
+
+    A MAP and not a flat key per instrument, because the instrument set grows and a flat
+    key would need a schema change for every new instrument.
+
+    The key is CHECKABLE and that is the stronger control the kit field cannot have: the
+    census derives an instrument's declared set from docs/instruments/<slug>.md, so a slug
+    with no law doc is a phantom name rather than a disposition, and it is refused here
+    instead of silently censusing zero paths.
+    """
+    errors: list[str] = []
+    if not isinstance(obj, dict):
+        return [f"{path}: instruments must be an object"]
+    for slug, disp in sorted(obj.items()):
+        label = f"instruments.{slug}"
+        law = REPO_ROOT / "docs" / "instruments" / f"{slug}.md"
+        if not law.is_file():
+            errors.append(
+                f"{path}: {label} names no instrument law doc — {law.relative_to(law.parents[2])} does not exist"
+            )
+        errors.extend(validate_disposition(path, label, disp, require_green=True))
+    return errors
 SERVICE_KEYS = frozenset({"name", "audience", "entry", "cadence"})
 LANE_KEYS = frozenset({"topic", "thread_id", "role", "announcements"})
 ANNOUNCEMENT_KEYS = frozenset(
@@ -502,30 +587,10 @@ def validate_fragment(data: object, path: str = "<memory>") -> list[str]:
                     errors.append(f"{path}: zone.{key} must be a list")
     kit = data.get("kit")
     if kit is not None:
-        if not isinstance(kit, dict):
-            errors.append(f"{path}: kit must be an object")
-        else:
-            for key in sorted(set(kit) - KIT_KEYS):
-                errors.append(f"{path}: kit has unknown key `{key}`")
-            state = kit.get("state")
-            if state is None:
-                errors.append(f"{path}: kit is missing `state`")
-            elif state not in KIT_STATES:
-                errors.append(
-                    f"{path}: kit.state `{state}` is not one of {'|'.join(KIT_STATES)}"
-                )
-            elif state in KIT_REASON_REQUIRED and not (kit.get("reason") or "").strip():
-                # The asymmetry, stated where it is enforced: "behind by N,
-                # deferred because X" is the clause's own wording, so a deferral
-                # with no X is the undeclared state wearing a declared label.
-                errors.append(f"{path}: kit.state `{state}` requires a non-empty `reason`")
-            behind = kit.get("behind_by")
-            if behind is not None and not isinstance(behind, int):
-                errors.append(f"{path}: kit.behind_by must be an integer")
-            if kit.get("measured_at") is not None and _iso_date(kit["measured_at"]) is None:
-                errors.append(
-                    f"{path}: kit.measured_at `{kit['measured_at']}` does not parse as ISO-8601"
-                )
+        errors.extend(validate_disposition(path, "kit", kit))
+    instruments = data.get("instruments")
+    if instruments is not None:
+        errors.extend(validate_instruments(path, instruments))
     services = data.get("services")
     if services is not None:
         if not isinstance(services, list):

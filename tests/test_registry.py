@@ -1224,6 +1224,80 @@ def probe_a_deferral_without_a_reason_fails() -> None:
     del tmp
 
 
+def probe_a_per_instrument_declaration_needs_both_axes() -> None:
+    """The per-instrument map: one vocabulary with the kit, plus the phantom-name control.
+
+    Frame 7.2 requires a deferrable instrument to NAME its declaration surface and that
+    the surface CARRY A FIELD. It also establishes that HELD and GREEN are independent and
+    that the declared state names both — so `adopted` cannot be claimed while red on the
+    member's own gate, which is the manufactured adoption the frame measured on 2026-09-27.
+
+    The key check is the control the kit field cannot have: the census derives an
+    instrument's declared set from docs/instruments/<slug>.md, so a slug with no law doc is
+    a phantom name rather than a disposition. Refusing it here is what stops a typo
+    censusing zero paths and reading as a clean member.
+    """
+    pair = probe_slugs()
+    arms = (
+        # accepted — a real instrument, both axes named
+        ("ledger adopted + green", {"ledger": {"state": "adopted", "green": True}}, True),
+        ("ledger partial + behind_by", {"ledger": {"state": "partial", "behind_by": 2, "green": False}}, True),
+        (
+            "ledger deferred WITH a reason",
+            {"ledger": {"state": "deferred", "reason": "waiting on the pin pair"}},
+            True,
+        ),
+        (
+            "two instruments in one map",
+            {
+                "ledger": {"state": "adopted", "green": True},
+                "pacemaker": {"state": "not-applicable", "reason": "no pacemaker here"},
+            },
+            True,
+        ),
+        # refused — the both-axes rule, which is what separates this from the kit field
+        ("adopted with NO green", {"ledger": {"state": "adopted"}}, False),
+        ("adopted with green:false", {"ledger": {"state": "adopted", "green": False}}, False),
+        ("green that is not a boolean", {"ledger": {"state": "partial", "green": "yes"}}, False),
+        ("deferred with NO reason", {"ledger": {"state": "deferred"}}, False),
+        # refused — the phantom-name control
+        ("a slug with no law doc", {"nosuch-instrument": {"state": "partial"}}, False),
+        # refused — the shared vocabulary still closes unknown keys
+        ("an unknown key", {"ledger": {"state": "partial", "drift": 3}}, False),
+    )
+    for label, instruments, expect_ok in arms:
+        fragment = _fragment(pair[0], [])
+        fragment["instruments"] = instruments
+        _loaded, errors, tmp = _fragments_on_disk([fragment])
+        ins_errors = [e for e in errors if ": instruments" in e]
+        check(
+            f"instruments {label} -> {'accepted' if expect_ok else 'refused'}",
+            (not ins_errors) == expect_ok,
+            ins_errors[0][:110] if ins_errors else "accepted",
+        )
+        del tmp
+    # The control that keeps the field from arriving as a hard requirement: absent is valid,
+    # so its arrival cannot red a member that has not answered — the same asymmetry the kit
+    # field's own probe pins.
+    _loaded, errors, tmp = _fragments_on_disk([_fragment(pair[0], [])])
+    check(
+        "instruments ABSENT is still valid while the obligation is new",
+        not [e for e in errors if "instruments" in e],
+        "; ".join(e for e in errors if "instruments" in e)[:100] or "accepted",
+    )
+    del tmp
+    # And the two surfaces must not diverge in vocabulary: a kit `deferred` and an
+    # instrument `deferred` are refused by ONE predicate for the SAME reason.
+    kit_errs = reg.validate_disposition("k", "kit", {"state": "deferred"})
+    ins_errs = reg.validate_disposition("i", "instruments.ledger", {"state": "deferred"})
+    check(
+        "kit and instruments share one deferral rule",
+        bool(kit_errs) and bool(ins_errs)
+        and kit_errs[0].split("requires")[-1] == ins_errs[0].split("requires")[-1],
+        f"kit={kit_errs[0][-40:]!r} instr={ins_errs[0][-40:]!r}",
+    )
+
+
 def probe_a_command_shaped_check_fails() -> None:
     """`check` names a predicate; a raw command is rejected rather than executed."""
     command: list[str] = []
@@ -1468,6 +1542,7 @@ PROBES = (
     probe_differing_text_under_one_id_fails,
     probe_a_warning_without_evidence_fails,
     probe_a_deferral_without_a_reason_fails,
+    probe_a_per_instrument_declaration_needs_both_axes,
     probe_a_command_shaped_check_fails,
     probe_a_future_review_by_fails,
     probe_the_box_wide_reader_reaches_the_default_home,
