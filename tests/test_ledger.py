@@ -296,6 +296,67 @@ def main() -> int:
                  (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 0, ())
         seq_case("P4b a claim AFTER its close is still refused (presence, positional)",
                  (("intake", "#4b"), ("close", "#4b"), ("claim", "#4b")), 1, ("#4b", "claim"))
+        print("\nthe close-row revision — declared at the WRITE PATH (#187)")
+        # The invariant `close_row_revision` was enforced by the gate and by NOTHING at the
+        # write path, so four instances in one session were each repaired by a SECOND append
+        # (`n=1065`->`n=1079`, `n=1126`->`n=1135`, `n=1258`->`n=1262`, `n=1260`->`n=1263`)
+        # and the rate was not falling. These probes drive the REAL command, and the pair of
+        # arms is the ruling's own discriminator: the refusal reads the CANONICAL RUN, so a
+        # revision merely MENTIONED in prose is refused while one the run DECLARES is
+        # accepted. Both arms are required — a permissive refusal, satisfiable by quoting any
+        # hex-shaped token, would pass a one-sided probe here and accept a row whose revision
+        # the existence leg never resolves. Three live rows are exactly that shape.
+        from field_predicate import declared_revision  # the shared predicate, one field one read
+        rev_actors = Path(tmp) / "rev-actors.txt"
+        rev_actors.write_text("worker\n", encoding="utf-8")
+        # A throwaway telemetry source, for the reason the #88 block states: a probe that
+        # read the LIVE database would pass or fail on this box's traffic rather than on the
+        # code. My first cut of this block omitted the pin and the row it inspected carried
+        # `tokens_in=22017218` — the live daemon's own totals.
+        rev_db = seed_telemetry_db(Path(tmp) / "rev-telemetry.db")
+        rev_env = {"OPENCRABS_DB_PATH": str(rev_db)}
+        rev = Path(tmp) / "revision.jsonl"
+        write_ledger(rev, ("intake", "#187"), ("claim", "#187"))
+        before_rev = hashlib.md5(rev.read_bytes()).hexdigest()
+
+        r = run(rev, "append", "--event", "close", "--actor", "worker", "--subject", "#187",
+                "--detail", "Closed, and the revision is not stated anywhere.",
+                actors=rev_actors, extra_env=rev_env)
+        check("a close declaring no revision is REFUSED",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and the refusal names the token it wants",
+              "head=<sha>" in (r.stderr + r.stdout), (r.stderr or r.stdout).strip()[:160])
+        check("and it wrote NOTHING — the ledger is byte-identical by md5",
+              hashlib.md5(rev.read_bytes()).hexdigest() == before_rev,
+              f"{len(rows(rev))} row(s)")
+
+        r = run(rev, "append", "--event", "close", "--actor", "worker", "--subject", "#187",
+                "--detail", "Closed. The receipts describe revision "
+                            "0123456789abcdef0123456789abcdef01234567 which resolves.",
+                actors=rev_actors, extra_env=rev_env)
+        check("a revision only MENTIONED in prose is REFUSED (the discriminator)",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and that refusal wrote nothing either",
+              hashlib.md5(rev.read_bytes()).hexdigest() == before_rev,
+              f"{len(rows(rev))} row(s)")
+
+        # The accepting arm. Without it the probe would pass on a refusal that rejected
+        # every close row — the one-sided shape that proves nothing about the predicate.
+        r = run(rev, "append", "--event", "close", "--actor", "worker", "--subject", "#187",
+                "--detail", "Closed with its receipts. "
+                            "head=0123456789abcdef0123456789abcdef01234567",
+                actors=rev_actors, extra_env=rev_env)
+        check("a revision the CANONICAL RUN declares is ACCEPTED",
+              r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
+        _rev_detail = close_row(rev).get("detail", "")
+        # Asserted through the SHARED reader, not `declares_field`: that predicate answers
+        # "has the author stated this TELEMETRY measurement" and parses the value for the
+        # key's type, so it is False for every key outside the telemetry set — a mistake
+        # this probe made first, and the reason the check reads the field's own predicate.
+        check("and the row carries it in the run, beside the telemetry the tool appended",
+              declared_revision(_rev_detail) == "0123456789abcdef0123456789abcdef01234567",
+              _rev_detail[-90:])
+
         print("\nreconstructed claims — declared by token, printed, never collapsed")
         # A claim stamped after the work declares itself with the token
         # `claim=reconstructed` (#98, ruling n=602 PART 5), and `verify` prints those
@@ -958,7 +1019,8 @@ def main() -> int:
             prose, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail",
             "Closed. The writer tested whether tokens_out= was absent before appending, "
-            "and cost_usd= was read from the same sentence.",
+            "and cost_usd= was read from the same sentence. "
+            "head=0123456789abcdef0123456789abcdef01234567",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)},
         )
         check("a close row whose prose mentions the keys is accepted",
@@ -976,7 +1038,8 @@ def main() -> int:
         stated = tdir / "stated.jsonl"
         write_ledger(stated, ("intake", "#88"), ("claim", "#88"))
         run(stated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
-            "--detail", "Closed. The author stated turns=7 and cost_usd=9.99 before the append",
+            "--detail", "Closed. The author stated turns=7 and cost_usd=9.99 before the "
+                        "append. head=0123456789abcdef0123456789abcdef01234567",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
         detail = close_row(stated).get("detail", "")
         check("a DECLARED measurement is not duplicated",
@@ -997,7 +1060,8 @@ def main() -> int:
         punctuated = tdir / "punctuated.jsonl"
         write_ledger(punctuated, ("intake", "#88"), ("claim", "#88"))
         run(punctuated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
-            "--detail", "Closed. The author stated turns=7.",
+            "--detail", "Closed. The author stated turns=7. "
+                        "head=0123456789abcdef0123456789abcdef01234567",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
         detail = close_row(punctuated).get("detail", "")
         check("a punctuated stated value does not suppress the append (pinned boundary)",
@@ -1019,7 +1083,8 @@ def main() -> int:
         quoted = tdir / "quoted.jsonl"
         write_ledger(quoted, ("intake", "#88"), ("claim", "#88"))
         run(quoted, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
-            "--detail", "Closed. The quoted trailer read turns=36' before the repair.",
+            "--detail", "Closed. The quoted trailer read turns=36' before the repair. "
+                        "head=0123456789abcdef0123456789abcdef01234567",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
         detail = close_row(quoted).get("detail", "")
         check("a quoted unparseable value does not suppress the measurement",
@@ -1075,7 +1140,8 @@ def main() -> int:
         )
         r = run(
             silent, "append", "--event", "close", "--actor", "worker", "--subject", "#89",
-            "--detail", "Closed with no telemetry inside the window.",
+            "--detail", "Closed with no telemetry inside the window. "
+                        "head=0123456789abcdef0123456789abcdef01234567",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
         )
         check("a close row whose window yielded nothing is accepted",
@@ -1095,7 +1161,8 @@ def main() -> int:
         write_ledger(stated, ("intake", "#90"), ("claim", "#90"))
         run(
             stated, "append", "--event", "close", "--actor", "worker", "--subject", "#90",
-            "--detail", "Closed. The author stated duration=42s before the append.",
+            "--detail", "Closed. The author stated duration=42s before the append. "
+                        "head=0123456789abcdef0123456789abcdef01234567",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
         )
         detail = close_row(stated).get("detail", "")
@@ -1170,7 +1237,8 @@ def main() -> int:
         # the arm would pass on a tree where the module was never staged, and the RED arm
         # below would then be proving the wrong thing.
         r = absent_run("append", "--event", "close", "--actor", "worker",
-                       "--subject", "#91", "--detail", "Closed with the extractor present.")
+                       "--subject", "#91", "--detail", "Closed with the extractor present. "
+                       "head=0123456789abcdef0123456789abcdef01234567")
         detail = close_row(absent_ledger).get("detail", "")
         check("extractor present: the row does not claim it was unavailable",
               r.returncode == 0 and "telemetry=unavailable" not in detail, detail[-90:])
@@ -1189,7 +1257,8 @@ def main() -> int:
             encoding="utf-8",
         )
         r = absent_run("append", "--event", "close", "--actor", "worker",
-                       "--subject", "#91", "--detail", "Closed with no extractor at all.")
+                       "--subject", "#91", "--detail", "Closed with no extractor at all. "
+                       "head=0123456789abcdef0123456789abcdef01234567")
         detail = close_row(absent_ledger).get("detail", "")
         check("an unimportable extractor is stated, never silent",
               r.returncode == 0 and "telemetry=unavailable" in detail, detail[-90:])

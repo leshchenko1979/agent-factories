@@ -89,7 +89,7 @@ REPO = Path(__file__).resolve().parent.parent
 # `tools/ledger.py`. Imported by module name so a staged throwaway `tools/` resolves it
 # the same way — see tools/field_predicate.py.
 sys.path.insert(0, str(REPO / "tools"))
-from field_predicate import keyed_value, trailer_tokens  # noqa: E402
+from field_predicate import declared_revision, keyed_value  # noqa: E402
 
 # The key this gate's boundary is declared under, in the factory's own
 # `docs/ledger-invariants.json`. The key is the gate's own name, so the declaration says
@@ -157,15 +157,15 @@ def _trailer_revision(detail: str) -> str | None:
     The value is the FIRST `head=` in the run, the same precedence `_declared_revision`
     applies; the run is short and its fields are machine-written, so a second `head=` is
     a writer defect rather than a choice this reader should resolve.
+
+    DELEGATES to `field_predicate.declared_revision` — the ONE reader of this field, shared
+    with the write path that refuses to create the defect (#187). A second copy of this
+    composition here would drift from the tool in silence, and the drift would land on
+    exactly the rows the predicate exists to judge. That is not hypothetical: this gate's
+    two legs disagreed for as long as the permissive one scanned the whole detail while
+    this one read the run, and the disagreement is what #187 was filed about.
     """
-    for token in trailer_tokens(detail):
-        value = keyed_value(token, REVISION_FIELD)
-        if value is None:
-            continue
-        sha = value.strip(").`")
-        if len(sha) >= _MIN_SHA and all(c in _HEX for c in sha):
-            return sha
-    return None
+    return declared_revision(detail, _MIN_SHA)
 
 
 def _resolves(sha: str, repo: Path) -> bool:

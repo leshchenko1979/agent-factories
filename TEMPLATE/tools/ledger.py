@@ -74,6 +74,7 @@ from ledger_declaration import (
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
     declared_keys,
+    declared_revision,
     declared_telemetry_provenance,
     declares_field,
     split_canonical_run,
@@ -535,6 +536,34 @@ def cmd_append(args: argparse.Namespace) -> int:
             if problems:
                 sys.exit("ledger append refused: "
                          + "; ".join(message for _subject, _leg, message in problems))
+            # AND THE ROW MUST DECLARE THE REVISION ITS RECEIPTS DESCRIBE (#187). The
+            # invariant is `close_row_revision`, enforced by
+            # `tests/test_close_row_revision.py` and — until this refusal existed — by
+            # NOTHING at the write path: four instances in one session were each repaired
+            # by a SECOND append (`n=1065`->`n=1079`, `n=1126`->`n=1135`,
+            # `n=1258`->`n=1262`, `n=1260`->`n=1263`), and the rate was not falling. This
+            # is #157's class one trailer over — a predicate that lived only in a paired
+            # test the writer never reads. The invariant is named ONCE, in
+            # INVARIANT_FOR_EVENT above, and read from there rather than re-invented.
+            #
+            # NO BOUNDARY READ HERE, for the reason the sequence refusal above states: a
+            # close appended now can never predate the boundary, so the rule reaches every
+            # row this path can write. History is the gate's business, and EXEMPTIONS
+            # govern the gate's reading of it.
+            #
+            # THE PREDICATE IS THE CANONICAL RUN, through the shared `declared_revision`
+            # and never a whole-detail scan. Three live rows carry `head=` in PROSE only
+            # (`n=1077`, `n=1083`, `n=1091`), so a permissive reading would let a writer
+            # satisfy this refusal by quoting any hex-shaped token — while the existence
+            # leg, which reads the run, never resolves that token at all.
+            if (INVARIANT_FOR_EVENT.get(args.event) == "close_row_revision"
+                    and declared_revision(args.detail) is None):
+                sys.exit(
+                    "ledger append refused: a close row must declare head=<sha> in its "
+                    "canonical trailer — the revision its receipts describe — and this "
+                    "detail declares none. The token is read from the trailing run, so a "
+                    "revision mentioned in prose does not satisfy it (#187)."
+                )
         detail = args.detail
         if args.event == "close":
             # ONE form, and it is the bare NEIGHBOUR import -- the same form the three

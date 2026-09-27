@@ -196,6 +196,45 @@ def declared_keys(detail: str) -> list[str]:
             keys.append(key)
     return keys
 
+# The close row's `head=<sha>` field — the revision its receipts describe. This is its
+# ONE canonical reader, shared by the gate that judges history and the write path that
+# refuses to create the defect, so the two cannot disagree about what a row DECLARES.
+#
+# It reads the CANONICAL RUN and never the whole detail, and that half is measured rather
+# than stylistic (#104, ruled at `n=620` PART 5; #187). The run IS the row's declaration,
+# so a token outside it is a QUOTATION: `n=565` quotes the foreign sha `4ae1ffdb…` in
+# prose while its own trailer declares `3878936a…`, so a whole-detail scan reads a
+# revision that row never measured. Three live rows split the two readings — `n=1077`
+# (#157), `n=1083` (#164) and `n=1091` (#158) each carry `head=` in PROSE only — which is
+# why a write-path refusal reading the whole detail could be satisfied by quoting any
+# hex-shaped token, and would accept a row whose revision no existence check ever reads.
+REVISION_KEY = "head"
+REVISION_MIN_CHARS = 7
+_HEX_DIGITS = frozenset("0123456789abcdef")
+
+def declared_revision(detail: str, min_chars: int = REVISION_MIN_CHARS) -> str | None:
+    """The `head=<sha>` value `detail`'s CANONICAL RUN declares, or None.
+
+    `None` means the run declares no readable revision — the state the write path refuses
+    and the gate reports. It never means "no revision anywhere in the text", which is why
+    a caller must not re-derive it with a whole-detail scan: that difference is the three
+    live rows named above, and it is the difference between a declaration and a quotation.
+
+    `min_chars` is a parameter because the gate and the write path assert the same SHAPE
+    at the same floor — 7, git's short-sha minimum — and a caller needing a different floor
+    would otherwise be tempted to write a second reader, which is the class this function
+    exists to close. The value is read VERBATIM after stripping the punctuation a sentence
+    wraps around it.
+    """
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, REVISION_KEY)
+        if value is None:
+            continue
+        sha = value.strip(").`")
+        if len(sha) >= min_chars and all(c in _HEX_DIGITS for c in sha):
+            return sha
+    return None
+
 # The close trailer's `rework` field — the disposition a close DECLARES. Its domain is
 # exactly two canonical values, ruled at ledger `n=386` clause 3 (reusing #53 clauses
 # 3/4): `rework=#N` names the rework entry THIS close produced, and `rework=none`
