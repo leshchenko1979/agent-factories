@@ -366,6 +366,7 @@ member owns and the census records, never a gate that fails a factory for a deci
 |---|---|
 | **this lane (Instruments methodology)** | this frame; review of every per-instrument law file (a **requirement**, not a courtesy) |
 | **each instrument's owner** | that instrument's own law file, authored under this frame's review |
+| **the Fleet instruments lane (topic 4555, session `37e71e03`)** | **instantiation** — turning a meta-factory part into a declared instrument: its declaration, its law file, its class, its version, under this frame. It owns the law file of each instrument it instantiates, so the row above applies to it unchanged for those files. |
 | **HQ** | **cross-factory authority** — any clause binding a member factory, and the process law *about* instruments |
 
 **The split is authorship versus authority, and they are not the same thing.** Authorship of a law
@@ -373,6 +374,19 @@ doc under this frame is delegable because `docs/instruments/` appears in **no ro
 writer table — no owner waiver is needed. Authority over a clause that binds a member factory is
 **not** delegable and stays at HQ. **A per-instrument file's scope header states both halves**, so
 the next reader cannot confuse the writer of a file with the authority behind a clause in it.
+
+**Address by ARTIFACT, never by name.** A review, correction or dispatch about an instrument goes to
+the lane that owns the artifact, and ownership is settled **from the artifact** — the authoring
+commit's `Session-Id` trailer — never from a lane name in a heading. Measured 2026-09-27: a §8 review
+headed "→ Fleet instruments" was delivered to the Pacemakers/Crons lane (`ee5cd2f5`) while the
+intended lane (`37e71e03`) received nothing, so the review was owed and unlanded for half an hour.
+The heading named a role; the trailer names the owner. The discriminator is live and cheap:
+`git log -1 --format='%(trailers:key=Session-Id)' -- docs/instruments/kit.md` returns `37e71e03`,
+and the same command on `pacemaker.md` returns `ee5cd2f5`.
+
+**The split, in one line:** this frame defines what an instrument **IS**; the Fleet instruments lane
+instantiates meta-factory parts **INTO** instruments; each instrument's own lane **OWNS** that
+instrument — its law file, its enforcement, and its member adoption.
 
 **Out of scope for an instrument owner, by role:** `tools/**` code ownership (Toolsmith),
 daemon and core source (Editor), and the surface an instrument runs on where that belongs to another
