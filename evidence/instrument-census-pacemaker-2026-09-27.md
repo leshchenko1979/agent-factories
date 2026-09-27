@@ -1,20 +1,27 @@
 # Instrument adoption census — one predicate over the declared population
 
-Read at **2026-09-27T20:58:47Z** by `tools/instrument_census.py`.
+Read at **2026-09-27T21:08:10Z** by `tools/instrument_census.py`.
 
 ## The predicate, stated before the figures
 
 **Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the
-law doc's §2 declares — **11 path(s)** — plus the reload link's own state.
+law doc's declared-set table declares — **11 path(s)** — plus the reload link's own state.
 **Scope:** the member fragments in `registry/factories/*.json`.
-**Instant:** 2026-09-27T20:58:47Z.
+**Instant:** 2026-09-27T21:08:10Z.
 
 **WHAT THIS DOES NOT MEASURE.** It is ONE predicate on file PRESENCE. A present file may
 differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —
 and a `seed`-class absence is a declaration, not a gap. Read a `held` figure as *held*,
 never as *current*.
 
-**Declared set, derived from `docs/instruments/pacemaker.md` §2** (the parse is
+**And `held` is a presence measurement over a WORKING TREE, so a path may be present AND
+untracked.** A member can therefore read held-complete over a commit that cannot run the
+instrument from a clone at all. So `held` is a reading of a live tree and is **never a
+fact about the member's repository** — those are two different figures wherever a declared
+path is untracked. The axis and its prohibition are template-instruments.md §7.5, not
+this tool's.
+
+**Declared set, derived from `docs/instruments/pacemaker.md`'s declared-set table** (the parse
 guarded: zero parsed paths refuses rather than censusing an empty set):
 
 1. `tools/patrol_host_state.py`
@@ -44,7 +51,8 @@ guarded: zero parsed paths refuses rather than censusing an empty set):
 
 A row is **ADOPTED** only when the declared set is COMPLETE *and* the member's own
 declaration says `adopted` with `green: true`. `HELD-UNDECLARED` is a member holding
-every path with no decision behind it (frame §1.3 — the files can arrive as another
+every path with no decision behind it (template-instruments.md §1.3 — the files can arrive
+as another
 instrument's closure), and `PARTIAL-UNDECLARED` is a member holding some of them. Both
 are reported as what they are: silence is a state here, never a pass.
 
@@ -60,6 +68,7 @@ instrument distinguishable from one that never did.
 the set by construction; counting it as an adoption site would report the source as its
 own adopter and inflate every wave by one.
 
-The **reload link** is the member's own act (frame §6.1) and is never installed from this
+The **reload link** is the member's own act (template-instruments.md §6.1) and is never
+installed from this
 repo. `absent` is a declared state, not a failure — a law doc with no reload link is
 perfectly readable, it is simply not re-injected after compaction.
