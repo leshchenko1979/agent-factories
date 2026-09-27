@@ -205,7 +205,7 @@ adopt, which is why §4's manifest grain carries the whole weight.
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This
-instrument's probes are named, not implied — all **17** are in `tests/test_review.py`, and each is
+instrument's probes are named, not implied — all **22** are in `tests/test_review.py`, and each is
 named for the behaviour it pins. The four this promotion added are the ones that make the new
 mechanisms non-vacuous:
 
@@ -216,14 +216,14 @@ mechanisms non-vacuous:
 | `test_a_lens_waiver_requires_a_named_reason` | a blank waiver is refused, so the census cannot read complete over an undecided lens |
 | `test_a_missing_closure_cannot_pass_verify` | the status says COMPLETED and the bytes are gone → verify FAILS; a status trusted alone reports a clean census over absent evidence |
 
-**The remaining thirteen pin the older surface**, and they are listed because a probe set stated as a
+**The remaining eighteen pin the older surface**, and they are listed because a probe set stated as a
 count is not a probe set stated by name: `test_review_lifecycle`, `test_schema_artifact_is_generated`,
 `test_cadence_boundary_is_anchored`, `test_cadence_reads_both_shipped_ledger_formats`,
 `test_legacy_state_is_refused_and_migrated_explicitly`, `test_close_sets_both_durations`,
 `test_verify_reports_unreceipted_lenses`, `test_intake_refuses_with_no_declarations`,
 `test_intake_is_read_only_over_member_data`, `test_intake_names_empty_and_incomplete`,
 `test_intake_refuses_a_declared_channel_that_is_absent`,
-`test_intake_receipts_validate_against_the_schema`, `test_shipped_executable_carries_no_donor_tokens`.
+`test_intake_receipts_validate_against_the_schema`, `test_shipped_executable_carries_no_donor_tokens`, and the five added since: `test_migration_maps_the_donor_terminal_synonym`, `test_migration_reports_values_it_cannot_map`, `test_a_migrated_record_renders_without_a_recorded_digest`, `test_the_donor_lens_key_rename_is_mapped_and_named`, `test_intake_dates_the_mandated_instant_form`.
 
 **Two of these are structural rather than behavioural, and they are the ones a member most needs:**
 
@@ -242,7 +242,7 @@ from the tree under test — holds here by construction: `REPO_ROOT` resolves fr
 cycle the probes use is built by the probe itself under a test-local id (`test-cycle-01`,
 `test-migrate-synonym`, `test-lens-key-rename`), and no probe reads a kit or donor tree. The dates and
 tokens those fixtures carry are the donor's **shape**, reproduced as input, never a value read back
-from the donor's state. Measured: the suite returns **21 passed** in a foreign copy materialized with
+from the donor's state. Measured: the suite returns **22 passed** in a foreign copy materialized with
 no `.git` and no history — so the verdict is a reading of the tree it runs in, which is the property
 the clause exists to secure. Clauses 2 and 3 are **N/A**: there is no hand-rolled probe driver and no
 hand-rolled runner — the gate is `pytest`, which honours its readers' declared skip vocabulary
