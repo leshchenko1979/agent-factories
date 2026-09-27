@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T12:10:55Z",
+  "resolved_at": "2026-09-27T12:26:54Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -621,7 +621,7 @@
           },
           {
             "id": "brain-metrics-baseline-measured",
-            "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument.\n\nLEG C IS EXPLAINED, NOT BROKEN — and the explanation was corrected on 2026-09-27, so the earlier wording is superseded rather than repeated. What is dormant is the AUTOMATIC THRESHOLD TRIGGER, not compaction itself. Measured: the gate's own log line (compaction.rs:418, \"triggering LLM compaction\") has fired 0 times since the 1M window, and the highest context any session reached was 56 percent on 2026-09-26 and 54 percent on 2026-09-27, against the 65-percent gate = 650000 tokens. So the ceiling is MEASURED, not assumed. But save_compaction_summary_to_memory runs on ANY compaction, and compaction still arrives by paths that do not need the threshold: the single 2026-09-26 note came from a MANUAL /compact (session dcd8f7a9, 22:08:40Z — \"Compact context now\", then 22:09:12Z \"Context was manually compacted\"), i.e. owner-initiated. The previous text said the summarizer line \"is never emitted\"; that is FALSE and this replaces it.\n\nTWO CORRECTIONS to a reading that circulated, both category errors worth naming: (a) the \"110423 / 1000000 input tokens\" line reports the SUMMARIZER'S PAYLOAD against its own input budget (context.rs:1086-1092 prints running_tokens / snapshot_max_tokens), which is NOT the gate's usage reading — that is compaction.rs:418's \"triggering LLM compaction\", and it has fired zero times; conjoining the two is what produced the claim that compaction fired below the threshold. (b) FullWindow is a CompactionScope (WHAT gets compacted), not a trigger KIND.\n\nCONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so a note exists only for a day in which compaction fired — and at a 1M window the threshold almost never fires. Measured 2026-09-27: notes exist for 09-19, 09-20, 09-21 and 09-26 only; 09-22 through 09-25 have none. memory_search's DEFAULT scope is exactly those notes, so default-scope recall is blind for every day that has none, while memory.db keeps indexing. The pipeline is STARVED, NOT STOPPED — and its remaining supply is HUMAN-INITIATED compaction, which is the operational point: an event trigger that no longer fires is not a trigger, so a note pipeline that must be reliable needs a CLOCK, not an event.\n\nFresh reading 2026-09-27T11:10:23Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 813 lines / 205148 bytes / about 58614 tokens = 29.31 percent of a 200k window — AGENTS.md alone is 756 lines / 200459 bytes = 97.71 percent of leg-A bytes and 92.99 percent of its lines — 256 lines over the owner's 500-line budget marker, which is PRINTED and never gated. LEG B, every skills/*/SKILL.md at depth 1: 869 lines / 95510 bytes / about 27289 tokens = 13.64 percent. TOGETHER 1682 lines / 300658 bytes / about 85903 tokens = 42.95 percent of a 200k window, which is 8.59 percent of the 1M window now configured. The two differ by exactly 5.0x, so always read the denominator beside the figure. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z), then 34.97 percent (2026-09-25T06:08:47Z), then 39.97 percent (2026-09-26T06:21:02Z), then this one. That is +2.98 points in one day and +13.19 points in four, and AGENTS.md is most of it. CAUTION: the trigger line \"Context at NN percent\" at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
+            "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument.\n\nLEG C IS EXPLAINED, NOT BROKEN — and the explanation was corrected on 2026-09-27, so the earlier wording is superseded rather than repeated. What is dormant is the AUTOMATIC THRESHOLD TRIGGER, not compaction itself. Measured: the gate's own log line (compaction.rs:418, \"triggering LLM compaction\") has fired 0 times since the 1M window, and nothing has crossed the 65-percent gate = 650000 tokens, which is what measures the ceiling. The only pressure-band reading (compaction.rs:911, band 55.0 to 65.0 half-open) is 56 percent on 2026-09-26 from session 2646d31a and 55 percent on 2026-09-27 from session 0117dd29 — one line per day, each a band ENTRY rather than a daily maximum, so it cannot establish the highest context any session reached; a session peaking below 55 percent emits nothing at all. But save_compaction_summary_to_memory runs on ANY compaction, and compaction still arrives by paths that do not need the threshold: the single 2026-09-26 note came from a MANUAL /compact (session dcd8f7a9, 22:08:40Z — \"Compact context now\", then 22:09:12Z \"Context was manually compacted\"), i.e. owner-initiated. The previous text said the summarizer line \"is never emitted\"; that is FALSE and this replaces it.\n\nTWO CORRECTIONS to a reading that circulated, both category errors worth naming: (a) the \"110423 / 1000000 input tokens\" line reports the SUMMARIZER'S PAYLOAD against its own input budget (context.rs:1086-1092 prints running_tokens / snapshot_max_tokens), which is NOT the gate's usage reading — that is compaction.rs:418's \"triggering LLM compaction\", and it has fired zero times; conjoining the two is what produced the claim that compaction fired below the threshold. (b) FullWindow is a CompactionScope (WHAT gets compacted), not a trigger KIND.\n\nCONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so a note exists only for a day in which compaction fired — and at a 1M window the threshold almost never fires. Measured 2026-09-27: notes exist for 09-19, 09-20, 09-21 and 09-26 only; 09-22 through 09-25 have none. memory_search's DEFAULT scope is exactly those notes, so default-scope recall is blind for every day that has none, while memory.db keeps indexing. Measured 2026-09-27: there were TWO manual /compact requests on 2026-09-26 (17:46:48Z and 22:08:29Z) for ONE saved summary, so even the human-initiated supply produced 1 of 2 — both event supplies are unreliable, the threshold one dead and the manual one lossy. The pipeline is STARVED, NOT STOPPED — and its remaining supply is HUMAN-INITIATED compaction, which is the operational point: an event trigger that no longer fires is not a trigger, so a note pipeline that must be reliable needs a CLOCK, not an event.\n\nFresh reading 2026-09-27T11:10:23Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 813 lines / 205148 bytes / about 58614 tokens = 29.31 percent of a 200k window — AGENTS.md alone is 756 lines / 200459 bytes = 97.71 percent of leg-A bytes and 92.99 percent of its lines — 256 lines over the owner's 500-line budget marker, which is PRINTED and never gated. LEG B, every skills/*/SKILL.md at depth 1: 869 lines / 95510 bytes / about 27289 tokens = 13.64 percent. TOGETHER 1682 lines / 300658 bytes / about 85903 tokens = 42.95 percent of a 200k window, which is 8.59 percent of the 1M window now configured. The two differ by exactly 5.0x, so always read the denominator beside the figure. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z), then 34.97 percent (2026-09-25T06:08:47Z), then 39.97 percent (2026-09-26T06:21:02Z), then this one. That is +2.98 points in one day and +13.19 points in four, and AGENTS.md is most of it. CAUTION: the trigger line \"Context at NN percent\" at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.",
             "severity": "info",
             "since": "2026-09-19T14:20:00Z",
             "affects": [
@@ -687,7 +687,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-27T12:03:35Z"
+        "attested_at": "2026-09-27T12:18:15Z"
       }
     },
     {
@@ -941,7 +941,7 @@
             ],
             "since": "2026-09-19",
             "review_by": "2026-12-19",
-            "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:171. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha."
+            "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs:206 returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:172. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha (verified rc=0 against deployed.sha d4f2802386a3b9c48a270d38c32c88a991f820fe)."
           }
         ],
         "lanes": [
@@ -964,7 +964,7 @@
             "announcements": []
           },
           {
-            "topic": "Editor lane: #17/#19 channel-ownership PRs",
+            "topic": "#19 channel-ownership PRs",
             "thread_id": 30090,
             "role": "editor",
             "announcements": []
@@ -994,7 +994,7 @@
             "announcements": []
           },
           {
-            "topic": "Flood Throttling",
+            "topic": "Telegram: Throttling",
             "thread_id": 30679,
             "role": null,
             "announcements": []
@@ -1018,7 +1018,7 @@
             "announcements": []
           },
           {
-            "topic": "Memory: Compaction & Context",
+            "topic": "Compaction visibility",
             "thread_id": 34653,
             "role": null,
             "announcements": []
@@ -1084,7 +1084,7 @@
             "announcements": []
           },
           {
-            "topic": "streaming-guard-105-xfer",
+            "topic": "Core: Goal Loop",
             "thread_id": 42311,
             "role": null,
             "announcements": []
@@ -1138,7 +1138,7 @@
             "announcements": []
           },
           {
-            "topic": "Core: Skills & Engine",
+            "topic": "Skills",
             "thread_id": 49643,
             "role": null,
             "announcements": []
@@ -1169,7 +1169,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-26T06:41:11Z"
+        "attested_at": "2026-09-27T12:20:27Z"
       }
     }
   ],
@@ -1335,11 +1335,11 @@
       "channel": "telegram",
       "chat_id": "-1004360461038",
       "thread_id": 1,
-      "updated_at": 1790508091,
+      "updated_at": 1790511682,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Понауехали [chat:-1004360461038:topic:1]",
-      "session_updated_at": 1790508249,
+      "session_updated_at": 1790511879,
       "_profile": "family",
       "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
     },
@@ -1482,7 +1482,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Deploy #235 Option Collision Guard",
-      "session_updated_at": 1790510828,
+      "session_updated_at": 1790511401,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1508,7 +1508,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683]",
-      "session_updated_at": 1790489371,
+      "session_updated_at": 1790511198,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1755,7 +1755,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790509778,
+      "session_updated_at": 1790511619,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1859,7 +1859,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862]",
-      "session_updated_at": 1790510794,
+      "session_updated_at": 1790511564,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1924,7 +1924,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Harvest retry-429 ladder [chat:-1003936827469:topic:40696]",
-      "session_updated_at": 1790486905,
+      "session_updated_at": 1790511504,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1937,7 +1937,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Harvest rich-host buttons [chat:-1003936827469:topic:40695]",
-      "session_updated_at": 1790510803,
+      "session_updated_at": 1790511704,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1950,7 +1950,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311]",
-      "session_updated_at": 1790510893,
+      "session_updated_at": 1790511938,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1976,7 +1976,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Triage: Issue Portfolio & Harvest Analysis",
-      "session_updated_at": 1790511052,
+      "session_updated_at": 1790511409,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2002,7 +2002,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / #92 demoted-host guard [chat:-1003936827469:topic:42940]",
-      "session_updated_at": 1790510866,
+      "session_updated_at": 1790511088,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2236,7 +2236,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790510948,
+      "session_updated_at": 1790511906,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2262,7 +2262,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1790510904,
+      "session_updated_at": 1790511816,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2288,7 +2288,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790510615,
+      "session_updated_at": 1790511627,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2301,7 +2301,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1790510460,
+      "session_updated_at": 1790511754,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2327,7 +2327,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1790508902,
+      "session_updated_at": 1790511383,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2353,7 +2353,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1790502629,
+      "session_updated_at": 1790512001,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2405,7 +2405,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / Worker — #25 CLIENT_KIND backfill + telemetry projection [chat:-1003996392908:topic:56]",
-      "session_updated_at": 1790510517,
+      "session_updated_at": 1790511963,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2470,7 +2470,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1790510524,
+      "session_updated_at": 1790511058,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2613,7 +2613,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1790508729,
+      "session_updated_at": 1790511983,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2626,7 +2626,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790510213,
+      "session_updated_at": 1790511969,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2895,11 +2895,11 @@
       "channel": "telegram",
       "chat_id": "133526395",
       "thread_id": null,
-      "updated_at": 1790511010,
+      "updated_at": 1790511394,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Agent Root Directory Creation Policy [chat:133526395]",
-      "session_updated_at": 1790511011,
+      "session_updated_at": 1790511416,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3148,8 +3148,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-09-27T12:25:00+00:00",
-      "last_run_at": "2026-09-27T06:25:07Z",
+      "next_run_at": "2026-09-27T18:25:00+00:00",
+      "last_run_at": "2026-09-27T12:25:34Z",
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "_profile": "ops"
     },
@@ -3373,8 +3373,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-09-27T12:23:00+00:00",
-      "last_run_at": "2026-09-27T06:23:07Z",
+      "next_run_at": "2026-09-27T18:23:00+00:00",
+      "last_run_at": "2026-09-27T12:23:34Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },

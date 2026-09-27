@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:171. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha."
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs:206 returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:172. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha (verified rc=0 against deployed.sha d4f2802386a3b9c48a270d38c32c88a991f820fe)."
     }
   ],
   "lanes": [
@@ -97,7 +97,7 @@
       "announcements": []
     },
     {
-      "topic": "Editor lane: #17/#19 channel-ownership PRs",
+      "topic": "#19 channel-ownership PRs",
       "thread_id": 30090,
       "role": "editor",
       "announcements": []
@@ -127,7 +127,7 @@
       "announcements": []
     },
     {
-      "topic": "Flood Throttling",
+      "topic": "Telegram: Throttling",
       "thread_id": 30679,
       "role": null,
       "announcements": []
@@ -151,7 +151,7 @@
       "announcements": []
     },
     {
-      "topic": "Memory: Compaction & Context",
+      "topic": "Compaction visibility",
       "thread_id": 34653,
       "role": null,
       "announcements": []
@@ -217,7 +217,7 @@
       "announcements": []
     },
     {
-      "topic": "streaming-guard-105-xfer",
+      "topic": "Core: Goal Loop",
       "thread_id": 42311,
       "role": null,
       "announcements": []
@@ -271,7 +271,7 @@
       "announcements": []
     },
     {
-      "topic": "Core: Skills & Engine",
+      "topic": "Skills",
       "thread_id": 49643,
       "role": null,
       "announcements": []
@@ -302,5 +302,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-26T06:41:11Z"
+  "attested_at": "2026-09-27T12:20:27Z"
 }
