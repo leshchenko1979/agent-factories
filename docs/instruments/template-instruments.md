@@ -591,6 +591,22 @@ not two readings; it is one reading of a moving object.
 only, excluding a member's declared forks? The count is a measurement; the classification is the
 member's reading. State both, or the number is unreproducible behind a judgement call.
 
+**The STANDARD must be committed; a live SUBJECT owes its axis.** Two different things read a tree,
+and only one of them is forbidden above. A predicate whose **standard** is a committed revision —
+"is this member byte-identical to the TEMPLATE half" — must read that revision, because a shared
+tree's working copy puts a peer's in-flight edit into the standard itself; that is the specimen
+above. A predicate whose **subject** is a live tree — "is this path present on this member's disk" —
+measures a legitimate object, and the census's `held` leg is exactly that: `os.path.isfile`
+(`tools/instrument_census.py`). What such a figure owes is its axis, stated in the artifact that
+carries it, plus one prohibition: it may never be quoted as a fact about the **repository**.
+
+Measured 2026-09-27 and the difference is material: `inferhub-watch` reads **held 11/11** while its
+own `HEAD` carries **6 of 11** — five paths (the patrol pair, `tools/registry.py`, both board gates)
+are untracked. So *held* and *runnable from a clone* are different readings, and a member can read
+held-complete over a commit that cannot run the instrument at all. A census figure that does not name
+this axis is the same defect as a count without its predicate: not wrong, but quoted as something it
+is not.
+
 ## 8. Ownership and scope
 
 | who | what |
