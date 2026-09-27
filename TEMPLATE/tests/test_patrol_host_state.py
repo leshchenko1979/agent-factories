@@ -101,8 +101,36 @@ def _rows(*pairs) -> list[dict]:
     ]
 
 
+_PROBE_KIT: tuple[Path, Path] | None = None
+
+
+def _probe_kit_pair() -> tuple[Path, Path]:
+    """A throwaway manifest+fleet pair that is CLEAN, built once and reused.
+
+    The kit-drift leg's population is LIVE state: the tree's own `registry/kit.json` and
+    the member repos `registry/fleet.json` names. `_run` injects every other dependency for
+    exactly one reason — a probe must never measure what the box happens to hold — and
+    these two were the last pair it left un-injected. The cost of the gap is not theoretical:
+    in a tree that carries no pin (the kit's own donor half, which by design ships only
+    `kit.example.json`) EVERY probe driven through `_run` reads red for a reason none of
+    them names, so thirteen probes about the board, the cron leg and the duty leg were
+    statements about the kit leg instead.
+
+    The leg's own probes pass a pair of their own, so this default never stands in for one.
+    """
+    global _PROBE_KIT
+    if _PROBE_KIT is None:
+        body = b"probe\n"
+        _PROBE_KIT = _synthetic_kit(
+            Path(tempfile.mkdtemp(prefix="probe-kit-")),
+            files={"tools/probe.py": body},
+            members={"probe-member": {"same": {"tools/probe.py": body}}},
+        )
+    return _PROBE_KIT
+
+
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
-         log_dir=None):
+         log_dir=None, kit_manifest=None, fleet_manifest=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -117,12 +145,19 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
     fresh EMPTY directory rather than the live `/tmp`, so no probe depends on what the
     box happens to have left lying around. The probes that exercise the leg pass a
     directory of their own.
+
+    The kit-drift leg's two manifests are injected for the fourth time and for the same
+    reason, which the probes here had been quietly living without (see `_probe_kit_pair`).
     """
     cron_rows = [] if cron_rows is None else cron_rows
     homes = ["probe-home"] if homes is None else homes
     unreached = [] if unreached is None else unreached
     prefixes = [] if prefixes is None else prefixes
     log_dir = _EMPTY_LOG_DIR if log_dir is None else log_dir
+    if kit_manifest is None or fleet_manifest is None:
+        default_manifest, default_fleet = _probe_kit_pair()
+        kit_manifest = default_manifest if kit_manifest is None else kit_manifest
+        fleet_manifest = default_fleet if fleet_manifest is None else fleet_manifest
     out, err = io.StringIO(), io.StringIO()
     rc = RUNNER.main(
         [],
@@ -132,6 +167,8 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         cron_rows_fn=lambda: (cron_rows, homes, unreached),
         prefixes_fn=lambda: prefixes,
         log_dir=log_dir,
+        kit_manifest=kit_manifest,
+        fleet_manifest=fleet_manifest,
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
@@ -1653,8 +1690,20 @@ def test_the_duty_leg_is_WIRED_into_the_runner_and_prints_its_population() -> No
     assert "LEG duty-receipt" in out, out
     assert "1 row(s) declare a receipt" in out, out
     assert "RESULTING STATE, never the receipt" in out, out
-    assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
-    assert rc == 1, "a missing duty receipt must fail the run"
+    # WHICH verdict reaches the report depends on whether THIS tree declares the bound the
+    # leg judges against (#78 clause b): a tree that has declared none is REFUSED rather
+    # than shown a clean run, which is the leg's own fail-closed law (#175) and not a
+    # weaker outcome. Both states must carry the verdict and both must fail the run — a leg
+    # silenced in either one is the failure this probe exists to catch — so the branch
+    # asserts each tree's own honest verdict rather than one tree's wording.
+    _, _, refusal = RUNNER.duty_receipt_bound(RUNNER.REPO)
+    if refusal:
+        assert "UNDECLARED" in out or "REFUSED" in out, (
+            f"a tree that declares no bound must be TOLD so in the report\n{out}"
+        )
+    else:
+        assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
+    assert rc == 1, "the leg's verdict must fail the run"
 
 
 # ------------------------------------------------------------------- kit-drift leg
