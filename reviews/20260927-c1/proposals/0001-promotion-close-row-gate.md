@@ -1,0 +1,1 @@
+ADD a gate over a promotion's close-row declarations in tests/ BECAUSE measured 2026-09-27T21:26Z: `grep -rln "promotion=|naming=|review=|vocabulary=" tests/ tools/ registry/` returns ZERO files, so frame §5.1 criteria 2/3/6 are close conditions with no mechanical carrier and an omitted declaration is invisible to every lane reading the audit as green.

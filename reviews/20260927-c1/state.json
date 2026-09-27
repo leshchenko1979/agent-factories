@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "cycle_id": "20260927-c1",
+  "status": "IN_PROGRESS",
+  "started_at": "2026-09-27T21:26:02Z",
+  "ended_at": null,
+  "duration_review_min": null,
+  "duration_cycle_min": null,
+  "cadence": {
+    "trigger": {
+      "kind": "version_bumps",
+      "every": 5,
+      "note": ""
+    },
+    "boundary": {
+      "ref": null,
+      "at": null,
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+ ACCEPTED",
+      "accepted_since": 0
+    },
+    "fires": false,
+    "evaluated_at": "2026-09-27T21:26:02Z"
+  },
+  "corpus": {
+    "hash": null,
+    "pack": null,
+    "pack_status": "absent"
+  },
+  "lenses": {
+    "A": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "B": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "G": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "J": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "P": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "C": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "E": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "F": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "D": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "H": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "M": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "T": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "I": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "S": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    }
+  },
+  "waivers": [],
+  "proposals": [
+    {
+      "id": "0001-promotion-close-row-gate",
+      "source": "dir",
+      "path": "/tmp/rr-self/reviews/20260927-c1/proposals/0001-promotion-close-row-gate.md",
+      "recorded_at": "2026-09-27T21:33:25Z",
+      "op": "ADD",
+      "target": "tests/",
+      "dated": false
+    },
+    {
+      "id": "0002-review-rotation-has-no-close-row",
+      "source": "dir",
+      "path": "/tmp/rr-self/reviews/20260927-c1/proposals/0002-review-rotation-has-no-close-row.md",
+      "recorded_at": "2026-09-27T21:33:25Z",
+      "op": "CHANGE",
+      "target": "evidence/ledger.jsonl",
+      "dated": false
+    },
+    {
+      "id": "0003-date-token-rejects-iso-instant",
+      "source": "dir",
+      "path": "/tmp/rr-self/reviews/20260927-c1/proposals/0003-date-token-rejects-iso-instant.md",
+      "recorded_at": "2026-09-27T21:33:25Z",
+      "op": "CHANGE",
+      "target": "tools/review.py:1525",
+      "dated": true
+    }
+  ],
+  "codification_plan": [],
+  "frozen_at": null,
+  "inputs_snapshot": null,
+  "step0_log": [
+    {
+      "at": "2026-09-27T21:31:36Z",
+      "status": "IN_PROGRESS",
+      "frozen": false,
+      "completed": 0,
+      "waived": 0,
+      "pending": 14,
+      "pending_lenses": [
+        "A",
+        "B",
+        "G",
+        "J",
+        "P",
+        "C",
+        "E",
+        "F",
+        "D",
+        "H",
+        "M",
+        "T",
+        "I",
+        "S"
+      ],
+      "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
+    }
+  ],
+  "updated_at": "2026-09-27T21:33:25Z"
+}

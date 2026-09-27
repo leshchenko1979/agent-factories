@@ -1,0 +1,1 @@
+CHANGE the ledger to carry this promotion's close row in evidence/ledger.jsonl BECAUSE measured 2026-09-27T21:26Z: 20+ commits landed on origin/main carrying Session-Id d6cfd3f7 and the ledger holds exactly ONE row naming that id (n=1389, event=run, a template-integrity fix) — no intake, no claim, no dispatch, no close row for the review-rotation promotion at all.
