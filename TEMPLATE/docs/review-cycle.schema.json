@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "review-cycle.schema.json",
+  "title": "Review Rotation - cycle state",
+  "description": "One review cycle's state, at reviews/<cycle-id>/state.json in the adopting tree. Emitted by `python3 tools/review.py schema`.",
+  "schema_version": 1,
+  "type": "object",
+  "required": [
+    "schema_version",
+    "cycle_id",
+    "status",
+    "started_at",
+    "ended_at",
+    "duration_review_min",
+    "duration_cycle_min",
+    "cadence",
+    "corpus",
+    "lenses",
+    "waivers",
+    "proposals",
+    "codification_plan",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "The schema's own version. A reader REFUSES an unknown value rather than guessing."
+    },
+    "cycle_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Minted ONCE at init and written to BOTH stores: state.json and the ledger row that opens the cycle."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "IN_PROGRESS",
+        "COMPLETED",
+        "ABANDONED"
+      ],
+      "description": "A CLOSED enum. Free text here is the measured defect: six distinct values against a two-value law."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "Null while IN_PROGRESS, and NEVER absent: absence and null are different claims. updated_at is not a substitute."
+    },
+    "duration_review_min": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Review start to last report persisted."
+    },
+    "duration_cycle_min": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Cycle start to cadence close stamp. A SECOND number; the two are never conflated."
+    },
+    "cadence": {
+      "type": "object",
+      "description": "The cadence boundary as an OBSERVABLE artifact, never prose. Computed by `review.py cadence`.",
+      "required": [
+        "trigger",
+        "boundary",
+        "fires",
+        "evaluated_at"
+      ],
+      "properties": {
+        "trigger": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "version_bumps",
+                "manual",
+                "interval"
+              ]
+            },
+            "every": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "note": {
+              "type": "string"
+            },
+            "counts": {
+              "type": "string",
+              "description": "The row kind counted as a version bump since the boundary. The count and the boundary are TWO predicates: the close stamp is itself anchored, so counting anchored rows would count it as a bump."
+            }
+          }
+        },
+        "boundary": {
+          "type": "object",
+          "required": [
+            "ref",
+            "at",
+            "pattern",
+            "accepted_since"
+          ],
+          "description": "The newest row matching the ANCHORED pattern \u2014 the cycle-close stamp \u2014 and how many BUMP rows landed after it. TWO predicates, never one: counting anchored rows would count the close stamp itself as a bump.",
+          "properties": {
+            "ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "accepted_since": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "fires": {
+          "type": "boolean"
+        },
+        "evaluated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "description": "The FROZEN inputs the cycle reviewed. A report is valid only for this hash.",
+      "required": [
+        "hash",
+        "pack",
+        "pack_status"
+      ],
+      "properties": {
+        "hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pack": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional mechanical corpus pack. NOT promoted: it is a project-dir trial called by absolute path."
+        },
+        "pack_status": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "failed"
+          ],
+          "description": "A missing or failing pack is REPORTED, never silently skipped: the record says which."
+        }
+      }
+    },
+    "lenses": {
+      "type": "object",
+      "description": "One entry per catalog lens, INCLUDING lenses that never ran. A sparse map is normalized on read, because coverage is complete-or-waived and an absent lens is PENDING, not absent.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMPLETED",
+              "WAIVED",
+              "HOLLOW",
+              "FAILED"
+            ]
+          },
+          "report_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "verified",
+              "UNRECEIPTED",
+              null
+            ],
+            "description": "A report with no index line is UNRECEIPTED, which is a distinct state from missing."
+          },
+          "fallback": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "inline",
+              null
+            ],
+            "description": "Set when the inline fallback ran after a second hollow report. The fallback MUST be flagged in the record."
+          },
+          "recorded_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "waivers": {
+      "type": "array",
+      "description": "The waiver LOG, one record per waived lens. A waiver with no reason is refused. This array is the SINGLE home; the donor's separate waivers.log is not carried.",
+      "items": {
+        "type": "object",
+        "required": [
+          "lens",
+          "reason",
+          "waived_at"
+        ],
+        "properties": {
+          "lens": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "waived_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "proposals": {
+      "type": "array",
+      "description": "Intake receipts: what the cycle took in and from which channel. The proposals/ DIRECTORY is the member-owned data surface; this array is the instrument's receipt index.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "recorded_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "dir",
+              "ledger",
+              "declared"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "codification_plan": {
+      "type": "array",
+      "description": "Accepted findings and the home each lands in. An accepted finding with no landed home is a cycle-completion FAILURE, never a scheduling choice.",
+      "items": {
+        "type": "object",
+        "required": [
+          "finding",
+          "disposition"
+        ],
+        "properties": {
+          "finding": {
+            "type": "string"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "landed",
+              "routed",
+              "rejected"
+            ]
+          },
+          "home": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Written by the engine on every save. Not a claim that the cycle is current."
+    }
+  }
+}
