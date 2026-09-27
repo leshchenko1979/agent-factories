@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T12:52:02Z",
+  "resolved_at": "2026-09-27T13:05:43Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -1138,7 +1138,7 @@
             "announcements": []
           },
           {
-            "topic": "Skills",
+            "topic": "Core: Skills",
             "thread_id": 49643,
             "role": null,
             "announcements": []
@@ -1169,7 +1169,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-27T12:42:48Z"
+        "attested_at": "2026-09-27T12:59:15Z"
       }
     }
   ],
@@ -1469,7 +1469,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Deploy #235 Option Collision Guard",
-      "session_updated_at": 1790513227,
+      "session_updated_at": 1790514082,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1495,7 +1495,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683]",
-      "session_updated_at": 1790511198,
+      "session_updated_at": 1790513959,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1729,7 +1729,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790512572,
+      "session_updated_at": 1790514204,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1820,7 +1820,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862]",
-      "session_updated_at": 1790511564,
+      "session_updated_at": 1790514335,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1859,7 +1859,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / #89 memory-search-parity [chat:-1003936827469:topic:40524]",
-      "session_updated_at": 1790487310,
+      "session_updated_at": 1790514165,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1911,7 +1911,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311]",
-      "session_updated_at": 1790511938,
+      "session_updated_at": 1790514329,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2015,7 +2015,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Governance: Ontology & RSI [chat:-1003936827469:topic:43993]",
-      "session_updated_at": 1790513384,
+      "session_updated_at": 1790514181,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2054,7 +2054,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1790496355,
+      "session_updated_at": 1790513792,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2249,7 +2249,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790512968,
+      "session_updated_at": 1790513955,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2288,7 +2288,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1790511383,
+      "session_updated_at": 1790514126,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2392,7 +2392,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1790510167,
+      "session_updated_at": 1790514037,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2431,7 +2431,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1790511058,
+      "session_updated_at": 1790513706,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2834,7 +2834,7 @@
       "last_origin": "callback",
       "turn_open_at": 1790509502,
       "session_title": "Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555]",
-      "session_updated_at": 1790510321,
+      "session_updated_at": 1790514326,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2860,7 +2860,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Harvesting upstream PRs into OpenCrabs",
-      "session_updated_at": 1790513398,
+      "session_updated_at": 1790514273,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2873,7 +2873,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
-      "session_updated_at": 1790513418,
+      "session_updated_at": 1790514059,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3437,6 +3437,21 @@
       "goal_template": null,
       "next_run_at": "2026-09-28T09:00:00+00:00",
       "last_run_at": "2026-09-27T09:00:48Z",
+      "trigger_cmd": null,
+      "_profile": "ops"
+    },
+    {
+      "id": "b269827f-0d37-42e6-8f53-068958a35c88",
+      "name": "oc-629-fallback-watch",
+      "cron_expr": "20 */6 * * *",
+      "timezone": "UTC",
+      "prompt": "Thin trigger — the pre-flight command already matched, so the release condition for #629 has fired. Do NOT re-derive the condition; act on it.\n\nWHY THIS EXISTS. #629's upstream filing was HELD by the owner (Open Questions register, set opencrabs-dev, q26): \"Hold until the next natural fallback is observed live.\" This job is the watch for that condition. It is silent (0 tokens) until the condition is met.\n\nRELEASE CONDITION. A log line matching `falling back to html dialect` — the warn! at src/channels/telegram/rich/api.rs:1039 — with a timestamp AFTER 2026-09-27T11:19:38Z (the swap that carried the fix, journal swap-74ad8fe2-1790507978-199023.jsonl).\n\nMATCHED LINES (the trigger's stdout, newest last):\n{output}\n\nWHAT TO DO, in one turn:\n1. Confirm the matched line is the FINAL-REPLY fallback, not a sibling. The discriminator is the literal itself. Do NOT count `deferred by active global 429 cooldown` — that phrase originates at api.rs:358 and :712 and fires from flow restick, plan-card create and rich-edit paths; it reads ~54/day and would falsely release the hold.\n2. Read the delivered message the fallback produced (its chat message id is in the surrounding log lines) and check the RENDERED form: the whole point of the fix is that blocks keep their own <p> and soft breaks become <br>, so a multi-paragraph reply must NOT collapse into one wall of text. That rendered read is the behavioural evidence the owner's condition is asking for.\n3. If the rendering is correct, post the release note on leshchenko1979/opencrabs#629 (gh issue comment 629 -R leshchenko1979/opencrabs -F <file>): the hold is satisfied, cite the log instant, the message id, the rendered evidence, and the fix's smoke verdict (smoke-verdicts.log, ledger n=12581). Then deliver #629 to the harvest lane for Phase 7 filing — resolve it dynamically with oc-ledger roster; the lane that filed on 2026-09-27 was 4b0990b7 (role harvest in the ledger actor field).\n4. If the rendering is WRONG (still collapsed), the fix did not work: say so plainly on #629, do NOT release the hold, and report it as a defect rather than a release.\n5. Retire this job (cron_manage disable) once the condition is resolved either way — it is a one-shot watch, and a spent watch left armed re-fires on every subsequent match.\n\nReport in this session's own topic.",
+      "deliver_to": "session:9fa7c71a-f009-418a-ac06-d0336efcf491",
+      "enabled": 1,
+      "set_goal": 0,
+      "goal_template": null,
+      "next_run_at": "2026-09-27T18:20:00+00:00",
+      "last_run_at": null,
       "trigger_cmd": null,
       "_profile": "ops"
     },

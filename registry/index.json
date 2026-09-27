@@ -1,13 +1,13 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T12:52:02Z",
+  "resolved_at": "2026-09-27T13:05:43Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 66,
     "announcements": 21,
-    "jobs": 61,
+    "jobs": 62,
     "unattributed_jobs": 4
   },
   "announcements": [
@@ -1390,7 +1390,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-27T12:42:48Z",
+      "attested_at": "2026-09-27T12:59:15Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -1776,7 +1776,7 @@
           "announcements": []
         },
         {
-          "topic": "Skills",
+          "topic": "Core: Skills",
           "thread_id": 49643,
           "role": null,
           "session_id": "4b4463d5-381c-4458-aa0c-3cf199882084",
@@ -2403,6 +2403,22 @@
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> chat"
+    },
+    {
+      "id": "b269827f-0d37-42e6-8f53-068958a35c88",
+      "name": "oc-629-fallback-watch",
+      "cron_expr": "20 */6 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-27T18:20:00+00:00",
+      "last_run_at": null,
+      "deliver_to": "session:9fa7c71a-f009-418a-ac06-d0336efcf491",
+      "trigger_cmd": null,
+      "profile": "ops",
+      "owner": "opencrabs-dev",
+      "owner_basis": "deliver_to -> lane"
     },
     {
       "id": "515a72f8-279c-43ee-b3da-ecdf99018004",
