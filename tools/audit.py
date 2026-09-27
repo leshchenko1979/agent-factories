@@ -2029,7 +2029,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
 
     # 63. Instrument-census gate (the review-rotation instrument): the census's DECLARED leg
     #     is the half a reader over-reads -- a complete file set with no decision behind it is
-    #     not an adoption (frame §1.3), and a declaration the registry REFUSES is not a
+    #     not an adoption (template-instruments.md §1.3), and a declaration the registry REFUSES is not a
     #     disposition either. The gate runs against the repo's own `tools/registry.py` rather
     #     than a restatement of the schema, so a refusal it prints is the registry's real one,
     #     and it carries a NON-VACUITY arm so its refusal arms fail for the reason they name

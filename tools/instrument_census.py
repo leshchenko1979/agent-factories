@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Publish the adoption census for ONE instrument — held, declared, and the pair's two legs.
 
-WHY A PUBLISHED ARTIFACT. An instrument is a unit of adoption (frame §1), and its law doc §2
+WHY A PUBLISHED ARTIFACT. An instrument is a unit of adoption (template-instruments.md §1), and its law doc
 DECLARES the file set a member must hold. A census that lives only in a turn's stdout cannot be
-re-read, diffed, or cited — and the promotion's own law file §9 says its readings are written
+re-read, diffed, or cited — and the promotion's own law file says its readings are written
 "when the wave returns them", each with its own instant.
 
 WHAT THIS IS, AND WHAT IT IS NOT. It is ONE predicate applied to a declared population:
@@ -23,11 +23,11 @@ THE TWO LEGS — the counting rule, and the defect this exists to avoid. A membe
      An ABSENT key is legal and reads as the member's silence; a PRESENT key the registry
      refuses reads `DECLARED-INVALID` and is listed with the registry's own errors.
 A copy alone is not adoption: a member can hold a complete set that arrived as another
-instrument's closure (frame §1.3) with no decision behind it, and it can be green on a partial
+instrument's closure (template-instruments.md §1.3) with no decision behind it, and it can be green on a partial
 set because a gate judges what the tree carries and a missing file is not a failing one. So the
 row carries both legs, and a member with one leg is reported as exactly that.
 
-THE PREDICATE'S SOURCE IS THE LAW DOC, deliberately. §2's table is the declaration; deriving the
+THE PREDICATE'S SOURCE IS THE LAW DOC, deliberately. That table is the declaration; deriving the
 path list from it keeps one source of truth instead of a second list here that drifts. The parse
 is guarded by a POSITIVE CONTROL — it refuses rather than censusing an empty set, because a zero
 over a failed parse is indistinguishable from a zero over an empty population.
@@ -35,7 +35,7 @@ over a failed parse is indistinguishable from a zero over an empty population.
 Run:  python3 tools/instrument_census.py <instrument> [--out PATH] [--stdout]
 Exit: 0 published; 1 the declared set could not be derived, or no member was reachable, so an
       empty artifact would read as a clean fleet. A REFUSAL ALSO WRITES an artifact naming the
-      refused input by path (frame §1.5): an exit code reaches a caller, and a reader meets
+      refused input by path (template-instruments.md §1.5): an exit code reaches a caller, and a reader meets
       artifacts, so a refusal that reaches no artifact is a coverage gap that looks like a
       shorter list.
 """
@@ -58,14 +58,15 @@ REPO = Path(__file__).resolve().parent.parent
 # gate no longer accepts is worse than one printing none. `_REGISTRY` caches that import.
 _REGISTRY = None
 
-# The member-side path of the reload link is `<skill dir>/<instrument>.md` (frame §6.1): the
+# The member-side path of the reload link is `<skill dir>/<instrument>.md`
+# (template-instruments.md §6.1): the
 # member's own act, in the member's own tree, and named for the instrument.
 
 
 def declared_paths(instrument: str) -> tuple[list[str], str]:
-    """The member-side paths the law doc §2 declares, and the law doc path it read.
+    """The member-side paths the law doc DECLARES, and the law doc path it read.
 
-    §2's table carries both halves per row — `tools/review.py` ↔ `TEMPLATE/tools/review.py` —
+    That table carries both halves per row — `tools/review.py` ↔ `TEMPLATE/tools/review.py` —
     and the MEMBER adopts the root half, so the left-hand path is the one measured.
     """
     law = REPO / "docs" / "instruments" / f"{instrument}.md"
@@ -94,7 +95,7 @@ def members() -> list[dict]:
 
 
 def reload_link_state(member: dict, instrument: str) -> tuple[str, str]:
-    """(state, path) for the member's reload link. NEVER installed from here (frame §6.1)."""
+    """(state, path) for the member's reload link. NEVER installed from here (template-instruments.md §6.1)."""
     skill = str(member.get("skill") or "")
     if not skill:
         return "no-skill-declared", ""
@@ -189,7 +190,7 @@ def census(instrument: str) -> dict:
             status = "SOURCE"
         elif declared == "absent":
             # BOTH LEGS, and the reason this column exists: held-with-no-declaration is the
-            # frame's §7.2 silence, and it must not read as adoption. An absent key is LEGAL
+            # template-instruments.md §7.2 silence, and it must not read as adoption. An absent key is LEGAL
             # (HQ's schema), so this is a reading of the member's own silence, not a refusal.
             status = "HELD-UNDECLARED" if complete else ("PARTIAL-UNDECLARED" if held else "ABSENT")
         elif declared_errors:
@@ -215,7 +216,7 @@ def census(instrument: str) -> dict:
 def render_refusal(instrument: str, law: str, instant: str, reason: str) -> str:
     """The artifact written when the declared set cannot be derived.
 
-    WHY A REFUSED RUN STILL WRITES. Frame §1.5: an aggregate must report the inputs it REFUSED,
+    WHY A REFUSED RUN STILL WRITES. template-instruments.md §1.5: an aggregate must report the inputs it REFUSED,
     by PATH, in the artifact a reader meets — otherwise a short list and a wrong list are
     indistinguishable, and a refusal nobody reads is a silent coverage gap. The exit code and the
     stderr line reach an interactive caller only; a reader who lists `evidence/` sees artifacts,
@@ -245,11 +246,13 @@ def render_refusal(instrument: str, law: str, instant: str, reason: str) -> str:
         "A refusal that reaches only the exit code and the stderr line is invisible to a reader",
         "who meets the published artifacts: two files in `evidence/` and three refusals would",
         "read identically to two adopted instruments and no gap at all. So the refused input is",
-        "named HERE, in the artifact a reader meets (frame §1.5).",
+        "named HERE, in the artifact a reader meets (template-instruments.md §1.5).",
         "",
         "This is a COORDINATE reading, not a defect verdict on the law file: the census derives",
-        "the declared set from the law doc's **§2** as numbered rows pairing the member path with",
-        "its template counterpart, and §2 may hold a different object for a good reason. The",
+        "the declared set from the law doc's declared-set table as numbered rows pairing the member",
+        "path with",
+        "its template counterpart, and that table may hold a different object for a good reason.",
+        "The",
         "coordinate fix belongs to that instrument's own lane; this file's job is to say so out",
         "loud rather than to return a shorter list.",
         "",
@@ -266,7 +269,7 @@ def render(c: dict) -> str:
         "## The predicate, stated before the figures",
         "",
         "**Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the",
-        f"law doc's §2 declares — **{n} path(s)** — plus the reload link's own state.",
+        f"law doc's declared-set table declares — **{n} path(s)** — plus the reload link's own state.",
         "**Scope:** the member fragments in `registry/factories/*.json`.",
         f"**Instant:** {c['instant']}.",
         "",
@@ -275,7 +278,7 @@ def render(c: dict) -> str:
         "and a `seed`-class absence is a declaration, not a gap. Read a `held` figure as *held*,",
         "never as *current*.",
         "",
-        f"**Declared set, derived from `{Path(c['law']).relative_to(REPO)}` §2** (the parse is",
+        f"**Declared set, derived from `{Path(c['law']).relative_to(REPO)}`'s declared-set table** (the parse",
         "guarded: zero parsed paths refuses rather than censusing an empty set):",
         "",
     ]
@@ -312,7 +315,8 @@ def render(c: dict) -> str:
         "",
         "A row is **ADOPTED** only when the declared set is COMPLETE *and* the member's own",
         "declaration says `adopted` with `green: true`. `HELD-UNDECLARED` is a member holding",
-        "every path with no decision behind it (frame §1.3 — the files can arrive as another",
+        "every path with no decision behind it (template-instruments.md §1.3 — the files can arrive as",
+        "another",
         "instrument's closure), and `PARTIAL-UNDECLARED` is a member holding some of them. Both",
         "are reported as what they are: silence is a state here, never a pass.",
         "",
@@ -328,7 +332,8 @@ def render(c: dict) -> str:
         "the set by construction; counting it as an adoption site would report the source as its",
         "own adopter and inflate every wave by one.",
         "",
-        "The **reload link** is the member's own act (frame §6.1) and is never installed from this",
+        "The **reload link** is the member's own act (template-instruments.md §6.1) and is never installed",
+        "from this",
         "repo. `absent` is a declared state, not a failure — a law doc with no reload link is",
         "perfectly readable, it is simply not re-injected after compaction.",
         "",
@@ -345,7 +350,8 @@ def main(argv: list[str] | None = None) -> int:
 
     c = census(args.instrument)
     if c["problem"]:
-        # The refusal is PUBLISHED, not only printed: frame §1.5 requires the refused inputs to
+        # The refusal is PUBLISHED, not only printed: template-instruments.md §1.5 requires the refused
+        # inputs to
         # reach the artifact a reader meets, so the exit code alone is not the deliverable.
         instant = c.get("instant") or dt.datetime.now(dt.timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ")
