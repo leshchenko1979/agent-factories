@@ -289,6 +289,27 @@ Two probe-design rules follow, and they are what this class keeps teaching:
 - **A fix lands with its rule, and a member's first use is the instrument's real test.** Both
   defects above were found by a member, not by us, on the first tree that used the seam we
   shipped — and neither reproduced in the tree that authored it.
+- **A probe that validates a SYNTHETIC tree must pin EVERY ambient seam it reads, and the pin
+  must be to an ABSENT path.** The third instance, same day, one probe deeper: the exemption
+  self-probes build a fixture whose row 2 is an *unauthorized* intake and every arm tests the
+  exemption surface against that premise — but the authorized set arrives from the module-level
+  `REPO` while the exemptions two lines later arrive from the tree under test. A factory that
+  lawfully declared `intake` for `worker` therefore authorized the fixture's row, it stopped
+  being governed, and three probes red on `matches no governed row`. The gate could not be green
+  in that tree **either way**: red with the declaration the seam exists to permit, red without it
+  on the rows that declaration makes lawful. `_DeclarationPin(None)` is not the fix — it POPS the
+  variable and the loader falls back to the real `REPO` file, which IS the leak. **An absent path
+  means NONE; popping means INHERIT.** The generalisation is the two-authority read, not the one
+  seam: wherever a checker takes one input from the tree under test and another from the ambient
+  tree, the ambient half must be pinned.
+- **The membership seam is the deliberate exception, and it is structural, not lucky.**
+  `ACTORS_FILE` binds at import, so no per-block pin could reach it — and it needs none, because
+  `known_actors()` is core UNION declared and the declaration is **additive-only**: membership can
+  grow but never shrink, so a fixture built from CORE actors is untouched by what a factory adds.
+  The additive floor is what buys that, and it is why the matrix is a constant floor rather than a
+  default. A pin, like a probe, must also be **proven load-bearing** — this fix ships a mutation
+  arm that grants the pair and asserts the stale-entry error appears, or the block would pass on
+  a pin that pins nothing.
 
 ---
 

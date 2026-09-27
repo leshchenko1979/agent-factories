@@ -592,94 +592,151 @@ def run_self_probes() -> bool:
                   f"got status={status!r} problems={problems}")
             probes_passed = False
 
-        # (iii) THE EXEMPTION SURFACE (#156). The governed class is the unauthorized-actor
-        #       violation, keyed by the row's own `n`. Every arm is driven from a
-        #       CONSTRUCTED fixture, never from prose that happens to be in this ledger —
-        #       this factory's own ledger carries no such row, so a probe reading it would
-        #       pass vacuously.
-        def member_tree(name: str, exempt: object) -> Path:
-            """A member-shaped tree: a 2-row ledger whose row 2 is an unauthorized intake."""
-            tree = Path(tmp) / name
-            (tree / "evidence").mkdir(parents=True)
-            (tree / "docs").mkdir()
-            rows = [
-                {"n": 1, "ts": "2026-09-24T10:00:00Z", "event": "intake", "actor": "triage",
-                 "subject": "#41", "detail": "clean row"},
-                {"n": 2, "ts": "2026-09-24T10:01:00Z", "event": "intake", "actor": "worker",
-                 "subject": "#42", "detail": "the member's unauthorized row"},
-            ]
-            (tree / "evidence" / "ledger.jsonl").write_text(
-                "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-            if exempt is not None:
-                (tree / "docs" / "ledger-schema-exemptions.json").write_text(
-                    json.dumps(exempt), encoding="utf-8")
-            return tree
+        # EVERY PROBE BELOW VALIDATES A SYNTHETIC TREE, so every one must pin the authorization
+        # seam. The pin is ONE wrap around the block, not five, because the leak is the block's
+        # shared premise rather than any single arm.
+        #
+        # `member_tree()` builds a 2-row fixture whose row 2 is an UNAUTHORIZED intake (`worker`
+        # filing `intake`). That unauthorized-ness is the fixture's premise, and every arm below
+        # tests the exemption surface AGAINST IT: a proven entry excuses it, a malformed one
+        # errors, a stale one is named, a proofless one refuses by name. But the authorization
+        # set does not come from the tree under test: `validate_ledger_file()` calls
+        # `load_authorizations(REPO)` on the MODULE-level `REPO`, while `load_exemptions()` two
+        # lines later reads the tree under test — so one function holds two authorities
+        # and they disagree by construction. A factory that LAWFULLY declared `intake` for
+        # `worker` — which is exactly what the seam ships to allow — therefore
+        # authorized the fixture's row: it stopped being governed, the exemption keyed to it
+        # matched nothing, and three probes red on `matches no governed row`.
+        #
+        # Measured 2026-09-27 on inferhub-watch, which declared both `ruling` and `intake` for
+        # `worker` (13 of its rows file their own issues) and got rc=1 WITH the declaration and
+        # rc=1 WITHOUT it: the gate could not be green in that tree either way. Same class as the
+        # probe-5 defect fixed an hour earlier, one probe deeper, and invisible here for the same
+        # reason — this factory's declaration grants `claim`/`close`/`run` and never
+        # `intake`, so the fixture's row stayed unauthorized in the tree that authored the gate.
+        #
+        # The pin is `_absent`, NOT `None`: `_DeclarationPin(None)` POPS the variable and
+        # `load_authorizations` then falls back to the real `REPO/docs/...json`, which IS the
+        # leak. An absent path is what means NONE. Corrected against the fix shape the reporting
+        # lane proposed; its parenthetical alternative was the right one.
+        #
+        # The MEMBERSHIP seam needs no pin and must not be given one, which is a structural fact
+        # rather than an omission: `ACTORS_FILE` is bound at IMPORT (line 35), so a per-block pin
+        # could not reach it. It does not need to. `known_actors()` is core UNION declared and
+        # `load_authorizations` is additive-only, so membership can grow but never shrink, and a
+        # fixture whose actors are all CORE (`triage`, `worker`) is unaffected by whatever a
+        # factory adds. Additive-only is what makes this safe; a declaration that could REMOVE a
+        # core actor would break it, which is why the floor is a constant and not a default.
 
-        # (b) A PROVEN entry excuses the violation, the run passes, and the excused line
-        #     is PRINTED — a clean verdict and an excused one must not be the same output.
-        proven = member_tree("exempt-proven", {"exempt": [{
-            "n": 2, "subject": "#42", "granted": "2026-09-26",
-            "reason": "row written before the actor matrix existed",
-            "proof": "the ruling that granted it: ledger n=1026"}]})
-        count, errs, exc = validate_ledger_file(proven / LEDGER_REL)
-        if errs or len(exc) != 1 or "n=2" not in exc[0]:
-            print(f"  FAIL self-probe 'a PROVEN entry excuses the governed row and prints it': "
-                  f"errors={errs} excused={exc}")
-            probes_passed = False
+        with _DeclarationPin(_absent):
+            # (iii) THE EXEMPTION SURFACE (#156). The governed class is the unauthorized-actor
+            #       violation, keyed by the row's own `n`. Every arm is driven from a
+            #       CONSTRUCTED fixture, never from prose that happens to be in this ledger —
+            #       this factory's own ledger carries no such row, so a probe reading it would
+            #       pass vacuously.
+            def member_tree(name: str, exempt: object) -> Path:
+                """A member-shaped tree: a 2-row ledger whose row 2 is an unauthorized intake."""
+                tree = Path(tmp) / name
+                (tree / "evidence").mkdir(parents=True)
+                (tree / "docs").mkdir()
+                rows = [
+                    {"n": 1, "ts": "2026-09-24T10:00:00Z", "event": "intake", "actor": "triage",
+                     "subject": "#41", "detail": "clean row"},
+                    {"n": 2, "ts": "2026-09-24T10:01:00Z", "event": "intake", "actor": "worker",
+                     "subject": "#42", "detail": "the member's unauthorized row"},
+                ]
+                (tree / "evidence" / "ledger.jsonl").write_text(
+                    "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+                if exempt is not None:
+                    (tree / "docs" / "ledger-schema-exemptions.json").write_text(
+                        json.dumps(exempt), encoding="utf-8")
+                return tree
 
-        # (c) A MALFORMED entry is a gate ERROR, never a silent pass.
-        for label, bad in (("no integer n", {"exempt": [{"subject": "#42"}]}),
-                           ("not an object", {"exempt": ["n=2"]})):
-            count, errs, exc = validate_ledger_file(
-                member_tree("exempt-bad-%s" % label.split()[0], bad) / LEDGER_REL)
-            if not errs:
-                print(f"  FAIL self-probe 'a malformed entry ({label}) is a gate ERROR': "
-                      f"got no errors")
+            # (b) A PROVEN entry excuses the violation, the run passes, and the excused line
+            #     is PRINTED — a clean verdict and an excused one must not be the same output.
+            proven = member_tree("exempt-proven", {"exempt": [{
+                "n": 2, "subject": "#42", "granted": "2026-09-26",
+                "reason": "row written before the actor matrix existed",
+                "proof": "the ruling that granted it: ledger n=1026"}]})
+            count, errs, exc = validate_ledger_file(proven / LEDGER_REL)
+            if errs or len(exc) != 1 or "n=2" not in exc[0]:
+                print(f"  FAIL self-probe 'a PROVEN entry excuses the governed row and prints it': "
+                      f"errors={errs} excused={exc}")
                 probes_passed = False
 
-        # (d) An entry matching NO governed row is a gate ERROR — a stale exemption
-        #     inflates the visible debt while admitting no defect.
-        stale = member_tree("exempt-stale", {"exempt": [{
-            "n": 99, "subject": "#99", "granted": "2026-09-26", "reason": "gone",
-            "proof": "ledger n=1026"}]})
-        count, errs, exc = validate_ledger_file(stale / LEDGER_REL)
-        if not any("matches no governed row" in e for e in errs):
-            print(f"  FAIL self-probe 'an entry matching no governed row is a gate ERROR': "
-                  f"errors={errs}")
-            probes_passed = False
+            # (c) A MALFORMED entry is a gate ERROR, never a silent pass.
+            for label, bad in (("no integer n", {"exempt": [{"subject": "#42"}]}),
+                               ("not an object", {"exempt": ["n=2"]})):
+                count, errs, exc = validate_ledger_file(
+                    member_tree("exempt-bad-%s" % label.split()[0], bad) / LEDGER_REL)
+                if not errs:
+                    print(f"  FAIL self-probe 'a malformed entry ({label}) is a gate ERROR': "
+                          f"got no errors")
+                    probes_passed = False
 
-        # (e) A BLANK proof is refused BY NAME and excuses nothing — the violation stands.
-        #     Both directions are probed: a proofless entry must not pass, and the refusal
-        #     must name the entry that failed to excuse it.
-        proofless = member_tree("exempt-proofless", {"exempt": [{
-            "n": 2, "subject": "#42", "granted": "2026-09-26",
-            "reason": "no receipt", "proof": ""}]})
-        count, errs, exc = validate_ledger_file(proofless / LEDGER_REL)
-        if exc or not any("not admittable" in e for e in errs):
-            print(f"  FAIL self-probe 'a proofless entry excuses nothing and is named': "
-                  f"errors={errs} excused={exc}")
-            probes_passed = False
-        if not any("unauthorized actor" in e for e in errs):
-            print(f"  FAIL self-probe 'and the violation itself still stands': errors={errs}")
-            probes_passed = False
+            # (d) An entry matching NO governed row is a gate ERROR — a stale exemption
+            #     inflates the visible debt while admitting no defect.
+            stale = member_tree("exempt-stale", {"exempt": [{
+                "n": 99, "subject": "#99", "granted": "2026-09-26", "reason": "gone",
+                "proof": "ledger n=1026"}]})
+            count, errs, exc = validate_ledger_file(stale / LEDGER_REL)
+            if not any("matches no governed row" in e for e in errs):
+                print(f"  FAIL self-probe 'an entry matching no governed row is a gate ERROR': "
+                      f"errors={errs}")
+                probes_passed = False
 
-        # (f) The exemption governs ONE class only. A malformed row that is ALSO
-        #     unauthorized must not have its schema error excused by an entry keyed to it.
-        mixed = member_tree("exempt-mixed", {"exempt": [{
-            "n": 2, "subject": "#42", "granted": "2026-09-26", "reason": "actor",
-            "proof": "ledger n=1026"}]})
-        (mixed / "evidence" / "ledger.jsonl").write_text(
-            json.dumps({"n": 1, "ts": "2026-09-24T10:00:00Z", "event": "intake",
-                        "actor": "triage", "subject": "#41", "detail": "d"}) + "\n"
-            + json.dumps({"n": 2, "ts": "2026-09-24T10:01:00Z", "event": "intake",
-                          "actor": "worker", "subject": "", "detail": "d"}) + "\n",
-            encoding="utf-8")
-        count, errs, exc = validate_ledger_file(mixed / LEDGER_REL)
-        if not any("subject" in e for e in errs):
-            print(f"  FAIL self-probe 'the exemption does not excuse a schema error on the "
-                  f"same row': errors={errs}")
-            probes_passed = False
+            # (e) A BLANK proof is refused BY NAME and excuses nothing — the violation stands.
+            #     Both directions are probed: a proofless entry must not pass, and the refusal
+            #     must name the entry that failed to excuse it.
+            proofless = member_tree("exempt-proofless", {"exempt": [{
+                "n": 2, "subject": "#42", "granted": "2026-09-26",
+                "reason": "no receipt", "proof": ""}]})
+            count, errs, exc = validate_ledger_file(proofless / LEDGER_REL)
+            if exc or not any("not admittable" in e for e in errs):
+                print(f"  FAIL self-probe 'a proofless entry excuses nothing and is named': "
+                      f"errors={errs} excused={exc}")
+                probes_passed = False
+            if not any("unauthorized actor" in e for e in errs):
+                print(f"  FAIL self-probe 'and the violation itself still stands': errors={errs}")
+                probes_passed = False
 
+            # (f) The exemption governs ONE class only. A malformed row that is ALSO
+            #     unauthorized must not have its schema error excused by an entry keyed to it.
+            mixed = member_tree("exempt-mixed", {"exempt": [{
+                "n": 2, "subject": "#42", "granted": "2026-09-26", "reason": "actor",
+                "proof": "ledger n=1026"}]})
+            (mixed / "evidence" / "ledger.jsonl").write_text(
+                json.dumps({"n": 1, "ts": "2026-09-24T10:00:00Z", "event": "intake",
+                            "actor": "triage", "subject": "#41", "detail": "d"}) + "\n"
+                + json.dumps({"n": 2, "ts": "2026-09-24T10:01:00Z", "event": "intake",
+                              "actor": "worker", "subject": "", "detail": "d"}) + "\n",
+                encoding="utf-8")
+            count, errs, exc = validate_ledger_file(mixed / LEDGER_REL)
+            if not any("subject" in e for e in errs):
+                print(f"  FAIL self-probe 'the exemption does not excuse a schema error on the "
+                      f"same row': errors={errs}")
+                probes_passed = False
+
+        # THE PIN IS LOAD-BEARING, and this arm proves it rather than assuming it. Under a
+        # declaration granting the fixture's own pair, the synthetic row stops being governed,
+        # the exemption keyed to it matches nothing, and the stale-entry error surfaces on
+        # demand. Without this arm the block would pass on a pin that pinned nothing — the
+        # vacuous-green failure mode a fix inherits from the defect it repairs. Probe (b) above
+        # is the converse arm under the pin; this is the mutation.
+        with tempfile.TemporaryDirectory() as _td:
+            _grant = Path(_td) / "authorizations.json"
+            _grant.write_text(json.dumps({"actors": [], "by_event": {"intake": ["worker"]}}),
+                                   encoding="utf-8")
+            with _DeclarationPin(_grant):
+                _c, _e, _x = validate_ledger_file(
+                    member_tree("exempt-under-grant", {"exempt": [{
+                        "n": 2, "subject": "#42", "granted": "2026-09-26",
+                        "reason": "excused under a lawful grant",
+                        "proof": "ledger n=1026"}]}) / LEDGER_REL)
+            if not any("matches no governed row" in e for e in _e):
+                print("  FAIL self-probe 'the authorization pin is load-bearing': errors=%s"
+                        % (_e,))
+                probes_passed = False
     return probes_passed
 
 
