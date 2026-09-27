@@ -69,6 +69,28 @@ saying it has NO WINDOW BASIS"* — so the ledger runs green and reports no wind
 indistinguishably from a genuine one. **The silent tier is 3.7× the loud one**, which is why the
 class (§3) is a predicate over files and not a directory convention.
 
+### 1.3 An instrument's executable may be SHARED — and then the closure widens
+
+**An instrument does not own its executable exclusively, and the frame must never require an
+instrument to be splittable.** Python gives one file: a runner that feeds several duties' predicates
+cannot be divided into "just this instrument's part", so a member may not take a fragment of it.
+
+**The consequence is a rule, not a caveat: when the executable is shared, the closure is declared
+over the WHOLE executable, and the declaration states the boundary.** Declaring only the
+instrument's own legs produces a closure that is complete on paper and crashes in the tree.
+
+Measured on the first instrument to hit this (`pacemaker`, 2026-09-27): its executable
+`tools/patrol_host_state.py` is a multi-leg runner carrying the cron-thinness, notify-receipt and
+duty-receipt legs among eight, so its closure of six modules is **wider than its own legs**. Its
+owner declared the boundary as it is rather than tidily — the behaviour this section exists to make
+legal, because the alternative is the tidy lie.
+
+**A shared executable is a declared fact, never a defect.** What the declaration owes is that a
+reader can see the boundary: which legs this instrument owns, and which other duties share the file.
+A second instrument built on the same runner declares the same executable and its own legs, and the
+two closures overlap by construction — which is correct, and is why the closure is declared rather
+than derived (§1.1).
+
 ## 2. The full set — nine parts
 
 An instrument is **complete** when all nine are present in the adopting tree. The owner named three
@@ -320,4 +342,39 @@ the next reader cannot confuse the writer of a file with the authority behind a 
 **Out of scope for an instrument owner, by role:** `tools/**` code ownership (Toolsmith),
 daemon and core source (Editor), and the surface an instrument runs on where that belongs to another
 factory. An instrument owner supplies text to the lane that owns a file; they do not land it there.
+
+## 9. Member obligations — stated here, authored by HQ
+
+**Authored by HQ; authority is the ruling row named against each clause.** A member factory can read this file. A member cannot follow a citation into the meta-factory's ledger, so an obligation that binds a member is stated IN FULL here and the ruling row is its authority record, never its delivery route. This is §8's split applied to the clause class §8 had not yet covered: cross-instrument DEFINITIONS are the frame's and are cited; cross-factory OBLIGATIONS are HQ's and are shipped.
+
+**A kit-side change is not a member obligation.** Clauses ruled about a shipped tool — the hygiene declaration surface, the template-law port, the lane-derivation fix — are things the kit does; a member receives them by porting. They are not listed here, and padding this section with them would make a member responsible for work that is ours.
+
+### O1 — Migration duty
+A member factory holding a divergent copy of a kit instrument file must **dispose** of it one of three ways, and silence is not a disposition:
+
+- **migrate** to the promoted shape;
+- **declare the fork**, with the reason, in its own declaration surface;
+- **defer**, with a stated re-entry condition.
+
+*Authority:* ruling n=1292 (C1). The declaration surface is registry/kit-decisions.json, which already carries the 2026-09-26 wave; a fork declared there is not drift, an undeclared one is.
+
+### O2 — Promotion duty
+When an instrument is promoted into the template, its canonical location is **inside this repo**; the existing pieces of the future bundle move to the template; and **the donor factory then migrates to the shape of the promoted instrument**. The third leg is the one that has no automatic owner and is therefore stated here rather than assumed.
+
+*Authority:* ruling n=1283, recording the owner's law verbatim — it existed in no durable surface before that row.
+
+### O3 — Pin duty
+Every member factory vendors registry/kit.json as its **own pin** and its own gate goes red on undeclared divergence from **that pin** — never from the meta-factory's live manifest. A member's verdict must depend on its own tree and never on ours; a gate that reads our working tree makes a member's audit a function of our backlog and our queue.
+
+*Authority:* ruling n=1292 (C4). The mechanism ships (tools/kit_pin.py, tests/test_kit_pin.py, registry/kit-exemptions.json as factory data), so this is an obligation on members rather than new machinery. An absent pin SKIPs behind a named vacuity guard; it never passes silently.
+
+### O4 — Declaration duty
+A member factory declares what its ledger accepts: tools/actors.txt, the authorized-event matrix, and its ref kinds — or states why it has none. **A factory that declares nothing cannot be governed**, and a silent absence is indistinguishable from a permitted one.
+
+*Authority:* ruling n=1292 (C5). Measured 2026-09-27: the matrix file is absent in four of the five member trees, present only in inferhub-watch; among the four ledger-holders, three accept an unauthorized row today.
+
+### O5 — Subject-namespace duty
+A ledger's bare hash-N namespace is **one board's**. Keeping it unique is the factory's obligation and the kit cannot check it: the sequence predicate keys on the exact subject string, so two boards sharing a numbering make one bare hash-N name two work units, and the collision does not red — a close on the second board's unit is accepted on the first board's intake and claim, which is a defeated guard reported as clean. A factory carrying more than one board picks ONE disposition and states it: scope lifecycle rows to the board the ledger records and name a second board's units with a distinct descriptive stem, or keep a second ledger via OC_LEDGER_PATH. A qualified reference is no discriminator, and a board lookup cannot close it — a row records a NUMBER, not which board it meant.
+
+*Authority:* ruling n=971, and the clause is already law in full at skills/meta-factory/SKILL.md:740. It is restated here because a member cannot read that file; the meta-factory's own copy stays the canonical text and this section cites it.
 
