@@ -233,13 +233,28 @@ LENS_METADATA: dict[str, dict[str, str]] = {
 
 SCHEMA_VERSION = 1
 
-# Terminal ENUM.  `COMPLETED` is the donor's own token and is kept verbatim.
+# Terminal ENUM.  `COMPLETED` is the donor's DOMINANT terminal token, not its
+# only one, and the distinction is measured rather than assumed: over the
+# donor's own cycle state files (predicate: each dir's state.json; scope: the
+# donor state root, 17 files; instant 2026-09-27) cycle `status` carries SIX
+# distinct values — COMPLETED 9, IN_PROGRESS 4, reports_persisted 1,
+# intake_complete 1, VALIDATED 1, COMPLETE 1 — and lens entries carry FOUR:
+# COMPLETED 66, COMPLETE 11, PENDING 7, PERSISTED 4.  So the enum keeps the
+# dominant token and `migrate` MAPS the plain synonym `COMPLETE`; anything
+# outside both is REPORTED as UNMAPPED rather than carried in as if valid.
 # `ABANDONED` is ADDED, and the reason is measured rather than speculative:
 # four donor cycles sit at IN_PROGRESS (20260915-c18, 20260916-c20,
 # 20260919-c21 and the live 20260927-c25), three of them days old and dead in
 # fact — an abandoned cycle is otherwise indistinguishable from a live one,
 # the same defect the donor fixed for `ended_at`.
 LIFECYCLE_STATES = ["IN_PROGRESS", "COMPLETED", "ABANDONED"]
+LENS_STATES = ["PENDING", "COMPLETED", "WAIVED"]
+
+# The donor's terminal SYNONYM, and only the synonym.  `PERSISTED` is
+# deliberately NOT mapped: it says a report was written, not that a lens
+# reached a verdict, and collapsing it to COMPLETED would over-claim evidence
+# the donor did not assert.  An unmapped value is named by the caller.
+TERMINAL_SYNONYMS = {"COMPLETE": "COMPLETED"}
 
 # The cadence boundary is the NEWEST row whose text ANCHORS on this pattern —
 # the last cycle-close stamp.  ANCHORED, never a substring: a loose search
@@ -569,6 +584,14 @@ def normalize_state(state: dict[str, Any], cycle_id: str) -> dict[str, Any]:
             continue
         out[key] = value
 
+    # status: the donor's terminal SYNONYM is mapped, so a cycle it closed as
+    # `COMPLETE` reads as closed here instead of as an unknown state.  Only the
+    # named synonym is mapped; anything else is carried in as-is and REPORTED by
+    # `migrate` as unmapped, because inventing a mapping for a value whose
+    # meaning was never measured is how a schema stops describing its data.
+    if out.get("status") in TERMINAL_SYNONYMS:
+        out["status"] = TERMINAL_SYNONYMS[out["status"]]
+
     # lenses: normalize each entry, and materialize every catalog lens.
     raw_lenses = state.get("lenses") or {}
     if isinstance(raw_lenses, dict):
@@ -579,6 +602,8 @@ def normalize_state(state: dict[str, Any], cycle_id: str) -> dict[str, Any]:
                 entry.update({k: v for k, v in incoming.items() if k in entry})
                 if entry.get("status") is None:
                     entry["status"] = "PENDING"
+                elif entry["status"] in TERMINAL_SYNONYMS:
+                    entry["status"] = TERMINAL_SYNONYMS[entry["status"]]
             out["lenses"][lens] = entry
 
     # waivers: a DICT (engine shape) becomes a LOG (v1 shape).
@@ -1128,7 +1153,13 @@ def cmd_status(cycle_id: str) -> int:
         status = info.get("status", "PENDING")
         if status == "COMPLETED":
             completed += 1
-            print(f"  [{status}] Lens {lens} -> {info.get('report_path')} ({info.get('sha256', '')[:8]})")
+            # A MIGRATED record carries the report PATH and no digest: the donor
+            # never recorded one, and a migration that invented a digest would be
+            # asserting a verification nobody performed.  Rendered as `unrecorded`
+            # rather than crashed on, so a donor cycle reads end-to-end.
+            digest = info.get("sha256")
+            shown = digest[:8] if isinstance(digest, str) and digest else "unrecorded"
+            print(f"  [{status}] Lens {lens} -> {info.get('report_path')} ({shown})")
         elif status == "WAIVED":
             waived += 1
             print(f"  [{status}] Lens {lens} -> {info.get('reason')}")
@@ -1402,6 +1433,26 @@ def cmd_migrate(cycle_id: str, dry_run: bool) -> int:
         print(f"  {key:24} {'kept' if key in migrated else 'DROPPED'}")
     if dropped:
         print(f"  dropped: {', '.join(dropped)}")
+
+    # TERMINAL VOCABULARY, reported rather than silently absorbed.  The donor's
+    # `status` carries six distinct values and its lens entries four, so a
+    # migration that maps the known synonym and says nothing about the rest
+    # leaves a reader unable to tell "mapped" from "carried in unvalidated".
+    raw_status = raw.get("status")
+    if raw_status is not None and raw_status != migrated.get("status"):
+        print(f"  status mapped: {raw_status!r} -> {migrated['status']!r}")
+    unmapped: list[str] = []
+    if migrated.get("status") not in LIFECYCLE_STATES:
+        unmapped.append(f"status={migrated.get('status')!r}")
+    seen_lens_values: dict[str, str] = {}
+    for lens, entry in ((raw.get("lenses") or {}) if isinstance(raw.get("lenses"), dict) else {}).items():
+        if isinstance(entry, dict) and entry.get("status") is not None:
+            seen_lens_values[str(entry["status"])] = lens
+    for value in sorted(seen_lens_values):
+        if value not in LENS_STATES and value not in TERMINAL_SYNONYMS:
+            unmapped.append(f"lens status={value!r} (e.g. lens {seen_lens_values[value]})")
+    if unmapped:
+        print(f"  UNMAPPED (carried in, not valid here): {'; '.join(unmapped)}")
     if dry_run:
         print("dry run: nothing written")
         return 0

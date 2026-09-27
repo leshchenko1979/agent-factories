@@ -620,6 +620,124 @@ def test_a_missing_closure_cannot_pass_verify() -> None:
         if cycle_dir.exists():
             shutil.rmtree(cycle_dir)
 
+def test_migration_maps_the_donor_terminal_synonym(tmp_path: Path) -> None:
+    """The donor's `COMPLETE` migrates to `COMPLETED`, so a closed cycle READS as closed.
+
+    Measured on the donor's own tree: its cycle `status` carries SIX distinct
+    values (COMPLETED 9, IN_PROGRESS 4, reports_persisted 1, intake_complete 1,
+    VALIDATED 1, COMPLETE 1) and its lens entries FOUR (COMPLETED 66, COMPLETE 11,
+    PENDING 7, PERSISTED 4). A migration that carries the synonym through
+    unmapped leaves a CLOSED cycle reading as an unknown state, and a census that
+    then reports 0 completed over a record that says otherwise.
+    """
+    cycle_id = "test-migrate-synonym"
+    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    if cycle_dir.exists():
+        shutil.rmtree(cycle_dir)
+    cycle_dir.mkdir(parents=True)
+    (cycle_dir / "state.json").write_text(json.dumps({
+        "cycle_id": cycle_id,
+        "status": "COMPLETE",
+        "started_at": "2026-09-25T17:24:14Z",
+        "ended_at": "2026-09-25T19:00:00Z",
+        "lenses": {"A": {"status": "COMPLETE", "verdict": "FINDINGS"},
+                   "B": {"status": "COMPLETE", "verdict": "FINDINGS"}},
+    }), encoding="utf-8")
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["migrate", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "status mapped: 'COMPLETE' -> 'COMPLETED'" in res.stdout, res.stdout
+
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["status"] == "COMPLETED", state["status"]
+        assert state["lenses"]["A"]["status"] == "COMPLETED", state["lenses"]["A"]
+
+        res = subprocess.run(cmd_base + ["step0", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "2 completed" in res.stdout, res.stdout
+        assert "frozen=yes" in res.stdout, res.stdout
+
+        # The pre-image is the donor's own bytes, so nothing was rewritten in place.
+        pre = json.loads((cycle_dir / "state.json.pre-v1.bak").read_text(encoding="utf-8"))
+        assert pre["status"] == "COMPLETE", "the pre-image is not the donor's own state"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_migration_reports_values_it_cannot_map(tmp_path: Path) -> None:
+    """A terminal value with no measured mapping is REPORTED, never silently absorbed.
+
+    The donor carries `reports_persisted` and a lens `PERSISTED`. Mapping them to
+    COMPLETED would over-claim: PERSISTED says a report was WRITTEN, not that the
+    lens reached a verdict. So they are carried in and NAMED as unmapped, which is
+    the difference between a migration and a rewrite of someone's record.
+    """
+    cycle_id = "test-migrate-unmapped"
+    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    if cycle_dir.exists():
+        shutil.rmtree(cycle_dir)
+    cycle_dir.mkdir(parents=True)
+    (cycle_dir / "state.json").write_text(json.dumps({
+        "cycle_id": cycle_id,
+        "status": "reports_persisted",
+        "lenses": {"J": {"status": "PERSISTED"}},
+    }), encoding="utf-8")
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["migrate", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "UNMAPPED" in res.stdout, res.stdout
+        assert "reports_persisted" in res.stdout, res.stdout
+        assert "PERSISTED" in res.stdout, res.stdout
+
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["status"] == "reports_persisted", "an unmapped value must be carried, not invented"
+        assert state["lenses"]["J"]["status"] == "PERSISTED"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_a_migrated_record_renders_without_a_recorded_digest(tmp_path: Path) -> None:
+    """A donor cycle carries report PATHS and NO digest, and `status` must render it.
+
+    Measured on the donor's own c24 record: every lens entry carries `report_path`
+    with `sha256` absent, because the donor never recorded one. `status` indexed
+    the missing value directly and raised `TypeError: 'NoneType' object is not
+    subscriptable`, so a migrated cycle crashed on the FIRST read — on the replay
+    leg that exists precisely to read donor data. The render now names the absence
+    (`unrecorded`) rather than crashing on it or inventing a digest, because a
+    digest nobody computed is a verification claim nobody made.
+    """
+    cycle_id = "test-migrate-no-digest"
+    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    if cycle_dir.exists():
+        shutil.rmtree(cycle_dir)
+    cycle_dir.mkdir(parents=True)
+    (cycle_dir / "state.json").write_text(json.dumps({
+        "cycle_id": cycle_id,
+        "status": "COMPLETED",
+        "started_at": "2026-09-25T17:24:14Z",
+        "ended_at": "2026-09-25T19:00:00Z",
+        "lenses": {"A": {"status": "COMPLETED", "report_path": "reports/lens-A.md",
+                         "verdict": "FINDINGS"}},
+    }), encoding="utf-8")
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["status", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        # The defect was a CRASH, not the exit code: `status` returns 1 for any
+        # cycle with a pending lens, so rc alone cannot tell a crash from an
+        # incomplete cycle. Assert the two properties that can.
+        assert "unrecorded" in res.stdout, res.stdout
+        assert "Traceback" not in res.stderr, res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -637,4 +755,7 @@ if __name__ == "__main__":
     test_frozen_cycle_refuses_a_live_channel_read()
     test_a_lens_waiver_requires_a_named_reason()
     test_a_missing_closure_cannot_pass_verify()
+    test_migration_maps_the_donor_terminal_synonym(Path("/tmp"))
+    test_migration_reports_values_it_cannot_map(Path("/tmp"))
+    test_a_migrated_record_renders_without_a_recorded_digest(Path("/tmp"))
     print("ALL TESTS PASSED")
