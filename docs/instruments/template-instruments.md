@@ -330,6 +330,9 @@ declaration, the install and the verify. Two rules bind it:
 - **"Absent from the member's tree" is not "unusable".** A law doc with no reload link is perfectly
   readable — it is simply not re-injected after compaction. The census records the absence as a
   **declared state** (§7.2), exactly as it records a deferred migration, and never as a failure.
+- **That declared state names both axes (§7.2).** A member can **hold** an instrument's declared
+  file set without being **green** on it — and a census counts the first while the member's own gate
+  reports the second — so a recorded state that names one is a claim about the other.
 
 **The shape is proven in production, not only in source:** `skills/grafana/` already runs it —
 `sql-examples.md` sits as a top-level auxiliary `.md` symlink beside `SKILL.md`, and the loader
@@ -359,6 +362,30 @@ The gate reds only on **UNDECLARED** divergence. Deferral is not drift; drift is
 declared. This is why the migration path is **not** a red gate — measured: a dispatch round produced
 **0 ports** from five replies, because *reporting is not enforcement*. The counter is a deferral the
 member owns and the census records, never a gate that fails a factory for a decision it took openly.
+
+**A declaration requires a surface, and the clause must NAME it.** An instrument whose adoption can
+be DEFERRED must name the surface where the deferral is declared, and that surface must carry a
+field for the state. A requirement with no surface to receive it is unsatisfiable as written, and
+the failure it produces is silent in the direction that matters: a member that deferred and a member
+that never considered the matter read identically. This is the same family as the cross-factory
+citation class (§9) — a member cannot follow a citation into the meta-factory's ledger, and cannot
+declare into a surface with no field. For the kit that surface is **`registry/factories/<slug>.json`**,
+field **`kit`** (§9 O6): states `adopted` / `partial` / `deferred` / `not-applicable`, a non-empty
+`reason` required for the last two, and the field ABSENT still valid while the obligation is new.
+A per-instrument declaration names its own.
+
+**Adoption has two axes, and neither implies the other: HELD and GREEN.** A member **holds** an
+instrument when its declared file set is present (§1); it is **green** when its own gate passes over
+that set. A member can hold a complete set and be red — the files arrived as another instrument's
+closure (§1.3) with no decision behind them, or it carries a divergent copy of a path (§9 O1). And
+it can be green on a partial set, because a gate judges what the tree carries and a missing file is
+not a failing one. So a census predicate counts **held** while a member's gate reports **green**, and
+a state that records only one reads as a claim about the other. The declared adoption state names
+both. Measured 2026-09-27T15:51:34Z, `tools/kit_census.py` (predicate: which copy an owner's tap
+reaches against which copies a member's tree holds; scope: **5** declared members, all reachable;
+instant as quoted): the census separates exactly these two and records that they disagreed in
+**BOTH** directions the same day — one factory held a copy that had never executed, and a copy can
+execute with no tree copy at all.
 
 ## 8. Ownership and scope
 
@@ -426,3 +453,9 @@ A member factory declares what its ledger accepts: tools/actors.txt, the authori
 A ledger's bare hash-N namespace is **one board's**. Keeping it unique is the factory's obligation and the kit cannot check it: the sequence predicate keys on the exact subject string, so two boards sharing a numbering make one bare hash-N name two work units, and the collision does not red — a close on the second board's unit is accepted on the first board's intake and claim, which is a defeated guard reported as clean. A factory carrying more than one board picks ONE disposition and states it: scope lifecycle rows to the board the ledger records and name a second board's units with a distinct descriptive stem, or keep a second ledger via OC_LEDGER_PATH. A qualified reference is no discriminator, and a board lookup cannot close it — a row records a NUMBER, not which board it meant.
 
 *Authority:* ruling n=971, and the clause is already law in full at skills/meta-factory/SKILL.md:740. It is restated here because a member cannot read that file; the meta-factory's own copy stays the canonical text and this section cites it.
+
+### O6 — a member factory is initialized to the kit system, and its state is declared
+
+A member factory is initialized to the kit system, and its state is declared. The delivery leg exists and is one command per member: `python3 tools/kit_deliver.py --to <member-root> [--dry-run]` (BOOTSTRAP Step 4f). It writes the bytes and the vendored pin in ONE run, so the member's own gate cannot red on a state we created — measured `--dry-run` rc=0 on three trees, 105 / 88 / 101 files to add. Nothing runs it on a cadence today, and that is the obligation: a member is initialized, or it declares why not. The declaration is the `kit` field on the member's own fragment. Silence is not a disposition — a member that deferred and a member that never considered the kit must be distinguishable on the surface that exists.
+
+*Authority:* owner order 2026-09-27T14:00Z ("the member factories should be initialized to use the kit system"); n=1283 Q2 (a clause binding a member factory stays at HQ).
