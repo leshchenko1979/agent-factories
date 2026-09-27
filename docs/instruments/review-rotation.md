@@ -315,6 +315,13 @@ an adoption nobody decided. The census therefore reports the declared leg `unest
 member, and **no member can lawfully reach ADOPTED until that surface exists**. Which per-instrument
 key a member declares on is HQ's schema call; this instrument coins none.
 
+**A RE-RUN PUBLISHES INTO A TRACKED FILE, and that is the trade the artifact makes.** The census
+writes to a committed path on purpose — a figure that lives only in a scrollback cannot be
+re-read, diffed or cited, which is the whole reason it exists. The consequence is that re-running
+it in a SHARED tree leaves the file dirty by the two lines that always move (the instant), so a
+runner must either **commit the new reading or revert the file**, never leave it modified for the
+next lane to trip over. To measure without publishing, pass `--out` to a scratch path.
+
 **A lone zero is not published here either.** The earlier revision of this section carried an
 inference and no figure, because the paths of §2 did not exist in the manifest before the commit
 that ships this doc; that inference is now superseded by the reading above, which is a measurement
