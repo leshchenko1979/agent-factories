@@ -477,6 +477,38 @@ def test_intake_receipts_validate_against_the_schema() -> None:
         if cycle_dir.exists():
             shutil.rmtree(cycle_dir)
 
+def test_intake_dates_the_mandated_instant_form() -> None:
+    """An ISO-8601 instant reads DATED — the form this fleet publishes readings in.
+
+    The dating token's trailing guard was `\\b`, which cannot match between the final
+    digit of `2026-09-27` and the following `T` because both are word characters. The
+    mandated instant form therefore read UNDATED while a bare date read DATED, so every
+    adopter who followed the dating discipline had its evidence flagged. The guard is
+    `(?!\\d)`: it admits the `T` form and still refuses a partial digit run.
+    """
+    cycle_id = "test-intake-instant"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        proposals = cycle_dir / "proposals"
+        proposals.mkdir(parents=True, exist_ok=True)
+        (proposals / "i1.md").write_text(
+            "ADD a rule in docs/x.md#4 BECAUSE it was missing at 2026-09-27T21:26Z.\n",
+            encoding="utf-8")
+        (proposals / "i2.md").write_text(
+            "ADD a rule in docs/y.md#5 BECAUSE the run at 2026-09-271 was broken.\n",
+            encoding="utf-8")
+        res = subprocess.run([sys.executable, str(REPO_ROOT / "tools" / "review.py"),
+                              "intake", cycle_id, "--record"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        dated = {r["id"]: r["dated"] for r in state["proposals"]}
+        assert dated["i1"] is True, "the ISO-8601 instant form must read DATED"
+        assert dated["i2"] is False, "a partial digit run must stay UNDATED"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
 def test_shipped_executable_carries_no_donor_tokens() -> None:
     """The shipped executable names no donor surface.
 
@@ -804,6 +836,7 @@ if __name__ == "__main__":
     test_intake_names_empty_and_incomplete()
     test_intake_refuses_a_declared_channel_that_is_absent(Path("/tmp"))
     test_intake_receipts_validate_against_the_schema()
+    test_intake_dates_the_mandated_instant_form()
     test_shipped_executable_carries_no_donor_tokens()
     test_step0_recovery_reads_state_alone_and_records_durable_evidence()
     test_frozen_cycle_refuses_a_live_channel_read()
