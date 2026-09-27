@@ -25,9 +25,12 @@ WHAT IT PINS, and why each arm is here:
      examined-nothing class;
   7. HERMETICITY — every arm runs in a TemporaryDirectory, so the live `evidence/` gains
      nothing;
-  8. a REFUSAL IS PUBLISHED, naming the refused input by path (template-instruments.md §1.5) — an exit code
-     reaches a caller and a reader meets artifacts, so a refusal that wrote nothing would make
-     a short list and a wrong list indistinguishable.
+  8. a REFUSAL IS PUBLISHED, naming the refused input by path (template-instruments.md §1.5) —
+     an exit code reaches a caller and a reader meets artifacts, so a refusal that wrote nothing
+     would make a short list and a wrong list indistinguishable;
+  9. the `held` figures are published WITH THEIR AXIS (template-instruments.md §7.5): `held`
+     reads a WORKING TREE, so a declared path may be present and untracked, and the figure may
+     never be quoted as a fact about the member's repository.
 
 THE PREDICATE IS REUSED, NOT RESTATED. These arms run against the REPO'S OWN
 `tools/registry.py`, so the refusal wording asserted below is the registry's real one: if the
@@ -130,6 +133,17 @@ def main() -> int:
         line = row((tmp / "b.md").read_text(encoding="utf-8"), "m1")
         check("NON-VACUITY: adopted + green over a complete set reads ADOPTED",
               rc == 0 and "**ADOPTED**" in line, line.strip())
+        # ARM 2b — the AXIS the `held` column owes (template-instruments.md §7.5). `held` reads a
+        # WORKING TREE, so a declared path can be present and untracked, and a member can read
+        # held-complete over a commit that cannot run the instrument from a clone. The figure is
+        # legitimate; quoting it as a repository fact is not. Stated in the artifact that carries
+        # the figure, because a requirement that reaches no assertion is the class the arm above
+        # cannot catch.
+        body_a = (tmp / "b.md").read_text(encoding="utf-8")
+        check("the published artifact states the WORKING-TREE axis and the prohibition",
+              "WORKING TREE" in body_a and "untracked" in body_a
+              and "never a" in body_a and "template-instruments.md §7.5" in body_a,
+              "the `held` figures are published without their axis")
 
         # ARM 3 — a declaration cannot MANUFACTURE a set. Same lawful declaration, incomplete set.
         root = build_tree(tmp / "c",

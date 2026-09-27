@@ -299,6 +299,13 @@ declared `repo` (`os.path.isfile(member.repo / p)`). The `TEMPLATE/` half is **n
 byte conformance is `kit_pin`'s question and the shipped set is `kit_census.py`'s, and a second
 comparison over the same population would let this file and a member's own gate disagree. A member
 that took the root half and no `TEMPLATE/` half therefore still reads HELD at this path level.
+**And `held` is a presence measurement over a WORKING TREE: a path may be present and UNTRACKED, so
+a `held` figure is never a fact about the member's repository** — a member can read held-complete
+over a commit that cannot run the instrument from a clone at all. The axis and its prohibition are
+the frame's (template-instruments.md §7.5), not this file's. Measured for THIS instrument at
+**2026-09-27T20:20:28Z**: both holding members are fully tracked (0 declared paths
+present-but-untracked), so no reading in the table below is affected — the axis is a latent
+property of the predicate, not a defect in a figure.
 **Scope:** the member fragments in `registry/factories/*.json`.
 **Instant:** **2026-09-27T17:43:52Z**, by the command that exists for this question —
 `tools/instrument_census.py review-rotation` — which also reports each member's **reload link** and
@@ -308,7 +315,7 @@ the declaration standing behind it.
 template does not need to census the meta-factory's members. It derives the path list FROM THIS
 FILE's §2 table rather than carrying a second list, and it refuses on zero parsed paths — a zero over
 a failed parse is otherwise indistinguishable from a zero over an empty population. It is pinned by
-`tests/test_instrument_census.py` (14 checks, root-only like the tool), which runs it against
+`tests/test_instrument_census.py` (15 checks, root-only like the tool), which runs it against
 the REPO'S OWN `tools/registry.py` so the refusal wording asserted there is the registry's real
 one, and which pins that a REFUSAL IS PUBLISHED naming the refused input by path — an exit code
 reaches a caller, while a reader meets artifacts (frame §1.5).

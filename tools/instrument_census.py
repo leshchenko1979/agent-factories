@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Publish the adoption census for ONE instrument — held, declared, and the pair's two legs.
 
-WHY A PUBLISHED ARTIFACT. An instrument is a unit of adoption (template-instruments.md §1), and its law doc
-DECLARES the file set a member must hold. A census that lives only in a turn's stdout cannot be
+WHY A PUBLISHED ARTIFACT. An instrument is a unit of adoption (template-instruments.md §1),
+and its law doc DECLARES the file set a member must hold. A census that lives only in a turn's stdout cannot be
 re-read, diffed, or cited — and the promotion's own law file says its readings are written
 "when the wave returns them", each with its own instant.
 
@@ -11,11 +11,16 @@ WHAT THIS IS, AND WHAT IT IS NOT. It is ONE predicate applied to a declared popu
 instant.* It is NOT a second comparison of the kit's bytes — `kit_census.py` owns that, and two
 predicates over the same population would let this file and a member's own gate disagree.
 A path that is PRESENT here may still differ byte-wise from the manifest; that is `kit_pin`'s
-question, and this file says so rather than quietly answering it.
+question, and this file says so rather than quietly answering it. And PRESENT means present on
+the WORKING TREE: a declared path may be present and UNTRACKED, so a `held` figure is never a
+fact about the member's repository (template-instruments.md §7.5) — a member can read
+held-complete over a commit that cannot run the instrument from a clone.
 
 THE TWO LEGS — the counting rule, and the defect this exists to avoid. A member is counted
 **adopted** only when BOTH hold:
-  1. **held** — every declared path is present at its recorded repo (the measured leg); and
+  1. **held** — every declared path is present on the member's WORKING TREE at its recorded
+     repo path (the measured leg — a live-subject reading, never a repository fact;
+     template-instruments.md §7.5); and
   2. **declared** — the member's own fragment declares a disposition at `instruments.<slug>`,
      the per-instrument surface, and says `adopted` with `green: true` (the declared leg).
      The shape of that declaration is NOT restated here: `tools/registry.py` owns it and this
@@ -58,9 +63,8 @@ REPO = Path(__file__).resolve().parent.parent
 # gate no longer accepts is worse than one printing none. `_REGISTRY` caches that import.
 _REGISTRY = None
 
-# The member-side path of the reload link is `<skill dir>/<instrument>.md`
-# (template-instruments.md §6.1): the
-# member's own act, in the member's own tree, and named for the instrument.
+# The member-side path of the reload link is `<skill dir>/<instrument>.md` -- the member's own
+# act, in the member's own tree, named for the instrument (template-instruments.md §6.1).
 
 
 def declared_paths(instrument: str) -> tuple[list[str], str]:
@@ -251,8 +255,7 @@ def render_refusal(instrument: str, law: str, instant: str, reason: str) -> str:
         "This is a COORDINATE reading, not a defect verdict on the law file: the census derives",
         "the declared set from the law doc's declared-set table as numbered rows pairing the member",
         "path with",
-        "its template counterpart, and that table may hold a different object for a good reason.",
-        "The",
+        "its template counterpart, and that table may hold a different object for a good reason. The",
         "coordinate fix belongs to that instrument's own lane; this file's job is to say so out",
         "loud rather than to return a shorter list.",
         "",
@@ -277,6 +280,13 @@ def render(c: dict) -> str:
         "differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —",
         "and a `seed`-class absence is a declaration, not a gap. Read a `held` figure as *held*,",
         "never as *current*.",
+        "",
+        "**And `held` is a presence measurement over a WORKING TREE, so a path may be present AND",
+        "untracked.** A member can therefore read held-complete over a commit that cannot run the",
+        "instrument from a clone at all. So `held` is a reading of a live tree and is **never a",
+        "fact about the member's repository** — those are two different figures wherever a declared",
+        "path is untracked. The axis and its prohibition are template-instruments.md §7.5, not",
+        "this tool's.",
         "",
         f"**Declared set, derived from `{Path(c['law']).relative_to(REPO)}`'s declared-set table** (the parse",
         "guarded: zero parsed paths refuses rather than censusing an empty set):",
@@ -315,8 +325,8 @@ def render(c: dict) -> str:
         "",
         "A row is **ADOPTED** only when the declared set is COMPLETE *and* the member's own",
         "declaration says `adopted` with `green: true`. `HELD-UNDECLARED` is a member holding",
-        "every path with no decision behind it (template-instruments.md §1.3 — the files can arrive as",
-        "another",
+        "every path with no decision behind it (template-instruments.md §1.3 — the files can arrive",
+        "as another",
         "instrument's closure), and `PARTIAL-UNDECLARED` is a member holding some of them. Both",
         "are reported as what they are: silence is a state here, never a pass.",
         "",
@@ -332,8 +342,8 @@ def render(c: dict) -> str:
         "the set by construction; counting it as an adoption site would report the source as its",
         "own adopter and inflate every wave by one.",
         "",
-        "The **reload link** is the member's own act (template-instruments.md §6.1) and is never installed",
-        "from this",
+        "The **reload link** is the member's own act (template-instruments.md §6.1) and is never",
+        "installed from this",
         "repo. `absent` is a declared state, not a failure — a law doc with no reload link is",
         "perfectly readable, it is simply not re-injected after compaction.",
         "",
@@ -350,8 +360,8 @@ def main(argv: list[str] | None = None) -> int:
 
     c = census(args.instrument)
     if c["problem"]:
-        # The refusal is PUBLISHED, not only printed: template-instruments.md §1.5 requires the refused
-        # inputs to
+        # The refusal is PUBLISHED, not only printed: template-instruments.md §1.5 requires the
+        # refused inputs to
         # reach the artifact a reader meets, so the exit code alone is not the deliverable.
         instant = c.get("instant") or dt.datetime.now(dt.timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ")
