@@ -64,6 +64,8 @@ import datetime as dt
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 REPO = Path(__file__).resolve().parent.parent
 RUNNER_PATH = REPO / "tools" / "patrol_host_state.py"
 
@@ -2194,7 +2196,19 @@ def test_the_bound_is_FACTORY_DATA_read_through_the_ONE_reader() -> None:
         "the bound instant is hardcoded in the leg; it belongs in docs/ledger-invariants.json")
     assert RUNNER.DUTY_RECEIPT_BOUNDARY_KEY == "duty_receipt_declared", source
     reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
-    bound, text = reader.declared_boundary(REPO, RUNNER.DUTY_RECEIPT_BOUNDARY_KEY)
+    try:
+        bound, text = reader.declared_boundary(REPO, RUNNER.DUTY_RECEIPT_BOUNDARY_KEY)
+    except reader.SkipGate as exc:
+        # The bound is FACTORY DATA (#78 clause b) and this tree declares none, so there
+        # is no live declaration for the probes to agree with. `ledger_boundary.py`
+        # states the outcome: SKIP, with the reason. The two probes above still ran —
+        # only the agreement is set aside — so the skip is narrow, not a blanket pass.
+        _declared_skip("the bound is factory data", str(exc))
+        return
+    except reader.GateError as exc:
+        raise AssertionError(
+            f"the boundary declaration is unreadable: {exc}"
+        ) from exc
     assert text == _DUTY_BOUND, f"the probes and the live declaration disagree: {text}"
 
 
@@ -2217,6 +2231,24 @@ def test_the_leg_prints_the_bound_beside_the_population_it_judged() -> None:
 
 
 
+_SKIPS: list[str] = []
+
+
+def _declared_skip(what: str, reason: str) -> None:
+    """`ledger_boundary.py`'s third outcome: nothing to judge, stated, exit 0.
+
+    Honoured in BOTH forms of this gate — pytest (a skip, not an error) and script (the
+    reason printed, the run non-fatal). A `SkipGate` escaping as a traceback makes "this
+    tree has nothing to judge" render exactly like "a check failed", which is the
+    confusion this instrument exists to remove; a gate that cannot state its own skip is
+    the gate failing at its own job.
+    """
+    line = f"{what}: {reason}"
+    _SKIPS.append(line)
+    print(f"  SKIP  {line}")
+    pytest.skip(reason)
+
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]
@@ -2224,6 +2256,10 @@ def main() -> int:
     for check in checks:
         try:
             check()
+        except pytest.skip.Exception:
+            # `_declared_skip` already printed the reason and recorded it: a declared
+            # skip is not a failure and must never abort the run around it.
+            continue
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
             print(f"  FAIL  {check.__name__} — {exc}")
@@ -2233,7 +2269,9 @@ def main() -> int:
     if failures:
         print(f"patrol-runner gate FAILED: {len(failures)} check(s)")
         return 1
-    print(f"patrol-runner gate passed: {len(checks)} check(s)")
+    ran = len(checks) - len(_SKIPS)
+    skipped = f", {len(_SKIPS)} SKIPPED (nothing to judge)" if _SKIPS else ""
+    print(f"patrol-runner gate passed: {ran} check(s){skipped}")
     return 0
 
 
