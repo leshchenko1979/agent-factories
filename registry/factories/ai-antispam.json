@@ -133,7 +133,7 @@
     },
     {
       "id": "gh-pages-origin-ahead-not-diverged",
-      "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.",
+      "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages from gh-pages on alexeyleshchenko/ai-antispam - that repo's gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain. Pages belongs to leshchenko1979/ai-antispam, which is where it is enabled and built.",
       "severity": "warning",
       "since": "2026-09-11",
       "affects": [
@@ -143,7 +143,7 @@
     },
     {
       "id": "two-files-named-skill-md",
-      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
+      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load; it carries its own version field and moves independently of the repo file). Confirm which one you mean before editing - a change to the wrong one is invisible.",
       "severity": "warning",
       "since": "2026-09-17",
       "affects": [
@@ -191,5 +191,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-26T06:20:28Z"
+  "attested_at": "2026-09-27T06:35:23Z"
 }

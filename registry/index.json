@@ -1,16 +1,33 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-26T10:46:21Z",
+  "resolved_at": "2026-09-27T10:33:20Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 62,
-    "announcements": 17,
+    "announcements": 18,
     "jobs": 59,
     "unattributed_jobs": 4
   },
   "announcements": [
+    {
+      "id": "inferhub-auto-route-failure-escalation",
+      "severity": "warning",
+      "scope": null,
+      "text": "Routing through the ops fallback chain's first hop (inferhub) is currently degrading, independent of the retired auto-switcher: measured over 24h to 2026-09-27T05:08Z, 21,242 requests with 2,852 failures (13.4%) — 499 client-abort x1218, 502 'upstream chain exhausted' x994, 429 rate-limit x486, 402 bid-starved x140 — concentrated on cheap iq-75-plus combo members (two gemini effort-variant aliases at ~76% failure over 7d, zai/glm-5.3 at ~97%). Not model-specific and not load-shaped.",
+      "since": "2026-09-27T06:36:31Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "leshchenko1979/inferhub-watch#158; usage_logs non-probe 24h window; new-api and OpenCrabs daemon logs",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "inferhub-watch"
+      ],
+      "conflict": []
+    },
     {
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "severity": "warning",
@@ -134,7 +151,7 @@
       "id": "inferhub-autoswitcher-retired",
       "severity": "warning",
       "scope": null,
-      "text": "The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-26: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-26 — the tier channels this notice named are no longer in the table and the row count has moved: live new_api.channels holds THREE rows (id 43 gemini, status 1 ENABLED, priority 300, auto_ban 1 — re-enabled since the 09-24 read, and that change is UNATTRIBUTED; id 44 iq-75-plus, status 1, priority 200; id 46 iq-80-plus, status 1, priority 210, created 09-25). Because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is PERSISTENT, not transient. That inversion is the thing to know. Channel 43 currently fails 82% of its consumes (871 failures against 197 successes over 8h) and sits first in the priority order, so an `auto` request takes two doomed hops before channel 44 serves; tracked as inferhub-watch #151.",
+      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-09-27: enforcement moved from a flag to an opt-in gate — scripts/sync_usage_logs.py now runs the switcher leg only under an explicit --run-switch, so --skip-switch is a DEPRECATED NO-OP that no longer prevents a switch (#152). A bare run therefore cannot reach it; do not re-arm either path.",
       "since": "2026-09-18T22:51:42Z",
       "review_by": null,
       "check": null,
@@ -151,7 +168,7 @@
       "id": "inferhub-root-credential-in-shared-compose",
       "severity": "warning",
       "scope": null,
-      "text": "LIVE ROOT CREDENTIALS ARE COMMITTED in files this factory and infra-factory both touch, and a rotation is pending owner authorisation. /root/inferhub-watch scripts carry the New-API ROOT access token as an os.getenv fallback at three call sites (NEW_API_ROOT_TOKEN is set nowhere, so the committed literal IS the credential in use; verified live - it authenticates as id=1, role=100). The same commit 452b08c8 in leshchenko1979/servers carries THREE more literals at new-api/docker-compose.yml lines 7-11: SQL_DSN (whose password is digest-identical to the PGPASSWORD this factory's own */10 data leg uses), INITIAL_ROOT_ACCESS_TOKEN (its first 32 chars authenticate as root; the full 48-char value is rejected 401), INITIAL_ROOT_PASSWORD (verified a LIVE console login - POST /api/user/login returns success), and SESSION_SECRET (root-equivalent: a holder can mint a valid session cookie for user 1 without presenting any credential). DO NOT edit, rotate or scrub any of these surfaces independently: the change is a five-consumer sequence and a partial rotation produces 401s. Consumers: new-api, grafana (2 datasources), mixpanel-pipeline, ai-antispam, and this factory's data-leg env file. Owner-gated; tracked as inferhub-watch #138. Values are NOT reproduced here - digests only.",
+      "text": "LIVE ROOT CREDENTIALS REMAIN COMMITTED in files this factory and infra-factory both touch: /root/inferhub-watch carries the New-API root access token (len 32, sha256_8 de0d7f4c) in scripts/sync_newapi_channels.py and scripts/sync_newapi_pricing.py, and vds-servers' new-api compose carries that token plus INITIAL_ROOT_PASSWORD and SESSION_SECRET. AMENDED 2026-09-27: THE OWNER HAS DECIDED — asked whether to rotate, he answered 'Accept the exposure as dated, no rotation' (register q4). Rotation is therefore NOT owed and NOTHING IS PENDING; do not re-raise it as an open item.",
       "since": "2026-09-17T01:08:46Z",
       "review_by": null,
       "check": null,
@@ -168,7 +185,7 @@
       "id": "two-files-named-skill-md",
       "severity": "warning",
       "scope": null,
-      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
+      "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load; it carries its own version field and moves independently of the repo file). Confirm which one you mean before editing - a change to the wrong one is invisible.",
       "since": "2026-09-17",
       "review_by": null,
       "check": null,
@@ -202,7 +219,7 @@
       "id": "gh-pages-origin-ahead-not-diverged",
       "severity": "warning",
       "scope": null,
-      "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.",
+      "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages from gh-pages on alexeyleshchenko/ai-antispam - that repo's gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain. Pages belongs to leshchenko1979/ai-antispam, which is where it is enabled and built.",
       "since": "2026-09-11",
       "review_by": null,
       "check": null,
@@ -306,7 +323,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-09-26T06:20:28Z",
+      "attested_at": "2026-09-27T06:35:23Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -435,7 +452,7 @@
           "session_id": "acc3fa9b-cefa-4e35-bf87-422696e558f0",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-24T19:46:51Z",
+          "bound_at": "2026-09-26T17:30:41Z",
           "announcements": []
         },
         {
@@ -455,7 +472,7 @@
           "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T10:37:31Z",
+          "bound_at": "2026-09-26T17:49:45Z",
           "announcements": []
         },
         {
@@ -475,7 +492,7 @@
           "session_id": "6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T17:08:29Z",
+          "bound_at": "2026-09-27T09:59:22Z",
           "announcements": []
         },
         {
@@ -506,7 +523,7 @@
         {
           "id": "gh-pages-origin-ahead-not-diverged",
           "severity": "warning",
-          "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages on the canonical repo from gh-pages - alexey/gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain.",
+          "text": "The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages from gh-pages on alexeyleshchenko/ai-antispam - that repo's gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain. Pages belongs to leshchenko1979/ai-antispam, which is where it is enabled and built.",
           "scope": null,
           "since": "2026-09-11",
           "review_by": null,
@@ -519,7 +536,7 @@
         {
           "id": "two-files-named-skill-md",
           "severity": "warning",
-          "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load, now version 0.1.1). Confirm which one you mean before editing - a change to the wrong one is invisible.",
+          "text": "Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load; it carries its own version field and moves independently of the repo file). Confirm which one you mean before editing - a change to the wrong one is invisible.",
           "scope": null,
           "since": "2026-09-17",
           "review_by": null,
@@ -535,18 +552,18 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-09-26T06:19:04Z",
+      "attested_at": "2026-09-27T06:36:31Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.81",
+      "skill_revision": "1.0.84",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
           "leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law",
           "Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
           "Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
-          "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in the current fragment NO LONGER EXISTS. Measured 2026-09-26 the table holds exactly THREE rows: id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1 — it read status 3 disabled on 09-24 and the change is UNATTRIBUTED: no ledger row and no admin-API event), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0) and id 46 iq-80-plus (status 1 = enabled, priority 210, auto_ban 0, created 2026-09-25 on owner order; it is bid-starved and returns 503 no_capacity by design, tracked as inferhub-watch #151). No automatic writer runs since the switcher retirement",
+          "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-09-27: exactly THREE rows — id 43 gemini (status 2 = DISABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED by ChannelDisableThreshold=15 at 2026-09-26T14:41:40Z, reason recorded verbatim 'status_code=503, combo has no member with a provider within budget right now'; priority 210). The 09-25T22:33:39Z re-enable of id 43 is NO LONGER UNATTRIBUTED: it was the owner's own admin session (new_api.audit_logs row 1121, auth_method=session, username=root, admin_id=1, role=100, matching other_info.status_time to the second, 14s after a failing test_time) — his own later message to a lane said he had been adjusting the config. It was disabled again 2026-09-26T07:03:33Z (audit row 1127) after measurement showed 43's members are a strict subset of 44's at an identical 0.003 bid while priority 300 made it the first call on every request. Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.",
           "Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)",
           "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
           "This factory's own crons and its daily GitHub Actions sweep"
@@ -565,7 +582,7 @@
         "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship",
         "Postgres inferhub_logs on apps — route_metrics, usage_logs, model_rollup",
         "Grafana dashboard inferhub-watch — panels and queries",
-        "The new_api channels table — priority, auto_ban and model_mapping policy (the tier ladder is gone; three rows today, and id 43 was re-enabled since the 09-24 read — that change is unattributed)"
+        "The new_api channels table — priority, auto_ban and model_mapping policy. Live 2026-09-27: three rows, ids 43 (disabled) / 44 (enabled) / 46 (auto-banned); the tier ladder is gone and no automatic writer runs."
       ],
       "services": [
         {
@@ -613,7 +630,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T19:17:26Z",
+          "bound_at": "2026-09-27T07:49:47Z",
           "announcements": []
         },
         {
@@ -643,7 +660,7 @@
           "session_id": "1122b15e-0b26-420f-a7b3-d0719479bbd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T10:35:05Z",
+          "bound_at": "2026-09-27T07:51:07Z",
           "announcements": []
         }
       ],
@@ -651,7 +668,7 @@
         {
           "id": "inferhub-autoswitcher-retired",
           "severity": "warning",
-          "text": "The auto-switcher is RETIRED and no automation may execute a route switch (owner order 2026-09-18; re-verified 2026-09-26: cron fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, and both sync prompts carry --skip-switch). Do not re-arm either switching path. AMENDED 2026-09-26 — the tier channels this notice named are no longer in the table and the row count has moved: live new_api.channels holds THREE rows (id 43 gemini, status 1 ENABLED, priority 300, auto_ban 1 — re-enabled since the 09-24 read, and that change is UNATTRIBUTED; id 44 iq-75-plus, status 1, priority 200; id 46 iq-80-plus, status 1, priority 210, created 09-25). Because no switch runs, scripts/sync_newapi_channels.py no longer rewrites those rows — so a hand edit to them is PERSISTENT, not transient. That inversion is the thing to know. Channel 43 currently fails 82% of its consumes (871 failures against 197 successes over 8h) and sits first in the priority order, so an `auto` request takes two doomed hops before channel 44 serves; tracked as inferhub-watch #151.",
+          "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-09-27: enforcement moved from a flag to an opt-in gate — scripts/sync_usage_logs.py now runs the switcher leg only under an explicit --run-switch, so --skip-switch is a DEPRECATED NO-OP that no longer prevents a switch (#152). A bare run therefore cannot reach it; do not re-arm either path.",
           "scope": null,
           "since": "2026-09-18T22:51:42Z",
           "review_by": null,
@@ -677,7 +694,7 @@
         {
           "id": "inferhub-root-credential-in-shared-compose",
           "severity": "warning",
-          "text": "LIVE ROOT CREDENTIALS ARE COMMITTED in files this factory and infra-factory both touch, and a rotation is pending owner authorisation. /root/inferhub-watch scripts carry the New-API ROOT access token as an os.getenv fallback at three call sites (NEW_API_ROOT_TOKEN is set nowhere, so the committed literal IS the credential in use; verified live - it authenticates as id=1, role=100). The same commit 452b08c8 in leshchenko1979/servers carries THREE more literals at new-api/docker-compose.yml lines 7-11: SQL_DSN (whose password is digest-identical to the PGPASSWORD this factory's own */10 data leg uses), INITIAL_ROOT_ACCESS_TOKEN (its first 32 chars authenticate as root; the full 48-char value is rejected 401), INITIAL_ROOT_PASSWORD (verified a LIVE console login - POST /api/user/login returns success), and SESSION_SECRET (root-equivalent: a holder can mint a valid session cookie for user 1 without presenting any credential). DO NOT edit, rotate or scrub any of these surfaces independently: the change is a five-consumer sequence and a partial rotation produces 401s. Consumers: new-api, grafana (2 datasources), mixpanel-pipeline, ai-antispam, and this factory's data-leg env file. Owner-gated; tracked as inferhub-watch #138. Values are NOT reproduced here - digests only.",
+          "text": "LIVE ROOT CREDENTIALS REMAIN COMMITTED in files this factory and infra-factory both touch: /root/inferhub-watch carries the New-API root access token (len 32, sha256_8 de0d7f4c) in scripts/sync_newapi_channels.py and scripts/sync_newapi_pricing.py, and vds-servers' new-api compose carries that token plus INITIAL_ROOT_PASSWORD and SESSION_SECRET. AMENDED 2026-09-27: THE OWNER HAS DECIDED — asked whether to rotate, he answered 'Accept the exposure as dated, no rotation' (register q4). Rotation is therefore NOT owed and NOTHING IS PENDING; do not re-raise it as an open item.",
           "scope": null,
           "since": "2026-09-17T01:08:46Z",
           "review_by": null,
@@ -686,6 +703,19 @@
             "infra-factory"
           ],
           "evidence": "Commit 452b08c8 in leshchenko1979/servers (2026-09-17) - the `since` is that commit's instant, the moment the literals landed; it is the one date I can stand behind and I am NOT inventing a second. New-API half committed in inferhub-watch 5fb4f2f (2026-09-17T01:08:46Z). Liveness measured 2026-09-24/25 digest-only: root token sha256_8 de0d7f4c authenticates id=1/role=100; INITIAL_ROOT_ACCESS_TOKEN first-32 -> HTTP 200, full 48 -> 401; INITIAL_ROOT_PASSWORD -> POST /api/user/login HTTP 200; SQL_DSN password sha256_8 d5bae8c3 == PGPASSWORD in /root/.inferhub_pg.env. Re-measured 2026-09-25: the two inferhub-watch literals are STILL present (sha256_8 de0d7f4c, both files). Config.Entrypoint=[/new-api] Cmd=[] closes the re-seed question structurally (PID 1 IS the binary; nothing can re-read those env names at boot). Scanned by digest only; no value printed, none on any command line."
+        },
+        {
+          "id": "inferhub-auto-route-failure-escalation",
+          "severity": "warning",
+          "text": "Routing through the ops fallback chain's first hop (inferhub) is currently degrading, independent of the retired auto-switcher: measured over 24h to 2026-09-27T05:08Z, 21,242 requests with 2,852 failures (13.4%) — 499 client-abort x1218, 502 'upstream chain exhausted' x994, 429 rate-limit x486, 402 bid-starved x140 — concentrated on cheap iq-75-plus combo members (two gemini effort-variant aliases at ~76% failure over 7d, zai/glm-5.3 at ~97%). Not model-specific and not load-shaped.",
+          "scope": null,
+          "since": "2026-09-27T06:36:31Z",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "leshchenko1979/inferhub-watch#158; usage_logs non-probe 24h window; new-api and OpenCrabs daemon logs"
         }
       ]
     },
@@ -789,7 +819,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T10:34:50Z",
+          "bound_at": "2026-09-26T18:44:13Z",
           "announcements": []
         },
         {
@@ -819,7 +849,7 @@
           "session_id": "8b278a4f-531d-4d7b-8c79-87d30f9257bd",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T08:23:17Z",
+          "bound_at": "2026-09-26T14:14:04Z",
           "announcements": []
         },
         {
@@ -896,7 +926,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.27",
+      "skill_revision": "0.1.29",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -975,7 +1005,7 @@
           "session_id": "f4c192c9-a8e9-4268-9026-ee3e4970cc8a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T09:12:12Z",
+          "bound_at": "2026-09-27T03:10:12Z",
           "announcements": []
         },
         {
@@ -985,7 +1015,7 @@
           "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T09:11:48Z",
+          "bound_at": "2026-09-27T03:10:01Z",
           "announcements": []
         },
         {
@@ -1005,7 +1035,7 @@
           "session_id": "dcd8f7a9-c1e7-48c3-b184-d901dc08eac7",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T18:46:50Z",
+          "bound_at": "2026-09-27T03:10:23Z",
           "announcements": []
         }
       ],
@@ -1160,7 +1190,7 @@
           "session_id": "39d2b612-dbfc-4953-ae02-609267c68c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T22:48:21Z",
+          "bound_at": "2026-09-26T14:57:07Z",
           "announcements": []
         }
       ],
@@ -1227,7 +1257,7 @@
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.263",
+      "skill_revision": "0.4.267",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
@@ -1295,7 +1325,7 @@
           "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-18T10:34:13Z",
+          "bound_at": "2026-09-27T10:23:23Z",
           "announcements": []
         },
         {
@@ -1305,7 +1335,7 @@
           "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T05:30:30Z",
+          "bound_at": "2026-09-27T01:10:52Z",
           "announcements": []
         },
         {
@@ -1315,7 +1345,7 @@
           "session_id": "127429e6-08de-439c-9162-2c8b0a9f73d9",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T08:15:25Z",
+          "bound_at": "2026-09-27T06:54:47Z",
           "announcements": []
         },
         {
@@ -1355,7 +1385,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-26T09:24:24Z",
+          "bound_at": "2026-09-27T10:07:10Z",
           "announcements": []
         },
         {
@@ -1375,7 +1405,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T21:31:18Z",
+          "bound_at": "2026-09-27T04:45:06Z",
           "announcements": []
         },
         {
@@ -1395,7 +1425,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T21:52:59Z",
+          "bound_at": "2026-09-26T22:48:29Z",
           "announcements": []
         },
         {
@@ -1405,7 +1435,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T17:49:56Z",
+          "bound_at": "2026-09-27T07:13:26Z",
           "announcements": []
         },
         {
@@ -1415,7 +1445,7 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "superseded",
           "channel": "telegram",
-          "bound_at": "2026-09-23T08:43:38Z",
+          "bound_at": "2026-09-27T10:16:52Z",
           "announcements": []
         },
         {
@@ -1425,7 +1455,7 @@
           "session_id": "212b3c83-6659-49c8-9984-0cf849f769c1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T20:30:58Z",
+          "bound_at": "2026-09-27T03:06:11Z",
           "announcements": []
         },
         {
@@ -1435,7 +1465,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T19:24:05Z",
+          "bound_at": "2026-09-27T08:20:00Z",
           "announcements": []
         },
         {
@@ -1445,7 +1475,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T09:20:08Z",
+          "bound_at": "2026-09-27T10:24:23Z",
           "announcements": []
         },
         {
@@ -1455,7 +1485,7 @@
           "session_id": "c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T18:15:39Z",
+          "bound_at": "2026-09-27T10:21:48Z",
           "announcements": []
         },
         {
@@ -1465,7 +1495,7 @@
           "session_id": "40427d4f-af4a-48ba-993f-f5f0b21916c0",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T14:56:02Z",
+          "bound_at": "2026-09-27T06:55:34Z",
           "announcements": []
         },
         {
@@ -1475,7 +1505,7 @@
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T17:14:56Z",
+          "bound_at": "2026-09-27T10:30:39Z",
           "announcements": []
         },
         {
@@ -1485,7 +1515,7 @@
           "session_id": "aff7ff41-a3a7-4c53-adc5-80fb7a33ba50",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T17:56:13Z",
+          "bound_at": "2026-09-27T07:17:18Z",
           "announcements": []
         },
         {
@@ -1495,7 +1525,7 @@
           "session_id": "42a44908-b8f3-42e1-bbd2-f2a672b8056e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T17:58:26Z",
+          "bound_at": "2026-09-27T01:49:15Z",
           "announcements": []
         },
         {
@@ -1505,7 +1535,7 @@
           "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T11:53:00Z",
+          "bound_at": "2026-09-27T08:24:13Z",
           "announcements": []
         },
         {
@@ -1525,7 +1555,7 @@
           "session_id": "9fa7c71a-f009-418a-ac06-d0336efcf491",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T11:30:37Z",
+          "bound_at": "2026-09-27T10:21:20Z",
           "announcements": []
         },
         {
@@ -1535,7 +1565,7 @@
           "session_id": "63d775f9-18e2-4097-8696-d9a2ca796f14",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T18:22:02Z",
+          "bound_at": "2026-09-27T01:33:51Z",
           "announcements": []
         },
         {
@@ -1545,7 +1575,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T09:55:15Z",
+          "bound_at": "2026-09-27T08:22:58Z",
           "announcements": []
         },
         {
@@ -1565,7 +1595,7 @@
           "session_id": "c78e78e0-099e-455e-8dfb-7e9b8f7d13e5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-18T17:37:25Z",
+          "bound_at": "2026-09-27T10:14:30Z",
           "announcements": []
         },
         {
@@ -1575,7 +1605,7 @@
           "session_id": "95bec69b-0e96-46a9-9d91-dc355e8af18f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T17:50:22Z",
+          "bound_at": "2026-09-27T01:24:38Z",
           "announcements": []
         },
         {
@@ -1585,7 +1615,7 @@
           "session_id": "6630dc9a-0eeb-46c2-95b8-bfae43e0766b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T05:49:16Z",
+          "bound_at": "2026-09-27T10:12:47Z",
           "announcements": []
         },
         {
@@ -1605,7 +1635,7 @@
           "session_id": "6cd8175f-fb27-4cf3-a390-971ff2519a47",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-19T11:17:52Z",
+          "bound_at": "2026-09-27T10:27:41Z",
           "announcements": []
         },
         {
@@ -1615,7 +1645,7 @@
           "session_id": "4b4463d5-381c-4458-aa0c-3cf199882084",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T06:05:15Z",
+          "bound_at": "2026-09-27T10:22:21Z",
           "announcements": []
         },
         {
@@ -1625,7 +1655,7 @@
           "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T07:57:35Z",
+          "bound_at": "2026-09-27T01:37:50Z",
           "announcements": []
         },
         {
@@ -1685,8 +1715,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:05:00+00:00",
-      "last_run_at": "2026-09-25T12:07:12Z",
+      "next_run_at": "2026-09-27T12:05:00+00:00",
+      "last_run_at": "2026-09-26T12:05:42Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "[ \"$(date -u +%Y%m%d)\" -ge 20260927 ] && /usr/local/bin/gh issue view 43 --repo alexeyleshchenko/ai-antispam --json state 2>/dev/null | grep -q OPEN && echo GATE-DUE",
       "profile": "ops",
@@ -1701,8 +1731,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:38Z",
       "deliver_to": "telegram:-1003993000918:10784",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1733,8 +1763,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T07:00:00+00:00",
-      "last_run_at": "2026-09-26T07:00:38Z",
+      "next_run_at": "2026-09-28T07:00:00+00:00",
+      "last_run_at": "2026-09-27T07:00:19Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1749,8 +1779,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:41Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1781,8 +1811,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T00:00:00+00:00",
-      "last_run_at": "2026-09-26T00:00:33Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T00:00:04Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1797,8 +1827,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:07:00+00:00",
-      "last_run_at": "2026-09-26T06:07:36Z",
+      "next_run_at": "2026-09-27T12:07:00+00:00",
+      "last_run_at": "2026-09-27T06:07:48Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1813,8 +1843,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:30:00+00:00",
-      "last_run_at": "2026-09-26T06:30:36Z",
+      "next_run_at": "2026-09-28T06:30:00+00:00",
+      "last_run_at": "2026-09-27T06:31:13Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -1829,8 +1859,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T05:50:00+00:00",
-      "last_run_at": "2026-09-26T05:50:35Z",
+      "next_run_at": "2026-09-28T05:50:00+00:00",
+      "last_run_at": "2026-09-27T05:50:23Z",
       "deliver_to": "session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1845,8 +1875,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:40:00+00:00",
-      "last_run_at": "2026-09-26T06:40:37Z",
+      "next_run_at": "2026-09-27T12:40:00+00:00",
+      "last_run_at": "2026-09-27T06:40:19Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -1861,8 +1891,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:00:00+00:00",
-      "last_run_at": "2026-09-25T12:00:32Z",
+      "next_run_at": "2026-09-27T12:00:00+00:00",
+      "last_run_at": "2026-09-26T12:00:42Z",
       "deliver_to": "telegram:-1003993000918:10784",
       "trigger_cmd": "CT=$(ssh apps \"docker ps --filter name=ai-antispam --format '{{.Names}}' | head -1\") && START=$(ssh apps \"docker inspect -f '{{.State.StartedAt}}' $CT\") && ssh apps \"docker logs --since $START $CT 2>&1 | awk '/app.agents: Gateway spam classification failed/{n++} END{print n+0}'\" > /tmp/oc_tm_fb && ssh apps 'docker exec postgres psql -U postgres -d ai_spam_bot -At -c \"SELECT '\"'\"'all='\"'\"'||count(*)||'\"'\"' decided='\"'\"'||count(*) FILTER (WHERE status='\"'\"'decided'\"'\"')||'\"'\"' failed='\"'\"'||count(*) FILTER (WHERE status='\"'\"'failed'\"'\"')||'\"'\"' | pre-pool n='\"'\"'||count(*) FILTER (WHERE created_at < TIMESTAMPTZ '\"'\"'2026-09-25T16:17:46Z'\"'\"')||'\"'\"' failed='\"'\"'||count(*) FILTER (WHERE created_at < TIMESTAMPTZ '\"'\"'2026-09-25T16:17:46Z'\"'\"' AND status='\"'\"'failed'\"'\"')||'\"'\"' | post-pool n='\"'\"'||count(*) FILTER (WHERE created_at >= TIMESTAMPTZ '\"'\"'2026-09-25T16:17:46Z'\"'\"')||'\"'\"' failed='\"'\"'||count(*) FILTER (WHERE created_at >= TIMESTAMPTZ '\"'\"'2026-09-25T16:17:46Z'\"'\"' AND status='\"'\"'failed'\"'\"')||'\"'\"' | span '\"'\"'||to_char(min(created_at),'\"'\"'MM-DD HH24:MI'\"'\"')||'\"'\"' .. '\"'\"'||to_char(max(created_at),'\"'\"'MM-DD HH24:MI'\"'\"') FROM classification_verdicts;\"' > /tmp/oc_tm_v && printf 'container=%s start=%s | gateway_fallbacks=%s (since container start) | %s\\n' \"$CT\" \"$START\" \"$(cat /tmp/oc_tm_fb)\" \"$(cat /tmp/oc_tm_v)\" && rm -f /tmp/oc_tm_fb /tmp/oc_tm_v",
       "profile": "ops",
@@ -1877,8 +1907,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:25:00+00:00",
-      "last_run_at": "2026-09-26T06:25:36Z",
+      "next_run_at": "2026-09-27T12:25:00+00:00",
+      "last_run_at": "2026-09-27T06:25:07Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
@@ -1909,8 +1939,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T09:00:00+00:00",
-      "last_run_at": "2026-09-26T09:00:39Z",
+      "next_run_at": "2026-09-28T09:00:00+00:00",
+      "last_run_at": "2026-09-27T09:00:48Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1957,8 +1987,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T05:00:00+00:00",
-      "last_run_at": "2026-09-26T05:00:35Z",
+      "next_run_at": "2026-09-28T05:00:00+00:00",
+      "last_run_at": "2026-09-27T05:00:36Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1973,8 +2003,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-27T12:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:45Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -1989,8 +2019,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:45Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2005,8 +2035,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:23:00+00:00",
-      "last_run_at": "2026-09-26T06:23:36Z",
+      "next_run_at": "2026-09-27T12:23:00+00:00",
+      "last_run_at": "2026-09-27T06:23:07Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2021,8 +2051,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T00:00:00+00:00",
-      "last_run_at": "2026-09-26T00:00:33Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T00:00:06Z",
       "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
@@ -2037,8 +2067,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T15:05:00+00:00",
-      "last_run_at": "2026-09-25T15:05:45Z",
+      "next_run_at": "2026-09-27T15:05:00+00:00",
+      "last_run_at": "2026-09-26T15:05:45Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2053,8 +2083,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:45Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2069,8 +2099,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-26T12:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:36Z",
+      "next_run_at": "2026-09-27T12:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:45Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -2117,8 +2147,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:41Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2133,8 +2163,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:00:00+00:00",
-      "last_run_at": null,
+      "next_run_at": "2026-09-27T12:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:43Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2149,8 +2179,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-28T06:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:44Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2181,8 +2211,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T12:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:35Z",
+      "next_run_at": "2026-09-27T12:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:45Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -2197,8 +2227,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T09:00:00+00:00",
-      "last_run_at": "2026-09-26T09:00:39Z",
+      "next_run_at": "2026-09-28T09:00:00+00:00",
+      "last_run_at": "2026-09-27T09:00:48Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2517,8 +2547,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-26T12:00:00+00:00",
-      "last_run_at": "2026-09-26T06:00:36Z",
+      "next_run_at": "2026-09-27T12:00:00+00:00",
+      "last_run_at": "2026-09-27T06:01:45Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2533,8 +2563,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T06:30:00+00:00",
-      "last_run_at": "2026-09-26T06:30:36Z",
+      "next_run_at": "2026-09-28T06:30:00+00:00",
+      "last_run_at": "2026-09-27T06:31:16Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2565,8 +2595,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-26T18:00:00+00:00",
-      "last_run_at": "2026-09-25T18:00:09Z",
+      "next_run_at": "2026-09-27T18:00:00+00:00",
+      "last_run_at": "2026-09-26T18:00:17Z",
       "deliver_to": "telegram:-1004286036984",
       "trigger_cmd": null,
       "profile": "family",
