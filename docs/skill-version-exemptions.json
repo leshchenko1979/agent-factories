@@ -14,6 +14,20 @@
       "granted": "2026-09-26",
       "reason": "the same commit changed the template law body without moving version 0.1.12; the two law files carry their OWN versions because they are not byte-paired, so each needs its own entry",
       "proof": "the ledger row that records the finding and this exemption: ledger n=1144"
+    },
+    {
+      "sha": "65ab4687f0cf23cb3f66020727c493dd8488140d",
+      "path": "skills/meta-factory/SKILL.md",
+      "granted": "2026-09-27",
+      "reason": "the ledger index-gate commit changed the law body without moving version 0.1.28, so that version now names two bodies; found only by a full audit, because the verification set for the change omitted this gate",
+      "proof": "the ledger row that records the finding and this exemption: ledger n=1305"
+    },
+    {
+      "sha": "65ab4687f0cf23cb3f66020727c493dd8488140d",
+      "path": "TEMPLATE/SKILL.md.tmpl",
+      "granted": "2026-09-27",
+      "reason": "the same commit changed the template law body without moving version 0.1.12; the two law files carry their OWN versions because they are not byte-paired, so each needs its own entry - and this is 0.1.12's second decoupling, so it now names three bodies",
+      "proof": "the ledger row that records the finding and this exemption: ledger n=1305"
     }
   ]
 }
