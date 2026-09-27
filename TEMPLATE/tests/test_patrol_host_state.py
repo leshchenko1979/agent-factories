@@ -33,13 +33,17 @@ having, each with a probe that would fail on the shape it forbids:
    them — a trailer-only read sees 40 of the 52 post-invariant rows, so a re-derived leg
    would judge 12 rows fewer and go false-green over them.
 
-6. **A failed notify SURFACES** (#122). A cron's notify can fail while the run row reads
-   green, and the failure lands on the job-local log. The leg is keyed on the SUCCESS TOKEN
-   and not on the byte count the finding arrived in, so a new error string at a familiar
-   length cannot satisfy it — and a log that merely MENTIONS the token is not a receipt,
-   because a field prose can satisfy is not a field (n=405 clause 5). Its live population
-   is legitimately empty on a quiet day, so non-vacuity rides the probe and never a
-   loud-fail-on-zero (#112) — the opposite call from the cron-thinness leg beside it.
+6. **A failed notify SURFACES** (#122), and the leg reads FOUR classes (#139). A cron's
+   notify can fail while the run row reads green, and the failure lands on the job-local
+   log. The leg is keyed on the receipt FORM the daemon wrote — not on the byte count the
+   finding arrived in, so a new error string at a familiar length cannot satisfy it — and
+   BOTH success forms are accepted, because only the deferred branch writes an id and a
+   token-only predicate therefore refused every immediate DELIVERY as a failed duty
+   (#139, ruling n=1087). Delivery and deferral keep their own kinds, a log with no output
+   is reported as never ATTEMPTED, and only a log with output and no receipt form is the
+   failed duty. A phrase without a uuid is not a receipt (n=405 clause 5), and its live
+   population is legitimately empty on a quiet day, so non-vacuity rides the probe and
+   never a loud-fail-on-zero (#112) — the opposite call from the cron-thinness leg.
 
 Run:  python3 tests/test_patrol_host_state.py
 Exit: 0 all checks pass, 1 a check failed.
@@ -683,6 +687,9 @@ _RECEIPT = (
     "the session has been quiet for 20s (hard cap 30s) — notification id "
     "f50759ea-b25f-475b-9c48-319dfa73dd8c\n"
 )
+# The OTHER success form, verbatim from /tmp (73 B), and the one the token-only predicate
+# refused: the daemon writes no `notification id` on the immediate-delivery path.
+_DELIVERED = "✅ delivered: delivered to session fb67ca75-8735-4c39-80be-06b59bd4365f\n"
 
 def _notify_row(name, *, row_id="row-1", home="probe-home") -> dict:
     """An ENABLED cron row this factory declares — the rows the leg attributes by.
@@ -762,7 +769,7 @@ def test_prose_ABOUT_a_missing_receipt_does_not_satisfy_the_read() -> None:
     rows = [_notify_row("factory-measurement-daily")]
     for name in sorted(p.name for p in log_dir.iterdir()):
         text = (log_dir / name).read_text(encoding="utf-8")
-        assert not RUNNER.reads_notify_receipt(text), (
+        assert RUNNER.read_notify_receipt(text) is None, (
             f"{name} mentions the token without naming an id and must NOT read as a "
             f"receipt — prose about a missing field is the n=405 clause 5 damage"
         )
@@ -770,6 +777,87 @@ def test_prose_ABOUT_a_missing_receipt_does_not_satisfy_the_read() -> None:
                                     log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
     assert len(leg["problems"]) == 2, (
         f"both logs carry no receipt and both must be reported: {leg['problems']}"
+    )
+
+def test_the_DELIVERED_form_reads_as_a_receipt_of_kind_delivered() -> None:
+    """#139 criterion (b): the form the token-only predicate REFUSED now reads as a receipt.
+
+    This is the whole defect. Measured on the live surface: the immediate-delivery branch
+    writes `delivered to session <uuid>` and NO id, so a predicate requiring the id reported
+    every successful delivery as a failed duty — permanently, and growing by one each time.
+    """
+    assert RUNNER.read_notify_receipt(_DELIVERED) == "delivered", (
+        "the delivered form must read as kind 'delivered' — it is the STRONGER receipt, "
+        "and refusing it was the defect"
+    )
+    log_dir = _log_dir(**{"factory-measurement-daily-20260924T060116.log": _DELIVERED})
+    rows = [_notify_row("factory-measurement-daily")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z")
+    assert leg["problems"] == [], (
+        f"a delivered notify is NOT a failed duty: {leg['problems']}"
+    )
+    assert len(leg["excused"]) == 1 and "(delivered)" in leg["excused"][0], (
+        f"the verdict must NAME the kind — delivery and acceptance are different facts: "
+        f"{leg['excused']}"
+    )
+
+def test_the_DEFERRED_form_reads_as_a_receipt_of_kind_deferred_with_its_id() -> None:
+    """#139 criterion (c): the weaker form keeps its own kind, and its id is quoted."""
+    assert RUNNER.read_notify_receipt(_RECEIPT) == "deferred", (
+        "the deferred form proves ACCEPTANCE, not delivery — a different fact"
+    )
+    log_dir = _log_dir(**{"factory-measurement-daily-20260919T060154.log": _RECEIPT})
+    rows = [_notify_row("factory-measurement-daily")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z")
+    assert leg["problems"] == [], leg["problems"]
+    assert "(deferred, id f50759ea-b25f-475b-9c48-319dfa73dd8c)" in leg["excused"][0], (
+        f"the kind AND the acceptance id must be named: {leg['excused']}"
+    )
+
+def test_BOTH_forms_without_a_uuid_are_NOT_receipts() -> None:
+    """#139 criterion (d), the non-vacuity control, on BOTH forms.
+
+    A phrase alone is prose. If the phrases matched without a uuid, a log that merely
+    MENTIONS the wording — a finding ABOUT the forms, e.g. this file's own text — would read
+    as a receipt, which is the n=405 clause 5 damage on two forms instead of one.
+    """
+    for phrase in ("delivered to session ", "deferred for session "):
+        assert RUNNER.read_notify_receipt(f"❌ the notify {phrase}could not be written\n") is None, (
+            f"{phrase!r} without a uuid must NOT read as a receipt"
+        )
+    for form in ("✅ delivered: delivered to session not-a-uuid\n",
+                 "⚠️ deferred: deferred for session 6ca0d547-short: x\n"):
+        assert RUNNER.read_notify_receipt(form) is None, (
+            f"a malformed uuid must not satisfy the read: {form!r}"
+        )
+    # The POSITIVE arm beside the negative one, so the control cannot pass by the predicate
+    # having stopped matching anything at all.
+    assert RUNNER.read_notify_receipt(_DELIVERED) == "delivered", "positive arm"
+    assert RUNNER.read_notify_receipt(_RECEIPT) == "deferred", "positive arm"
+
+def test_a_log_with_NO_OUTPUT_is_reported_as_no_attempt_never_a_failed_duty() -> None:
+    """#139 criterion (e): a 0-byte log is a notify that was never ATTEMPTED.
+
+    Measured origin: a run row reading `interrupted: cleared by doctor --fix (orphaned: no
+    live process owns this run)` left a 0-byte log, so no receipt could ever be written and
+    every future patrol re-reported it — a detector that could never go green. It is
+    REPORTED and NAMED, because an unreported absence is indistinguishable from a clean read.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="orphaned-probe")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z")
+    assert leg["problems"] == [], (
+        f"a notify never attempted is not a failed one: {leg['problems']}"
+    )
+    assert leg["coverage"]["logs_not_attempted"] == 1, leg["coverage"]
+    assert leg["coverage"]["not_attempted_logs"][0]["job"] == "factory-measurement-daily", (
+        leg["coverage"]
+    )
+    assert leg["coverage"]["logs_without_receipt"] == 0, (
+        f"no-attempt must NOT be counted as a missing receipt\n{leg['coverage']}"
     )
 
 def test_a_log_with_no_live_ROW_is_reported_as_history_and_never_judged() -> None:

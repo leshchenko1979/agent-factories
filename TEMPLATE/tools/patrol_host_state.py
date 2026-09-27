@@ -54,10 +54,13 @@ Six things it does deliberately:
 - **Reads the notify logs a failed thin trigger leaves behind** (#122). A cron's notify can
   fail while the table records a successful run, and the table cannot express the outcome —
   `cron_jobs` carries no status, error or result column at all. WHERE the failure lands is
-  the job-local log, and the predicate is the SUCCESS TOKEN (`notification id <uuid>`), never
-  the byte count the finding was first stated in: a log carrying no receipt is a notify that
-  produced no receipt, which IS the invariant. A failure report cannot ride the channel that
-  failed, which is why this is a READER and not a second notify.
+  the job-local log, and the predicate is the RECEIPT FORM the daemon wrote — `delivered to
+  session <uuid>` or `deferred for session <uuid>` — never the byte count the finding was
+  first stated in. Both are success forms and only one carries an id, so a token-only
+  predicate refused the STRONGER half of its own evidence (#139, ruling n=1087). A log
+  carrying no receipt form is a notify that produced no receipt, which IS the invariant. A
+  failure report cannot ride the channel that failed, which is why this is a READER and not
+  a second notify.
 
 The board slug is derived from the git remote, so nothing here hardcodes a factory.
 
@@ -239,11 +242,19 @@ BARE_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 # **THE PREDICATE IS CONTENT, NOT SIZE** (ruling n=774). The finding was stated as a byte
 # count (155 = failure, 197 = success), and a byte count is a count by PATTERN — this
 # factory's own law bars a pattern count from standing in for a count of items, and a new
-# error string arriving at a familiar length would satisfy it. The sharper predicate is the
-# SUCCESS TOKEN: a log that produced a receipt carries `notification id <uuid>`; a log that
-# carries none is a notify that produced no receipt, which IS the invariant. The uuid is
-# REQUIRED rather than the bare phrase, so prose ABOUT a missing id cannot satisfy the read
-# (the prose-as-data class, ruled at n=405 clause 5).
+# error string arriving at a familiar length would satisfy it. The predicate is therefore
+# the receipt FORM the log carries. The uuid is REQUIRED rather than the bare phrase, so
+# prose ABOUT a missing id cannot satisfy the read (the prose-as-data class, n=405 cl 5).
+#
+# **TWO ACCEPTED FORMS, ONE PREDICATE** (ruling n=1087, #139). The thin trigger's log
+# carries ONE OF TWO success forms, and only the deferred branch writes the `notification
+# id` token — so a token-only predicate could never accept an immediate delivery, and it
+# reported every one of them as a FAILED duty: permanent, and growing with each delivery.
+# Reshaping the world was REJECTED (both forms are emitted by the DAEMON and the trigger
+# only redirects its stdout, so it is not a kit change) — the predicate describes the world.
+# The delivered form is the STRONGER receipt (it proves delivery; the deferred form proves
+# acceptance only, delivery pending), so the leg was refusing the better half of its
+# evidence. Order is strongest-first: a log carrying both forms reports the stronger fact.
 #
 # **NON-VACUITY RIDES A PROBE, NEVER A LOUD-FAIL-ON-ZERO** (ruling n=774 done-criteria).
 # The live population of failed notifies is legitimately EMPTY on a quiet day, so an empty
@@ -253,13 +264,19 @@ BARE_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 LOG_DIR = Path("/tmp")
 # `<job-name>-<YYYYmmddTHHMMSS>.log` — the thin trigger's own redirect, nothing else.
 NOTIFY_LOG_RE = re.compile(r"^(?P<job>.+)-(?P<stamp>\d{8}T\d{6})\.log$")
+# The phrase a reader should look for when NO form matched (the deferred branch's token).
 NOTIFY_RECEIPT_TOKEN = "notification id"
-# The token AND the id it names. Anchored on a UUID so a log that merely MENTIONS the token
-# cannot read as a receipt, and the `\b` ends keep a longer identifier from matching.
-NOTIFY_RECEIPT_RE = re.compile(
-    r"\bnotification id\s+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+_UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+# Each form is anchored on its PHRASE PLUS A UUID, so a log that merely MENTIONS a phrase is
+# not a receipt. Strongest first: delivery proves the fact the leg exists to assert, while
+# deferral proves only that the notify was accepted.
+NOTIFY_RECEIPT_FORMS = (
+    ("delivered", re.compile(r"\bdelivered to session\s+" + _UUID + r"\b")),
+    ("deferred", re.compile(r"\bdeferred for session\s+" + _UUID + r"\b")),
 )
+# The deferred form's own id, quoted in the verdict so the excuse names the acceptance
+# token rather than merely its kind.
+NOTIFY_ID_RE = re.compile(r"\bnotification id\s+(" + _UUID + r")\b")
 
 
 class BoardReadError(RuntimeError):
@@ -769,14 +786,21 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
     }
 
 
-def reads_notify_receipt(text: str) -> bool:
-    """True when `text` carries a notify RECEIPT — the token AND the id it names.
+def read_notify_receipt(text: str) -> str | None:
+    """The KIND of receipt `text` carries, or None — one predicate, two accepted forms.
+
+    `"delivered"` proves the notify DELIVERED; `"deferred"` proves only that it was
+    ACCEPTED, delivery pending. A bool could not say which fact was found and the verdict
+    must say, because they mean different things to a reader (#139, ruling n=1087).
 
     The uuid is required on purpose. A log whose only line is "no notification id was
     recorded" carries the phrase and must NOT satisfy the read, because a field prose can
     SATISFY is the class ruled at n=405 clause 5.
     """
-    return NOTIFY_RECEIPT_RE.search(text) is not None
+    for kind, pattern in NOTIFY_RECEIPT_FORMS:
+        if pattern.search(text):
+            return kind
+    return None
 
 def notify_failure_line(text: str) -> str:
     """The line that reports the failure: the transport error if present, else the first
@@ -831,6 +855,12 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     carrying its reason and no problem: the surface is a constant of this tool rather than
     factory data, and a box with no thin triggers yet has nothing to judge.
 
+    FOUR CLASSES, and only ONE is a failed duty (#139, ruling n=1087): `delivered` and
+    `deferred` are both receipts and are EXCUSED with the kind named (they are different
+    facts — one proves delivery, the other proves acceptance); a log with NO OUTPUT was
+    never attempted and is REPORTED, never judged; and a log with output but no receipt
+    form is the single class this leg exists to surface.
+
     ZERO MATCHED LOGS IS NOT A FAILURE HERE (ruling n=774 done-criteria). This population is
     legitimately empty on a quiet day, so an empty read is PRINTED and never gated — the
     opposite call from the cron-thinness leg, whose population is the rows the factory
@@ -844,6 +874,10 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     judged: list[dict] = []
     retired: list[dict] = []
     foreign: list[dict] = []
+    # The FOURTH class's sibling (#139): a log with no output at all is a notify that was
+    # never ATTEMPTED, and judging it as a failed duty made a permanent false positive out
+    # of a run that was orphaned before it ever reached its notify. Reported, never a problem.
+    not_attempted: list[dict] = []
     for name, path in matched:
         if not prefixes or not any(name.startswith(prefix) for prefix in prefixes):
             foreign.append({"job": name, "path": str(path)})
@@ -860,8 +894,20 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
                 f"defeats the read is a defect, never an absence"
             )
             continue
-        if reads_notify_receipt(text):
-            excused.append(f"{name}: {path.name} carries a receipt — the notify delivered")
+        kind = read_notify_receipt(text)
+        if kind:
+            id_match = NOTIFY_ID_RE.search(text)
+            detail = f", id {id_match.group(1)}" if kind == "deferred" and id_match else ""
+            meaning = ("the notify was DELIVERED" if kind == "delivered"
+                       else "the notify was ACCEPTED; delivery is pending")
+            excused.append(f"{name}: {path.name} carries a receipt ({kind}{detail}) — {meaning}")
+            continue
+        if not text.strip():
+            not_attempted.append({
+                "job": name,
+                "id": str(row.get("id") or ""),
+                "path": str(path),
+            })
             continue
         line = notify_failure_line(text)
         judged.append({
@@ -872,7 +918,8 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
         })
         problems.append(
             f"{name} (cron id {row.get('id') or 'unstated'}): the notify produced NO "
-            f"receipt — {path} carries no '{NOTIFY_RECEIPT_TOKEN}' id; failure line: "
+            f"receipt — {path} carries neither success form ('delivered to session <uuid>' "
+            f"/ 'deferred for session <uuid>') nor any output at all; failure line: "
             f"{line!r}"
         )
     return {
@@ -891,6 +938,8 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
             "logs_on_surface": len(matched),
             "logs_matched": len(matched) - len(retired) - len(foreign),
             "logs_without_receipt": len(judged),
+            "logs_not_attempted": len(not_attempted),
+            "not_attempted_logs": not_attempted,
             "logs_retired": len(retired),
             "logs_unattributed": len(foreign),
             "retired_logs": retired,
@@ -1583,6 +1632,12 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"on {cov['log_dir']} naming a live row this factory declares — "
                 f"{cov['logs_without_receipt']} produced no receipt"
             )
+            for row in cov.get("not_attempted_logs", []):
+                lines.append(
+                    f"    no attempt: {row['job']} (cron id {row['id'] or 'unstated'}) — "
+                    f"{row['path']} carries no output, so no notify was attempted; "
+                    f"reported, never a failed duty"
+                )
             for row in cov.get("retired_logs", []):
                 lines.append(
                     f"    no live row: {row['job']} ({row['path']}) — history, not judged"
