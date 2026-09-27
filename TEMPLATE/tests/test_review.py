@@ -738,6 +738,60 @@ def test_a_migrated_record_renders_without_a_recorded_digest(tmp_path: Path) -> 
         if cycle_dir.exists():
             shutil.rmtree(cycle_dir)
 
+def test_the_donor_lens_key_rename_is_mapped_and_named(tmp_path: Path) -> None:
+    """The donor renames a lens-entry KEY, and the rename must be MAPPED and NAMED.
+
+    Measured over the donor's 88 lens entries: the key shapes are
+    `(report_path, status, verdict)` 73, `(path, status)` 11, `(findings_count,
+    report_path, status)` 4 — so eleven entries name the report with `path`, and
+    `sha256` is present in ZERO of the 88.
+
+    Two distinct failures ride on this, and neither is a crash:
+      * the migration's key filter keeps only keys the TEMPLATE has, so `path` was
+        DROPPED — eleven donor lenses arrived carrying no report at all; and
+      * the render read `report_path` alone, so a raw donor record printed `None`
+        for a lens whose report exists — a WRONG value, which is worse than a
+        crash because nothing looks broken.
+    """
+    cycle_id = "test-lens-key-rename"
+    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    if cycle_dir.exists():
+        shutil.rmtree(cycle_dir)
+    cycle_dir.mkdir(parents=True)
+    (cycle_dir / "state.json").write_text(json.dumps({
+        "cycle_id": cycle_id,
+        "status": "COMPLETED",
+        "started_at": "2026-09-14T00:00:00Z",
+        "ended_at": "2026-09-14T01:00:00Z",
+        # The donor's renamed shape, and a key with no home in the schema.
+        "lenses": {"A": {"path": "reports/lens-A.md", "status": "COMPLETED"},
+                   "C": {"report_path": "reports/lens-C.md", "status": "COMPLETED",
+                         "findings_count": 3}},
+    }), encoding="utf-8")
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+
+        # (1) A RAW donor record still renders its report path — no migration required.
+        res = subprocess.run(cmd_base + ["status", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert "reports/lens-A.md" in res.stdout, res.stdout
+        assert "Lens A -> None" not in res.stdout, res.stdout
+
+        # (2) The migration MAPS the rename and NAMES it, and NAMES what it dropped.
+        res = subprocess.run(cmd_base + ["migrate", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "'path' -> 'report_path'" in res.stdout, res.stdout
+        assert "'findings_count'" in res.stdout, res.stdout
+
+        # (3) The migrated entry CARRIES the path under the schema's own key.
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["lenses"]["A"]["report_path"] == "reports/lens-A.md", state["lenses"]["A"]
+        assert "path" not in state["lenses"]["A"], "the renamed key must not survive beside it"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -758,4 +812,5 @@ if __name__ == "__main__":
     test_migration_maps_the_donor_terminal_synonym(Path("/tmp"))
     test_migration_reports_values_it_cannot_map(Path("/tmp"))
     test_a_migrated_record_renders_without_a_recorded_digest(Path("/tmp"))
+    test_the_donor_lens_key_rename_is_mapped_and_named(Path("/tmp"))
     print("ALL TESTS PASSED")
