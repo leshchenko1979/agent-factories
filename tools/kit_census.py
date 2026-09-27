@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -47,6 +48,205 @@ EVIDENCE = REPO / "evidence"
 FACTORY_DIR = REPO / "registry" / "factories"
 DECISIONS = REPO / "registry" / "kit-decisions.json"
 
+
+# == the answering path =============================================================
+#
+# THE PUBLISHED PAGE IS SERVED FROM A DIFFERENT HOST THAN THIS MEASUREMENT RUNS ON, and
+# the CLI it serves with runs HERE. `/opt/questions/backend.py` on the vpn host answers an
+# owner's tap by ssh'ing to this box and executing the register CLI, resolving that CLI at
+# CALL TIME -- `ls -1 <CLI_ROOT>/*/oc-questions <CLI_ROOT>/oc-questions`, exactly-one or
+# exit 127 -- because the CLI moved once (`tools/` -> `tools/state/` on 2026-09-25) and a
+# pinned layout silently broke every answer with rc=127. So the resolution happens on this
+# host, and this function RUNS it rather than replicating a verdict about it.
+#
+# WHAT THIS IS NOT. Still not a second measurement of the members' TREES -- the trees are
+# the patrol leg's predicate and stay there. This answers a different question: which copy
+# the OWNER'S TAP reaches. A tree read cannot answer it in EITHER direction, and both
+# directions were measured on 2026-09-27: `infra-factory` held a copy that never executed
+# (one real install indexed over a dead file), and a copy can execute with no tree copy at
+# all. State the predicate with the number, or the number cannot be read.
+ANSWER_CLI_ROOT = os.environ.get(
+    "OQ_CLI_ROOT",
+    "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools",
+)
+ANSWER_AUTHORITY = "/opt/questions/backend.py (CLI_ROOT default + the CLI_RESOLVE glob)"
+
+# THE MEMBER-RELATIVE PATH OF THE TOOL, taken from the manifest's own `TEMPLATE/tools/questions`.
+# A member's tree carries it at `<root>/tools/questions` -- the kit's declared path -- while
+# the EXECUTING copy lives in the ops profile's skill tree, which sits inside NO member root.
+# That gap is the whole reason the per-member column below exists: a tree read cannot see it,
+# and on 2026-09-27 it was measured in both directions at once.
+ANSWER_TOOL_PATH = "tools/questions"
+
+# A MARKER IS EVIDENCE ABOUT THE LEG IT MEASURES, NEVER ABOUT THE INSTRUMENT. The two legs
+# below read DIFFERENTLY at the same instant -- on 2026-09-27 the clarify leg was equal on
+# both copies while the publisher-fault leg diverged by all three of its markers -- so one
+# marker reported as one verdict would clear a leg it cannot see. Each leg therefore carries
+# its own CONTROL, present in any copy of the tool, so that a probe which finds NOTHING is
+# distinguishable from a leg that is genuinely absent; a zero without a working control is
+# not evidence of absence.
+ANSWER_LEGS = (
+    {
+        "leg": "clarify — what an owner's empty tap does",
+        "control": "def republish",
+        "fixed": "CLARIFY_EMPTY_TEXT",
+        "old": "clarify requires --text",
+        "reads": "fixed present = an empty tap is RECORDED as such; old present = the "
+                 "pre-#183 refusal that died before recording it",
+    },
+    {
+        "leg": "publisher fault — what a caller learns when a page fails to build",
+        "control": "def republish",
+        "fixed": "_note_publish_fault",
+        "old": '"publish_failed", "SystemExit"',
+        "reads": "fixed present = the reason reaches the caller; old present = only the "
+                 "exception's class name is logged, and logging is gated OFF by default",
+    },
+)
+
+
+def _leg_state(counts: dict) -> str:
+    """Read a leg from its own three markers, never from the other leg's."""
+    if counts["control"] == 0:
+        return "UNPROBED — its control is absent, so this probe says nothing"
+    if counts["fixed"] and not counts["old"]:
+        return "fixed"
+    if counts["old"] and not counts["fixed"]:
+        return "PRE-FIX"
+    if counts["fixed"] and counts["old"]:
+        return "BOTH — carries the fix AND the old form; read it by hand"
+    return "neither marker — this copy does not carry the leg"
+
+
+def answering_path(cli_root: str = "") -> dict:
+    """Which copy an OWNER'S TAP reaches, and which legs of the tool that copy carries.
+
+    Fail-open as UNMEASURED, never as clean: a search that raises, a root that does not
+    exist, or a candidate count other than one is reported as the fault it is. The backend
+    exits 127 on any count but one, so an ambiguous root is not a degraded measurement --
+    it is every tap refused, and it must not render as a quiet single row.
+    """
+    root = Path(cli_root or ANSWER_CLI_ROOT)
+    out: dict = {
+        "cli_root": str(root),
+        "authority": ANSWER_AUTHORITY,
+        "candidates": [],
+        "resolved": "",
+        "measured": False,
+        "ambiguous": False,
+        "legs": [],
+        "why": "",
+    }
+    if not root.is_dir():
+        out["why"] = f"the CLI root does not exist: {root}"
+        return out
+    try:
+        found = sorted(
+            [p for p in root.glob("*/oc-questions") if p.is_file()]
+            + ([root / "oc-questions"] if (root / "oc-questions").is_file() else [])
+        )
+    except OSError as exc:
+        out["why"] = f"cannot search {root}: {exc}"
+        return out
+    out["candidates"] = [str(p) for p in found]
+    if len(found) != 1:
+        # Not a degradation -- the backend wants exactly one and exits 127 otherwise.
+        out["ambiguous"] = True
+        out["why"] = (
+            f"the backend wants exactly 1 candidate under {root} and finds {len(found)}; "
+            f"every tap exits 127 until that is one"
+        )
+        return out
+    path = found[0]
+    try:
+        text = path.read_text(errors="replace")
+        st = path.stat()
+    except OSError as exc:
+        out["why"] = f"resolved {path} but cannot read it: {exc}"
+        return out
+    out["measured"] = True
+    out["resolved"] = str(path)
+    out["bytes"] = st.st_size
+    out["mtime"] = dt.datetime.fromtimestamp(
+        st.st_mtime, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for spec in ANSWER_LEGS:
+        counts = {
+            "control": text.count(spec["control"]),
+            "fixed": text.count(spec["fixed"]),
+            "old": text.count(spec["old"]),
+        }
+        out["legs"].append({
+            "leg": spec["leg"],
+            "reads": spec["reads"],
+            **counts,
+            "state": _leg_state(counts),
+        })
+    return out
+
+
+def _under(root: str, path: str) -> bool:
+    """Whether `path` sits inside `root`, by resolved comparison rather than by prefix.
+
+    A string prefix would read `/root/ai-antispam-old` as inside `/root/ai-antispam`; the
+    resolved-relative test cannot. Symlinks are followed on both sides, so a link into a
+    member's tree counts as inside it — which is the honest answer, since the loader
+    follows it too.
+    """
+    try:
+        Path(path).resolve().relative_to(Path(root).resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+def member_copy_state(m: dict, answering: dict, tool_path: str = ANSWER_TOOL_PATH) -> dict:
+    """Whether a member's OWN copy sits ON the answering path, OFF it, or is ABSENT.
+
+    Three states, and the distinction is the point this column was added for: on
+    2026-09-27 `infra-factory` held a copy that had never executed (a real file, a real
+    install, indexed over a dead path) while `miidas` holds one that is inert for OWNER
+    TAPS but live for its own lane invocations. Those are different facts about different
+    members, and a single "installed" column reported both as the same thing.
+
+    ABSENT is not inert. A member with no copy has installed nothing; rendering it inert
+    would say it had something that does not run.
+
+    FAIL-OPEN, and this is the load-bearing branch: INERT is a claim that a copy is OFF
+    the answering path, which cannot be made without the path. When the path was not
+    measured -- no candidates, an ambiguous root, an unreadable copy -- the state is
+    `undetermined` and says so, never `inert`. A probe that cannot see the path must not
+    report a member's copy as off it.
+    """
+    out: dict = {"state": "", "why": "", "copy": ""}
+    if not m.get("reachable"):
+        out["state"] = "unreachable"
+        out["why"] = "the leg could not read its tree"
+        return out
+    root = Path(m["root"])
+    copy = root / tool_path
+    if tool_path in (m.get("absent_files") or []) or not copy.exists():
+        out["state"] = "ABSENT"
+        out["why"] = f"no `{tool_path}` in its tree — it has installed nothing"
+        return out
+    out["copy"] = str(copy)
+    if not answering.get("measured"):
+        out["state"] = "undetermined"
+        out["why"] = ("it holds a copy, but the answering path was NOT measured — so "
+                      "whether that copy is on it cannot be claimed either way")
+        return out
+    try:
+        on_path = copy.resolve() == Path(answering["resolved"]).resolve()
+    except OSError as exc:
+        out["state"] = "undetermined"
+        out["why"] = f"it holds a copy but it cannot be resolved for comparison: {exc}"
+        return out
+    if on_path:
+        out["state"] = "LIVE"
+        out["why"] = "this copy IS the one an owner's tap reaches"
+    else:
+        out["state"] = "inert"
+        out["why"] = ("off the answering path — reaches no owner tap; live only for its "
+                      "own lane invocations, if it invokes its own copy")
+    return out
 
 def load_declarations(slug: str) -> dict:
     """This repo's record of what a member DECLARED, or an explicit absence.
@@ -114,9 +314,10 @@ def load_decisions() -> dict:
         return {}
 
 
-def _cell_row(m: dict, decl: dict) -> str:
+def _cell_row(m: dict, decl: dict, answering: dict | None = None) -> str:
+    cs = member_copy_state(m, answering or {})
     if not m["reachable"]:
-        return f"| `{m['slug']}` | — | — | — | — | — | **unreachable** |"
+        return f"| `{m['slug']}` | — | — | — | — | — | — | **unreachable** |"
     d = decl
     if d.get("declared"):
         declared = f"{d['attested_at']} · {d['status']}"
@@ -134,11 +335,11 @@ def _cell_row(m: dict, decl: dict) -> str:
         pin = "**none**"
     return (
         f"| `{m['slug']}` | {m['same']} | {m['DIFF']} | {m['ABSENT']} | {pin} | "
-        f"{zone} | {declared} |"
+        f"{cs['state']} | {zone} | {declared} |"
     )
 
 
-def render(leg: dict, read_at: str) -> str:
+def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
     cov = leg.get("coverage") or {}
     members = cov.get("members") or []
     mc = cov.get("manifest_cells") or {}
@@ -149,8 +350,9 @@ def render(leg: dict, read_at: str) -> str:
     out.append("# Kit-drift census — member adoption of the template's shipped set")
     out.append("")
     out.append(f"Read at **{read_at}** by `tools/kit_census.py`, which calls the patrol's")
-    out.append("`kit_drift_leg` — this artifact renders that leg's own result and adds no")
-    out.append("comparison of its own.")
+    out.append("`kit_drift_leg` — this artifact renders that leg's own result. It adds ONE")
+    out.append("measurement of its own (section 2, the answering path), which is a DIFFERENT")
+    out.append("predicate and not a second comparison of the same bytes.")
     out.append("")
     out.append("## 1. The reference, stated first")
     out.append("")
@@ -162,7 +364,71 @@ def render(leg: dict, read_at: str) -> str:
     out.append("**we** move — so a DIFF here is not a member's to act on. A member acts on")
     out.append("its own vendored pin, judged by `tests/test_kit_pin.py`.")
     out.append("")
-    out.append("## 2. The population")
+    out.append("## 2. The answering path — which copy an owner's tap reaches")
+    out.append("")
+    out.append("A DIFFERENT PREDICATE FROM EVERY NUMBER ELSEWHERE IN THIS ARTIFACT, and that is")
+    out.append("why it is here: the figures below say what a member HOLDS, this one says what an")
+    out.append("owner's tap REACHES. On 2026-09-27 the two disagreed in BOTH directions — one")
+    out.append("factory held a copy that had never executed, and a copy can execute with no tree")
+    out.append("copy at all — so neither can be read off the other.")
+    out.append("")
+    if answering is None:
+        out.append("**NOT MEASURED** — the caller passed no answering-path result, so this")
+        out.append("section states nothing about which copy is live. It is stated rather than")
+        out.append("omitted because an absent section and a clean section read the same, and that")
+        out.append("is the one confusion this row exists to prevent.")
+        out.append("")
+    elif answering.get("ambiguous"):
+        out.append("**AMBIGUOUS — NOT ONE COPY.** " + str(answering["why"]))
+        out.append("")
+        out.append("- candidates found: %d; the backend wants exactly one and exits 127"
+                   % len(answering["candidates"]))
+        out.append("  otherwise, so this is every tap REFUSED rather than a degraded reading.")
+        out.append("")
+    elif not answering.get("measured"):
+        out.append("**UNMEASURED** — " + str(answering.get("why", "no reason recorded")))
+        out.append("")
+    else:
+        out.append("- resolved by the backend's own search — " + str(answering["authority"]))
+        out.append("- CLI root searched: `" + str(answering["cli_root"]) + "`")
+        out.append("- candidates: **%d** — the backend requires exactly one, so a count"
+                   % len(answering["candidates"]))
+        out.append("  other than 1 is reported above as a refusal, not as a partial reading")
+        out.append("- **executing copy**: `" + str(answering["resolved"]) + "`")
+        out.append("  - **%s B**, mtime **%s** — size and time only, no digest: this copy"
+                   % (answering["bytes"], answering["mtime"]))
+        out.append("    moved twice inside one day, so a fixed hash here would be a stale")
+        out.append("    claim rather than a measurement")
+        out.append("")
+        out.append("Each leg is probed with ITS OWN control and reported on its own row:")
+        out.append("")
+        out.append("| leg | control | fix marker | old marker | reads |")
+        out.append("|---|---|---|---|---|")
+        for lg in answering["legs"]:
+            out.append("| " + str(lg["leg"]) + " | " + str(lg["control"]) + " | "
+                       + str(lg["fixed"]) + " | " + str(lg["old"]) + " | **"
+                       + str(lg["state"]) + "** |")
+        out.append("")
+        out.append("One row per leg because the legs can DISAGREE — on 2026-09-27 this copy")
+        out.append("carried the clarify fix and NOT the publisher-fault fix, so a single marker")
+        out.append("summarised as one verdict would have cleared the leg it cannot see. A marker")
+        out.append("is evidence about the leg it measures, never about the instrument.")
+        out.append("")
+        hits = [m["slug"] for m in members
+                if m.get("reachable") and _under(m["root"], answering["resolved"])]
+        if hits:
+            out.append("**The tree holding that copy**: "
+                       + ", ".join("`" + s + "`" for s in hits)
+                       + " — a member's own tree IS the answering path, so that member's")
+            out.append("copy reads LIVE in the section 4 column.")
+        else:
+            out.append("**The tree holding that copy**: NONE of the declared members. The")
+            out.append("executing copy sits outside every member root, so no row in section 4")
+            out.append("can read LIVE — and a member's own copy, however current it is, is")
+            out.append("inert for owner taps.")
+        out.append("")
+
+    out.append("## 3. The population")
     out.append("")
     out.append(f"- members declared: **{cov.get('members_declared')}**, "
                f"reachable: **{cov.get('members_reachable')}**")
@@ -170,9 +436,8 @@ def render(leg: dict, read_at: str) -> str:
         out.append(f"- unreachable: {', '.join('`' + s + '`' for s in cov['members_unreachable'])}")
     out.append(f"- **every manifest cell** ({cov.get('manifest_cells_total')} pairs): "
                f"same {mc.get('same')} · DIFF {mc.get('DIFF')} · ABSENT {mc.get('ABSENT')}")
-    out.append(f"- **bootstrap-named subset** ({cov.get('bootstrap_cells_total')} cells, the "
-               f"{len(names)} files")
-    out.append("  `TEMPLATE/BOOTSTRAP.md` names): "
+    out.append(f"- **bootstrap-named subset** ({cov.get('bootstrap_cells_total')} cells, "
+               f"the {len(names)} files `TEMPLATE/BOOTSTRAP.md` names): "
                f"same {bc.get('same')} · DIFF {bc.get('DIFF')} · ABSENT {bc.get('ABSENT')}")
     out.append("")
     out.append("Two populations are reported because a number must travel with its own "
@@ -181,23 +446,29 @@ def render(leg: dict, read_at: str) -> str:
                "and quoting")
     out.append("only one of them would leave the other unreproducible.")
     out.append("")
-    out.append("## 3. Per member — the figure AND the declaration")
+    out.append("## 4. Per member — the figure AND the declaration")
     out.append("")
-    out.append("| member | same | DIFF | ABSENT | own pin | zone own/not | declared |")
-    out.append("|---|---|---|---|---|---|---|")
+    out.append("| member | same | DIFF | ABSENT | own pin | own copy | zone own/not | declared |")
+    out.append("|---|---|---|---|---|---|---|---|")
     decls = {}
     for m in members:
         d = load_declarations(m["slug"])
         decls[m["slug"]] = d
-        out.append(_cell_row(m, d))
+        out.append(_cell_row(m, d, answering))
     out.append("")
-    out.append("Three columns carry the point. **own pin** is the member-actionable half: a")
+    out.append("Four columns carry the point. **own pin** is the member-actionable half: a")
     out.append("member with no pin has no figure of its own, and the DIFF beside it is against")
-    out.append("OUR manifest. **declared** is when it last attested. A member that has DECLARED")
-    out.append("a fork and one that has silently diverged produce the same figure, and must not")
-    out.append("read the same — which is why section 5 carries what each one said.")
+    out.append("OUR manifest. **own copy** is a DIFFERENT PREDICATE from every figure beside it")
+    out.append("— not a comparison of the same bytes but a statement about which copy an")
+    out.append("owner's tap REACHES: LIVE (it is that copy), inert (off that path, so it reaches")
+    out.append("no owner tap), ABSENT (there is no copy to reach with), or undetermined when the")
+    out.append("path itself was not measured. It is read from section 2, so it moves when the")
+    out.append("answering path moves and not when a member's tree does. **declared** is when it")
+    out.append("last attested. A member that has DECLARED a fork and one that has silently")
+    out.append("diverged produce the same figure, and must not read the same — which is why")
+    out.append("section 6 carries what each one said.")
     out.append("")
-    out.append("## 4. Declared detail")
+    out.append("## 5. Declared detail")
     out.append("")
     for m in members:
         d = decls[m["slug"]]
@@ -221,7 +492,7 @@ def render(leg: dict, read_at: str) -> str:
                 more = f" (+{len(m['absent_files']) - 8} more)" if len(m["absent_files"]) > 8 else ""
                 out.append(f"- ABSENT: {shown}{more}")
         out.append("")
-    out.append("## 5. Declared decisions — what each member SAID about its own figure")
+    out.append("## 6. Declared decisions — what each member SAID about its own figure")
     out.append("")
     decisions = load_decisions()
     if not decisions:
@@ -263,7 +534,7 @@ def render(leg: dict, read_at: str) -> str:
                     out.append(f"  - filed on its own tracker: "
                                + ", ".join(f"`{f}`" for f in wave["filed"]))
             out.append("")
-    out.append("## 6. Bounds — what this census does not say")
+    out.append("## 7. Bounds — what this census does not say")
     out.append("")
     out.append("- **DIFF is measured; behind-vs-forked is not.** The leg compares bytes. It")
     out.append("  cannot say whether a member is BEHIND the template or has deliberately")
@@ -299,7 +570,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {p}")
         return 1
 
-    text = render(leg, read_at)
+    text = render(leg, read_at, answering_path())
     if args.stdout:
         print(text, end="")
         return 0

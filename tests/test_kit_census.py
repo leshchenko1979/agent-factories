@@ -17,11 +17,19 @@ WHAT IT PINS, and why each arm is here:
   4. an unreachable member is RENDERED, not dropped — a member missing from the table is
      indistinguishable from a member that is fine;
   5. HERMETICITY — every arm writes to a TemporaryDirectory, so the live evidence
-     directory gains nothing.
+     directory gains nothing;
+  6. the ANSWERING PATH renders as its own section, and an UNMEASURED path renders as
+     NOT MEASURED rather than as a clean row — an absent section and a clean section read
+     the same, and that is the one confusion the section exists to prevent;
+  7. an AMBIGUOUS root renders as every tap REFUSED, not as a degraded reading;
+  8. the two LEGS are reported on their own rows and are allowed to DISAGREE — one marker
+     summarised as one verdict clears the leg it cannot see;
+  9. a member's own copy reads LIVE / inert / ABSENT / undetermined FROM the answering
+     path, and INERT is never claimed when that path was not measured.
 
-The leg itself is injected, so these arms run with no live fleet and no live board: a probe
-that could only run against five real repositories would be measuring those trees rather
-than this tool.
+The leg AND the answering-path result are both injected, so these arms run with no live
+fleet, no live board and no live answering path: a probe that could only run against five
+real repositories would be measuring those trees rather than this tool.
 
 Run:  python3 tests/test_kit_census.py
 Exit: 0 all arms hold; 1 a failure, printed.
@@ -87,6 +95,32 @@ def member(slug: str, root: str, reachable: bool = True) -> dict:
     }
 
 
+def answering_dict(**kw) -> dict:
+    """A synthetic answering-path result, in the shape `answering_path()` returns.
+
+    Both legs carry DIFFERENT verdicts on purpose: the arm that pins per-leg reporting needs
+    two legs that disagree, or it would pass on a renderer that collapsed them into one.
+    """
+    out = {
+        "cli_root": "/tmp/synthetic/tools",
+        "authority": "/opt/questions/backend.py (CLI_ROOT default + the CLI_RESOLVE glob)",
+        "candidates": ["/tmp/synthetic/tools/state/oc-questions"],
+        "resolved": "/tmp/synthetic/tools/state/oc-questions",
+        "bytes": 174035,
+        "mtime": "2026-01-01T00:00:00Z",
+        "measured": True,
+        "ambiguous": False,
+        "legs": [
+            {"leg": "clarify — what an owner's empty tap does", "reads": "synthetic",
+             "control": 1, "fixed": 4, "old": 0, "state": "fixed"},
+            {"leg": "publisher fault — what a caller learns when a page fails to build",
+             "reads": "synthetic", "control": 1, "fixed": 0, "old": 1, "state": "PRE-FIX"},
+        ],
+        "why": "",
+    }
+    out.update(kw)
+    return out
+
 def main() -> int:
     live_evidence_before = sorted(p.name for p in (REPO / "evidence").glob("kit-drift-census-*"))
 
@@ -102,7 +136,12 @@ def main() -> int:
                       "decisions": ["DO NOT PORT: its own gates for its own code"]},
         }}))
         saved_decl, saved_leg = KC.DECISIONS, KC.P.kit_drift_leg
+        saved_ans = KC.answering_path
         KC.DECISIONS = decls
+        # The answering path is injected for the same reason the leg is: `main` calls it,
+        # and a real call would make every arm below depend on which copy happens to be
+        # live on this box — a probe that measures the box rather than this tool.
+        KC.answering_path = lambda *a, **k: answering_dict()
         try:
             # ARM 1 — THE FIGURE AND THE DECLARED HALF BOTH REACH THE ARTIFACT.
             root_a = tmp / "alpha"
@@ -182,8 +221,95 @@ def main() -> int:
                   "vendored · 1 exempt" in t6, "the member-actionable half")
             check("ARM 6: a member without one reads 'none'",
                   "**none**" in t6, "no pin means the fleet figure is not theirs to act on")
+            # ARM 8 — THE ANSWERING PATH RENDERS AS ITS OWN SECTION, WITH ITS RESOLVED COPY.
+            TS = "2026-01-01T00:00:00Z"
+            t8 = KC.render(leg_with([member("alpha", str(root_a))]), TS, answering=answering_dict())
+            check("ARM 8: the answering path renders with its resolved copy",
+                  "/tmp/synthetic/tools/state/oc-questions" in t8,
+                  "the copy an owner's tap reaches, named")
+            check("ARM 8: both legs render on their own rows with their OWN verdicts",
+                  "| clarify" in t8 and "| publisher fault" in t8
+                  and "**fixed**" in t8 and "**PRE-FIX**" in t8,
+                  "two legs that disagree must not collapse into one verdict")
+
+            # ARM 9 — AN UNMEASURED PATH IS STATED, NOT OMITTED.
+            t9 = KC.render(leg_with([member("alpha", str(root_a))]), TS, answering=None)
+            check("ARM 9: answering=None renders NOT MEASURED rather than a clean section",
+                  "**NOT MEASURED**" in t9,
+                  "an absent section and a clean section read the same")
+            check("ARM 9: answering=None names no resolved copy",
+                  "**executing copy**" not in t9,
+                  "no measurement means no copy claimed")
+
+            # ARM 10 — AN AMBIGUOUS ROOT IS EVERY TAP REFUSED, NOT A DEGRADED READING.
+            t10 = KC.render(leg_with([member("alpha", str(root_a))]), TS,
+                            answering=answering_dict(measured=False, ambiguous=True,
+                                                     resolved="", candidates=[],
+                                                     why="wants exactly 1 and finds 0"))
+            check("ARM 10: an ambiguous root renders as REFUSED",
+                  "AMBIGUOUS" in t10 and "exits 127" in t10,
+                  "the backend exits 127 on any count but one")
+            check("ARM 10: an ambiguous root does NOT render a resolved copy",
+                  "**executing copy**" not in t10,
+                  "an ambiguous root resolves nothing")
+
+            # ARM 11 — EACH LEG IS READ ON ITS OWN MARKERS, INCLUDING THE CONTROL.
+            check("ARM 11: a copy with NO control reads UNPROBED, not clean",
+                  KC._leg_state({"control": 0, "fixed": 4, "old": 0}).startswith("UNPROBED"),
+                  "a zero without a working control is not evidence of absence")
+            check("ARM 11: a leg carrying only the OLD form reads PRE-FIX",
+                  KC._leg_state({"control": 1, "fixed": 0, "old": 1}) == "PRE-FIX",
+                  "the leg the fix has not reached")
+            check("ARM 11: a leg carrying BOTH forms reads BOTH, not a verdict",
+                  KC._leg_state({"control": 1, "fixed": 1, "old": 1}).startswith("BOTH"),
+                  "a half-applied fix must not read as fixed")
+            check("ARM 11: a leg carrying NEITHER marker is named as such",
+                  "neither marker" in KC._leg_state({"control": 1, "fixed": 0, "old": 0}),
+                  "distinct from a clean leg")
+
+            # ARM 12 — THE PER-MEMBER COLUMN DERIVES FROM THE ANSWERING PATH, NOT THE TREE.
+            live_mem = tmp / "live_mem"
+            (live_mem / "tools").mkdir(parents=True)
+            (live_mem / "tools" / "questions").write_text("# synthetic copy\n")
+            inert_mem = tmp / "inert_mem"
+            (inert_mem / "tools").mkdir(parents=True)
+            (inert_mem / "tools" / "questions").write_text("# synthetic copy\n")
+            absent_mem = tmp / "absent_mem"
+            absent_mem.mkdir()
+            m_live = member("live", str(live_mem))
+            m_inert = member("inert", str(inert_mem))
+            m_absent = member("absent", str(absent_mem))
+            ans_at_live = answering_dict(resolved=str(live_mem / "tools" / "questions"))
+            check("ARM 12: a member whose copy IS the answering path reads LIVE",
+                  KC.member_copy_state(m_live, ans_at_live)["state"] == "LIVE")
+            check("ARM 12: a member holding a copy OFF that path reads inert",
+                  KC.member_copy_state(m_inert, ans_at_live)["state"] == "inert",
+                  "a real copy that reaches no owner tap")
+            check("ARM 12: a member holding NO copy reads ABSENT, not inert",
+                  KC.member_copy_state(m_absent, ans_at_live)["state"] == "ABSENT",
+                  "installed-nothing and installed-but-dead are different states")
+            check("ARM 12: INERT is NEVER claimed when the path was not measured",
+                  KC.member_copy_state(
+                      m_inert, answering_dict(measured=False, resolved="", why="none")
+                  )["state"] == "undetermined",
+                  "off-path is a claim about the path, so it needs the path")
+            t12 = KC.render(leg_with([m_live, m_inert, m_absent]), TS, answering=ans_at_live)
+            check("ARM 12: the rendered table carries the column for every member",
+                  "| own copy |" in t12 and "| LIVE |" in t12
+                  and "| inert |" in t12 and "| ABSENT |" in t12)
+
+            # ARM 13 — THE FLEET LINE NAMES THE TREE, OR SAYS NONE.
+            t13 = KC.render(leg_with([member("host", str(live_mem))]), TS, answering=ans_at_live)
+            check("ARM 13: when a member's tree holds the executing copy, it is NAMED",
+                  "**The tree holding that copy**: `host`" in t13,
+                  "the one case where a row can read LIVE")
+            t13b = KC.render(leg_with([member("alpha", str(root_a))]), TS, answering=ans_at_live)
+            check("ARM 13: when no member tree holds it, the line says NONE",
+                  "NONE of the declared members" in t13b,
+                  "the case that ended the install round")
+
         finally:
-            KC.DECISIONS, KC.P.kit_drift_leg = saved_decl, saved_leg
+            KC.DECISIONS, KC.P.kit_drift_leg, KC.answering_path = saved_decl, saved_leg, saved_ans
 
     # ARM 7 — HERMETICITY: every arm wrote to a TemporaryDirectory.
     live_evidence_after = sorted(p.name for p in (REPO / "evidence").glob("kit-drift-census-*"))
