@@ -180,5 +180,14 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-27T13:57:34Z"
+  "attested_at": "2026-09-27T13:57:34Z",
+  "instruments": {
+    "pacemaker": {
+      "state": "adopted",
+      "green": true,
+      "behind_by": 0,
+      "reason": "instrument gate rc=0 (101 checks, 1 SKIPPED); cron_thinness rc=0. Two declared board paths (test_board_intake_recorded.py, test_close_board_recorded.py) are RED on a DECLARED INAPPLICABILITY not a defect: this factory board IS the ledger, one surface, so a board/ledger close-agreement predicate has nothing to agree about (ledger n=611; routed to Instruments-methodology). behind_by 0 = all 9 declared paths byte-identical to the TEMPLATE half at 2026-09-27T18:19Z, re-copied that turn (n=638).",
+      "measured_at": "2026-09-27T18:35:18Z"
+    }
+  }
 }

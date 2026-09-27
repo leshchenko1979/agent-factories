@@ -1,13 +1,13 @@
 # Instrument adoption census — one predicate over the declared population
 
-Read at **2026-09-27T17:49:48Z** by `tools/instrument_census.py`.
+Read at **2026-09-27T18:58:07Z** by `tools/instrument_census.py`.
 
 ## The predicate, stated before the figures
 
 **Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the
 law doc's §2 declares — **9 path(s)** — plus the reload link's own state.
 **Scope:** the member fragments in `registry/factories/*.json`.
-**Instant:** 2026-09-27T17:49:48Z.
+**Instant:** 2026-09-27T18:58:07Z.
 
 **WHAT THIS DOES NOT MEASURE.** It is ONE predicate on file PRESENCE. A present file may
 differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —
@@ -33,7 +33,7 @@ guarded: zero parsed paths refuses rather than censusing an empty set):
 |---|---|---|---|---|
 | `ai-antispam` | 9/9 | absent | absent | **HELD-UNDECLARED** |
 | `inferhub-watch` | 9/9 | absent | absent | **HELD-UNDECLARED** |
-| `infra-factory` | 9/9 | absent | absent | **HELD-UNDECLARED** |
+| `infra-factory` | 9/9 | absent | adopted · green=true | **ADOPTED** |
 | `meta-factory` | 9/9 | resolves | absent | **SOURCE** |
 | `miidas` | 1/9 | absent | absent | **PARTIAL-UNDECLARED** |
 | `opencrabs-dev` | 0/9 | absent | absent | **ABSENT** |

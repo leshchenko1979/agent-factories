@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T13:59:44Z",
+  "resolved_at": "2026-09-27T18:58:34Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -681,7 +681,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T07:49:47Z",
+          "bound_at": "2026-09-27T14:50:43Z",
           "announcements": []
         },
         {
@@ -1116,7 +1116,7 @@
           "session_id": "d0cba805-92c9-4377-8808-a1cf715bce9e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T03:28:19Z",
+          "bound_at": "2026-09-27T15:10:01Z",
           "announcements": []
         },
         {
@@ -1126,7 +1126,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T13:37:02Z",
+          "bound_at": "2026-09-27T15:39:16Z",
           "announcements": []
         },
         {
@@ -1136,7 +1136,7 @@
           "session_id": "ee5cd2f5-6c1b-41bb-b031-1150a3132fb1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T13:07:15Z",
+          "bound_at": "2026-09-27T16:45:04Z",
           "announcements": []
         },
         {
@@ -1146,7 +1146,7 @@
           "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T13:58:54Z",
+          "bound_at": "2026-09-27T15:06:37Z",
           "announcements": []
         }
       ],
@@ -1187,7 +1187,7 @@
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.27",
+      "skill_revision": "1.1.29",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
@@ -1472,7 +1472,7 @@
           "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T01:10:52Z",
+          "bound_at": "2026-09-27T14:20:37Z",
           "announcements": []
         },
         {
@@ -1532,7 +1532,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T04:45:06Z",
+          "bound_at": "2026-09-27T14:20:06Z",
           "announcements": []
         },
         {
@@ -1542,7 +1542,7 @@
           "session_id": "7e1ebbb6-68b3-478b-abc2-b697e70c2f37",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-24T12:02:14Z",
+          "bound_at": "2026-09-27T15:29:17Z",
           "announcements": []
         },
         {
@@ -1562,7 +1562,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T07:13:26Z",
+          "bound_at": "2026-09-27T14:27:58Z",
           "announcements": []
         },
         {
@@ -1572,7 +1572,7 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T13:27:03Z",
+          "bound_at": "2026-09-27T14:33:47Z",
           "announcements": []
         },
         {
@@ -1612,7 +1612,7 @@
           "session_id": "c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:21:48Z",
+          "bound_at": "2026-09-27T15:32:58Z",
           "announcements": []
         },
         {
@@ -1622,7 +1622,7 @@
           "session_id": "40427d4f-af4a-48ba-993f-f5f0b21916c0",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T06:55:34Z",
+          "bound_at": "2026-09-27T14:32:52Z",
           "announcements": []
         },
         {
@@ -1632,7 +1632,7 @@
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:30:39Z",
+          "bound_at": "2026-09-27T14:28:37Z",
           "announcements": []
         },
         {
@@ -1642,7 +1642,7 @@
           "session_id": "aff7ff41-a3a7-4c53-adc5-80fb7a33ba50",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T07:17:18Z",
+          "bound_at": "2026-09-27T14:27:27Z",
           "announcements": []
         },
         {
@@ -1662,7 +1662,7 @@
           "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T13:22:15Z",
+          "bound_at": "2026-09-27T14:37:22Z",
           "announcements": []
         },
         {
@@ -1712,7 +1712,7 @@
           "session_id": "facd50af-0807-4fee-942b-008bff037f6f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-18T17:39:21Z",
+          "bound_at": "2026-09-27T14:28:11Z",
           "announcements": []
         },
         {
@@ -1742,7 +1742,7 @@
           "session_id": "95bec69b-0e96-46a9-9d91-dc355e8af18f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T01:24:38Z",
+          "bound_at": "2026-09-27T14:27:03Z",
           "announcements": []
         },
         {
@@ -1782,7 +1782,7 @@
           "session_id": "4b4463d5-381c-4458-aa0c-3cf199882084",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:22:21Z",
+          "bound_at": "2026-09-27T15:29:17Z",
           "announcements": []
         },
         {
@@ -1792,7 +1792,7 @@
           "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T01:37:50Z",
+          "bound_at": "2026-09-27T14:25:47Z",
           "announcements": []
         },
         {
@@ -1970,8 +1970,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:07:00+00:00",
-      "last_run_at": "2026-09-27T12:07:33Z",
+      "next_run_at": "2026-09-28T00:07:00+00:00",
+      "last_run_at": "2026-09-27T18:07:37Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2018,8 +2018,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:40:00+00:00",
-      "last_run_at": "2026-09-27T12:40:34Z",
+      "next_run_at": "2026-09-28T00:40:00+00:00",
+      "last_run_at": "2026-09-27T18:40:44Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -2050,8 +2050,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:25:00+00:00",
-      "last_run_at": "2026-09-27T12:25:34Z",
+      "next_run_at": "2026-09-28T00:25:00+00:00",
+      "last_run_at": "2026-09-27T18:25:39Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
@@ -2146,8 +2146,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-27T18:00:00+00:00",
-      "last_run_at": "2026-09-27T12:00:33Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T18:00:36Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2178,8 +2178,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:23:00+00:00",
-      "last_run_at": "2026-09-27T12:23:34Z",
+      "next_run_at": "2026-09-28T00:23:00+00:00",
+      "last_run_at": "2026-09-27T18:23:39Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2210,8 +2210,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T15:05:00+00:00",
-      "last_run_at": "2026-09-26T15:05:45Z",
+      "next_run_at": "2026-09-28T15:05:00+00:00",
+      "last_run_at": "2026-09-27T15:05:26Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2242,8 +2242,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-09-27T18:00:00+00:00",
-      "last_run_at": "2026-09-27T12:00:33Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T18:00:36Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "profile": "ops",
@@ -2306,8 +2306,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:00:00+00:00",
-      "last_run_at": "2026-09-27T12:00:32Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T18:00:36Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2354,8 +2354,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:00:00+00:00",
-      "last_run_at": "2026-09-27T12:00:33Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T18:00:36Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "profile": "ops",
@@ -2402,8 +2402,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:20:00+00:00",
-      "last_run_at": null,
+      "next_run_at": "2026-09-28T00:20:00+00:00",
+      "last_run_at": "2026-09-27T18:20:39Z",
       "deliver_to": "session:9fa7c71a-f009-418a-ac06-d0336efcf491",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2722,8 +2722,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-09-27T18:00:00+00:00",
-      "last_run_at": "2026-09-27T12:00:33Z",
+      "next_run_at": "2026-09-28T00:00:00+00:00",
+      "last_run_at": "2026-09-27T18:00:36Z",
       "deliver_to": "session:530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2770,8 +2770,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T18:00:00+00:00",
-      "last_run_at": "2026-09-26T18:00:17Z",
+      "next_run_at": "2026-09-28T18:00:00+00:00",
+      "last_run_at": "2026-09-27T18:00:12Z",
       "deliver_to": "telegram:-1004286036984",
       "trigger_cmd": null,
       "profile": "family",
