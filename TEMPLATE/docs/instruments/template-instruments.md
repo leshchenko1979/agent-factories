@@ -662,6 +662,15 @@ while the root side audits **12** declared surfaces (parsed from `skills/meta-fa
 TEMPLATE side audits **11** (parsed from `TEMPLATE/SKILL.md.tmpl`). Identical code, a **different
 standard**, both green — so the two verdicts are not one check run twice, and neither says so.
 
+**And the difference is not one row.** Nine surfaces are shared; **three** are declared only by the
+meta-factory (`evidence/*.md`, `evidence/subprocesses/*.jsonl`, the questions register) and **two**
+only by the template (the `registry/` surfaces: `registry/fleet.json`, `registry/index.json`,
+`docs/factory-registry.md`). Three of the remaining differences are pure naming — the same surface
+rendered with a literal repo slug versus `{{REPO}}`, `skills/meta-factory/SKILL.md` versus *"this
+law"*, `docs/processes.md` versus `processes.md` — which is why a raw `comm` over the two tables
+over-reports the gap. The substantive shape is that **each half audits state the other half's law does
+not cover**, and a green from either is silent about that.
+
 **The rule:** for a shipped pair, exactly one half is the fleet gate — the half whose `REPO` resolves
 to the repository root — and it is the only half whose verdict may be quoted. A green from the other
 half is a reading of a different population, and must be named as such rather than reported as the
