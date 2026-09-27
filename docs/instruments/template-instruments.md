@@ -639,6 +639,34 @@ Measured the same day: a probe resolved each member repo as `/root/<slug>`, whic
 eleven absent"* for a directory that **never existed** — a verdict indistinguishable from a member
 that adopted nothing. The member's fragment names its repo; the slug is a label, not a path.
 
+### 7.6 Which half is the gate — a shipped pair has ONE fleet gate, and the other half's green is vacuous
+
+A byte-identical pair ships **two copies of one test**. Each copy resolves its tree root from its own
+`__file__` (`REPO = Path(__file__).resolve().parent.parent`), so the `TEMPLATE/` half looks for
+`TEMPLATE/` **inside** `TEMPLATE/` — a population that does not exist there. Measured 2026-09-27 on
+`tests/test_docs_sync.py`: the root-side copy reads *"docs in sync: 38 shared document(s)
+byte-identical"* (rc=0) while the TEMPLATE-side copy reads *"no TEMPLATE/docs tree — nothing to pair"*
+(**also rc=0**). A green from the half whose population is empty is not a weaker verdict; it is a
+verdict about nothing — and this one prints no failure to prompt a second look.
+
+Three behaviours were measured among the paired tests' template-side copies, and only one is honest:
+
+| template-side behaviour | specimen | rc |
+|---|---|---|
+| **vacuous pass** — empty population, named in the output | `test_docs_sync.py` | 0 |
+| **loud failure** | `test_kit_pin.py`, `test_ontology.py` | 1 |
+| **green over a DIFFERENT population** — the sharpest | `test_single_writer.py` | 0 |
+
+The third is the one a reader cannot catch. Both halves read *"single-writer state clean"* and exit 0,
+while the root side audits **12** declared surfaces (parsed from `skills/meta-factory/SKILL.md`) and the
+TEMPLATE side audits **11** (parsed from `TEMPLATE/SKILL.md.tmpl`). Identical code, a **different
+standard**, both green — so the two verdicts are not one check run twice, and neither says so.
+
+**The rule:** for a shipped pair, exactly one half is the fleet gate — the half whose `REPO` resolves
+to the repository root — and it is the only half whose verdict may be quoted. A green from the other
+half is a reading of a different population, and must be named as such rather than reported as the
+gate's result. When a gate's verdict is cited, cite the half it came from.
+
 ## 8. Ownership and scope
 
 | who | what |
