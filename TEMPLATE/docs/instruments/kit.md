@@ -531,9 +531,14 @@ the move is deliberately not in this commit:
    plus the bare `:N`, `line N` and `§N` forms, returned **zero** citations of the kit clauses. The
    risk is therefore not a broken citation.
 2. **What binds them is code, and code is the stronger citation.** The manifest and the pair gate are
-   machine-enforced by `tools/kit_manifest.py --check` and `TEMPLATE/tests/test_docs_sync.py`, so the
-   pointer row left behind must name **the enforcing command**, not a prose line a later edit can move
-   without any gate noticing.
+   machine-enforced by `tools/kit_manifest.py --check` and **`tests/test_docs_sync.py` — the ROOT-side
+   copy, and the half is part of the name.** That is frame **§7.6**'s rule, and this row is a specimen
+   of it rather than a restatement: the `TEMPLATE/`-side copy of the same script resolves its repo
+   root to `TEMPLATE/`, finds no `TEMPLATE/docs` beneath it, and exits **0** with *"no TEMPLATE/docs
+   tree — nothing to pair"* — a green over an empty population, which is a verdict about nothing. So
+   the pointer row must name **the enforcing command AND its half**, not a prose line a later edit can
+   move without any gate noticing. The class is §2.1's one tool over — a right name in the wrong half
+   of a pair, where the number checks out and the reader lands on the copy that has never bitten.
 
 **Skill-text authorship is HQ's, not this lane's** (frame §8: an instrument owner supplies text to
 the lane that owns a file; they do not land it there). So the extraction of the kit's SKILL sections
