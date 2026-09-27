@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 
 DECLARATION_REL = "docs/ledger-invariants.json"
@@ -78,6 +79,85 @@ AUTHORIZED_ACTORS_BY_EVENT: dict[str, tuple[str, ...]] = {
     "close": ("hq", "worker", "carrier", "triage", "delegate", "surveys", "owner"),
     "run": ("hq", "surveys", "worker", "carrier", "triage", "delegate", "owner"),
 }
+
+
+AUTHORIZATIONS_REL = "docs/ledger-authorizations.json"
+AUTHORIZATIONS_EXAMPLE_REL = "docs/ledger-authorizations.example.json"
+
+def load_authorizations(repo: Path) -> tuple[tuple[str, ...], dict[str, tuple[str, ...]]]:
+    """`(declared_actors, declared_by_event)` — the factory's OWN lanes and what they may write.
+
+    WHY THIS IS A FILE AND NOT A CONSTANT IN THE TOOL, and the reason is the SAME one that put
+    `tools/actors.txt` beside the `ACTORS` tuple: `tools/ledger_declaration.py` is copied into
+    every factory, so a lane that only ONE factory has cannot sit in a constant that must match
+    everywhere. The matrix had no such seam, which meant a factory's own lane could be DECLARED
+    as a lane (the fragment names it, `actors.txt` grants membership) and still be refused at
+    append, because the matrix had no row for it and there was no lawful way to give it one.
+    Membership and authorization were the two halves of the same declaration, and only one had a
+    home (#193).
+
+    A declaration ADDS; it never removes or redefines a core entry. The constant stays the floor,
+    so every factory keeps the core matrix whether or not it declares anything.
+
+    ABSENT MEANS NONE, and MALFORMED IS A PROBLEM — the convention every sibling surface states:
+    absent or empty means the factory has declared nothing (the shipped state of a new factory),
+    while a file that exists and cannot be read must never pass quietly, because a declaration
+    that fails to load is indistinguishable from no declaration at all.
+    """
+    # The override is the isolation seam, the same shape `OC_ACTORS_PATH` uses for
+    # membership: a probe that read the LIVE declaration would pass or fail on this
+    # factory's own declared lanes instead of on the code.
+    path = Path(os.environ.get("OC_AUTHORIZATIONS_PATH", repo / AUTHORIZATIONS_REL))
+    if not path.is_file():
+        return (), {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise DeclarationUnreadable([f"{AUTHORIZATIONS_REL} exists but cannot be read: {exc}"]) from exc
+    except json.JSONDecodeError as exc:
+        raise DeclarationUnreadable([f"{AUTHORIZATIONS_REL} is not valid JSON: {exc}"]) from exc
+    if not isinstance(payload, dict):
+        raise DeclarationUnreadable([
+            f"{AUTHORIZATIONS_REL} must be a JSON object carrying `actors` and `by_event`"
+        ])
+    actors = payload.get("actors")
+    if not isinstance(actors, list) or not all(isinstance(a, str) and a.strip() for a in actors):
+        raise DeclarationUnreadable([
+            f"{AUTHORIZATIONS_REL} carries no `actors` list of role names — "
+            f"see {AUTHORIZATIONS_EXAMPLE_REL}"
+        ])
+    by_event = payload.get("by_event", {})
+    if not isinstance(by_event, dict):
+        raise DeclarationUnreadable([
+            f"{AUTHORIZATIONS_REL} `by_event` must be an object mapping event -> [role, ...]"
+        ])
+    out: dict[str, tuple[str, ...]] = {}
+    for event, names in by_event.items():
+        if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
+            raise DeclarationUnreadable([
+                f"{AUTHORIZATIONS_REL} by_event[{event!r}] must be a list of role names"
+            ])
+        out[str(event)] = tuple(str(n) for n in names)
+    return tuple(str(a) for a in actors), out
+
+
+
+def authorized_for_event(repo: Path, event: str) -> tuple[str, ...]:
+    """The roles authorized for `event` — the core matrix UNION this factory's declaration.
+
+    ONE HOME, because the write path and the schema gate must agree about it: while they
+    held separate copies, a declared authorization would pass the tool and red the gate,
+    which is the same defect that made `test_ledger_schema.py` carry its own event tuple
+    and refuse an event the tool lawfully wrote.
+
+    A declaration ADDS; it never removes or redefines a core entry. So the constant is the
+    floor and the declaration extends it, and a factory that declares nothing gets exactly
+    the core matrix it has today.
+    """
+    core = AUTHORIZED_ACTORS_BY_EVENT.get(event, ())
+    _, declared = load_authorizations(repo)
+    return core + tuple(a for a in declared.get(event, ()) if a not in core)
+
 
 class DeclarationUnavailable(Exception):
     """This factory has declared nothing for this key — the CALLER decides what that means.

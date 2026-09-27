@@ -28,7 +28,7 @@ Per the frame's §1 (what an instrument is) and §2 (the full set), this instrum
 | **closure** | `tools/ledger_declaration.py` (the authorized-actor matrix and the declaration readers), `tools/field_predicate.py`, `tools/reconstruction.py`, `tools/telemetry.py`, `tools/registry*.py` — HARD tier; a tree missing any of them fails at import |
 | **gate set** | six gates, named in §5 below |
 | **version source** | `registry/kit.json` → `kit_version`, derived from the manifest, never hand-typed (frame §7.1) |
-| **data surfaces** | `evidence/ledger.jsonl` (factory-owned, never overwritten by an update); `docs/ledger-*.json` (factory-owned declarations, shipped as `.example.json`); `evidence/.ledger-index.sqlite` (derived, gitignored, deletable) |
+| **data surfaces** | `evidence/ledger.jsonl` (factory-owned, never overwritten by an update); `docs/ledger-*.json` (factory-owned declarations, shipped as `.example.json` — including `ledger-refs-kinds.json` for vocabulary and `ledger-authorizations.json` for a factory's own lanes); `evidence/.ledger-index.sqlite` (derived, gitignored, deletable) |
 
 The instrument's LAW is this file. Before 2026-09-27 it had no home: it was prose woven through
 `skills/meta-factory/SKILL.md`, measured at **49 lines carrying `ledger` (82 occurrences) and ZERO headings naming it** (case-insensitive; lines != occurrences, so both are stated),
@@ -158,6 +158,50 @@ lawfully — which is precisely the pressure that pushes a member to fork the fi
 
 A declaration **ADDS**; it never removes or redefines a core entry, so a factory cannot shadow
 `close` and quietly escape the sequence law.
+
+### The authorization declaration — a factory's own lane, without a fork
+
+Membership had a declaration surface (`tools/actors.txt`) and **authorization did not**: the
+role-to-event matrix was a hard constant inside `tools/ledger_declaration.py`, which is copied into
+every factory. So a factory whose law names a lane the core set does not have could be **declared as
+a lane and still refused at append** — it resolved, and then had no row to write under. Measured
+2026-09-27: four owner-commissioned lanes in this factory resolved through the registry and every
+one was refused, which made the instrument owner's own close row unwritable.
+
+`docs/ledger-authorizations.json` is that missing surface, and it is the **same shape** as the two
+sibling declarations:
+
+```json
+{"actors": ["instrument"], "by_event": {"ruling": ["instrument"]}}
+```
+
+| field | meaning |
+|---|---|
+| `actors` | lanes this factory declares that the core set does not name — **membership** |
+| `by_event` | what each may write — **authorization** |
+
+Both are needed, because **membership is not authorization**: `actors` alone yields a lane that
+resolves and is refused, which is exactly the state this seam removes.
+
+**A declaration ADDS; it never removes or redefines a core entry.** The constant stays the floor, so
+every factory keeps the core matrix whether or not it declares anything, and a factory cannot shadow
+its own lifecycle law by declaring a lane for `close`. The composed predicate lives in **one home**
+(`ledger_declaration.authorized_for_event`), read by both the write path and the schema gate —
+because while those two held separate copies, a declared authorization would pass the tool and red
+the gate, the same defect that once made `test_ledger_schema.py` refuse an event the tool lawfully
+wrote.
+
+**Absent means none; malformed is a problem** — the convention every sibling surface states. A
+missing file is a factory that has declared no lanes of its own (the shipped state of a new
+factory); a file that exists and cannot be read **fails loudly at the top level**, because a
+declaration that quietly fails to load is indistinguishable from no declaration, and a factory whose
+own lanes vanished on a typo would meet a membership error naming no file.
+
+**THE BOUND, stated because it is what made the gap invisible for so long:** the matrix binds a
+**derived** actor, and a fixture's actor is `declared` by construction — reaching the live ledger
+requires both overrides absent — so no fixture can drive a real lane's refusal. The gate therefore
+proves the *predicate* the write path calls and the composition rule it obeys; the derived leg is
+exercised by the first real lane to write.
 
 ### Member objects travel as refs, never as columns
 

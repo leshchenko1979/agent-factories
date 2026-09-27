@@ -74,7 +74,9 @@ from ledger_declaration import (
     AUTHORIZED_ACTORS_BY_EVENT,
     DeclarationUnavailable,
     DeclarationUnreadable,
+    authorized_for_event,
     boundary_for,
+    load_authorizations,
     load_exemptions,
     parse_ts,
 )
@@ -221,13 +223,21 @@ ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", Path(__file__).with_name("ac
 
 
 def known_actors() -> tuple[str, ...]:
-    """The core actors, plus any this factory declares in `tools/actors.txt`."""
+    """The core actors, plus any this factory declares.
+
+    Two declaration surfaces, and they answer the two halves of one question: `tools/actors.txt`
+    names the lanes this factory has, and `docs/ledger-authorizations.json` names what each may
+    write. A malformed authorization declaration RAISES rather than reading as none — a
+    declaration that fails to load must never pass quietly.
+    """
     extra: list[str] = []
     if ACTORS_FILE.exists():
         for line in ACTORS_FILE.read_text(encoding="utf-8").splitlines():
             role = line.split("#", 1)[0].strip()
             if role:
                 extra.append(role)
+    declared, _ = load_authorizations(REPO)
+    extra.extend(declared)
     return ACTORS + tuple(role for role in extra if role not in ACTORS)
 
 
@@ -575,7 +585,9 @@ def cmd_append(args: argparse.Namespace) -> int:
     # fixture is not a lane — the pinned vocabulary in `probe_actors_path` is the
     # whole point of that seam. A derived role always has a row, because the
     # derivation resolves through the same registry the matrix is written for.
-    authorized = AUTHORIZED_ACTORS_BY_EVENT.get(args.event, ())
+    # The composed predicate lives in ONE home, because the schema gate reads it too: while
+    # the two held separate copies a declared authorization would pass here and red there.
+    authorized = authorized_for_event(REPO, args.event)
     if authorized and actor_origin == "derived" and args.actor not in authorized:
         sys.exit(
             f"ledger append refused: actor '{args.actor}' is not authorized for a "
@@ -1478,7 +1490,13 @@ def main() -> int:
     rp.set_defaults(func=cmd_repair)
 
     args = parser.parse_args()
-    return args.func(args)
+    try:
+        return args.func(args)
+    except DeclarationUnreadable as exc:
+        # A declaration that cannot be read must FAIL, never read as none: a factory whose
+        # own lanes vanished from the matrix on a typo would have its rows refused with a
+        # membership error that names no file.
+        sys.exit(f"ledger refused: {exc}")
 
 if __name__ == "__main__":
     raise SystemExit(main())

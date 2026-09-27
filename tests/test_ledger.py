@@ -64,6 +64,7 @@ def run(
     ledger: Path,
     *args: str,
     actors: Path | None = None,
+    auth: Path | None = None,
     extra_env: dict[str, str] | None = None,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess:
@@ -79,6 +80,9 @@ def run(
     """
     env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
     env["OC_ACTORS_PATH"] = str(actors if actors is not None else ledger.parent / "no-actors.txt")
+    env["OC_AUTHORIZATIONS_PATH"] = str(
+        auth if auth is not None else ledger.parent / "no-authorizations.json"
+    )
     env.update(extra_env or {})
     return subprocess.run(
         [sys.executable, str(TOOL), *args],
@@ -307,6 +311,101 @@ def main() -> int:
                 extra_env=DECL)
         check("a core event is still refused by its own law, not shadowed by a declaration",
               r.returncode != 0, r.stderr.strip()[:120] or r.stdout.strip()[-120:])
+
+
+        # --- the authorization declaration: a factory's OWN lane, without a fork ---------
+        # #193. The matrix was a hard constant while membership had `tools/actors.txt`, so a
+        # factory's own lane could be DECLARED as a lane and still be refused at append. This
+        # gives authorization the same seam. THE BOUND, stated rather than papered over: the
+        # matrix binds a DERIVED actor, and a fixture's actor is `declared` by construction
+        # (reaching the live ledger requires both overrides absent), so no fixture can drive a
+        # real lane's derived append. What is proven here is the PREDICATE the write path now
+        # calls and the composition rule it obeys; the derived leg is exercised by the first
+        # real lane to write, which is why the seam's absence was invisible for so long.
+        # --- the authorization declaration: a factory's OWN lane, without a fork ---------
+        # #193. The matrix was a hard constant while membership had `tools/actors.txt`, so a
+        # factory's own lane could be DECLARED as a lane and still be refused at append. This
+        # gives authorization the same seam.
+        #
+        # THE BOUND, stated rather than papered over: the matrix binds a DERIVED actor, and a
+        # fixture's actor is `declared` by construction — reaching the live ledger requires both
+        # overrides absent — so no fixture can drive a real lane's refusal. What is proven here
+        # is the PREDICATE the write path calls and the composition rule it obeys; the derived
+        # leg is exercised by the first real lane to write, which is why the seam's absence was
+        # invisible for so long.
+        print("authorization declaration \u2014 a factory's own lane, declared not forked")
+        auth_tree = Path(tmp) / "auth-tree"
+        auth_tree.mkdir(parents=True, exist_ok=True)
+        auth_file = auth_tree / "authorizations.json"
+        auth_actors = auth_tree / "actors.txt"
+        auth_actors.write_text("surveys\ninstrument\n")
+        AUTH = {"OC_AUTHORIZATIONS_PATH": str(auth_file)}
+        auth_kw = {"actors": auth_actors}
+
+        def predicate(event, repo=None):
+            """Read the composed predicate the WRITE PATH calls, from its one home."""
+            code = (
+                "import sys, pathlib; sys.path.insert(0, 'tools');"
+                "import ledger_declaration as ld;"
+                "print('|'.join(ld.authorized_for_event(pathlib.Path(sys.argv[1]), sys.argv[2])))"
+            )
+            return subprocess.run(
+                [sys.executable, "-c", code, str(repo or auth_tree), event],
+                capture_output=True, text=True,
+                env={**os.environ, **AUTH}, cwd=str(REPO),
+            )
+
+        # ARM 1: a lane DECLARED here is a MEMBER, without touching tools/actors.txt's role
+        # list — the membership half the declaration now carries.
+        auth_file.write_text(json.dumps({"actors": ["instrument"], "by_event": {}}))
+        got = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, 'tools'); import ledger;"
+             "print('instrument' in ledger.known_actors())"],
+            capture_output=True, text=True,
+            env={**os.environ, **AUTH, "OC_ACTORS_PATH": str(auth_tree / "no-actors.txt")},
+            cwd=str(REPO),
+        )
+        check("a lane declared in the authorizations file is a MEMBER",
+              got.returncode == 0 and got.stdout.strip() == "True",
+              got.stdout.strip() or got.stderr.strip()[-150:])
+
+        # ARM 2: with NO declaration the predicate is EXACTLY the core floor — the shipped
+        # state of a new factory, unchanged by this seam.
+        auth_file.unlink()
+        got = predicate("ruling")
+        check("with no declaration the predicate is exactly the core floor",
+              got.returncode == 0 and set(got.stdout.strip().split("|")) == {"hq", "owner"},
+              got.stdout.strip() or got.stderr.strip()[-150:])
+
+        # ARM 3: a declaration ADDS. It must never evict a core role, or a factory could
+        # shadow its own law by declaring one lane for an event.
+        auth_file.write_text(json.dumps(
+            {"actors": ["instrument"], "by_event": {"ruling": ["instrument"]}}))
+        got = predicate("ruling")
+        roles = set(got.stdout.strip().split("|"))
+        check("a declaration ADDS the lane and never removes a core entry",
+              got.returncode == 0 and {"hq", "owner", "instrument"} <= roles,
+              got.stdout.strip() or got.stderr.strip()[-150:])
+
+        # ARM 4: a MALFORMED declaration FAILS LOUDLY, never reads as none. A factory whose own
+        # lanes silently vanished on a typo would get a membership error naming no file.
+        auth_file.write_text("{ this is not json")
+        r = run(auth_tree / "ledger.jsonl", "append", "--event", "claim", "--actor", "triage",
+                "--subject", "#2", "--detail", "malformed declaration",
+                extra_env=AUTH, **auth_kw)
+        check("a malformed declaration fails loudly rather than reading as none",
+              r.returncode != 0 and "not valid JSON" in (r.stderr or ""),
+              (r.stderr or r.stdout).strip()[-160:])
+
+        # ARM 5: the tool still RUNS with the declaration absent — absent means none, and a
+        # factory that declares nothing keeps exactly the behaviour it had.
+        auth_file.unlink()
+        r = run(auth_tree / "ledger.jsonl", "append", "--event", "intake", "--actor", "triage",
+                "--subject", "#3", "--detail", "no declaration present",
+                extra_env=AUTH, **auth_kw)
+        check("absent declaration means none, and the tool still runs",
+              r.returncode == 0, (r.stderr or r.stdout).strip()[-140:])
 
         print("concurrent append \u2014 the single-writer property")
         procs = [

@@ -1,0 +1,5 @@
+{
+  "comment": "This factory's OWN lanes and the events each may write, for lanes the core matrix does not name. The core set is hq, triage, worker, carrier, owner plus whatever tools/actors.txt declares, and the core matrix in tools/ledger_declaration.py binds them. Declare here when THIS factory's law names a lane the core set does not have -- a meta-factory's commissioned instrument lane, say -- because a lane only one factory has cannot sit in a constant that must match everywhere, which is the same reason tools/actors.txt exists for membership. `actors` grants membership; `by_event` grants authorization, and both are needed: membership is not authorization. A declaration ADDS; it never removes or redefines a core entry. Absent or empty means this factory has declared no lanes of its own, which is the shipped state of a new factory.",
+  "actors": [],
+  "by_event": {}
+}

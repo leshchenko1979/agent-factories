@@ -27,6 +27,9 @@ REPO = Path(__file__).resolve().parent.parent
 LEDGER_REL = Path("evidence") / "ledger.jsonl"
 LEDGER_PATH = Path(os.environ.get("OC_LEDGER_PATH", REPO / LEDGER_REL))
 ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", REPO / "tools" / "actors.txt"))
+AUTHORIZATIONS_FILE = Path(
+    os.environ.get("OC_AUTHORIZATIONS_PATH", REPO / "docs" / "ledger-authorizations.json")
+)
 
 
 class SkipGate(Exception):
@@ -89,7 +92,7 @@ OPTIONAL_FIELDS = {"refs", "session"}
 # (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
 # only copy, `append` could not consult it, so an unauthorized row was written silently and
 # reported here a day later: the blind spot was exactly one audit wide by construction.
-from ledger_declaration import AUTHORIZED_ACTORS_BY_EVENT  # noqa: E402
+from ledger_declaration import authorized_for_event  # noqa: E402
 
 ISO_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
@@ -169,7 +172,7 @@ def validate_domain_invariants(row: dict[str, Any], line_num: int) -> list[str]:
     subject = row.get("subject", "")
 
     # Role-to-event authorization check
-    allowed_actors = AUTHORIZED_ACTORS_BY_EVENT.get(event, ())
+    allowed_actors = authorized_for_event(REPO, event)
     if actor and event and allowed_actors and actor not in allowed_actors:
         errors.append(
             f"line {line_num}: unauthorized actor '{actor}' for event '{event}' "
