@@ -50,6 +50,45 @@ A subject's rows are a sequence, not a row count: `intake` (filed), then
 `claim` (taken), then `close` (finished). A close with no intake is work that
 was never filed; a close with no claim is work nobody took. `verify` reads the
 sequence and names the subject and the missing leg.
+
+The unit you are copying
+------------------------
+This file is NOT standalone. It imports modules that ship beside it in `tools/`,
+and a factory that copies this file alone gets a `ModuleNotFoundError` at import
+rather than a ledger. The sets are DECLARED below so they are checkable rather
+than prose: `tests/test_ledger_header_closure.py` asserts each declaration equals
+this file's actual intra-repo imports of that kind, in both trees.
+
+Closure: ledger_declaration.py, field_predicate.py, reconstruction.py
+
+Deferred: registry.py, telemetry.py
+
+`Closure` modules are imported at MODULE level, so a tree missing one dies at
+import -- copy them with the file. `Deferred` modules are imported INSIDE
+functions on purpose (a fixture append must not pay for the lane resolver), so a
+tree missing one degrades at that call rather than at startup. Both must be
+present for the tool to work; only the first kind stops it from loading.
+
+`EVENTS` below is the CORE vocabulary, never the factory's whole one. A factory's
+event set is a fact about ITS process, so a member that legitimately adds an event
+declares it in `docs/ledger-refs-kinds.json` and `known_events()` folds it in --
+the same shape as `tools/actors.txt` for the actor set. Forking this file to add
+an event is the wrong move: its constants must match everywhere, which is exactly
+why the declaration surfaces are separate files.
+
+Two companion artefacts are part of no copy, and a factory that syncs the modules
+WITHOUT them has a dormant declared-invariant leg that fails OPEN -- `verify`
+reads clean while the leg examines nothing:
+
+  docs/ledger-invariants.json   instantiated from the shipped
+                                `docs/ledger-invariants.example.json`. Absent, the
+                                declared boundaries are never read.
+  tests/ledger_boundary.py      the shared absence/population reader that this
+                                tool and the gates both import. Absent, the
+                                boundary legs cannot run at all.
+
+They are named here so a factory can READ that its leg is dormant, rather than
+infer it from a clean `verify`.
 """
 
 from __future__ import annotations
@@ -215,9 +254,10 @@ EVENTS = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", 
 # (`roles/`), plus `owner`, who directs without being a lane. A factory whose
 # law names a lane the core set does not have — a meta-factory's member-comms
 # lane, say — declares it in `tools/actors.txt`, one role per line. It lives
-# there and not here because this file is copied byte-identically into every
-# factory: a lane that only one factory has cannot sit in a constant that must
-# match everywhere.
+# there and not here because these constants must MATCH EVERYWHERE: a lane that
+# only one factory has cannot sit in a shared constant, whatever any given copy
+# does with the file. (This file is not standalone either -- see the module
+# docstring's "The unit you are copying".)
 ACTORS = ("hq", "triage", "worker", "carrier", "owner")
 ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", Path(__file__).with_name("actors.txt")))
 

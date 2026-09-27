@@ -2039,6 +2039,20 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_instrument_census.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_instrument_census.py"])
 
+    # 64. Ledger header closure (#137): the header told a factory to copy the file
+    #     byte-identically, and the file is not standalone -- it imports three siblings at
+    #     module level, so a faithful copy dies at import with ModuleNotFoundError, and the
+    #     kit's real unit (a closure plus a per-factory event set) was stated nowhere. The
+    #     gate asserts the docstring's `Closure:` and `Deferred:` declarations EQUAL the
+    #     file's actual intra-repo imports of each kind, in BOTH trees, so the header cannot
+    #     drift from the code it describes. A declaration in a sentence cannot be compared to
+    #     anything, which is exactly why the defect survived; the marker is what makes it
+    #     checkable. Four probes drive constructed sources (an omitted import, a stale name,
+    #     an import declared under the WRONG KIND, and no declaration at all), so the gate
+    #     bites for each reason it names and reads no live board.
+    if (repo_root / "tests/test_ledger_header_closure.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_header_closure.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

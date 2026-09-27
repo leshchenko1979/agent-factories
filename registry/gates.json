@@ -6,348 +6,349 @@
   "gates": {
     "tests/test_audit_rates.py": {
       "budget_sec": 71.67,
-      "measured_sec": 17.73,
+      "margin_x": 4.042,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.042
+      "measured_sec": 17.73
     },
     "tests/test_board_intake_recorded.py": {
       "budget_sec": 20.55,
-      "measured_sec": 4.95,
+      "margin_x": 4.152,
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "margin_x": 4.152
+      "measured_sec": 4.95
     },
     "tests/test_close_board_recorded.py": {
       "budget_sec": 24.19,
-      "measured_sec": 5.86,
+      "margin_x": 4.128,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.128
+      "measured_sec": 5.86
     },
     "tests/test_close_row_revision.py": {
       "budget_sec": 43.07,
-      "measured_sec": 10.58,
+      "margin_x": 4.071,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.071
+      "measured_sec": 10.58
     },
     "tests/test_close_telemetry_provenance.py": {
       "budget_sec": 18.39,
-      "measured_sec": 4.41,
+      "margin_x": 4.17,
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "margin_x": 4.17
+      "measured_sec": 4.41
     },
     "tests/test_commit_pair_hook.py": {
       "budget_sec": 2.19,
-      "measured_sec": 0.36,
+      "margin_x": 6.083,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 6.083
+      "measured_sec": 0.36
     },
     "tests/test_commit_pathspec_law.py": {
       "budget_sec": 1.67,
-      "measured_sec": 0.23,
+      "margin_x": 7.261,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 7.261
+      "measured_sec": 0.23
     },
     "tests/test_criteria_count.py": {
       "budget_sec": 3.79,
-      "measured_sec": 0.76,
+      "margin_x": 4.987,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.987
+      "measured_sec": 0.76
     },
     "tests/test_cron_thinness.py": {
       "budget_sec": 30.31,
-      "measured_sec": 7.39,
+      "margin_x": 4.101,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.101
+      "measured_sec": 7.39
     },
     "tests/test_docs_sync.py": {
       "budget_sec": 2.03,
-      "measured_sec": 0.32,
+      "margin_x": 6.344,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 6.344
+      "measured_sec": 0.32
     },
     "tests/test_duplicate_prose.py": {
       "budget_sec": 1.91,
-      "measured_sec": 0.29,
+      "margin_x": 6.586,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 6.586
+      "measured_sec": 0.29
     },
     "tests/test_gate_fixtures_closure.py": {
       "budget_sec": 38.15,
-      "measured_sec": 9.35,
+      "margin_x": 4.08,
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "margin_x": 4.08
+      "measured_sec": 9.35
     },
     "tests/test_gate_registration.py": {
       "budget_sec": 4.35,
-      "measured_sec": 0.9,
+      "margin_x": 4.833,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.833
+      "measured_sec": 0.9
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 19.99,
-      "measured_sec": 4.81,
+      "margin_x": 4.156,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.156
+      "measured_sec": 4.81
     },
     "tests/test_hygiene_inflight.py": {
       "budget_sec": 26.67,
-      "measured_sec": 6.48,
+      "margin_x": 4.116,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.116
+      "measured_sec": 6.48
     },
     "tests/test_hygiene_namespace.py": {
       "budget_sec": 25.15,
-      "measured_sec": 6.1,
+      "margin_x": 4.123,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.123
+      "measured_sec": 6.1
     },
     "tests/test_insights_gate_recorded.py": {
       "budget_sec": 26.95,
-      "measured_sec": 6.55,
+      "margin_x": 4.115,
       "measured_at": "31077b1b50476c80ce7d521c9243ec65f655e930",
-      "margin_x": 4.115
+      "measured_sec": 6.55
     },
     "tests/test_law_coverage.py": {
       "budget_sec": 44.35,
-      "measured_sec": 10.9,
+      "margin_x": 4.069,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.069
+      "measured_sec": 10.9
     },
     "tests/test_law_structure.py": {
       "budget_sec": 33.83,
-      "measured_sec": 8.27,
+      "margin_x": 4.091,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.091
+      "measured_sec": 8.27
     },
     "tests/test_ledger.py": {
       "budget_sec": 87.87,
-      "measured_sec": 21.78,
+      "margin_x": 4.034,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.034
+      "measured_sec": 21.78
     },
     "tests/test_ledger_close_preflight.py": {
       "budget_sec": 61.07,
-      "measured_sec": 15.08,
+      "margin_x": 4.05,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.05
+      "measured_sec": 15.08
     },
     "tests/test_ledger_commit_cites_no_rows.py": {
       "budget_sec": 6.79,
-      "measured_sec": 1.51,
+      "margin_x": 4.497,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.497
+      "measured_sec": 1.51
     },
     "tests/test_ledger_no_shrink.py": {
       "budget_sec": 118.51,
-      "measured_sec": 29.44,
+      "margin_x": 4.025,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.025
+      "measured_sec": 29.44
     },
     "tests/test_ledger_schema.py": {
       "budget_sec": 2.15,
-      "measured_sec": 0.35,
+      "margin_x": 6.143,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 6.143
+      "measured_sec": 0.35
     },
     "tests/test_ontology.py": {
       "budget_sec": 4.55,
-      "measured_sec": 0.95,
+      "margin_x": 4.789,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.789
+      "measured_sec": 0.95
     },
     "tests/test_patrol_host_state.py": {
       "budget_sec": 17.03,
-      "measured_sec": 4.07,
+      "margin_x": 4.184,
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "margin_x": 4.184
+      "measured_sec": 4.07
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 64.27,
-      "measured_sec": 15.88,
+      "margin_x": 4.047,
       "measured_at": "59c66a4ab84dc36253fa0fec829c5e1e59dd23ea",
-      "margin_x": 4.047
+      "measured_sec": 15.88
     },
     "tests/test_registry.py": {
       "budget_sec": 15.07,
-      "measured_sec": 3.58,
+      "margin_x": 4.209,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.209
+      "measured_sec": 3.58
     },
     "tests/test_registry_render.py": {
       "budget_sec": 23.51,
-      "measured_sec": 5.69,
+      "margin_x": 4.132,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.132
+      "measured_sec": 5.69
     },
     "tests/test_rework.py": {
       "budget_sec": 6.31,
-      "measured_sec": 1.39,
+      "margin_x": 4.54,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.54
+      "measured_sec": 1.39
     },
     "tests/test_rework_declared_landed.py": {
       "budget_sec": 3.47,
-      "measured_sec": 0.68,
+      "margin_x": 5.103,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 5.103
+      "measured_sec": 0.68
     },
     "tests/test_rework_relative_revision.py": {
       "budget_sec": 4.35,
-      "measured_sec": 0.9,
+      "margin_x": 4.833,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.833
+      "measured_sec": 0.9
     },
     "tests/test_roadmap_transition.py": {
       "budget_sec": 11.99,
-      "measured_sec": 2.81,
+      "margin_x": 4.267,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.267
+      "measured_sec": 2.81
     },
     "tests/test_score_artifact_sections.py": {
       "budget_sec": 29.75,
-      "measured_sec": 7.25,
+      "margin_x": 4.103,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.103
+      "measured_sec": 7.25
     },
     "tests/test_score_gate_recorded.py": {
       "budget_sec": 16.07,
-      "measured_sec": 3.83,
+      "margin_x": 4.196,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.196
+      "measured_sec": 3.83
     },
     "tests/test_session_bindings.py": {
       "budget_sec": 34.03,
-      "measured_sec": 8.32,
+      "margin_x": 4.09,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.09
+      "measured_sec": 8.32
     },
     "tests/test_single_writer.py": {
       "budget_sec": 1.19,
-      "measured_sec": 0.11,
+      "margin_x": 10.818,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 10.818
+      "measured_sec": 0.11
     },
     "tests/test_skill_version_contract.py": {
       "budget_sec": 49.59,
-      "measured_sec": 12.21,
+      "margin_x": 4.061,
       "measured_at": "b82876f2f5d4f3d8c97411cb950ca5b2575fbd09",
-      "margin_x": 4.061
+      "measured_sec": 12.21
     },
     "tests/test_subject_form.py": {
       "budget_sec": 66.55,
-      "measured_sec": 16.45,
+      "margin_x": 4.046,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.046
+      "measured_sec": 16.45
     },
     "tests/test_synthesize_interface.py": {
       "budget_sec": 3.99,
-      "measured_sec": 0.81,
+      "margin_x": 4.926,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.926
+      "measured_sec": 0.81
     },
     "tests/test_telemetry_reader_registry.py": {
       "budget_sec": 29.95,
-      "measured_sec": 7.3,
+      "margin_x": 4.103,
       "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "margin_x": 4.103
+      "measured_sec": 7.3
     },
     "tests/test_template_integrity.py": {
       "budget_sec": 15.99,
-      "measured_sec": 3.81,
+      "margin_x": 4.197,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.197
+      "measured_sec": 3.81
     },
     "tests/test_template_sync.py": {
       "budget_sec": 5.39,
-      "measured_sec": 1.16,
+      "margin_x": 4.647,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.647
+      "measured_sec": 1.16
     },
     "tools/hygiene.py": {
       "budget_sec": 4.95,
-      "measured_sec": 1.05,
+      "margin_x": 4.714,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.714
+      "measured_sec": 1.05
     },
     "tools/ledger.py": {
       "budget_sec": 5.71,
-      "measured_sec": 1.24,
+      "margin_x": 4.605,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.605
+      "measured_sec": 1.24
     },
     "tools/roadmap.py": {
       "budget_sec": 3.83,
-      "measured_sec": 0.77,
+      "margin_x": 4.974,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "margin_x": 4.974
+      "measured_sec": 0.77
     }
   },
   "modes": {
-    "tools/ledger.py": "script",
-    "tests/test_ontology.py": "script",
-    "tests/test_rework.py": "script",
-    "tests/test_single_writer.py": "script",
-    "tests/test_ledger_schema.py": "script",
-    "tests/test_ledger_index.py": "script",
-    "tests/test_template_sync.py": "script",
-    "tools/hygiene.py": "script",
-    "tools/roadmap.py": "script",
-    "tests/test_law_coverage.py": "pytest",
-    "tests/test_session_bindings.py": "pytest",
-    "tests/test_law_structure.py": "pytest",
-    "tests/test_docs_sync.py": "script",
-    "tests/test_hygiene_namespace.py": "pytest",
+    "tests/test_audit_inflight_guard.py": "script",
     "tests/test_audit_rates.py": "pytest",
     "tests/test_audit_tree_condition.py": "script",
-    "tests/test_score_gate_recorded.py": "pytest",
-    "tests/test_hq_delegation.py": "pytest",
-    "tests/test_template_integrity.py": "pytest",
-    "tests/test_hygiene_inflight.py": "pytest",
-    "tests/test_close_board_recorded.py": "pytest",
-    "tests/test_ledger_commit_cites_no_rows.py": "script",
-    "tests/test_commit_pathspec_law.py": "script",
-    "tests/test_criteria_count.py": "script",
-    "tests/test_synthesize_interface.py": "script",
-    "tests/test_roadmap_transition.py": "script",
-    "tests/test_board_intake_recorded.py": "pytest",
-    "tests/test_gate_fixtures_closure.py": "pytest",
-    "tests/test_ledger.py": "script",
-    "tests/test_gate_registration.py": "script",
-    "tests/test_close_row_revision.py": "pytest",
-    "tests/test_score_artifact_sections.py": "pytest",
-    "tests/test_duplicate_prose.py": "script",
-    "tests/test_ledger_no_shrink.py": "script",
-    "tests/test_subject_form.py": "pytest",
-    "tests/test_registry.py": "script",
-    "tests/test_patrol_host_state.py": "pytest",
-    "tests/test_rework_relative_revision.py": "script",
-    "tests/test_ledger_close_preflight.py": "pytest",
-    "tests/test_telemetry_reader_registry.py": "pytest",
-    "tests/test_commit_pair_hook.py": "script",
-    "tests/test_registry_render.py": "pytest",
-    "tests/test_rework_declared_landed.py": "script",
-    "tests/test_reconstructed_claim_declared.py": "pytest",
-    "tests/test_skill_version_contract.py": "pytest",
-    "tests/test_cron_thinness.py": "pytest",
-    "tests/test_close_telemetry_provenance.py": "pytest",
-    "tests/test_insights_gate_recorded.py": "pytest",
     "tests/test_binding_mechanism_exists.py": "pytest",
+    "tests/test_board_intake_recorded.py": "pytest",
     "tests/test_brain_metrics.py": "script",
-    "tests/test_audit_inflight_guard.py": "script",
-    "tests/test_commit_session_trailer.py": "script",
-    "tests/test_ledger_identity.py": "script",
-    "tests/test_kit_manifest.py": "script",
-    "tests/test_synthesize_insights.py": "pytest",
-    "tests/test_registry_attest.py": "pytest",
-    "tests/test_kit_deliver.py": "script",
-    "tests/test_kit_pin.py": "script",
-    "tests/test_kit_census.py": "script",
-    "tests/test_kit_names.py": "script",
-    "tests/test_publish.py": "script",
-    "tests/test_subject_anchor.py": "script",
-    "tests/test_questions.py": "script",
     "tests/test_citation_clause_titles.py": "script",
-    "tests/test_self_audit_instant.py": "script",
+    "tests/test_close_board_recorded.py": "pytest",
+    "tests/test_close_row_revision.py": "pytest",
+    "tests/test_close_telemetry_provenance.py": "pytest",
+    "tests/test_commit_pair_hook.py": "script",
+    "tests/test_commit_pathspec_law.py": "script",
+    "tests/test_commit_session_trailer.py": "script",
+    "tests/test_criteria_count.py": "script",
+    "tests/test_cron_thinness.py": "pytest",
+    "tests/test_docs_sync.py": "script",
+    "tests/test_duplicate_prose.py": "script",
+    "tests/test_gate_fixtures_closure.py": "pytest",
     "tests/test_gate_invocation_mode.py": "script",
-    "tests/test_instrument_census.py": "script"
+    "tests/test_gate_registration.py": "script",
+    "tests/test_hq_delegation.py": "pytest",
+    "tests/test_hygiene_inflight.py": "pytest",
+    "tests/test_hygiene_namespace.py": "pytest",
+    "tests/test_insights_gate_recorded.py": "pytest",
+    "tests/test_instrument_census.py": "script",
+    "tests/test_kit_census.py": "script",
+    "tests/test_kit_deliver.py": "script",
+    "tests/test_kit_manifest.py": "script",
+    "tests/test_kit_names.py": "script",
+    "tests/test_kit_pin.py": "script",
+    "tests/test_law_coverage.py": "pytest",
+    "tests/test_law_structure.py": "pytest",
+    "tests/test_ledger.py": "script",
+    "tests/test_ledger_close_preflight.py": "pytest",
+    "tests/test_ledger_commit_cites_no_rows.py": "script",
+    "tests/test_ledger_header_closure.py": "script",
+    "tests/test_ledger_identity.py": "script",
+    "tests/test_ledger_index.py": "script",
+    "tests/test_ledger_no_shrink.py": "script",
+    "tests/test_ledger_schema.py": "script",
+    "tests/test_ontology.py": "script",
+    "tests/test_patrol_host_state.py": "pytest",
+    "tests/test_publish.py": "script",
+    "tests/test_questions.py": "script",
+    "tests/test_reconstructed_claim_declared.py": "pytest",
+    "tests/test_registry.py": "script",
+    "tests/test_registry_attest.py": "pytest",
+    "tests/test_registry_render.py": "pytest",
+    "tests/test_rework.py": "script",
+    "tests/test_rework_declared_landed.py": "script",
+    "tests/test_rework_relative_revision.py": "script",
+    "tests/test_roadmap_transition.py": "script",
+    "tests/test_score_artifact_sections.py": "pytest",
+    "tests/test_score_gate_recorded.py": "pytest",
+    "tests/test_self_audit_instant.py": "script",
+    "tests/test_session_bindings.py": "pytest",
+    "tests/test_single_writer.py": "script",
+    "tests/test_skill_version_contract.py": "pytest",
+    "tests/test_subject_anchor.py": "script",
+    "tests/test_subject_form.py": "pytest",
+    "tests/test_synthesize_insights.py": "pytest",
+    "tests/test_synthesize_interface.py": "script",
+    "tests/test_telemetry_reader_registry.py": "pytest",
+    "tests/test_template_integrity.py": "pytest",
+    "tests/test_template_sync.py": "script",
+    "tools/hygiene.py": "script",
+    "tools/ledger.py": "script",
+    "tools/roadmap.py": "script"
   }
 }

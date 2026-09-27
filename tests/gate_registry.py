@@ -530,6 +530,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger.py",
     "test_ledger_close_preflight.py",
     "test_ledger_commit_cites_no_rows.py",
+    # Added with its registration (board #137). REQUIRED is the correct grain: the gate
+    # parses the ledger header's own declaration and compares it to the file's ACTUAL
+    # intra-repo imports, driving four constructed sources so it bites for each reason it
+    # names — no live board, no fleet manifest, no box-local fixture — so it passes in a
+    # bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE copy,
+    # so the manifest grain is what keeps a factory from dropping the runner and keeping the
+    # file. The claim it guards is the one a factory READS BEFORE COPYING: a header saying
+    # "byte-identical" about a file that needs three siblings is the defect it was filed for.
+    "test_ledger_header_closure.py",
     # Added with its registration (board #192). REQUIRED is the correct grain: the gate
     # drives the index's OWN SELFTEST against a THROWAWAY ledger under a temp directory —
     # no live ledger, no fleet manifest, no box-local fixture — so it passes in a
