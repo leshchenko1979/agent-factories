@@ -84,6 +84,20 @@ the instant of writing):
 | `TEMPLATE/tests/test_board_intake_recorded.py` | the board-intake predicate |
 | `TEMPLATE/tests/test_close_board_recorded.py` | the close-board gate |
 
+The table above is the **shipped** half. The runner also refuses to start without one input that is
+**member-authored and therefore never shipped**:
+
+| path | what the runner loads it for |
+|---|---|
+| `<your repo>/registry/fleet.json` | the fleet manifest — `tools/registry.py::load_fleet_manifest`, called while the `legs` list is built |
+
+Only `TEMPLATE/registry/fleet.example.json` ships (§6). `load_fleet_manifest` raises
+`FleetManifestError` on **any** defect — absent, unparseable, a missing top-level key, an empty
+`factories` list, a non-integer `chat_id`, a duplicate slug — and that call sits **outside** the
+`try/except BoardReadError` that guards the board read, in the same `legs = [...]` expression as the
+eight legs. So a member holding **every** shipped path above still cannot run the runner until it
+writes this file. §8 step 2 states it as a step; it is a prerequisite.
+
 **The shape a member must not adopt is the two-file copy.** `test_cron_thinness.py` is a pure
 predicate: it judges a list handed to it and reads no live table. Copied alone, it passes — and it
 has never been asked a question about the member's own box, because nothing feeds it rows. The runner
@@ -167,9 +181,14 @@ dispatch):
 1. **Port the kit rows.** The three paths in §2, carrying the classes the manifest assigns them, plus
    the six closure modules in §3. Nothing here is optional and nothing is ported "later": the closure
    is what makes the executable run, and a missing module crashes rather than degrades (§3).
-2. **Declare ownership.** Write your own `job_prefixes` in your `registry/fleet.json`. Until you do,
+2. **Write your own `registry/fleet.json` — a PREREQUISITE, not a nicety.** The runner will not start
+   without it: `load_fleet_manifest` raises `FleetManifestError` (absent, unparseable, missing key, an
+   empty `factories` list), and that call sits outside the board-read guard — so a member holding every
+   shipped path still gets a crash, not a quiet week. Copy `registry/fleet.example.json` and fill it in.
+   Your record's `job_prefixes` is what attributes your own cron rows to you; until it is declared,
    every row you own is reported as unattributable — named and counted, never judged, and never
-   silently folded into someone else's factory.
+   silently folded into someone else's factory. The two effects are separate: the file makes the
+   runner RUN, the `job_prefixes` field makes its verdicts YOURS.
 3. **Register the gates** at the grain §4 states, so the manifest can keep you from dropping the
    runner and keeping the file.
 4. **Create your own reload link** if you want this law to survive your own compaction — the frame's
@@ -178,21 +197,45 @@ dispatch):
 
 ## 9. Adoption census
 
-**Predicate:** each of the three declared paths of §2 exists in the factory's own declared `/repo`.
-**Scope:** all six manifests in `registry/factories/*.json`. **Instant:** 2026-09-27T04:09:43Z.
+**Predicate:** each of the three declared paths of §2 exists in the factory's own declared `/repo`
+(a member counts as present only if the path is there — the closure of §3 is measured separately,
+because a partially-ported closure is a crash rather than a smaller number).
+**Scope:** all five member manifests in `registry/factories/*.json` (the key is `factory`, not `slug`).
+**Instant:** 2026-09-27T07:03:01Z.
 
-| factory | declared repo | carries the instrument |
-|---|---|---|
-| meta-factory | the template home | **3/3** |
-| ai-antispam | member | 0/3 |
-| inferhub-watch | member | 0/3 — carries an ad-hoc `tests/test_cron_prompt_lint.py` instead |
-| infra-factory | member | 0/3 — carries an ad-hoc `tests/test_cron_targets.py` instead |
-| miidas | member | 0/3 |
-| opencrabs-dev | member | 0/3 |
+| factory | declared set | own `fleet.json` | disposition |
+|---|---|---|---|
+| `infra-factory` | **3/3** | **written** | **ADOPTED** — closure 10/11 + its own manifest; its own gate passes **86 check(s), rc=0**. Untracked in its tree at the instant of measurement, so this is a port in progress, not a committed one. |
+| `ai-antispam` | 0/3 | absent | DEFER (declared) — behind by 3/3, closure 1/6; blocked on its own project-write gate |
+| `inferhub-watch` | 0/3 | absent | DEFER (declared) — behind by 8 of 9 declared paths; re-entry scoped against two adjacent instruments first |
+| `miidas` | 0/3 | absent | DEFER (declared) — behind by 8 of 9; blocked because the transport is kit-wide and offers no per-instrument selector |
+| `opencrabs-dev` | 0/3 | absent | BRIEFED — no disposition returned at this instant |
 
-**Zero of five members carry this instrument.** Two carry something shaped like it, and neither is the
-instrument: an ad-hoc file at a different path with a different predicate is **not** a partial
-adoption, it is a different thing, and counting it as progress is how a census flatters itself.
+**One of five members has adopted it; three have declared a deferral with a reason and a re-entry
+condition; one has not yet answered.** The distinction is the point of frame §7.2: a declared deferral
+is a *state*, and only undeclared divergence reds. A census that reported "1 of 5" alone would erase
+the difference between a member that measured itself and said why, and one that has gone quiet — so
+the disposition column is not decoration, it is the half of the figure that a bare count destroys.
+
+### 9.1 Three corrections from the adoption round, all measured
+
+1. **A record in another factory's manifest does not satisfy step 2.** `ai-antispam` reported step 2
+   already satisfied, citing a `registry/fleet.json` record carrying its own slug and job prefix. Read
+   first-hand: `/root/ai-antispam/registry/` **does not exist**. The record it read is the
+   **meta-factory's own** `registry/fleet.json` — a correct record of ai-antispam, sitting in a file
+   the runner will never open from ai-antispam's tree, because the runner reads `REPO / "registry" /
+   "fleet.json"` where `REPO` is the *runner's* root. This is the adjacency attribution this repo keeps
+   ruling against: the row was read, the row was right, and it was not the row that binds.
+2. **The declared closure of §3 is not the whole closure — it is the declared one.** `inferhub-watch`
+   measured `tools/field_predicate.py` importing `ledger_declaration` and `reconstruction` in turn, and
+   put its transitive closure at ~11 modules rather than 6. That is consistent, not contradictory: the
+   frame (§1) requires the closure be **declared, never derived**, precisely because a static walk is
+   blind to path-loaded modules. §3 declares what this instrument *loads*; a member's own transitive
+   dependencies sit beneath it.
+3. **The sanctioned transport cannot single out this instrument.** Confirmed at source:
+   `tools/kit_deliver.py` accepts exactly `--to` and `--dry-run`; a grep for `instrument|--only|--paths|
+   selector` returns **0** hits. A member's choice is therefore the whole population or a manual port of
+   the declared set — the wave does not ask for the former, and the second is what `infra-factory` did.
 
 ## 10. Where this instrument's law lives
 
