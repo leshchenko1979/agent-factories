@@ -55,17 +55,35 @@ the gate side).
 
 ## 2. The declared file set
 
-Read from `registry/kit.json` for the shipping half, and from the tree for the root-side half.
-`kit_version` at the instant of writing is in §5.
+**Predicate:** the shipped paths a member of this instrument receives — the manifest rows that carry
+it. **Scope:** `registry/kit.json` at the instant named in §5. Both halves of each row are listed
+because the pair is what a member adopts, and the manifest hashes the `TEMPLATE/` half.
 
-**The shipping half — the instrument's own manifest rows:**
+| # | path (member half ↔ TEMPLATE half) | class | what it is |
+|---|---|---|---|
+| 1 | `tools/kit_pin.py` ↔ `TEMPLATE/tools/kit_pin.py` | `closure` | **the pin reader** — imported rather than run |
+| 2 | `tests/test_kit_pin.py` ↔ `TEMPLATE/tests/test_kit_pin.py` | `standalone` | **the gate** — judges a member's tree against its OWN pin |
 
-| role | path | class |
-|---|---|---|
-| **closure** — the pin reader, imported rather than run | `TEMPLATE/tools/kit_pin.py` | `closure` |
-| **gate** — the pin's own reader | `TEMPLATE/tests/test_kit_pin.py` | `standalone` |
+**This is the ONE table the census parses** — `tools/instrument_census.py` derives the declared set
+from these numbered rows rather than keeping a second list that would drift, so a shipped path added
+here is measured there with no second edit. **A member is HELD when both rows are present.** The set
+is two paths because the transport delivers two paths, and §9.1's per-member census measures the same
+two — the parsed coordinate and the adoption table agree by construction rather than by maintenance.
 
-**The root-side half — meta-factory-only, and therefore in NO manifest:**
+**Six modules, five root-side gates, one shipping gate — and it is ONE instrument, not eleven.** Say
+it explicitly, because a reader counting the files as so many instruments reads the census in §9 wrong.
+Rows 1–2 are the shipping half; §2.1 is the rest, deliberately outside the parsed set for the reason
+stated there.
+
+**The pin reader is SHARED, and the frame already makes that legal.** `TEMPLATE/tools/kit_pin.py` is
+imported by this instrument's own transport **and** by `TEMPLATE/tools/patrol_host_state.py`, the
+pacemaker instrument's runner (frame §1.3: *an instrument does not own its executable exclusively*).
+The class the manifest assigns it is `closure`, so it is present only to be imported, and the frame's
+own §3 rule applies: **a pin travels with its reader** — which is why `kit_pin.py` and
+`test_kit_pin.py` are two rows of the same kit and not two independently adoptable files. A member
+that keeps the gate and drops the module holds a gate that cannot import.
+
+### 2.1 The root-side half — meta-factory-only, and deliberately NOT in the parsed set
 
 | role | path | why it cannot ship |
 |---|---|---|
@@ -75,17 +93,20 @@ Read from `registry/kit.json` for the shipping half, and from the tree for the r
 | **executable** — the four-surface census | `tools/kit_surfaces.py` | its population is `TEMPLATE/tools/`; a member has no template tree |
 | **executable** — the transport | `tools/kit_deliver.py` | a member delivers to nobody |
 
-**Six modules, five root-side gates, one shipping gate — and it is ONE instrument, not eleven.**
-Say it explicitly, because a reader counting the files as so many instruments reads the census in §9
-wrong.
+**Why these five are excluded from the parsed rows above, and why that is not a gap.** The parser
+reads a paired row as *"a member must hold both halves"*. These five have **no `TEMPLATE/` counterpart
+at all** — every entry in `registry/kit.json` is `TEMPLATE/`-rooted, which is the predicate, not a
+count — so there is no member half to pair, and a row asserting one would state a falsehood. Pairing
+each to itself would put five paths into the declared set that the transport never delivers, and then
+**every member in the fleet would read short by five for a state that is correct by design.** That is
+frame §7.2's *not applicable* wearing a shortfall's clothing, and it is the same error as scoring
+`opencrabs-dev` 0-of-2: a scope mistake filed as a shortfall, which is worse than no measurement
+because it looks like one.
 
-**The pin reader is SHARED, and the frame already makes that legal.** `TEMPLATE/tools/kit_pin.py` is
-imported by this instrument's own transport **and** by `TEMPLATE/tools/patrol_host_state.py`, the
-pacemaker instrument's runner (frame §1.3: *an instrument does not own its executable exclusively*).
-The class the manifest assigns it is `closure`, so it is present only to be imported, and the frame's
-own §3 rule applies: **a pin travels with its reader** — which is why `kit_pin.py` and
-`test_kit_pin.py` are two rows of the same kit and not two independently adoptable files. A member
-that keeps the gate and drops the module holds a gate that cannot import.
+Their class lives in `TEMPLATE/tests/gate_registry.py` as `meta-factory-only` entries — the home §4
+names for an executable outside the manifest population — so a reader grepping `kit.json` for
+`kit_surfaces` finds nothing, **and that absence is not a part-3 defect.** One instrument, two class
+homes, and this section is where the split is stated rather than left to be rediscovered.
 
 ## 3. The closure — declared, never derived
 
@@ -259,7 +280,7 @@ install travels `registry/kit.json` (manifest grain, never a per-member dispatch
    §6.1 defines it and it is **your** act, in **your** tree; it is never installed from the template.
    Absent from your tree is a **declared state**, not a failure.
 
-**What you do NOT take is the five root-side modules of §2.** They are this repo's fleet instruments
+**What you do NOT take is the five root-side modules of §2.1.** They are this repo's fleet instruments
 (census, naming, delivery, surfaces); their absence from your tree is **not applicable**, never a
 gap, and no step above asks for them. A member that copied `kit_census.py` and found its population
 empty would be running a fleet sweep in a tree that is not the fleet — §4's own reason for the
@@ -284,6 +305,22 @@ partial copy reads as adopted).
 | `inferhub-watch` | absent | absent | present | 0 of 2 (pin only) |
 | `opencrabs-dev` | absent | absent | **absent** | out of scope — see below |
 | `meta-factory` | present | present | present | the template's own tree |
+
+**Superseded beside, never over — the same predicate re-read at 2026-09-27T21:23:57Z by
+`tools/instrument_census.py kit`** (rc=0, declared set 2, the §2 rows above). Two rows moved, and
+**the observer caused both movements**, which is why the predecessor stays in place rather than being
+silently corrected:
+
+| member | 14:0xZ | 21:23:57Z | cause |
+|---|---|---|---|
+| `inferhub-watch` | 0 of 2 | **2 of 2** | this instrument's own transport wrote both paths at 14:16; the member kept them |
+| `miidas` | 2 of 2 *(by its own reader)* | **1 of 2** | the strict predicate names `tests/test_kit_pin.py`; miidas's fork is `test_kit_pin_member.py`, and the delivered copy was withdrawn at 15:04 |
+
+**So a delivery wave and a withdrawal are not adoption events, and a census run across them measures
+the wave, not a decision.** Both new rows read `HELD-UNDECLARED` — the declared leg is a member's act,
+and no member has answered in it. The frame's own warning applies to the row above mine as much as to
+any other: `held` is a presence reading over a **working tree**, so it is never a fact about a
+member's repository.
 
 **One member has adopted this instrument since the previous reading, and the census moved in BOTH
 directions.** `ai-antispam` went 0 of 2 → **2 of 2** and its gate returns **rc=0** (judged 14 carried
