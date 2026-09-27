@@ -405,6 +405,39 @@ declaration, the install and the verify. Two rules bind it:
 discovers and reads it through the link. **That one is absolute; a member adopting this law should
 prefer the relative form**, which survives a move of either tree.
 
+### 6.2 The reload path serves a CHECKOUT, not a revision
+
+**A law doc's reload link resolves to a file in the repository's working tree — so what a lane
+reloads is whatever that checkout currently holds, never `origin/main` and never a worktree's tip.**
+A `readlink -f` that succeeds proves the path *resolves*; it says nothing about which revision it
+serves. Those are different questions and only the second one matters to a lane about to act on the
+law.
+
+Measured 2026-09-27 on this repository's own frame checkout. Predicate: the served bytes against the
+`origin/main` blob for the same path. Instant: 2026-09-27T17:2xZ.
+- the shared tree stood **3 commits behind** `origin/main` (my own §5.5 landing among them);
+- the reload link resolved, and served **318 lines** where the pushed doc carried **349**;
+- the missing **31 lines** were that law doc's §9 adoption readings — added precisely so the section
+  would keep its own promise, and therefore exactly the newest law in the file.
+
+**This does not contradict "two paths, one file" above — it qualifies what that claim covers.** The
+shipped half and the reloaded half are one inode and cannot drift *from each other*; an inode can
+still be **behind**, and nothing in the distribution model measures that. The pair gate
+(`test_docs_sync`) reads the working tree too, so it is green on a stale pair by construction.
+
+**One checkout, one served revision.** The link resolves through the containing directory, which is
+itself a symlink into this repo — so every lane sharing that skill directory reloads the **same**
+tree's HEAD, and no lane can make the served revision current by working in a worktree, because a
+worktree is a different directory. A single lane's decision not to pull is therefore not a private
+matter: it sets the revision every sibling lane reloads.
+
+Two rules for a reader:
+- **When the served revision matters, compare the served bytes against the tip** — never trust the
+  symlink. `git diff --stat HEAD origin/main -- <path>` answers it for the shared tree.
+- **The shared tree is not a lane's to bring current.** It may carry peers' uncommitted work, and
+  touching it is the boundary §7.3 draws. Reading the divergence, or landing one's own change from a
+  worktree, is the shape that leaves the tree alone.
+
 ## 7. The version identifier and the deferred state
 
 **These two are defined here, once, because they are cross-instrument: an owner coining their own
