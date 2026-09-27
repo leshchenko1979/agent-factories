@@ -141,3 +141,42 @@ owner's — and a record written by the wrong lane is a different defect from a 
 
 **Residual, stated plainly:** c1 remains UNMET until that transcription lands. Everything else is
 complete and receipted (§4, §6).
+
+## 9. The actual cause of the stall — the fleet's streaming path is failing, sustained
+
+Added 2026-09-27T18:2xZ. §7 said the holder lanes were "mid-turn and not declaring". That was true and
+incomplete: they are not declining, they are **failing to complete turns**.
+
+**Measured this turn:**
+
+| measurement | value |
+|---|---|
+| `stream handshake timeout after 60s` today | **4,639** |
+| rate, last 12 minutes | ~**10/min**, sustained (9,11,10,12,9,10,10,8,9,11,12,3) |
+| affected sessions in a 30-min window | **8+ lanes**, 22–27 each |
+| `fallback providers exhausted` | **0** — so requests retry and die on the handshake, they do not exhaust the chain |
+
+**The control endpoints, and the trap in them.** `https://llm.l1979.ru/v1/models` answers `http=401`
+in **0.22 s**, and a streaming `chat/completions` POST answers `http=401` in **0.17 s**. Both are
+FAST — but **both short-circuit on auth before any work is done**, so they prove the HTTP front is
+up and nothing about whether a real completion can be served. A control that returns 401 in 0.2 s is
+not a control for "can this path complete"; it is a control for "is the listener accepting sockets".
+Recorded because the first reading of it invited exactly the wrong conclusion.
+
+**What was ruled OUT first-hand, so the attribution is not a guess:**
+
+- **Not memory starvation.** `memory.current` sits at 97.7 % of `memory.high` — but that is
+  **833 MB of page cache against 358 MB anon** (`memory.stat`), which is reclaimable. The decisive
+  counter is flat: `memory.events high 41780` did **not** increment across a 12-second sample, and
+  `memory.max 0`, `oom_kill 0`. PSI agrees: `some avg10=0.00`. The cgroup is **not** throttling now.
+- **Not a dead gateway.** The front door answers in 0.2 s.
+- **Not provider-chain exhaustion.** Zero exhaustion events.
+
+**What it means for c1, and it is the honest answer:** the declaration has not landed because the
+fleet's lanes cannot reliably finish a turn — every one of them is retrying a 60-second handshake
+timeout roughly ten times a minute. infra-factory HQ's own last row is a 25 KB reasoning block that
+never reached a conclusion, and the Delegate's is `len=0`. That is the signature, not reluctance.
+
+**So c1 is blocked on a live infrastructure fault, not on a decision.** The block would land the
+moment a holder completes a turn — and the fix for that is upstream of this lane: the streaming path
+through `llm.l1979.ru` needs its own diagnosis by whoever owns it.
