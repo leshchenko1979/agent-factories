@@ -74,8 +74,10 @@ The tokens are read through the SHARED predicate `tools/field_predicate.py::keye
 not a substring test, so a row that merely NAMES a field cannot satisfy it: `workspace_gate=`
 is a mention carrying no value, and prose about the rule is not a record of it. The scan
 continues past an unreadable `head=` token rather than stopping at the first one, the shape
-`test_close_row_revision.py::_declared_revision` and `test_score_gate_recorded.py::_has_head_sha`
+`tools/field_predicate.py::declared_revision` and `test_score_gate_recorded.py::_has_head_sha`
 both use — a row that DESCRIBES the field before naming its revision does declare one.
+(`test_close_row_revision.py` carried its own copy of that reader until #190 removed it,
+because one field judged by two predicates was the defect #190 exists to close.)
 
 The invariant is factored into `run_verdict_problems()` so synthetic rows can probe it: a
 rule that has only ever seen good input has not been shown to reject bad input.

@@ -9,9 +9,11 @@ three failure directions, each measured on a live row:
 * **prose must not SATISFY a field** — `tests/test_ledger_schema.py` split the whole
   detail on whitespace and validated every `k=v` token, so a row that QUOTED a
   trailer was read as declaring it (the #87 intake row, `n=561`).
-* **prose must not TERMINATE a scan** — `_declared_revision` returned at the first
-  `head=` token, so a row that DESCRIBED the field before naming its revision was
-  refused. Fixed at `d244964`; the predicate it uses is the one below.
+* **prose must not TERMINATE a scan** — the close-row gate's OLD whole-detail reader
+  (removed by #190, which moved that leg onto this module's `declared_revision`)
+  returned at the first `head=` token, so a row that DESCRIBED the field before
+  naming its revision was refused. Fixed at `d244964`; the predicate it uses is the
+  one below.
 * **prose must not SUPPRESS a field** — `tools/ledger.py` tested `"tokens_out=" not
   in detail`, a SUBSTRING test, so a prose mention stopped the tool appending the
   measurement it had genuinely taken.

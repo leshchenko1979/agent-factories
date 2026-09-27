@@ -77,6 +77,7 @@ from ledger_boundary import (  # noqa: E402
     GateError,
     SkipGate,
     boundary_and_rows,
+    declared_boundary,
     parse_ts,
     population_skip_reason,
     post_boundary_rows,
@@ -101,43 +102,29 @@ REVISION_KEY = f"{REVISION_FIELD}="
 _HEX = set("0123456789abcdef")
 _MIN_SHA = 7
 
+# The SECOND boundary this gate declares, and why it needs one (#190). The missing
+# leg used to scan the WHOLE detail, so a row that declared its revision only in
+# PROSE was credited while the existence leg skipped it and never resolved the value:
+# one field judged by two predicates, with nothing printing the split. Moving that
+# leg onto the canonical run makes those historical rows problems, and the instant
+# that separates them is the write-path refusal's landing (#187, `ac43fe1`) — before
+# it such a row could be WRITTEN; at or after it the refusal makes one unwritable, so
+# one is a defect. Declared in the factory's own tree beside the invariant's own key,
+# for the same reason: one factory's history must not live in a file that ships to
+# every new factory. A tree that has NOT declared it gets no window at all — see
+# `evaluate`, which is fail-closed here.
+RUN_READ_KEY = "close_row_revision_run_read"
+
+# The marker every prose-excused line carries. The summary counts the lines that
+# START with it, so the count and the lines it counts come from ONE constant rather
+# than from a second derivation of the predicate that produced them.
+PROSE_EXCUSED_MARKER = "declares its revision in PROSE only"
+
 # The DECLARED RETIREMENT surface: this gate's own factory data, read from the tree it
 # judges and never inline in the gate — which is paired byte-identically into TEMPLATE/,
 # so a factory's own row numbers must not live in a file that ships to every new factory.
 # The skeleton is TEMPLATE/docs/ledger-retirements.example.json.
 RETIREMENTS_PATH = "docs/ledger-retirements.json"
-
-def _declared_revision(detail: str) -> str | None:
-    """The `head=<sha>` value, or None when no readable field is present.
-
-    A FIELD, not a prose mention: the token must DECLARE `head` — the shared
-    `keyed_value` predicate in `tools/field_predicate.py`, which requires the key, then
-    `=`, then a NON-EMPTY value — and that value must be hex of at least `_MIN_SHA`
-    chars. Both halves are probed, because a predicate that only checked "is a sha
-    present somewhere" would pass a row whose revision is merely cited in a sentence —
-    the pattern-inflated shape #63 measured at 30 of 54. The shape half is the same
-    predicate the telemetry gates use; only the type half is this gate's own, which is
-    what makes it one class with one remedy rather than three readers (#88, n=405
-    clause 5).
-
-    The scan CONTINUES past an unreadable `head=` token rather than stopping at it, the
-    shape `tests/test_score_gate_recorded.py::_has_head_sha` uses. Stopping at the first
-    one is a false-RED generator: a row that DESCRIBES the field in prose before naming
-    the revision ("the `head=` field is carried by only 4 rows ... head=02e9597...") does
-    declare a revision, and an early return rejects it. Not hypothetical — it fired on
-    this gate's own author's close row on the day it landed, and it is #53 clause 4's
-    shape one layer up, prose mistaken for a field. The distinction that matters is
-    readable-vs-not, so a row whose only `head=` token is unreadable is still reported,
-    which `test_probe_rejects_an_unreadable_revision` pins.
-    """
-    for token in str(detail).replace(",", " ").replace(";", " ").split():
-        value = keyed_value(token, REVISION_FIELD)
-        if value is None:
-            continue
-        sha = value.strip(").`")
-        if len(sha) >= _MIN_SHA and all(c in _HEX for c in sha):
-            return sha
-    return None
 
 def _trailer_revision(detail: str) -> str | None:
     """The `head=<sha>` value from the row's CANONICAL RUN, or None when it declares none.
@@ -154,9 +141,9 @@ def _trailer_revision(detail: str) -> str | None:
     declaration, so a token outside it is a quotation. And it is one field with one
     predicate — the same `trailer_tokens` the repair path and the telemetry readers use.
 
-    The value is the FIRST `head=` in the run, the same precedence `_declared_revision`
-    applies; the run is short and its fields are machine-written, so a second `head=` is
-    a writer defect rather than a choice this reader should resolve.
+    The value is the FIRST `head=` in the run; the run is short and its fields are
+    machine-written, so a second `head=` is a writer defect rather than a choice this
+    reader should resolve.
 
     DELEGATES to `field_predicate.declared_revision` — the ONE reader of this field, shared
     with the write path that refuses to create the defect (#187). A second copy of this
@@ -342,16 +329,26 @@ def close_row_revision_existence_problems(
 
 
 def close_row_revision_problems(
-    rows: list[dict], boundary_text: str
+    rows: list[dict],
+    boundary_text: str,
+    run_boundary_text: str,
 ) -> tuple[list[str], list[str]]:
     """Return (problems, excused) for the `close` rows of a ledger.
 
     `problems` names every post-boundary close row that does not declare a readable
-    revision; `excused` names every pre-boundary row, so the two are never conflated.
-    `boundary_text` is the DECLARED boundary verbatim, so an excused line quotes the date
-    the factory declared rather than one this file carries.
+    revision IN ITS CANONICAL RUN; `excused` names every pre-boundary row, plus — with
+    `PROSE_EXCUSED_MARKER` — every row in the historical window between the two
+    boundaries whose declaration is prose-only, so the two are never conflated.
+
+    BOTH boundaries are the DECLARED text verbatim, so an excused line quotes the date the
+    factory declared rather than one this file carries. This leg reads the field through
+    `field_predicate.declared_revision` — the SAME predicate the existence leg uses and the
+    same one the write path enforces — because one field judged by two predicates is how
+    the split this function now reports came to exist (#190, and §11's one-field-one-
+    predicate rule).
     """
     boundary = parse_ts(boundary_text)
+    run_boundary = parse_ts(run_boundary_text)
     problems: list[str] = []
     excused: list[str] = []
 
@@ -367,11 +364,21 @@ def close_row_revision_problems(
         if when < boundary:
             excused.append(f"n={n} ({ts}) predates the declared boundary ({boundary_text})")
             continue
-        if _declared_revision(str(row.get("detail") or "")) is None:
-            problems.append(
-                f"n={n} ({ts}) does not declare the revision its receipts describe "
-                f"(expected a readable {REVISION_KEY}<sha> field)"
+        if declared_revision(str(row.get("detail") or ""), _MIN_SHA) is not None:
+            continue
+        if when < run_boundary:
+            excused.append(
+                f"{PROSE_EXCUSED_MARKER} (n={n}, {ts}) — before the run-read boundary "
+                f"({run_boundary_text}) such a row could still be written, and it is "
+                f"excused rather than repaired: a revision recorded today for a row that "
+                f"predates the rule would be a falsified record"
             )
+            continue
+        problems.append(
+            f"n={n} ({ts}) does not declare the revision its receipts describe in its "
+            f"canonical run (expected a readable {REVISION_KEY}<sha> field there; a "
+            f"revision cited in prose is a QUOTATION the existence leg never resolves)"
+        )
 
     return problems, excused
 
@@ -395,7 +402,21 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int, list[str]
     except GateError as exc:
         return "fail", "", list(exc.problems), [], 0, []
 
-    problems, excused = close_row_revision_problems(rows, boundary_text)
+    # The run-read boundary is read HERE and is FAIL-CLOSED when absent: a tree that
+    # has not declared it gets no prose-excuse window, so every post-boundary row is
+    # judged by the canonical run and a prose-only one is a PROBLEM — the correct
+    # verdict until that factory declares when its own rows could still be written
+    # that way. A MALFORMED value FAILS, the same as the invariant's own key.
+    try:
+        run_boundary, run_boundary_text = declared_boundary(repo, RUN_READ_KEY)
+    except SkipGate:
+        run_boundary_text = boundary_text
+    except GateError as exc:
+        return "fail", "", list(exc.problems), [], 0, []
+
+    problems, excused = close_row_revision_problems(
+        rows, boundary_text, run_boundary_text
+    )
 
     # The retirement surface is read from the tree UNDER JUDGEMENT, and a declaration it
     # cannot honour is a DEFECT rather than an absence — the same reason a malformed
@@ -452,10 +473,13 @@ def test_live_close_rows_declare_the_revision_they_measured() -> None:
     examined nothing is visible as `0 checked` rather than reading as a clean one.
     """
     _, _, excused, checked, prints = _live_verdict()
+    prose_excused = [e for e in excused if e.startswith(PROSE_EXCUSED_MARKER)]
     print(
         f"close-row revision gate: {checked} post-boundary close row(s) declared a "
-        f"revision and every one RESOLVES; {len(prints)} retired by declaration; "
-        f"{len(excused)} excused (pre-boundary)"
+        f"revision IN THE CANONICAL RUN and every one RESOLVES; {len(prints)} retired "
+        f"by declaration; {len(excused) - len(prose_excused)} excused (pre-boundary); "
+        f"{len(prose_excused)} excused by the run-read boundary ({RUN_READ_KEY}) and "
+        f"named above"
     )
 
 # --- probes: the tree the gate runs in, then the predicate it applies --------------
@@ -555,6 +579,48 @@ def test_probe_the_boundary_comes_from_the_declaration_not_this_file(
     assert (status, problems) == ("skip", []), (status, problems)
     assert excused and "2026-09-19T07:00:00Z" in excused[0], excused
 
+def test_probe_the_missing_leg_reads_the_canonical_run(tmp_path: Path) -> None:
+    """(#190) ONE field, ONE predicate — and the split is PRINTED, never hidden.
+
+    The discriminator is a row whose only `head=` sits in PROSE, which the existence leg
+    never resolves. Before the run-read boundary such a row is EXCUSED and printed, so an
+    excused run is never readable as an unexamined one; at or after it the SAME row is a
+    PROBLEM naming it. Both halves run over one synthetic ledger, so the boundary is the
+    only thing that differs between them.
+    """
+    prose = "Closed. its receipts describe head=f1a7cfa29 in prose only"
+    tree = synthetic_tree(
+        tmp_path / "split",
+        rows=[
+            _close(1, "2026-09-26T10:00:00Z", prose),
+            _close(2, "2026-09-27T03:00:00Z", prose),
+        ],
+        invariants={
+            INVARIANT_KEY: "2026-09-19T05:05:49Z",
+            RUN_READ_KEY: "2026-09-27T02:16:26Z",
+        },
+    )
+    status, _, problems, excused, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert [p for p in problems if "n=2" in p], problems
+    assert not [p for p in problems if "n=1" in p], problems
+    prose_excused = [e for e in excused if e.startswith(PROSE_EXCUSED_MARKER)]
+    assert prose_excused and "n=1" in prose_excused[0], excused
+    assert not [e for e in excused if "n=2" in e], excused
+
+def test_probe_no_run_read_boundary_excuses_nothing(tmp_path: Path) -> None:
+    """The second key is FAIL-CLOSED: undeclared, a prose-only row is a PROBLEM rather
+    than silently excused by a boundary nobody declared."""
+    tree = synthetic_tree(
+        tmp_path / "no-run-boundary",
+        rows=[_close(1, "2026-09-26T10:00:00Z",
+                     "Closed. its receipts describe head=f1a7cfa29 in prose only")],
+        invariants={INVARIANT_KEY: "2026-09-19T05:05:49Z"},
+    )
+    status, _, problems, excused, _, _ = evaluate(tree)
+    assert status == "fail" and problems, (status, problems)
+    assert not [e for e in excused if e.startswith(PROSE_EXCUSED_MARKER)], excused
+
 def test_probe_an_empty_population_skips_rather_than_passing(tmp_path: Path) -> None:
     """(c), PROPORTIONAL: a young factory whose history predates the boundary — or holds
     no close at all — skips with its reason instead of passing vacuously."""
@@ -624,19 +690,19 @@ _OK = {
 }
 
 def test_probe_accepts_a_compliant_close_row() -> None:
-    problems, excused = close_row_revision_problems([_OK], _PROBE_BOUNDARY)
+    problems, excused = close_row_revision_problems([_OK], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems == [] and excused == [], (problems, excused)
 
 def test_probe_rejects_a_close_row_with_no_revision() -> None:
     row = {**_OK, "detail": "Closed. audit -> HEALTHY (PASS), 28 gates, 0 FAIL."}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems and "does not declare the revision" in problems[0], problems
 
 def test_probe_rejects_an_unreadable_revision() -> None:
     """A `head=` field whose value is not a sha is present-but-unreadable, not absent."""
     for bad in ("head=not-a-sha", "head=abc", "head=zzzzzzzz"):
         row = {**_OK, "detail": f"Closed. Receipts taken at {bad}."}
-        problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+        problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
         assert problems, f"{bad!r} must not read as a declared revision"
 
 def test_probe_rejects_a_prose_mention_without_the_field() -> None:
@@ -646,7 +712,7 @@ def test_probe_rejects_a_prose_mention_without_the_field() -> None:
     field. Accepting the prose form would pass rows whose revision is never declared.
     """
     row = {**_OK, "detail": "Closed. The fix landed at 9c2ed02 as clause 8 of the stream."}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems, "a sha-shaped prose token must not satisfy the field"
 
 def test_probe_accepts_a_row_that_describes_the_field_before_naming_it() -> None:
@@ -661,14 +727,14 @@ def test_probe_accepts_a_row_that_describes_the_field_before_naming_it() -> None
         "this prose to the field that follows. Receipts taken at "
         "head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e."
     )}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems == [], f"a row naming its revision after describing the field must pass: {problems}"
 
 def test_probe_rejects_a_pure_digit_comment_id() -> None:
     """n=303 cites 5737030289 — a GitHub comment id, which `git cat-file -t` does not
     resolve as an object. Ten such rows are in the live population."""
     row = {**_OK, "detail": "Closed. Receipt comment 5739522839 posted to the board."}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems, "a comment id must not satisfy the revision field"
 
 def test_probe_rejects_a_telemetry_trailer_match() -> None:
@@ -677,7 +743,7 @@ def test_probe_rejects_a_telemetry_trailer_match() -> None:
     there, which is why the loose pattern would pass rows that declare nothing."""
     row = {**_OK, "detail": "Closed. gate=all-pass outcome=accepted cost_usd=4.7343 "
                             "tokens_out=16830682 turns=5 duration=308s"}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems, "the telemetry trailer must not satisfy the revision field"
 
 def test_probe_the_field_predicate_is_shared_not_reimplemented() -> None:
@@ -698,12 +764,12 @@ def test_probe_the_field_predicate_is_shared_not_reimplemented() -> None:
     # And the shape the shared predicate changes at this site: a bare `head=` is a
     # MENTION. It names the field and states no value, so it declares no revision.
     row = {**_OK, "detail": "Closed. The head= field is read from the trailer; it is absent here."}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems, "a bare head= mention must not satisfy the revision field"
 
 def test_probe_rejects_an_unparseable_timestamp() -> None:
     row = {**_OK, "ts": "not-a-timestamp"}
-    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY)
+    problems, _ = close_row_revision_problems([row], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems and "unparseable ts" in problems[0], problems
 
 def test_probe_excuses_pre_boundary_rows_without_calling_them_clean() -> None:
@@ -713,13 +779,13 @@ def test_probe_excuses_pre_boundary_rows_without_calling_them_clean() -> None:
         "event": "close",
         "detail": "Closed. python3 tools/audit.py -> HEALTHY (PASS), 27 gates, 0 FAIL.",
     }
-    problems, excused = close_row_revision_problems([legacy], _PROBE_BOUNDARY)
+    problems, excused = close_row_revision_problems([legacy], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems == [], problems
     assert len(excused) == 1 and "predates the declared boundary" in excused[0], excused
 
 def test_probe_ignores_non_close_events() -> None:
     other = {"n": 901, "ts": "2026-09-19T06:00:00Z", "event": "claim", "detail": "x"}
-    problems, excused = close_row_revision_problems([other], _PROBE_BOUNDARY)
+    problems, excused = close_row_revision_problems([other], _PROBE_BOUNDARY, _PROBE_BOUNDARY)
     assert problems == [] and excused == []
 
 # --- probes: the existence leg and the declared retirement surface (#104, PART 5) --
@@ -925,7 +991,7 @@ def test_probe_a_tree_with_no_object_database_skips_with_its_reason(
 def main() -> int:
     """Script form: the same verdict, with the skip reason on STDOUT rather than in a
     pytest short summary — so a reader of the run sees WHY nothing was judged."""
-    status, reason, problems, _, checked, prints = evaluate(REPO)
+    status, reason, problems, excused, checked, prints = evaluate(REPO)
     if status == "skip":
         print(f"close-row revision gate: SKIP — {reason}")
         return 0
@@ -934,11 +1000,20 @@ def main() -> int:
         for line in problems:
             print(f"  {line}", file=sys.stderr)
         return 1
+    # The window's rows are PRINTED, not merely counted (#190): an excused run must never
+    # be readable as one that examined nothing, and the pre-boundary population is counted
+    # rather than listed so the line a reader meets stays short.
+    prose_excused = [e for e in excused if e.startswith(PROSE_EXCUSED_MARKER)]
+    for line in prose_excused:
+        print(f"  excused: {line}")
     for line in prints:
         print(f"  {line}")
     print(
         f"close-row revision gate: clean — {checked} post-boundary close row(s) declared "
-        f"a revision and every one RESOLVES; {len(prints)} retired by declaration"
+        f"a revision IN THE CANONICAL RUN and every one RESOLVES; {len(prints)} retired "
+        f"by declaration; {len(excused) - len(prose_excused)} excused (pre-boundary); "
+        f"{len(prose_excused)} excused by the run-read boundary ({RUN_READ_KEY}) and "
+        f"named above"
     )
     return 0
 
