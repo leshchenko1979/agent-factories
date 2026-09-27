@@ -4,6 +4,23 @@ Produced by an independent read-only sub-agent (D.3 protocol), scoped to the TEM
 copy and the TEMPLATE law. Verbatim report below; the disposition of every finding is in
 ledger row n=1142 and commit 2f8c135.
 
+> **CITATION DRIFT — the line numbers in the body no longer resolve (2026-09-27).** The body is
+> verbatim and is NOT edited. Its line-number pointers were correct at this review's revision
+> (`027aa98`, `SKILL.md` 824 lines) and the file has since grown to 866:
+>
+> | cited | holds now | the clause it meant, by NAME |
+> |---|---|---|
+> | `SKILL.md:547` (x3) | a table row on `evidence/insights.jsonl` | §11 **"THE WRITE PATH OWNS THE ACTOR, AND THE ACTOR IS DERIVED"** — now `:589` |
+> | `SKILL.md:549` (x2) | a table row on `evidence/scores/<date>.md` | §11 **"THE SETTLEMENT RECEIPT IS THE TOOL'S, NOT THE AUTHOR'S"** — now `:591` |
+> | `TEMPLATE/tools/ledger_declaration.py:46-52` | the module docstring's tail + `from __future__` | the `EXEMPTIONS` declaration |
+>
+> Both clauses moved by exactly **+42 lines**, matching the file's growth — the drift is pure
+> insertion above them, and it is silent: nothing reds, and a reader following `:547` lands on a
+> table about a different surface. `docs/processes.md:152` happens to still resolve; that is luck,
+> not safety. **The stable anchor is the NAME** — a clause's own bold header, a constant's name, a
+> function name — never a line number. Same remedy as #184, second failure mode: there the file
+> does not ship, here it does and the line moved.
+
 ---
 
 # INDEPENDENT REVIEW OF SHIPPED INSTRUMENT: LEDGER
