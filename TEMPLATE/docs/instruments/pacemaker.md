@@ -345,17 +345,33 @@ the one it came from.**
 - **HELD** — `os.path.isfile(member.repo / p)` for each of §2's **eleven** declared paths. This is
   `tools/instrument_census.py`'s predicate, and its published artifact is the citable form. It reads
   a **working tree**, so a member reads 11/11 while its own **commit** carries fewer: measured
-  2026-09-27, `inferhub-watch` reads 11/11 held and a clone of its `HEAD` carries **6 of the 11**
-  (five are untracked). Read HELD as *present on disk*, never as *in the repo* — a third axis
-  beside held-vs-current, and the one a fresh clone settles.
+  2026-09-27T21:42:07Z, `inferhub-watch` reads 11/11 held and a clone of its `HEAD` (`dbdab59`) carries
+  **8 of the 11**, the three absent being rows 1, 3 and 9 (`tools/patrol_host_state.py`,
+  `tests/test_patrol_host_state.py`, `tests/test_close_board_recorded.py`). Read HELD as *present on
+  disk*, never as *in the repo* — a third axis beside held-vs-current, and the one a fresh clone settles.
+  (An earlier revision of this bullet read 6 of 11 / five untracked; the member has since committed
+  two of them, which is the reference moving again — hence the member sha beside the figure.)
 - **CURRENT** — byte-identity of each held file against the template half (`cmp -s`). A member can
   hold every path and still be **behind**: adoption is a revision, not a copy.
+- **What a clone cannot see has TWO mechanisms, and they differ in who is blind.** A file is missing
+  from a fresh checkout either because it is **untracked by design** (`inferhub-watch` row 9 — its
+  declared carve-out) or because it carries an **uncommitted edit** (`infra-factory` row 8, `M` in its
+  tree: disk `e3fd9f1a…` == TEMPLATE HEAD while its own HEAD holds the pre-repair `49ed31df…`).
+  Both are invisible to a clone; only the second is invisible to its own operator too, and the remedy
+  differs by mechanism — the untracked file needs a decision, the uncommitted edit needs a **commit**,
+  not a re-copy. On one row the on-disk and committed readings therefore point in **opposite**
+  directions, each correct for its own predicate (frame §7.5).
 
 **Scope:** the member fragments in `registry/factories/*.json`. **Instant:** HELD read by
-`tools/instrument_census.py` at **2026-09-27T19:16:27Z** — the stamp the artifact
-`evidence/instrument-census-pacemaker-2026-09-27.md` carries on its own first line, so this citation
-resolves to a receipt that agrees with it, and that artifact reads the **eleven**-path set §2 now
-declares (its predecessor at 18:58:07Z read nine). **CURRENT** read by `md5sum` against the **committed**
+`tools/instrument_census.py` at **2026-09-27T21:40:04Z** — the stamp the committed artifact
+`evidence/instrument-census-pacemaker-2026-09-27.md` carries, so this citation resolves to a receipt
+that agrees with it. **The artifact RE-STAMPS on every run** — the tool always writes it
+(`--stdout` only *also* prints) — so read the stamp from the copy in hand rather than from this line.
+An earlier revision of this sentence cited `2026-09-27T19:16:27Z` and called it the artifact's *first
+line*; measured against the committed copy it matched neither, since the stamp rides the artifact's
+`Read at` / `Instant:` lines and moves every run. Its readings were unaffected by that re-stamp —
+only the stamp moved, which is the reference moving while the measurement stands still. That artifact
+reads the **eleven**-path set §2 declares (its predecessor at 18:58:07Z read nine). **CURRENT** read by `md5sum` against the **committed**
 template halves (`git show HEAD:TEMPLATE/<path>`, not a working tree other lanes are editing) at
 **2026-09-27T19:05Z** over the same eleven paths in the same five member repos, and re-read at
 **2026-09-27T21:21:50Z** at HEAD `29a117c` after `3793de5` (19:58:46Z) moved row 10. Earlier instants:
