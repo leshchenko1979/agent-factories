@@ -541,6 +541,84 @@ def sequence_problems(
     # its close is still caught, because `claims` is read positionally.
     return problems
 
+# --- the dispatch leg (#45, ruling n=255, refined n=524) ------------------------
+#
+# `verify` modelled a subject's life as intake -> claim -> close, and `dispatch` was not
+# a leg of that model at all. Nothing asserted that a subject was FILED before it was
+# ROUTED, so the ledger could answer "this was dispatched" for a subject it could not
+# answer "was this ever taken in?" for.
+#
+# THREE classifications, and the split is the ruling's own (n=524), taken because a
+# binary split certified a row it could not see:
+#
+#   (1) a strict `#<n>` subject  — a WORK-UNIT handoff. That subject's intake must
+#       precede the dispatch, or the route promises a filing that never happened.
+#   (2) a descriptive stem       — an observation dispatch, EXPLICITLY LEGAL. These are
+#       not work-unit handoffs and sit outside the ordering leg entirely.
+#   (3) a BARE or HASH-LED form that is not strict (`77`, `# 12`, `#12a`) — a DEFECT IN
+#       THE ROW: a work-unit dispatch was INTENDED and its subject cannot be resolved by
+#       any subject-keyed predicate. REPORTED and named, never gated: the row's identity
+#       is immutable once pushed (#52 clause 1), so only a NEW row can repair it.
+#
+# FORWARD-ONLY, WITH A DECLARED BOUNDARY — and the boundary is a measured decision, not
+# a convenience. The law ("a work-unit dispatch promises the subject was filed") has
+# never been enforced, so every historical instance is PRE-GATE by construction, and the
+# measured population is 28, not the 2 the ruling knew: their gaps run 0.3 min to
+# 276.7 min with NO SEAM that could separate a same-turn race from a genuine
+# routing-before-filing. An EXEMPTIONS entry is admitted by an EXTERNAL RECEIPT
+# (n=620), so 28 entries would mean inventing 26 receipts that do not exist. The
+# boundary excuses and PRINTS the historical population instead — never backfilled, and
+# never by weakening the leg (the #190 pattern).
+DISPATCH_LEG_BOUNDARY = "2026-09-27T16:22:43Z"
+def is_work_unit(subject: str) -> bool:
+    """A STRICT `#<n>` subject — a hash, then digits, then nothing else.
+
+    Deliberately not a regex: the test is three predicates over a short string, and
+    `tools/ledger.py` carries no `re` import for good reason — this module must run
+    wherever the ledger runs, and a regex engine is one more dependency on that path.
+    `#12a`, `# 12` and `#332-D5` all fail it, which is the point: they are neither a
+    work unit nor a descriptive stem, and class (3) of the ruling exists for them.
+    """
+    return len(subject) > 1 and subject[0] == "#" and subject[1:].isdigit()
+
+
+def dispatch_problems(
+    rows: list[dict], by_subject: dict[str, list[tuple[int, str]]],
+) -> tuple[list[tuple[str, str, str]], list[tuple[str, int]], list[tuple[str, int, str]]]:
+    """(problems, malformed, excused) for the dispatch leg — PURE over the row list.
+
+    Returned as three populations rather than one verdict, because they are three
+    different facts: a post-boundary ordering defect (a problem), a row whose subject
+    cannot be resolved (a report), and a pre-boundary instance (a visible debt printed
+    as an `excused:` line). Collapsing them would make the report of an unrepairable
+    row indistinguishable from a defect the lane could fix.
+    """
+    problems: list[tuple[str, str, str]] = []
+    malformed: list[tuple[str, int]] = []
+    excused: list[tuple[str, int, str]] = []
+    for i, row in enumerate(rows):
+        if row.get("event") != "dispatch":
+            continue
+        subject = str(row.get("subject") or "").strip()
+        if is_work_unit(subject):
+            precedes = any(
+                ev == "intake" and j < i for j, ev in by_subject.get(subject, [])
+            )
+            if precedes:
+                continue
+            ts = str(row.get("ts") or "")
+            if ts and ts < DISPATCH_LEG_BOUNDARY:
+                excused.append((subject, i + 1, ts))
+                continue
+            problems.append((subject, "dispatch",
+                f"line {i + 1}: dispatch of {subject} has no intake before it — a "
+                f"work-unit dispatch promises the subject was filed, and the board has "
+                f"no record of this one being taken in"))
+        elif subject and (subject[0].isdigit() or subject[0] == "#"):
+            malformed.append((subject, i + 1))
+    return problems, malformed, excused
+
+
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in known_events():
         sys.exit(
@@ -1334,6 +1412,23 @@ def cmd_verify(args: argparse.Namespace) -> int:
             continue
         seq_problems.extend(sequence_problems(by_subject, row.get("subject"), i))
 
+    # The dispatch leg is INDEPENDENT of the close sequence above (n=524: the malformed
+    # check "may land with it or before it"), and its two halves have different
+    # dispositions: the ordering half is EXEMPTABLE like every other leg, the malformed
+    # half is REPORTED and never gated.
+    dispatch_defects, dispatch_malformed, dispatch_excused = dispatch_problems(
+        rows, by_subject
+    )
+    seq_problems.extend(dispatch_defects)
+    dispatch_examined = sum(1 for r in rows if r.get("event") == "dispatch")
+    dispatch_work_units = sum(
+        1 for r in rows if r.get("event") == "dispatch"
+        and is_work_unit(str(r.get("subject") or "").strip())
+    )
+    dispatch_observations = (
+        dispatch_examined - dispatch_work_units - len(dispatch_malformed)
+    )
+
     # PROOF is what ADMITS a POST-gate entry (#52 clause 3), so a proofless entry is
     # not admittable and is refused HERE — at the point it would excuse an omission —
     # which leaves the omission a problem naming the entry that failed to excuse it.
@@ -1374,6 +1469,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # examined nothing must not read as a leg that examined the ledger and found it
     # clean. Same convention as the patrol legs.
     print(f"refs examined: {refs_examined}")
+    # The dispatch leg's population, printed BESIDE the verdict rather than implied by
+    # it — a leg that examined nothing must not read as one that examined the ledger.
+    print(
+        f"dispatch rows examined: {dispatch_examined} "
+        f"({dispatch_work_units} work-unit, {dispatch_observations} observation, "
+        f"{len(dispatch_malformed)} malformed), ordering leg forward-only from "
+        f"{DISPATCH_LEG_BOUNDARY}"
+    )
     if problems:
         print(f"ledger problems: {len(problems)}")
         for p in problems:
@@ -1405,7 +1508,23 @@ def cmd_verify(args: argparse.Namespace) -> int:
         # (`n=405` clause 5, `n=599`), never a private copy that can drift in silence.
         for row in reconstructed_claims(rows):
             print(f"  {interval_line(row, rows)}")
+        for subject, line_no, ts in dispatch_excused:
+            print(
+                f"  excused: dispatch of {subject} at line {line_no} ({ts}) precedes "
+                f"its intake — pre-boundary, and the law that orders them has never "
+                f"been enforced before {DISPATCH_LEG_BOUNDARY}"
+            )
         rc = 0
+    # The malformed population prints on BOTH paths: a row whose subject cannot be
+    # resolved is a finding about the ROW, and it stays visible even when the ledger is
+    # otherwise clean — which is the only way a reader meets it at all.
+    for subject, line_no in dispatch_malformed:
+        print(
+            f"  malformed subject: dispatch at line {line_no} carries {subject!r} — "
+            f"neither a strict '#<n>' nor a descriptive stem, so a work-unit dispatch "
+            f"was intended and no subject-keyed predicate can resolve it. The row's "
+            f"identity is immutable once pushed; the repair is a NEW row"
+        )
 
     # The revision comparison runs whatever the structure check found: a ledger that is
     # internally consistent can still have had a row's identity changed, which is exactly

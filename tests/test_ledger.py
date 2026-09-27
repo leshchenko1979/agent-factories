@@ -525,6 +525,53 @@ def main() -> int:
                  (("claim", "#4"), ("intake", "#4"), ("close", "#4")), 0, ())
         seq_case("P4b a claim AFTER its close is still refused (presence, positional)",
                  (("intake", "#4b"), ("close", "#4b"), ("claim", "#4b")), 1, ("#4b", "claim"))
+
+        # THE DISPATCH LEG (#45, ruling n=255, refined n=524). `verify` modelled intake ->
+        # claim -> close and `dispatch` was no leg of that model, so the ledger could say
+        # "this was routed" for a subject it could not say "was this taken in?" for. The
+        # leg is FORWARD-ONLY from a DECLARED BOUNDARY, so a probe must control the row's
+        # `ts`: `write_ledger`'s fixed 2026-09-12 is pre-boundary and would be excused,
+        # which is exactly the trap a probe that used it would fall into.
+        print("\nthe dispatch leg — ordering, observations, malformed subjects (#45)")
+        POST = "2027-01-01T00:00:00Z"   # after any plausible landing boundary
+        PRE = "2026-09-12T00:00:00Z"    # the boundary's own pre-image
+
+        def write_ledger_ts(path: Path, *rows: tuple[str, str, str]) -> None:
+            """(event, subject, ts) rows, numbered 1..N — the sequence leg's own fixture."""
+            path.write_text(
+                "\n".join(
+                    json.dumps({"n": i, "ts": ts, "event": event, "actor": "hq",
+                                "subject": subject, "detail": "probe"})
+                    for i, (event, subject, ts) in enumerate(rows, 1)
+                ) + "\n",
+                encoding="utf-8",
+            )
+
+        def dispatch_case(name: str, rows: tuple[tuple[str, str, str], ...],
+                          want_rc: int, want: tuple[str, ...]) -> None:
+            write_ledger_ts(seq, *rows)
+            r = run(seq, "verify")
+            ok = r.returncode == want_rc and all(s in r.stdout for s in want)
+            lines = [l for l in r.stdout.strip().splitlines() if l.strip()]
+            check(name, ok, lines[1].strip() if len(lines) > 1 else (lines[0] if lines else ""))
+
+        dispatch_case("P5 a work-unit dispatch with no intake before it is REFUSED",
+                      (("dispatch", "#5", POST),), 1, ("#5", "dispatch of #5"))
+        dispatch_case("P6 the same ledger with the dispatch row REMOVED passes",
+                      (("intake", "#6", PRE),), 0, ())
+        dispatch_case("P7 an OBSERVATION dispatch is legal and never swept in",
+                      (("dispatch", "advisory-sweep-2026-09-18", POST),), 0,
+                      ("1 observation", "dispatch rows examined"))
+        dispatch_case("P8 a MALFORMED subject is REPORTED, and the ledger stays clean",
+                      (("dispatch", "77", POST),), 0,
+                      ("malformed subject", "77", "immutable once pushed"))
+        dispatch_case("P8b a HASH-LED non-strict subject is reported too",
+                      (("dispatch", "#332-D5", POST),), 0, ("malformed subject", "#332-D5"))
+        dispatch_case("P9 a PRE-boundary instance is EXCUSED and printed, never refused",
+                      (("dispatch", "#9", PRE),), 0, ("excused: dispatch of #9", "pre-boundary"))
+        dispatch_case("P10 the population is printed beside the verdict",
+                      (("dispatch", "advisory-x", POST),), 0,
+                      ("dispatch rows examined:", "forward-only from"))
         print("\nthe close-row revision — declared at the WRITE PATH (#187)")
         # The invariant `close_row_revision` was enforced by the gate and by NOTHING at the
         # write path, so four instances in one session were each repaired by a SECOND append
