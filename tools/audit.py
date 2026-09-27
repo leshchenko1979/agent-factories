@@ -1933,6 +1933,19 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_self_audit_instant.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_self_audit_instant.py"])
 
+    # 61. Gate invocation mode (board #195, ruling n=1340). The audit invokes its gates
+    #     under TWO conventions -- some as scripts, some collected by pytest -- and the
+    #     split was declared nowhere, so a member wiring these gates into a pytest-based CI
+    #     enforced a SILENTLY PARTIAL population: measured on one member, `pytest` over two
+    #     gate files collected 8 items from one and nothing from the other, which was rc=1
+    #     with 4 violations under its own script form. The split is intended and is not
+    #     converted; this gate asserts the DECLARATION against the call sites themselves,
+    #     because a gate keyed on the budget manifest would cover 46 of 64 and go green over
+    #     the rest. It SKIPS with its reason where the map is absent (a factory that has not
+    #     adopted it), and FAILS where the map exists and cannot be read.
+    if (repo_root / "tests/test_gate_invocation_mode.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_gate_invocation_mode.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

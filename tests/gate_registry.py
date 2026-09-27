@@ -483,6 +483,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_duplicate_prose.py",
     "test_gate_fixtures_closure.py",
     "test_gate_registration.py",
+    # Added with its registration (board #195, ruling n=1340). REQUIRED is the correct
+    # grain: the gate's population is the audit's OWN call sites and a synthetic pair, so it
+    # needs no live board, no fleet manifest and no box-local fixture — it passes in a
+    # bootstrapped factory exactly as it does here, and it SKIPS with a stated reason where
+    # the declaration map is absent. It is byte-paired with a TEMPLATE copy, so the manifest
+    # grain is what keeps a factory from dropping the runner and keeping the file.
+    "test_gate_invocation_mode.py",
     "test_hq_delegation.py",
     "test_hygiene_inflight.py",
     "test_hygiene_namespace.py",
