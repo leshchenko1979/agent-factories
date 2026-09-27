@@ -518,6 +518,16 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_schema.py",
     "test_ontology.py",
     "test_patrol_host_state.py",
+    "test_questions.py",
+    # Added with its registration (board #182 item 2). REQUIRED is the correct grain and
+    # OPTIONAL is not, for the reason that decides every entry around it: the gate drives the
+    # instrument's OWN SELFTEST, which builds a THROWAWAY register under a temp directory —
+    # no live register, no fleet manifest, no box-local fixture — so it passes in a
+    # bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE copy,
+    # so the manifest grain is what keeps a factory from dropping the runner and keeping the
+    # file. THE MECHANISM IT GUARDS is one nothing else observed: the instrument shipped a
+    # selftest that NO gate invoked, so a green selftest proved nothing about any tree until
+    # this gate asked it to run.
     "test_rework.py",
     # Added with its registration (issue #110, ruling n=642). REQUIRED is the correct
     # grain and OPTIONAL is not: the declaration it checks rides on the SAME close row

@@ -281,6 +281,11 @@ PAIRS = [
     # runs an instrument that always skips with its reason.
     ("tools/subject_anchor.py", "TEMPLATE/tools/subject_anchor.py"),
     ("tests/test_subject_anchor.py", "TEMPLATE/tests/test_subject_anchor.py"),
+    # Added with its registration (board #182 item 2, gate 58). The questions selftest gate
+    # is byte-paired for the same reason as every entry above it: the manifest grain is what
+    # keeps a factory from dropping the runner and keeping the file. Without this entry the
+    # gate exists in both trees but NOTHING enforces that they stay identical.
+    ("tests/test_questions.py", "TEMPLATE/tests/test_questions.py"),
 ]
 
 

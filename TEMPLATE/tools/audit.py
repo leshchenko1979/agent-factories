@@ -1835,6 +1835,28 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_subject_anchor.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_subject_anchor.py"])
 
+    # 58. Questions selftest gate (board #182 item 2). `tools/questions` carries its own
+    #     `selftest` subcommand, and NOTHING invoked it: no `test_*questions*` existed
+    #     anywhere and the tool's only appearance in this file was the English word in three
+    #     comments. A selftest that no gate runs is a check nobody performs -- a green run
+    #     proves nothing about a tree, because nothing asks it to run (P29: a law needs an
+    #     upholding mechanism, and so does a capability).
+    #     WHAT IT PROVES that nothing else can: the instrument still runs END TO END -- every
+    #     verb, the register round-trip, the page build and the notify path -- after any
+    #     change to it.
+    #     THE POPULATION IS SYNTHETIC, and that is why it is REQUIRED rather than OPTIONAL:
+    #     the selftest builds a THROWAWAY register under a temp directory, so it reads no live
+    #     register, no fleet manifest and no box-local fixture, and it passes in a bootstrapped
+    #     factory exactly as it does here. A gate needing live state is a gate that skips
+    #     everywhere it ships.
+    #     THE TOOL IS LOOKED FOR IN TWO LAYOUTS: `tools/questions` (a factory, where the kit
+    #     delivers it) and `TEMPLATE/tools/questions` (this repo, before delivery). A tree
+    #     carrying neither takes the gate's STATED SKIP, so an absent tool is never a silent
+    #     pass. It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a
+    #     factory from dropping the runner and keeping the file.
+    if (repo_root / "tests/test_questions.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_questions.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
