@@ -325,7 +325,10 @@ The step exists, and it is **one command per member**. `TEMPLATE/BOOTSTRAP.md` *
 the pin, so you can judge yourself") names it, and `tools/kit_deliver.py` implements it: bytes and pin
 are written **in one run**, so the member's own gate cannot red on a state we created.
 
-Dry-run readings, 2026-09-27T14:0xZ (`--dry-run`, nothing written, `rc=0` all three):
+Dry-run readings, 2026-09-27T14:0xZ (`--dry-run`, nothing written, `rc=0` all three). The counts are
+**one instant's property**, exactly as §9.1.2 states for the delivery table beside them — the version
+in force at this reading is the one §9.1.2's pin column names, so an ADD figure travels with it or it
+is unreproducible:
 
 | target | ADD | the two shipping paths |
 |---|---|---|
@@ -343,14 +346,22 @@ So the four measured reasons the census is where it is — none of them a refusa
 3. **Nothing runs it on a cadence, and reporting is not enforcement.** Step 4f's own text is *"run by
    the meta-factory, or handed to you"* — there is no cron and no lane duty. Frame §7.2 records the
    measured cost: *"a dispatch round produced 0 ports from five replies."*
-4. **The member has nowhere to declare the state.** All six member manifests carry the same thirteen
-   keys and **none carries a kit, adoption, deferred or drift field** (scanned this turn). Frame §7.2
-   makes a deferral a **declared** state, but the member's own manifest has no home for it, so a
-   member that has decided to wait reads exactly like one that never considered it.
+4. **The member had nowhere to declare the state — and this one is now CLOSED.** At the census
+   instant all six member manifests carried the same thirteen keys and **none carried a kit,
+   adoption, deferred or drift field** (scanned then). Frame §7.2 makes a deferral a **declared**
+   state, but the member's own manifest had no home for it, so a member that had decided to wait
+   read exactly like one that never considered it.
 
-Reason 4 is the one that keeps the others invisible, and it is a **schema** question, not a
+Reason 4 is the one that kept the others invisible, and it was a **schema** question, not a
 per-instrument one: the surface a member declares adoption on is `registry/factories/<slug>.json`,
-which this instrument does not own.
+which this instrument does not own. **The home now exists** — commit `a29a18e` adds it as an
+optional object, `kit`, with four states (`adopted` / `partial` / `deferred` / `not-applicable`) and
+`KIT_REASON_REQUIRED = ("deferred", "not-applicable")` (`tools/registry.py:298-300`), so a deferral
+or a not-applicable must carry its reason while a member that has not yet answered stays legal
+(absent is a valid state while the obligation is new). **This changes the census above not at all:**
+the six manifests still read thirteen keys with no `kit` value, which is now an *unanswered* state
+rather than an *undeclarable* one — and the table moves only when a member answers on its own
+measurement.
 
 **And the gate's self-probe is stated, not hidden.** In a member tree the fixture arms **SKIP** —
 their inputs are `TEMPLATE/`-only paths and no member carries a `TEMPLATE/` (measured: `ai-antispam`,
