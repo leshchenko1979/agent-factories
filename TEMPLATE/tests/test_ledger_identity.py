@@ -75,6 +75,92 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     if not ok:
         _failures.append(name)
 
+class ResolverBroken(Exception):
+    """The tree carries a lane resolver, and it will not load. A BROKEN INPUT.
+
+    Distinct from an ABSENT one on purpose (HQ's criterion-3 sharpening): a
+    destination tree that ships `tools/registry.py` and a manifest that will not
+    parse must NOT take the same branch as a tree that carries no resolver at all.
+    One is a defect in the tree, the other is a factory that has not declared a
+    fleet yet, and a gate that renders them identically reports a clean skip over a
+    broken input.
+    """
+
+RESOLVER = REPO / "tools" / "registry.py"
+
+def _is_this_trees_fragment(data: object) -> bool:
+    """Whether a live fragment describes THIS tree. It always does.
+
+    The predecessor compared `data.get("factory")` against the ORIGIN factory's
+    slug, hardcoded -- so in any destination factory
+    the comparison never matched, the loop ran through every fragment, `resolve_role`
+    returned None, and the gate took its skip branch while its message blamed the
+    tree for a slug the kit had hardcoded. Outcome-correct, mechanism-wrong.
+
+    Every path in `registry.live_fragment_paths([])` is the TREE'S OWN -- that is
+    what `live` means -- so each fragment's `factory` IS this tree's slug and no
+    comparison against a remembered name is owed. The tree's slug is therefore
+    available from two independent sources (this fragment's own field, and the
+    tree's `registry/fleet.json`, which `registry.FACTORY_CHATS` is built from); the
+    fragment is used here because it is already in hand and cannot disagree with
+    itself. Kept as a named predicate so a probe can exercise it directly.
+    """
+    return isinstance(data, dict)
+
+def _report_broken(exc: BaseException) -> None:
+    """Print the BROKEN-input verdict. Shared by both sites that can raise it.
+
+    One printer, so the two cannot drift apart and render one state as a skip and the
+    other as a failure. It prints and does NOT return: the caller keeps its own
+    `return 1`, so the exit code is visible at the call site rather than hidden in a
+    helper's return value.
+    """
+    print(f"ledger identity: FAILED — the lane resolver is present and BROKEN: {exc}")
+    print("  A broken input is not an absent one: this tree ships a resolver, so this is a "
+          "defect HERE rather than a factory that has not declared a fleet yet. Refusing to "
+          "render it as a skip.")
+
+def load_resolver() -> tuple[object | None, str | None]:
+    """`(registry module, absent_reason)`; `absent_reason` is set only when it is ABSENT.
+
+    Raises `ResolverBroken` when the resolver exists and cannot be read -- the third
+    state, and the one that must never render as a skip. The two skips are both
+    ABSENCE: no `tools/registry.py` at all (a tree that carries no lane resolver),
+    and no fleet manifest (a factory that has not declared one, which `BOOTSTRAP.md`
+    creates). A manifest that EXISTS and will not parse is neither.
+    """
+    if not RESOLVER.is_file():
+        return None, f"this tree carries no {RESOLVER.relative_to(REPO)}"
+    override = os.environ.get("OC_FLEET_MANIFEST")
+    manifest = Path(override) if override else REPO / "registry" / "fleet.json"
+    if not manifest.is_file():
+        return None, f"this tree declares no fleet manifest ({manifest.name})"
+    sys.path.insert(0, str(REPO / "tools"))
+    try:
+        import registry  # noqa: PLC0415
+    except Exception as exc:
+        raise ResolverBroken(
+            f"{RESOLVER.relative_to(REPO)} is present and its manifest exists, but the "
+            f"resolver will not load: {exc}"
+        ) from exc
+    # `import registry` TOLERATES a manifest that will not parse. registry.py:233 binds
+    # `MANIFEST, MANIFEST_ERROR = _manifest_or_empty()`, so a broken file yields an empty
+    # record set plus an error string rather than an exception — which is why the `except`
+    # above cannot be the whole of this discrimination. Re-validating through the
+    # resolver's OWN loader is the authoritative read: it raises on a file that will not
+    # parse AND on one that parses but is incomplete, where the import-time cache would
+    # silently yield no declared factories. Reading only the import would send a BROKEN
+    # input into the emptiness below, and the emptiness renders as a skip: the false clean
+    # this branch exists to prevent.
+    try:
+        registry.load_fleet_manifest(manifest)
+    except Exception as exc:
+        raise ResolverBroken(
+            f"{manifest} is present but the resolver's own loader refuses it, so no "
+            f"factory is declared: {exc}"
+        ) from exc
+    return registry, None
+
 def resolve_role(role: str) -> str | None:
     """A live session id whose declared lane role is `role`, or None.
 
@@ -82,24 +168,34 @@ def resolve_role(role: str) -> str | None:
     the gate cannot disagree with the mechanism it pins about which session is which
     lane. Never assembled from a prefix: a hand-built session id is the defect this
     whole change exists to remove.
+
+    The DESTINATION's lane is what resolves: the fragments iterated are this tree's
+    own, and each is filtered by `_is_this_trees_fragment`, never by a remembered
+    factory name.
     """
-    sys.path.insert(0, str(REPO / "tools"))
-    try:
-        import registry  # noqa: PLC0415
-        bindings, _errors = registry.all_bindings()
-        for path in registry.live_fragment_paths([]):
-            data, err = registry.load_fragment(path)
-            if err or not isinstance(data, dict) or data.get("factory") != "meta-factory":
+    registry, absent = load_resolver()
+    if registry is None:
+        return None
+    bindings, errors = registry.all_bindings()
+    if errors:
+        # The same discrimination one level down: an unreadable binding store is a BROKEN
+        # input, not an ABSENT lane. Rendering it as the skip below would certify a tree
+        # whose daemon DB cannot be opened as a tree with nothing bound.
+        raise ResolverBroken(
+            "the resolver and its manifest loaded, but no binding row could be read: "
+            + "; ".join(str(e) for e in errors)
+        )
+    for path in registry.live_fragment_paths([]):
+        data, err = registry.load_fragment(path)
+        if err or not _is_this_trees_fragment(data):
+            continue
+        chat_id = registry.FACTORY_CHATS.get(data.get("factory"))
+        for lane in data.get("lanes") or []:
+            if lane.get("role") != role:
                 continue
-            chat_id = registry.FACTORY_CHATS.get(data.get("factory"))
-            for lane in data.get("lanes") or []:
-                if lane.get("role") != role:
-                    continue
-                resolved = registry.resolve_lane(lane, bindings, {}, chat_id)
-                if resolved.get("session_id"):
-                    return str(resolved["session_id"])
-    except Exception as exc:  # an unreadable registry is a STATED skip, never a pass
-        print(f"  (the lane resolver could not be read: {exc})")
+            resolved = registry.resolve_lane(lane, bindings, {}, chat_id)
+            if resolved.get("session_id"):
+                return str(resolved["session_id"])
     return None
 
 def stage(tmp: Path) -> Path:
@@ -147,6 +243,199 @@ def rows(path: Path) -> list[dict]:
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
+# --- The DESTINATION-factory tree, for ARMs 9 and 10 (issue #186) -----------------
+#
+# Built from the registry's own manifest idiom — the key set `_manifest_record`
+# declares in tests/test_registry.py — and NOT from a copy of this repo's registry
+# data, because a member tree that could still resolve a meta-factory lane would make
+# ARM 9 pass for the wrong reason. The slug below is one no factory in this fleet
+# declares, so the ONLY way the gate resolves a Worker there is by reading that tree's
+# own fragment, which is exactly the property #186 is about.
+MEMBER_SLUG = "probe-member"
+MEMBER_CHAT = -1009990000001
+MEMBER_THREAD = 90001
+# A fixture session id, minted for the throwaway DB below and bound to nothing real.
+# It never appears in a report and names no live lane: the rule against hand-assembling
+# identifiers governs a REAL session's identity, and a member tree's session has to be
+# synthesized rather than borrowed precisely so this gate cannot reach a live lane.
+MEMBER_SESSION = "00000000-0000-4000-8000-00000000e186"
+# The recursion sentinel. ARM 9 runs THIS gate inside a member tree, and that nested run
+# would otherwise build its own member tree and recurse — three more gate processes per
+# level, each with a 300 s timeout. A nested probe reports arms 1-8 and stops.
+MEMBER_PROBE_ENV = "OC_IDENTITY_MEMBER_PROBE"
+
+
+def _member_tree(tmp: Path, *, break_manifest: bool = False) -> Path:
+    """A destination factory carrying the gate AND its full closure (P35).
+
+    Two shapes from one builder, so the states cannot drift apart: the default —
+    resolver + a parseable manifest, the tree #186's criterion 2 runs in — and
+    `break_manifest=True`, a resolver present whose manifest will not parse, which is a
+    BROKEN INPUT and must never render as the skip an ABSENT resolver earns (HQ's
+    criterion-3 sharpening: "the skip must not become a false clean").
+
+    There is deliberately NO `with_resolver=False` parameter here. `ledger.py` imports
+    the resolver for its own actor derivation, so staging the tool's closure always
+    brings `registry.py` along: a parameter of that name would silently not do what it
+    says. Absence is constructed by removal in ARM 10, where the fact is stated.
+    """
+    root = tmp / "member"
+    tests_dir = root / "tests"
+    tools_dir = root / "tools"
+    # The gate's OWN closure: it imports `gate_fixtures`, so copying the file alone
+    # stages a tree that cannot start. That is P35, and it is the hole my first probe
+    # of this arm fell into when it copied `ledger.py` without its import closure.
+    stage_tool(Path(__file__).resolve(), tests_dir, REPO / "tests")
+    stage_tool(TOOL, tools_dir, REPO / "tools")
+    stage_tool(RESOLVER, tools_dir, REPO / "tools")
+    (root / "registry" / "factories").mkdir(parents=True, exist_ok=True)
+    profile_root = root / "profiles"
+    manifest = {
+        "profile_root": str(profile_root),
+        "profile": "probe",
+        "factories": [{
+            "slug": MEMBER_SLUG,
+            "display_name": "Probe Member",
+            "chat_id": MEMBER_CHAT,
+            "repo": f"owner/{MEMBER_SLUG}",
+            "skill": f"skills/{MEMBER_SLUG}/SKILL.md",
+            "job_prefixes": [f"{MEMBER_SLUG}-"],
+            "aliases": [],
+        }],
+    }
+    body = json.dumps(manifest)
+    # A trailing `}` replaced by `",` is invalid JSON that still reads as text up to
+    # the fault, so the resolver's own loader is the thing that rejects it.
+    (root / "registry" / "fleet.json").write_text(
+        body[:-1] + '",' if break_manifest else body, encoding="utf-8")
+    (root / "registry" / "factories" / f"{MEMBER_SLUG}.json").write_text(json.dumps({
+        "factory": MEMBER_SLUG,
+        "status": "live",
+        "lanes": [{"role": "worker", "topic": "Worker", "thread_id": MEMBER_THREAD}],
+    }), encoding="utf-8")
+    (profile_root / "probe").mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(profile_root / "probe" / "opencrabs.db")
+    conn.execute("CREATE TABLE session_bindings (session_id text, channel text, "
+                 "chat_id integer, thread_id integer, updated_at integer)")
+    conn.execute("CREATE TABLE sessions (id text, title text, updated_at integer)")
+    conn.execute("INSERT INTO session_bindings VALUES (?, ?, ?, ?, ?)",
+                 (MEMBER_SESSION, "telegram", MEMBER_CHAT, MEMBER_THREAD, 1))
+    conn.execute("INSERT INTO sessions VALUES (?, ?, ?)",
+                 (MEMBER_SESSION, f"member {MEMBER_SLUG} worker", 1))
+    conn.commit()
+    conn.close()
+    (root / "evidence").mkdir(parents=True, exist_ok=True)
+    (root / "evidence" / "ledger.jsonl").write_text("", encoding="utf-8")
+    return root
+
+
+def _run_gate_in(root: Path) -> subprocess.CompletedProcess:
+    """Run the staged copy of THIS gate in `root`, with this shell's session stripped."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in (SESSION_ENV, "OC_FLEET_MANIFEST", "OC_LEDGER_PATH")}
+    # The sentinel that keeps ARMs 9-10 from recursing: it is set HERE and honoured by
+    # `_arms_member_tree`, so the tree this arm builds reports the arms it exists to
+    # prove and stops instead of spawning three more gate runs of its own. SESSION_ENV is
+    # stripped for the same reason `run()` strips it: a nested tree that inherited this
+    # shell's live session could resolve a REAL lane, and the arm exists to prove the
+    # member's OWN lane is what resolves.
+    env[MEMBER_PROBE_ENV] = "1"
+    return subprocess.run(
+        [sys.executable, str(root / "tests" / Path(__file__).name)],
+        capture_output=True, text=True, env=env, cwd=str(root), timeout=300,
+    )
+
+
+def _arms_member_tree() -> None:
+    """ARMs 9 and 10 — the tree-level verdicts for issue #186.
+
+    Skipped inside a member probe: this process may BE the tree ARM 9 builds, and
+    re-entering the arm there would recurse with three more gate runs per level.
+    """
+    if os.environ.get(MEMBER_PROBE_ENV):
+        print("  (member probe: ARMs 9-10 belong to the top level — this tree exists to "
+              "prove they bite, and reports arms 1-8 which are the ones that must RUN "
+              "here rather than skip)")
+        return
+
+    # ARM 9 — THE MEMBER-SHAPED TREE, end to end (#186 criterion 2). ARM 8 is a unit
+    # probe: it shows the filter accepts the tree's own slugs and nothing more. The
+    # property that decides whether this defect is real is that a DESTINATION factory
+    # RUNS this gate instead of skipping it, and that is only reachable by running the
+    # gate in a tree shaped like a member's. Under the hardcoded origin comparison the
+    # fragment below matched nothing, `resolve_role` returned None, and the gate skipped
+    # while blaming the tree — so the assertion is not "rc==0" alone but that the
+    # session it resolved is THIS tree's own bound lane.
+    with tempfile.TemporaryDirectory() as mt:
+        mr = _run_gate_in(_member_tree(Path(mt)))
+        mout = mr.stdout + mr.stderr
+        check("arm9 a member-shaped tree RUNS the gate rather than skipping it",
+              "SKIPPED" not in mout, mout.strip()[:200])
+        # The resolved id is read out of the gate's own line, which prints the first 8
+        # chars of whatever `resolve_role` returned — so this proves the member's lane
+        # resolved, and not merely that some lane did.
+        check("arm9 it resolved THIS member's own Worker session",
+              MEMBER_SESSION[:8] in mout,
+              f"expected {MEMBER_SESSION[:8]}… in the gate's resolved-lane line")
+        check("arm9 and arms 1-8 RAN and held inside it",
+              mr.returncode == 0 and "identity passed" in mout,
+              f"rc={mr.returncode} tail={mout.strip()[-260:]}")
+
+        # ARM 10 — THE THREE STATES ARE THREE BRANCHES, not one (#186 criterion 3).
+        # An ABSENT resolver is a factory that has not been given one: a legitimate
+        # skip, whose reason must name the MISSING CLOSURE and never the origin
+        # factory. A manifest that EXISTS and will not parse is a BROKEN input in a
+        # tree that ships a resolver, and it must refuse instead — rendering it as the
+        # same skip is the false clean HQ's sharpening exists to prevent.
+        #
+        # ABSENCE IS CONSTRUCTED BY REMOVAL, NOT BY DECLINING TO STAGE, and the reason
+        # is a fact worth recording: `ledger.py` imports the resolver for its own
+        # actor derivation, so `stage_tool(TOOL, …)` already carried `registry.py` into
+        # this tree as part of the closure. A tree that ships the ledger tool ships the
+        # resolver, so this skip branch is reachable in a live factory only where the
+        # resolver was removed or never installed — which is why the more realistic
+        # bootstrapped shape (the leg below it) is a resolver present and NO manifest.
+        ar = _member_tree(Path(mt) / "a")
+        (ar / "tools" / "registry.py").unlink()
+        a = _run_gate_in(ar)
+        aout = a.stdout + a.stderr
+        check("arm10 NO resolver -> SKIP, and it is a clean exit",
+              a.returncode == 0 and "SKIPPED" in aout, aout.strip()[:200])
+        check("arm10 the skip reason names the MISSING CLOSURE",
+              "carries no" in aout, aout.strip()[:200])
+
+        # The bootstrapped shape: a resolver that ships, and a fleet manifest that
+        # BOOTSTRAP.md has not written yet. Also a legitimate skip, also naming absence
+        # rather than a factory — and it must not be confused with the leg below.
+        nr = _member_tree(Path(mt) / "n")
+        (nr / "registry" / "fleet.json").unlink()
+        nm = _run_gate_in(nr)
+        nmout = nm.stdout + nm.stderr
+        check("arm10 resolver but NO manifest -> SKIP, naming the missing manifest",
+              nm.returncode == 0 and "SKIPPED" in nmout and "manifest" in nmout,
+              nmout.strip()[:200])
+
+        # No factory slug appears in either reason. The population is READ from this
+        # tree's own fleet manifest rather than typed here, because typing one is the
+        # defect this change exists to remove — and a probe that names the literal it
+        # checks absent is the same hardcoding wearing a test's clothes.
+        _declared = [f["slug"] for f in json.loads(
+            (REPO / "registry" / "fleet.json").read_text(encoding="utf-8"))["factories"]]
+        check("arm10 and neither reason names any factory of this fleet",
+              bool(_declared)
+              and not any(s in aout for s in _declared)
+              and not any(s in nmout for s in _declared),
+              f"{len(_declared)} declared slug(s) checked against both reasons")
+
+        b = _run_gate_in(_member_tree(Path(mt) / "b", break_manifest=True))
+        bout = b.stdout + b.stderr
+        check("arm10 a BROKEN manifest -> FAIL, never the skip branch",
+              b.returncode == 1 and "SKIPPED" not in bout,
+              f"rc={b.returncode} tail={bout.strip()[-200:]}")
+        check("arm10 and it says so in terms — a broken input, not an absent one",
+              "BROKEN" in bout and "not an absent one" in bout, bout.strip()[:220])
+
+
 def main() -> int:
     print("ledger identity — the actor is DERIVED, and the matrix binds it (#138, plan 2646d31a)")
 
@@ -154,12 +443,29 @@ def main() -> int:
         check("the tool exists", False, f"{TOOL} is absent")
         return 1
 
-    worker = resolve_role("worker")
+    try:
+        registry, absent = load_resolver()
+    except ResolverBroken as exc:
+        _report_broken(exc)
+        return 1
+    if registry is None:
+        print(
+            f"ledger identity: SKIPPED — no lane resolver: {absent}. With no resolver there "
+            f"are no lanes to bind, so every arm below would pass vacuously. A bootstrapped "
+            f"factory lands here until BOOTSTRAP.md writes its fleet manifest."
+        )
+        return 0
+
+    try:
+        worker = resolve_role("worker")
+    except ResolverBroken as exc:
+        _report_broken(exc)
+        return 1
     if worker is None:
         print(
-            "ledger identity: SKIPPED — the meta-factory's Worker lane does not resolve in "
-            "this tree, so no session can be bound to a role and every arm below would "
-            "pass vacuously. A bootstrapped factory with no fleet manifest lands here."
+            "ledger identity: SKIPPED — this tree carries a lane resolver and a manifest, but "
+            "its Worker lane does not resolve to a live session, so no session can be bound "
+            "to a role and every arm below would pass vacuously."
         )
         return 0
     print(f"  (worker session resolved: {worker[:8]}… — read from the registry, never assembled)")
@@ -236,6 +542,32 @@ def main() -> int:
         check("arm6 a redirected ledger may declare its own actor (the seam is intended)",
               r.returncode == 0 and len(rows(fixture_led)) == 1,
               f"rc={r.returncode} rows={len(rows(fixture_led))}")
+
+    # ARM 8 — THE FRAGMENT FILTER (issue #186). The predecessor accepted a fragment only
+    # when its `factory` equalled the ORIGIN slug, so a destination factory's own fragment
+    # was skipped, `resolve_role` returned None, and the gate took its skip branch while
+    # blaming the tree. The predicate must accept ANY live fragment, because
+    # `live_fragment_paths` has ALREADY scoped the population to this tree -- that is what
+    # `live` means -- so the fragment's own `factory` is this tree's slug by construction.
+    check("arm8 a fragment naming ANOTHER factory is accepted (the #186 defect)",
+          _is_this_trees_fragment({"factory": "miidas", "lanes": []}),
+          "a destination factory's fragment was skipped by the hardcoded comparison")
+    # And EVERY slug the tree's own manifest declares is accepted. No remembered name
+    # is typed here, because typing one is the defect this arm exists to remove; the
+    # population is read from the tree's own fleet manifest instead. The count is
+    # asserted non-zero so a tree declaring no factory cannot report this as clean.
+    _slugs = [f["slug"] for f in json.loads(
+        (REPO / "registry" / "fleet.json").read_text(encoding="utf-8"))["factories"]]
+    check("arm8 every slug the tree's own manifest declares is accepted",
+          bool(_slugs)
+          and all(_is_this_trees_fragment({"factory": s, "lanes": []}) for s in _slugs),
+          f"{len(_slugs)} declared slug(s) read from the manifest; the hardcoded"
+          " comparison accepted none of them")
+    check("arm8 a malformed fragment is still refused",
+          not _is_this_trees_fragment(None) and not _is_this_trees_fragment("not-a-dict"),
+          "the predicate must still refuse a non-object")
+
+    _arms_member_tree()
 
     # ARM 7 — HERMETICITY: nothing above reached the live ledger. The staged tree's own
     # default ledger is inside the temp dir, so the live ledger was never even the
