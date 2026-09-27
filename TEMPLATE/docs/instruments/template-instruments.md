@@ -111,19 +111,34 @@ The declared set lives in the law file's **§2**, as numbered rows pairing the m
 template counterpart, so a reader derives it without a second list to drift. That placement is a
 **coordinate**, and a machine reader that assumes it must report when the coordinate is empty instead
 of returning a shorter set. **A reading is superseded beside its predecessor, never over it.**
-Measured 2026-09-27 at 19:5xZ: a census requiring the paired-row form in §2 published two instruments
-and **refused three** — `kit.md`'s §2 is a one-sided table, `ledger.md`'s §2 is the write-path identity
-law, `open-questions.md`'s §2 is the lane-side contract. Three refusals, three different objects, none
-an omission.
+**A count in this clause goes stale in hours, so the PROPERTY is the law and every count is a dated
+example.** The property: a doc whose §2 carries no parsed paired row is **REFUSED**, and the refusal
+is the correct failure mode — the repair is that doc's own lane writing its declared set at the
+coordinate, never the frame homing an exception. Measured over the five `docs/instruments/*.md` with
+`python3 tools/instrument_census.py <slug> --out <path>`, three readings in one evening, each correct
+for its instant:
 
-**Superseded at 2026-09-27T20:11:01Z — the refusing set is ONE.** `ledger.md` filled its coordinate at
-`4dbe5c1` and `open-questions.md` at `5daf6ee`, each by writing its declared set as numbered paired
-rows at the coordinate the census parses, so the census now publishes four and refuses only `kit.md`.
-Predicate: `python3 tools/instrument_census.py <slug> --out <path>`, run over all five law files;
-scope: the five `docs/instruments/*.md`; instant above. The finding was the THREE DIFFERENT OBJECTS:
-each lane corrected its own §2 rather than the frame homing an exception, and `ledger.md`'s correction
-also moved its §3 to keep the write-path law in the same section — after measuring that §9 is the only
-section number that file cites outward.
+| Instant | Published | Refused |
+|---|---|---|
+| 2026-09-27T19:5xZ | 2 | **3** — `kit.md`, `ledger.md`, `open-questions.md` |
+| 2026-09-27T20:11:01Z | 4 | **1** — `kit.md` |
+| 2026-09-27T21:4xZ | **5** | **0** |
+
+Three refusals, three different objects, none an omission: `kit.md`'s §2 was a one-sided table,
+`ledger.md`'s §2 was the write-path identity law, `open-questions.md`'s §2 was the lane-side contract.
+Each lane corrected its OWN §2 rather than the frame homing an exception — `ledger.md` filled its set
+at `4dbe5c1`, `open-questions.md` at `5daf6ee`, `kit.md` at `60be1b2`. `ledger.md` also moved its §3
+to keep the write-path law in the same section, after measuring that §9 is the only section number
+that file cites outward. `kit.md`'s repair is the one that shows why a naive fix would have been
+wrong: its five root-side executables have no TEMPLATE counterpart at all, so pairing each to itself
+would have put five undeliverable paths into the declared set and scored every member short by five
+for a state that is correct by design — the not-applicable-wearing-a-shortfall shape, five times over.
+
+**That trajectory is the lesson, and it is why this clause states a property rather than a count:**
+the same sentence needed correcting three times in one evening, and each correction was a fresh count
+that the next lane's honest work invalidated. A count that moves while nothing is wrong is not a
+reading of the law — it is a reading of the lanes' PROGRESS, and it belongs in a dated artifact, never
+in always-loaded text.
 
 **An aggregate reports the inputs it refused, by PATH, in the artifact a reader meets.** A short list
 and a wrong list are otherwise indistinguishable, and a refusal nobody reads is a silent coverage
