@@ -183,7 +183,13 @@ def test_a_close_with_both_legs_preceding_is_accepted() -> None:
             landed = append(ledger, event, actor, f"{event} probe")
             assert landed.returncode == 0, f"{event} did not land: {landed.stdout}{landed.stderr}"
 
-        closed = append(ledger, "close", "worker", "close probe")
+        # The close declares `head=` because the write path now REFUSES a close whose
+        # canonical run carries none (#187) — the invariant this gate's sibling enforces
+        # over history. The three refusal probes above keep their bare detail and are
+        # still refused by the SEQUENCE leg, which is checked first, so each fails for
+        # the reason it names and not for this one.
+        closed = append(ledger, "close", "worker",
+                        "close probe head=0123456789abcdef0123456789abcdef01234567")
         assert closed.returncode == 0, f"a lawful close must land: {closed.stdout}{closed.stderr}"
         # A lawful close writes TWO rows: the close, then the SETTLEMENT RECEIPT recording
         # the verified population the sequence check covered. Both halves are asserted --
