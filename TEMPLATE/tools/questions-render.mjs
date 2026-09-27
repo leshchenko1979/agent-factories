@@ -126,9 +126,17 @@ const { registry } = defineRegistry(catalog, {
                             className: 'q' + (clarifying ? ' clarifying' : '') },
       h('h3', { className: 'qt' }, props.title),
       // The recommendation band is the page's SIGNATURE: an amber-ruled block
-      // carrying the lane's own counsel. The words "lane recommends" come from
-      // CSS, not from this string, so the label cannot drift from the styling.
-      props.recommendation ? h('p', { className: 'rec' }, props.recommendation) : null,
+      // carrying the lane's own counsel. Owner order 2026-09-27: it FOLDS like
+      // the clarifying form -- a compact label, the counsel one tap away -- so
+      // the card opens on the QUESTION rather than on the lane's advice.
+      // The label moved out of CSS content and into the summary: a disclosure
+      // control needs real text, which generated content cannot supply
+      // accessibly. The counsel itself stays in the DOM, so folding is visual.
+      props.recommendation
+        ? h('details', { className: 'recbox' },
+            h('summary', null, 'Lane recommends'),
+            h('p', { className: 'rec' }, props.recommendation))
+        : null,
       // A clarifying question must LOOK different from an open one, or the
       // reader cannot tell their request was recorded.
       props.status === 'clarifying'

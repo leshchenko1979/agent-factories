@@ -1887,8 +1887,18 @@ border-radius:0 7px 7px 0;padding:1.2rem 1.3rem 1.1rem;margin:0 0 .85rem}
 .qt{font:600 clamp(1.2rem,2.7vw,1.42rem)/1.3 var(--serif);letter-spacing:-.015em;margin:0}
 .rec{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;border-left:2px solid var(--amber);
 border-radius:0 5px 5px 0;background:var(--amber-soft);font-size:.95rem;line-height:1.5}
-.rec::before{content:'lane recommends';display:block;font:.6rem/1.4 var(--mono);
-letter-spacing:.15em;text-transform:uppercase;color:var(--amber);margin-bottom:.28rem}
+/* No ::before label here any more: the label is the <summary> above, because a
+disclosure control needs real text. A CSS-generated label beside a real one
+would double it, and a dead rule reads as live. */
+/* The band FOLDS (owner order 2026-09-27, the same order as the clarifying
+form below): the label is the summary, the counsel is inside. The amber
+signature stays -- it is the page's, and folding must not erase it. */
+.recbox{margin:.9rem 0 1.15rem}
+.recbox>summary{cursor:pointer;font:.6rem/1.4 var(--mono);letter-spacing:.15em;
+text-transform:uppercase;color:var(--amber);padding:.15rem 0}
+.recbox>summary:hover{color:var(--text)}
+.recbox[open]>summary{margin-bottom:.3rem}
+.recbox .rec{margin:.35rem 0 0}
 /* The clarifying state, made visible (owner report 2026-09-25): a question the
 reader asked to clarify rendered identically to an open one, so the state
 change was invisible and a reload looked like nothing had happened. Teal, not
@@ -1907,6 +1917,7 @@ the full form, so the question stays answerable. */
 .q.clarifying{padding:.85rem 1.05rem;border-left-color:var(--teal)}
 .q.clarifying .qt{font-size:1.05rem}
 .q.clarifying .clarifyband{margin:.55rem 0 .35rem;padding:.55rem .75rem;font-size:.9rem}
+.q.clarifying .recbox{margin:.5rem 0 .3rem}
 .clarifybox{margin:.4rem 0 0}
 .clarifybox>summary{cursor:pointer;font:.62rem/1.5 var(--mono);letter-spacing:.13em;
 text-transform:uppercase;color:var(--dim);padding:.3rem 0}
@@ -2629,6 +2640,24 @@ def selftest():
         ck('name="qid" value="%s"' % _cq in _body,
            "\u2026and the form is STILL in the DOM, so it stays answerable "
            "(qid=%s)" % _cq)
+        # Owner order 2026-09-27: the recommendation band folds the same way --
+        # a compact label, the lane's counsel one tap away -- so the card opens
+        # on the QUESTION. The counsel stays in the DOM: folding is visual only.
+        rc, out, _ = run("ask", "--factory", "f-rec-lane", "--title", "r",
+                         "--description", "d", "--option", "a", "--option", "b",
+                         "--recommended", "0", "--json")
+        ck(rc == 0, "a question WITH a recommendation registers (rc=%d)" % rc)
+        rc, out, _ = run("publish", "--json")
+        _rdir = json.loads(out)["path"]
+        _rbody = open(os.path.join(_rdir, "index.html"), encoding="utf-8").read()
+        ck('<details class="recbox">' in _rbody,
+           "the recommendation band renders FOLDED behind a native <details>")
+        ck("Lane recommends" in _rbody,
+           "\u2026under a label naming what is inside")
+        _rm = re.search(r'<p class="rec">(.*?)</p>', _rbody, re.S)
+        ck(_rm is not None and _rm.group(1).strip() == "a",
+           "\u2026and the counsel is STILL in the DOM, so folding hides it "
+           "visually only (got %r)" % (_rm.group(1).strip() if _rm else None))
         _uijs = open(os.path.join(_uidir, "questions.js"), encoding="utf-8").read()
         ck("htmx:responseError" in _uijs,
            "the vendored UI surfaces a REFUSED submit -- htmx swaps only 2xx, "
