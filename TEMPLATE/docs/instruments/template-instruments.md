@@ -569,6 +569,17 @@ every entry's committed blob must equal the committed manifest, which is a diffe
 owns. **A generated artifact is a function of the COMMITTED tree; a manifest built from anything else
 describes a tree that does not exist.**
 
+**The shared checkout is a third population, and it can lag the commit.** A lane that authors in a
+worktree advances HEAD without advancing the shared checkout, so the checkout's working copies can sit
+at an older revision than the manifest describes — a `--check` run there then reports a path DRIFTED
+that nobody touched, and a GREEN run there says nothing about HEAD. Measured 2026-09-27: both halves
+of this file were authored in worktrees, and the shared checkout's copies lacked §7.6 while the
+manifest at the commit recorded its digest. Read `git rev-parse HEAD origin/main` beside any gate
+result taken from a shared tree. The companion discipline: **bringing a path in the shared checkout up
+to HEAD is a WRITE to another lane's working copy**, so verify that path is clean before the sync, sync
+committed content only, and name what was synced — the sync restores a revision, it never carries an
+edit.
+
 ### 7.4 A law file cannot publish its own version — the self-reference regress
 
 **A law doc that is itself a manifest path cannot state the current version of itself, and that is a
