@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T12:45:40Z",
+  "resolved_at": "2026-09-27T12:52:02Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -1187,7 +1187,7 @@
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
-      "skill_revision": "1.1.26",
+      "skill_revision": "1.1.27",
       "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
       "zone": {
         "owns": [
@@ -1390,11 +1390,11 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-27T12:20:27Z",
+      "attested_at": "2026-09-27T12:42:48Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.267",
+      "skill_revision": "0.4.268",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
@@ -1462,7 +1462,7 @@
           "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:23:23Z",
+          "bound_at": "2026-09-27T12:51:33Z",
           "announcements": []
         },
         {
@@ -1580,9 +1580,9 @@
           "thread_id": 34653,
           "role": null,
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
-          "status": "superseded",
+          "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:16:52Z",
+          "bound_at": "2026-09-27T12:50:16Z",
           "announcements": []
         },
         {
@@ -1612,7 +1612,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:24:23Z",
+          "bound_at": "2026-09-27T12:48:27Z",
           "announcements": []
         },
         {

@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T12:45:40Z",
+  "resolved_at": "2026-09-27T12:52:02Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -1169,7 +1169,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-27T12:20:27Z"
+        "attested_at": "2026-09-27T12:42:48Z"
       }
     }
   ],
@@ -1461,19 +1461,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 7198,
-      "updated_at": 1790504603,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "bash guard forced-variation design",
-      "session_updated_at": 1790507370,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "1a63f103-b899-4ad2-a5b3-c89f2902bf97",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -1482,7 +1469,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Deploy #235 Option Collision Guard",
-      "session_updated_at": 1790512625,
+      "session_updated_at": 1790513227,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1682,19 +1669,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "d5863180-017d-4646-82a7-19be145e4974",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 34653,
-      "updated_at": 1789871531,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
-      "session_updated_at": 1789881604,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "a5b34466-1c14-441f-b2c6-6eaf4f316dde",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -1756,19 +1730,6 @@
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
       "session_updated_at": 1790512572,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39218,
-      "updated_at": 1790504663,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Harvesting upstream PRs into OpenCrabs",
-      "session_updated_at": 1790510921,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2054,7 +2015,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Governance: Ontology & RSI [chat:-1003936827469:topic:43993]",
-      "session_updated_at": 1790509775,
+      "session_updated_at": 1790513384,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2236,7 +2197,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790512847,
+      "session_updated_at": 1790513432,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2626,7 +2587,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790512452,
+      "session_updated_at": 1790513375,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2640,19 +2601,6 @@
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / JEV Classifier [chat:-1003936827469:topic:68049]",
       "session_updated_at": 1790340936,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 34653,
-      "updated_at": 1790504212,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
-      "session_updated_at": 1790505752,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2902,6 +2850,45 @@
       "session_updated_at": 1790511416,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39218,
+      "updated_at": 1790513307,
+      "last_origin": "callback",
+      "turn_open_at": null,
+      "session_title": "Harvesting upstream PRs into OpenCrabs",
+      "session_updated_at": 1790513398,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 34653,
+      "updated_at": 1790513416,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
+      "session_updated_at": 1790513418,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 7198,
+      "updated_at": 1790513493,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "bash guard forced-variation design",
+      "session_updated_at": 1790513507,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
   ],
   "skill_versions": {
@@ -2909,8 +2896,8 @@
     "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.84",
     "/root/vds-servers/skills/infra-factory/SKILL.md": "0.1.0",
     "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.30",
-    "/root/miidas/SKILL.md": "1.1.26",
-    "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md": "0.4.267"
+    "/root/miidas/SKILL.md": "1.1.27",
+    "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md": "0.4.268"
   },
   "jobs": [
     {
