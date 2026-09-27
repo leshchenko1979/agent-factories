@@ -1174,6 +1174,56 @@ def probe_a_warning_without_evidence_fails() -> None:
     )
     del tmp, ok_tmp
 
+def probe_a_deferral_without_a_reason_fails() -> None:
+    """O6's asymmetry: `deferred`/`not-applicable` must name WHY, and the LOADER is where it lands.
+
+    The clause's own wording is "behind by N, deferred because X", so a deferral carrying
+    no X is the undeclared state wearing a declared label — which is the thing the field
+    exists to make impossible. The four accepted arms are here beside the refused ones
+    because a schema that refuses everything is as useless as one that refuses nothing:
+    `adopted` carries no reason by design, and `kit` ABSENT is still valid while the
+    obligation is new, so the field's arrival cannot red a member that has not answered.
+    """
+    pair = probe_slugs()
+    arms = (
+        ("adopted with no reason", {"state": "adopted"}, True),
+        ("partial with behind_by", {"state": "partial", "behind_by": 88}, True),
+        ("deferred WITH a reason", {"state": "deferred", "reason": "waiting on the pin pair"}, True),
+        (
+            "not-applicable WITH a reason",
+            {"state": "not-applicable", "reason": "upstream source, no pin"},
+            True,
+        ),
+        ("deferred with NO reason", {"state": "deferred"}, False),
+        ("deferred with a blank reason", {"state": "deferred", "reason": "   "}, False),
+        ("not-applicable with NO reason", {"state": "not-applicable"}, False),
+        ("a state outside the four", {"state": "maybe"}, False),
+        ("no state at all", {"reason": "x"}, False),
+        ("an unknown key", {"state": "adopted", "drift": 3}, False),
+        ("behind_by that is not an int", {"state": "partial", "behind_by": "many"}, False),
+        ("measured_at that is not ISO", {"state": "adopted", "measured_at": "yesterday"}, False),
+    )
+    for label, kit, expect_ok in arms:
+        fragment = _fragment(pair[0], [])
+        fragment["kit"] = kit
+        _loaded, errors, tmp = _fragments_on_disk([fragment])
+        kit_errors = [e for e in errors if ": kit" in e]
+        check(
+            f"kit {label} -> {'accepted' if expect_ok else 'refused'}",
+            (not kit_errors) == expect_ok,
+            kit_errors[0][:110] if kit_errors else "accepted",
+        )
+        del tmp
+    # The control that keeps the field from arriving as a hard requirement: absent is valid.
+    _loaded, errors, tmp = _fragments_on_disk([_fragment(pair[0], [])])
+    check(
+        "kit ABSENT is still valid while the obligation is new",
+        not [e for e in errors if "kit" in e],
+        "; ".join(e for e in errors if "kit" in e)[:100] or "accepted",
+    )
+    del tmp
+
+
 def probe_a_command_shaped_check_fails() -> None:
     """`check` names a predicate; a raw command is rejected rather than executed."""
     command: list[str] = []
@@ -1417,6 +1467,7 @@ PROBES = (
     probe_same_id_same_text_is_one_entry,
     probe_differing_text_under_one_id_fails,
     probe_a_warning_without_evidence_fails,
+    probe_a_deferral_without_a_reason_fails,
     probe_a_command_shaped_check_fails,
     probe_a_future_review_by_fails,
     probe_the_box_wide_reader_reaches_the_default_home,

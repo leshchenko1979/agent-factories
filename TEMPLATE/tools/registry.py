@@ -285,9 +285,19 @@ FRAGMENT_KEYS = frozenset(
         "lanes",
         "status",
         "attested_at",
+        "kit",
     }
 )
 ZONE_KEYS = frozenset({"owns", "does_not_own"})
+# The kit-adoption declaration (O6). Allowed but NOT required today: a fragment
+# that omits it is undeclared, which the census reports rather than blocks, so
+# each member answers on its own measurement instead of being forced to invent a
+# state. What IS enforced is the asymmetry the clause exists for: a deferral or a
+# not-applicable must carry its reason, because a member that deliberately waited
+# and one that never considered the kit are otherwise identical on this surface.
+KIT_KEYS = frozenset({"state", "behind_by", "reason", "measured_at"})
+KIT_STATES = ("adopted", "partial", "deferred", "not-applicable")
+KIT_REASON_REQUIRED = ("deferred", "not-applicable")
 SERVICE_KEYS = frozenset({"name", "audience", "entry", "cadence"})
 LANE_KEYS = frozenset({"topic", "thread_id", "role", "announcements"})
 ANNOUNCEMENT_KEYS = frozenset(
@@ -490,6 +500,32 @@ def validate_fragment(data: object, path: str = "<memory>") -> list[str]:
                     errors.append(f"{path}: zone is missing `{key}`")
                 elif zone[key] is not None and not isinstance(zone[key], list):
                     errors.append(f"{path}: zone.{key} must be a list")
+    kit = data.get("kit")
+    if kit is not None:
+        if not isinstance(kit, dict):
+            errors.append(f"{path}: kit must be an object")
+        else:
+            for key in sorted(set(kit) - KIT_KEYS):
+                errors.append(f"{path}: kit has unknown key `{key}`")
+            state = kit.get("state")
+            if state is None:
+                errors.append(f"{path}: kit is missing `state`")
+            elif state not in KIT_STATES:
+                errors.append(
+                    f"{path}: kit.state `{state}` is not one of {'|'.join(KIT_STATES)}"
+                )
+            elif state in KIT_REASON_REQUIRED and not (kit.get("reason") or "").strip():
+                # The asymmetry, stated where it is enforced: "behind by N,
+                # deferred because X" is the clause's own wording, so a deferral
+                # with no X is the undeclared state wearing a declared label.
+                errors.append(f"{path}: kit.state `{state}` requires a non-empty `reason`")
+            behind = kit.get("behind_by")
+            if behind is not None and not isinstance(behind, int):
+                errors.append(f"{path}: kit.behind_by must be an integer")
+            if kit.get("measured_at") is not None and _iso_date(kit["measured_at"]) is None:
+                errors.append(
+                    f"{path}: kit.measured_at `{kit['measured_at']}` does not parse as ISO-8601"
+                )
     services = data.get("services")
     if services is not None:
         if not isinstance(services, list):
