@@ -87,15 +87,30 @@ the class field now carries the fleet-generic-versus-factory-specific distinctio
 carry.
 ## 2. The declared file set
 
-Read from `registry/kit.json` (the manifest, `kit_version` at the instant of writing in §9):
+**Predicate:** the shipped paths the manifest classifies `standalone` or `closure` that carry this
+instrument. **Scope:** `registry/kit.json` at the instant named in §9. Both halves of each row are
+listed because the pair is what a member adopts, and the manifest hashes the `TEMPLATE/` half.
 
-| role | path | class |
-|---|---|---|
-| **executable** — the live runner | `TEMPLATE/tools/patrol_host_state.py` | `standalone` |
-| **gate** — the pure predicate over rows | `TEMPLATE/tests/test_cron_thinness.py` | `standalone` |
-| **gate** — the runner's wiring | `TEMPLATE/tests/test_patrol_host_state.py` | `standalone` |
+| # | path (member half ↔ TEMPLATE half) | class | what it is |
+|---|---|---|---|
+| 1 | `tools/patrol_host_state.py` ↔ `TEMPLATE/tools/patrol_host_state.py` | `standalone` | **the executable** — the live multi-leg runner |
+| 2 | `tests/test_cron_thinness.py` ↔ `TEMPLATE/tests/test_cron_thinness.py` | `standalone` | **the gate** — the pure predicate over rows |
+| 3 | `tests/test_patrol_host_state.py` ↔ `TEMPLATE/tests/test_patrol_host_state.py` | `standalone` | **the gate** — the runner's wiring |
+| 4 | `tools/field_predicate.py` ↔ `TEMPLATE/tools/field_predicate.py` | `closure` | the canonical-trailer read the close-board leg binds to |
+| 5 | `tools/kit_pin.py` ↔ `TEMPLATE/tools/kit_pin.py` | `closure` | the pin reader — travels with its pin (frame §3) |
+| 6 | `tools/publish.py` ↔ `TEMPLATE/tools/publish.py` | `standalone` | the publish-freshness leg |
+| 7 | `tools/registry.py` ↔ `TEMPLATE/tools/registry.py` | `standalone` | the registry read the legs share — also a CLI of its own |
+| 8 | `tests/test_board_intake_recorded.py` ↔ `TEMPLATE/tests/test_board_intake_recorded.py` | `standalone` | the board-intake predicate |
+| 9 | `tests/test_close_board_recorded.py` ↔ `TEMPLATE/tests/test_close_board_recorded.py` | `standalone` | the close-board gate |
 
-**One instrument, one executable, two gates — not three instruments.** Say it explicitly, because a
+**This is the ONE table the census parses** — `tools/instrument_census.py` derives the declared set
+from these numbered rows rather than keeping a second list that would drift, so a shipped path added
+here is measured there with no second edit. **A member is HELD only when all nine are present.** Rows
+4–9 are the closure, and they are declared *here* rather than only explained in §3 because the
+census's question is *"is the instrument complete here?"* — and a closure left out of the measured
+set answers that question wrongly, which is the defect §3 describes.
+
+**One instrument, one executable, two gates — not nine instruments.** Say it explicitly, because a
 reader counting the instrument's files as so many instruments reads the census in §9 wrong.
 
 **The executable is a SHARED, multi-leg runner, and that boundary is real rather than tidy.**
@@ -119,20 +134,13 @@ the call sits in. So a member holding the gate and the runner but **not** their 
 quiet week — it gets a crash. The frame's warning about the silent tier is about a *different* shape;
 this instrument does not have it, and claiming the exotic failure would be the more flattering error.
 
-Closure, declared (each path as it appears in the manifest, and verified present in the template at
-the instant of writing):
+**The six closure modules — the SET the executable loads, whatever each one's manifest class — are
+declared in §2's table, rows 4–9.** They are deliberately not repeated here, so
+the measured list and the documented list cannot drift apart. The census parses §2; a second copy in
+this section would be a list that drifts from the one being measured.
 
-| path | what the runner loads it for |
-|---|---|
-| `TEMPLATE/tools/field_predicate.py` | the canonical-trailer read that the close-board leg binds to |
-| `TEMPLATE/tools/kit_pin.py` | the pin reader — travels with its pin (frame §3) |
-| `TEMPLATE/tools/publish.py` | the publish-freshness leg |
-| `TEMPLATE/tools/registry.py` | the registry read the legs share |
-| `TEMPLATE/tests/test_board_intake_recorded.py` | the board-intake predicate |
-| `TEMPLATE/tests/test_close_board_recorded.py` | the close-board gate |
-
-The table above is the **shipped** half. The runner also refuses to start without one input that is
-**member-authored and therefore never shipped**:
+**And the closure is not the whole prerequisite.** The runner also refuses to start without one input
+that is **member-authored and therefore never shipped**:
 
 | path | what the runner loads it for |
 |---|---|
@@ -295,28 +303,45 @@ that leaves the member's own suite permanently red.
 
 ## 9. Adoption census
 
-**Predicate:** each of the three declared paths of §2 exists in the factory's own declared `/repo`
-(a member counts as present only if the path is there — the closure of §3 is measured separately,
-because a partially-ported closure is a crash rather than a smaller number).
-**Scope:** all five member manifests in `registry/factories/*.json` (the key is `factory`, not `slug`).
-**Instant:** declared-set counts re-measured **2026-09-27T15:19:17Z** (predicate re-run over all five
-member repos, byte-identity by `cmp`, and both entry points EXECUTED in each adopting tree);
-dispositions carried forward from the 08:38Z round plus two briefs sent 15:21Z. Earlier instants:
-07:27:09Z and 08:38Z. The counts MOVED between the 08:38Z read and this one — `ai-antispam` and
-`inferhub-watch` both went 0/3 → 3/3 — which is why the instant travels with the figure rather than
-the figure alone.
+**TWO predicates, stated separately because they answer different questions — and a figure must carry
+the one it came from.**
 
-| factory | declared set | own `fleet.json` | disposition |
+- **HELD** — `os.path.isfile(member.repo / p)` for each of §2's **nine** declared paths. This is
+  `tools/instrument_census.py`'s predicate, and its published artifact is the citable form.
+- **CURRENT** — byte-identity of each held file against the template half (`cmp -s`). A member can
+  hold every path and still be **behind**: adoption is a revision, not a copy.
+
+**Scope:** the member fragments in `registry/factories/*.json`. **Instant:** HELD read by
+`tools/instrument_census.py` at **2026-09-27T17:36:50Z**
+(`evidence/instrument-census-pacemaker-2026-09-27.md`); CURRENT by `cmp` at 17:37Z. Earlier instants:
+07:27:09Z, 08:38Z, 15:19:17Z.
+
+| factory | held | current | disposition |
 |---|---|---|---|
-| `infra-factory` | **3/3** | **written** | **ADOPTED** — commits `e334161e` + `5cd8aefe`, pushed 0/0; closure 11 of 12 paths present (the twelfth is `registry/factories/`, the fragment store). Its own runner gate passes **86 check(s), rc=0**, and the runner itself executes all **eight legs** in its tree. |
-| `ai-antispam` | **3/3** (untracked) | absent | **PORTING** — plan approved 13:53:31Z. Declared set + 4 of 6 closure byte-identical to TEMPLATE (`cmp` rc=0), all untracked. Two measured crashes remain: the runner raises `FleetManifestError` (no `profile_root`), the gate raises `DeclarationUnavailable` → unhandled `SkipGate` → rc=1. Both fixes ship as `seed` skeletons. |
-| `inferhub-watch` | **3/3** (untracked) | absent | **PORTING** — declared set byte-identical (`cmp` rc=0), untracked; already holds `docs/ledger-invariants.json`. Two measured crashes: `tools/field_predicate.py` is a stale revision (`9a42a73`) lacking `declared_duty` → `AttributeError` at `patrol_host_state.py:1233`; and the runner raises `FleetManifestError` (no `profile_root`). |
-| `miidas` | 0/3 | absent | DEFER (declared) — behind by 8 of 9. Its **transport blocker is discharged**: the manual port proved in `infra-factory` needs no selector (§9.1 item 3), and the requirement was relayed to it 2026-09-27T08:35:59Z. The **board-convention prerequisite** (§9.1 item 4) stands, and its own board-vs-ledger unit remains owed regardless of branch. |
-| `opencrabs-dev` | 0/3 | absent | DEFER (declared) — 0 of 3 confirmed, and `registry/` **does not exist** in its tree at all (`ls` rc=2). Its reason is SCOPE rather than effort: the prerequisite (`registry/kit.json` + `tools/kit_pin.py`) does not bootstrap one instrument — it **enrols the factory in the kit manifest system for every instrument at once**, a fleet-level decision that a pacemaker brief would otherwise decide by side effect. Re-entry: when it enrols in the kit for ANY instrument. |
+| `infra-factory` | **9/9** | 6/9 | **ADOPTED** — commits `e334161e` + `5cd8aefe`, pushed 0/0; its runner executes all **eight legs** and its own gate passes **86 check(s), rc=0**. |
+| `ai-antispam` | **9/9** | 6/9 | **ADOPTED-WITH-FORKS** — commit `0ea9c66`, pushed 0/0; `test_cron_thinness.py` registered as audit gate 13 (16 passed). All three divergent files are **declared**: `registry.py` (fork #7, refreshed for `KIT_KEYS`) plus the two board gates, which carry its own anchor and the #59 exemption surface. Its patrol gate is **held uncommitted and declared** rather than shipped red. |
+| `inferhub-watch` | **9/9** | 6/9 | **PORTING** — declared set now complete; the divergent `field_predicate.py` has been refreshed. Remaining: `patrol_host_state.py`, `test_patrol_host_state.py` and `registry.py` are **pre-fix revisions**, and its runner still raises `FleetManifestError` until it writes `registry/fleet.json`. |
+| `miidas` | 1/9 | 1/9 | DEFER (declared) — behind by 8 of 9. Its **transport blocker is discharged**: the manual port proved in `infra-factory` needs no selector (§9.1 item 3), and the requirement was relayed to it 2026-09-27T08:35:59Z. The **board-convention prerequisite** (§9.1 item 4) stands. |
+| `opencrabs-dev` | 0/9 | 0/9 | DEFER (declared) — `registry/` **does not exist** in its tree at all (`ls` rc=2). Its reason is SCOPE rather than effort: the prerequisite (`registry/kit.json` + `tools/kit_pin.py`) does not bootstrap one instrument — it **enrols the factory in the kit manifest system for every instrument at once**, a fleet-level decision that a pacemaker brief would otherwise decide by side effect. Re-entry: when it enrols in the kit for ANY instrument. |
 
-**One of five members has adopted it; two are PORTING with the full set already on disk; two have
-declared a deferral with a reason and a re-entry condition.** The distinction is the point of frame §7.2: a declared deferral
-is a *state*, and only undeclared divergence reds. A census that reported "1 of 5" alone would erase
+**The three members that hold the set are each 6/9 CURRENT, and the divergence has one cause: they
+adopted from a revision that predates this instrument's 2026-09-27 fixes.** `infra-factory` and
+`inferhub-watch` both differ on exactly `patrol_host_state.py`, `test_patrol_host_state.py` and
+`registry.py` — the gate's declared-skip fix and the registry refresh. That is a **version gap, not a
+port error**, and the kit's own `behind_by` field exists to declare it; what it must not be is silent,
+because a member holding a pre-fix gate reads green over a defect the fix removed.
+
+**HELD is not ADOPTED — the second leg is the reason, and on this instrument it is unestablished for
+every member.** The census reads a per-instrument disposition from the member's fragment, and the
+reader predates the `instruments` map that `tools/registry.py` gained at 17:29Z on 2026-09-27
+(19 minutes after the census tool itself, 17:10Z). So the published artifact reports the declared leg
+as `unestablished` for all six rows **as a schema fact** rather than a member's omission, and no member
+can reach `ADOPTED` on this census until that reader is extended. That is HQ's tool, not a member's
+gap, and it is reported there rather than worked around here.
+
+**Three of five members hold the complete declared set; two have declared a deferral with a reason and
+a re-entry condition.** The distinction is the point of frame §7.2: a declared deferral
+is a *state*, and only undeclared divergence reds. A census that reported "3 of 5" alone would erase
 the difference between a member that measured itself and said why, and one that has gone quiet — so
 the disposition column is not decoration, it is the half of the figure that a bare count destroys.
 
