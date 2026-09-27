@@ -68,3 +68,38 @@ this record closes. Nothing else is outstanding; §4 is the receipt that the res
 
 **The honest verdict on the criterion:** externally blocked, with a named owner and a one-block
 remedy — **not** met, and not presentable as met.
+
+## 6. Deploy receipt (c3) — the corrected tooling is live in the target environment
+
+Captured 2026-09-27T18:1xZ:
+
+    $ git fetch -q origin
+    $ git rev-parse HEAD
+    df809ecc9e93bec1ea270dc55902c5f5046c5f36
+    $ git rev-parse origin/main
+    df809ecc9e93bec1ea270dc55902c5f5046c5f36
+    $ git rev-list --left-right --count HEAD...origin/main
+    0	0
+
+Blob-level check that the live tooling IS the corrected tooling, not a local-only edit:
+
+    tools/instrument_census.py        origin/main blob == working tree   IDENTICAL
+    tests/test_instrument_census.py   origin/main blob == working tree   IDENTICAL
+
+And the regression gate, literal exit code:
+
+    $ python3 tests/test_instrument_census.py
+    ... 10 PASS, 0 FAIL
+    instrument census gate: passed
+    exit=0
+
+## 7. Verdict — a hard blocker, stated as one
+
+**c1 is UNMET and is a hard blocker, not a task in progress.** The declaration is an act the
+governing rule reserves to a member's own HQ, no other lane may supply it, and no member has
+performed it in the repository's entire history. This lane has asked both holder lanes and the
+scribe lane; all three hold the ask and none has declared.
+
+**It is not closable from this lane by any legitimate action.** The only two remaining routes are
+both outside it: a holder HQ declaring, or the fleet owner directing one to. Neither is a technical
+step that more work here would reach.
