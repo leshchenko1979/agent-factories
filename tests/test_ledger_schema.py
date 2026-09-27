@@ -26,6 +26,11 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 LEDGER_REL = Path("evidence") / "ledger.jsonl"
 LEDGER_PATH = Path(os.environ.get("OC_LEDGER_PATH", REPO / LEDGER_REL))
+
+# FACTORY DATA, never inline in this gate (#156). This file is a declared PAIR, so a
+# factory's own row numbers must not ship to every new factory; the skeleton that
+# ships is the `.example.json` beside it. Absent means "this factory declared none".
+EXEMPTIONS_REL = Path("docs") / "ledger-schema-exemptions.json"
 ACTORS_FILE = Path(os.environ.get("OC_ACTORS_PATH", REPO / "tools" / "actors.txt"))
 AUTHORIZATIONS_FILE = Path(
     os.environ.get("OC_AUTHORIZATIONS_PATH", REPO / "docs" / "ledger-authorizations.json")
@@ -179,20 +184,34 @@ def validate_row_schema(row: dict[str, Any], line_num: int, known_actors: set[st
     return errors
 
 
+def unauthorized_actor_error(row: dict[str, Any], line_num: int) -> str | None:
+    """The GOVERNED class, as ONE predicate — the exemption surface keys on this.
+
+    A second copy of this test would let the exemption and the violation drift apart,
+    which is the one-field-one-predicate defect: an exemption that matched a string the
+    gate no longer emits would excuse nothing while reading as coverage.
+    """
+    event = row.get("event")
+    actor = row.get("actor")
+    allowed_actors = authorized_for_event(REPO, event)
+    if actor and event and allowed_actors and actor not in allowed_actors:
+        return (
+            f"line {line_num}: unauthorized actor '{actor}' for event '{event}' "
+            f"(authorized: {', '.join(allowed_actors)})"
+        )
+    return None
+
+
 def validate_domain_invariants(row: dict[str, Any], line_num: int) -> list[str]:
     """Validate domain entity class and role-to-event authorization invariants."""
     errors: list[str] = []
     event = row.get("event")
-    actor = row.get("actor")
     subject = row.get("subject", "")
 
-    # Role-to-event authorization check
-    allowed_actors = authorized_for_event(REPO, event)
-    if actor and event and allowed_actors and actor not in allowed_actors:
-        errors.append(
-            f"line {line_num}: unauthorized actor '{actor}' for event '{event}' "
-            f"(authorized: {', '.join(allowed_actors)})"
-        )
+    # Role-to-event authorization check — read through the shared predicate above.
+    unauthorized = unauthorized_actor_error(row, line_num)
+    if unauthorized:
+        errors.append(unauthorized)
 
     # Domain Entity Class Invariants
     if event == "genesis":
@@ -211,7 +230,36 @@ def validate_domain_invariants(row: dict[str, Any], line_num: int) -> list[str]:
     return errors
 
 
-def validate_ledger_file(ledger_path: Path) -> tuple[int, list[str]]:
+def load_exemptions(repo: Path) -> tuple[list[dict], list[str]]:
+    """`(entries, load_errors)` for this factory's schema exemptions.
+
+    Three readings, and they are NOT the same (#156, following the five precedents):
+      * ABSENT file -> none declared, which is the shipped state of a new factory;
+      * a file that exists and cannot be READ -> a reported problem, because only the
+        silent failure is the hazard;
+      * a file whose shape is wrong -> a reported problem, never a silent pass.
+    """
+    path = repo / EXEMPTIONS_REL
+    if not path.is_file():
+        return [], []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [
+            f"{EXEMPTIONS_REL}: cannot be read ({exc}) — an exemption file that cannot be "
+            f"read is a reported problem, never a silent pass"
+        ]
+    if not isinstance(data, dict):
+        return [], [f"{EXEMPTIONS_REL}: must be a JSON object carrying an `exempt` array"]
+    entries = data.get("exempt")
+    if entries is None:
+        return [], []
+    if not isinstance(entries, list):
+        return [], [f"{EXEMPTIONS_REL}: `exempt` must be an array of entries"]
+    return entries, []
+
+
+def validate_ledger_file(ledger_path: Path) -> tuple[int, list[str], list[str]]:
     """Audit the complete ledger file, or `SkipGate` when the tree ships none BY DESIGN.
 
     The absence has two shapes and they are NOT the same reading:
@@ -230,10 +278,13 @@ def validate_ledger_file(ledger_path: Path) -> tuple[int, list[str]]:
                 f"no {LEDGER_REL} in this tree — the ledger is BOOTSTRAP-created, so there "
                 f"is nothing to audit yet (BOOTSTRAP.md step 4b creates it)"
             )
-        return 0, [f"ledger file not found: {ledger_path}"]
+        return 0, [f"ledger file not found: {ledger_path}"], []
 
     known_actors = get_known_actors()
-    errors: list[str] = []
+    entries, load_errors = load_exemptions(ledger_path.parent.parent)
+    errors: list[str] = list(load_errors)
+    excused: list[str] = []
+    matched: set[int] = set()
     lines = ledger_path.read_text(encoding="utf-8").splitlines()
 
     for idx, line in enumerate(lines, 1):
@@ -252,9 +303,52 @@ def validate_ledger_file(ledger_path: Path) -> tuple[int, list[str]]:
             continue
 
         errors.extend(validate_row_schema(row, idx, known_actors))
-        errors.extend(validate_domain_invariants(row, idx))
+        row_errors = validate_domain_invariants(row, idx)
 
-    return len(lines), errors
+        # The exemption governs EXACTLY the unauthorized-actor class, keyed by the row's
+        # own `n` — `n` is row identity and immutable, which is what makes the key stable
+        # across a re-read. It is applied only to that one class: an entry must never
+        # excuse a malformed row, because the repair space for a schema error is not empty.
+        governed = unauthorized_actor_error(row, idx)
+        n = row.get("n")
+        if governed is not None and isinstance(n, int):
+            for entry in entries:
+                if not isinstance(entry, dict) or entry.get("n") != n:
+                    continue
+                if not entry.get("proof"):
+                    errors.append(
+                        f"{EXEMPTIONS_REL}: entry n={n} is not admittable — `proof` is blank, "
+                        f"so it excuses nothing (name the external receipt that admits it)"
+                    )
+                    break
+                excused.append(
+                    f"n={n} unauthorized actor — {entry.get('reason', 'no reason stated')} "
+                    f"[{entry.get('proof')}]"
+                )
+                matched.add(n)
+                row_errors = [e for e in row_errors if e != governed]
+                break
+
+        errors.extend(row_errors)
+
+    # An entry that matched no governed row is a gate ERROR: an exemption list that
+    # quietly excuses nothing is indistinguishable from no exemptions at all, and a
+    # stale entry inflates the visible debt while admitting no defect.
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            errors.append(f"{EXEMPTIONS_REL}: entry {i} is not a JSON object")
+            continue
+        n = entry.get("n")
+        if not isinstance(n, int):
+            errors.append(f"{EXEMPTIONS_REL}: entry {i} has no integer `n` — the key is the row's own number")
+            continue
+        if n not in matched:
+            errors.append(
+                f"{EXEMPTIONS_REL}: entry n={n} matches no governed row in this ledger — an "
+                f"exemption that excuses nothing is a stale entry, not a pass"
+            )
+
+    return len(lines), errors, excused
 
 
 def evaluate(repo: Path) -> tuple[str, str, list[str]]:
@@ -265,7 +359,7 @@ def evaluate(repo: Path) -> tuple[str, str, list[str]]:
     and never suppresses a defect the audit would have found.
     """
     try:
-        row_count, errors = validate_ledger_file(repo / LEDGER_REL)
+        row_count, errors, _excused = validate_ledger_file(repo / LEDGER_REL)
     except SkipGate as exc:
         return "skip", str(exc), []
     if errors:
@@ -410,7 +504,7 @@ def run_self_probes() -> bool:
     with tempfile.TemporaryDirectory() as tmp:
         # (i) A tree that ships no `evidence/` BY DESIGN -> SKIP, with the reason STATED.
         #     THIS IS ALSO THE MUTATION CONTROL: revert the loader's by-design branch to
-        #     `return 0, [f"ledger file not found: …"]` and this probe REDs, because the
+        #     `return 0, [f"ledger file not found: …"], []` and this probe REDs, because the
         #     status becomes "fail" where a skip is owed.
         bare = Path(tmp) / "ships-no-evidence"
         bare.mkdir()
@@ -446,6 +540,94 @@ def run_self_probes() -> bool:
                   f"got status={status!r} problems={problems}")
             probes_passed = False
 
+        # (iii) THE EXEMPTION SURFACE (#156). The governed class is the unauthorized-actor
+        #       violation, keyed by the row's own `n`. Every arm is driven from a
+        #       CONSTRUCTED fixture, never from prose that happens to be in this ledger —
+        #       this factory's own ledger carries no such row, so a probe reading it would
+        #       pass vacuously.
+        def member_tree(name: str, exempt: object) -> Path:
+            """A member-shaped tree: a 2-row ledger whose row 2 is an unauthorized intake."""
+            tree = Path(tmp) / name
+            (tree / "evidence").mkdir(parents=True)
+            (tree / "docs").mkdir()
+            rows = [
+                {"n": 1, "ts": "2026-09-24T10:00:00Z", "event": "intake", "actor": "triage",
+                 "subject": "#41", "detail": "clean row"},
+                {"n": 2, "ts": "2026-09-24T10:01:00Z", "event": "intake", "actor": "worker",
+                 "subject": "#42", "detail": "the member's unauthorized row"},
+            ]
+            (tree / "evidence" / "ledger.jsonl").write_text(
+                "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+            if exempt is not None:
+                (tree / "docs" / "ledger-schema-exemptions.json").write_text(
+                    json.dumps(exempt), encoding="utf-8")
+            return tree
+
+        # (b) A PROVEN entry excuses the violation, the run passes, and the excused line
+        #     is PRINTED — a clean verdict and an excused one must not be the same output.
+        proven = member_tree("exempt-proven", {"exempt": [{
+            "n": 2, "subject": "#42", "granted": "2026-09-26",
+            "reason": "row written before the actor matrix existed",
+            "proof": "the ruling that granted it: ledger n=1026"}]})
+        count, errs, exc = validate_ledger_file(proven / LEDGER_REL)
+        if errs or len(exc) != 1 or "n=2" not in exc[0]:
+            print(f"  FAIL self-probe 'a PROVEN entry excuses the governed row and prints it': "
+                  f"errors={errs} excused={exc}")
+            probes_passed = False
+
+        # (c) A MALFORMED entry is a gate ERROR, never a silent pass.
+        for label, bad in (("no integer n", {"exempt": [{"subject": "#42"}]}),
+                           ("not an object", {"exempt": ["n=2"]})):
+            count, errs, exc = validate_ledger_file(
+                member_tree("exempt-bad-%s" % label.split()[0], bad) / LEDGER_REL)
+            if not errs:
+                print(f"  FAIL self-probe 'a malformed entry ({label}) is a gate ERROR': "
+                      f"got no errors")
+                probes_passed = False
+
+        # (d) An entry matching NO governed row is a gate ERROR — a stale exemption
+        #     inflates the visible debt while admitting no defect.
+        stale = member_tree("exempt-stale", {"exempt": [{
+            "n": 99, "subject": "#99", "granted": "2026-09-26", "reason": "gone",
+            "proof": "ledger n=1026"}]})
+        count, errs, exc = validate_ledger_file(stale / LEDGER_REL)
+        if not any("matches no governed row" in e for e in errs):
+            print(f"  FAIL self-probe 'an entry matching no governed row is a gate ERROR': "
+                  f"errors={errs}")
+            probes_passed = False
+
+        # (e) A BLANK proof is refused BY NAME and excuses nothing — the violation stands.
+        #     Both directions are probed: a proofless entry must not pass, and the refusal
+        #     must name the entry that failed to excuse it.
+        proofless = member_tree("exempt-proofless", {"exempt": [{
+            "n": 2, "subject": "#42", "granted": "2026-09-26",
+            "reason": "no receipt", "proof": ""}]})
+        count, errs, exc = validate_ledger_file(proofless / LEDGER_REL)
+        if exc or not any("not admittable" in e for e in errs):
+            print(f"  FAIL self-probe 'a proofless entry excuses nothing and is named': "
+                  f"errors={errs} excused={exc}")
+            probes_passed = False
+        if not any("unauthorized actor" in e for e in errs):
+            print(f"  FAIL self-probe 'and the violation itself still stands': errors={errs}")
+            probes_passed = False
+
+        # (f) The exemption governs ONE class only. A malformed row that is ALSO
+        #     unauthorized must not have its schema error excused by an entry keyed to it.
+        mixed = member_tree("exempt-mixed", {"exempt": [{
+            "n": 2, "subject": "#42", "granted": "2026-09-26", "reason": "actor",
+            "proof": "ledger n=1026"}]})
+        (mixed / "evidence" / "ledger.jsonl").write_text(
+            json.dumps({"n": 1, "ts": "2026-09-24T10:00:00Z", "event": "intake",
+                        "actor": "triage", "subject": "#41", "detail": "d"}) + "\n"
+            + json.dumps({"n": 2, "ts": "2026-09-24T10:01:00Z", "event": "intake",
+                          "actor": "worker", "subject": "", "detail": "d"}) + "\n",
+            encoding="utf-8")
+        count, errs, exc = validate_ledger_file(mixed / LEDGER_REL)
+        if not any("subject" in e for e in errs):
+            print(f"  FAIL self-probe 'the exemption does not excuse a schema error on the "
+                  f"same row': errors={errs}")
+            probes_passed = False
+
     return probes_passed
 
 
@@ -460,10 +642,16 @@ def main() -> int:
     #    ledger is bootstrap-created, and the tree the kit SHIPS has none (#78's class).
     #    A tree that HAS the directory and lost the ledger still reds — see SkipGate.
     try:
-        row_count, errors = validate_ledger_file(LEDGER_PATH)
+        row_count, errors, excused = validate_ledger_file(LEDGER_PATH)
     except SkipGate as exc:
         print(f"ledger schema gate SKIPPED: {exc}")
         return 0
+
+    # Every MATCHING entry prints as an `excused:` line on EVERY run, and the closing
+    # line distinguishes clean from excused, so the two are never the same output. An
+    # exemption is a VISIBLE DEBT, not forgiveness.
+    for line in excused:
+        print(f"  excused: {line}")
 
     if errors:
         print(f"ledger schema violations ({len(errors)} problem(s) in {LEDGER_PATH}):")
@@ -471,7 +659,11 @@ def main() -> int:
             print(f"  {err}")
         return 1
 
-    print(f"ledger schema clean: {row_count} row(s) audited, all domain invariants & schemas verified")
+    if excused:
+        print(f"ledger schema clean, {len(excused)} excused: {row_count} row(s) audited, "
+              f"all domain invariants & schemas verified")
+    else:
+        print(f"ledger schema clean: {row_count} row(s) audited, all domain invariants & schemas verified")
     return 0
 
 
