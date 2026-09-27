@@ -246,3 +246,31 @@ here — that needs the gateway's own logs on `apps` (163.5.41.61), which this l
 reliably reach first byte inside 60 s. The lanes are not declining, and the fault is not this box's
 memory (§9). It is one slow, variable upstream behind the gateway, and the fix is upstream of this
 lane.
+
+### 10.1 Why a slow provider is not escaped quickly — the retry ladder multiplies the cap
+
+The obvious question §10 leaves open: if the primary route is slow, why do lanes not fall through to
+the other four providers and carry on? Measured — because the ladder is **five retries on the same
+provider** before any fall-through.
+
+    Stream retry 1/5 failed     991   (today)
+    Stream retry 2/5 failed     745
+    Stream retry 3/5 failed     608
+    Stream retry 4/5 failed     445
+    Stream retry 5/5 failed     361
+
+Each retry carries its own 60-second handshake cap, so a request that climbs the whole ladder spends
+**5 × 60 s = 300 s** on the primary before the chain moves on — and the daemon's
+`thinking_loop_timeout_secs` is **600 s**, so a single unlucky turn can burn half its budget waiting
+on one slow upstream. That is the mechanism behind "lanes are mid-turn but produce nothing": they are
+not idle, they are retrying.
+
+Last 10 minutes, for scale: **96 handshake timeouts and 173 retry lines.**
+
+The decreasing counts show some requests do recover at each stage, which is why the fault is
+intermittent rather than a clean outage — and why a lane occasionally settles (2 in one 5-minute
+window) while the failure rate stays near 10/min.
+
+**Stated as a mechanism, not a fix proposal:** the remedy belongs to whoever owns the gateway and the
+provider config, not to this lane. Recorded because "the gateway is slow" does not explain the
+observed turn behaviour; **a 5-retry ladder against a 60 s cap does.**
