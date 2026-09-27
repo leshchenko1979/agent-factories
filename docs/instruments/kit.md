@@ -287,11 +287,17 @@ partial copy reads as adopted).
 **No member has adopted this instrument, and two hold a partial copy of it.** The partial state is
 the one worth naming rather than rounding into a zero: both trees carry `tools/kit_pin.py` and
 neither carries its reader gate, so each holds a module that **nothing in its tree exercises**.
-`infra-factory` is a confirmed pacemaker adopter and `kit_pin.py` is in that instrument's closure
-(frame §1.3, §2 of §3 above) — so the likely provenance is *the file arrived as the closure of a
-different instrument*, which is precisely the frame's warning: a factory can hold a complete
-instrument **and** a partial one at the same time, and only declaration tells them apart. Stated as
-provenance-under-investigation, not as a measured cause; what is measured is the presence column.
+`infra-factory` is a confirmed pacemaker adopter, and the provenance is **measured, not suspected**,
+on two independent receipts: `TEMPLATE/tools/patrol_host_state.py:88` binds
+`KIT_PIN = REPO / "tools" / "kit_pin.py"` and `:1454` loads it **by that path**
+(`load_module("kit_pin", KIT_PIN)`, never an `import`), and `pacemaker.md:124` declares
+`TEMPLATE/tools/kit_pin.py` in **the pacemaker's own closure** — "the pin reader — travels with its pin
+(frame §3)". A member that adopted the **pacemaker** therefore received this file as a piece of *that*
+instrument, which is frame §1.3 exactly: an executable may be shared, and when it is, the closure is
+declared over the whole executable. The partial copy is consequently a **predicted state** of the frame
+rather than an anomaly — a factory can hold a complete instrument **and** a partial one at the same
+time, and only declaration tells them apart. Measured 2026-09-27T13:0xZ at those three sites; the
+presence column alone measures presence, never provenance, which is why both are stated.
 
 ### 9.2 The gaps this instrument declares
 
