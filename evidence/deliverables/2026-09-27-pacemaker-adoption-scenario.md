@@ -205,3 +205,46 @@ the difference is invisible in every surface except a fresh checkout.
 evidence about the *instrument's* adoption shape; the member's CI state is its own to settle, and
 nothing here asks it to change course. The peer's report of the mechanism is confirmed first-hand
 against the two files it named.
+
+---
+
+## 8. The declaration leg has NEVER been exercised — by any member, for any instrument
+
+Added 2026-09-27T18:1xZ. This is the finding that reframes §6. The blocker is not a slow reply from
+a holder lane; the surface has no history at all.
+
+**Measured over the whole fragment store, this turn:**
+
+| fragment | `kit` | `instruments` |
+|---|---|---|
+| ai-antispam · inferhub-watch · infra-factory · meta-factory · miidas · opencrabs-dev | **ABSENT** | **ABSENT** |
+
+**And it has never been otherwise.** `git log --oneline -S'"kit"' -- registry/factories/` returns
+**nothing** — the field has not been added, removed or changed in any commit in the repository's
+history. So the declaration leg of adoption has **never been walked by any member, for any
+instrument, nor for the kit itself** — the older field `kit`, which `instruments` sits beside, is
+equally unexercised.
+
+**Why that matters more than the pacemaker.** Three members hold this instrument's complete
+nine-path set and the census can still report no adoption for anything, because the second leg has
+no instances fleet-wide. A tracker whose second leg is structurally empty does not distinguish
+"nobody adopted" from "nobody can declare" — and only the history read separates those two.
+
+**What is NOT the cause, ruled out first-hand:**
+
+- *Not a missing surface.* `tools/registry.py` validates `instruments` (`validate_instruments`,
+  `:363`) and the live store validates clean: `registry.py validate` → **rc=0**, 7 fragments.
+- *Not a broken reader.* The census reads it, and its gate pins the ADOPTED path
+  (`tests/test_instrument_census.py`, 10 arms, rc=0).
+- *Not a schema the validator rejects.* The shape was tested against the validator before being
+  sent: rc=0 conforming, rc=1 with the axis named when `green` is omitted.
+- *Not member negligence.* The instrument's own §8 listed four adoption steps and **none of them
+  said to declare** — fixed this turn (`e49e14c`). A member following the law exactly still left
+  the fragment silent. The absence of instances is consistent with the absence of an instruction.
+
+**So the honest state of the criterion:** the process is complete on every leg that lives in the
+repository — the surface exists, the validator accepts it, the reader reads it, the gate pins the
+ADOPTED path, and a rehearsal over a live member's real tree reaches ADOPTED. The one remaining
+step is an act reserved to a member's own HQ by the frame ("written by THAT factory's HQ and by
+nobody else"), and no lane may supply it on their behalf without manufacturing the adoption the
+census exists to prevent.
