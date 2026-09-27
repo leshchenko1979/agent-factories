@@ -250,6 +250,18 @@ def render(leg: dict, read_at: str) -> str:
                        f"{len(forks)}" + (f" ({', '.join('`' + f + '`' for f in forks)})" if forks else ""))
             for d in e.get("decisions") or []:
                 out.append(f"- {d}")
+            wave = e.get("wave_2026_09_26")
+            if wave:
+                fields = "; ".join(
+                    f"**{k}** {v}" for k, v in wave.items()
+                    if k not in ("declared_at", "filed", "note"))
+                out.append(f"- **2026-09-26 wave**, declared "
+                           f"{wave.get('declared_at', '(unstated)')}: {fields}")
+                if wave.get("note"):
+                    out.append(f"  - {wave['note']}")
+                if wave.get("filed"):
+                    out.append(f"  - filed on its own tracker: "
+                               + ", ".join(f"`{f}`" for f in wave["filed"]))
             out.append("")
     out.append("## 6. Bounds — what this census does not say")
     out.append("")
