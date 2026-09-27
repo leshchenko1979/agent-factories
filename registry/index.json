@@ -1,16 +1,33 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T11:26:11Z",
+  "resolved_at": "2026-09-27T11:46:02Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 66,
-    "announcements": 19,
-    "jobs": 60,
+    "announcements": 21,
+    "jobs": 61,
     "unattributed_jobs": 4
   },
   "announcements": [
+    {
+      "id": "miidas-slot-volume-git-config-carries-remote-credential",
+      "severity": "warning",
+      "scope": null,
+      "text": "Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.",
+      "since": "2026-09-27T11:39:51Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply).",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "miidas"
+      ],
+      "conflict": []
+    },
     {
       "id": "inferhub-auto-route-failure-escalation",
       "severity": "warning",
@@ -219,7 +236,7 @@
       "id": "miidas-volume-namespace-on-apps",
       "severity": "warning",
       "scope": "profile",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-27T11:38Z: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
       "since": "2026-09-13T09:56:00Z",
       "review_by": null,
       "check": null,
@@ -246,6 +263,23 @@
       ],
       "origins": [
         "ai-antispam"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "miidas-kit-forks-declared",
+      "severity": "info",
+      "scope": null,
+      "text": "miidas vendors the fleet kit pin (registry/kit.json) and declares 16 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 21 carried paths judged, 16 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+      "since": "2026-09-27T05:24:07Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 21 carried path(s); 1 factory-class path(s) excluded by class; 16 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused.",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "miidas"
       ],
       "conflict": []
     },
@@ -1092,7 +1126,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T11:26:02Z",
+          "bound_at": "2026-09-27T11:34:31Z",
           "announcements": []
         },
         {
@@ -1102,7 +1136,7 @@
           "session_id": "ee5cd2f5-6c1b-41bb-b031-1150a3132fb1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T09:09:57Z",
+          "bound_at": "2026-09-27T11:32:37Z",
           "announcements": []
         },
         {
@@ -1149,7 +1183,7 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-26T06:31:01Z",
+      "attested_at": "2026-09-27T11:39:51Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
@@ -1275,7 +1309,7 @@
         {
           "id": "miidas-volume-namespace-on-apps",
           "severity": "warning",
-          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
+          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-27T11:38Z: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
           "scope": "profile",
           "since": "2026-09-13T09:56:00Z",
           "review_by": null,
@@ -1323,6 +1357,32 @@
             "profile"
           ],
           "evidence": "deploy_lib.sh:148-152 — miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
+        },
+        {
+          "id": "miidas-kit-forks-declared",
+          "severity": "info",
+          "text": "miidas vendors the fleet kit pin (registry/kit.json) and declares 16 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 21 carried paths judged, 16 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+          "scope": null,
+          "since": "2026-09-27T05:24:07Z",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 21 carried path(s); 1 factory-class path(s) excluded by class; 16 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
+        },
+        {
+          "id": "miidas-slot-volume-git-config-carries-remote-credential",
+          "severity": "warning",
+          "text": "Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.",
+          "scope": null,
+          "since": "2026-09-27T11:39:51Z",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply)."
         }
       ]
     },
@@ -1796,6 +1856,22 @@
       "last_run_at": "2026-09-26T12:05:42Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "[ \"$(date -u +%Y%m%d)\" -ge 20260927 ] && /usr/local/bin/gh issue view 43 --repo alexeyleshchenko/ai-antispam --json state 2>/dev/null | grep -q OPEN && echo GATE-DUE",
+      "profile": "ops",
+      "owner": "ai-antispam",
+      "owner_basis": "deliver_to -> lane"
+    },
+    {
+      "id": "c83538e0-8054-4ebf-b210-00d00c9a22ee",
+      "name": "ai-antispam-52-close-gate",
+      "cron_expr": "30 11 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-09-28T11:30:00+00:00",
+      "last_run_at": "2026-09-27T11:32:04Z",
+      "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
+      "trigger_cmd": "D=$(date -u +%Y%m%d); S=$(gh issue view 52 --repo alexeyleshchenko/ai-antispam --json state --jq .state 2>/dev/null); if [ \"$D\" -ge 20260928 ] && [ \"$S\" = \"OPEN\" ]; then echo \"due: window closed, #52 still open\"; fi",
       "profile": "ops",
       "owner": "ai-antispam",
       "owner_basis": "deliver_to -> lane"

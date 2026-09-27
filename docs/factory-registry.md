@@ -2,21 +2,23 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-27T11:26:11Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-27T11:46:02Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-27T11:26:11Z` |
+| generated | live reads | resolved `2026-09-27T11:46:02Z` |
 
 ## Announcements
 
 Deduplicated by `id` across every fragment: several lanes noticing one fact is one statement with several declarers. An entry naming a `check` is mechanically verified; the rest rest on `review_by` alone.
 
-### 🟡 warning (14)
+### 🟡 warning (15)
 
+- 🟡 **`miidas-slot-volume-git-config-carries-remote-credential`** — Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.
+  - affects: profile · since: 2026-09-27T11:39:51Z · declared by: miidas
 - 🟡 **`inferhub-auto-route-failure-escalation`** — Routing through the ops fallback chain's first hop (inferhub) is currently degrading, independent of the retired auto-switcher: measured over 24h to 2026-09-27T05:08Z, 21,242 requests with 2,852 failures (13.4%) — 499 client-abort x1218, 502 'upstream chain exhausted' x994, 429 rate-limit x486, 402 bid-starved x140 — concentrated on cheap iq-75-plus combo members (two gemini effort-variant aliases at ~76% failure over 7d, zai/glm-5.3 at ~97%). Not model-specific and not load-shaped.
   - affects: profile · since: 2026-09-27T06:36:31Z · declared by: inferhub-watch
 - 🟡 **`ops-daemon-dies-at-cgroup-cap`** — The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.
@@ -41,13 +43,16 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: infra-factory · since: 2026-09-17T01:08:46Z · declared by: inferhub-watch
 - 🟡 **`two-files-named-skill-md`** — Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load; it carries its own version field and moves independently of the repo file). Confirm which one you mean before editing - a change to the wrong one is invisible.
   - affects: ai-antispam · since: 2026-09-17 · declared by: ai-antispam
-- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-27T11:38Z: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 - 🟡 **`gh-pages-origin-ahead-not-diverged`** — The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages from gh-pages on alexeyleshchenko/ai-antispam - that repo's gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain. Pages belongs to leshchenko1979/ai-antispam, which is where it is enabled and built.
   - affects: ai-antispam · since: 2026-09-11 · declared by: ai-antispam
 
-### 🔵 info (5)
+### 🔵 info (6)
 
+- 🔵 **`miidas-kit-forks-declared`** — miidas vendors the fleet kit pin (registry/kit.json) and declares 16 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 21 carried paths judged, 16 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.
+  - affects: profile · since: 2026-09-27T05:24:07Z · declared by: miidas
+  - evidence: Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 21 carried path(s); 1 factory-class path(s) excluded by class; 16 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused.
 - 🔵 **`brain-metrics-baseline-measured`** — Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument. LEG C IS EXPLAINED, NOT BROKEN. The owner order of 2026-09-21 13:32:44 MSK raised the agent context_limit to 1000000, effective at the 21:35:01 boot. The Tier-1 gate is 65 percent of effective max = 650000 tokens, and the maximum context reached since is about 341K (34 percent), so compaction is DORMANT BY DESIGN and the summarizer line is never emitted. Verified: compaction trigger lines 11445 on 09-21, then 0 and 0; last real compaction 2026-09-21T21:33:05Z. CONSEQUENCE WORTH KNOWING BEFORE YOU TRUST A SEARCH: save_compaction_summary_to_memory is the SOLE writer of memory/<date>.md, so a note exists only for a day in which compaction fired — and at a 1M window that is rare. Measured 2026-09-27: notes exist for 09-19, 09-20, 09-21 and 09-26 only; 09-22 through 09-25 have none. memory_search's DEFAULT scope is exactly those notes, so default-scope recall is blind for every day that has none, while memory.db keeps indexing. The pipeline is STARVED, NOT STOPPED. Fresh reading 2026-09-27T11:10:23Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; named in docs/methodology/04-harness-binding.md; these live in NO repository, so a leg-A reading has an INSTANT for its identity and no revision) 813 lines / 205148 bytes / about 58614 tokens = 29.31 percent of a 200k window — AGENTS.md alone is 756 lines / 200459 bytes = 97.71 percent of leg-A bytes and 92.99 percent of its lines — 256 lines over the owner's 500-line budget marker, which is PRINTED and never gated. LEG B, every skills/*/SKILL.md at depth 1: 869 lines / 95510 bytes / about 27289 tokens = 13.64 percent. TOGETHER 1682 lines / 300658 bytes / about 85903 tokens = 42.95 percent of a 200k window, which is 8.59 percent of the 1M window now configured. The two differ by exactly 5.0x, so always read the denominator beside the figure. The reading chain is kept, never overwritten: 29.76 percent (2026-09-23T11:28:08Z), then 34.97 percent (2026-09-25T06:08:47Z), then 39.97 percent (2026-09-26T06:21:02Z), then this one. That is +2.98 points in one day and +13.19 points in four, and AGENTS.md is most of it. CAUTION: the trigger line Context at NN percent at compaction.rs uses a DIFFERENT denominator (effective tokens over effective max, i.e. the window minus reserves) and must never be read as a fraction of the provider window.
   - affects: profile · since: 2026-09-19T14:20:00Z · declared by: meta-factory
 - 🔵 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is now inferhub, openrouter, opencode, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, which put three hops at or below 27.8 percent success ahead of one at 99.1 percent. Any lane running on the ops profile now reaches a provider through this order. The reorder was made live by config hot-reload with no daemon restart.
@@ -133,6 +138,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
 | `ai-antispam-43-close-gate` | ops | `5 12 * * *` | UTC | yes | 0 | **absent** | 2026-09-27T12:05:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | [ "$(date -u +%Y%m%d)" -ge 20260927 ] && /usr/local/bin/gh issue view 4… |
+| `ai-antispam-52-close-gate` | ops | `30 11 * * *` | UTC | yes | 0 | **absent** | 2026-09-28T11:30:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 52 --repo alexeyleshchenko/ai-a… |
 | `ai-antispam-bot-service-health` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-09-28T06:00:00+00:00 | telegram:-1003993000918:10784 | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
 | `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-09-28T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
@@ -151,7 +157,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
-2 of 16 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
+2 of 17 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
 
 ### inferhub-watch — Inferhub watch
 
@@ -314,8 +320,8 @@ Attribution basis: name prefix.
 | Delegate | 68 | delegate | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | Telegram: Factories / Delegate [chat:-1004497192134:topic:68] | resolved | telegram | 2026-09-26T10:41:51Z | — |
 | Worker | 1271 | worker | `dcd8f7a9-c1e7-48c3-b184-d901dc08eac7` | Telegram: Factories / Worker [chat:-1004497192134:topic:1271] | resolved | telegram | 2026-09-27T10:44:35Z | — |
 | Factories / Ledger | 3981 | ledger | `d0cba805-92c9-4377-8808-a1cf715bce9e` | Telegram: Factories / Ledger [chat:-1004497192134:topic:3981] | resolved | telegram | 2026-09-27T03:28:19Z | — |
-| Factories / Open Question Tool | 4087 | questions | `9f635151-4311-44ab-94f8-d4fd86e9b6c2` | Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087] | resolved | telegram | 2026-09-27T11:26:02Z | — |
-| Factories / Pacemakers / Crons | 4223 | pacemakers | `ee5cd2f5-6c1b-41bb-b031-1150a3132fb1` | Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223] | resolved | telegram | 2026-09-27T09:09:57Z | — |
+| Factories / Open Question Tool | 4087 | questions | `9f635151-4311-44ab-94f8-d4fd86e9b6c2` | Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087] | resolved | telegram | 2026-09-27T11:34:31Z | — |
+| Factories / Pacemakers / Crons | 4223 | pacemakers | `ee5cd2f5-6c1b-41bb-b031-1150a3132fb1` | Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223] | resolved | telegram | 2026-09-27T11:32:37Z | — |
 | Factories / Instruments methodology | 4186 | methodology | `4515ea72-eb39-4a3c-9b05-a1dc02b1c977` | Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186] | resolved | telegram | 2026-09-27T09:11:06Z | — |
 
 **Pacemakers**
@@ -338,7 +344,7 @@ Attribution basis: name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-26T06:31:01Z |
+| freshness | ✅ attested 2026-09-27T11:39:51Z |
 | purpose | MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them. |
 | profile | `ops` |
 | repo | `/root/miidas` |
@@ -346,7 +352,7 @@ Attribution basis: name prefix.
 | owns | ['/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps', 'leshchenko1979/miidas and leshchenko1979/miidas-template', 'per-client slot state: pool/slots/miidas-*.env on apps — apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ — plus the miidas-* container and miidas_* volume namespaces', 'the Miidas Factory Telegram chat (-1003996392908) and its topics', '/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer', 'cron miidas-hq-daily-trigger', 'the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle', 'leshchenko1979/miidas-landing — the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing'] |
 | does not own | ['client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface', "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle", "the apps host beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows", "other factories' repos, chats and processes", 'OpenCrabs core and the dev process'] |
 | substrates owned | ['leshchenko1979/miidas', 'leshchenko1979/miidas-template', 'leshchenko1979/miidas-landing', '/root/miidas/SKILL.md (live skill path is a symlink to it)', 'apps: pool/slots/miidas-*.env at /data/projects/miidas/pool/slots/ and the miidas-* compose stack under /data/projects/miidas/compose/'] |
-| attested at | 2026-09-26T06:31:01Z |
+| attested at | 2026-09-27T11:39:51Z |
 
 **Services**
 
@@ -361,7 +367,7 @@ Attribution basis: name prefix.
 
 **Announcements reaching this factory**
 
-- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-27T11:38Z: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 - 🔵 **`llm-gateway-per-service-user`** — The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.
   - affects: profile · since: 2026-09-18T01:53:06Z · declared by: miidas
@@ -369,6 +375,11 @@ Attribution basis: name prefix.
   - affects: profile · since: 2026-09-11T00:00:00Z · declared by: miidas
 - 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.
   - affects: profile · since: 2026-09-26 · declared by: miidas
+- 🔵 **`miidas-kit-forks-declared`** — miidas vendors the fleet kit pin (registry/kit.json) and declares 16 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 21 carried paths judged, 16 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.
+  - affects: profile · since: 2026-09-27T05:24:07Z · declared by: miidas
+  - evidence: Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 21 carried path(s); 1 factory-class path(s) excluded by class; 16 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused.
+- 🟡 **`miidas-slot-volume-git-config-carries-remote-credential`** — Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.
+  - affects: profile · since: 2026-09-27T11:39:51Z · declared by: miidas
 
 **Lanes**
 
@@ -494,7 +505,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 ## Unattributed jobs
 
-Read from the declared profile homes: 3 home(s) opened, 60 job row(s). Homes read: family, oc348probe, ops.
+Read from the declared profile homes: 3 home(s) opened, 61 job row(s). Homes read: family, oc348probe, ops.
 
 These rows name no known factory in their `deliver_to` and match no naming prefix. They are rendered rather than dropped: a job the registry cannot place is a finding, not an omission. Each row carries the profile home it was read from, so a row that should not be here can be found and changed without guessing which home owns it.
 

@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T11:26:11Z",
+  "resolved_at": "2026-09-27T11:46:02Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -766,7 +766,7 @@
         "announcements": [
           {
             "id": "miidas-volume-namespace-on-apps",
-            "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-25: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
+            "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-27T11:38Z: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
             "severity": "warning",
             "since": "2026-09-13T09:56:00Z",
             "affects": [
@@ -805,6 +805,26 @@
             ],
             "since": "2026-09-26",
             "evidence": "deploy_lib.sh:148-152 — miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
+          },
+          {
+            "id": "miidas-kit-forks-declared",
+            "severity": "info",
+            "since": "2026-09-27T05:24:07Z",
+            "affects": [
+              "profile"
+            ],
+            "text": "miidas vendors the fleet kit pin (registry/kit.json) and declares 16 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 21 carried paths judged, 16 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+            "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 21 carried path(s); 1 factory-class path(s) excluded by class; 16 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
+          },
+          {
+            "id": "miidas-slot-volume-git-config-carries-remote-credential",
+            "severity": "warning",
+            "since": "2026-09-27T11:39:51Z",
+            "affects": [
+              "profile"
+            ],
+            "text": "Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.",
+            "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply)."
           }
         ],
         "lanes": [
@@ -840,7 +860,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-26T06:31:01Z"
+        "attested_at": "2026-09-27T11:39:51Z"
       }
     },
     {
@@ -1761,7 +1781,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790508235,
+      "session_updated_at": 1790508925,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1865,7 +1885,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862]",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790508727,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1878,7 +1898,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883]",
-      "session_updated_at": 1790508233,
+      "session_updated_at": 1790508728,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1956,7 +1976,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311]",
-      "session_updated_at": 1790508231,
+      "session_updated_at": 1790508729,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2060,7 +2080,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Governance: Ontology & RSI [chat:-1003936827469:topic:43993]",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790508727,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2294,7 +2314,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1790505050,
+      "session_updated_at": 1790508727,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2320,7 +2340,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790509191,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2359,7 +2379,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790508902,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2437,7 +2457,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / Worker — #25 CLIENT_KIND backfill + telemetry projection [chat:-1003996392908:topic:56]",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790508512,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2463,7 +2483,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1790507459,
+      "session_updated_at": 1790508899,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2489,7 +2509,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790507012,
+      "session_updated_at": 1790509091,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2502,7 +2522,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1790508299,
+      "session_updated_at": 1790508875,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2645,7 +2665,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1790508234,
+      "session_updated_at": 1790508729,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2866,7 +2886,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Ledger [chat:-1004497192134:topic:3981]",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790508726,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2888,11 +2908,11 @@
       "channel": "telegram",
       "chat_id": "-1004497192134",
       "thread_id": 4087,
-      "updated_at": 1790508362,
+      "updated_at": 1790508871,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087]",
-      "session_updated_at": 1790508364,
+      "session_updated_at": 1790508724,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2914,11 +2934,11 @@
       "channel": "telegram",
       "chat_id": "-1004497192134",
       "thread_id": 4223,
-      "updated_at": 1790500197,
+      "updated_at": 1790508757,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
-      "session_updated_at": 1790508232,
+      "session_updated_at": 1790508991,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2927,11 +2947,11 @@
       "channel": "telegram",
       "chat_id": "-1004497192134",
       "thread_id": 4555,
-      "updated_at": 1790507835,
-      "last_origin": "text",
-      "turn_open_at": null,
+      "updated_at": 1790509502,
+      "last_origin": "callback",
+      "turn_open_at": 1790509502,
       "session_title": "Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555]",
-      "session_updated_at": 1790507991,
+      "session_updated_at": 1790509503,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -2988,6 +3008,21 @@
       "next_run_at": "2026-09-27T12:05:00+00:00",
       "last_run_at": "2026-09-26T12:05:42Z",
       "trigger_cmd": "[ \"$(date -u +%Y%m%d)\" -ge 20260927 ] && /usr/local/bin/gh issue view 43 --repo alexeyleshchenko/ai-antispam --json state 2>/dev/null | grep -q OPEN && echo GATE-DUE",
+      "_profile": "ops"
+    },
+    {
+      "id": "c83538e0-8054-4ebf-b210-00d00c9a22ee",
+      "name": "ai-antispam-52-close-gate",
+      "cron_expr": "30 11 * * *",
+      "timezone": "UTC",
+      "prompt": "#52 close gate — the 24h log window has closed. Verify and close, or report why not.\n\nDEPLOY INSTANT (window start): 2026-09-27T11:20:14Z. Window ends 2026-09-28T11:20:14Z.\n\nSTEP 1 — measure the window. Run, reading rc first-hand:\n\n  ssh apps 'docker logs --since 2026-09-27T11:20:14 ai-antispam-ai-antispam-1 2>&1 | grep -c \"Unhandled exception in dispatcher\"'\n  ssh apps 'docker logs --since 2026-09-27T11:20:14 ai-antispam-ai-antispam-1 2>&1 | grep -c \"callback_handlers\"'\n  ssh apps 'docker logs --since 2026-09-27T11:20:14 ai-antispam-ai-antispam-1 2>&1 | wc -l'\n\nCOUNTING TRAP: each record double-prints (structured logger + Python logging handler). The dispatcher line is module-anchored, so state which count you are quoting. A container recreate TRUNCATES this log — if `docker inspect --format '{{.State.StartedAt}}'` is later than 2026-09-27T11:20:14Z the window is gone; say so and re-base on the new start rather than presenting a short window as the full one.\n\nSTEP 2 — if the dispatcher count is 0 and the log covers the window, close #52 on the canonical board:\n  - confirm the artifact first: ssh apps 'docker exec ai-antispam-ai-antispam-1 md5sum /app/app/handlers/callback_handlers.py' must equal the repo md5\n  - CLOSE THE BOARD FIRST, then write the close row carrying board=closed. Do NOT put a close/fix keyword immediately before #N in a commit subject (#56).\n  - ledger close row is owed by the closer; intake n=65 is HQ's, claim n=51 exists.\n\nSTEP 3 — if the count is non-zero, do NOT close. Report the lines verbatim, name the handler, and state whether the cause is the #52 class or something new. Deliver that into the Bot topic.\n\nReport outcome to the Bot topic (thread 10784) via the turn text — no send tool needed unless a file is attached.",
+      "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
+      "enabled": 1,
+      "set_goal": 0,
+      "goal_template": null,
+      "next_run_at": "2026-09-28T11:30:00+00:00",
+      "last_run_at": "2026-09-27T11:32:04Z",
+      "trigger_cmd": "D=$(date -u +%Y%m%d); S=$(gh issue view 52 --repo alexeyleshchenko/ai-antispam --json state --jq .state 2>/dev/null); if [ \"$D\" -ge 20260928 ] && [ \"$S\" = \"OPEN\" ]; then echo \"due: window closed, #52 still open\"; fi",
       "_profile": "ops"
     },
     {
