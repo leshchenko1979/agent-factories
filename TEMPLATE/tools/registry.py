@@ -1252,8 +1252,11 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 # can prove, and writes `null` where the answer belongs to the factory itself.
 #
 # A stub is a QUESTION, not a claim — which is why this is legitimate for
-# Meta-Factory to run against member factories at all (SKILL.md §The hard boundary — never do a member's work): it authors
-# no member's self-description, it asks the owner to. `status: "unattested"` is
+# Meta-Factory to run against member factories at all: this factory's own law,
+# "The hard boundary — never do a member's work", is what makes it legitimate —
+# it authors no member's self-description, it asks the owner to. That clause is the
+# ORIGIN factory's own, and is deliberately NOT cited as a `SKILL.md` section: a
+# member tree carries no such heading. `status: "unattested"` is
 # how a fragment says nobody has answered yet.
 #
 # Enrollment is keyed on the factory ID and the file is named for it, so a

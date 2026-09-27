@@ -32,6 +32,7 @@ exists to serve, and `TEMPLATE/SKILL.md.tmpl` legitimately does so throughout.
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -94,6 +95,35 @@ def law_corpus() -> dict[str, set[str]]:
     return corpus
 
 
+def member_corpus() -> set[str]:
+    """Titles a MEMBER tree actually receives: everything shipped under TEMPLATE/.
+
+    A member's law is bootstrapped from `SKILL.md.tmpl`, so a citation inside a file
+    that SHIPS must resolve there. This factory's own law (`skills/*/SKILL.md`) is not
+    part of a member's corpus, and citing a title that lives only in it is the same
+    defect as citing a section number - the receiving tree cannot resolve it.
+    """
+    out: set[str] = set()
+    for pattern in ("TEMPLATE/*.tmpl", "TEMPLATE/*.md", "TEMPLATE/roles/*.md"):
+        for p in REPO.glob(pattern):
+            if p.is_file():
+                out |= doc_titles(p)
+    return out
+
+
+def shipped_paths() -> set[str]:
+    """Paths the kit delivers, read from the manifest that already answers it."""
+    m = REPO / "registry" / "kit.json"
+    if not m.is_file():
+        return set()
+    return set(json.loads(m.read_text(encoding="utf-8")).get("files", {}))
+
+
+def ships(rel: str, manifest: set[str]) -> bool:
+    """Does this scanned path's content reach a member tree?"""
+    return (rel if rel.startswith("TEMPLATE/") else f"TEMPLATE/{rel}") in manifest
+
+
 def carried_docs() -> set[str]:
     """Basenames of every markdown document this repo holds (shipped or not)."""
     return {p.name for p in REPO.rglob("*.md*") if ".git" not in p.parts}
@@ -112,7 +142,12 @@ def scoped_files() -> list[Path]:
     return sorted(out)
 
 
-def citation_problems(text: str, corpus: dict[str, set[str]], carried: set[str]) -> tuple[list[str], list[str]]:
+def citation_problems(
+    text: str,
+    corpus: dict[str, set[str]],
+    carried: set[str],
+    member: set[str] | None = None,
+) -> tuple[list[str], list[str]]:
     """(problems, exemptions) for one file's text.
 
     `corpus` maps a law document's basename to the titles it carries; `carried` is every
@@ -120,6 +155,8 @@ def citation_problems(text: str, corpus: dict[str, set[str]], carried: set[str])
     reported as an exemption rather than silently passing.
     """
     titles = {t for ts in corpus.values() for t in ts}
+    # A shipped file's reader is a MEMBER, so its corpus is the member's, not ours.
+    shipped = member is not None
     problems: list[str] = []
     exempt: list[str] = []
     for lineno, line in enumerate(text.splitlines(), 1):
@@ -152,9 +189,19 @@ def citation_problems(text: str, corpus: dict[str, set[str]], carried: set[str])
                     f"other tree: {line.strip()[:90]}"
                 )
                 continue
-            resolvable = corpus.get(name, titles) if name else titles
+            if shipped and (name is None or name in ("SKILL.md", "SKILL.md.tmpl")):
+                resolvable = member or set()
+            elif name:
+                resolvable = corpus.get(name, titles)
+            else:
+                resolvable = titles
             if not any(after.startswith(t) for t in resolvable):
-                where = f"`{name}`" if name else "this repo's law corpus"
+                if name and not shipped:
+                    where = f"`{name}`"
+                elif shipped:
+                    where = "the law corpus a MEMBER receives (everything under TEMPLATE/)"
+                else:
+                    where = "this repo's law corpus"
                 problems.append(
                     f"{lineno}: `§{after[:60]}` does not start with any clause title carried by "
                     f"{where}"
@@ -166,6 +213,8 @@ def scan() -> tuple[list[str], list[str], int, int]:
     """(problems, exemptions, files_examined, citations_examined)."""
     corpus = law_corpus()
     carried = carried_docs()
+    member = member_corpus()
+    manifest = shipped_paths()
     problems: list[str] = []
     exempt: list[str] = []
     files = 0
@@ -180,14 +229,23 @@ def scan() -> tuple[list[str], list[str], int, int]:
         files += 1
         citations += sum(line.count("§") for line in text.splitlines())
         rel = path.relative_to(REPO)
-        p, e = citation_problems(text, corpus, carried)
+        p, e = citation_problems(
+            text, corpus, carried, member if ships(str(rel), manifest) else None
+        )
         problems.extend(f"{rel}: {x}" for x in p)
         exempt.extend(f"{rel}: {x}" for x in e)
     return problems, exempt, files, citations
 
 
-def probe(name: str, text: str, corpus: dict[str, set[str]], want: bool, failures: list[str]) -> None:
-    problems, _ = citation_problems(text, corpus, carried_docs())
+def probe(
+    name: str,
+    text: str,
+    corpus: dict[str, set[str]],
+    want: bool,
+    failures: list[str],
+    member: set[str] | None = None,
+) -> None:
+    problems, _ = citation_problems(text, corpus, carried_docs(), member)
     got = bool(problems)
     if got != want:
         failures.append(f"probe {name!r}: expected problems={want}, got {problems or 'none'}")
@@ -207,6 +265,22 @@ def _probes(corpus: dict[str, set[str]]) -> list[str]:
           "SKILL.md §Verdicts and claims already says verdict verbs need a receipt", corpus, False, failures)
     probe("a document's own numbering is that document's to keep",
           "obligation `docs/measurement-procedure.md` §5 declares", corpus, False, failures)
+    probe(
+        "a SHIPPED file may not cite a title only the ORIGIN factory carries",
+        "# see SKILL.md \u00a7The hard boundary \u2014 never do a member's work",
+        corpus,
+        True,
+        failures,
+        member={"Something else"},
+    )
+    probe(
+        "a NON-shipped file may cite a title only the ORIGIN factory carries",
+        "# see SKILL.md \u00a7The hard boundary \u2014 never do a member's work",
+        corpus,
+        False,
+        failures,
+        member=None,
+    )
     probe("the title must be the HEAD of the citation, not a word inside it",
           "see SKILL.md §the clause named State — every surface has one writer", corpus, True, failures)
     return failures
@@ -214,6 +288,8 @@ def _probes(corpus: dict[str, set[str]]) -> list[str]:
 
 def main() -> int:
     corpus = law_corpus()
+    member = member_corpus()
+    manifest = shipped_paths()
     if not corpus:
         print("citation-clause-titles gate FAILED: the law corpus yielded ZERO clause titles — "
               "a predicate that examined nothing has reported nothing")
@@ -224,7 +300,9 @@ def main() -> int:
 
     print(f"citation clause-title gate: {files} source file(s), {citations} '§' citation(s) examined")
     print(f"  law corpus: {len(corpus)} law document(s), "
-          f"{sum(len(v) for v in corpus.values())} clause title(s)")
+          f"{sum(len(v) for v in corpus.values())} clause title(s); "
+          f"{len(member)} in the corpus a MEMBER receives; "
+          f"{len(manifest)} shipped path(s)")
     for e in exempt:
         print(f"  exempt: {e}")
     for p in problems:
