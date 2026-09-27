@@ -33,7 +33,11 @@ Per the frame's §1 (what an instrument is) and §2 (the full set), this instrum
 The instrument's LAW is this file. Before 2026-09-27 it had no home: it was prose woven through
 `skills/meta-factory/SKILL.md`, measured at **49 lines carrying `ledger` (82 occurrences) and ZERO headings naming it** (case-insensitive; lines != occurrences, so both are stated),
 with no `docs/ledger*.md` anywhere — so it could not be cited by section, could not be versioned
-independently of the skill, and its divergence was invisible to the kit census.
+independently of the skill, and its divergence was invisible to the kit census. **Two readings,
+each with its instant, because the strip is HQ's and in flight:** 49 lines / 82 occurrences at the
+carve decision (2026-09-27 ~04:00Z), and **39 lines / 54 occurrences** re-measured at 2026-09-27T14:0xZ
+after HQ began the strip. A reader who checks the skill and finds a third number has caught the
+edit mid-flight, not a defect in this figure.
 
 ---
 
