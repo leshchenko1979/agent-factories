@@ -111,7 +111,46 @@ ROW_IDENTITY = ("n", "ts", "event", "actor", "subject")
 # docs/ledger-refs-kinds.json -- the same declaration family as
 # docs/ledger-exemptions.json, so a member's own object needs no fork.
 CORE_REF_KINDS = ("row", "subject", "commit", "session", "rework")
-REFS_KINDS_FILE = REPO / "docs" / "ledger-refs-kinds.json"
+# Every declared surface in this module is relocatable, and for the same reason: a
+# member tree whose layout differs must be able to point the instrument at its own
+# declaration without editing the instrument. `OC_ACTORS_PATH` and `OC_LEDGER_PATH`
+# already work this way, and the fixture seam that makes a declaration relocatable is
+# the same seam that makes a fixture lawful.
+REFS_KINDS_FILE = Path(
+    os.environ.get(
+        "OC_REFS_KINDS_PATH", REPO / "docs" / "ledger-refs-kinds.json"
+    )
+)
+
+
+def known_events() -> tuple[str, ...]:
+    """The core events, plus any this factory declares in `ledger-refs-kinds.json`.
+
+    THE EVENT VOCABULARY IS THE SAME KIND OF THING AS THE REF KINDS: a member's event
+    is a fact about that factory's process, not a divergence to be policed. Measured
+    2026-09-27: inferhub-watch's ledger carries 8 `ack` rows, an event the shipped
+    EVENTS tuple does not name, so `verify` reds on a ledger whose rows were all
+    written lawfully -- the member is pushed toward forking this file when what it
+    actually has is a DECLARATION it cannot make. Declaring it here makes the member's
+    own vocabulary lawful without a fork, and keeps ONE reader for it.
+
+    Core events are never removable: a declaration ADDS, it does not redefine.
+    """
+    declared = _read_extension_declaration()
+    extra = [e for e in declared.get("events", []) if isinstance(e, str)]
+    return EVENTS + tuple(e for e in extra if e not in EVENTS)
+
+
+def _read_extension_declaration() -> dict:
+    """The factory's declared extension surface -- ref kinds and events.
+
+    Unreadable or absent is NOT an error: the core vocabulary stands alone, which is
+    what lets the field ship before any factory has declared anything.
+    """
+    try:
+        return json.loads(REFS_KINDS_FILE.read_text(encoding="utf-8")) or {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def known_ref_kinds() -> tuple[str, ...]:
@@ -120,12 +159,8 @@ def known_ref_kinds() -> tuple[str, ...]:
     Unreadable or absent declaration is NOT an error: the core set stands alone,
     which is what lets the field ship before any factory has declared a kind.
     """
-    extra: list[str] = []
-    try:
-        declared = json.loads(REFS_KINDS_FILE.read_text(encoding="utf-8"))
-        extra = [k for k in (declared.get("kinds") or []) if isinstance(k, str)]
-    except (OSError, json.JSONDecodeError):
-        pass
+    declared = _read_extension_declaration()
+    extra = [k for k in (declared.get("kinds") or []) if isinstance(k, str)]
     return CORE_REF_KINDS + tuple(k for k in extra if k not in CORE_REF_KINDS)
 
 
@@ -497,8 +532,12 @@ def sequence_problems(
     return problems
 
 def cmd_append(args: argparse.Namespace) -> int:
-    if args.event not in EVENTS:
-        sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
+    if args.event not in known_events():
+        sys.exit(
+            f"unknown event '{args.event}' — one of: {', '.join(known_events())}. "
+            f"A member's own event is DECLARED in docs/ledger-refs-kinds.json "
+            f"(\"events\": [\"{args.event}\"]) rather than added to the core tuple."
+        )
     # Refuse a malformed ref BEFORE the lock is taken: a write path that acquires the
     # lock and then rejects its own arguments has serialised a lane against nothing.
     refs = parse_refs(getattr(args, "ref", []) or [])
@@ -1238,7 +1277,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     for i, row in enumerate(rows, 1):
         if row.get("n") != i:
             problems.append(f"line {i}: n={row.get('n')} — row numbers must be 1..N with no gaps")
-        if row.get("event") not in EVENTS:
+        if row.get("event") not in known_events():
             problems.append(f"line {i}: unknown event {row.get('event')!r}")
         if row.get("actor") not in known_actors():
             problems.append(f"line {i}: unknown actor {row.get('actor')!r}")

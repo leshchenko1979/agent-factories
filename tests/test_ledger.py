@@ -65,6 +65,7 @@ def run(
     *args: str,
     actors: Path | None = None,
     extra_env: dict[str, str] | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess:
     """Run the tool against a throwaway ledger.
 
@@ -84,6 +85,7 @@ def run(
         capture_output=True,
         text=True,
         env=env,
+        cwd=cwd,
     )
 
 def seed_telemetry_db(path: Path, *, cost: float = 1.25, tokens_in: int = 111,
@@ -178,7 +180,135 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         ledger = Path(tmp) / "ledger.jsonl"
 
-        print("concurrent append — the single-writer property")
+        # --- refs: a typed pointer, and the existence check at the write path -----
+        # W2 of the ledger-instrument plan. The append-time check is the half only the
+        # lock can do; the verify leg is the half only a read can do.
+        print("refs — a typed pointer, and the existence check at the write path")
+        # A SEPARATE ledger: the concurrent-append fixture below asserts an exact
+        # row count, so a probe appending to `ledger` breaks a NEIGHBOUR test
+        # rather than its own (measured 2026-09-27: 20 -> 22 rows).
+        refs_ledger = Path(tmp) / "refs.jsonl"
+        run(refs_ledger, "append", "--event", "claim", "--actor", "triage",
+            "--subject", "#1", "--detail", "first")
+        r2 = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
+                 "--subject", "#2", "--detail", "points at row 1",
+                 "--ref", "row:1", "--ref", "subject:#1")
+        check("a row carrying refs appends", r2.returncode == 0,
+              r2.stderr.strip()[:140])
+        got = rows(refs_ledger)
+        check("refs are stored as typed pointers",
+              len(got) == 2 and got[1].get("refs") == [{"row": "1"}, {"subject": "#1"}],
+              json.dumps(got[1].get("refs")) if len(got) > 1 else "no second row")
+        check("a six-key row stays valid (the field is additive)",
+              "refs" not in got[0],
+              json.dumps(sorted(got[0].keys())) if got else "")
+
+        bad = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
+                  "--subject", "#3", "--detail", "dangling", "--ref", "row:999")
+        check("a dangling row ref is REFUSED at append",
+              bad.returncode != 0 and "does not exist" in bad.stderr,
+              bad.stderr.strip()[:160])
+        check("the refused append wrote nothing", len(rows(refs_ledger)) == 2,
+              f"{len(rows(refs_ledger))} row(s)")
+
+        malformed = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
+                        "--subject", "#4", "--detail", "malformed", "--ref", "nope")
+        check("a malformed ref is refused with the kinds named",
+              malformed.returncode != 0 and "KIND:VALUE" in malformed.stderr,
+              malformed.stderr.strip()[:140])
+
+        # A ref that was VALID AT APPEND and broken afterwards is visible only to the
+        # verify leg -- built by hand, because no lawful write path can produce it.
+        broken = Path(tmp) / "broken.jsonl"
+        broken.write_text(
+            "\n".join(json.dumps(x) for x in [
+                {"n": 1, "ts": "2026-09-27T00:00:00Z", "event": "claim",
+                 "actor": "triage", "subject": "#1", "detail": "a"},
+                {"n": 2, "ts": "2026-09-27T00:00:01Z", "event": "dispatch",
+                 "actor": "triage", "subject": "#2", "detail": "b",
+                 "refs": [{"row": "99"}]},
+            ]) + "\n"
+        )
+        v = run(broken, "verify")
+        check("verify reports a ref that no longer resolves",
+              v.returncode != 0 and "dangling ref row:99" in v.stdout,
+              v.stdout.strip()[-200:])
+        check("verify prints the ref population it examined",
+              "refs examined: 1" in v.stdout,
+              [ln for ln in v.stdout.splitlines() if "refs examined" in ln])
+
+        undecl = Path(tmp) / "undecl.jsonl"
+        undecl.write_text(
+            "\n".join(json.dumps(x) for x in [
+                {"n": 1, "ts": "2026-09-27T00:00:00Z", "event": "claim",
+                 "actor": "triage", "subject": "#1", "detail": "a",
+                 "refs": [{"nonsense": "x"}]},
+            ]) + "\n"
+        )
+        v2 = run(undecl, "verify")
+        check("verify reports an undeclared ref kind",
+              v2.returncode != 0 and "is not declared" in v2.stdout,
+              v2.stdout.strip()[-160:])
+
+        # --- declared vocabulary: a member's event, without a fork ------------------
+        # W3. The point is not that `ack` is special; it is that a member's vocabulary
+        # is DECLARED rather than forked into this file.
+        print("declared vocabulary \u2014 a member event a law for, not a fork")
+        # THE DECLARATION IS POINTED AT BY ENV, not by staging a copy of the tool: the
+        # `run` helper invokes TOOL, so a staged tree would never be executed and the
+        # probe would silently test the wrong file (measured 2026-09-27, and the first
+        # cut of this check did exactly that). OC_REFS_KINDS_PATH is the module's own
+        # seam, the same shape OC_ACTORS_PATH and OC_LEDGER_PATH already use.
+        decl_tree = Path(tmp) / "decl-tree"
+        decl_tree.mkdir(parents=True, exist_ok=True)
+        decl_ledger = decl_tree / "ledger.jsonl"
+        decl_file = decl_tree / "refs-kinds.json"
+        DECL = {"OC_REFS_KINDS_PATH": str(decl_file)}
+
+        r = run(decl_ledger, "append", "--event", "ack", "--actor", "triage",
+                "--subject", "#1", "--detail", "declared event",
+                extra_env=DECL)
+        check("an event NOT declared is refused, by name, naming the route",
+              r.returncode != 0 and "unknown event 'ack'" in r.stderr
+              and "ledger-refs-kinds.json" in r.stderr,
+              r.stderr.strip()[:170])
+
+        decl_file.write_text(json.dumps({"events": ["ack"], "kinds": ["contour"]}))
+        r = run(decl_ledger, "append", "--event", "ack", "--actor", "triage",
+                "--subject", "#1", "--detail", "declared event",
+                extra_env=DECL)
+        check("the SAME event is lawful once declared",
+              r.returncode == 0, r.stderr.strip()[:150])
+
+        r = run(decl_ledger, "append", "--event", "ack", "--actor", "triage",
+                "--subject", "#2", "--detail", "a declared member kind",
+                "--ref", "contour:zamer/01", extra_env=DECL)
+        check("a declared member kind travels as an opaque ref",
+              r.returncode == 0, r.stderr.strip()[:150])
+
+        v = run(decl_ledger, "verify", extra_env=DECL)
+        check("verify accepts a ledger already holding the declared event's rows",
+              v.returncode == 0 and "refs examined: 1" in v.stdout,
+              v.stdout.strip()[-150:])
+
+        decl_file.unlink()
+        r = run(decl_ledger, "append", "--event", "score", "--actor", "triage",
+                "--subject", "#3", "--detail", "core event, no declaration present",
+                extra_env=DECL)
+        check("core events stand alone when no declaration exists",
+              r.returncode == 0, r.stderr.strip()[:150])
+
+        # A declaration ADDS; it never removes or redefines a core entry. Without this
+        # leg a member could shadow `close` and the sequence law would silently stop
+        # applying to a factory's own lifecycle.
+        decl_file.write_text(json.dumps({"events": [], "kinds": []}))
+        r = run(decl_ledger, "append", "--event", "close", "--actor", "triage",
+                "--subject", "#9", "--detail", "core event against an empty declaration",
+                extra_env=DECL)
+        check("a core event is still refused by its own law, not shadowed by a declaration",
+              r.returncode != 0, r.stderr.strip()[:120] or r.stdout.strip()[-120:])
+
+        print("concurrent append \u2014 the single-writer property")
         procs = [
             subprocess.Popen(
                 [

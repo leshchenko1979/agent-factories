@@ -1,0 +1,5 @@
+{
+  "comment": "The ref kinds and EVENTS this factory declares BEYOND the instrument's core set. A ref is a typed pointer from a row to another object; the core kinds are row, subject, commit, session, rework. Core events are genesis, intake, claim, dispatch, close, score, ruling, run. Declare here when this factory carries a kind or an event the core vocabulary lacks -- e.g. inferhub-watch's 'ack' event (8 rows) belongs in ITS OWN copy of this file, which is how a member's own vocabulary becomes lawful without forking tools/ledger.py. The value of a member's object stays opaque to the tool: a miidas contour such as zamer/01 travels as a ref whose KIND is declared here. A declaration ADDS; it never removes or redefines a core entry.",
+  "kinds": [],
+  "events": []
+}

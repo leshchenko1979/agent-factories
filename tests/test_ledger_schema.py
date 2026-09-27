@@ -57,8 +57,33 @@ sys.path.insert(0, str(REPO / "tools"))
 from field_predicate import telemetry_problems  # noqa: E402
 
 CORE_ACTORS = ("hq", "triage", "worker", "carrier", "owner")
-EVENT_TYPES = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", "run")
+# The CORE events. A factory's OWN events are declared, and they are read from the SAME
+# declaration file the write path reads, through the SAME env seam -- because a gate that
+# refuses what the tool lawfully wrote is worse than no gate: the member learns that its
+# declared vocabulary is unlawful at the exact moment the tool told it otherwise.
+# Measured 2026-09-27 on inferhub-watch: `tools/ledger.py verify` accepted its 8
+# `ack` rows once they were declared, while this tuple still red them.
+_CORE_EVENT_TYPES = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", "run")
+_REFS_KINDS_FILE = Path(os.environ.get("OC_REFS_KINDS_PATH", REPO / "docs" / "ledger-refs-kinds.json"))
+
+
+def _declared_events() -> tuple[str, ...]:
+    try:
+        _d = json.loads(_REFS_KINDS_FILE.read_text(encoding="utf-8")) or {}
+    except (OSError, json.JSONDecodeError):
+        return ()
+    return tuple(e for e in (_d.get("events") or []) if isinstance(e, str))
+
+
+EVENT_TYPES = _CORE_EVENT_TYPES + tuple(
+    e for e in _declared_events() if e not in _CORE_EVENT_TYPES)
 REQUIRED_FIELDS = {"n", "ts", "event", "actor", "subject", "detail"}
+# THE DECLARED EXTENSION SURFACE, widened in the SAME change as the write path that
+# emits it, so the gate never refuses what the tool lawfully writes. Additive and
+# OPTIONAL: a six-key row stays valid, so the forked copies are not broken on day one.
+#   refs    -- typed pointers from this row to another object
+#   session -- the writing lane's session id: attribution beside the actor's capacity
+OPTIONAL_FIELDS = {"refs", "session"}
 
 # Role-to-Event Authorization Matrix — imported from its ONE home
 # (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
@@ -88,7 +113,7 @@ def validate_row_schema(row: dict[str, Any], line_num: int, known_actors: set[st
     missing = REQUIRED_FIELDS - row_keys
     if missing:
         errors.append(f"line {line_num}: missing required field(s): {', '.join(sorted(missing))}")
-    extra = row_keys - REQUIRED_FIELDS
+    extra = row_keys - REQUIRED_FIELDS - OPTIONAL_FIELDS
     if extra:
         errors.append(f"line {line_num}: unknown field(s) in schema: {', '.join(sorted(extra))}")
 
