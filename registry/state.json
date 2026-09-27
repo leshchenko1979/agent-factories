@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T13:05:43Z",
+  "resolved_at": "2026-09-27T13:59:44Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -485,7 +485,7 @@
           },
           {
             "id": "ops-daemon-dies-at-cgroup-cap",
-            "text": "The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.",
+            "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarted 19 times on 2026-09-27: 16 deliberate (ship-chain deploy) and 3 crash recoveries. Every restart opens a boot-drain window that re-pushes parked rows (18 drains re-pushed 144 rows, mean 8.0), so a re-push is the COMMON case and a crash the minority one. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
             "severity": "warning",
             "affects": [
               "profile"
@@ -529,7 +529,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-27T10:39:50Z"
+        "attested_at": "2026-09-27T13:57:34Z"
       }
     },
     {
@@ -946,19 +946,19 @@
         ],
         "lanes": [
           {
-            "topic": "bash guard forced-variation design",
+            "topic": "Core: Brain Tools",
             "thread_id": 7198,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Mermaid",
+            "topic": "Telegram: Mermaid",
             "thread_id": 29947,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Gemini Reasoning and Flow Message Analysis",
+            "topic": "Providers: Routing",
             "thread_id": 30045,
             "role": null,
             "announcements": []
@@ -970,13 +970,7 @@
             "announcements": []
           },
           {
-            "topic": "OC Compiler",
-            "thread_id": 30129,
-            "role": null,
-            "announcements": []
-          },
-          {
-            "topic": "Deploy #235 Option Collision Guard",
+            "topic": "Telegram: Options",
             "thread_id": 30134,
             "role": null,
             "announcements": []
@@ -988,7 +982,7 @@
             "announcements": []
           },
           {
-            "topic": "Subagents",
+            "topic": "Core: Subagents",
             "thread_id": 30517,
             "role": null,
             "announcements": []
@@ -1000,19 +994,19 @@
             "announcements": []
           },
           {
-            "topic": "Graceful restart",
+            "topic": "Lifecycle: Restarts",
             "thread_id": 31683,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Plan tool",
+            "topic": "Core: Plan & Tasks",
             "thread_id": 31789,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Issue #234: Review Implementation Button",
+            "topic": "Telegram: Rich Text",
             "thread_id": 31847,
             "role": null,
             "announcements": []
@@ -1024,61 +1018,61 @@
             "announcements": []
           },
           {
-            "topic": "Vector memory",
+            "topic": "Memory: Vectors",
             "thread_id": 36841,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Toolsmith Issue 255 and PR Dependency Laws",
+            "topic": "OC DEV TOOLSMITH",
             "thread_id": 39171,
             "role": "toolsmith",
             "announcements": []
           },
           {
-            "topic": "Harvesting upstream PRs into OpenCrabs",
+            "topic": "Upstream: Harvest",
             "thread_id": 39218,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Rich resume wire",
+            "topic": "Lifecycle: Boot",
             "thread_id": 39862,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Loop guard",
+            "topic": "Core: Loop",
             "thread_id": 39883,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "#83 config-manager-warn",
+            "topic": "Config: Schema",
             "thread_id": 40011,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "#87 config-write-types",
+            "topic": "Config: Typings",
             "thread_id": 40479,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "#89 memory-search-parity",
+            "topic": "Memory: Search",
             "thread_id": 40524,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Harvest rich-host buttons",
+            "topic": "Browser: CDP",
             "thread_id": 40695,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Harvest retry-429 ladder",
+            "topic": "Security: Policies",
             "thread_id": 40696,
             "role": null,
             "announcements": []
@@ -1090,49 +1084,55 @@
             "announcements": []
           },
           {
-            "topic": "Role split",
+            "topic": "Governance: Roles",
             "thread_id": 42360,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Triage: Issue Portfolio & Harvest Analysis",
+            "topic": "Triage",
             "thread_id": 42487,
             "role": "triage",
             "announcements": []
           },
           {
-            "topic": "oc-waiter + #111 durable-notify",
+            "topic": "Process: Waits",
             "thread_id": 42744,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "#92 demoted-host guard",
+            "topic": "Telegram: Host Guards",
             "thread_id": 42940,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Telegram flow card metrics telemetry bar #232",
+            "topic": "Governance: Audits",
+            "thread_id": 43440,
+            "role": null,
+            "announcements": []
+          },
+          {
+            "topic": "Telegram: Bot API",
             "thread_id": 43727,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Governance: Ontology & RSI",
+            "topic": "Governance: Ontology",
             "thread_id": 43993,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Multicalls",
+            "topic": "Core: Multi-Tool",
             "thread_id": 44326,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "Fix #149: Cron Session Isolation",
+            "topic": "Core: Crons",
             "thread_id": 49607,
             "role": null,
             "announcements": []
@@ -1144,20 +1144,14 @@
             "announcements": []
           },
           {
-            "topic": "Deploy issue 248 default group command scopes",
+            "topic": "Core: Prompts",
             "thread_id": 50566,
             "role": null,
             "announcements": []
           },
           {
-            "topic": "FlowLine::System split — #291 header fix",
+            "topic": "Telegram: Flow",
             "thread_id": 51188,
-            "role": null,
-            "announcements": []
-          },
-          {
-            "topic": "🔍 PROBE review-155",
-            "thread_id": 51714,
             "role": null,
             "announcements": []
           },
@@ -1169,7 +1163,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-27T12:59:15Z"
+        "attested_at": "2026-09-27T13:50:18Z"
       }
     }
   ],
@@ -1469,7 +1463,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Deploy #235 Option Collision Guard",
-      "session_updated_at": 1790514082,
+      "session_updated_at": 1790516101,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1508,7 +1502,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Plan tool [chat:-1003936827469:topic:31789]",
-      "session_updated_at": 1790510867,
+      "session_updated_at": 1790514620,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1721,19 +1715,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39171,
-      "updated_at": 1790497200,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790514204,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "46153a98-a025-415a-8d4b-186c04aeb031",
       "channel": "telegram",
       "chat_id": "-1003813823904",
@@ -1820,7 +1801,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862]",
-      "session_updated_at": 1790514335,
+      "session_updated_at": 1790515957,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1833,7 +1814,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883]",
-      "session_updated_at": 1790510900,
+      "session_updated_at": 1790514755,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1890,19 +1871,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 40695,
-      "updated_at": 1790497453,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Harvest rich-host buttons [chat:-1003936827469:topic:40695]",
-      "session_updated_at": 1790511704,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "9fa7c71a-f009-418a-ac06-d0336efcf491",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -1911,7 +1879,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311]",
-      "session_updated_at": 1790514329,
+      "session_updated_at": 1790517045,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1937,7 +1905,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Triage: Issue Portfolio & Harvest Analysis",
-      "session_updated_at": 1790512710,
+      "session_updated_at": 1790514693,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2015,7 +1983,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Governance: Ontology & RSI [chat:-1003936827469:topic:43993]",
-      "session_updated_at": 1790514181,
+      "session_updated_at": 1790515965,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2054,7 +2022,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1790513792,
+      "session_updated_at": 1790517387,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2197,7 +2165,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790513432,
+      "session_updated_at": 1790517200,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2223,7 +2191,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1790512097,
+      "session_updated_at": 1790517441,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2249,7 +2217,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790513955,
+      "session_updated_at": 1790517454,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2288,7 +2256,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1790514126,
+      "session_updated_at": 1790514891,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2353,7 +2321,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "worker: inferhub-watch-lane",
-      "session_updated_at": 1790496292,
+      "session_updated_at": 1790517529,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2366,7 +2334,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / Worker — #25 CLIENT_KIND backfill + telemetry projection [chat:-1003996392908:topic:56]",
-      "session_updated_at": 1790511963,
+      "session_updated_at": 1790517383,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2384,19 +2352,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
-      "channel": "telegram",
-      "chat_id": "-1003993000918",
-      "thread_id": 10782,
-      "updated_at": 1790444985,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1790514037,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "0459ad55-bfe2-458c-acb2-b9be55483c6a",
       "channel": "telegram",
       "chat_id": "-1004379632866",
@@ -2410,19 +2365,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
-      "channel": "telegram",
-      "chat_id": "-1004486255170",
-      "thread_id": 4,
-      "updated_at": 1790448253,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790509778,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "fb67ca75-8735-4c39-80be-06b59bd4365f",
       "channel": "telegram",
       "chat_id": "-1004486255170",
@@ -2431,7 +2373,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1790513706,
+      "session_updated_at": 1790517548,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2514,19 +2456,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "8daa376e-367c-452d-840f-0c18d66ef60a",
-      "channel": "telegram",
-      "chat_id": "-1004486255170",
-      "thread_id": 7,
-      "updated_at": 1790334510,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7]",
-      "session_updated_at": 1790489470,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "8b278a4f-531d-4d7b-8c79-87d30f9257bd",
       "channel": "telegram",
       "chat_id": "-1004486255170",
@@ -2574,7 +2503,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1790512662,
+      "session_updated_at": 1790517279,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2587,7 +2516,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790513375,
+      "session_updated_at": 1790515160,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2782,59 +2711,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Ledger [chat:-1004497192134:topic:3981]",
-      "session_updated_at": 1790509777,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 4087,
-      "updated_at": 1790508871,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087]",
-      "session_updated_at": 1790510877,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 4186,
-      "updated_at": 1790500266,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186]",
-      "session_updated_at": 1790510259,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "ee5cd2f5-6c1b-41bb-b031-1150a3132fb1",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 4223,
-      "updated_at": 1790508757,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
-      "session_updated_at": 1790513041,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "37e71e03-0022-4d38-9279-1687fec7a823",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 4555,
-      "updated_at": 1790509502,
-      "last_origin": "callback",
-      "turn_open_at": 1790509502,
-      "session_title": "Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555]",
-      "session_updated_at": 1790514326,
+      "session_updated_at": 1790517576,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2860,20 +2737,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Harvesting upstream PRs into OpenCrabs",
-      "session_updated_at": 1790514273,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 34653,
-      "updated_at": 1790513416,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
-      "session_updated_at": 1790514059,
+      "session_updated_at": 1790515798,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2889,13 +2753,143 @@
       "session_updated_at": 1790513507,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "ee5cd2f5-6c1b-41bb-b031-1150a3132fb1",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 4223,
+      "updated_at": 1790514435,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
+      "session_updated_at": 1790514583,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 40695,
+      "updated_at": 1790515335,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / Harvest rich-host buttons [chat:-1003936827469:topic:40695]",
+      "session_updated_at": 1790516207,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39171,
+      "updated_at": 1790515570,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
+      "session_updated_at": 1790516046,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 34653,
+      "updated_at": 1790515623,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
+      "session_updated_at": 1790515892,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 4087,
+      "updated_at": 1790516222,
+      "last_origin": "callback",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087]",
+      "session_updated_at": 1790517572,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "37e71e03-0022-4d38-9279-1687fec7a823",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 4555,
+      "updated_at": 1790516311,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555]",
+      "session_updated_at": 1790516805,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
+      "channel": "telegram",
+      "chat_id": "-1003993000918",
+      "thread_id": 10782,
+      "updated_at": 1790517217,
+      "last_origin": "callback",
+      "turn_open_at": 1790517217,
+      "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
+      "session_updated_at": 1790517221,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
+      "channel": "telegram",
+      "chat_id": "-1004486255170",
+      "thread_id": 4,
+      "updated_at": 1790517324,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
+      "session_updated_at": 1790517484,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "8daa376e-367c-452d-840f-0c18d66ef60a",
+      "channel": "telegram",
+      "chat_id": "-1004486255170",
+      "thread_id": 7,
+      "updated_at": 1790517336,
+      "last_origin": "callback",
+      "turn_open_at": 1790517336,
+      "session_title": "Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7]",
+      "session_updated_at": 1790517338,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 4186,
+      "updated_at": 1790517534,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186]",
+      "session_updated_at": 1790517536,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
   ],
   "skill_versions": {
     "/root/ai-antispam/SKILL.md": "0.1.0",
     "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.84",
     "/root/vds-servers/skills/infra-factory/SKILL.md": "0.1.0",
-    "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.30",
+    "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.31",
     "/root/miidas/SKILL.md": "1.1.27",
     "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md": "0.4.268"
   },
@@ -3329,7 +3323,7 @@
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "enabled": 1,
       "set_goal": 1,
-      "goal_template": null,
+      "goal_template": "InferHub Watch HQ cycle due. Execute the 6-hourly cycle per skills/inferhub/SKILL.md and report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md 1.0.62).",
       "next_run_at": "2026-09-27T18:00:00+00:00",
       "last_run_at": "2026-09-27T12:00:33Z",
       "trigger_cmd": null,

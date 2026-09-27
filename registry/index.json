@@ -1,11 +1,11 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T13:05:43Z",
+  "resolved_at": "2026-09-27T13:59:44Z",
   "counts": {
     "factories": 6,
     "attested": 6,
-    "lanes": 66,
+    "lanes": 65,
     "announcements": 21,
     "jobs": 62,
     "unattributed_jobs": 4
@@ -49,7 +49,7 @@
       "id": "ops-daemon-dies-at-cgroup-cap",
       "severity": "warning",
       "scope": "profile",
-      "text": "The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.",
+      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarted 19 times on 2026-09-27: 16 deliberate (ship-chain deploy) and 3 crash recoveries. Every restart opens a boot-drain window that re-pushes parked rows (18 drains re-pushed 144 rows, mean 8.0), so a re-push is the COMMON case and a crash the minority one. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
       "since": "2026-09-27T06:13:19Z",
       "review_by": "2026-10-11",
       "check": null,
@@ -523,7 +523,7 @@
           "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T17:49:45Z",
+          "bound_at": "2026-09-27T13:53:37Z",
           "announcements": []
         },
         {
@@ -774,7 +774,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-09-27T10:39:50Z",
+      "attested_at": "2026-09-27T13:57:34Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -870,7 +870,7 @@
           "session_id": "6a314aac-94db-4b11-974c-f53decc25b9d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T18:44:13Z",
+          "bound_at": "2026-09-27T13:55:24Z",
           "announcements": []
         },
         {
@@ -890,7 +890,7 @@
           "session_id": "8daa376e-367c-452d-840f-0c18d66ef60a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T11:08:30Z",
+          "bound_at": "2026-09-27T13:55:36Z",
           "announcements": []
         },
         {
@@ -970,7 +970,7 @@
         {
           "id": "ops-daemon-dies-at-cgroup-cap",
           "severity": "warning",
-          "text": "The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.",
+          "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarted 19 times on 2026-09-27: 16 deliberate (ship-chain deploy) and 3 crash recoveries. Every restart opens a boot-drain window that re-pushes parked rows (18 drains re-pushed 144 rows, mean 8.0), so a re-push is the COMMON case and a crash the minority one. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
           "scope": "profile",
           "since": "2026-09-27T06:13:19Z",
           "review_by": "2026-10-11",
@@ -990,7 +990,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.30",
+      "skill_revision": "0.1.31",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -1126,7 +1126,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T11:34:31Z",
+          "bound_at": "2026-09-27T13:37:02Z",
           "announcements": []
         },
         {
@@ -1136,7 +1136,7 @@
           "session_id": "ee5cd2f5-6c1b-41bb-b031-1150a3132fb1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T11:32:37Z",
+          "bound_at": "2026-09-27T13:07:15Z",
           "announcements": []
         },
         {
@@ -1146,7 +1146,7 @@
           "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T09:11:06Z",
+          "bound_at": "2026-09-27T13:58:54Z",
           "announcements": []
         }
       ],
@@ -1390,7 +1390,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-27T12:59:15Z",
+      "attested_at": "2026-09-27T13:50:18Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -1456,7 +1456,7 @@
       ],
       "lanes": [
         {
-          "topic": "bash guard forced-variation design",
+          "topic": "Core: Brain Tools",
           "thread_id": 7198,
           "role": null,
           "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
@@ -1466,7 +1466,7 @@
           "announcements": []
         },
         {
-          "topic": "Mermaid",
+          "topic": "Telegram: Mermaid",
           "thread_id": 29947,
           "role": null,
           "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
@@ -1476,7 +1476,7 @@
           "announcements": []
         },
         {
-          "topic": "Gemini Reasoning and Flow Message Analysis",
+          "topic": "Providers: Routing",
           "thread_id": 30045,
           "role": null,
           "session_id": "127429e6-08de-439c-9162-2c8b0a9f73d9",
@@ -1496,17 +1496,7 @@
           "announcements": []
         },
         {
-          "topic": "OC Compiler",
-          "thread_id": 30129,
-          "role": null,
-          "session_id": "1539f410-b844-4001-8e9d-b063d8469dcd",
-          "status": "superseded",
-          "channel": "telegram",
-          "bound_at": "2026-08-28T17:08:16Z",
-          "announcements": []
-        },
-        {
-          "topic": "Deploy #235 Option Collision Guard",
+          "topic": "Telegram: Options",
           "thread_id": 30134,
           "role": null,
           "session_id": "1a63f103-b899-4ad2-a5b3-c89f2902bf97",
@@ -1526,7 +1516,7 @@
           "announcements": []
         },
         {
-          "topic": "Subagents",
+          "topic": "Core: Subagents",
           "thread_id": 30517,
           "role": null,
           "session_id": "a5b34466-1c14-441f-b2c6-6eaf4f316dde",
@@ -1546,7 +1536,7 @@
           "announcements": []
         },
         {
-          "topic": "Graceful restart",
+          "topic": "Lifecycle: Restarts",
           "thread_id": 31683,
           "role": null,
           "session_id": "7e1ebbb6-68b3-478b-abc2-b697e70c2f37",
@@ -1556,7 +1546,7 @@
           "announcements": []
         },
         {
-          "topic": "Plan tool",
+          "topic": "Core: Plan & Tasks",
           "thread_id": 31789,
           "role": null,
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
@@ -1566,7 +1556,7 @@
           "announcements": []
         },
         {
-          "topic": "Issue #234: Review Implementation Button",
+          "topic": "Telegram: Rich Text",
           "thread_id": 31847,
           "role": null,
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
@@ -1582,11 +1572,11 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T12:50:16Z",
+          "bound_at": "2026-09-27T13:27:03Z",
           "announcements": []
         },
         {
-          "topic": "Vector memory",
+          "topic": "Memory: Vectors",
           "thread_id": 36841,
           "role": null,
           "session_id": "212b3c83-6659-49c8-9984-0cf849f769c1",
@@ -1596,17 +1586,17 @@
           "announcements": []
         },
         {
-          "topic": "Toolsmith Issue 255 and PR Dependency Laws",
+          "topic": "OC DEV TOOLSMITH",
           "thread_id": 39171,
           "role": "toolsmith",
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T08:20:00Z",
+          "bound_at": "2026-09-27T13:26:10Z",
           "announcements": []
         },
         {
-          "topic": "Harvesting upstream PRs into OpenCrabs",
+          "topic": "Upstream: Harvest",
           "thread_id": 39218,
           "role": null,
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
@@ -1616,7 +1606,7 @@
           "announcements": []
         },
         {
-          "topic": "Rich resume wire",
+          "topic": "Lifecycle: Boot",
           "thread_id": 39862,
           "role": null,
           "session_id": "c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1",
@@ -1626,7 +1616,7 @@
           "announcements": []
         },
         {
-          "topic": "Loop guard",
+          "topic": "Core: Loop",
           "thread_id": 39883,
           "role": null,
           "session_id": "40427d4f-af4a-48ba-993f-f5f0b21916c0",
@@ -1636,7 +1626,7 @@
           "announcements": []
         },
         {
-          "topic": "#83 config-manager-warn",
+          "topic": "Config: Schema",
           "thread_id": 40011,
           "role": null,
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
@@ -1646,7 +1636,7 @@
           "announcements": []
         },
         {
-          "topic": "#87 config-write-types",
+          "topic": "Config: Typings",
           "thread_id": 40479,
           "role": null,
           "session_id": "aff7ff41-a3a7-4c53-adc5-80fb7a33ba50",
@@ -1656,7 +1646,7 @@
           "announcements": []
         },
         {
-          "topic": "#89 memory-search-parity",
+          "topic": "Memory: Search",
           "thread_id": 40524,
           "role": null,
           "session_id": "42a44908-b8f3-42e1-bbd2-f2a672b8056e",
@@ -1666,17 +1656,17 @@
           "announcements": []
         },
         {
-          "topic": "Harvest rich-host buttons",
+          "topic": "Browser: CDP",
           "thread_id": 40695,
           "role": null,
           "session_id": "aaa8d8ae-a4be-4b89-9f92-01a317075be3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T08:24:13Z",
+          "bound_at": "2026-09-27T13:22:15Z",
           "announcements": []
         },
         {
-          "topic": "Harvest retry-429 ladder",
+          "topic": "Security: Policies",
           "thread_id": 40696,
           "role": null,
           "session_id": "afe476f8-279b-4d54-b628-c9d7e35873c8",
@@ -1696,7 +1686,7 @@
           "announcements": []
         },
         {
-          "topic": "Role split",
+          "topic": "Governance: Roles",
           "thread_id": 42360,
           "role": null,
           "session_id": "63d775f9-18e2-4097-8696-d9a2ca796f14",
@@ -1706,7 +1696,7 @@
           "announcements": []
         },
         {
-          "topic": "Triage: Issue Portfolio & Harvest Analysis",
+          "topic": "Triage",
           "thread_id": 42487,
           "role": "triage",
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
@@ -1716,7 +1706,7 @@
           "announcements": []
         },
         {
-          "topic": "oc-waiter + #111 durable-notify",
+          "topic": "Process: Waits",
           "thread_id": 42744,
           "role": null,
           "session_id": "facd50af-0807-4fee-942b-008bff037f6f",
@@ -1726,7 +1716,7 @@
           "announcements": []
         },
         {
-          "topic": "#92 demoted-host guard",
+          "topic": "Telegram: Host Guards",
           "thread_id": 42940,
           "role": null,
           "session_id": "c78e78e0-099e-455e-8dfb-7e9b8f7d13e5",
@@ -1736,7 +1726,17 @@
           "announcements": []
         },
         {
-          "topic": "Telegram flow card metrics telemetry bar #232",
+          "topic": "Governance: Audits",
+          "thread_id": 43440,
+          "role": null,
+          "session_id": "30ab6f43-3326-4aad-abe3-eb4a5a98f630",
+          "status": "resolved",
+          "channel": "telegram",
+          "bound_at": "2026-09-07T05:45:18Z",
+          "announcements": []
+        },
+        {
+          "topic": "Telegram: Bot API",
           "thread_id": 43727,
           "role": null,
           "session_id": "95bec69b-0e96-46a9-9d91-dc355e8af18f",
@@ -1746,7 +1746,7 @@
           "announcements": []
         },
         {
-          "topic": "Governance: Ontology & RSI",
+          "topic": "Governance: Ontology",
           "thread_id": 43993,
           "role": null,
           "session_id": "6630dc9a-0eeb-46c2-95b8-bfae43e0766b",
@@ -1756,7 +1756,7 @@
           "announcements": []
         },
         {
-          "topic": "Multicalls",
+          "topic": "Core: Multi-Tool",
           "thread_id": 44326,
           "role": null,
           "session_id": "a38499fc-76a4-4aff-8953-fa5931ad0e5c",
@@ -1766,7 +1766,7 @@
           "announcements": []
         },
         {
-          "topic": "Fix #149: Cron Session Isolation",
+          "topic": "Core: Crons",
           "thread_id": 49607,
           "role": null,
           "session_id": "6cd8175f-fb27-4cf3-a390-971ff2519a47",
@@ -1786,7 +1786,7 @@
           "announcements": []
         },
         {
-          "topic": "Deploy issue 248 default group command scopes",
+          "topic": "Core: Prompts",
           "thread_id": 50566,
           "role": null,
           "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
@@ -1796,23 +1796,13 @@
           "announcements": []
         },
         {
-          "topic": "FlowLine::System split — #291 header fix",
+          "topic": "Telegram: Flow",
           "thread_id": 51188,
           "role": null,
           "session_id": "2ed8adeb-4784-4159-b68f-0e552490641e",
           "status": "resolved",
           "channel": "telegram",
           "bound_at": "2026-09-25T21:32:43Z",
-          "announcements": []
-        },
-        {
-          "topic": "🔍 PROBE review-155",
-          "thread_id": 51714,
-          "role": null,
-          "session_id": "fcfbcd89-1392-4234-9b88-e13afc30d474",
-          "status": "resolved",
-          "channel": "telegram",
-          "bound_at": "2026-09-11T14:55:01Z",
           "announcements": []
         },
         {
@@ -2155,7 +2145,7 @@
       "timezone": "UTC",
       "enabled": 1,
       "set_goal": 1,
-      "has_goal_template": false,
+      "has_goal_template": true,
       "next_run_at": "2026-09-27T18:00:00+00:00",
       "last_run_at": "2026-09-27T12:00:33Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",

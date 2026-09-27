@@ -79,19 +79,19 @@
   ],
   "lanes": [
     {
-      "topic": "bash guard forced-variation design",
+      "topic": "Core: Brain Tools",
       "thread_id": 7198,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Mermaid",
+      "topic": "Telegram: Mermaid",
       "thread_id": 29947,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Gemini Reasoning and Flow Message Analysis",
+      "topic": "Providers: Routing",
       "thread_id": 30045,
       "role": null,
       "announcements": []
@@ -103,13 +103,7 @@
       "announcements": []
     },
     {
-      "topic": "OC Compiler",
-      "thread_id": 30129,
-      "role": null,
-      "announcements": []
-    },
-    {
-      "topic": "Deploy #235 Option Collision Guard",
+      "topic": "Telegram: Options",
       "thread_id": 30134,
       "role": null,
       "announcements": []
@@ -121,7 +115,7 @@
       "announcements": []
     },
     {
-      "topic": "Subagents",
+      "topic": "Core: Subagents",
       "thread_id": 30517,
       "role": null,
       "announcements": []
@@ -133,19 +127,19 @@
       "announcements": []
     },
     {
-      "topic": "Graceful restart",
+      "topic": "Lifecycle: Restarts",
       "thread_id": 31683,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Plan tool",
+      "topic": "Core: Plan & Tasks",
       "thread_id": 31789,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Issue #234: Review Implementation Button",
+      "topic": "Telegram: Rich Text",
       "thread_id": 31847,
       "role": null,
       "announcements": []
@@ -157,61 +151,61 @@
       "announcements": []
     },
     {
-      "topic": "Vector memory",
+      "topic": "Memory: Vectors",
       "thread_id": 36841,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Toolsmith Issue 255 and PR Dependency Laws",
+      "topic": "OC DEV TOOLSMITH",
       "thread_id": 39171,
       "role": "toolsmith",
       "announcements": []
     },
     {
-      "topic": "Harvesting upstream PRs into OpenCrabs",
+      "topic": "Upstream: Harvest",
       "thread_id": 39218,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Rich resume wire",
+      "topic": "Lifecycle: Boot",
       "thread_id": 39862,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Loop guard",
+      "topic": "Core: Loop",
       "thread_id": 39883,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "#83 config-manager-warn",
+      "topic": "Config: Schema",
       "thread_id": 40011,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "#87 config-write-types",
+      "topic": "Config: Typings",
       "thread_id": 40479,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "#89 memory-search-parity",
+      "topic": "Memory: Search",
       "thread_id": 40524,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Harvest rich-host buttons",
+      "topic": "Browser: CDP",
       "thread_id": 40695,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Harvest retry-429 ladder",
+      "topic": "Security: Policies",
       "thread_id": 40696,
       "role": null,
       "announcements": []
@@ -223,49 +217,55 @@
       "announcements": []
     },
     {
-      "topic": "Role split",
+      "topic": "Governance: Roles",
       "thread_id": 42360,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Triage: Issue Portfolio & Harvest Analysis",
+      "topic": "Triage",
       "thread_id": 42487,
       "role": "triage",
       "announcements": []
     },
     {
-      "topic": "oc-waiter + #111 durable-notify",
+      "topic": "Process: Waits",
       "thread_id": 42744,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "#92 demoted-host guard",
+      "topic": "Telegram: Host Guards",
       "thread_id": 42940,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Telegram flow card metrics telemetry bar #232",
+      "topic": "Governance: Audits",
+      "thread_id": 43440,
+      "role": null,
+      "announcements": []
+    },
+    {
+      "topic": "Telegram: Bot API",
       "thread_id": 43727,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Governance: Ontology & RSI",
+      "topic": "Governance: Ontology",
       "thread_id": 43993,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Multicalls",
+      "topic": "Core: Multi-Tool",
       "thread_id": 44326,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "Fix #149: Cron Session Isolation",
+      "topic": "Core: Crons",
       "thread_id": 49607,
       "role": null,
       "announcements": []
@@ -277,20 +277,14 @@
       "announcements": []
     },
     {
-      "topic": "Deploy issue 248 default group command scopes",
+      "topic": "Core: Prompts",
       "thread_id": 50566,
       "role": null,
       "announcements": []
     },
     {
-      "topic": "FlowLine::System split — #291 header fix",
+      "topic": "Telegram: Flow",
       "thread_id": 51188,
-      "role": null,
-      "announcements": []
-    },
-    {
-      "topic": "🔍 PROBE review-155",
-      "thread_id": 51714,
       "role": null,
       "announcements": []
     },
@@ -302,5 +296,5 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-27T12:59:15Z"
+  "attested_at": "2026-09-27T13:50:18Z"
 }
