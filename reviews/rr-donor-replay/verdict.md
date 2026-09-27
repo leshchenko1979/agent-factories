@@ -1,5 +1,11 @@
 # Review Cycle rr-donor-replay — Master Verdict (2026-09-27)
 
+> **A REPLAY, NOT A REVIEW.** This file is the donor's cycle `20260925-c24` carried
+> through the promoted engine to prove the migration leg end-to-end. `Status: COMPLETED`
+> is the DONOR's terminal state, faithfully migrated — it is **not** a statement that a
+> review ran here: 4 of the 14 lenses read `PENDING`, and both consolidated sections
+> below are the engine's empty placeholders. Read it as a schema-migration receipt.
+
 Status: COMPLETED
 
 ## Census & Lenses Executed
