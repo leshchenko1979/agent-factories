@@ -116,6 +116,14 @@ prevents it.** A factory that keeps `test_cron_thinness.py` and drops `patrol_ho
 gate that passes over an empty question — which is why the two are manifest rows of the same kit and
 not two independently adoptable files.
 
+**That mechanism is a FILE the adopter must hold, and this doc did not name it until
+`infra-factory` found the omission (§9.1 item 5).** `TEMPLATE/tests/gate_registry.py` is a manifest
+row of class **`closure`**, byte-paired with its root twin (`cmp` rc=0) and stdlib-only, so it is
+self-sufficient. It is **not** in §3's table because the RUNNER does not load it — it belongs to the
+ADOPTION's closure, not the executable's. What it provides is the pair coupling: a member whose audit
+discovers gates by glob holds no mechanism that notices the runner was dropped, and §8 step 3 is
+unimplementable without it. Porting these gates means porting this file.
+
 | gate | registered at | grain | why that grain |
 |---|---|---|---|
 | `test_cron_thinness.py` | `gate_registry.py`, REQUIRED | required | the predicate is PURE over a list of rows and reads no live table, so it passes in a bootstrapped factory exactly as it does here — there is no `TEMPLATE` comparison or box-local fixture that would make it red |
@@ -190,7 +198,10 @@ dispatch):
    silently folded into someone else's factory. The two effects are separate: the file makes the
    runner RUN, the `job_prefixes` field makes its verdicts YOURS.
 3. **Register the gates** at the grain §4 states, so the manifest can keep you from dropping the
-   runner and keeping the file.
+   runner and keeping the file. This step needs `tests/gate_registry.py` (§4) — if your tree has no
+   gate registry and your audit discovers gates by glob, discovery gives you the RUN but not the
+   PAIRING, so a dropped runner leaves a green file over an empty question. Port it or state the gap;
+   do not record the gates as registered when nothing couples them.
 4. **Create your own reload link** if you want this law to survive your own compaction — the frame's
    §6.1 defines it and it is **your** act, in **your** tree; it is never installed from the template.
    Absent from your tree is a **declared state**, not a failure.
@@ -226,7 +237,7 @@ is a *state*, and only undeclared divergence reds. A census that reported "1 of 
 the difference between a member that measured itself and said why, and one that has gone quiet — so
 the disposition column is not decoration, it is the half of the figure that a bare count destroys.
 
-### 9.1 Four corrections from the adoption round, all measured
+### 9.1 Five corrections from the adoption round, all measured
 
 1. **A record in another factory's manifest does not satisfy step 2.** `ai-antispam` reported step 2
    already satisfied, citing a `registry/fleet.json` record carrying its own slug and job prefix. Read
@@ -263,6 +274,17 @@ the disposition column is not decoration, it is the half of the figure that a ba
    deciding it is inapplicable to its board shape — turns two discovered gates permanently red. That is
    how `infra-factory` read it, and why it declared them forks rather than deleting them: deleting would
    fork the runner, which references both by path.
+
+5. **§4's protection does not survive adoption unless `tests/gate_registry.py` travels with the
+   gates — and this doc's §2/§3 never named it.** `infra-factory` measured the gap in its own tree: it
+   carries no `tests/gate_registry.py`, and its `tools/audit.py` discovers gates by GLOB
+   (`for test_file in sorted((repo_root / "tests").glob("test_*.py"))`). Discovery supplies the RUN but
+   not the PAIRING, so §8 step 3 was unimplementable as written and the failure §4 exists to prevent
+   was live in the only adopting tree: keep the predicate, drop the runner, keep a green file over an
+   empty question. `TEMPLATE/tests/gate_registry.py` is a manifest row of class `closure`, byte-paired
+   (`cmp` rc=0), stdlib-only. It belongs to the adoption's closure rather than §3's, because the runner
+   does not load it — which is precisely why the omission survived four readings of this file. Found by
+   the lane it affects, not by its author.
 
 ## 10. Where this instrument's law lives
 
