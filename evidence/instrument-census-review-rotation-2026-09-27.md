@@ -1,13 +1,13 @@
 # Instrument adoption census — one predicate over the declared population
 
-Read at **2026-09-27T17:05:14Z** by `tools/instrument_census.py`.
+Read at **2026-09-27T17:43:52Z** by `tools/instrument_census.py`.
 
 ## The predicate, stated before the figures
 
 **Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the
 law doc's §2 declares — **5 path(s)** — plus the reload link's own state.
 **Scope:** the member fragments in `registry/factories/*.json`.
-**Instant:** 2026-09-27T17:05:14Z.
+**Instant:** 2026-09-27T17:43:52Z.
 
 **WHAT THIS DOES NOT MEASURE.** It is ONE predicate on file PRESENCE. A present file may
 differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —
@@ -27,29 +27,28 @@ guarded: zero parsed paths refuses rather than censusing an empty set):
 
 | member | held | reload link | fragment declares | status |
 |---|---|---|---|---|
-| `ai-antispam` | 3/5 | absent | unestablished | **PARTIAL-UNDECLARED** |
-| `inferhub-watch` | 0/5 | absent | unestablished | **ABSENT** |
-| `infra-factory` | 0/5 | absent | unestablished | **ABSENT** |
-| `meta-factory` | 5/5 | resolves | unestablished | **SOURCE** |
-| `miidas` | 0/5 | absent | unestablished | **ABSENT** |
-| `opencrabs-dev` | 0/5 | absent | unestablished | **ABSENT** |
+| `ai-antispam` | 5/5 | absent | absent | **HELD-UNDECLARED** |
+| `inferhub-watch` | 0/5 | absent | absent | **ABSENT** |
+| `infra-factory` | 0/5 | absent | absent | **ABSENT** |
+| `meta-factory` | 5/5 | resolves | absent | **SOURCE** |
+| `miidas` | 0/5 | absent | absent | **ABSENT** |
+| `opencrabs-dev` | 0/5 | absent | absent | **ABSENT** |
 
 ## The two legs, and why a copy alone is not adoption
 
-A row is **ADOPTED** only when the declared set is COMPLETE *and* the member has a
-DECLARATION behind it. `HELD-UNDECLARED` is a member holding every path with no decision
-behind it (frame §1.3 — the files can arrive as another instrument's closure), and
-`PARTIAL-UNDECLARED` is a member holding some of them. Both are reported as what they
-are: silence is a state here, never a pass.
+A row is **ADOPTED** only when the declared set is COMPLETE *and* the member's own
+declaration says `adopted` with `green: true`. `HELD-UNDECLARED` is a member holding
+every path with no decision behind it (frame §1.3 — the files can arrive as another
+instrument's closure), and `PARTIAL-UNDECLARED` is a member holding some of them. Both
+are reported as what they are: silence is a state here, never a pass.
 
-**THE DECLARED LEG IS UNESTABLISHED, FOR EVERY MEMBER, AND THAT IS A SCHEMA FACT.**
-`registry/factories/<slug>.json` carries a `kit` field whose value is the **KIT's**
-adoption state (obligation O6). There is no field for a PER-INSTRUMENT disposition, so a
-member that declared its kit adopted has said nothing about this instrument — and reading
-one as the other would manufacture an adoption nobody decided. This census therefore
-reports the leg as unestablished rather than defaulting it, and **no member can reach
-ADOPTED until that surface exists or a member declares on one this census can read.**
-That is HQ's schema to extend, not a member's omission.
+**THE DECLARED LEG IS READ FROM `instruments.<slug>`, HQ's per-instrument surface.**
+The fragment's `kit` key beside it is the **KIT's** adoption state (obligation O6) and
+says nothing about this instrument, so it is never read as one: a member that declared
+its kit adopted has not declared this instrument. An **absent** key is a LEGAL state —
+the schema makes absence valid — so it is reported as the member's silence, which is a
+reading rather than a refusal, and it is what keeps a member that considered the
+instrument distinguishable from one that never did.
 
 `SOURCE` marks the member whose repo IS the repo the instrument is authored in. It holds
 the set by construction; counting it as an adoption site would report the source as its

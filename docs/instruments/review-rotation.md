@@ -294,37 +294,62 @@ change belongs at HQ, not in this file.
 
 ## 9. Adoption census
 
-**Predicate:** each of the five declared paths of §2 exists in the member's own declared `/repo`
-(a member counts as present only if the path is there; both halves are counted, because a member that
-took the root half and not the `TEMPLATE/` half holds a pair it cannot sync).
-**Scope:** the member manifests in `registry/factories/*.json`.
-**Instant:** **2026-09-27T17:14:21Z**, by the command that exists for this question —
+**Predicate:** the ROOT half of each of the five declared pairs of §2 exists at the member's own
+declared `repo` (`os.path.isfile(member.repo / p)`). The `TEMPLATE/` half is **not** measured here:
+byte conformance is `kit_pin`'s question and the shipped set is `kit_census.py`'s, and a second
+comparison over the same population would let this file and a member's own gate disagree. A member
+that took the root half and no `TEMPLATE/` half therefore still reads HELD at this path level.
+**Scope:** the member fragments in `registry/factories/*.json`.
+**Instant:** **2026-09-27T17:43:52Z**, by the command that exists for this question —
 `tools/instrument_census.py review-rotation` — which also reports each member's **reload link** and
 the declaration standing behind it.
 
 `tools/instrument_census.py` is root-only tooling (like `kit_census.py`) and is **not shipped**: the
 template does not need to census the meta-factory's members. It derives the path list FROM THIS
 FILE's §2 table rather than carrying a second list, and it refuses on zero parsed paths — a zero over
-a failed parse is otherwise indistinguishable from a zero over an empty population.
+a failed parse is otherwise indistinguishable from a zero over an empty population. It is pinned by
+`tests/test_instrument_census.py` (10 arms, root-only like the tool), which runs it against the
+REPO'S OWN `tools/registry.py` so the refusal wording asserted there is the registry's real one.
 
 **The readings, each with its own instant, and NOT a claim about now:**
 
-| member | held | reload link | disposition |
-|---|---|---|---|
-| `ai-antispam` | 3/5 | absent | PARTIAL-UNDECLARED — a divergent copy, which is frame §9 O1's case |
-| `inferhub-watch` | 0/5 | absent | ABSENT — the adoption pilot, rehearsed green |
-| `infra-factory` | 0/5 | absent | ABSENT |
-| `miidas` | 0/5 | absent | ABSENT |
-| `opencrabs-dev` (the donor) | 0/5 | absent | ABSENT — its `hq.md` carve landed 2026-09-27 |
-| `meta-factory` | 5/5 | resolves | SOURCE — the authoring tree, not an adopter |
+| member | held | reload link | fragment declares | status |
+|---|---|---|---|---|
+| `ai-antispam` | 5/5 | absent | absent | **HELD-UNDECLARED** |
+| `inferhub-watch` | 0/5 | absent | absent | **ABSENT** — the adoption pilot |
+| `infra-factory` | 0/5 | absent | absent | **ABSENT** |
+| `miidas` | 0/5 | absent | absent | **ABSENT** |
+| `opencrabs-dev` (the donor) | 0/5 | absent | absent | **ABSENT** — its `hq.md` carve landed 2026-09-27 |
+| `meta-factory` | 5/5 | resolves | absent | **SOURCE** — the authoring tree, not an adopter |
 
-**No member is ADOPTED, and the reason is a SCHEMA fact rather than any member's omission.**
-`registry/factories/<slug>.json` carries a `kit` field whose value is the **KIT's** adoption state
-(frame §9 O6). There is **no field for a per-instrument disposition**, so a member that declared its
-kit adopted has said nothing about this instrument — and reading one as the other would manufacture
-an adoption nobody decided. The census therefore reports the declared leg `unestablished` for every
-member, and **no member can lawfully reach ADOPTED until that surface exists**. Which per-instrument
-key a member declares on is HQ's schema call; this instrument coins none.
+**`ai-antispam` reads 5/5 here and 3/5 in the reading at 17:14:21Z, and both are correct for their own
+instant** — the member's tree moved between the two, so the figures differ without either being wrong.
+A count that arrives without its instant cannot be checked against the next one, which is why the
+table carries one and why the artifact under `evidence/` is committed rather than scrolled past.
+
+**The declared leg is read from `instruments.<slug>`, HQ's per-instrument surface, and the shape
+stated here is HQ's rather than this file's.** `registry/factories/<slug>.json` carries an
+`instruments` MAP keyed by instrument slug; an entry declares `state` (`adopted` | `partial` |
+`deferred` | `not-applicable`) beside `green`, `behind_by`, `reason` and `measured_at`; an ABSENT key
+is legal; `reason` is required for `deferred` and `not-applicable`; and `adopted` additionally
+requires `green: true`, because HELD and GREEN are independent (frame §7.2) and a bare `adopted`
+cannot say which it claims. The census **calls that predicate** —
+`tools/registry.py::validate_disposition`, the call `validate_instruments` makes — instead of
+restating it, so a state printed here is one the registry gate accepts, a declaration the registry
+refuses reads `DECLARED-INVALID` carrying the registry's own wording, and the field set above is
+named only so this section can be read without a second file open. One control the `kit` field cannot
+have: a slug with no law doc at `docs/instruments/<slug>.md` is REFUSED as a **phantom name** rather
+than silently censusing zero paths, so a member cannot declare on an instrument that does not exist —
+and this instrument's slug resolves, so it is declarable.
+
+**Two surfaces, and neither is read as the other.** The fragment's `kit` key beside it is the
+**KIT's** adoption state (frame §9 O6) and says nothing about this instrument: a member that declared
+its kit adopted has not declared this instrument.
+
+**No member is ADOPTED at this instant, and that is a READING rather than a schema gap.** Every
+member's `instruments.review-rotation` key is ABSENT — a legal declaration, and one that reads as the
+member's silence rather than as a failure. So the two legs separate exactly as designed: `ai-antispam`
+HOLDS the whole set with no declaration behind it, and no member is refused for declaring wrongly.
 
 **A RE-RUN PUBLISHES INTO A TRACKED FILE, and that is the trade the artifact makes.** The census
 writes to a committed path on purpose — a figure that lives only in a scrollback cannot be
@@ -333,10 +358,11 @@ it in a SHARED tree leaves the file dirty by the two lines that always move (the
 runner must either **commit the new reading or revert the file**, never leave it modified for the
 next lane to trip over. To measure without publishing, pass `--out` to a scratch path.
 
-**A lone zero is not published here either.** The earlier revision of this section carried an
-inference and no figure, because the paths of §2 did not exist in the manifest before the commit
-that ships this doc; that inference is now superseded by the reading above, which is a measurement
-over a declared population with its predicate, scope and instant named.
+**How a member reaches ADOPTED, stated once so the table is readable:** the declared set COMPLETE *and*
+`instruments.review-rotation` declaring `adopted` with `green: true`. Anything less keeps the state it
+named — a complete set under a `partial` declaration reads `DECLARED-PARTIAL` — because a copy alone
+is not adoption (frame §1.3: the files can arrive as another instrument's closure) and a declaration
+alone does not move bytes.
 
 
 ## 10. Where this instrument's law lives
