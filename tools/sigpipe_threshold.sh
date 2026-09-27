@@ -33,8 +33,8 @@
 # exactly that. So the form is worth removing on its own merits, and the threshold tells you the
 # ORDER to remove it in.
 #
-# Usage:  bash 2026-09-27-sigpipe-repro.sh            # sweep the threshold (default, 60 trials/row)
-#         bash 2026-09-27-sigpipe-repro.sh 60 64      # one row: TRIALS KiB
+# Usage:  bash tools/sigpipe_threshold.sh            # sweep the threshold (default, 60 trials/row)
+#         bash tools/sigpipe_threshold.sh 60 64      # one row: TRIALS KiB
 
 set -o pipefail                      # the guard under test; the defect needs BOTH this and a pipe
 TRIALS="${1:-60}"

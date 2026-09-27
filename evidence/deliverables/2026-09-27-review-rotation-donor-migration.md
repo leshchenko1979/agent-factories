@@ -160,7 +160,7 @@ beside the original reading rather than over it.
   the failure is certain. Two runs of the sweep sit in the script's own header, because the per-row
   **rate** is load-dependent (the same payload gave 1/60, 11/60, 2/60 and 48/60 at different instants)
   while the **shape** is stable. Quote the shape and the boundary, never a row's rate.
-  Reproduce: `bash evidence/deliverables/2026-09-27-sigpipe-repro.sh` — it prints its own instant,
+  Reproduce: `bash tools/sigpipe_threshold.sh` — it prints its own instant,
   trials and buffer size, and flags any run in which the here-string form also failed.
 - **The fix is at the donor's HEAD — and the class has already returned: 4 sites in 36 minutes.**
   Donor root, because `tools/` is not unique on this box:
