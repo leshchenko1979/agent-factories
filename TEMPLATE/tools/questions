@@ -1953,6 +1953,12 @@ def page_wrapper(body, expires_at, title):
             + "\n</body></html>\n")
 
 
+# The reason from the LAST renderer fault, kept outside the unified log so it
+# survives both the SystemExit that die() raises and a tree with no log at all.
+# Read by republish() to name the fault on the mutation's own output (#189).
+_LAST_RENDER_FAULT = None
+
+
 def build_page(entries, slug, expires_at, action):
     """The page body from a json-render spec, wrapped in the tested shell.
 
@@ -1961,9 +1967,11 @@ def build_page(entries, slug, expires_at, action):
     to state its own provenance, so the fallback was deleted rather than kept as
     a safety net. The fault exits non-zero with the reason on stderr and NOTHING
     is written, so the previous page stays serving instead of a 404."""
+    global _LAST_RENDER_FAULT
     spec = build_spec(entries, slug, expires_at, action)
     html_body, why = render_via_node(spec)
     if html_body is None:
+        _LAST_RENDER_FAULT = why
         oc_log_extra("publish_failed", why)
         die(4, "renderer fault: %s" % why)
     oc_log_extra("renderer", "json-render")
@@ -2131,18 +2139,36 @@ def republish(flags):
 
     A publish fault must never fail the mutation that triggered it — the
     mutation is the caller's work and the page is a convenience — so this
-    swallows the fault and records it in the unified log instead."""
+    returns None and the caller exits 0.
+
+    It must NOT swallow the fault in silence (#189). The unified log is not a
+    surface the caller reads: `--no-log` and the selftest both disable it, and a
+    tree that never set OC_TOOLS_LOG has no log at all — so a fault recorded
+    only there is a page that silently stops refreshing. The reason is named on
+    the mutation's OWN stderr instead, while the exit code stays 0."""
     if flags.get("--no-publish"):
         return None
     try:
         meta, _ = publish_page(quiet=True)
         return meta
     except SystemExit:
-        oc_log_extra("publish_failed", "SystemExit")
+        _note_publish_fault(
+            _LAST_RENDER_FAULT or "publish exited without naming a reason")
         return None
     except Exception as exc:
-        oc_log_extra("publish_failed", exc.__class__.__name__)
+        _note_publish_fault("%s: %s" % (exc.__class__.__name__, exc))
         return None
+
+
+def _note_publish_fault(why):
+    """Name a publish fault on the caller's own output, and never change rc.
+
+    A warning, not an error: the mutation SUCCEEDED and its work is on disk, so
+    a non-zero exit would report the caller's own success as a failure. The
+    warning goes to stderr so a caller parsing --json on stdout is unaffected."""
+    oc_log_extra("publish_failed", why)
+    sys.stderr.write(
+        "%s: warning: the page was NOT refreshed \u2014 %s\n" % (PROG, why))
 
 
 def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=False):
@@ -2847,6 +2873,28 @@ def selftest():
                          "--title", "t", "--description", "d", "--no-publish", "--json")
         ck(rc == 0 and json.loads(out).get("page") is None,
            "--no-publish suppresses the refresh (rc=%d)" % rc)
+
+        # #189: the SAME renderer fault, on a MUTATION path. republish() is
+        # best-effort by design, so the exit code must stay 0 AND the fault must
+        # be named on the mutation's OWN output. The PUBLISH verb's four-half
+        # probe below is unchanged: there the fault MUST fail the command.
+        faulty = dict(env)
+        faulty["OC_QUESTIONS_RENDER_DIR"] = "/proc/nonexistent/build"
+        proc = subprocess.run(
+            [tool, "ask", "--factory", "f-mutation-fault-lane",
+             "--title", "t", "--description", "d",
+             "--option", "a", "--option", "b", "--recommended", "0", "--json"],
+            env=faulty, capture_output=True, text=True, timeout=120)
+        ck(proc.returncode == 0,
+           "a mutation whose auto-republish faults STILL exits 0 (rc=%d)"
+           % proc.returncode)
+        ck("NOT refreshed" in proc.stderr and "renderer fault" in proc.stderr,
+           "\u2026and the fault is NAMED on the mutation's own output (%r)"
+           % proc.stderr.strip()[-110:])
+        ck("f-mutation-fault-lane" in [s.get("id") for s in store_json()["sets"]],
+           "\u2026and the mutation's OWN work is on disk, not lost with the page")
+        ck("f-mutation-fault-lane" in proc.stdout,
+           "\u2026and the mutation still reports what it registered")
 
         # A publish fault must never fail the mutation that triggered it.
         rc, out, err = run("ask", "--factory", "f-broken-page-lane",
