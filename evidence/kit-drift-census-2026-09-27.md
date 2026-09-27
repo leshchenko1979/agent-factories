@@ -1,13 +1,13 @@
 # Kit-drift census — member adoption of the template's shipped set
 
-Read at **2026-09-27T01:15:42Z** by `tools/kit_census.py`, which calls the patrol's
+Read at **2026-09-27T06:57:51Z** by `tools/kit_census.py`, which calls the patrol's
 `kit_drift_leg` — this artifact renders that leg's own result and adds no
 comparison of its own.
 
 ## 1. The reference, stated first
 
 Every figure below compares a member's tree against **OUR** `registry/kit.json`
-(`kit_version` `799fce6ef24f`, 119 paths). That is a
+(`kit_version` `59d7e004c777`, 127 paths). That is a
 fact about our shipped bytes as much as about their tree, and it moves when
 **we** move — so a DIFF here is not a member's to act on. A member acts on
 its own vendored pin, judged by `tests/test_kit_pin.py`.
@@ -15,9 +15,9 @@ its own vendored pin, judged by `tests/test_kit_pin.py`.
 ## 2. The population
 
 - members declared: **5**, reachable: **5**
-- **every manifest cell** (595 pairs): same 9 · DIFF 49 · ABSENT 537
+- **every manifest cell** (635 pairs): same 21 · DIFF 48 · ABSENT 566
 - **bootstrap-named subset** (50 cells, the 10 files
-  `TEMPLATE/BOOTSTRAP.md` names): same 1 · DIFF 20 · ABSENT 29
+  `TEMPLATE/BOOTSTRAP.md` names): same 2 · DIFF 20 · ABSENT 28
 
 Two populations are reported because a number must travel with its own predicate:
 the bootstrap subset is what the earlier 1/20/29 baseline was taken over, and quoting
@@ -27,11 +27,11 @@ only one of them would leave the other unreproducible.
 
 | member | same | DIFF | ABSENT | own pin | zone own/not | declared |
 |---|---|---|---|---|---|---|
-| `ai-antispam` | 2 | 9 | 108 | **none** | 5/6 | 2026-09-26T06:20:28Z · attested |
-| `infra-factory` | 2 | 16 | 101 | vendored · 0 exempt | 6/8 | 2026-09-26T06:21:03Z · attested |
-| `inferhub-watch` | 4 | 8 | 107 | vendored · 0 exempt | 7/6 | 2026-09-26T06:19:04Z · attested |
-| `miidas` | 1 | 15 | 103 | **none** | 8/5 | 2026-09-26T06:31:01Z · attested |
-| `opencrabs-dev` | 0 | 1 | 118 | **none** | 5/5 | 2026-09-26T06:41:11Z · attested |
+| `ai-antispam` | 2 | 9 | 116 | **none** | 5/6 | 2026-09-26T06:20:28Z · attested |
+| `infra-factory` | 10 | 15 | 102 | vendored · 0 exempt | 6/8 | 2026-09-26T06:21:03Z · attested |
+| `inferhub-watch` | 4 | 8 | 115 | vendored · 0 exempt | 7/6 | 2026-09-26T06:19:04Z · attested |
+| `miidas` | 5 | 15 | 107 | vendored · 14 exempt | 8/5 | 2026-09-26T06:31:01Z · attested |
+| `opencrabs-dev` | 0 | 1 | 126 | **none** | 5/5 | 2026-09-26T06:41:11Z · attested |
 
 Three columns carry the point. **own pin** is the member-actionable half: a
 member with no pin has no figure of its own, and the DIFF beside it is against
@@ -46,35 +46,35 @@ read the same — which is why section 5 carries what each one said.
 - attested: **2026-09-26T06:20:28Z** · status `attested`
 - declared surfaces: zone owns 5 / not-owns 6 · services 15 · lanes 6 · announcements 3
 - DIFF: `tests/test_close_board_recorded.py`, `tests/test_hygiene_namespace.py`, `tests/test_ledger.py`, `tests/test_ledger_schema.py`, `tests/test_ontology.py`, `tests/test_rework.py`, `tools/audit.py`, `tools/hygiene.py` (+1 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+100 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+108 more)
 
 ### `infra-factory`
 
 - attested: **2026-09-26T06:21:03Z** · status `attested`
 - declared surfaces: zone owns 6 / not-owns 8 · services 9 · lanes 5 · announcements 4
-- DIFF: `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `roles/carrier.md`, `roles/hq.md`, `roles/triage.md`, `roles/worker.md` (+8 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+93 more)
+- DIFF: `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `roles/carrier.md`, `roles/hq.md`, `roles/triage.md`, `roles/worker.md` (+7 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+94 more)
 
 ### `inferhub-watch`
 
 - attested: **2026-09-26T06:19:04Z** · status `attested`
 - declared surfaces: zone owns 7 / not-owns 6 · services 6 · lanes 4 · announcements 3
 - DIFF: `README.md`, `tests/test_ontology.py`, `tests/test_rework.py`, `tests/test_single_writer.py`, `tools/audit.py`, `tools/field_predicate.py`, `tools/ledger.py`, `tools/ledger_declaration.py`
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+99 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+107 more)
 
 ### `miidas`
 
 - attested: **2026-09-26T06:31:01Z** · status `attested`
 - declared surfaces: zone owns 8 / not-owns 5 · services 6 · lanes 5 · announcements 4
 - DIFF: `README.md`, `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `docs/subject/client-requirements.md`, `docs/subject/domain-model.md`, `tests/test_ledger.py` (+7 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+95 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+99 more)
 
 ### `opencrabs-dev`
 
 - attested: **2026-09-26T06:41:11Z** · status `attested`
 - declared surfaces: zone owns 5 / not-owns 5 · services 6 · lanes 37 · announcements 1
 - DIFF: `README.md`
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+110 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+118 more)
 
 ## 5. Declared decisions — what each member SAID about its own figure
 
@@ -151,7 +151,7 @@ MEMBER STATED THEM, so some are approximate; the round's own ledger rows
   forked, and those need opposite actions.
 - **ABSENT is not a verdict.** A factory ports a subset by design; a path it
   never took cannot diverge from anything.
-- **The pin gate is the member's own view.** 3 of 5 members have vendored no pin (`ai-antispam`, `miidas`, `opencrabs-dev`), so for those the figure above is against OUR manifest and is not theirs to
+- **The pin gate is the member's own view.** 2 of 5 members have vendored no pin (`ai-antispam`, `opencrabs-dev`), so for those the figure above is against OUR manifest and is not theirs to
   act on. The vehicle exists (`TEMPLATE/registry/kit.example.json`) and `tests/test_kit_pin.py`
   is the gate that judges it; this census is where that adoption is observed.
 

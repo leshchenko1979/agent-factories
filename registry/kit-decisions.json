@@ -153,5 +153,68 @@
     "miidas"
    ]
   }
+ },
+ "ledger_round_2026_09_27": {
+  "_note": "The 2026-09-27 LEDGER-INSTRUMENT migration round, dispatched to each member's own HQ lane. Distinct from the 09-26 kit-adoption wave above: that asked which kit files a member adopts, this asked what to do with each member's DIVERGENT DOUBLE of the ledger instrument. Every reply below was read in that lane's own inbound row, and the instant beside it is THAT ROW's created_at -- never the round's date. A member's disposition is its own declaration; where it corrected a figure of ours the correction is recorded with the action taken on it.",
+  "source_of_round": "one dispatch per member HQ by the ledger instrument lane (session d0cba805, ledger-owner round), each carrying that member's own measured divergence, the four lawful dispositions (a migrate / b declare / c promote / d declared deferral), and an explicit invitation to name a capability the template lacks",
+  "as_of": "2026-09-27T06:50:00Z",
+  "replies": {
+   "infra-factory": {
+    "at": "2026-09-27T04:51:52Z",
+    "disposition": "b DECLARE",
+    "reason": "stdlib-only: zero non-stdlib imports and NO closure carried -- its tree has no field_predicate.py, no ledger_declaration.py, no reconstruction.py, and its EXEMPTIONS is a 4-tuple where the template's is a 5-tuple, so verify would break on adoption",
+    "gap_declared": "the authorization matrix is ABSENT and declared a GAP, not a fork: measured in its tools/ledger.py, a known actor writing a known-but-unauthorized event is accepted SILENTLY",
+    "correction_accepted": "verify does NOT fail on its ledger (rc=0, 'ledger clean: 590 row(s)', three granted excusals). Our census quoted the UN-EXCUSED form of a granted excusal and thereby merged two populations: an exemption-blind cross-member verify reports a member's declared debt as a defect. Recorded in the doc as a bound on the census method.",
+    "route_offered": "c on the MATRIX ALONE -- a table plus a lookup needs no closure module, so it fits stdlib-only; if promoted, its fork narrows to 'no import closure' and (a) becomes cheap",
+    "re_entry": "adds the matrix as one stdlib-only change with its own test, OR adopts the promoted shape"
+   },
+   "opencrabs-dev": {
+    "at": "2026-09-27T05:28:12Z",
+    "disposition": "b DECLARE AS EXEMPTION",
+    "reason": "workers-ledger.json is a different OBJECT, not a divergent copy: a single dict keyed by worker recording which skill version each worker was NOTIFIED of vs ACKNOWLEDGED. No n ordinal, no append-only event stream, no closure semantics. Our ledger answers 'has this lane absorbed this skill version'; the instrument answers 'what happened, in order, and what closed'.",
+    "promote_candidate": "c on the FIELD SHAPE ONLY -- its `oc-ledger events` rows assert #N and n= edges in FREE TEXT no instrument can follow, the same gap our typed refs answer. It would take refs as a field shape on rows it already writes, WITHOUT taking the ledger. Offered, not merged.",
+    "bound": "it carries no tools/ledger.py and 0 of 17 manifest ledger paths; measuring /root/opencrabs returns absent by construction"
+   },
+   "miidas": {
+    "at": "2026-09-27T05:29:12Z",
+    "disposition": "a MIGRATE + b DECLARE + c PROMOTE + d DECLARE-DEFER",
+    "a_migrate": "registry/kit.json vendored byte-identical (6ab591c618ec, 128 files) with tools/kit_pin.py as its closure; the questions instrument adopted and refreshed to the pin",
+    "b_declare": "registry/kit-exemptions.json, 14 entries each with disposition, since, reason and the capability it carries -- the subject law, the actor authorization table (#50), the row-scoped EXEMPTIONS (#36), the measured run duration (#44), the single-rounded rates (#48), the three-way gate verdict (#42), the hygiene LIVE_PATHS divergence (#40/#65/#69), and its own test surfaces and subject docs",
+    "c_promote": "tests/test_ledger_schema.py is AHEAD of the template's (1142 lines against 432): TestWriterGateConvergence drives all 56 (event, actor) pairs through the real write path, and the event vocabulary is consumed by identity with EXPECTED_EVENTS. Our copy holds a private predicate; theirs holds none.",
+    "d_defer": "the ledger BASIS migration: the closure (field_predicate, ledger_declaration, reconstruction) is a multi-module port, and its write path carries the subject law and the actor table. Re-entry: a scoped port of the unit + full transitive closure, driven against its ledger in a scratch tree BEFORE landing. It will NOT take a wholesale ledger.py replacement (364 vs 1484 lines; the 14 declared forks are the difference).",
+    "corrections_accepted": [
+     "verify does NOT fail -- rc=0 with one excused line; its EXEMPTIONS carries ROW IDENTITY where the template's is keyed by (subject, leg)",
+     "its tree DOES refuse unauthorized pairs: authorize() is wired at tools/ledger.py:111 and consumed by cmd_append, verified here first-hand (AUTHORIZED_ACTORS_BY_EVENT at :85, authorize at :111). Our fleet figure 'three of four accept silently' does not describe this tree.",
+     "KIT DEFECT, verified here and FIXED: tests/test_kit_pin.py crashed in a member tree -- the fixture arms copy TEMPLATE/-only paths. Its member-side workaround was a gate of its own; the fixture arm is now guarded upstream (commit f9cc405) and it can retire that gate."
+    ]
+   },
+   "inferhub-watch": {
+    "at": "2026-09-27T06:26:07Z",
+    "disposition": "d DEFER (declared)",
+    "reason": "a multi-module CLOSURE port, not a file swap: the template's ledger.py imports AUTHORIZED_ACTORS_BY_EVENT from ledger_roles.py, which this tree does not carry, and the template's tools/ set is 22 entries against its 14",
+    "correction_accepted": "its tools/ledger.py is a STRICT SUBSET of the template's -- every public function it defines the template also defines, and `repair` is among the template's that it lacks. Verified here first-hand: 15 defs, 0 unique. So 'the fleet's deepest divergence' was our framing error; LINE depth is not CAPABILITY depth, and (c) was inapplicable rather than declined.",
+    "landed_in_round": "docs/ledger-refs-kinds.json with {\"events\": [\"ack\"]}; it verified the declaration mechanism itself -- clean WITH the declaration, 2x \"unknown event 'ack'\" WITHOUT",
+    "behind": "tools/ledger.py 1117 vs 1308 lines; tools/ledger_roles.py absent; 4 of 17 ledger paths; 1 of 6 gates; registry/kit.json PRESENT (pin adopted 04ca2ce)",
+    "re_entry": "a scoped port of the template unit + its full transitive closure, driven against its 577-row ledger in a scratch tree before it lands"
+   },
+   "ai-antispam": {
+    "at": "2026-09-27T06:37:00Z",
+    "disposition": "a MIGRATE + b DECLARE + c PROMOTE + d DECLARE-DEFER",
+    "a_migrate": "tools/ledger.py to the template basis, plus its closure tools/ledger_declaration.py (11,210 B, stdlib-only) -- its fork holds NO capability the template lacks and lacks three the template has (the authorization matrix, the write-path refusal, the repair verb)",
+    "b_declare": "tools/audit.py, deliberately AHEAD: it carries the #38 single-rounding-site yield fix and the gate-note fix (a failing gate's note taken from its FIRST non-empty line, the one carrying the population, not its last). tools/hygiene.py is NOT a fork -- adopted byte-identical on 2026-09-25.",
+    "c_promote": "its tools/audit.py half, reproducible from a diff",
+    "d_defer": "the PIN, blocked rather than declined: project writes are refused while its own session checklist sits in Editing awaiting owner approval. Re-entry: the pin lands as the first action once the gate opens, then it re-runs the drift read and reports its OWN same/DIFF/ABSENT rather than accepting our figure",
+    "corrections_accepted": [
+     "#144 is NOT its fork -- its 277-line double has no matrix reference at all and refuses only an unknown EVENT or an unknown ACTOR. The write-path refusal we attributed to it lives in the TEMPLATE. It argued for that refusal upstream (agent-factories#157) but did not build it.",
+     "the #38 fix is in its tools/audit.py, not its ledger double; the template STILL ships the defect (tracked meta-factory#143)"
+    ]
+   }
+  },
+  "measured_this_round": {
+   "dispositions": "5 of 5 declared -- 2 migrate, 5 declare, 2 promote, 3 defer (a member may hold more than one)",
+   "silence": "0 -- every member answered; nothing left undeclared",
+   "corrections_we_accepted": "4 (infra: verify-verdict tool; miidas: authorize wired + kit defect; inferhub: subset not superset; ai-antispam: #144 misattributed)",
+   "kit_defect_fixed": "tests/test_kit_pin.py fixture arms, both halves + manifest (f9cc405)"
+  }
  }
 }
