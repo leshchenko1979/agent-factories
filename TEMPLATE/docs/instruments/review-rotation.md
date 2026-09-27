@@ -119,7 +119,7 @@ Measured this turn, and the two facts are different:
   entry in a tuple. The manifest is what keeps a member from *"dropping the runner and keeping the
   file"*, which is the mechanism `REQUIRED_GATES` exists to serve for the gates that ARE registered.
 
-**Four gates cover this instrument, and each covers a different property:**
+**Five gates cover this instrument, and each covers a different property:**
 
 | gate | property it holds over this instrument |
 |---|---|
@@ -150,18 +150,15 @@ forbids, so none is coined here.
 | reading | value | predicate | instant |
 |---|---|---|---|
 | kit manifest version | `8d15725ac358` | digest over the manifest's own `(path, sha256, class)` triples, **134** files | 2026-09-27T16:14Z |
-| this instrument's declared set | **5 paths** (10 with both halves) | manifest paths carrying this instrument (§2) | as above |
+| with this law doc present, mid-flight | `4c142a360cff` | **135** files, **107** `standalone` | 2026-09-27T16:26Z |
+| **at commit `6209756`** — the commit this doc first shipped in | **`fa419c2001ac`** | **135** files, **107** `standalone`, read from the COMMITTED blob | 2026-09-27T16:41Z |
 
-**The manifest reading above was taken BEFORE this file joined the manifest**, so it does not yet
-count the law you are reading. The second reading is the one taken WITH this file present:
-
-| reading | value | predicate | instant |
-|---|---|---|---|
-| before this doc joined | `8d15725ac358` | 134 files, 106 `standalone` | 2026-09-27T16:14Z |
-| with this doc present | `4c142a360cff` | **135** files, **107** `standalone` | 2026-09-27T16:26Z |
-
-**A corrected reading is written BESIDE the old one, never over it** (frame §7.1's own discipline for
-a superseded figure), so both stand.
+**Each row stands BESIDE the ones it supersedes, never over them** (frame §7.1's own discipline), and
+the third is the one a reviewer reproduces: frame §7.4 rules that **the row a reviewer can reproduce
+is the one at the COMMIT the doc ships in**, because a mid-flight reading is a real instant that is
+also already superseded. **That row is pinned to a sha, not to an instant**, so it stays reproducible
+when the manifest moves on — which it does the moment this sentence is edited, by the regress below.
+Read the value for any later commit from that commit's own `registry/kit.json`.
 
 **And no value written in this file can ever be current — measured, not reasoned.** This law doc is
 itself a `standalone` manifest path, so **editing this file changes the digest that reports the
@@ -170,11 +167,12 @@ from `096942ab8ff1` to `c05479b31cce` and moved `kit_version` from `4c142a360cff
 `44720ca152e1` — the reading moved because the writer wrote. The value is therefore published with
 its instant and its reason for being superseded, never as a claim of currency.
 
-**This is a property, not a defect of the measurement**, and it is the sharpest form of frame §7.1's
-rule that a hand-typed number is a claim nothing can test: here the DERIVED number is also
-untestable from inside the file that carries it. **To read the version, read
-`registry/kit.json`** — the manifest is the only surface where the reading and the tree are the same
-object.
+**This is a property, not a defect of the measurement, it is GENERAL to every instrument law doc, and
+it is not coined here: frame §7.4 states it once as "the self-reference regress".** The sentence this
+paragraph exists to carry is that clause's consequence: the DERIVED number is untestable from inside
+the file that carries it, which is the sharper form of §7.1 (there a hand-typed number was untestable
+because nothing checked it). **To read the version, read `registry/kit.json`** — the manifest is the
+only surface where the reading and the tree are the same object.
 
 **These are readings at the instant shown and NOT a statement that the instrument is current.** The
 manifest moves whenever any shipped file moves, including files this instrument does not own, so a
@@ -292,11 +290,12 @@ took the root half and not the `TEMPLATE/` half holds a pair it cannot sync).
 **Instant:** the census has **not** been run for this instrument yet — the wave is step 9 of the
 promotion, and no number is published here in advance of it.
 
-**Stated as an absence with its reason, never as a zero.** Zero members hold this instrument today
-and zero members have declared a deferral. Those are different facts — an absence of adoption and an
-absence of *declaration* — and publishing `0` without both predicates would make a wave that has not
-run look like a wave that found nothing. Both readings are written here when the wave returns them,
-each with its own instant.
+**Stated as an inference with its reason, never as a bare zero.** No member holds this instrument and
+none has declared a deferral — both are **consequences of the timeline, not measurements**: the paths
+of §2 did not exist in the manifest before the commit that ships this doc, so no tree could hold them,
+and no member could have declared a deferral against an instrument that was not there. The predicates
+and the wave's readings are written here **when the wave returns them**, each with its own instant;
+until then this section carries an inference with its reason rather than a `0` dressed as a count.
 
 ## 10. Where this instrument's law lives
 
