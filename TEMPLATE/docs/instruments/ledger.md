@@ -239,9 +239,28 @@ pin**, judged by its own gate, never on this figure.
 
 Against the template's `tools/ledger.py` at **1308 lines** before this round's additions.
 
-**Three of the four member ledger-holders have no authorization matrix at all**, so an unauthorized
-row is accepted silently there today. That is not history — it is a live property of those trees,
-and it is the strongest single argument for the migration round.
+**Three of the four member ledger-holders accept an unauthorized pair silently today** — but the
+population is **inverted** against file presence, so a file count cannot stand in for the
+capability. Re-measured 2026-09-27T05:57Z by **behavioural probe**: a synthetic ledger, `append --event intake
+--actor worker`, run through each member's own `tools/ledger.py` with `OC_LEDGER_PATH` overridden.
+That is the only predicate that answers the question, and it disagrees with the file census in
+**both** directions.
+
+| member | carries `ledger_declaration.py` | refuses an unauthorized pair |
+|---|---|---|
+| ai-antispam | no | **no** — accepted |
+| infra-factory | no | **no** — accepted |
+| inferhub-watch | **yes** | **no** — accepted |
+| miidas | no | **yes** — refused |
+| opencrabs-dev | no ledger object | — |
+
+The single tree that **enforces** authorization carries no declaration module (miidas — an inline
+`authorize()` routed through both its write and its read path); the single tree that **carries**
+the module does not enforce it (inferhub-watch — the module is present, the write path never
+consults it). So *"has no authorization matrix"* and *"accepts an unauthorized row"* are
+different populations, and a census keyed on the file reports the wrong set either way. This is
+the strongest single argument for the migration round, stated the other way round: **the
+capability is what migrates, never the file that usually carries it.**
 
 **Pins vendored:** 2 of the 5 members carry `registry/kit.json` (infra-factory, inferhub-watch);
 the other three do not. An earlier figure of "0 of 5" was read before those two vendored theirs and
