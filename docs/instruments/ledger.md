@@ -268,6 +268,28 @@ family. A gate that refuses what the instrument lawfully writes is worse than no
 2026-09-27, `test_ledger_schema.py` carried its **own** `EVENT_TYPES` tuple, so a declared event
 passed the tool and red the gate. It now reads the same declaration through the same seam.
 
+The SAME class has an **actor half**, measured the same day on the first member tree to use the
+seam (`inferhub-watch`): the authorization self-probe asserted the CORE matrix — `worker` for
+`ruling` — while `docs/ledger-authorizations.json` exists precisely so a factory can **ADD** to
+that matrix. That factory lawfully declared the pair, so the probe demanded an error the
+declaration is designed to suppress and the gate returned rc=1 on a correct tree. **A probe that
+asserts a DEFAULT must state which world it asserts in**, by pinning the isolation seam the
+declaration surface already carries; and it must carry the **converse arm**, or it cannot tell
+"no declaration" from "a declaration that extends the default". Both arms ship.
+
+Two probe-design rules follow, and they are what this class keeps teaching:
+
+- **A non-vacuity anchor attaches to the population the check WALKS, never to the defect it
+  COUNTS.** Measured the same day: `test_board_intake_recorded.py` required its defect population
+  — subjects acted on with no intake row — to be non-empty, justified as "non-empty by
+  construction". That is false in a **REPAIRED** ledger: once every acted subject has been
+  backfilled an intake row the predicate returns `[]` legitimately, and the gate reds a ledger in
+  its best state, which is the very failure the anchor exists to prevent. The population that
+  survives repair is the walk; the defect does not.
+- **A fix lands with its rule, and a member's first use is the instrument's real test.** Both
+  defects above were found by a member, not by us, on the first tree that used the seam we
+  shipped — and neither reproduced in the tree that authored it.
+
 ---
 
 ## 6. This instrument's divergence matrix
