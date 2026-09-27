@@ -22,22 +22,65 @@ own.** This file therefore supplies only what is true of THIS instrument:
 
 ## 1. What the pacemaker instrument is
 
-**Its job, in one sentence: a factory's scheduled jobs are thin WAKES whose duties are receipted, and
-this instrument is the unit that makes that checkable in a tree.**
+**Its job, in one sentence: a factory's periodic work rides in a cron row that gates cheaply, wakes a
+session only when something is actually ready, and sets a goal so the woken lane keeps draining
+instead of answering one turn and settling.**
 
-It upholds the Pacemaker Law — `docs/best-practices.md` P7 (*"Cron is a thin pacemaker trigger, not
-the worker"*) and P28 (*"Every periodic process is driven by a thin nudging cron"*) — together with the
-two contracts that law's consequences added, the **duty receipt** and the **redirect log**.
+The concept is four columns of the daemon's `cron_jobs` table (added by migration
+`20260915000001_add_cron_trigger_pipeline.sql`; field semantics documented in
+`src/docs/reference/templates/cron/README.md`):
 
-An instrument is a **declared** object (frame §1), and this file is its declaration. It names the
-fields the frame fixes — name, executable(s), closure, gate set, version source, data surfaces — so a
-reader holding this file and a tree can answer *"is the pacemaker instrument complete here?"* without
-enumerating imports.
+| field | the duty it carries |
+|---|---|
+| `trigger_cmd` | the cheap pre-flight: a shell command run under `/bin/sh -c` (30 s timeout) **before** any agent turn. It watches; it never acts. |
+| `trigger_on` | when the watch counts as "something to do": `non_empty` (default) · `exit_zero` · `exit_non_zero` · `regex:<pattern>` · `always`. |
+| `deliver_to = session:<uuid>` | the wake. A fired trigger delivers into that session and starts its turn; the cron itself does no work. |
+| `set_goal` (+ `goal_template`) | the keeping-going. The fire sets an **active goal** in the target session, so the lane works the detected condition to completion rather than settling after one turn. Refused unless `deliver_to` targets a session. |
+
+**The economy is the point.** When the condition is not met the run is short-circuited at **0 tokens**
+and recorded as a skipped run — the prompt never executes and nothing is delivered
+(`cron_manage.rs:106`: *"If output is empty / non-zero based on `trigger_on`, job execution is
+short-circuited (0 tokens)"*). A periodic duty with no gate burns a full agent turn on every fire,
+whether or not there was anything to do; and a wake without `set_goal` drains the queue only as far
+as one turn reached.
+
+**The law this instrument upholds** is `docs/best-practices.md` P7 (*"Cron is a thin pacemaker
+trigger, not the worker"*) and P28 (*"Every periodic process is driven by a thin nudging cron"*),
+together with the two contracts that law's consequences added — the **duty receipt** and the
+**redirect log**, whose surfaces §6 declares.
+
+**Declaration and enforcement are different objects, and this doc is about both, in that order.**
+What ships to *check* these rows is `tools/patrol_host_state.py` (the live runner: it reads the cron
+table and feeds the predicates real rows) plus `tests/test_cron_thinness.py` (the pure predicate).
+The patrol is the upholder; the pacemaker is the cron row. §2 declares the upholder's file set,
+because that is what a tree census counts — but the **property** it upholds is the four columns
+above, and a member that ports the files without gating its own crons has adopted the checker and
+not the concept. An instrument is a **declared** object (frame §1), and this file is its declaration.
+
+**The concept's live state, measured 2026-09-27T12:33:45Z** (predicate: `enabled=1` rows in the
+**ops profile home only**; `gate` = `length(trigger_cmd) > 0`; `session wake` = `deliver_to`
+beginning `session:` — the only non-null delivery forms on this home are `session:<uuid>` and
+`telegram:-1003…`, verified by distinct read):
+
+| metric | rows |
+|---|---|
+| enabled | 33 |
+| with a cheap gate | 10 |
+| waking a session | 8 |
+| gate **AND** session wake | 2 |
+| with `set_goal` | 2 |
+| gate **AND** session wake **AND** `set_goal` | **0** |
+
+So on this home **no enabled row yet carries the full concept**: the two gated session-wakes
+(`ai-antispam-43-close-gate`, `ai-antispam-52-close-gate`) do not set a goal, and the two
+`set_goal` rows (`oc-triage-factory-patrol`, `inferhub-hq-pacemaker`) have no gate. Six enabled
+session-wakes have no gate at all and burn a turn on every fire. This table is a snapshot of ONE
+home at ONE instant, not a fleet figure — §9 counts member **adoption of the instrument**, a
+different population, and the two must not be read as each other.
 
 **Name:** `pacemaker` — a bare noun, per frame §4: adopted instruments drop the `oc-` prefix, because
 the class field now carries the fleet-generic-versus-factory-specific distinction the prefix used to
 carry.
-
 ## 2. The declared file set
 
 Read from `registry/kit.json` (the manifest, `kit_version` at the instant of writing in §9):
