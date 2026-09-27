@@ -353,6 +353,39 @@ their inputs are `TEMPLATE/`-only paths and no member carries a `TEMPLATE/` (mea
 skip rather than passing quietly (`f9cc405` made it reach a verdict instead of crashing). An adopter
 should read a member-tree green as *the live population is judged*, never as *every probe ran*.
 
+### 9.1.2 The initialization delivery of 2026-09-27 — measured
+
+**Instant:** 2026-09-27T14:1xZ. **Command:** `python3 tools/kit_deliver.py --to <member-root>`, once per
+member, on owner order (*"the member factories should be initialized to use the kit system"*).
+
+| member | written | local files kept | pin before → after | its gate, after |
+|---|---|---|---|---|
+| `ai-antispam` | 101 | 6 | `ab929a61bcc2` → `6f10a14dcb5f` | **rc=0** |
+| `inferhub-watch` | 105 | 7 | `db6aa904a8a1` → `6f10a14dcb5f` | **rc=1** — 7 undeclared divergences |
+| `infra-factory` | 88 | 21 | `b0bb09cb288f` → `6f10a14dcb5f` | **rc=1** — 18 undeclared divergences |
+| `miidas` | 91 | 17 | `6ab591c618ec` → `6f10a14dcb5f` | **rc=0** |
+| `opencrabs-dev` | — | — | **REFUSED** — no pin | out of scope (§9.1) |
+
+**Every one of the four now holds both shipping paths of §2**, so §9.1's own predicate reads 2 of 2 for
+all four. The two red gates are **not** caused by the delivery, and that is measured rather than
+argued: the delivery **never overwrites an existing file** (it counts them as *local files kept*), so
+each diverging path was compared against the member's **own pre-delivery pin** — and **every one was
+already divergent there** (`inferhub-watch` 7 of 7, `infra-factory` 18 of 18). What the delivery changed
+is that two of these members now **have the reader** that makes their drift measurable at all; before
+it, both carried no `tests/test_kit_pin.py` and could not judge themselves.
+
+**So the delivery resolves the ADD half and leaves the DIVERGENCE half, which is the member's own
+decision** — the gate names both lawful answers (take the update, or declare the fork in
+`registry/kit-exemptions.json` with a reason), and frame §9's O-series is the same rule.
+
+Two smaller measurements from the same run. `miidas`'s pin carries **132** entries, the extra being
+`TEMPLATE/tests/test_template_sync.py` — a path **retired in the source and kept in the member's pin**
+(the tool names it as such on every run, so it is a declared observation, not drift). And the tool's
+own phrase *"local files kept"* is broader than divergence: it counts **every** existing path it
+declines to overwrite, including those byte-identical to the pin — which is why its count (21 for
+`infra-factory`) exceeds the gate's divergence count (18).
+
+
 ### 9.2 The gaps this instrument declares
 
 Each is **declared** rather than silently patched, with its reproduce command, so a later reader
