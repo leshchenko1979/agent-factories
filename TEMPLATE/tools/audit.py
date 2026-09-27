@@ -1021,6 +1021,12 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_schema.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_schema.py"])
 
+    # 5b. The derived ledger index — P29's mechanism for the index's own rule
+    # ("derived, disposable, never a source of truth"). It asserts that a rebuild agrees
+    # with a plain scan, on a FIXTURE, so it depends on no live ledger.
+    if (repo_root / "tests/test_ledger_index.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_index.py"])
+
     # 6. Template sync gate
     if (repo_root / "tests/test_template_sync.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_template_sync.py"])

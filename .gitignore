@@ -2,3 +2,6 @@
 .ledger.lock
 .insights.lock
 __pycache__/
+
+# The derived ledger index: disposable, regenerable, ~2.9x the text.
+.ledger-index.sqlite
