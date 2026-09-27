@@ -214,6 +214,16 @@ required:
 | **repo twin** | `docs/instruments/<instrument>.md` — **byte-identical** | `tests/test_docs_sync.py` |
 | **reload path** | `skills/meta-factory/<instrument>.md` — **relative symlink** into the template half | the loader, which follows symlinks |
 
+**The reload row is META-FACTORY-SCOPED, and that is a deliberate limit rather than the whole
+story.** The path is `skills/meta-factory/`, which is **outside `TEMPLATE/`** — and `TEMPLATE/` is
+the manifest's entire population (measured: **120 of 120** entries, `skills/` = **0**). So the
+reload leg is **not shipped and cannot be**: `kit_deliver.py` copies manifest paths
+(`shutil.copyfile`) and creates **no symlinks by construction**, and no single manifest entry could
+express it anyway, because a member's skill directory is named **per member**
+(`skills/ai-antispam/`, `skills/inferhub/`, …). **A member that receives a law doc therefore holds a
+COPY WITH NO RELOAD LEG until it creates one** — the law ships, and it does not survive that
+member's compaction. §6.1 is the step that closes it.
+
 **The reload path exists because law that does not survive compaction is not law.** Measured: the
 reload scanner's location is **fixed** (`user_skills_dir()` resolves under the profile home; there
 is **no** environment override — `OC_SKILLS_DIR`/`SKILLS_DIR` = 0 hits in source), so the scanner
@@ -243,6 +253,31 @@ byte-identical.
 unit and never touches the member's own files; it is declared **meta-factory-only** in
 `gate_registry.py` because **a member delivers to nobody**. So an instrument that exists to
 distribute does **not** ship — which is why a census of the shipped tree does not see it.
+
+### 6.1 The member leg — an ADOPTION STEP, never installed from here
+
+**A member that adopts an instrument and wants its law to survive compaction creates its own reload
+link.** It is the member's act, in the member's tree, because only the member knows its own skill
+directory name:
+
+```
+<member>/skills/<member-skill>/<instrument>.md  ->  ../../docs/instruments/<instrument>.md
+```
+
+**It is a step the adopting factory owns, on the same footing as the other adoption steps** — the
+declaration, the install and the verify. Two rules bind it:
+
+- **It is never installed from the meta-factory.** `kit_deliver.py` copies files and creates no
+  symlinks; a distribution that wrote into a member's skill tree would be touching the member's own
+  files, which its contract forbids outright. **The shape is each member's own decision.**
+- **"Absent from the member's tree" is not "unusable".** A law doc with no reload link is perfectly
+  readable — it is simply not re-injected after compaction. The census records the absence as a
+  **declared state** (§7.2), exactly as it records a deferred migration, and never as a failure.
+
+**The shape is proven in production, not only in source:** `skills/grafana/` already runs it —
+`sql-examples.md` sits as a top-level auxiliary `.md` symlink beside `SKILL.md`, and the loader
+discovers and reads it through the link. **That one is absolute; a member adopting this law should
+prefer the relative form**, which survives a move of either tree.
 
 ## 7. The version identifier and the deferred state
 
