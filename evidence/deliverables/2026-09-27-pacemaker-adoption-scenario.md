@@ -80,3 +80,82 @@ stays asserted: the token is the convention; the anchor is the tree's data.
 - The pytest form of the gate in the member's tree is blocked by their own conftest requiring
   `BOT_TOKEN` — a pre-existing condition of their tree, unrelated to this gate, and recorded
   rather than worked around.
+
+---
+
+## 6. The declaration leg — the one stage no lane but the member's can supply
+
+Added 2026-09-27T17:5xZ. §1–§5 close the ADOPTION *scenario* in a member's tree; this section
+records the stage after it, where the fleet's census reads the result.
+
+### 6.1 What was wrong, and how it was found
+
+The census (`tools/instrument_census.py`, 17:10:24Z) requires **two legs** for `ADOPTED`: the
+declared set complete, AND the instrument's own declaration behind it. On its first run it
+reported the declared leg as `unestablished` for **every** member — as a *schema fact*, and it
+said so: no per-instrument declaration surface existed.
+
+That was true when written and false 19 minutes later: `tools/registry.py` (17:29:36Z, HQ
+`bee6353`) added `instruments.<slug>`. Two halves of one law landed out of step, and nobody
+noticed until the census was run against a law doc that finally parsed.
+
+**Same class as the rest of this instrument: a reader that predates its surface reads clean over
+it.** The census's own docstring asked for the field ("HQ's schema to extend"); HQ extended it;
+the reader was not updated. Measured consequence: **no member could reach `ADOPTED` whatever it
+declared**, so the fleet's adoption tracker could report no adoption at all, for any instrument.
+
+The reader was extended by the tool's owning lane (`84a94ba`) and carries a gate of its own:
+`tests/test_instrument_census.py`, **10 arms, rc=0**, including the non-vacuity arm that reads
+`ADOPTED` over a complete set — the path no member had walked.
+
+### 6.2 The rehearsal — the live member is one declaration away
+
+Run against `infra-factory`'s **real** tree (`/root/vds-servers`), with the declaration supplied
+in a **temporary fragment store**: no live store and no member tree was written.
+
+    infra-factory    held=9/9  declares=adopted · green=true   -> ADOPTED
+
+So the pipe is proven end to end over live fleet data, and the only missing input is the member's
+own measurement. That is not a technical gap — the frame is explicit that the fragment is
+"written by THAT factory's HQ and by nobody else", so neither the instrument owner nor the scribe
+can supply it.
+
+### 6.3 Live state at the reading
+
+`tools/instrument_census.py`, artifact `evidence/instrument-census-pacemaker-2026-09-27.md`,
+instant **2026-09-27T17:48:33Z**:
+
+| member | held | fragment declares | status |
+|---|---|---|---|
+| `ai-antispam` | 9/9 | unestablished | HELD-UNDECLARED |
+| `inferhub-watch` | 9/9 | unestablished | HELD-UNDECLARED |
+| `infra-factory` | 9/9 | unestablished | HELD-UNDECLARED |
+| `meta-factory` | 9/9 | — | SOURCE |
+| `miidas` | 1/9 | unestablished | PARTIAL-UNDECLARED |
+| `opencrabs-dev` | 0/9 | unestablished | ABSENT |
+
+**All three holders are `HELD-UNDECLARED`, and that is the correct reading, not a failure** —
+it is frame §7.2's silence rendered as silence. The declaration is each member's own act.
+
+### 6.4 The declaration shape, verified against the registry's own validator
+
+    "instruments": {"pacemaker": {"state": "adopted", "green": true, "measured_at": "<instant>"}}
+
+- valid shape → `python3 tools/registry.py validate <fragment>` **rc=0**
+- `green` omitted → **rc=1**, refusal: *"instruments.pacemaker.state `adopted` requires `green:
+  true` — HELD and GREEN are independent (frame 7.2)…"*
+- live store, 17:5xZ → rc=0, 7 fragments valid, **zero carrying `instruments`**
+
+### 6.5 Dispatched, and what it awaits
+
+- `infra-factory HQ` — asked to declare, with the shape above and the validator receipts, and
+  with the honest caveat attached: its tree is 6/9 **current**, three files being pre-fix
+  revisions, so it was asked to re-copy and re-measure before declaring rather than to adopt on
+  a stale green.
+- `Delegate` (topic 68) — the lane that commits fragments from member declarations; told the
+  field exists and is readable, with the same receipts. Not asked to declare on anyone's behalf:
+  a scribe cannot supply a measurement it did not take.
+
+**Re-entry, stated so this is not silence:** the pacemaker's first live `ADOPTED` row appears the
+moment one holder replies with `state: adopted` + its own `green`. Everything already exists to
+render it; §6.2 is the receipt that it will.
