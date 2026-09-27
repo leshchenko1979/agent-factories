@@ -939,6 +939,75 @@ def test_a_stem_NO_live_row_declares_stays_HISTORY() -> None:
     )
 
 
+def test_a_CLASS_1_row_is_NAMED_with_its_class_never_counted() -> None:
+    """#148 acceptance 1: a class-gate that prints only a COUNT fails.
+
+    `#119` created the class and the detection worked; nothing acted on the finding, so the
+    row stayed broken while every mechanical surface read clean (criterion 4 of #148, ruling
+    n=1169: "a count is a fact about a population and a repairer needs an OBJECT"). The leg
+    must therefore NAME the row and its class, not merely report that a class exists.
+    """
+    rows = [_cron("factory-broken-pacemaker", deliver_to=f"oc://session/{_SESSION_UUID}",
+                  prompt=_WAKE_PROMPT)]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], unreached=[],
+                      prefixes=["factory-"])
+    assert rc != 0, f"a class-1 row is a problem, so the run reds\n{out}"
+    assert "factory-broken-pacemaker" in out, (
+        f"the class-1 row must be NAMED, never folded into a count\n{out}"
+    )
+    assert "unbaked" in out, f"the finding must name the CLASS it belongs to\n{out}"
+    assert "route: factory-broken-pacemaker — unbaked-target" in out, (
+        f"and its CURRENT route must be printed per row WITH ITS CLASS, not merely the "
+        f"predicate's finding — so a row that regresses into class 1 is named as class 1\n"
+        f"{out}"
+    )
+
+
+def test_the_leg_prints_the_CURRENT_delivery_path_of_every_attributed_row() -> None:
+    """#148 acceptance 2: the scheduled check asserts the state READ, not a forecast.
+
+    The patrol runs on a cron cadence, so the current delivery path of each attributed row
+    is what makes the row's health assertable by a RUN rather than predicted by a plan.
+    """
+    rows = [
+        _cron("factory-prompt-notify",
+              prompt=f"{_WAKE_PROMPT} then run session notify for the lane"),
+        _cron("factory-session-target", deliver_to=f"session:{_SESSION_UUID}",
+              prompt=_WAKE_PROMPT),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], unreached=[],
+                      prefixes=["factory-"])
+    assert rc == 0, f"both rows are thin and must be clean\n{out}"
+    assert "delivery paths:" in out, f"the routes block must be printed\n{out}"
+    assert "route: factory-prompt-notify — prompt-notify (no deliver_to)" in out, (
+        f"each attributed row's CURRENT route must be named with the field it came from\n{out}"
+    )
+    assert "route: factory-session-target — session-target" in out, out
+    assert "2 attributed row(s)" in out, f"the population must be printed\n{out}"
+
+
+def test_a_row_this_factory_does_NOT_own_is_not_in_the_routes_block() -> None:
+    """NEGATIVE CONTROL: the block's population is the ATTRIBUTED set, not every row read.
+
+    A block that named rows this factory has no authority over would turn a per-factory
+    report into a box-wide one (#101, ruling n=610 part 3b).
+    """
+    rows = [
+        _cron("factory-mine",
+              prompt=f"{_WAKE_PROMPT} then run session notify for the lane"),
+        _cron("other-factory-job",
+              prompt=f"{_WAKE_PROMPT} then run session notify for the lane"),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], unreached=[],
+                      prefixes=["factory-"])
+    assert rc == 0, out
+    routes_block = out.split("delivery paths:", 1)[1]
+    assert "route: factory-mine" in routes_block, routes_block
+    assert "other-factory-job" not in routes_block.split("homes unreached", 1)[0], (
+        f"an unattributed row is REPORTED in its own bucket, never judged here\n{routes_block}"
+    )
+
+
 def test_the_retired_bucket_prints_its_POPULATION_and_its_PREDICATE() -> None:
     """#163 half 2 (b): "no retired logs" and "a bucket that cannot see one" must differ.
 

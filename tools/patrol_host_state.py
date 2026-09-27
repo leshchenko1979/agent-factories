@@ -716,6 +716,23 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
     judged, excused = predicate.pacemaker_problems(attributed)
     problems.extend(judged)
 
+    # EACH ATTRIBUTED ROW'S CURRENT DELIVERY PATH, named (#148, ruling n=1169 criteria 3/4).
+    # A class-gate over a list can report that a class EXISTS and repairs nothing, and a
+    # COUNT is a fact about a population while a repairer needs an OBJECT. So the route every
+    # attributed row carries TODAY is read and NAMED here, on every scheduled run: a class-1
+    # row (`unbaked-target`) is named with its class rather than folded into a number, and a
+    # row that regresses into that class is visible at the next fire. This asserts the state
+    # READ — never a predicted future failure, because a row's own history is not a forecast.
+    attributed_routes = [
+        {
+            "name": str(row.get("name") or ""),
+            "route": predicate.row_wake(row),
+            "deliver_to": str(row.get("deliver_to") or ""),
+            "home": str(row.get("home") or ""),
+        }
+        for row in attributed
+    ]
+
     # THE EMBEDDED-LAW-CONTENT CLASS IS SCANNED OVER EVERY ROW READ, not only the
     # attributed ones, and that scope is the point: the class is a property of the PROMPT,
     # and the box's live instances sit on OTHER factories' rows (measured 2026-09-27T03:4xZ:
@@ -791,6 +808,10 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
             "rows_scanned": len(rows),
             "law_content_rows": law_content,
             "dated_not_boundary_rows": dated_only,
+            # #148's scheduled check: the CURRENT delivery path of every attributed row,
+            # named per row. Printed every run, so the state is asserted by the run rather
+            # than predicted by a plan (ruling n=1169 criterion 3).
+            "attributed_routes": attributed_routes,
         },
     }
 
@@ -1774,6 +1795,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"    dated, not a boundary: {row['name']} (owner {owner}) carries "
                     f"{row['date']}"
                 )
+            routes = cov.get("attributed_routes", [])
+            lines.append(
+                f"  delivery paths: the CURRENT route of each of {len(routes)} attributed "
+                f"row(s), NAMED per row — a class-1 row is named with its class, never "
+                f"counted, and a regression into that class shows at the next fire"
+            )
+            for row in routes:
+                detail = (
+                    f"deliver_to {row['deliver_to']!r}" if row["deliver_to"]
+                    else "no deliver_to"
+                )
+                lines.append(f"    route: {row['name']} — {row['route']} ({detail})")
             lines.append(
                 f"  homes unreached: {len(cov['homes_unreached'])}"
                 + (f" — {'; '.join(cov['homes_unreached'])}" if cov['homes_unreached'] else "")
