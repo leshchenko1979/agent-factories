@@ -238,9 +238,16 @@ _WAKE_PROMPT = (
     "do NOT execute any project work yourself"
 )
 
-def _thin(name, **kw) -> dict:
-    """A correctly-thin row: a session target whose prompt declares itself wake-only."""
-    return _cron(name, deliver_to=f"session:{_SESSION_UUID}", prompt=_WAKE_PROMPT, **kw)
+def _thin(name, *, prompt=None, **kw) -> dict:
+    """A correctly-thin row: a session target whose prompt declares itself wake-only.
+
+    `prompt` EXTENDS the wake-only prompt rather than replacing it, so a probe can add the
+    content it is testing while the row stays correctly thin on the wake and marker legs —
+    otherwise the content probe would trip the unrelated work-order leg and prove nothing
+    about the class it names.
+    """
+    body = _WAKE_PROMPT if prompt is None else f"{_WAKE_PROMPT} {prompt}"
+    return _cron(name, deliver_to=f"session:{_SESSION_UUID}", prompt=body, **kw)
 
 def _ledger_with(*subjects) -> Path:
     """A synthetic ledger in a temp dir — the guard is checked against DATA, not the live log."""
@@ -344,6 +351,105 @@ def test_the_cron_leg_BITES_on_a_defect_in_a_row_this_factory_declares() -> None
     assert "2 cron row(s) attributed to this factory and judged" in out, (
         f"the verdict must state the judged population\n{out}"
     )
+
+def test_the_law_content_class_NAMES_every_row_and_states_its_population() -> None:
+    """#178: the class NAMES each row, never a bare count, and prints the population read.
+
+    A count cannot be dispatched, claimed or closed; a named row can be all three (#148).
+    The row below belongs to ANOTHER factory, and the leg still names it — because a
+    per-factory scan would see none of the class's live instances and would report a clean
+    verdict over the class it exists to catch (the #170/#177 family).
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("oc-other-factory-window",
+              prompt=_WAKE_PROMPT + " The window from the deploy (2026-09-24T11:33:19Z) "
+                                   "has passed.", home="other-home"),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
+                      prefixes=["factory-"])
+    assert rc == 0, (
+        f"another factory's row must not fail THIS factory's run — the class is reported "
+        f"for rows this factory does not declare (#101)\n{out}"
+    )
+    assert "law-content scan: 2 row(s) examined" in out, (
+        f"the population examined must be printed, so a clean verdict is distinguishable "
+        f"from one that examined nothing\n{out}"
+    )
+    assert "law content: oc-other-factory-window" in out, (
+        f"the row must be NAMED, with the instant it embeds\n{out}"
+    )
+    assert "2026-09-24T11:33" in out, out
+
+def test_the_law_content_class_BITES_on_a_row_this_factory_declares() -> None:
+    """Non-vacuity: the class must FAIL the run when the row carrying it is ours."""
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-boundary-holder",
+              prompt=_WAKE_PROMPT + " Pool-swap boundary: 2026-09-25T16:17:46Z. The pool is "
+                                   "now model-a:free + model-b:free."),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 1, f"an embedded boundary on our own row must fail the run, got rc={rc}\n{out}"
+    assert "factory-boundary-holder" in out, out
+    assert "2026-09-25T16:17" in out, out
+    assert "P7/P28" in out, (
+        f"the finding must name the rule that would have prevented it, per #148 — the "
+        f"repairer is named, not counted\n{out}"
+    )
+
+def test_a_bare_date_is_REPORTED_and_never_judged_so_the_exclusion_is_visible() -> None:
+    """A bare date is a CITATION of the past, not state — printed, never judged.
+
+    This is the half that keeps the exclusion checkable: a reader can see WHICH rows were
+    set aside and why, instead of trusting a silent predicate.
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-thin-exemplar",
+              prompt=_WAKE_PROMPT + " This prompt is thin: it was 5,289 chars of pasted law "
+                                   "on 2026-09-26, every word of which already lived in "
+                                   "triage.md."),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 0, (
+        f"a historical rationale carrying a bare date is not embedded state\n{out}"
+    )
+    assert "dated, not a boundary: factory-thin-exemplar" in out, (
+        f"the row must be REPORTED with its date — an exclusion that prints nothing is "
+        f"indistinguishable from a predicate that never looked\n{out}"
+    )
+    judged = [line for line in out.splitlines() if line.startswith("    - ")]
+    assert not any("factory-thin-exemplar" in line for line in judged), (
+        f"a bare date must never reach the problems list\n{judged}\n{out}"
+    )
+
+def test_the_negative_control_BITES_a_date_only_predicate_would_fire_on_the_exemplar() -> None:
+    """The control is not vacuous, and this is the measurement that chose the predicate.
+
+    Widening the class to a BARE DATE makes the box's best-shaped row a defect: the
+    exemplar explains its own thinness using a date. A predicate that fires on the exemplar
+    is one a reader learns to ignore, so the instant (date WITH a time) is the predicate and
+    this probe is the evidence for it — it fails if the control cannot fire at all.
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-thin-exemplar",
+              prompt=_WAKE_PROMPT + " It was 5,289 chars of pasted law on 2026-09-26, every "
+                                   "word of which already lived in triage.md."),
+    ]
+    saved = RUNNER.EMBEDDED_INSTANT_RE
+    try:
+        RUNNER.EMBEDDED_INSTANT_RE = RUNNER.BARE_DATE_RE
+        rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+        assert rc == 1, (
+            f"the control must BITE: a date-only predicate fires on the exemplar, which is "
+            f"exactly why the shipped predicate is an INSTANT\n{out}"
+        )
+    finally:
+        RUNNER.EMBEDDED_INSTANT_RE = saved
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 0, f"the shipped predicate must not fire on the exemplar\n{out}"
 
 def test_the_leg_binds_to_the_SHARED_predicate_and_the_shared_registry() -> None:
     """One predicate, one home — imported, never re-derived.

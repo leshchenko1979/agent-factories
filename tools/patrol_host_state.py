@@ -192,6 +192,36 @@ CLOSE_BOARD_GATE = REPO / "tests" / "test_close_board_recorded.py"
 REGISTRY = REPO / "tools" / "registry.py"
 CRON_THINNESS_PREDICATE = REPO / "tests" / "test_cron_thinness.py"
 
+# --- the embedded-law-content class (#178) --------------------------------------
+#
+# A cron prompt must be a THIN POINTER to the law. When it carries the law's CONTENT
+# inline, the law moves and the prompt does not: the prompt is a copy, the copy drifts,
+# and nothing re-reads it (#178, ruling n=1230). The class is DRIFT-PRONE EMBEDDED STATE
+# — a boundary, window, epoch or deadline the law owns — never a section reference, which
+# the ruling measured at ZERO across the whole box and is therefore the WRONG zero to
+# brief against.
+#
+# THE PREDICATE IS AN ISO-8601 INSTANT (a date WITH a time component), and that is a
+# MEASURED choice rather than a convenience. A BARE DATE fires on the best-shaped row on
+# the box: `oc-triage-factory-patrol` says "it was 5,289 chars of pasted law on
+# 2026-09-26, every word of which already lived in triage.md" — a historical rationale
+# EXPLAINING why its prompt is thin, and a date-only predicate reports it as a defect.
+# Measured over 40 enabled rows across 3 homes at 2026-09-27T03:4xZ: a date-only
+# predicate fires on 10 rows, an instant-only predicate on 5, and the 5 are exactly the
+# rows asserting a boundary/window/epoch/deadline. A bare date is most often a CITATION
+# of when something was decided — the past, not state — so it is REPORTED and never
+# judged, which keeps the excluded population visible instead of silent.
+#
+# THE INSTANT IS NOT THE WHOLE CLASS, and the gap is stated rather than hidden: a prompt
+# restating campaign law normatively ("only 0-star inboxes are usable") carries content
+# the instant predicate cannot see. No phrasing predicate replaces it, because the
+# wake-only marker ("do NOT execute any project work yourself") is itself normative and
+# appears on nearly every row — a normative scan would fire on the whole population and
+# be read as noise. The instant is the objective half, and the REPORTED bare-date
+# population is what keeps the rest checkable by a reader.
+EMBEDDED_INSTANT_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+BARE_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
+
 # --- the notify-receipt leg (#122) ---------------------------------------------
 #
 # Origin (issue #122, ruled at ledger n=772..774). A thin-trigger cron's notify can FAIL
@@ -614,6 +644,23 @@ def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], l
     return attributed, unattributed
 
 
+def embedded_law_content(prompt: str) -> tuple[str, str]:
+    """(embedded instant, bare date) for one prompt — at most one of them is non-empty.
+
+    The two are RETURNED APART rather than folded into one verdict, because they are
+    different findings: an instant is drift-prone STATE and is judged, while a bare date is
+    a citation of the past and is only REPORTED. Collapsing them would make the citation
+    indistinguishable from the state, which is the false positive this class measured on
+    the box's own best-shaped row (`oc-triage-factory-patrol`, whose bare date sits in a
+    rationale explaining why its prompt is THIN).
+    """
+    text = prompt or ""
+    instant = EMBEDDED_INSTANT_RE.search(text)
+    if instant:
+        return instant.group(0), ""
+    date = BARE_DATE_RE.search(text)
+    return "", (date.group(0) if date else "")
+
 def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                       prefixes: list[str], *, predicate=None, read_at: str = "") -> dict:
     """The cron-thinness leg: THIS factory's rows, judged by the PURE predicate.
@@ -642,6 +689,57 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
         )
     judged, excused = predicate.pacemaker_problems(attributed)
     problems.extend(judged)
+
+    # THE EMBEDDED-LAW-CONTENT CLASS IS SCANNED OVER EVERY ROW READ, not only the
+    # attributed ones, and that scope is the point: the class is a property of the PROMPT,
+    # and the box's live instances sit on OTHER factories' rows (measured 2026-09-27T03:4xZ:
+    # all five in the ops home, under prefixes this factory does not declare). A per-factory
+    # scan would see none of them and would report a clean verdict over the class it was
+    # built to catch — the #170/#177 family, a predicate that cannot see its own population.
+    # Rows this factory OWNS are JUDGED; rows it does not are NAMED and reported, the same
+    # split the unattributed population already uses, because a box-wide RED over another
+    # factory's rows would fire on rows this factory has no authority over (#101).
+    #
+    # The declaring factory is read from the manifest, never guessed from the name: a name
+    # is not an address, and the manifest is what DECLARES ownership. A manifest that cannot
+    # be read yields {} and each finding then names the HOME it was read from instead of
+    # inventing an owner.
+    try:
+        declaring = dict(load_module("oc_registry", REGISTRY).NAME_PREFIXES)
+    except Exception:
+        declaring = {}
+
+    def _declares(name: str) -> str:
+        for slug, pref in declaring.items():
+            if any(name.startswith(p) for p in pref):
+                return slug
+        return ""
+
+    law_content: list[dict] = []
+    dated_only: list[dict] = []
+    for row in rows:
+        row_name = str(row.get("name") or "")
+        instant, bare = embedded_law_content(str(row.get("prompt") or ""))
+        if instant:
+            law_content.append({"name": row_name, "home": str(row.get("home") or ""),
+                                "instant": instant, "owner": _declares(row_name)})
+        elif bare:
+            dated_only.append({"name": row_name, "home": str(row.get("home") or ""),
+                               "date": bare, "owner": _declares(row_name)})
+
+    owned = {str(r.get("name") or "") for r in attributed}
+    for entry in law_content:
+        if entry["name"] not in owned:
+            continue
+        problems.append(
+            f"{entry['name']}: its prompt embeds drift-prone law content — the instant "
+            f"{entry['instant']} is a boundary/window/epoch the law owns, so the prompt is "
+            f"a COPY that drifts the moment the law moves. P7/P28: a cron prompt is a thin "
+            f"POINTER to the law, never the law itself (#178, ruling n=1230). Repairer: "
+            f"this factory. Move the state into the law and have the prompt read it, or "
+            f"drop it where the pre-flight command already derives it"
+        )
+
     return {
         "name": "cron-thinness",
         "status": "ASSERTED",
@@ -660,6 +758,13 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
             ],
             "prefixes": prefixes,
             "read_at": read_at,
+            # The embedded-law-content class, NAMED — never a bare count, because a count
+            # cannot be dispatched, claimed or closed while a named row can be all three
+            # (#148's ruling, applied here). `rows_scanned` is printed beside it so a clean
+            # verdict is distinguishable from one that examined nothing.
+            "rows_scanned": len(rows),
+            "law_content_rows": law_content,
+            "dated_not_boundary_rows": dated_only,
         },
     }
 
@@ -1438,6 +1543,24 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 lines.append(
                     f"    unattributed: {row['name'] or '(unnamed row)'} "
                     f"(home {row['home'] or 'unknown'})"
+                )
+            lines.append(
+                f"  law-content scan: {cov['rows_scanned']} row(s) examined, "
+                f"{len(cov['law_content_rows'])} embed a boundary/window/epoch the law "
+                f"owns, {len(cov['dated_not_boundary_rows'])} carry a bare date (a "
+                f"citation of the past, reported and never judged)"
+            )
+            for row in cov["law_content_rows"]:
+                owner = row["owner"] or row["home"] or "unknown"
+                lines.append(
+                    f"    law content: {row['name']} (owner {owner}) embeds "
+                    f"{row['instant']} — a thin POINTER to the law must not carry its state"
+                )
+            for row in cov["dated_not_boundary_rows"]:
+                owner = row["owner"] or row["home"] or "unknown"
+                lines.append(
+                    f"    dated, not a boundary: {row['name']} (owner {owner}) carries "
+                    f"{row['date']}"
                 )
             lines.append(
                 f"  homes unreached: {len(cov['homes_unreached'])}"
