@@ -7,6 +7,10 @@ those live in the frame it cites.
 own law makes review of a per-instrument file a **requirement, not a courtesy** (frame §8).
 **Authority:** **HQ retains cross-factory authority.** Any clause in this file that binds a member
 factory is HQ's, and so is the process law *about* instruments; both are cited here, never coined.
+**Does not own, by role:** cross-instrument definitions (the frame, §8); the instantiation of a
+meta-factory part into a new instrument (the Fleet instruments lane, HQ-chartered 2026-09-27T04:18Z);
+and any clause binding a member factory (HQ, §8). This lane owns **one** instrument end to end —
+its law, its enforcement, and its member adoption.
 
 **This file cites `template-instruments.md`, the frame, and never restates it** — restating is how one
 definition becomes two, and two definitions drift. Parts 4, 7, 8 and 9 are cross-instrument by
