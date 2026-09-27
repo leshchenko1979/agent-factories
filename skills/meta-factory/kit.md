@@ -1,0 +1,1 @@
+../../TEMPLATE/docs/instruments/kit.md
