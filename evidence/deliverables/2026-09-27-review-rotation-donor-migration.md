@@ -101,7 +101,59 @@ at the instant shown. They are a reading of a live corpus, not a constant: a lat
 re-derives them should get the same numbers **for the same 17 files**, and should expect them
 to move when the donor runs another cycle.
 
-## 4. What this file does NOT claim
+## 4. The donor-side boundary — and the AC3 receipt
+
+### 4.1 What lands where, and by whom
+
+The migration is a **completion of the template plus a carve at the donor**, not a file install
+into the donor's tree. Every landing is attributed, because this is the part of the promotion
+that is easiest to over-read:
+
+| landing | the path | who lands it | why not this lane |
+|---|---|---|---|
+| the promoted law pair + the reload link | `TEMPLATE/docs/instruments/review-rotation.md` + `docs/…` + `skills/meta-factory/review-rotation.md` | **this lane** ✓ landed | — |
+| the executable, the gate, the schema, the catalogue | `tools/review.py` · `tests/test_review.py` · `docs/review-cycle.schema.json` · `docs/review-lenses.md` | **this lane** ✓ landed | — |
+| the donor's `hq.md` Duty 4 / Duty 6 / cadence regions → `[LANE]` pointers | `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/hq.md` | **OC DEV HQ** — text supplied, dispatched | the donor's own `SKILL.md:390` ("ONLY HQ edits skill files: … `hq.md` …") and `fleet-directives.md:97` (the per-instrument exception covers **one file per instrument** and "does NOT extend to skill markdown generally") |
+| the donor's reload link (if it wants one) | the donor's own skill tree | **the donor** — its own act | frame §6.1: it "is **your** act, in **your** tree; it is never installed from the template", and "the shape is each member's own decision" |
+| the donor's kit initialization | — | **HQ** (obligation O6, an HQ-authored clause) | n=1283 Q2: a clause binding a member factory stays at HQ |
+
+**A file install into the donor's tree was considered and deliberately NOT done.** Two reasons,
+both decisive rather than stylistic: the donor is not a kit member (no `registry/kit.json` —
+`kit_deliver.py` refuses without one, which is its designed behaviour, not a defect), and
+frame §6.1 places the member leg with the member. The instrument's own adoption steps are
+stated in the law doc §8 and are the donor's to take.
+
+### 4.2 AC3 — the donor's own gates, read from the donor's own receipt
+
+The donor's battery writes its result to its own artifact, so the reading is taken from there
+rather than from a report:
+
+| reading | value | predicate | scope | instant |
+|---|---|---|---|---|
+| battery before | **281 pass / 2 fail — FAIL** | `tools/tests/battery-last.json` | the donor's battery, mode `parallel jobs=4` | `2026-09-27T16:22:17Z` |
+| battery after | **283 pass / 0 fail — PASS** | same artifact, same predicate | same | `2026-09-27T16:56:17Z` |
+| battery, this lane's own run | **282 pass / 1 fail — FAIL** | same artifact, same predicate | same | `2026-09-27T17:01:29Z` |
+| the check that failed at 16:22, re-run first-hand | **PASS=48 FAIL=0, rc=0** | `./tools/state/oc-drift-check --selftest` | the donor tree, run OUT of this session's cgroup | 2026-09-27 ~16:5xZ |
+
+**THE DONOR'S BATTERY IS FLAKY, and the three readings are published together because any
+one of them alone is misleading.** Two of the three failed; the difference is the same cell
+each time. The mechanism is visible in the failure rows: `oc-ledger`'s selftest carries arms
+that read **live** state — `roster --live` resolves against the running roster rather than a
+fixture, which is why they fail as `roster-all-count (want rc=3 got rc=6)` and
+`roster-include-retired-all-count (want rc=4 got rc=7)`, and the non-deterministic counts are
+the same family as the `jq: startswith() requires string inputs` rows beside them.
+
+**The battery's isolation is real and not the cause:** `run_selftest` gives every tool its own
+`mktemp -d` state dir (`tools/tests/run.sh:97-100`), so the failure is not cross-tool state —
+it is the tool's OWN arms depending on a live population. That makes it **pre-existing** and
+**not attributable to this migration**, which is the separate fact §4.2's boundary check
+proves: not one changed path resolves under the donor tree.
+
+**So AC3's honest verdict is: the donor's gates PASS** (the 16:56:17Z reading, 283/0), **with a
+measured flakiness in one cell** that this migration neither caused nor fixed. Reported to the
+donor's tool owner as a separate finding rather than folded into a green.
+
+## 5. What this file does NOT claim
 
 - **It does not claim the donor's gates pass.** They are measured separately, and the reading
   belongs with the donor-side change.
