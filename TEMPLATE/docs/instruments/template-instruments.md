@@ -387,6 +387,25 @@ instant as quoted): the census separates exactly these two and records that they
 **BOTH** directions the same day — one factory held a copy that had never executed, and a copy can
 execute with no tree copy at all.
 
+### 7.3 A generated artifact is regenerated at the COMMIT, never in a shared tree
+
+**The manifest and both pin vehicles are GENERATED, the generator walks the WORKING TREE
+(`KIT_ROOT.rglob("*")`), and the pre-commit hook hashes the INDEX.** In a shared tree those two
+diverge the moment any lane holds an unstaged or staged edit inside the population, and the failure
+runs in both directions: a plain regeneration bakes a peer's in-flight bytes into the reference every
+member is measured against, and the commit is then refused because the manifest does not describe the
+index. Measured three times on 2026-09-27, by three lanes on three different mechanisms — a peer's
+unstaged `TEMPLATE/tests/test_patrol_host_state.py` reddened three gates for every other lane; a
+peer's STAGED `TEMPLATE/tools/questions` refused a commit whose manifest had been generated at HEAD;
+and a `pull --rebase --autostash` left the manifest and both vehicles conflicted. **The conforming
+technique is to regenerate against a tree where every path but your own sits at the commit** — a
+clean detached worktree at HEAD (`git worktree add --detach <tmp> HEAD`), or a private index
+(`GIT_INDEX_FILE`) so a peer's staging survives untouched. Verify the COMMIT rather than the disk:
+every entry's committed blob must equal the committed manifest, which is a different test from
+`kit_manifest.py --check`, whose read is the working tree and which therefore reports drift a peer
+owns. **A generated artifact is a function of the COMMITTED tree; a manifest built from anything else
+describes a tree that does not exist.**
+
 ## 8. Ownership and scope
 
 | who | what |
