@@ -148,13 +148,36 @@ the **narrower** reading stands — a recorded non-fix with its reason is legal 
 | this lane (Review Rotation) | this instrument's implementation, law doc, adoption and donor migration |
 | HQ | cross-factory authority: any clause binding a member factory, and the process law about instruments |
 
-## 10. Open questions carried by this record
+## 10. The engine's shape — one engine, no split
+
+Task 6 asked for the engine's responsibilities to be reconciled, with a split **only on a stable
+reusable boundary**. Measured this turn, before deciding: the review state has **one** consumer in
+this repo. `grep -rl` for a reader of `reviews/*/state.json` or an importer of the engine returns
+`tests/test_review.py`, the engine itself, and prose (`docs/review-lenses.md`,
+`docs/projects/review-rotation.md`, the demoted legacy verdict). No second program reads the state,
+so a state-IO module would have exactly one caller — which is the speculative build **KISS/YAGNI**
+forbid, not a boundary. **The engine stays one file**, and the split is deferred until a real second
+consumer appears; if one does, the boundary is named here rather than guessed now.
+
+What was reconciled instead, so one catalogue and one lifecycle govern every user:
+
+- **One catalogue.** `CATALOG_LENSES` (14) is the single lens list every leg iterates — `init`,
+  `status`, `verify` and `compile` all read it rather than carrying their own copy.
+- **The step-0 claim became a mechanism.** The docstring had claimed since promotion that
+  `state.json` IS the step-0 recovery point, while the code had **zero** hits for `step0`: a claim
+  in a paragraph a compacted session cannot execute. `step0 <cycle>` now reads state and nothing
+  else, and `--record` appends to `step0_log` — durable evidence rather than an assertion.
+- **No silent live read.** A terminal lifecycle FREEZES the cycle and snapshots its declared
+  channels (`inputs_snapshot`, digests streamed in constant memory). `intake` and `cadence --write`
+  are REFUSED against a frozen cycle; `--live` is the deliberate override and says so on stderr.
+
+## 11. Open questions carried by this record
 
 1. **F5 — the fix duty** (§8 above). Proceed on the narrower reading.
 2. **The instrument NAME** — **Review Rotation** is a working name, collision-checked. A rename is
    cheap now (no slug is published, no member has adopted a law file) and expensive after step 9.
 
-## 11. Provenance
+## 12. Provenance
 
 - Promotion plan: this lane's own session plan; the tasking design is the methodology lane's and is
   **not** cited by path anywhere in this record or in the instrument's artifacts.

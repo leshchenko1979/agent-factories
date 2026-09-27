@@ -19,6 +19,9 @@
     "waivers",
     "proposals",
     "codification_plan",
+    "frozen_at",
+    "inputs_snapshot",
+    "step0_log",
     "updated_at"
   ],
   "properties": {
@@ -373,6 +376,116 @@
               "string",
               "null"
             ]
+          }
+        }
+      }
+    },
+    "frozen_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Set when the cycle closes. A FROZEN cycle's inputs are historical: a live channel read against it is REFUSED, because the bytes on disk now answer a different question than the one the cycle closed on."
+    },
+    "inputs_snapshot": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "WHAT the cycle read and WHEN, one digest per declared channel, taken at freeze time. A resumed reader compares this against today's channel to tell the cycle's own bytes from the current ones. Digests are computed in constant memory: the ledger may be large and a whole-file read is banned on this box.",
+      "properties": {
+        "taken_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "ref",
+              "exists"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "dir",
+                  "ledger"
+                ]
+              },
+              "ref": {
+                "type": "string"
+              },
+              "exists": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "files": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "step0_log": {
+      "type": "array",
+      "description": "One entry per `step0 --record`: where the cycle stood, read from state ALONE. This is the durable half of the step-0 recovery claim \u2014 a resumed session can show where it recovered from rather than assert it.",
+      "items": {
+        "type": "object",
+        "required": [
+          "at",
+          "status",
+          "frozen",
+          "completed",
+          "waived",
+          "pending",
+          "next_action"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          },
+          "frozen": {
+            "type": "boolean"
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "waived": {
+            "type": "integer"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "pending_lenses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_action": {
+            "type": "string"
           }
         }
       }

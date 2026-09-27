@@ -3,10 +3,15 @@
 Manages periodic quality reviews of factory laws, tools, and artifacts.
 Enforces:
   1. Complete census: all catalog lenses must run or be explicitly waived.
-  2. State durability: state.json carries the cycle lifecycle, an explicit
-     terminal state and both durations.  That file IS the step-0 recovery
-     point — after a compaction or restart, read it before re-querying input,
-     re-briefing reviewers or re-drafting a plan.
+  2. State durability and STEP-0 RECOVERY: state.json carries the cycle
+     lifecycle, an explicit terminal state and both durations.  That file IS
+     the step-0 recovery point — after a compaction or restart, RUN
+     `step0 <cycle>` before re-querying input, re-briefing reviewers or
+     re-drafting a plan.  It is a COMMAND rather than this paragraph because a
+     compacted session cannot execute prose, and it reads state.json and
+     nothing else, so it answers the same on a resumed run as on the first.
+     `step0 --record` appends the reading to `step0_log`, which is what makes
+     the recovery durable EVIDENCE instead of an assertion.
   3. Receipt verification: reports verified with sha256 checksums, and a report
      with no index line is UNRECEIPTED — a named state, never a silent pass.
   4. Adversarial sub-agent dispatch: generates isolated, adversarial auditor
@@ -19,6 +24,12 @@ Enforces:
   6. A DECLARED intake: `intake` reads the cycle's input channels and reports a
      NAMED state.  Nothing declared, nothing submitted and a malformed
      submission are three different states, and none of them is a pass.
+  7. NO SILENT LIVE READ: a cycle is FROZEN once its lifecycle is terminal.
+     Closing snapshots the declared channels (`inputs_snapshot`), and a later
+     `intake` or `cadence --write` against a frozen cycle is REFUSED, because
+     the bytes on disk now answer a different question than the one the cycle
+     closed on.  `--live` is the explicit way to say the reader means today's
+     bytes, and the read then says so.
 
 Usage:
   python3 tools/review.py init <cycle_id>
@@ -30,7 +41,8 @@ Usage:
   python3 tools/review.py compile <cycle_id>
   python3 tools/review.py close <cycle_id> [--status COMPLETED|ABANDONED] [--stamp --ledger F]
   python3 tools/review.py cadence --ledger <ledger.jsonl> [--every N] [--write <cycle_id>] [--json]
-  python3 tools/review.py intake <cycle_id> [--record]
+  python3 tools/review.py intake <cycle_id> [--record] [--live]
+  python3 tools/review.py step0 <cycle_id> [--record]
   python3 tools/review.py schema
   python3 tools/review.py migrate <cycle_id> [--dry-run]
 """
@@ -276,6 +288,9 @@ STATE_SCHEMA: dict[str, Any] = {
         "waivers",
         "proposals",
         "codification_plan",
+        "frozen_at",
+        "inputs_snapshot",
+        "step0_log",
         "updated_at",
     ],
     "properties": {
@@ -434,6 +449,50 @@ STATE_SCHEMA: dict[str, Any] = {
                 },
             },
         },
+        "frozen_at": {
+            "type": ["string", "null"],
+            "description": "Set when the cycle closes. A FROZEN cycle's inputs are historical: a live channel read against it is REFUSED, because the bytes on disk now answer a different question than the one the cycle closed on.",
+        },
+        "inputs_snapshot": {
+            "type": ["object", "null"],
+            "description": "WHAT the cycle read and WHEN, one digest per declared channel, taken at freeze time. A resumed reader compares this against today's channel to tell the cycle's own bytes from the current ones. Digests are computed in constant memory: the ledger may be large and a whole-file read is banned on this box.",
+            "properties": {
+                "taken_at": {"type": "string", "format": "date-time"},
+                "channels": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["kind", "ref", "exists"],
+                        "properties": {
+                            "kind": {"type": "string", "enum": ["dir", "ledger"]},
+                            "ref": {"type": "string"},
+                            "exists": {"type": "boolean"},
+                            "sha256": {"type": ["string", "null"]},
+                            "bytes": {"type": ["integer", "null"]},
+                            "files": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+            },
+        },
+        "step0_log": {
+            "type": "array",
+            "description": "One entry per `step0 --record`: where the cycle stood, read from state ALONE. This is the durable half of the step-0 recovery claim — a resumed session can show where it recovered from rather than assert it.",
+            "items": {
+                "type": "object",
+                "required": ["at", "status", "frozen", "completed", "waived", "pending", "next_action"],
+                "properties": {
+                    "at": {"type": "string", "format": "date-time"},
+                    "status": {"type": "string"},
+                    "frozen": {"type": "boolean"},
+                    "completed": {"type": "integer"},
+                    "waived": {"type": "integer"},
+                    "pending": {"type": "integer"},
+                    "pending_lenses": {"type": "array", "items": {"type": "string"}},
+                    "next_action": {"type": "string"},
+                },
+            },
+        },
         "updated_at": {
             "type": "string",
             "format": "date-time",
@@ -473,6 +532,19 @@ def _empty_state(cycle_id: str) -> dict[str, Any]:
         "waivers": [],
         "proposals": [],
         "codification_plan": [],
+        # A cycle is FROZEN once its lifecycle is terminal: its inputs were read
+        # at a known instant and a later read of a LIVE mutable channel (a
+        # ledger, a proposals dir) would answer a different question than the
+        # one the cycle closed on. `inputs_snapshot` records the digests taken
+        # at freeze time, so a resumed reader can say WHAT it read and WHEN
+        # instead of silently re-reading whatever is on disk now.
+        "frozen_at": None,
+        "inputs_snapshot": None,
+        # The step-0 recovery log: each `step0 --record` appends where the cycle
+        # stood at that instant. It is EVIDENCE rather than a convenience —
+        # a resumed session can prove it recovered from state alone, instead of
+        # asserting it did.
+        "step0_log": [],
         "updated_at": now,
     }
 
@@ -715,6 +787,157 @@ def save_state(cycle_id: str, state: dict[str, Any], migrate: bool = False) -> i
         f.write("\n")
     return 0
 
+
+def _stream_sha256(path: Path) -> str:
+    """Digest a file in CONSTANT memory. A whole-file read() is banned here.
+
+    The memory law on this box is a cgroup decision, not a host one, and every
+    tool child adds to that cgroup: a 1 GB read to compute a digest is exactly
+    the fat child the rule exists to prevent.
+    """
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+def is_frozen(state: dict[str, Any]) -> bool:
+    """A cycle is FROZEN when its lifecycle is terminal, or when frozen_at is set.
+
+    Terminal status IS the freeze, not a separate switch: a closed cycle's
+    inputs became historical the moment it closed, so a design that required a
+    second command to freeze it would leave open exactly the window this guard
+    exists to shut.
+    """
+    if not state:
+        return False
+    return bool(state.get("frozen_at")) or state.get("status") in ("COMPLETED", "ABANDONED")
+
+def snapshot_inputs(cycle_dir: Path) -> dict[str, Any]:
+    """Record WHAT the cycle read and WHEN: one digest per declared channel.
+
+    Two channels are named because they are the two the engine can read: the
+    `proposals/` directory, which is authoritative and always current, and an
+    OPTIONAL ledger, which must be declared before it is read at all.
+    """
+    declaration = _intake_declaration(cycle_dir)
+    candidates: list[tuple[str, str, Path]] = [("dir", "proposals", cycle_dir / "proposals")]
+    declared_ledger = declaration.get("ledger")
+    if declared_ledger:
+        candidates.append(("ledger", str(declared_ledger), Path(str(declared_ledger))))
+
+    channels: list[dict[str, Any]] = []
+    for kind, ref, path in candidates:
+        entry: dict[str, Any] = {"kind": kind, "ref": ref, "exists": path.exists()}
+        if path.is_file():
+            entry["sha256"] = _stream_sha256(path)
+            entry["bytes"] = path.stat().st_size
+        elif path.is_dir():
+            files = sorted(p for p in path.rglob("*") if p.is_file())
+            hasher = hashlib.sha256()
+            for item in files:
+                hasher.update(item.relative_to(path).as_posix().encode())
+                hasher.update(_stream_sha256(item).encode())
+            entry["files"] = len(files)
+            entry["sha256"] = hasher.hexdigest()
+        channels.append(entry)
+    return {"taken_at": _now(), "channels": channels}
+
+def refuse_live_read(state: dict[str, Any], cycle_id: str, channel: str,
+                     live: bool) -> int | None:
+    """Gate a LIVE-sourced read against a FROZEN cycle.
+
+    Returns None when the read may proceed, else the exit code and the refusal.
+    Not a lock — a named state: `--live` is the explicit way to say "I know this
+    cycle is closed and I want today's bytes anyway", and the read then says so
+    on stdout so the answer can never be mistaken for the frozen one.
+    """
+    if not is_frozen(state):
+        return None
+    frozen_at = state.get("frozen_at") or state.get("ended_at") or state.get("status")
+    if live:
+        print(
+            f"WARNING: cycle '{cycle_id}' is FROZEN at {frozen_at} and {channel} was "
+            f"read with --live. These bytes are TODAY's, not the cycle's: the frozen "
+            f"snapshot is inputs_snapshot in state.json.",
+            file=sys.stderr,
+        )
+        return None
+    print(
+        f"REFUSED: cycle '{cycle_id}' is FROZEN at {frozen_at}; {channel} would read live "
+        f"mutable input the cycle did not close on. Re-run with --live to read today's bytes "
+        f"deliberately, or read the frozen snapshot in state.json.",
+        file=sys.stderr,
+    )
+    return 2
+
+def cmd_step0(cycle_id: str, record: bool = False) -> int:
+    """The step-0 recovery point: where a resumed reader stands, from state ALONE.
+
+    The module docstring has claimed since promotion that state.json IS the
+    step-0 recovery point. A claim in a docstring is not a mechanism: a
+    compacted session cannot run a paragraph. This is the claim as a COMMAND,
+    and it reads state.json and nothing else — no ledger, no proposals dir, no
+    live channel — so it answers the same way on a resumed run as on the first.
+
+    `--record` appends the reading to step0_log, which is what makes the
+    recovery DURABLE rather than merely printed.
+    """
+    state = read_state(cycle_id)
+    if not state:
+        print(f"Error: Cycle '{cycle_id}' not found.", file=sys.stderr)
+        return 2
+
+    lenses = state.get("lenses", {})
+    completed = [l for l in CATALOG_LENSES if (lenses.get(l) or {}).get("status") == "COMPLETED"]
+    waived = [l for l in CATALOG_LENSES if (lenses.get(l) or {}).get("status") == "WAIVED"]
+    pending = [l for l in CATALOG_LENSES
+               if (lenses.get(l) or {}).get("status", "PENDING") not in ("COMPLETED", "WAIVED")]
+    frozen = is_frozen(state)
+
+    if frozen:
+        next_action = (
+            "cycle is FROZEN (terminal): report the frozen snapshot. Do NOT re-read a live "
+            "ledger or proposals dir — pass --live only to say you mean today's bytes."
+        )
+    elif pending:
+        next_action = f"brief and record lens {pending[0]} (pending: {','.join(pending)})"
+    elif not state.get("ended_at"):
+        next_action = f"verify, then close (status={state.get('status')})"
+    else:
+        next_action = "nothing owed"
+
+    print(f"=== Step 0 recovery: {cycle_id} ===")
+    frozen_note = f" (frozen_at {state.get('frozen_at')})" if state.get("frozen_at") else ""
+    print(f"status      : {state.get('status')}  frozen={'yes' if frozen else 'no'}{frozen_note}")
+    print(f"started_at  : {state.get('started_at')}   ended_at: {state.get('ended_at')}")
+    print(f"census      : {len(completed)} completed | {len(waived)} waived | "
+          f"{len(pending)} pending (of {len(CATALOG_LENSES)})")
+    print(f"proposals   : {len(state.get('proposals') or [])} receipt(s)")
+    snapshot = state.get("inputs_snapshot") or {}
+    if snapshot:
+        print(f"inputs      : frozen snapshot taken {snapshot.get('taken_at')}")
+        for channel in snapshot.get("channels") or []:
+            print(f"  [{channel.get('kind')}] {channel.get('ref')} "
+                  f"exists={channel.get('exists')} sha256={str(channel.get('sha256'))[:16]}")
+    print(f"next action : {next_action}")
+
+    if record:
+        state.setdefault("step0_log", []).append({
+            "at": _now(),
+            "status": state.get("status"),
+            "frozen": frozen,
+            "completed": len(completed),
+            "waived": len(waived),
+            "pending": len(pending),
+            "pending_lenses": pending,
+            "next_action": next_action,
+        })
+        rc = save_state(cycle_id, state)
+        if rc != 0:
+            return rc
+        print(f"recorded step-0 reading #{len(state['step0_log'])} in {cycle_id}/state.json")
+    return 0
 
 def cmd_init(cycle_id: str) -> int:
     cycle_dir = get_cycle_dir(cycle_id)
@@ -1057,12 +1280,14 @@ def cmd_schema() -> int:
 
 
 def cmd_cadence(ledger_path: str, every: int, cycle_id: str | None,
-                json_out: bool) -> int:
+                json_out: bool, live: bool = False) -> int:
     """Compute the cadence boundary stamp, and optionally record it.
 
     The boundary is an OBSERVABLE artifact, not prose: a member's cadence state
     is the ledger's own anchored notes, re-derivable by anyone holding the
-    ledger.  Recording it into a cycle is `--write <cycle_id>`.
+    ledger.  Recording it into a cycle is `--write <cycle_id>` — and a ledger is
+    LIVE mutable input, so writing one into a FROZEN cycle is refused unless
+    `--live` says the reader means today's ledger.
     """
     stamp = cadence_stamp(ledger_path, every)
     if cycle_id:
@@ -1070,6 +1295,9 @@ def cmd_cadence(ledger_path: str, every: int, cycle_id: str | None,
         if not state:
             print(f"Error: Cycle '{cycle_id}' not found.", file=sys.stderr)
             return 2
+        refused = refuse_live_read(state, cycle_id, "cadence --write", live)
+        if refused is not None:
+            return refused
         state["cadence"] = stamp
         rc = save_state(cycle_id, state)
         if rc != 0:
@@ -1129,13 +1357,22 @@ def cmd_close(cycle_id: str, status: str, stamp: bool,
         every = (state["cadence"].get("trigger") or {}).get("every", CADENCE_DEFAULT_EVERY)
         state["cadence"] = cadence_stamp(ledger_path, every)
 
+    # Closing FREEZES: the inputs become historical at this instant, and the
+    # snapshot records what they were so a later reader can tell the cycle's
+    # own bytes from today's. Taken here rather than in a separate command
+    # because the window between close and freeze is the window that matters.
+    state["frozen_at"] = _now()
+    state["inputs_snapshot"] = snapshot_inputs(get_cycle_dir(cycle_id))
+
     rc = save_state(cycle_id, state)
     if rc != 0:
         return rc
     print(
         f"Closed cycle '{cycle_id}' as {status}; "
         f"duration_cycle_min={state['duration_cycle_min']}, "
-        f"duration_review_min={state['duration_review_min']}"
+        f"duration_review_min={state['duration_review_min']}, "
+        f"frozen_at={state['frozen_at']}, "
+        f"inputs snapshotted={len((state['inputs_snapshot'] or {}).get('channels') or [])} channel(s)"
     )
     return 0
 
@@ -1268,7 +1505,7 @@ def _proposal_rows_from_ledger(ledger_path: Path, kind: str) -> list[tuple[str, 
         out.append((str(ref), text))
     return out
 
-def cmd_intake(cycle_id: str, record: bool = False) -> int:
+def cmd_intake(cycle_id: str, record: bool = False, live: bool = False) -> int:
     """Read the cycle's input channels and report a NAMED intake state.
 
     TWO channels, and the difference between them is load-bearing:
@@ -1282,14 +1519,23 @@ def cmd_intake(cycle_id: str, record: bool = False) -> int:
     are the member's data, and this leg never writes them; the receipt index it
     produces goes into the cycle STATE, which is the instrument's own.
 
+    FROZEN cycles are REFUSED here: both channels are LIVE and MUTABLE, so
+    re-reading one against a closed cycle answers a different question than the
+    one the cycle closed on. `--live` is the deliberate way to ask for today's
+    bytes, and it says so on stdout.
+
     Exit: 0 COMPLETE · 1 EMPTY or INCOMPLETE (a named state, never a pass) ·
-          2 REFUSED (nothing declared, or a declared channel the tree lacks).
+          2 REFUSED (nothing declared, a channel the tree lacks, or a frozen cycle).
     """
     cycle_dir = get_cycle_dir(cycle_id)
     if not cycle_dir.is_dir():
         print(f"INTAKE REFUSED: cycle '{cycle_id}' has no directory at {cycle_dir}.",
               file=sys.stderr)
         return 2
+
+    refused = refuse_live_read(read_state(cycle_id), cycle_id, "intake", live)
+    if refused is not None:
+        return refused
 
     decl = _intake_declaration(cycle_dir)
     proposals_dir = cycle_dir / "proposals"
@@ -1432,6 +1678,8 @@ def main() -> int:
         help="Record the stamp into this cycle's state",
     )
     p_cadence.add_argument("--json", action="store_true", help="Output the stamp as JSON")
+    p_cadence.add_argument("--live", action="store_true",
+                           help="Write today's ledger boundary into a FROZEN cycle, and say so")
 
     p_close = subparsers.add_parser("close", help="Close a cycle with an explicit terminal state")
     p_close.add_argument("cycle_id", help="Cycle identifier")
@@ -1451,6 +1699,15 @@ def main() -> int:
     p_intake.add_argument("cycle_id", help="Cycle identifier")
     p_intake.add_argument("--record", action="store_true",
                           help="Write the receipt index into the cycle state (read-only over member data)")
+    p_intake.add_argument("--live", action="store_true",
+                          help="Read today's bytes even on a FROZEN cycle, and say so")
+
+    p_step0 = subparsers.add_parser(
+        "step0", help="Recovery point: where a resumed reader stands, read from state alone"
+    )
+    p_step0.add_argument("cycle_id", help="Cycle identifier")
+    p_step0.add_argument("--record", action="store_true",
+                         help="Append the reading to step0_log (durable evidence)")
 
     args = parser.parse_args()
 
@@ -1471,13 +1728,15 @@ def main() -> int:
     elif args.subcommand == "schema":
         return cmd_schema()
     elif args.subcommand == "cadence":
-        return cmd_cadence(args.ledger, args.every, args.write_cycle, args.json)
+        return cmd_cadence(args.ledger, args.every, args.write_cycle, args.json, args.live)
     elif args.subcommand == "close":
         return cmd_close(args.cycle_id, args.status, args.stamp, args.ledger)
     elif args.subcommand == "migrate":
         return cmd_migrate(args.cycle_id, args.dry_run)
     elif args.subcommand == "intake":
-        return cmd_intake(args.cycle_id, args.record)
+        return cmd_intake(args.cycle_id, args.record, args.live)
+    elif args.subcommand == "step0":
+        return cmd_step0(args.cycle_id, args.record)
     return 1
 
 

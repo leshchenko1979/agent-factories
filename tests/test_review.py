@@ -490,6 +490,136 @@ def test_shipped_executable_carries_no_donor_tokens() -> None:
     found = {t: source.count(t) for t in tokens if source.count(t)}
     assert not found, f"donor tokens in the shipped executable: {found}"
 
+def test_step0_recovery_reads_state_alone_and_records_durable_evidence() -> None:
+    """Step 0 is a COMMAND, and its reading survives as evidence.
+
+    The module docstring claimed state.json IS the step-0 recovery point from
+    promotion until now. A compacted session cannot execute a paragraph, so the
+    claim is only real if there is something to RUN that reads state and nothing
+    else — and `--record` is what makes the reading durable rather than printed.
+    """
+    cycle_id = "test-step0-recovery"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["step0", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "Step 0 recovery" in res.stdout
+        assert "frozen=no" in res.stdout
+        assert "14 pending" in res.stdout
+        assert "next action" in res.stdout
+
+        res = subprocess.run(cmd_base + ["step0", cycle_id, "--record"], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert len(state["step0_log"]) == 1, "step0 --record wrote no durable evidence"
+        entry = state["step0_log"][0]
+        assert entry["pending"] == 14 and entry["frozen"] is False
+        assert entry["next_action"].strip(), "a recorded reading must carry its next action"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_frozen_cycle_refuses_a_live_channel_read() -> None:
+    """A closed cycle's inputs are historical: re-reading a live channel is REFUSED.
+
+    Both intake channels are mutable — a proposals directory grows and a ledger
+    is appended to — so reading one against a closed cycle answers a different
+    question than the one the cycle closed on. `--live` is the deliberate way to
+    say the reader means today's bytes, and it must SAY SO rather than pass.
+    """
+    cycle_id = "test-frozen-refusal"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        proposals = cycle_dir / "proposals"
+        proposals.mkdir(parents=True, exist_ok=True)
+        (proposals / "w1.md").write_text(
+            "ADD a rule in docs/x.md#4 BECAUSE it was missing on 2026-09-27.\n", encoding="utf-8")
+
+        res = subprocess.run(cmd_base + ["close", cycle_id, "--status", "COMPLETED"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "frozen_at=" in res.stdout, "close must freeze the cycle"
+
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["frozen_at"], "close wrote no frozen_at"
+        snapshot = state["inputs_snapshot"]
+        assert snapshot and snapshot["channels"], "close took no inputs snapshot"
+        assert snapshot["channels"][0]["sha256"], "the snapshot carries no digest"
+
+        res = subprocess.run(cmd_base + ["intake", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout
+        assert "FROZEN" in res.stderr and "REFUSED" in res.stderr
+
+        res = subprocess.run(cmd_base + ["intake", cycle_id, "--live"], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "WARNING" in res.stderr and "TODAY's" in res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_a_lens_waiver_requires_a_named_reason() -> None:
+    """A waiver with no reason is the undeclared state in a declared label.
+
+    The census's whole job is that every lens ran or was EXPLICITLY waived: a
+    blank waiver saves the operator from writing X and produces a census that
+    reads complete while nothing was decided.
+    """
+    cycle_id = "test-waiver-reason"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["waive", cycle_id, "A", "--reason", "   "],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout
+        assert "cannot be empty" in res.stderr
+
+        res = subprocess.run(cmd_base + ["waive", cycle_id, "A", "--reason", "not applicable here"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["lenses"]["A"]["status"] == "WAIVED"
+        assert state["waivers"], "the waiver did not reach the log"
+        assert state["waivers"][-1]["reason"] == "not applicable here"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_a_missing_closure_cannot_pass_verify() -> None:
+    """A lens marked COMPLETED whose report file is gone is a BROKEN closure, not a pass.
+
+    The state says COMPLETED and the tree cannot honour it, so a reader that
+    trusts the status alone reports a clean census over a cycle whose evidence
+    is absent — the defeated-guard-reported-as-clean class.
+    """
+    cycle_id = "test-missing-closure"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        reports = cycle_dir / "reports"
+        reports.mkdir(parents=True, exist_ok=True)
+        report = reports / "lens-A.md"
+        report.write_text("A finding, legitimately recorded.\n", encoding="utf-8")
+        res = subprocess.run(cmd_base + ["record", cycle_id, "A", str(report)],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+
+        # Break the closure: the status still claims COMPLETED, the bytes are gone.
+        report.unlink()
+        res = subprocess.run(cmd_base + ["verify", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 1, res.stdout
+        assert "file missing" in res.stdout, res.stdout
+        assert "census check failed" in res.stdout
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -503,4 +633,8 @@ if __name__ == "__main__":
     test_intake_refuses_a_declared_channel_that_is_absent(Path("/tmp"))
     test_intake_receipts_validate_against_the_schema()
     test_shipped_executable_carries_no_donor_tokens()
+    test_step0_recovery_reads_state_alone_and_records_durable_evidence()
+    test_frozen_cycle_refuses_a_live_channel_read()
+    test_a_lens_waiver_requires_a_named_reason()
+    test_a_missing_closure_cannot_pass_verify()
     print("ALL TESTS PASSED")
