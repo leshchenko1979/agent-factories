@@ -301,6 +301,11 @@ def format_undeclared_text(stats: dict[str, Any]) -> str:
         f"never accepted{invalid}"
     )
 
+# The read instant's ONE form (#142). The gate parses THIS shape, so the writer and the
+# reader hold one predicate rather than two that drift: `%Y-%m-%dT%H:%M:%SZ`, UTC, seconds
+# precision -- the ledger's own `ts` form, so a reader needs no new habit.
+READ_INSTANT_FORM = "%Y-%m-%dT%H:%M:%SZ"
+
 def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
     """Parse ledger.jsonl and calculate operational delivery metrics, including token/cost economics.
 
@@ -1918,6 +1923,16 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_citation_clause_titles.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_citation_clause_titles.py"])
 
+    # 60. Self-audit read-instant gate (board #142, ruling n=919). The self-audit artifact
+    #     reads the LIVE ledger -- appended during its own run -- and named only a date, so
+    #     its figures were a property of an instant it never recorded: neither replayable
+    #     from recorded inputs nor readable as fresh (section 8). The gate asserts a
+    #     committed artifact names a PARSEABLE instant, forward-only with the earlier
+    #     artifacts excused and counted. Its live population is legitimately empty until the
+    #     next instance lands, so non-vacuity rides a probe rather than a loud-fail-on-zero.
+    if (repo_root / "tests/test_self_audit_instant.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_self_audit_instant.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
@@ -1976,6 +1991,7 @@ def check_cadence_integrity(ledger_path: Path) -> dict[str, Any]:
 
 def format_report_markdown(
     date_str: str,
+    ledger_read_at: str,
     ledger_stats: dict[str, Any],
     rework_stats: dict[str, Any],
     cadence_stats: dict[str, Any],
@@ -1985,10 +2001,17 @@ def format_report_markdown(
     all_passed = all(g["passed"] for g in gate_results)
     verdict = "PASSED" if all_passed and cadence_stats.get("cadence_held", True) else "FAILED"
 
+    rows_read = ledger_stats.get("total_events", 0)
     lines = [
         f"# Operational Process Self-Audit — {date_str}",
         "",
         f"> **Verdict:** `{verdict}` · Process 3 (Internal Self-Audit)",
+        "",
+        f"> **Ledger read at:** `{ledger_read_at}` ({rows_read} events) — this artifact "
+        f"describes the ledger AS OF THAT INSTANT, before this run's own row was appended. "
+        f"It is a START-OF-RUN SNAPSHOT, not the ledger's state when you read it: the run "
+        f"row this audit writes lands after the read, and concurrent lanes append "
+        f"throughout the gate window (#142, ruling n=919).",
         "",
         "---",
         "",
@@ -2102,6 +2125,15 @@ def main() -> int:
     ledger_file = REPO_ROOT / "evidence/ledger.jsonl"
     rework_file = REPO_ROOT / "evidence/rework.md"
 
+    # THE READ INSTANT (#142, ruling n=919). The ledger is appended DURING this run -- its
+    # own run row lands after this parse, and concurrent lanes append throughout the gate
+    # window -- so every figure below is a property of THIS instant, not of the revision.
+    # Section 8 binds that such a measurement "must name the instant it read"; with no
+    # instant recorded the artifact was NEITHER replayable from recorded inputs NOR
+    # readable as fresh. The ORDER does not move (Q2): parse-before-append is the only
+    # non-circular one, because the run row's own yield comes from this same parse and
+    # stamping first would let the audit's own row join the population it grades.
+    ledger_read_at = datetime.datetime.now(datetime.timezone.utc).strftime(READ_INSTANT_FORM)
     ledger_stats, closed_subject_set = parse_ledger(ledger_file)
     rework_stats = parse_rework(rework_file, closed_subject_set)
     cadence_stats = check_cadence_integrity(ledger_file)
@@ -2145,6 +2177,7 @@ def main() -> int:
     if args.json:
         payload = {
             "date": today,
+            "ledger_read_at": ledger_read_at,
             "healthy": healthy,
             "status": verdict.status,
             "all_gates_pass": all_gates_pass,
@@ -2227,7 +2260,9 @@ def main() -> int:
             print(f"  [STALE:{'+'.join(stale.legs)}] {stale.key} — {stale.detail}")
 
     if args.report or args.output:
-        report_md = format_report_markdown(today, ledger_stats, rework_stats, cadence_stats, gate_results)
+        report_md = format_report_markdown(
+            today, ledger_read_at, ledger_stats, rework_stats, cadence_stats, gate_results
+        )
         out_path = Path(args.output) if args.output else (REPO_ROOT / f"evidence/scores/{today}-self-audit.md")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(report_md, encoding="utf-8")

@@ -532,6 +532,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     # in a bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE
     # copy, so the manifest grain is what keeps a factory from dropping the runner and
     # keeping the file.
+    "test_self_audit_instant.py",
+    # Added with its registration (board #142, ruling n=919). REQUIRED: its live leg reads
+    # this tree's own `evidence/scores/`, and its six probes drive synthetic text, so it
+    # needs no live board, no fleet manifest and no box-local fixture. Its coupling probe
+    # asserts `docs/processes.md` states the requirement, which is a repo file this factory
+    # carries — a factory that has not adopted that row yet reports the coupling leg by
+    # name rather than passing silently.
     "test_questions.py",
     # Added with its registration (board #182 item 2). REQUIRED is the correct grain and
     # OPTIONAL is not, for the reason that decides every entry around it: the gate drives the
