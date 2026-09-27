@@ -298,6 +298,11 @@ declared, 0 undeclared divergence). Two independent readings of one row:
 A file-presence predicate cannot see the second, **and neither reading is wrong** — they answer
 different questions. This is why the disposition column names the reader, not only the file.
 
+**And the census carries a predicate bound: it measures the TREE'S AGE, never its owner's decision.**
+The initialization step (§9.1.1 reason 1) postdates five of the six trees, so a member reading 0 of 2
+records *when it was built*, not a judgement about the kit. A later reader must take this table as a
+measurement of the fleet at an instant — and must not read a low row as a member that declined.
+
 **`opencrabs-dev` is out of scope by repo kind, not behind.** Its declared `/repo` is `/root/opencrabs`,
 the OpenCrabs **source** tree. It holds no pin and no kit file, and a factory whose repo is upstream
 source has no tree for this instrument to land in. Reading it as 0-of-4 would file a scope error as a
@@ -365,6 +370,12 @@ member, on owner order (*"the member factories should be initialized to use the 
 | `infra-factory` | 88 | 21 | `b0bb09cb288f` → `6f10a14dcb5f` | **rc=1** — 18 undeclared divergences |
 | `miidas` | 91 | 17 | `6ab591c618ec` → `6f10a14dcb5f` | **rc=0** |
 | `opencrabs-dev` | — | — | **REFUSED** — no pin | out of scope (§9.1) |
+
+**The counts above are ONE INSTANT's property, and the instant is the version named in the pin
+column.** The manifest moved twice on 2026-09-27 alone — `6f10a14dcb5f` at this delivery,
+`685f40d3648a` after this file's own registration, and a peer's further drift after that — so an ADD
+count without its version beside it is unreproducible, which is the rule §5 already states for the
+identifier itself.
 
 **Every one of the four now holds both shipping paths of §2**, so §9.1's own predicate reads 2 of 2 for
 all four. The two red gates are **not** caused by the delivery, and that is measured rather than
