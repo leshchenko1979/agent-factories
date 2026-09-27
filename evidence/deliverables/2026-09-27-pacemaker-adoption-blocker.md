@@ -274,3 +274,47 @@ window) while the failure rate stays near 10/min.
 **Stated as a mechanism, not a fix proposal:** the remedy belongs to whoever owns the gateway and the
 provider config, not to this lane. Recorded because "the gateway is slow" does not explain the
 observed turn behaviour; **a 5-retry ladder against a 60 s cap does.**
+
+### 10.2 The class of the fault — the fleet's own gateway is billed as CLOUD, so it gets the SHORTEST window
+
+Read from source, not inferred. `handshake_timeout_for(cli_handles_tools, base_url)`
+(`helpers.rs:190`) returns exactly three values:
+
+| condition | window |
+|---|---|
+| the provider is a CLI subprocess | **600 s** |
+| `is_local_base_url(base_url)` | **90 s** |
+| everything else | **60 s** |
+
+And `is_local_base_url` (`factory.rs:349`) matches only: `localhost`, `127.0.0.1`, `0.0.0.0`, `::1`,
+`*.local`, `192.168.*`, `10.*`, `172.16–31.*`.
+
+**`https://llm.l1979.ru/v1` matches none of them.** It is a public domain resolving to a public
+address, so `is_local_base_url` returns **false** and the fleet's own gateway is given the **60 s**
+cloud window — the shortest of the three — even though it is the fleet's own infrastructure.
+
+**That is the collision.** The 60 s window is documented in the regression test as chosen because
+*"routing proxies (dialagram, openrouter) can take 20-45s when upstream is slow"*. Measured against
+this gateway: **14.6 s best case, >50 s common**. The path is legitimately slow-but-healthy and sits
+right at, or past, the cap — and with `MAX_STREAM_RETRIES = 5` (`tool_loop.rs:1814`) each attempt
+carries its own 60 s, so one request can spend **300 s** on this route before the chain moves on.
+
+**A private-address workaround was checked and is NOT available from here.** The natural fix —
+reach the gateway on a `192.168.*`/`10.*` address so the 90 s window applies — needs a private route
+to `apps`, and there is none: `agents` is `192.168.20.125/24` on `eth0`, while `apps` is a public
+address and the route to it goes out through the default gateway (`via 192.168.20.101`). Probing
+private candidates returned no route. So the lever is not "point the config at a private IP" unless
+`apps` turns out to have an address on this LAN that the lanes can reach.
+
+**Recorded as a mechanism with its three candidate remedies, none of which is this lane's to take:**
+
+1. **The upstream.** Why `cb/deepseek-v4.1-flash` needs >50 s for a trivial completion — the
+   gateway's own logs on `apps` would say, and this lane did not open them.
+2. **The window.** Raise the cloud handshake timeout, or give the fleet's own gateway the local
+   class — a source/config decision (`helpers.rs:190`, `factory.rs:349`), owner-gated.
+3. **The ladder.** `MAX_STREAM_RETRIES = 5` multiplies whatever the window is by five before any
+   fall-through. Lowering it trades stall time for earlier fallback — also owner-gated.
+
+**This is the honest state of c1's blocker:** the declaration is not landing because the fleet's
+turns are being killed by a 60 s cap on a path that needs longer, and every remedy sits above this
+lane.
