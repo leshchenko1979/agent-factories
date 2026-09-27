@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The derived ledger index — its gate.
+"""Gate: the derived ledger index — a rebuild agrees with a plain scan.
 
 P29: a rule needs an active process or a deterministic gate. The index's rule is
 "derived, disposable, never a source of truth", and the property that makes it safe to

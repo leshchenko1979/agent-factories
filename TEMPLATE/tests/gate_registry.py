@@ -514,6 +514,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger.py",
     "test_ledger_close_preflight.py",
     "test_ledger_commit_cites_no_rows.py",
+    # Added with its registration (board #192). REQUIRED is the correct grain: the gate
+    # drives the index's OWN SELFTEST against a THROWAWAY ledger under a temp directory —
+    # no live ledger, no fleet manifest, no box-local fixture — so it passes in a
+    # bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE copy,
+    # so the manifest grain is what keeps a factory from dropping the runner and keeping the
+    # file.
+    "test_ledger_index.py",
     "test_ledger_no_shrink.py",
     "test_ledger_schema.py",
     "test_ontology.py",
