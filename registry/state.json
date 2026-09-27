@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T12:26:54Z",
+  "resolved_at": "2026-09-27T12:45:40Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -964,7 +964,7 @@
             "announcements": []
           },
           {
-            "topic": "#19 channel-ownership PRs",
+            "topic": "Telegram: Push",
             "thread_id": 30090,
             "role": "editor",
             "announcements": []
@@ -1018,7 +1018,7 @@
             "announcements": []
           },
           {
-            "topic": "Compaction visibility",
+            "topic": "Memory: Compaction",
             "thread_id": 34653,
             "role": null,
             "announcements": []
@@ -1335,11 +1335,11 @@
       "channel": "telegram",
       "chat_id": "-1004360461038",
       "thread_id": 1,
-      "updated_at": 1790511682,
+      "updated_at": 1790512854,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Понауехали [chat:-1004360461038:topic:1]",
-      "session_updated_at": 1790511879,
+      "session_updated_at": 1790513035,
       "_profile": "family",
       "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
     },
@@ -1482,7 +1482,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Deploy #235 Option Collision Guard",
-      "session_updated_at": 1790511401,
+      "session_updated_at": 1790512625,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1755,7 +1755,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790511619,
+      "session_updated_at": 1790512572,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1976,7 +1976,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Triage: Issue Portfolio & Harvest Analysis",
-      "session_updated_at": 1790511409,
+      "session_updated_at": 1790512710,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2236,7 +2236,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790511906,
+      "session_updated_at": 1790512847,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2262,7 +2262,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1790511816,
+      "session_updated_at": 1790512097,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2288,7 +2288,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790511627,
+      "session_updated_at": 1790512968,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2301,7 +2301,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1790511754,
+      "session_updated_at": 1790512798,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2353,7 +2353,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1790512001,
+      "session_updated_at": 1790512400,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2613,7 +2613,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1790511983,
+      "session_updated_at": 1790512662,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2626,7 +2626,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790511969,
+      "session_updated_at": 1790512452,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2873,7 +2873,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
-      "session_updated_at": 1790509775,
+      "session_updated_at": 1790513041,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3118,8 +3118,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-09-27T12:40:00+00:00",
-      "last_run_at": "2026-09-27T06:40:19Z",
+      "next_run_at": "2026-09-27T18:40:00+00:00",
+      "last_run_at": "2026-09-27T12:40:34Z",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "_profile": "ops"
     },

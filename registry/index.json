@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T12:26:54Z",
+  "resolved_at": "2026-09-27T12:45:40Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -1486,7 +1486,7 @@
           "announcements": []
         },
         {
-          "topic": "#19 channel-ownership PRs",
+          "topic": "Telegram: Push",
           "thread_id": 30090,
           "role": "editor",
           "session_id": "d18ce16a-75a0-447c-90c7-ab7dabce4411",
@@ -1576,7 +1576,7 @@
           "announcements": []
         },
         {
-          "topic": "Compaction visibility",
+          "topic": "Memory: Compaction",
           "thread_id": 34653,
           "role": null,
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
@@ -2028,8 +2028,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-27T12:40:00+00:00",
-      "last_run_at": "2026-09-27T06:40:19Z",
+      "next_run_at": "2026-09-27T18:40:00+00:00",
+      "last_run_at": "2026-09-27T12:40:34Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",

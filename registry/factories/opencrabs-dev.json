@@ -97,7 +97,7 @@
       "announcements": []
     },
     {
-      "topic": "#19 channel-ownership PRs",
+      "topic": "Telegram: Push",
       "thread_id": 30090,
       "role": "editor",
       "announcements": []
@@ -151,7 +151,7 @@
       "announcements": []
     },
     {
-      "topic": "Compaction visibility",
+      "topic": "Memory: Compaction",
       "thread_id": 34653,
       "role": null,
       "announcements": []
