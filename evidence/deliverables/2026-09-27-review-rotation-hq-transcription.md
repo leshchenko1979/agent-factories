@@ -167,7 +167,39 @@ without confirming the boundary row exists.
 STAMP, the ledger it lands on and the close ordering above.
 ```
 
-## 4. What this transcription does not do
+## 4. The AC2 baseline — the predicate a verifier reads AFTER the strip
+
+The criterion is "grep -c for the duplicated implementation contract in `hq.md` is 0". A
+verifier needs the predicate, not just the expectation, so here is the **before** reading.
+Measured this turn: predicate = literal-substring count of the token; scope = the donor's
+`hq.md`, **333 lines**, whole file; instant 2026-09-27 ~16:5xZ.
+
+| token | count BEFORE the strip | where it lives |
+|---|---|---|
+| `oc-review-persist` | 6 | Duty 6 steps 1–3, and the completion formula |
+| `review-lenses.md` | 2 | Duty 6 step 2 |
+| `Step-0` | 2 | Duty 6 step 0 |
+| `duration_review_min` | 2 | the frozen-schema field table |
+| `duration_cycle_min` | 2 | same table |
+| `cycle_id` | 2 | same table |
+| `IN_PROGRESS` | 4 | the terminal enum |
+| `oc-notify-fanout` | 5 | Duty 4 steps 1–2 (**not** all of them move: the broadcast MECHANISM stays, only the intake contract goes) |
+| `proposals/<` | 2 | Duty 4's channel declaration (**stays** — the channel is our declaration) |
+
+**Read the two marked rows before using this table as a checklist.** The tokens are a
+*measurement of the file*, not a list of things to delete: `oc-notify-fanout` and
+`proposals/<` appear largely in clauses the inventory classifies **STAY**, so a verifier who
+drives the strip from token counts would delete the factory's own process law. **Drive it from
+§2's inventory, which classifies by clause** — and re-derive both this table and the inventory
+immediately before landing, because the file moves.
+
+**So the criterion, stated so it is checkable:** after the strip, `oc-review-persist`,
+`review-lenses.md`, `Step-0`, the three frozen-schema field names and the terminal enum should
+read **0 in the Duty 4 / Duty 6 regions** (lines 137–173 and 184–291 at this instant), because
+those are the contract's own vocabulary. `oc-notify-fanout` and `proposals/<` are expected to
+**survive where the inventory says STAY**, and a zero for them would be the error, not the pass.
+
+## 5. What this transcription does not do
 
 - **It does not edit `hq.md`.** That file is HQ's (`SKILL.md:390`), and the landing is HQ's act.
 - **It does not create the donor's reload link.** Frame §6.1: that is the member's own act, in
