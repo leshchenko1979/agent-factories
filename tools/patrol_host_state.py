@@ -267,6 +267,12 @@ BARE_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 LOG_DIR = Path("/tmp")
 # `<job-name>-<YYYYmmddTHHMMSS>.log` — the thin trigger's own redirect, nothing else.
 NOTIFY_LOG_RE = re.compile(r"^(?P<job>.+)-(?P<stamp>\d{8}T\d{6})\.log$")
+# The redirect a prompt DECLARES, by its stem (#163 half 2). Every pacemaker on this
+# box writes `/tmp/<stem>-$(date ...).log` (one job escapes the `$` as `\$(date`), so
+# the stem is the token between `/tmp/` and the timestamp EXPRESSION. Read from the
+# prompt that OWNS the redirect rather than inferred from a filename, so a hand-typed
+# label cannot hide a live surface in `retired`.
+DECLARED_REDIRECT_RE = re.compile(r"/tmp/(?P<stem>[A-Za-z0-9._-]+?)-(?:\\?\$\(date)")
 # The phrase a reader should look for when NO form matched (the deferred branch's token).
 NOTIFY_RECEIPT_TOKEN = "notification id"
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -849,8 +855,12 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     COUNTED, NAMED and REPORTED rather than dropped, because a population that resolves to
     no object cannot be checked by the reader it is reported to (#126):
 
-      - `logs_matched` — judged, because a live row this factory declares owns the name;
-      - `retired_logs` — this factory's prefix with no live row: history, never judged;
+      - `logs_matched` — judged, because a live row this factory declares owns the name
+        OR declares, in its own prompt, the redirect stem the log carries (#163 half 2);
+      - `retired_logs` — this factory's prefix with no enabled row owning the name AND no
+        enabled row's prompt declaring that redirect stem: history, never judged. The
+        PREDICATE is printed beside the bucket, so "no retired logs" and "a bucket that
+        cannot see one" are never the same output;
       - `unattributed_logs` — nobody here declares it: another factory's law (#101, n=610).
 
     A log that EXISTS and cannot be read is a PROBLEM, never an absence — a declared surface
@@ -871,12 +881,20 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     """
     attributed, _ = attribute_rows(rows, prefixes)
     live = {str(row.get("name") or ""): row for row in attributed}
+    # The redirect each ENABLED row's own prompt declares, keyed by the stem its log would
+    # carry (#163 half 2). Built here so the bucket below can ask the question the filename
+    # parse cannot: is this stem declared by a LIVE row even though it is not its NAME?
+    declared_stem: dict[str, dict] = {}
+    for row in attributed:
+        for stem in declared_log_stems(str(row.get("prompt") or "")):
+            declared_stem.setdefault(stem, row)
     matched, not_run = notify_logs(log_dir)
     problems: list[str] = []
     excused: list[str] = []
     judged: list[dict] = []
     retired: list[dict] = []
     foreign: list[dict] = []
+    redeclared: list[dict] = []
     # The FOURTH class's sibling (#139): a log with no output at all is a notify that was
     # never ATTEMPTED, and judging it as a failed duty made a permanent false positive out
     # of a run that was orphaned before it ever reached its notify. Reported, never a problem.
@@ -887,8 +905,18 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
             continue
         row = live.get(name)
         if row is None:
-            retired.append({"job": name, "path": str(path)})
-            continue
+            # Not the row's NAME — but a live row may DECLARE this stem in its own prompt.
+            # Filing it as history there is the defect: the log never enters the judged
+            # population, so the one leg built to catch a failed notify reports it clean.
+            row = declared_stem.get(name)
+            if row is None:
+                retired.append({"job": name, "path": str(path)})
+                continue
+            redeclared.append({
+                "job": name,
+                "path": str(path),
+                "row": str(row.get("name") or ""),
+            })
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -944,8 +972,16 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
             "logs_not_attempted": len(not_attempted),
             "not_attempted_logs": not_attempted,
             "logs_retired": len(retired),
+            "logs_attributed_by_redirect": len(redeclared),
             "logs_unattributed": len(foreign),
             "retired_logs": retired,
+            "attributed_by_redirect": redeclared,
+            # The bucket's own PREDICATE, printed beside its population: a clean bucket and
+            # one that cannot see a member must never render the same (#163 half 2 (b)).
+            "retired_predicate": (
+                "log stem names no enabled row this factory declares, AND no such row's "
+                "own prompt declares that redirect stem"
+            ),
             "unattributed_logs": foreign,
             "prefixes": prefixes,
             "read_at": read_at,
@@ -1033,6 +1069,25 @@ def declared_receipt_stem(prompt: str) -> str | None:
     """
     found = RECEIPT_DECL_RE.search(prompt or "")
     return found.group(1) if found else None
+
+def declared_log_stems(prompt: str) -> tuple[str, ...]:
+    """The redirect STEMS a prompt declares — `/tmp/<stem>-$(date ...)`, in order, deduped.
+
+    This is the attribution half of #163 half 2. The leg's first key was the log's FILENAME
+    stem looked up among the enabled rows' NAMES, and that parse cannot see a hand-typed
+    label: the job `factory-triage-patrol` wrote `/tmp/factory-triage-6h-<ts>.log`, the stem
+    `factory-triage-6h` matched no row, and every one of those logs landed in `retired_logs`
+    as history — a SILENT exclusion of exactly the surface the leg exists to judge. Reading
+    the stem the prompt itself declares makes a live surface visible even when its label
+    does not equal its job name.
+    """
+    seen: list[str] = []
+    for found in DECLARED_REDIRECT_RE.finditer(prompt or ""):
+        stem = found.group("stem")
+        if stem not in seen:
+            seen.append(stem)
+    return tuple(seen)
+
 
 def receipt_subject_matches(subject: str, stem: str, round_date: str) -> bool:
     """True when `subject` names this round — a BOUNDARY-CHECKED PREFIX, not equality.
@@ -1737,8 +1792,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             lines.append(
                 f"  logs matched: {cov['logs_matched']} of {cov['logs_on_surface']} log(s) "
-                f"on {cov['log_dir']} naming a live row this factory declares — "
-                f"{cov['logs_without_receipt']} produced no receipt"
+                f"on {cov['log_dir']} naming OR DECLARING a live row this factory "
+                f"declares — {cov['logs_without_receipt']} produced no receipt"
             )
             for row in cov.get("not_attempted_logs", []):
                 lines.append(
@@ -1746,9 +1801,25 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{row['path']} carries no output, so no notify was attempted; "
                     f"reported, never a failed duty"
                 )
+            lines.append(
+                f"  retired: {cov.get('logs_retired', 0)} log(s) — "
+                f"{cov.get('retired_predicate', 'predicate unstated')}; history, never "
+                f"judged (a bucket that saw none prints 0 here, never silence)"
+            )
             for row in cov.get("retired_logs", []):
                 lines.append(
-                    f"    no live row: {row['job']} ({row['path']}) — history, not judged"
+                    f"    retired: {row['job']} ({row['path']}) — history, not judged"
+                )
+            if cov.get("logs_attributed_by_redirect"):
+                lines.append(
+                    f"  attributed by DECLARED REDIRECT (the label does not equal the job "
+                    f"name): {cov['logs_attributed_by_redirect']} log(s) — JUDGED, not "
+                    f"filed as history, because a LIVE row's own prompt declares them"
+                )
+            for row in cov.get("attributed_by_redirect", []):
+                lines.append(
+                    f"    live label mismatch: {row['job']} ({row['path']}) is declared "
+                    f"by the live row {row['row']}"
                 )
             for row in cov.get("unattributed_logs", []):
                 lines.append(

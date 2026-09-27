@@ -882,6 +882,96 @@ def test_a_log_with_no_live_ROW_is_reported_as_history_and_never_judged() -> Non
         f"a retired log is outside the judged population\n{leg['coverage']}"
     )
 
+
+def test_a_log_whose_stem_is_a_LIVE_rows_DECLARED_redirect_is_JUDGED_not_retired() -> None:
+    """#163 half 2 (a): a hand-typed label on a LIVE trigger must not hide its log in history.
+
+    The leg's first key was the log's FILENAME stem looked up among the enabled rows' NAMES,
+    and that parse cannot see a label that does not equal its job name. Measured origin: the
+    job `factory-triage-patrol` wrote `/tmp/factory-triage-6h-<ts>.log` for 16 rounds, the
+    stem matched no row, and every one of those logs landed in `retired_logs` as history —
+    while the 2026-09-25T12:00:32Z fire's own redirect log carried no receipt and no
+    directive reached the woken lane. The leg built to catch that reported the log clean.
+
+    A live surface is never history: the stem its OWN prompt declares puts the log in the
+    judged population, and the mismatch is NAMED.
+    """
+    log_dir = _log_dir(**{"factory-triage-6h-20260922T000045.log": _FAILURE})
+    rows = [_thin("factory-triage-patrol",
+                  prompt="/tmp/factory-triage-6h-$(date -u +%Y%m%dT%H%M%S).log")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert leg["coverage"]["logs_retired"] == 0, (
+        f"a stem a LIVE row declares in its own prompt is not history\n{leg['coverage']}"
+    )
+    assert leg["coverage"]["logs_attributed_by_redirect"] == 1, leg["coverage"]
+    assert leg["coverage"]["attributed_by_redirect"][0]["row"] == "factory-triage-patrol", (
+        f"the log must name the LIVE row that declares it\n{leg['coverage']}"
+    )
+    assert leg["coverage"]["logs_without_receipt"] == 1, (
+        f"judged, so its missing receipt is reported rather than filed as history\n"
+        f"{leg['coverage']}"
+    )
+    assert len(leg["problems"]) == 1 and "factory-triage-6h" in leg["problems"][0], (
+        f"the live mis-labelled log must be a NAMED problem: {leg['problems']}"
+    )
+
+
+def test_a_stem_NO_live_row_declares_stays_HISTORY() -> None:
+    """NEGATIVE CONTROL for the arm above: the bucket is keyed on the DECLARED stem.
+
+    A fix that moved every unmatched stem into the judged population would be worse than
+    the defect — it would red forever on genuinely retired pacemakers' logs, and a leg that
+    cannot go green is a leg nobody reads. So a row declaring a DIFFERENT redirect does not
+    adopt this log.
+    """
+    log_dir = _log_dir(**{"factory-triage-6h-20260922T000045.log": _FAILURE})
+    rows = [_thin("factory-measurement-daily",
+                  prompt="/tmp/factory-measurement-daily-$(date -u +%Y%m%dT%H%M%S).log")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
+    assert leg["coverage"]["logs_retired"] == 1, (
+        f"a stem no live row declares is genuinely history\n{leg['coverage']}"
+    )
+    assert leg["coverage"]["logs_attributed_by_redirect"] == 0, leg["coverage"]
+    assert leg["problems"] == [], (
+        f"history is never a problem\n{leg['problems']}"
+    )
+
+
+def test_the_retired_bucket_prints_its_POPULATION_and_its_PREDICATE() -> None:
+    """#163 half 2 (b): "no retired logs" and "a bucket that cannot see one" must differ.
+
+    The bucket is the leg's silent-exclusion surface, so an empty read has to PRINT the
+    population it examined and the predicate that emptied it. A bare zero is
+    indistinguishable from a bucket whose key can never match.
+    """
+    # arm 1 — nothing retired: the zero must still carry its predicate.
+    rows = [_notify_row("factory-measurement-daily")]
+    log_dir = _log_dir(**{"factory-measurement-daily-20260921T060126.log": _RECEIPT})
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], unreached=[],
+                      prefixes=["factory-"], log_dir=log_dir)
+    assert rc == 0, out
+    assert "retired: 0 log(s)" in out, (
+        f"an empty bucket must print its population rather than vanish\n{out}"
+    )
+    assert "names no enabled row this factory declares" in out, (
+        f"the bucket's PREDICATE must be printed beside its population\n{out}"
+    )
+
+    # arm 2 — a live label mismatch: NAMED as judged, never filed as history.
+    rows2 = [_thin("factory-triage-patrol",
+                   prompt="/tmp/factory-triage-6h-$(date -u +%Y%m%dT%H%M%S).log")]
+    log_dir2 = _log_dir(**{"factory-triage-6h-20260922T000045.log": _FAILURE})
+    _, out2, _ = _run([], [], cron_rows=rows2, homes=["probe-home"], unreached=[],
+                      prefixes=["factory-"], log_dir=log_dir2)
+    assert "attributed by DECLARED REDIRECT" in out2, (
+        f"a live label mismatch must be VISIBLE in the report\n{out2}"
+    )
+    assert "live label mismatch" in out2 and "factory-triage-patrol" in out2, (
+        f"the mismatch must NAME the live row that owns the log\n{out2}"
+    )
+
 def test_a_log_nobody_here_declares_is_reported_and_never_judged() -> None:
     """Another factory's law is not this factory's to enforce (#101, ruling n=610 part 3b)."""
     log_dir = _log_dir(**{"oc-some-other-job-20260922T000045.log": _FAILURE})
