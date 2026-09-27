@@ -26,7 +26,7 @@ was an append-only correction row: the correct remedy for the RECORD, and the wh
 that was applied. It is not a PREVENTION, and the class recurred twice after the first
 correction was written — the second time by a lane that had already read it. By the
 factory's own rule a second instance of a shape is a process defect whose remedy is a
-MECHANISM, and P29 makes a requirement enforceable or dead text: §11 declared the ledger
+MECHANISM, and P29 makes a requirement enforceable or dead text: SKILL.md §State — every surface has one writer declared the ledger
 an authoritative surface and said nothing about the form of a subject.
 
 What fires and what does not

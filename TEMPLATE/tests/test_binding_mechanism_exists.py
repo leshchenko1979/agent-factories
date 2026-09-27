@@ -226,7 +226,7 @@ def test_binding_and_probes_agree() -> None:
         pytest.skip(f"no harness binding at {BINDING.relative_to(REPO)} — nothing to uphold in this tree")
     named = binding_variables()
     assert named, (
-        f"{BINDING.relative_to(REPO)} names no isolation variable — either the §10 table was "
+        f"{BINDING.relative_to(REPO)} names no isolation variable — either the `04-harness-binding.md` §10 table was "
         "removed or its row shape changed; this gate reads that table, so it would pass "
         "vacuously. Restore the table or update _VAR_ROW."
     )
@@ -241,7 +241,7 @@ def test_binding_and_probes_agree() -> None:
     assert not unprescribed, (
         "this gate probes isolation variable(s) the binding does not name: "
         + ", ".join(unprescribed)
-        + " — either document them in the binding's §10 table or drop the probe"
+        + " — either document them in `04-harness-binding.md` §10 or drop the probe"
     )
     print(f"\nbinding names {len(named)} isolation variable(s): {', '.join(named)}")
 

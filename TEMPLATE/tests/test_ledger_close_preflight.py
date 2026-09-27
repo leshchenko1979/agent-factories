@@ -22,7 +22,7 @@ refusal names the subject and the missing leg, and it writes NOTHING — byte-fo
 nothing, not merely "no close row". It asserts the ACCEPTANCE: a close whose subject
 carries both legs preceding it lands, and `verify` then reads that ledger clean.
 
-It does NOT assert that a ledger can no longer CONTAIN a bad sequence. SKILL.md §11's
+It does NOT assert that a ledger can no longer CONTAIN a bad sequence. SKILL.md §State — every surface has one writer's
 guarantee is one append path, not tamper-proof: a writer that never calls
 `tools/ledger.py` takes no lock and this pre-flight never sees it. That residue stays
 `verify`'s, and the last two probes pin it — a raw row written AROUND the append path is
@@ -109,7 +109,7 @@ def rows(ledger: Path) -> list[dict]:
 def write_around(ledger: Path, events: list[tuple[str, str]]) -> None:
     """Write rows AROUND the append path, the way no lawful writer can.
 
-    This is the residue §11 names: one append path is a guarantee about the
+    This is the residue that SKILL.md §State — every surface has one writer names: one append path is a guarantee about the
     WRITERS, not about the file. A raw write takes no lock, so the pre-flight
     cannot see it — and `verify` is what catches it afterwards.
     """

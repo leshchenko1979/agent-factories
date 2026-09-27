@@ -286,6 +286,10 @@ PAIRS = [
     # keeps a factory from dropping the runner and keeping the file. Without this entry the
     # gate exists in both trees but NOTHING enforces that they stay identical.
     ("tests/test_questions.py", "TEMPLATE/tests/test_questions.py"),
+    # Added with its registration (board #184, ruling n=1231). The gate reads
+    # `TEMPLATE/**` AND `tools/**` in THIS tree, so without the entry the two copies
+    # could drift and the shipped half would keep citing by number in every member.
+    ("tests/test_citation_clause_titles.py", "TEMPLATE/tests/test_citation_clause_titles.py"),
 ]
 
 

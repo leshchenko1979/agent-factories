@@ -241,8 +241,8 @@ KNOWN_FACTORY_SLUGS = frozenset(MANIFEST_RECORDS)
 PROFILE_SCOPE = "profile"  # the literal that `affects` uses for box-wide notices
 # The profile field is a DIFFERENT question from the `affects` sentinel above: one
 # is a scope keyword, the other is a profile NAME. Every factory on this box runs
-# under `ops` (AGENTS.md §Session naming convention: no lane is prefixed "ops"
-# because it distinguishes nothing), so the name is declared in the manifest.
+# under `ops` — no lane is prefixed "ops", because the prefix distinguishes
+# nothing — so the name is declared in the manifest.
 FACTORY_PROFILE = MANIFEST["profile"]
 
 FACTORY_CHATS = {slug: r["chat_id"] for slug, r in MANIFEST_RECORDS.items()}
@@ -1252,7 +1252,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 # can prove, and writes `null` where the answer belongs to the factory itself.
 #
 # A stub is a QUESTION, not a claim — which is why this is legitimate for
-# Meta-Factory to run against member factories at all (SKILL.md §3): it authors
+# Meta-Factory to run against member factories at all (SKILL.md §The hard boundary — never do a member's work): it authors
 # no member's self-description, it asks the owner to. `status: "unattested"` is
 # how a fragment says nobody has answered yet.
 #
@@ -1262,7 +1262,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 # The factory's own forum chat, its repo, its law file and its display name are
 # all DECLARED in `registry/fleet.json` and derived at the top of this module —
-# see §The fleet manifest. They were six hardcoded dicts here, which is what made
+# see SKILL.md §State — every surface has one writer. They were six hardcoded dicts here, which is what made
 # this file un-portable: a template carrying them ships one box's fleet to every
 # factory that copies it.
 #

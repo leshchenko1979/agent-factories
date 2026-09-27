@@ -518,6 +518,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_schema.py",
     "test_ontology.py",
     "test_patrol_host_state.py",
+    "test_citation_clause_titles.py",
+    # Added with its registration (board #184, ruling n=1231). REQUIRED is the correct
+    # grain: the gate's live leg reads a TREE and its seven probes drive synthetic text,
+    # so it needs no live board, no fleet manifest and no box-local fixture, and it passes
+    # in a bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE
+    # copy, so the manifest grain is what keeps a factory from dropping the runner and
+    # keeping the file.
     "test_questions.py",
     # Added with its registration (board #182 item 2). REQUIRED is the correct grain and
     # OPTIONAL is not, for the reason that decides every entry around it: the gate drives the

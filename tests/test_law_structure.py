@@ -2,7 +2,7 @@
 """Gate: numbered sections in a law file must be contiguous.
 
 A law file (`skills/<name>/SKILL.md`, or the template's `SKILL.md.tmpl`) numbers its
-sections so that prose can reference them — "see §7", "per §11". That reference scheme
+sections so that prose can reference them by number. That reference scheme
 breaks silently:
 
 - a **duplicate** number means two sections claim the same slot, or a heading was

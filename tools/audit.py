@@ -1300,7 +1300,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     and `#86` at n=589, the second time with the invalid row sitting uncommitted in
     #     the SHARED tree, where the next lane to stage the ledger would have carried it
     #     into history with no act of its own. The refusal carries NO exemption surface
-    #     and needs none: a close appended now can never predate the gate. §11's guarantee
+    #     and needs none: a close appended now can never predate the gate. SKILL.md §State — every surface has one writer's guarantee
     #     is one append path, not tamper-proof, so the order leg and any row written
     #     AROUND the path stay `verify`'s — both are probed here (issue #98, ruling n=596,
     #     P29).
@@ -1563,7 +1563,7 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_insights_gate_recorded.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_gate_recorded.py"])
 
-    # 47. Binding-mechanism-existence gate (issue #74, ruling n=485). §11 of the law gives the
+    # 47. Binding-mechanism-existence gate (issue #74, ruling n=485). SKILL.md §State — every surface has one writer gives the
     #     durable ledger exactly one writer, `tools/ledger.py append`, and a law clause now
     #     states that an ad-hoc probe, scratch script or throwaway harness must never append to
     #     live state. The REQUIREMENT is product-neutral and lives in the core law; the
@@ -1856,6 +1856,28 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     factory from dropping the runner and keeping the file.
     if (repo_root / "tests/test_questions.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_questions.py"])
+
+    # 59. Citation clause-title gate (board #184, ruling n=1231). The kit's own code cited
+    #     the kit's own law by section NUMBER, into a file the receiving tree does not carry:
+    #     `TEMPLATE/` ships `SKILL.md.tmpl`, and a member's law is authored per tree, so the
+    #     same numbered citation names a DIFFERENT clause in each. The harm was measured, not
+    #     hypothetical: a brief asserting "your law'''s eleventh section prescribes a remedy"
+    #     reached miidas HQ, whose eleventh section is its Verification law and whose SKILL.md
+    #     contains no "repair" at all.
+    #     WHAT IT PROVES that nothing else can: every citation marker in the shipped
+    #     instruments and their gates names its DOCUMENT and a clause TITLE that RESOLVES here, in this repo'''s
+    #     law corpus - the title form survives a tree whose numbering differs or is absent
+    #     (miidas's law carries no numbered headings at all).
+    #     THE POPULATION IS A TREE, and it PRINTS it: files examined, citations examined, and
+    #     every exemption with its reason - a citation into a document this repo does not
+    #     carry cannot be resolved offline, so it is reported as an exemption on EVERY run
+    #     rather than read as a pass. Zero citations examined fails loudly.
+    #     IT READS SYNTHETIC INPUT in seven probes (one per rule: the numbered defect, the
+    #     bare number, a resolving title, an unresolvable title, a title at the head not the
+    #     middle, a carried document's own numbering, and a title continuing into prose), so
+    #     the gate is non-vacuous wherever it ships.
+    if (repo_root / "tests/test_citation_clause_titles.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_citation_clause_titles.py"])
 
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and

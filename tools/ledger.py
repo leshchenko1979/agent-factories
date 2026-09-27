@@ -24,9 +24,19 @@ a revert loud, never to block a factory that has nothing to compare against.
 Commands
 --------
   append --event E --actor A --subject S --detail D   the only write
+         [--ref KIND:VALUE ...]                       typed pointers to other objects
   tail [--n N]                                        read-only, newest last
   verify                                              read-only: structure, and
                                                       each subject's sequence
+
+What a refusal tells you
+------------------------
+An unrecognized flag is NOT refused with a bare usage line. A typo and a request for
+a capability this tool does not carry read identically to argparse, so the refusal
+names the two lawful routes instead: `--ref` for a typed pointer from this row to
+another object, and `docs/ledger-refs-kinds.json` for a DECLARED new ref kind or
+event -- which is how a member factory carries an object the core vocabulary does
+not have, without forking this file. A refusal exits 2.
 
 Exit: 0 ok, 1 problem (bad usage, corrupted ledger, unknown event type, or a
 close whose transition sequence is incomplete).
@@ -93,6 +103,51 @@ REPO = Path(__file__).resolve().parent.parent
 # field a lawful repair may extend, and the identity around it is what `verify` and every
 # subject-keyed predicate resolve through.
 ROW_IDENTITY = ("n", "ts", "event", "actor", "subject")
+
+# THE DECLARED EXTENSION SURFACE (#ledger-instrument, owner order 2026-09-27).
+# A ref is a TYPED POINTER from a row to another object, so an edge a row already
+# claims in prose becomes one an instrument can follow. Kinds are DECLARED, never
+# guessed: the core set below, plus whatever the factory adds in
+# docs/ledger-refs-kinds.json -- the same declaration family as
+# docs/ledger-exemptions.json, so a member's own object needs no fork.
+CORE_REF_KINDS = ("row", "subject", "commit", "session", "rework")
+REFS_KINDS_FILE = REPO / "docs" / "ledger-refs-kinds.json"
+
+
+def known_ref_kinds() -> tuple[str, ...]:
+    """The core ref kinds, plus any this factory declares.
+
+    Unreadable or absent declaration is NOT an error: the core set stands alone,
+    which is what lets the field ship before any factory has declared a kind.
+    """
+    extra: list[str] = []
+    try:
+        declared = json.loads(REFS_KINDS_FILE.read_text(encoding="utf-8"))
+        extra = [k for k in (declared.get("kinds") or []) if isinstance(k, str)]
+    except (OSError, json.JSONDecodeError):
+        pass
+    return CORE_REF_KINDS + tuple(k for k in extra if k not in CORE_REF_KINDS)
+
+
+def parse_refs(values: list[str]) -> list[dict]:
+    """Typed pointers, validated for FORM at the write path.
+
+    `KIND:VALUE`, and a malformed ref is refused HERE, at append, naming the lawful
+    kinds -- the form is the one thing the tool can settle without knowing a member's
+    object. The EXISTENCE check (a `row` ref must resolve) is a separate leg: it needs
+    the ledger's own maximum, which only the append lock holds.
+    """
+    refs: list[dict] = []
+    for raw in values:
+        kind, sep, value = raw.partition(":")
+        if not sep or not kind or not value:
+            sys.exit(
+                f"ledger append refused: --ref {raw!r} is not KIND:VALUE "
+                f"(e.g. row:1228, subject:#149, commit:be47c443). "
+                f"Kinds: {', '.join(known_ref_kinds())}"
+            )
+        refs.append({kind: value})
+    return refs
 
 # Which declared invariant's boundary governs a correction to a row of each event. Only
 # `close` has one: `close_row_revision` is the sole declared invariant constraining a row's
@@ -325,9 +380,7 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
     try:
         rel_path = path.resolve().relative_to(REPO).as_posix()
     except ValueError:
-        sys.stderr.write(
-            "warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n"
-        )
+        print("warning: ledger guard: cannot read committed lineage (proceeding fail-open)")
         return None, None
     for ref in ("origin/main", "HEAD"):
         text = _git_show(ref, rel_path)
@@ -347,9 +400,7 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
         if parsed:
             return rows, ref
         break
-    sys.stderr.write(
-        "warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n"
-    )
+    print("warning: ledger guard: cannot read committed lineage (proceeding fail-open)")
     return None, None
 
 def lineage_divergence(
@@ -448,6 +499,9 @@ def sequence_problems(
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in EVENTS:
         sys.exit(f"unknown event '{args.event}' — one of: {', '.join(EVENTS)}")
+    # Refuse a malformed ref BEFORE the lock is taken: a write path that acquires the
+    # lock and then rejects its own arguments has serialised a lane against nothing.
+    refs = parse_refs(getattr(args, "ref", []) or [])
     # THE TARGET DECIDES WHICH IDENTITY LAW APPLIES, and it is decided BEFORE the
     # actor is resolved because the resolver needs to know. A `--subprocess`
     # append writes a domain sub-ledger and a redirected `OC_LEDGER_PATH` writes a
@@ -514,6 +568,29 @@ def cmd_append(args: argparse.Namespace) -> int:
             divergence = lineage_divergence(rows, committed_rows, ref_name)
             if divergence:
                 sys.exit(f"ledger append refused: {divergence}")
+        # A REF MUST RESOLVE AT THE INSTANT IT IS WRITTEN, and this lock is the only
+        # place the check is cheap: the ledger's maximum `n` is a fact THIS lock
+        # already holds, three lines above, so the predicate costs one comparison.
+        # Checked here rather than at read time because a dangling pointer is
+        # cheapest to kill before it exists -- `verify` is the second half of this
+        # leg, not a substitute for it: only read time can see a ref that was valid
+        # when written and broken afterwards, and only write time can prevent one.
+        _max_n = rows[-1]["n"] if rows else 0
+        for _ref in refs:
+            for _kind, _value in _ref.items():
+                if _kind != "row":
+                    continue
+                if not str(_value).isdigit():
+                    sys.exit(
+                        f"ledger append refused: ref row:{_value!r} is not a row "
+                        f"number"
+                    )
+                if int(_value) > _max_n:
+                    sys.exit(
+                        f"ledger append refused: ref row:{_value} points at a row "
+                        f"that does not exist -- this ledger holds {_max_n} row(s), "
+                        f"and a ref is a pointer to something, never a wish"
+                    )
         # A close row is refused at the WRITE PATH when its subject has no
         # preceding intake and claim — the SAME predicate `verify` runs, asked
         # here about the row about to be written, with `index = len(rows)`, the
@@ -687,6 +764,10 @@ def cmd_append(args: argparse.Namespace) -> int:
             "subject": args.subject,
             "detail": detail,
         }
+        # ADDITIVE: a row without refs stays valid, so the five forked copies are not
+        # broken on day one. The key appears only when there is something to point at.
+        if refs:
+            row["refs"] = refs
         with open(target_ledger, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             fh.flush()
@@ -766,7 +847,7 @@ def cmd_repair(args: argparse.Namespace) -> int:
     timestamp falls AFTER that invariant's declared boundary (#52 clause 2). Everything
     that makes the row what it is — `n`, `ts`, `event`, `actor`, `subject` — is left
     untouched, because a row wrong in one of THOSE is retired by naming it in a new row
-    and never edited (SKILL.md §11).
+    and never edited (SKILL.md §State — every surface has one writer).
 
     Two refusals carry the law:
 
@@ -1165,6 +1246,30 @@ def cmd_verify(args: argparse.Namespace) -> int:
             if not row.get(field):
                 problems.append(f"line {i}: missing {field}")
 
+    # THE REFS LEG -- an edge a row CLAIMS must resolve, and here the claim is
+    # checked rather than believed. `append` refuses a dangling `row` ref at write
+    # time; that check cannot see a ref broken AFTERWARDS (a rewrite, a truncation,
+    # a hand-edit), and this leg is the half that can. A kind that is neither core
+    # nor declared is reported too: an undeclared kind is a member's object the
+    # instrument has no vocabulary for, and silence would read as support.
+    refs_examined = 0
+    for i, row in enumerate(rows, 1):
+        for ref in (row.get("refs") or []):
+            for kind, value in ref.items():
+                refs_examined += 1
+                if kind == "row":
+                    if not str(value).isdigit():
+                        problems.append(
+                            f"line {i}: ref row:{value!r} is not a row number")
+                    elif int(value) > len(rows):
+                        problems.append(
+                            f"line {i}: dangling ref row:{value} -- the ledger "
+                            f"holds {len(rows)} row(s), so it points at nothing")
+                elif kind not in known_ref_kinds():
+                    problems.append(
+                        f"line {i}: ref kind {kind!r} is not declared -- one of: "
+                        f"{', '.join(known_ref_kinds())}")
+
     # A subject's life is a sequence, not a row count. Subjects are compared as
     # exact strings — `#6` and `6` are different subjects, and no normalisation
     # is applied, because guessing at intent is how a gate starts agreeing with
@@ -1214,6 +1319,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
         else:
             problems.append(message)
 
+    # The population is printed BESIDE the verdict, never implied by it: a leg that
+    # examined nothing must not read as a leg that examined the ledger and found it
+    # clean. Same convention as the patrol legs.
+    print(f"refs examined: {refs_examined}")
     if problems:
         print(f"ledger problems: {len(problems)}")
         for p in problems:
@@ -1257,8 +1366,30 @@ def cmd_verify(args: argparse.Namespace) -> int:
         rc = max(rc, _verify_against(against, target_ledger, rows))
     return rc
 
+class _LedgerParser(argparse.ArgumentParser):
+    """Argparse refuses an unknown flag with a bare usage line, and that line cannot
+    tell a TYPO from a REQUEST FOR A CAPABILITY this tool does not carry. The two read
+    identically, so the refusal names the two lawful routes instead -- the answer is
+    then in the refusal itself rather than in a reader's guess about it.
+    """
+
+    _ROUTES = (
+        "  Two lawful routes for data the core flag set does not carry:\n"
+        "    --ref <kind>:<value>         a typed pointer from this row to another object\n"
+        "    docs/ledger-refs-kinds.json  declare a new ref kind (or event), for a\n"
+        "                                 member factory's own object\n"
+        "  Full append surface: --event --actor --subject --detail [--ref ...]\n"
+        "  [--subprocess]"
+    )
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        sys.stderr.write("\nledger refusal: %s\n%s\n" % (message, self._ROUTES))
+        self.exit(2)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = _LedgerParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     ap = sub.add_parser("append", help="the only write path")
@@ -1270,6 +1401,12 @@ def main() -> int:
     ap.add_argument("--subject", required=True)
     ap.add_argument("--detail", required=True)
     ap.add_argument("--subprocess", required=False, help="optional subprocess domain sub-ledger name")
+    ap.add_argument(
+        "--ref", action="append", default=[], metavar="KIND:VALUE",
+        help="a typed pointer from this row to another object; repeatable. KIND is one of "
+             "row, subject, commit, session, rework, or a kind declared in "
+             "docs/ledger-refs-kinds.json",
+    )
     ap.set_defaults(func=cmd_append)
 
     tp = sub.add_parser("tail", help="read-only")

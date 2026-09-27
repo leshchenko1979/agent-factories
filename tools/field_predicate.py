@@ -264,7 +264,7 @@ def declared_rework(detail: str) -> list[str]:
 
     A LIST, not a single value, because the two callers differ on the multiplicity they
     can see: the resolving gate must report EVERY declaration it finds, while a count
-    reads one disposition per row. The law gives a row one token (§8: a field carrying
+    reads one disposition per row. The law gives a row one token (SKILL.md §Verdicts and claims: a field carrying
     two values has no canonical reading, which is why `tools/ledger.py repair` refuses to
     append a key the run already declares), and the live population obeys it — measured
     0 of 92 close rows carry two at ledger `n=712`. Stated so a reader that takes
@@ -425,7 +425,7 @@ def declared_telemetry_provenance(detail: str) -> list[str]:
 
     The ONE positional read of this field, imported by both call sites — the close guard
     in `tools/ledger.py`, which must not RESTATE a provenance the detail already carries
-    (two tokens for one field have no canonical reading, §8), and
+    (two tokens for one field have no canonical reading, SKILL.md §Verdicts and claims), and
     `tests/test_close_telemetry_provenance.py`, which asserts that a row declaring a
     measurement declares its provenance too. A private `token.split("=")` at either would
     be the class `n=405` PART 5 rules: one field, one predicate.

@@ -8,7 +8,7 @@ to name WHICH revision that was, and no gate read the receipt at all. So the row
 false; it is UNCHECKABLE: a reader cannot tell whether "27 gates, 0 FAIL" describes the
 tree that shipped or a tree that has since moved four commits.
 
-The sharpening. SKILL.md §8 already says verdict verbs need a receipt. This adds the
+The sharpening. SKILL.md §Verdicts and claims already says verdict verbs need a receipt. This adds the
 missing half — the receipt must name the revision it measured. Without it a receipt
 degrades into testimony: an assertion about a tree nobody can identify.
 
@@ -150,7 +150,7 @@ def _trailer_revision(detail: str) -> str | None:
     foreign sha REDs an honest row, and an EARLIER resolving prose token MASKS a
     fabricated trailer token, which is the defect this leg exists to catch.
 
-    This is also §11's own definition applied literally: the canonical run IS the row's
+    This is also SKILL.md §State — every surface has one writer, applied literally: the canonical run IS the row's
     declaration, so a token outside it is a quotation. And it is one field with one
     predicate — the same `trailer_tokens` the repair path and the telemetry readers use.
 

@@ -2,7 +2,7 @@
 r"""Gate: a reconstructed claim DECLARES itself and the basis it rests on.
 
 Origin: #112, ruled at ledger `n=657`, amended under **#115 (ruling `n=687`)**. The law at
-`skills/meta-factory/SKILL.md` §11 requires a reconstructed claim — an event `claim` row
+SKILL.md §State — every surface has one writer requires a reconstructed claim — an event `claim` row
 stamped AFTER the work it accepts — to carry the token `claim=reconstructed` and to name the
 basis it rests on under the canonical marker `BASIS:`.
 

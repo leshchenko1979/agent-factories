@@ -11,7 +11,7 @@ Both outputs are GENERATED and must never be hand-edited: the drift gate
 re-renders and compares. Every claim about live state in them carries the instant
 it was read (`resolved_at`), because a claim that describes live state without
 naming the instant cannot be re-checked — the same rule that governs a patrol's
-board claim (SKILL.md §11, commit 1491b81).
+board claim (SKILL.md §State — every surface has one writer, commit 1491b81).
 
 Announcements are ONE source rendered in TWO places, never duplicated:
   * a profile-wide block near the top, deduplicated by `id` across fragments —
@@ -52,7 +52,7 @@ from registry import (
 
 # --- Freshness windows -----------------------------------------------------
 #
-# The re-attest pacemaker runs DAILY (SKILL.md §3), so a fragment older than a
+# The re-attest pacemaker runs DAILY (SKILL.md §Periodic processes & the Pacemaker Law), so a fragment older than a
 # small multiple of that cadence is a PROCESS failure — nobody answered — while
 # a moved binding is a STATE failure that a re-render fixes. The two are
 # rendered separately so a reader is never sent to repair the wrong half.
