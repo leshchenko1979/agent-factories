@@ -86,6 +86,15 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# The absence contract is SHARED, not re-implemented per gate (#83).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ledger_boundary import (  # noqa: E402
+    GateError,
+    SkipGate,
+    evidence_skip_reason,
+    read_rows,
+)
 AUDIT = REPO / "tools" / "audit.py"
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 REWORK = REPO / "evidence" / "rework.md"
@@ -1029,19 +1038,60 @@ def test_the_definition_gate_rejects_a_narrowed_definition():
 
 def main() -> int:
     payload = load_audit()
-    problems = rate_form_problems(payload)
-    problems += derivation_problems(payload, derive_fail_linkage())
-    problems += outcome_reader_problems()
+
+    # The legs that judge a POPULATION this tree may legitimately not have yet (#83).
+    # They are guarded TOGETHER because absence propagates through all of them: with no
+    # ledger the payload's denominators are zeroed, so `rate_form_problems` would report
+    # a malformed rate that the tree cannot have, and the other four read the ledger, the
+    # rework log or the ontology DIRECTLY and raise. A leg that ran over that state would
+    # report a defect or a crash where the honest reading is "nothing to judge yet".
+    skip = evidence_skip_reason(REPO)
+
+    # These four read only the SHIPPED source and the payload's form, so they run in
+    # every tree — including the kit's own, where they are the whole of what can be said.
+    problems = outcome_reader_problems()
     problems += outcome_population_problems(payload)
     problems += rework_bucket_problems()
-    problems += rework_declaration_problems(payload)
     problems += telemetry_scope_problems()
-    problems += work_unit_definition_problems(payload)
+
+    if not skip:
+        # The directory IS present, so the ledger must be READABLE. A CORRUPT ledger is a
+        # failure the shared reader names (#164) — and the legs below re-read the SAME file
+        # with their own `json.loads`, so a named failure must also STOP them: appending the
+        # problem and running them anyway would red for the right reason while still crashing
+        # on the way, which is a traceback rather than the verdict the reader's law wants.
+        # This is the one shape gate and reader must agree on: absent = skip, unreadable = fail.
+        try:
+            read_rows(REPO)
+            ledger_readable = True
+        except SkipGate as exc:
+            problems.append(f"evidence/ exists but the ledger is not judgeable: {exc}")
+            ledger_readable = False
+        except GateError as exc:
+            problems.append(f"the ledger cannot be read: {exc}")
+            ledger_readable = False
+        if ledger_readable:
+            try:
+                problems += rate_form_problems(payload)
+                problems += derivation_problems(payload, derive_fail_linkage())
+                problems += rework_declaration_problems(payload)
+                problems += work_unit_definition_problems(payload)
+            except FileNotFoundError as exc:
+                # The directory IS present and a file is gone: a live factory that lost its
+                # evidence. A real problem, reported by name — never read as a skip.
+                problems.append(f"instance file unreadable: {exc}")
+
     if problems:
         print("rate gate FAILED:", file=sys.stderr)
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
         return 1
+
+    if skip:
+        # Stated, never printed as zeros: a vacuous "0 of 0" reads as a measurement.
+        print(f"rate gate OK — population legs SKIPPED: {skip}")
+        return 0
+
     rows, subjects = ledger_close_counts()
     rw = payload["rework"]
     print(

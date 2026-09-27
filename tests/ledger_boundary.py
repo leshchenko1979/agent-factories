@@ -123,6 +123,42 @@ def read_rows(repo: Path) -> list[dict]:
         raise SkipGate(f"{LEDGER_REL} exists but carries no rows — nothing to judge")
     return rows
 
+EVIDENCE_REL = "evidence"
+REWORK_REL = "evidence/rework.md"
+
+def evidence_skip_reason(repo: Path) -> str:
+    """A stated reason when this tree ships NO `evidence/` BY DESIGN, else "".
+
+    The ONE home of this predicate (#83). Two gates judge a population that lives
+    entirely inside `evidence/` — `test_audit_rates.py` over five legs, `test_rework.py`
+    over its live-document assertions — and a second private parse of the same absence
+    is the defect section 11 names, not a style preference.
+
+    Two absence shapes, and they are NOT the same reading (#164):
+
+      * the `evidence/` directory ITSELF is absent — the tree the KIT ships, where the
+        ledger and the rework log are BOOTSTRAP-created (BOOTSTRAP.md steps 4b/4c) and
+        the ontology is filled at step 3, so the legs that judge that population have
+        nothing to read yet -> SKIP, reason stated;
+      * the directory is PRESENT and a file is gone — a live factory that LOST its
+        evidence, which is a real problem and never a skip. Callers must fail that arm,
+        so this function returns "" for it rather than inventing a reason.
+
+    Collapsing the two is the vacuity this split exists to prevent: a factory that has
+    lost its ledger must never read as "nothing to judge".
+
+    Distinct from `read_rows` above, which judges the LEDGER FILE (absent/empty -> skip,
+    corrupt -> error). This judges the DIRECTORY, because the legs it guards also read the
+    rework log and the ontology, and no single file read can stand in for all three.
+    """
+    if not (repo / EVIDENCE_REL).is_dir():
+        return (
+            f"no {EVIDENCE_REL}/ in this tree — the ledger and the rework log are "
+            f"BOOTSTRAP-created (BOOTSTRAP.md steps 4b/4c) and the ontology is filled at "
+            f"step 3, so the legs that judge that population have nothing to read yet"
+        )
+    return ""
+
 def declared_boundary(repo: Path, key: str) -> tuple[dt.datetime, str]:
     """The boundary `key` names, as `(datetime, declared-text)`, or Skip/GateError.
 

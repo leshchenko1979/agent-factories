@@ -634,6 +634,20 @@ def main() -> int:
               _rev_detail[-90:])
 
         print("\nreconstructed claims — declared by token, printed, never collapsed")
+        # The seam BOTH blocks below share: a staged COPY of the tree carrying its own
+        # `docs/ledger-exemptions.json`. Defined here because the first probe that needs
+        # it comes before the exemption arms (#83: the exemption is a DATA file, so a
+        # probe must seed it rather than inherit this factory's).
+        def stage_with_exemptions(name: str, entries: list[dict]) -> Path:
+            tree = Path(tmp) / name
+            (tree / "tools").mkdir(parents=True)
+            (tree / "evidence").mkdir()
+            (tree / "docs").mkdir()
+            stage_tool(TOOL, tree / "tools", LOCAL_TOOLS)
+            (tree / "docs" / "ledger-exemptions.json").write_text(
+                json.dumps({"exempt": entries}), encoding="utf-8")
+            return tree / "tools" / "ledger.py"
+
         # A claim stamped after the work declares itself with the token
         # `claim=reconstructed` (#98, ruling n=602 PART 5), and `verify` prints those
         # rows beside its `excused:` lines. The declaration is MECHANICAL because a
@@ -680,11 +694,31 @@ def main() -> int:
 
         # Not collapsed: one ledger exercising BOTH a pre-gate exemption and a
         # reconstruction must print both, distinctly, on the clean path.
-        both = Path(tmp) / "rec-both.jsonl"
+        # THE EXEMPTION IS SEEDED IN THE FIXTURE (#83). The live
+        # `docs/ledger-exemptions.json` is FACTORY DATA — it names meta-factory's own
+        # 2026-09-12 closes — and by design it does NOT ship: the kit carries only the
+        # `.example.json` skeleton, and the loader's own documented contract is "ABSENT
+        # means none". A probe that read the live file was therefore RED in the tree the
+        # deliver hands to members, on a tree where the GATE IS RIGHT and the probe was
+        # reading a surface the receiving tree does not carry. The fixture varies exactly
+        # the surface a factory varies.
+        both_tool = stage_with_exemptions("rec-both-tree", [
+            {"subject": "#6", "leg": "claim", "granted": "2026-09-12",
+             "reason": "close written before the sequence gate existed; no claim row "
+                       "was ever written",
+             "proof": "the ruling that granted it: ledger n=15, the boundary fact"},
+        ])
+        both_tree = both_tool.parent.parent
+        both = both_tree / "evidence" / "ledger.jsonl"
         write_ledger(both, ("intake", "#6"), ("close", "#6"),
                      ("intake", "#98"), ("claim", "#98"), ("close", "#98"))
         set_detail(both, 3, "Taken on acceptance of the dispatch. claim=reconstructed")
-        r = run(both, "verify")
+        r = subprocess.run(
+            [sys.executable, str(both_tool), "verify"],
+            capture_output=True, text=True, cwd=str(both_tree),
+            env={**os.environ, "OC_LEDGER_PATH": str(both),
+                 "OC_ACTORS_PATH": str(both_tree / "no-actors.txt")},
+        )
         lines = r.stdout.strip().splitlines()
         check("clean, excused and reconstructed are three distinct outputs",
               r.returncode == 0
@@ -703,20 +737,11 @@ def main() -> int:
         # directions are probed, because a one-sided probe passes on a list that refuses
         # everything exactly as happily as on one that excuses everything.
         #
-        # The seam is a staged COPY of the tree, and since 2026-09-25 the exemptions are a
-        # DATA FILE (`docs/ledger-exemptions.json`) rather than a module constant -- so this
-        # probe now varies exactly the surface a factory varies, and the declaration it
-        # writes is the one production reads. The live surface is still never touched.
-        def stage_with_exemptions(name: str, entries: list[dict]) -> Path:
-            tree = Path(tmp) / name
-            (tree / "tools").mkdir(parents=True)
-            (tree / "evidence").mkdir()
-            (tree / "docs").mkdir()
-            stage_tool(TOOL, tree / "tools", LOCAL_TOOLS)
-            (tree / "docs" / "ledger-exemptions.json").write_text(
-                json.dumps({"exempt": entries}), encoding="utf-8")
-            return tree / "tools" / "ledger.py"
-
+        # The seam is a staged COPY of the tree (`stage_with_exemptions`, defined above),
+        # and since 2026-09-25 the exemptions are a DATA FILE
+        # (`docs/ledger-exemptions.json`) rather than a module constant -- so these probes
+        # vary exactly the surface a factory varies, and the declaration they write is the
+        # one production reads. The live surface is still never touched.
         def exempt_run(tool: Path) -> subprocess.CompletedProcess:
             """Verify a ledger whose ONLY defect is a missing claim leg on #7."""
             tree = tool.parent.parent

@@ -62,6 +62,36 @@ REWORK = REPO / "evidence" / "rework.md"
 # outside, and the leg that takes it says so where it is used.
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 
+# The absence contract is SHARED, not re-implemented per gate (#83): the tree
+# the kit ships carries no evidence/, and this is the second gate that has to
+# say so in the same words as tests/test_audit_rates.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ledger_boundary import (  # noqa: E402
+    EVIDENCE_REL,
+    REWORK_REL,
+    GateError,
+    SkipGate,
+    evidence_skip_reason,
+    read_rows,
+)
+
+def ledger_corruption(repo: Path = REPO) -> str:
+    """The shared reader's verdict when the ledger EXISTS but cannot be read (#164).
+
+    A corrupt ledger is a FAILURE, never a skip and never a silence. This leg's own
+    `parse_ledger` tolerates a malformed line and reports a clean gate over a damaged
+    document, so the absence contract alone leaves the corruption arm reading green —
+    the false clean this gate exists to close. Measured 2026-09-27: a ledger with an
+    unterminated JSON row returned rc=0 here before this check landed.
+    """
+    try:
+        read_rows(repo)
+    except GateError as exc:
+        return str(exc)
+    except SkipGate:
+        return ""
+    return ""
+
 # The coverage predicate lives in `tools/audit.py`, which reads the same file this
 # gate reads. It is imported rather than re-implemented so that one number cannot
 # have two implementations free to drift apart.
@@ -354,17 +384,31 @@ def dated_rates(claim: str | None = None) -> str:
     )
 
 def main() -> int:
+    # Two absence shapes, and they are NOT the same reading (#83, #164). The tree the kit
+    # SHIPS carries no evidence/ at all, so there is no live log to judge; a live factory
+    # whose evidence/ exists but whose rework log is GONE has LOST it, which no bootstrap
+    # step produces and which must FAIL. A blanket early exit would also skip the synthetic
+    # probes, and those are a property of this gate's own predicates — they need no live
+    # document to mean anything, and dropping them would make the shipped tree's green
+    # read as though the gate had been exercised when it had not.
     if not REWORK.is_file():
-        sys.exit("evidence/rework.md is missing")
-
-    text = REWORK.read_text(encoding="utf-8")
-    problems, count = check_text(text)
-    if problems:
-        print(f"rework log incomplete: {len(problems)} problem(s)\n")
-        for p in problems:
-            print(f"  {p}")
-        return 1
-    print(f"rework log clean: {count} complete entry(s)")
+        skip = evidence_skip_reason(REPO)
+        if not skip:
+            sys.exit(
+                f"{REWORK_REL} is missing while {EVIDENCE_REL}/ exists — a live factory "
+                f"that LOST its rework log, which no bootstrap step produces"
+            )
+        text = ""
+        print(f"rework log SKIPPED: {skip}")
+    else:
+        text = REWORK.read_text(encoding="utf-8")
+        problems, count = check_text(text)
+        if problems:
+            print(f"rework log incomplete: {len(problems)} problem(s)\n")
+            for p in problems:
+                print(f"  {p}")
+            return 1
+        print(f"rework log clean: {count} complete entry(s)")
 
     # The gate is probed on synthetic documents, in-process: it never writes a
     # temp file and never re-invokes itself, so a probe cannot become the
@@ -501,28 +545,47 @@ def main() -> int:
     # closes a work unit. If it were not, this gate would go RED on another lane's
     # commit — the false-RED class #41 names, and the reason the *rate* is
     # deliberately NOT gated here.
-    empty = audit.parse_rework(REWORK, set())
-    populated = audit.parse_rework(REWORK, {"#40", "#50"})
-    invariant = (
-        empty["subject_coverage_numerator"] == populated["subject_coverage_numerator"]
-        and empty["subject_coverage_denominator"]
-        == populated["subject_coverage_denominator"]
-    )
-    print(
-        f"  {'PASS' if invariant else 'FAIL'}  the coverage figure does not move "
-        f"with the closed-subject set — {live_n} of {live_m}"
-    )
-    if not invariant:
-        failures.append("the coverage figure moves with the closed-subject set")
+    if text:
+        empty = audit.parse_rework(REWORK, set())
+        populated = audit.parse_rework(REWORK, {"#40", "#50"})
+        invariant = (
+            empty["subject_coverage_numerator"] == populated["subject_coverage_numerator"]
+            and empty["subject_coverage_denominator"]
+            == populated["subject_coverage_denominator"]
+        )
+        print(
+            f"  {'PASS' if invariant else 'FAIL'}  the coverage figure does not move "
+            f"with the closed-subject set — {live_n} of {live_m}"
+        )
+        if not invariant:
+            failures.append("the coverage figure moves with the closed-subject set")
+    else:
+        # 0 == 0 over an absent document would be a PASS that examined nothing, which is
+        # the vacuity this repo's own non-vacuity clause bars. Stated, never silent.
+        print(
+            "  SKIP  the coverage-invariance probe — no live document, so there is no "
+            "figure that COULD move with the closed-subject set"
+        )
 
     # The resolution leg against the LIVE document. This is the one assertion in
     # the gate that reads the ledger, and it reads it through the audit's own
     # parser so the closed set checked here is the same population the change fail
     # rate is computed against — a second reading of the ledger is how the gate
     # and the rate come to disagree about which work units exist.
-    if not LEDGER.is_file():
-        print(f"  FAIL  the ledger is missing at {LEDGER} — nothing can be resolved")
-        failures.append("the ledger is missing, so no determinate Subject can resolve")
+    corrupt = ledger_corruption()
+    if corrupt:
+        print(f"  FAIL  the ledger cannot be read: {corrupt}")
+        failures.append(f"the ledger cannot be read: {corrupt}")
+    elif not LEDGER.is_file():
+        skip = evidence_skip_reason(REPO)
+        if skip:
+            print(f"  SKIP  the live resolution leg — {skip}")
+        else:
+            print(
+                f"  FAIL  the ledger is missing at {LEDGER} while {EVIDENCE_REL}/ exists "
+                f"— a live factory that LOST its ledger, so nothing can be resolved"
+            )
+            failures.append("the ledger is missing, so no determinate Subject can resolve")
     else:
         _, closed_subjects = audit.parse_ledger(LEDGER)
         resolution_problems, examined = subject_resolution_problems(
