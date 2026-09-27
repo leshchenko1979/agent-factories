@@ -92,18 +92,33 @@ OPTIONAL_FIELDS = {"refs", "session"}
 # (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
 # only copy, `append` could not consult it, so an unauthorized row was written silently and
 # reported here a day later: the blind spot was exactly one audit wide by construction.
-from ledger_declaration import authorized_for_event  # noqa: E402
+from ledger_declaration import authorized_for_event, load_authorizations  # noqa: E402
 
 ISO_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def get_known_actors() -> set[str]:
+    """The core roles, plus any this factory DECLARES -- both declaration surfaces.
+
+    `tools/actors.txt` names the lanes this factory has; `docs/ledger-authorizations.json`
+    names what each may write, and its `actors` list is membership's second half. While this
+    gate read the txt alone, `tools/ledger.py::known_actors()` unioned BOTH, so a lane the
+    declaration admits was accepted by `append` and refused HERE -- a gate refusing what the
+    instrument lawfully wrote, which is a red no lane can clear by doing the right thing.
+    Measured when it landed: this factory's four commissioned lanes (#193) wrote lawful rows
+    that the write path took and this gate rejected with `unknown actor 'ledger'`.
+
+    Read through the SAME loader the write path uses, so the two cannot drift: one predicate,
+    one home. A malformed declaration RAISES rather than reading as none.
+    """
     actors = set(CORE_ACTORS)
     if ACTORS_FILE.exists():
         for line in ACTORS_FILE.read_text(encoding="utf-8").splitlines():
             role = line.split("#", 1)[0].strip()
             if role:
                 actors.add(role)
+    declared, _ = load_authorizations(REPO)
+    actors.update(declared)
     return actors
 
 
@@ -282,6 +297,35 @@ def run_self_probes() -> bool:
         errs = validate_row_schema(row, line_no, known_actors) + validate_domain_invariants(row, line_no)
         if errs:
             print(f"  FAIL self-probe '{name}': expected no error, got: {errs}")
+            probes_passed = False
+
+    # Probe 0: the DECLARED-ACTOR arm, both ways, against the REAL actor set.
+    #
+    # The fixture set below is a literal, so a probe using it cannot tell a declaration READ
+    # from a hardcoded tuple -- which is exactly how the defect survived: the gate's own
+    # vocabulary was consistent with itself and disagreed with the write path. This arm reads
+    # `get_known_actors()` and asserts BOTH directions, so neither a constant nor an empty
+    # declaration can pass it. Where a tree declares nothing beyond the core (the TEMPLATE
+    # half does not), it SKIPS with that reason rather than passing vacuously.
+    real_actors = get_known_actors()
+    beyond_core = sorted(real_actors - set(CORE_ACTORS))
+    if not beyond_core:
+        print("  note self-probe 'declared actor admitted': this tree declares no actor beyond "
+              "the core, so the declaration-read arm SKIPS rather than passing vacuously")
+    else:
+        role = beyond_core[0]
+        declared_row = {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "run", "actor": role,
+                        "subject": "#1", "detail": "d"}
+        errs = validate_row_schema(declared_row, 1, real_actors)
+        if errs:
+            print(f"  FAIL self-probe 'declared actor admitted': {role!r} is DECLARED but the "
+                  f"gate refuses it: {errs}")
+            probes_passed = False
+        errs_without = validate_row_schema(declared_row, 1, real_actors - {role})
+        if not any("unknown actor" in e for e in errs_without):
+            print(f"  FAIL self-probe 'declared actor refused when undeclared': dropping "
+                  f"{role!r} from the set did NOT refuse it, so the arm above proves nothing: "
+                  f"{errs_without}")
             probes_passed = False
 
     # Probe 1: Missing required field
