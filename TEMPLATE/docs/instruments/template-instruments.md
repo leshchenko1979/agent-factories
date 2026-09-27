@@ -170,6 +170,20 @@ its `oc-` names; the template's `tools/` uses bare nouns.
 one** (owner ruling 2026-09-25), which makes the template's naming a *result* of the census rather
 than a convention imposed on it.
 
+**A name is realised on FOUR surfaces, and each has its own reader** — so a name can be right on one
+surface and wrong on another, and no single check sees both. Walk all four:
+
+| # | surface | realised as | the mechanism that READS it |
+|---|---|---|---|
+| S1 | **declared name** | the instrument's name in its law file | the reader of the law, against the three criteria above |
+| S2 | **file basename** | `tools/<name>.py` | the Python import machinery; `tools/kit_names.py` (fleet collision + stdlib shadowing); `registry/kit.json`, where the path IS the key |
+| S3 | **path slug** | the law doc's filename, its pair, and the reload link | `tests/test_docs_sync.py` (the pair); `registry/kit.json` (path + class); the loader's `discover_aux_files`, which reads top-level `.md` and excludes `SKILL.md`, `README.md`, `CHANGELOG.md` |
+| S4 | **published slug** | a URL segment, for an instrument that publishes a page | **the pointer** — the tool reads `pages/latest.json` BEFORE it consults any register, so a slug is READ from the pointer that owns it and is **never assembled from a factory key**: one page directory serves every set, and a path built from a key is a dead link for every factory except the one it happens to name |
+
+**The law slug and the module basename may differ, and usually should:** a law file names the
+INSTRUMENT; a module is one executable inside its file set. Each surface is checked against the
+mechanism that reads it — never against a hand-written example of the URL.
+
 ## 5. Promotion — the owner's law
 
 **Owner order, 2026-09-27, in three clauses, and they bind every promotion:**
@@ -192,15 +206,24 @@ Each rests on evidence already in hand:
 
 1. **Arrival evidence** — built independently by **two or more** factories, or one factory is
    demonstrably **ahead** of the template on a template instrument.
-2. **Naming** — the three criteria in §4, applied against a **fleet-wide** census.
-3. **Review** — code **and** law, and **the review is a CLOSE CONDITION, not a step.** A promotion's
-   close row cites `review=<artifact>`. A step that leaves no artifact is a step that did not happen.
+2. **Naming** — the three criteria in §4, applied against a **fleet-wide** census, and **the review
+   is a CLOSE CONDITION**: the close row cites `naming=<artifact>`, and the artifact walks all four
+   §4 surfaces with the mechanism that reads each. A naming review that leaves no file is a review
+   that did not happen, exactly as in criterion 3.
+3. **Review** — code **and** law, **by a subagent scoped to the template's copy and the template's
+   law** (the requirement and its reason are `review-lenses.md`'s *Adversarial Isolation
+   Requirement* — the authoring lane suffers conversational self-confirmation bias and an isolated
+   adversarial subagent does not; cited, never restated), and **the review is a CLOSE CONDITION,
+   not a step.** A promotion's close row cites `review=<artifact>`. A step that leaves no artifact
+   is a step that did not happen.
 4. **Migration population named** — who must change, and what breaks if they do not.
 5. **Second versus replacement stated** — does it replace a template instrument or add one?
 6. **Vocabulary** — the instrument's names are read against `ONTOLOGY.md` before landing; every term
    it coins either exists canonically or earns a new row, and **no term it uses means two things**.
-   This is a criterion and not advice: the first vocabulary review, run over the kit's own classes,
-   found **two false claims in `ONTOLOGY.md` itself**.
+   **The review is a CLOSE CONDITION**: the close row cites `vocabulary=<artifact>`, and the
+   artifact reports each term's senses and every collision it found. This is a criterion and not
+   advice: the first vocabulary review, run over the kit's own classes, found **two false claims in
+   `ONTOLOGY.md` itself**.
 
 **Criterion 3 is gateable and the shape already exists** (`close_row_revision` is a declared
 invariant with a boundary instant, read through `tests/ledger_boundary.py`); the gate lands with the
@@ -209,15 +232,23 @@ forbid.
 
 ### 5.2 Two reviews per instrument, both scoped to the template's copy
 
-- **Code and law** — read both; name every assumption the member's tree made that the template does
-  not; produce either a landed fix or a **recorded non-fix with its reason**. The member already
-  reviewed its own copy; re-reviewing that is duplicated work.
+- **Code and law** — read both, **by a subagent scoped to the template's copy and law** (the
+  adversarial-isolation requirement is `review-lenses.md`'s and is cited, not restated here); name
+  every assumption the member's tree made that the template does not; produce either a landed fix or
+  a **recorded non-fix with its reason**. The member already reviewed its own copy; re-reviewing that
+  is duplicated work.
 - **Vocabulary** — read the identifiers and prose against `ONTOLOGY.md`. **Not optional, and
   measured:** `questions` was promoted into the template and shipped with **zero gates** — nothing
   named `test_*questions*` exists, and its only `tools/audit.py` appearance is the English word in
   three comments. Its verification is a `selftest` no gate invokes, so a green selftest is not
   evidence anything ran it. One review would have caught it; the vocabulary review would have caught
   it twice.
+
+**The ontology-quality requirement binds the FILE, not only the review:** a per-instrument law file
+states, for every term it uses, either the canonical `ONTOLOGY.md` row it resolves to or the row it
+earns — and an **ambiguous term is reported as a defect in the ontology** rather than tolerated. A
+term carrying two senses in the corpus is a defect wherever it is found, including inside
+`ONTOLOGY.md` itself.
 
 ### 5.3 Promotion is not adoption
 
@@ -233,12 +264,16 @@ required:
 | role | path | held by |
 |---|---|---|
 | **canonical, shipped** | `TEMPLATE/docs/instruments/<instrument>.md` | the manifest (sha256 + class) |
-| **repo twin** | `docs/instruments/<instrument>.md` — **byte-identical** | `tests/test_docs_sync.py` |
+| **repo pair** | `docs/instruments/<instrument>.md` — **byte-identical** | `tests/test_docs_sync.py` |
 | **reload path** | `skills/meta-factory/<instrument>.md` — **relative symlink** into the template half | the loader, which follows symlinks |
 
 **The reload row is META-FACTORY-SCOPED, and that is a deliberate limit rather than the whole
 story.** The path is `skills/meta-factory/`, which is **outside `TEMPLATE/`** — and `TEMPLATE/` is
-the manifest's entire population (measured: **120 of 120** entries, `skills/` = **0**). So the
+the manifest's entire population (predicate: the `files` map of `registry/kit.json`, grouped by path
+prefix; scope: this repository; instant 2026-09-27T14:17Z — **131 of 131** entries under `TEMPLATE/`,
+`skills/` = **0**. The figure this sentence first carried read **120 of 120**: it was correct for its
+own instant, and it is superseded here rather than overwritten, because a count published without
+its predicate, its scope and its instant goes stale silently). So the
 reload leg is **not shipped and cannot be**: `kit_deliver.py` copies manifest paths
 (`shutil.copyfile`) and creates **no symlinks by construction**, and no single manifest entry could
 express it anyway, because a member's skill directory is named **per member**
@@ -377,4 +412,3 @@ A member factory declares what its ledger accepts: tools/actors.txt, the authori
 A ledger's bare hash-N namespace is **one board's**. Keeping it unique is the factory's obligation and the kit cannot check it: the sequence predicate keys on the exact subject string, so two boards sharing a numbering make one bare hash-N name two work units, and the collision does not red — a close on the second board's unit is accepted on the first board's intake and claim, which is a defeated guard reported as clean. A factory carrying more than one board picks ONE disposition and states it: scope lifecycle rows to the board the ledger records and name a second board's units with a distinct descriptive stem, or keep a second ledger via OC_LEDGER_PATH. A qualified reference is no discriminator, and a board lookup cannot close it — a row records a NUMBER, not which board it meant.
 
 *Authority:* ruling n=971, and the clause is already law in full at skills/meta-factory/SKILL.md:740. It is restated here because a member cannot read that file; the meta-factory's own copy stays the canonical text and this section cites it.
-
