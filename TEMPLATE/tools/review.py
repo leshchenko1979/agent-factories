@@ -256,6 +256,15 @@ LENS_STATES = ["PENDING", "COMPLETED", "WAIVED"]
 # the donor did not assert.  An unmapped value is named by the caller.
 TERMINAL_SYNONYMS = {"COMPLETE": "COMPLETED"}
 
+# A LENS ENTRY drifts by KEY as well as by VALUE, and the rename is measured rather than
+# assumed: over the donor's 88 lens entries the shapes are `(report_path, status, verdict)`
+# 73, `(path, status)` 11, `(findings_count, report_path, status)` 4 — so eleven entries name
+# the report with `path` where the other seventy-three use `report_path`.  A null-check on
+# `report_path` does NOT survive that: the render prints None for a lens that has a report,
+# which is a wrong value rather than a crash, and the migration's own key filter DROPPED it,
+# because `path` is not a key of the template.
+LENS_KEY_SYNONYMS = {"path": "report_path"}
+
 # The cadence boundary is the NEWEST row whose text ANCHORS on this pattern —
 # the last cycle-close stamp.  ANCHORED, never a substring: a loose search
 # harvests an END from a row whose whole point is that none was written — the
@@ -599,6 +608,11 @@ def normalize_state(state: dict[str, Any], cycle_id: str) -> dict[str, Any]:
             entry = dict(out["lenses"][lens])
             incoming = raw_lenses.get(lens)
             if isinstance(incoming, dict):
+                # The KEY RENAME is applied BEFORE the filter, because the filter keeps only
+                # keys the template has and `path` is not one of them — so an un-renamed entry
+                # loses its report path silently, which is how eleven donor lenses arrived
+                # with no report at all.
+                incoming = {LENS_KEY_SYNONYMS.get(k, k): v for k, v in incoming.items()}
                 entry.update({k: v for k, v in incoming.items() if k in entry})
                 if entry.get("status") is None:
                     entry["status"] = "PENDING"
@@ -1159,7 +1173,11 @@ def cmd_status(cycle_id: str) -> int:
             # rather than crashed on, so a donor cycle reads end-to-end.
             digest = info.get("sha256")
             shown = digest[:8] if isinstance(digest, str) and digest else "unrecorded"
-            print(f"  [{status}] Lens {lens} -> {info.get('report_path')} ({shown})")
+            # The report path is resolved across BOTH key names, because the donor renamed
+            # it in eleven of its own entries and a record read without migration must not
+            # report a launched lens as having no report.
+            path = info.get("report_path") or info.get("path")
+            print(f"  [{status}] Lens {lens} -> {path} ({shown})")
         elif status == "WAIVED":
             waived += 1
             print(f"  [{status}] Lens {lens} -> {info.get('reason')}")
@@ -1453,6 +1471,33 @@ def cmd_migrate(cycle_id: str, dry_run: bool) -> int:
             unmapped.append(f"lens status={value!r} (e.g. lens {seen_lens_values[value]})")
     if unmapped:
         print(f"  UNMAPPED (carried in, not valid here): {'; '.join(unmapped)}")
+
+    # LENS ENTRY KEYS, reported for the same reason the values are: the donor renames a key in
+    # some entries and carries keys the schema has no home for, and a migration that absorbed
+    # either in silence would leave a reader unable to tell what was kept from what was lost.
+    template_keys: set[str] = set()
+    for lens in CATALOG_LENSES:
+        e = (migrated.get("lenses") or {}).get(lens)
+        if isinstance(e, dict):
+            template_keys = set(e)
+            break
+    raw_lenses = raw.get("lenses") if isinstance(raw.get("lenses"), dict) else {}
+    renamed: dict[str, str] = {}
+    dropped_keys: dict[str, str] = {}
+    for lens, entry in raw_lenses.items():
+        if not isinstance(entry, dict):
+            continue
+        for k in entry:
+            if k in LENS_KEY_SYNONYMS:
+                renamed.setdefault(k, lens)
+            elif template_keys and k not in template_keys:
+                dropped_keys.setdefault(k, lens)
+    if renamed:
+        print("  lens keys mapped: " + "; ".join(
+            f"{k!r} -> {LENS_KEY_SYNONYMS[k]!r} (e.g. lens {v})" for k, v in sorted(renamed.items())))
+    if dropped_keys:
+        print("  lens keys DROPPED (no home in the schema): " + "; ".join(
+            f"{k!r} (e.g. lens {v})" for k, v in sorted(dropped_keys.items())))
     if dry_run:
         print("dry run: nothing written")
         return 0
