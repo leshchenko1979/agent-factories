@@ -1,4 +1,3 @@
-<!-- working-tree-only edit -->
 # Fleet Factory Registry
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
