@@ -34,7 +34,10 @@ over a failed parse is indistinguishable from a zero over an empty population.
 
 Run:  python3 tools/instrument_census.py <instrument> [--out PATH] [--stdout]
 Exit: 0 published; 1 the declared set could not be derived, or no member was reachable, so an
-      empty artifact would read as a clean fleet.
+      empty artifact would read as a clean fleet. A REFUSAL ALSO WRITES an artifact naming the
+      refused input by path (frame §1.5): an exit code reaches a caller, and a reader meets
+      artifacts, so a refusal that reaches no artifact is a coverage gap that looks like a
+      shorter list.
 """
 
 from __future__ import annotations
@@ -209,6 +212,49 @@ def census(instrument: str) -> dict:
     return {"problem": None, "instant": instant, "rows": rows, "paths": paths, "law": law}
 
 
+def render_refusal(instrument: str, law: str, instant: str, reason: str) -> str:
+    """The artifact written when the declared set cannot be derived.
+
+    WHY A REFUSED RUN STILL WRITES. Frame §1.5: an aggregate must report the inputs it REFUSED,
+    by PATH, in the artifact a reader meets — otherwise a short list and a wrong list are
+    indistinguishable, and a refusal nobody reads is a silent coverage gap. The exit code and the
+    stderr line reach an interactive caller only; a reader who lists `evidence/` sees artifacts,
+    so the refusal has to be one of them.
+    """
+    try:
+        shown = Path(law).relative_to(REPO)
+    except ValueError:
+        shown = law
+    # The reason string carries the same path the caller resolved, so REPO-normalise it too: an
+    # absolute worktree path in a published artifact is a figure that does not travel.
+    reason = str(reason).replace(str(REPO) + "/", "")
+    return "\n".join([
+        f"# Instrument adoption census — REFUSED: {instrument}",
+        "",
+        f"Read at **{instant}** by `tools/instrument_census.py`.",
+        "",
+        "## This instrument was NOT censused",
+        "",
+        f"**Refused input (by path):** `{shown}`",
+        f"**Reason:** {reason}",
+        "",
+        "**Exit status:** 1 — no census was produced for this instrument.",
+        "",
+        "## Why this file exists rather than an absent one",
+        "",
+        "A refusal that reaches only the exit code and the stderr line is invisible to a reader",
+        "who meets the published artifacts: two files in `evidence/` and three refusals would",
+        "read identically to two adopted instruments and no gap at all. So the refused input is",
+        "named HERE, in the artifact a reader meets (frame §1.5).",
+        "",
+        "This is a COORDINATE reading, not a defect verdict on the law file: the census derives",
+        "the declared set from the law doc's **§2** as numbered rows pairing the member path with",
+        "its template counterpart, and §2 may hold a different object for a good reason. The",
+        "coordinate fix belongs to that instrument's own lane; this file's job is to say so out",
+        "loud rather than to return a shorter list.",
+        "",
+    ])
+
 def render(c: dict) -> str:
     paths, rows = c["paths"], c["rows"]
     n = len(paths)
@@ -299,7 +345,23 @@ def main(argv: list[str] | None = None) -> int:
 
     c = census(args.instrument)
     if c["problem"]:
+        # The refusal is PUBLISHED, not only printed: frame §1.5 requires the refused inputs to
+        # reach the artifact a reader meets, so the exit code alone is not the deliverable.
+        instant = c.get("instant") or dt.datetime.now(dt.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ")
+        body_out = Path(args.out) if args.out else (
+            REPO / "evidence"
+            / f"instrument-census-{args.instrument}-{instant[:10]}.md")
+        body_out.parent.mkdir(parents=True, exist_ok=True)
+        body_out.write_text(
+            render_refusal(args.instrument, str(c.get("law") or ""), instant, c["problem"]),
+            encoding="utf-8")
+        shown = (body_out.relative_to(REPO)
+                 if body_out.is_relative_to(REPO) else body_out)
         print(f"instrument census: REFUSED — {c['problem']}")
+        print(f"instrument census: refusal recorded at {shown} at {instant}")
+        if args.stdout:
+            print(body_out.read_text(encoding="utf-8"))
         return 1
     if not any(r["held"] for r in c["rows"]):
         # NOT necessarily an error — a fresh instrument is held by nobody. But say so, with

@@ -308,8 +308,10 @@ the declaration standing behind it.
 template does not need to census the meta-factory's members. It derives the path list FROM THIS
 FILE's §2 table rather than carrying a second list, and it refuses on zero parsed paths — a zero over
 a failed parse is otherwise indistinguishable from a zero over an empty population. It is pinned by
-`tests/test_instrument_census.py` (10 arms, root-only like the tool), which runs it against the
-REPO'S OWN `tools/registry.py` so the refusal wording asserted there is the registry's real one.
+`tests/test_instrument_census.py` (14 checks, root-only like the tool), which runs it against
+the REPO'S OWN `tools/registry.py` so the refusal wording asserted there is the registry's real
+one, and which pins that a REFUSAL IS PUBLISHED naming the refused input by path — an exit code
+reaches a caller, while a reader meets artifacts (frame §1.5).
 
 **The readings, each with its own instant, and NOT a claim about now:**
 

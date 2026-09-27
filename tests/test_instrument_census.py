@@ -24,7 +24,10 @@ WHAT IT PINS, and why each arm is here:
   6. a zero parsed declared set is a REFUSAL (rc=1), not a clean census — the
      examined-nothing class;
   7. HERMETICITY — every arm runs in a TemporaryDirectory, so the live `evidence/` gains
-     nothing.
+     nothing;
+  8. a REFUSAL IS PUBLISHED, naming the refused input by path (frame §1.5) — an exit code
+     reaches a caller and a reader meets artifacts, so a refusal that wrote nothing would make
+     a short list and a wrong list indistinguishable.
 
 THE PREDICATE IS REUSED, NOT RESTATED. These arms run against the REPO'S OWN
 `tools/registry.py`, so the refusal wording asserted below is the registry's real one: if the
@@ -172,14 +175,39 @@ def main() -> int:
         check("a deferral WITH its reason reads DECLARED-DEFERRED (rc=0)",
               rc == 0 and "DECLARED-DEFERRED" in line, line.strip())
 
-        # ARM 7 — a law doc whose §2 table does not parse is a REFUSAL, not an empty census.
+        # ARM 7 — a law doc whose §2 table does not parse is a REFUSAL, not an empty census,
+        # AND the refusal is PUBLISHED. Frame §1.5: an aggregate reports the inputs it refused,
+        # BY PATH, in the artifact a reader meets. An exit code reaches a caller; a reader who
+        # lists the artifact directory meets files -- so a refusal that wrote nothing would make
+        # a short list and a wrong list indistinguishable, which is the defect this arm pins.
         root = build_tree(tmp / "g", {"m1": {}}, {"m1": ALL_PATHS})
         (root / "docs" / "instruments" / "review-rotation.md").write_text(
             "# no table here\n", encoding="utf-8")
         rc, out = run(root, tmp / "g.md")
-        check("a zero parsed declared set is a REFUSAL (rc=1, nothing published)",
-              rc == 1 and not (tmp / "g.md").exists() and "REFUSED" in out,
-              f"rc={rc}, wrote={(tmp / 'g.md').exists()}")
+        body = (tmp / "g.md").read_text(encoding="utf-8") if (tmp / "g.md").is_file() else ""
+        check("a zero parsed declared set is a REFUSAL (rc=1)",
+              rc == 1 and "REFUSED" in out, f"rc={rc}")
+        check("  ... and the refusal IS published, naming the REFUSED INPUT BY PATH",
+              (tmp / "g.md").is_file() and "docs/instruments/review-rotation.md" in body,
+              f"wrote={(tmp / 'g.md').exists()}, names_path="
+              f"{'docs/instruments/review-rotation.md' in body}")
+        check("  ... the artifact says the instrument was NOT censused, so no table is read",
+              "NOT censused" in body and "| member |" not in body,
+              "the refusal artifact rendered a reading table")
+        check("  ... and it carries NO absolute worktree path",
+              str(root) not in body, "an absolute path leaked into a published artifact")
+
+        # ARM 8 — the refusal must reach the DEFAULT artifact location too. The arms above pass
+        # --out; a reader meets the path the tool CHOSE, so that leg is pinned separately.
+        root = build_tree(tmp / "h", {"m1": {}}, {"m1": ALL_PATHS})
+        (root / "docs" / "instruments" / "review-rotation.md").write_text(
+            "# no table here\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "tools/instrument_census.py", "review-rotation"],
+            cwd=root, capture_output=True, text=True)
+        default = sorted(p.name for p in (root / "evidence").glob("instrument-census-*"))
+        check("a refusal with no --out still lands under evidence/ (frame §1.5)",
+              proc.returncode == 1 and len(default) == 1, f"rc={proc.returncode}, {default}")
 
     live_after = sorted(p.name for p in (REPO / "evidence").glob("instrument-census-*"))
     check("HERMETICITY: the live evidence directory gained nothing",
