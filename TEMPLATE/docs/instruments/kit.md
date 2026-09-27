@@ -273,31 +273,85 @@ empty would be running a fleet sweep in a tree that is not the fleet — §4's o
 (a member counts as holding the instrument only if **both** are present — the frame's §3 rule is that
 a pin travels with its reader, so one file alone is a partial copy, and the frame is explicit that a
 partial copy reads as adopted).
-**Scope:** the five member manifests in `registry/factories/*.json`. **Instant:**
-2026-09-27T11:5xZ.
+**Scope:** the six member manifests in `registry/factories/*.json`. **Instant:**
+2026-09-27T14:0xZ.
 
-| factory | `tools/kit_pin.py` | `tests/test_kit_pin.py` | disposition |
-|---|---|---|---|
-| `infra-factory` | present | **absent** | **PARTIAL** — 1 of 2 |
-| `miidas` | present | **absent** | **PARTIAL** — 1 of 2 |
-| `ai-antispam` | absent | absent | 0 of 2 |
-| `inferhub-watch` | absent | absent | 0 of 2 |
-| `opencrabs-dev` | absent | absent | 0 of 2 |
+| factory | `tools/kit_pin.py` | `tests/test_kit_pin.py` | own pin | disposition |
+|---|---|---|---|---|
+| `ai-antispam` | present | present | present | **ADOPTED** — 2 of 2, gate green |
+| `miidas` | present | **member-side gate** | present | **ADOPTED with a fork** — 2 of 2 by its own reader |
+| `infra-factory` | present | **absent** | present | **PARTIAL** — 1 of 2 |
+| `inferhub-watch` | absent | absent | present | 0 of 2 (pin only) |
+| `opencrabs-dev` | absent | absent | **absent** | out of scope — see below |
+| `meta-factory` | present | present | present | the template's own tree |
 
-**No member has adopted this instrument, and two hold a partial copy of it.** The partial state is
-the one worth naming rather than rounding into a zero: both trees carry `tools/kit_pin.py` and
-neither carries its reader gate, so each holds a module that **nothing in its tree exercises**.
-`infra-factory` is a confirmed pacemaker adopter, and the provenance is **measured, not suspected**,
-on two independent receipts: `TEMPLATE/tools/patrol_host_state.py:88` binds
-`KIT_PIN = REPO / "tools" / "kit_pin.py"` and `:1454` loads it **by that path**
+**One member has adopted this instrument since the previous reading, and the census moved in BOTH
+directions.** `ai-antispam` went 0 of 2 → **2 of 2** and its gate returns **rc=0** (judged 14 carried
+paths, 6 declared exempt). `miidas` is the sharper row: it carries no `tests/test_kit_pin.py`, so a
+presence-only predicate calls it partial — but it carries `tests/test_kit_pin_member.py` with
+`registry/kit-exemptions.json`, and that gate also returns **rc=0** (24 carried paths judged, 17 forks
+declared, 0 undeclared divergence). Two independent readings of one row:
+
+- **by §2's file list:** 1 of 2 — **PARTIAL**;
+- **by what the member can actually judge itself with:** adopted, with a forked reader.
+
+A file-presence predicate cannot see the second, **and neither reading is wrong** — they answer
+different questions. This is why the disposition column names the reader, not only the file.
+
+**`opencrabs-dev` is out of scope by repo kind, not behind.** Its declared `/repo` is `/root/opencrabs`,
+the OpenCrabs **source** tree. It holds no pin and no kit file, and a factory whose repo is upstream
+source has no tree for this instrument to land in. Reading it as 0-of-4 would file a scope error as a
+shortfall.
+
+**The partial copies are the frame §1.3 predicted state, and their provenance is measured, not
+suspected.** `infra-factory` carries `tools/kit_pin.py` and no reader gate — a module **nothing in its
+tree exercises** — because it is a confirmed pacemaker adopter: `TEMPLATE/tools/patrol_host_state.py:88`
+binds `KIT_PIN = REPO / "tools" / "kit_pin.py"` and `:1454` loads it **by that path**
 (`load_module("kit_pin", KIT_PIN)`, never an `import`), and `pacemaker.md:124` declares
 `TEMPLATE/tools/kit_pin.py` in **the pacemaker's own closure** — "the pin reader — travels with its pin
 (frame §3)". A member that adopted the **pacemaker** therefore received this file as a piece of *that*
 instrument, which is frame §1.3 exactly: an executable may be shared, and when it is, the closure is
-declared over the whole executable. The partial copy is consequently a **predicted state** of the frame
-rather than an anomaly — a factory can hold a complete instrument **and** a partial one at the same
-time, and only declaration tells them apart. Measured 2026-09-27T13:0xZ at those three sites; the
-presence column alone measures presence, never provenance, which is why both are stated.
+declared over the whole executable. So a factory can hold a complete instrument **and** a partial one
+at the same time, and only declaration tells them apart.
+
+### 9.1.1 Why the adoption is incomplete — the mechanism measured
+
+The step exists, and it is **one command per member**. `TEMPLATE/BOOTSTRAP.md` **Step 4f** ("Vendor
+the pin, so you can judge yourself") names it, and `tools/kit_deliver.py` implements it: bytes and pin
+are written **in one run**, so the member's own gate cannot red on a state we created.
+
+Dry-run readings, 2026-09-27T14:0xZ (`--dry-run`, nothing written, `rc=0` all three):
+
+| target | ADD | the two shipping paths |
+|---|---|---|
+| `inferhub-watch` | **105** | both — `tests/test_kit_pin.py` and `tools/kit_pin.py` |
+| `infra-factory` | **88** | the gate it lacks (`tools/kit_pin.py` is already at the delivered bytes) |
+| `ai-antispam` | **101** | **neither** — the pair is already current |
+
+So the four measured reasons the census is where it is — none of them a refusal:
+
+1. **The step postdates five of the six trees.** Step 4f landed 2026-09-25 (`ec04e5f`), and
+   `kit_deliver.py` the same day (`a211cbc`). A member bootstrapped before that step never had it,
+   so its state records *when it was built*, not a judgement about the kit.
+2. **Provenance** — reason 1 of §9.1 above: a piece arrives as another instrument's closure, which is
+   a partial copy without a decision behind it.
+3. **Nothing runs it on a cadence, and reporting is not enforcement.** Step 4f's own text is *"run by
+   the meta-factory, or handed to you"* — there is no cron and no lane duty. Frame §7.2 records the
+   measured cost: *"a dispatch round produced 0 ports from five replies."*
+4. **The member has nowhere to declare the state.** All six member manifests carry the same thirteen
+   keys and **none carries a kit, adoption, deferred or drift field** (scanned this turn). Frame §7.2
+   makes a deferral a **declared** state, but the member's own manifest has no home for it, so a
+   member that has decided to wait reads exactly like one that never considered it.
+
+Reason 4 is the one that keeps the others invisible, and it is a **schema** question, not a
+per-instrument one: the surface a member declares adoption on is `registry/factories/<slug>.json`,
+which this instrument does not own.
+
+**And the gate's self-probe is stated, not hidden.** In a member tree the fixture arms **SKIP** —
+their inputs are `TEMPLATE/`-only paths and no member carries a `TEMPLATE/` (measured: `ai-antispam`,
+`miidas`, `infra-factory` all NO). The live arm carries the verdict there, and the gate prints the
+skip rather than passing quietly (`f9cc405` made it reach a verdict instead of crashing). An adopter
+should read a member-tree green as *the live population is judged*, never as *every probe ran*.
 
 ### 9.2 The gaps this instrument declares
 
