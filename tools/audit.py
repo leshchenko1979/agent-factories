@@ -2027,6 +2027,18 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_audit_tree_condition.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_audit_tree_condition.py"])
 
+    # 63. Instrument-census gate (the review-rotation instrument): the census's DECLARED leg
+    #     is the half a reader over-reads -- a complete file set with no decision behind it is
+    #     not an adoption (frame §1.3), and a declaration the registry REFUSES is not a
+    #     disposition either. The gate runs against the repo's own `tools/registry.py` rather
+    #     than a restatement of the schema, so a refusal it prints is the registry's real one,
+    #     and it carries a NON-VACUITY arm so its refusal arms fail for the reason they name
+    #     rather than because the gate is stuck. It was BORN UNREGISTERED and this very scan found
+    #     it -- #59's class, reproduced once more on 2026-09-27, and the reason the carrier
+    #     here is a scan over the tree rather than a self-check inside the gate.
+    if (repo_root / "tests/test_instrument_census.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_instrument_census.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
