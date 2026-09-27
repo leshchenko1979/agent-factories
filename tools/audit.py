@@ -187,10 +187,39 @@ def format_rework_declaration_note(stats: dict[str, Any]) -> str:
     )
 
 
+def format_yield_percent(value: float | None) -> str:
+    """The yield as a percentage — THE rounding site, so every surface states one number.
+
+    Origin (#143): one ratio was rendered two ways. The run row's `yield=` TRUNCATED
+    (`int(ratio * 100)`) while the report ROUNDED to 1 dp, so a single run published two
+    yields — and the divergence is not a large-denominator curiosity: modelled over all
+    `a/d` pairs for d in 1..399, **74,451 of 80,199** diverge, the first at `1/3` (row
+    `33%` against report `33.3%`). A fix scoped by denominator threshold would therefore
+    be scoped wrong.
+
+    The cure is to remove the SECOND rounding rather than trade truncation for a smaller
+    error: this function is the only place a ratio becomes a percentage, and every
+    renderer calls it. `None` means no run row stated an outcome, which is `n/a` and
+    never `0%` — an unstated yield is UNKNOWN, not a failure.
+    """
+    return "n/a" if value is None else f"{round(value * 100, 1)}%"
+
+def format_run_row_detail(stats: dict[str, Any], outcome: str, gate_summary: str) -> str:
+    """The self-audit run row's canonical detail — the ONE site that renders its `yield=`.
+
+    Factored out so the row is PROBEABLE (#143): the row and the report disagreed because
+    each rendered the ratio itself, and a probe that can only reach the report cannot catch
+    the row's arithmetic. This function and the report's renderers all call
+    `format_yield_percent`, so their agreement is an identity rather than a coincidence.
+    """
+    return (
+        f"duration=4s turns=0 outcome={outcome} gate={gate_summary} "
+        f"yield={format_yield_percent(stats.get('first_pass_yield'))}"
+    )
+
 def format_yield_rate(stats: dict[str, Any]) -> str:
     """The yield as a percentage, or `n/a` when no run row states an outcome."""
-    value = stats.get("first_pass_yield")
-    return "n/a" if value is None else f"{round(value * 100, 1)}%"
+    return format_yield_percent(stats.get("first_pass_yield"))
 
 def format_yield_note(stats: dict[str, Any]) -> str:
     """The yield's population and coverage, as the note column states it (clause 5)."""
@@ -216,7 +245,8 @@ def format_yield_text(stats: dict[str, Any]) -> str:
     population = stats.get("first_pass_yield_population", 0)
     total = stats.get("run_events", 0)
     accepted = stats.get("runs_by_outcome", {}).get("accepted", 0)
-    rate = "n/a — no run row states an outcome" if value is None else f"{round(value * 100, 1)}%"
+    rate = ("n/a — no run row states an outcome" if value is None
+            else format_yield_percent(value))
     return (
         f"{rate} ({accepted} accepted runs ÷ {population} runs stating an outcome "
         f"— coverage: {population} of {total} run rows)"
@@ -530,7 +560,10 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
             close_rows_declaring_rework / close_events if close_events > 0 else 0.0, 4
         ),
         "invalid_rework_reports": invalid_rework_reports,
-        "first_pass_yield": round(yield_val, 4) if yield_val is not None else None,
+        # The RAW ratio, never pre-rounded (#143). A 4 dp pre-round here was the second
+        # site that made the disagreement: `int(round(r,4)*100)` and `round(round(r,4)*100,1)`
+        # are two operations on two different numbers. One rounding, in the formatter.
+        "first_pass_yield": yield_val,
         "first_pass_yield_population": run_rows_stating_outcome,
         "first_pass_yield_coverage": [run_rows_stating_outcome, total_runs],
         "lead_times_sec": lead_times_sec,
@@ -2216,9 +2249,7 @@ def main() -> int:
                 else ("gate-unknown" if verdict.status == "UNKNOWN" else "gate-failure")
             )
         )
-        _yield = ledger_stats.get("first_pass_yield")
-        yield_pct = "n/a" if _yield is None else f"{int(_yield * 100)}%"
-        detail = f"duration=4s turns=0 outcome={outcome} gate={gate_summary} yield={yield_pct}"
+        detail = format_run_row_detail(ledger_stats, outcome, gate_summary)
         stamp_cmd = [
             sys.executable,
             "tools/ledger.py",

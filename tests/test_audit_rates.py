@@ -542,8 +542,12 @@ def outcome_population_problems(payload: dict) -> list[str]:
     # structural check above while publishing a number no bucket supports.
     accepted = delivery.get("runs_by_outcome", {}).get("accepted", 0)
     if population > 0 and yield_val is not None:
-        expected = round(accepted / population, 4)
-        if yield_val != expected:
+        # The payload carries the RAW ratio (#143), and the comparison is a TOLERANCE rather
+        # than an equality against a pre-rounded value: pinning 4 dp here would re-introduce
+        # exactly the second rounding the defect consisted of, and a gate whose expected
+        # value is a rounded form of the number under test cannot catch a rounding error.
+        expected = accepted / population
+        if abs(yield_val - expected) > 1e-9:
             problems.append(
                 f"the published yield {yield_val} does not follow from {accepted} accepted "
                 f"÷ {population} runs stating an outcome (expected {expected})"
@@ -928,6 +932,73 @@ def work_unit_definition_problems(
             f"definition reads {text!r}"
         ]
     return []
+
+def test_the_row_and_the_report_state_the_SAME_yield():
+    """#143: one ratio, ONE rounding — the run row and the report beside it must agree.
+
+    Origin: the row TRUNCATED (`int(ratio * 100)`) while the report ROUNDED to 1 dp, so a
+    single run published two yields. Modelled over every `a/d` for d in 1..399, 74,451 of
+    80,199 pairs diverge, and the first is `1/3` — so a fix scoped by denominator threshold
+    would be scoped wrong, and the divergence is not rare.
+
+    The probe drives the ratio the defect was stated on, `2/7` (`int(28.57) = 28` against
+    `round(28.57, 1) = 28.6`), through BOTH renderers. It fails on pre-fix code in the row
+    arm, which is the arm no existing probe covered.
+    """
+    ratio = 2 / 7
+    stats = {
+        "first_pass_yield": ratio,
+        "first_pass_yield_population": 7,
+        "run_events": 7,
+        "runs_by_outcome": {"accepted": 2},
+    }
+    report = audit_reader.format_yield_rate(stats)
+    assert report == "28.6%", (
+        f"the report must round to one decimal, got {report!r} — and 28% is the TRUNCATED "
+        f"value the row used to publish for this same ratio"
+    )
+    text = audit_reader.format_yield_text(stats)
+    assert text.startswith("28.6% ("), (
+        f"the report's text form must state the same number as its table form: {text!r}"
+    )
+    # The ROW's arm, driven through the row's own builder. Pre-fix this rendered `28%`
+    # (`int(28.57)`), so this assertion is what the defect fails.
+    row = audit_reader.format_run_row_detail(stats, "accepted", "all-pass")
+    assert "yield=28.6%" in row, (
+        f"the run row must state the same number as the report beside it, got {row!r} — "
+        f"pre-fix it truncated this ratio to 28%"
+    )
+    assert audit_reader.format_yield_percent(ratio) == report, (
+        "the row's renderer IS the report's renderer — that identity is the cure, and it "
+        "is what a second arithmetic site at the row breaks"
+    )
+    # The negative arm: `None` is UNKNOWN, never a favourable `0%`.
+    assert audit_reader.format_yield_percent(None) == "n/a", (
+        "an unstated yield must not render as 0%"
+    )
+
+def test_no_SECOND_arithmetic_site_renders_the_yield():
+    """#143's structural half: the row must not do its own percentage arithmetic.
+
+    A behavioural probe cannot see a second site that happens to agree on the day it runs;
+    this asserts the SHAPE that produced the disagreement — the row computing a percentage
+    itself. Both halves are needed: the behavioural one fails on the truncating expression,
+    and this one fails if that expression returns in any form.
+    """
+    src = AUDIT.read_text(encoding="utf-8")
+    assert "format_run_row_detail(ledger_stats, outcome, gate_summary)" in src, (
+        "the run row must render its yield through the one rounding site"
+    )
+    assert "yield_pct" not in src, (
+        "no local percentage variable in the row: it IS the second arithmetic site"
+    )
+    assert "int(_yield * 100)" not in src, (
+        "the truncating expression is the defect; it must not return"
+    )
+    assert 'round(yield_val, 4)' not in src, (
+        "a pre-rounded payload is the second site the disagreement rode on — the parser "
+        "exposes the RAW ratio"
+    )
 
 def test_the_work_unit_definition_matches_the_counted_population():
     problems = work_unit_definition_problems(load_audit())
