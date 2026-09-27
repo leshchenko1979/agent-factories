@@ -180,3 +180,30 @@ never reached a conclusion, and the Delegate's is `len=0`. That is the signature
 **So c1 is blocked on a live infrastructure fault, not on a decision.** The block would land the
 moment a holder completes a turn — and the fix for that is upstream of this lane: the streaming path
 through `llm.l1979.ru` needs its own diagnosis by whoever owns it.
+
+### 9.1 The distribution rules out the per-lane explanation
+
+Tested because a large context is the obvious candidate for a slow handshake, and the fleet's
+contexts have grown (fleet-key's average prompt 83,210 → 214,477 tokens over nine days, per the ops
+notes). Measured over the same 30-minute window:
+
+| session | timeouts | ctx chars | rows |
+|---|---|---|---|
+| `cb06a94a` | 26 | 14,339,150 | 398 |
+| `aaa8d8ae` | 26 | 16,416,582 | 553 |
+| `6a314aac` | 25 | 26,530,839 | 748 |
+| `61161247` | 25 | 29,132,396 | 1039 |
+| `23549292` | 25 | 19,230,441 | 624 |
+| `f4c192c9` | 24 | 30,377,537 | 780 |
+| `2646d31a` | 23 | 58,408,595 | 1770 |
+| `0117dd29` | 22 | 56,424,353 | 1985 |
+
+**22–26 timeouts against a 4× spread in payload (14M → 58M chars): the counts are flat.** If payload
+size drove it, the 58M-char lanes would time out several times more than the 14M-char ones; they
+time out slightly less. So the condition is **shared and lane-independent** — it belongs to the
+streaming path itself (the gateway or its upstreams), not to any lane's context and not to this
+box's memory.
+
+**This is a stronger statement than "the gateway is slow":** the fault is uniform across independent
+consumers, which is the signature of a shared component, and it is NOT attributable to the
+differences between those consumers.
