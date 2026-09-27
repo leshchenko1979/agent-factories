@@ -83,11 +83,11 @@ The hazard is NAMING, not content — a rename separates the halves while each f
 
 A mutation that auto-publishes SWALLOWS a render fault: the publish leg catches its own fatal exit and reports "no page", and the mutation path then treats the page as optional. The consequences compound:
 
-- **A deliberate skip and a broken renderer produce the SAME output.** Both leave the page absent, so a consumer cannot tell "I asked for no page" from "the page was not built" — one value carrying two meanings.
-- **The reason is lost even when the fault is recorded.** The durable log carries the exception CLASS rather than the fault's reason, and the log helper writes nowhere at all unless logging is enabled — which it is not by default. So on the ordinary path the fault reaches nobody: not stdout, not stderr, not the log, not the exit code.
-- **The instrument's own suite asserts the opposite property on the standalone publish verb**, which fails loudly by design. One instrument, two entry points, opposite verdicts.
+- **A deliberate skip and a broken renderer produce different output on stderr but not in JSON.** Both leave the page absent (`page: null` in JSON), so a consumer parsing only `--json` cannot tell "I asked for no page" from "the page was not built". However, on stderr the skip prints nothing while a fault prints a warning — so a caller seeing stderr can distinguish them.
+- **The reason survives and is logged.** The fix records the reason in a module-level slot (`_LAST_RENDER_FAULT`), names it on stderr via `_note_publish_fault()`, and logs it with `oc_log_extra("publish_failed", why)`. The log helper now writes the reason, but note the unified tools log is still disabled by default (`--no-log`), so on the ordinary daemon path the fault reaches nobody via the log.
+- **The instrument's own suite now accepts both properties.** The standalone `publish` verb still fails loudly on a fault (die(4)), while the mutation path treats the page as optional and names the fault on stderr — so one instrument has two entry points with context-appropriate verdicts.
 
-**Ruled fix shape:** the exit code stays 0 by design — the mutation did succeed — and the mutation's own stdout MUST name that the page was not published, unconditionally. The log must carry the REASON rather than the exception class. The two policies are reconciled in the file that holds both, and the acceptance criterion is that a caller reading only stdout can tell a stranded question from a deliberate skip.
+**Landed fix:** commit `b16451e` (2026-09-27T04:51:55Z) implements the above. The exit code stays 0 by design, the fault reason is named on the mutation's own stderr, and stdout stays parseable so a caller reading `--json` is unaffected. The ruled acceptance criterion named stdout; the implementation chose stderr deliberately to preserve `--json` usability — that divergence is HQ's/Worker's to adjudicate, not mine to encode as satisfied.
 
 ### 4.4 Rollout and adoption
 
