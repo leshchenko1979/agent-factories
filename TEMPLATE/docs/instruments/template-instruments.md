@@ -420,6 +420,15 @@ Measured 2026-09-27 on this repository's own frame checkout. Predicate: the serv
 - the missing **31 lines** were that law doc's §9 adoption readings — added precisely so the section
   would keep its own promise, and therefore exactly the newest law in the file.
 
+**And a checkout can be AHEAD of every ref, which is the worse case.** Measured in the turn that
+wrote this paragraph, on another law doc in this same tree (`pacemaker.md`): at 17:48Z the served
+bytes differed from **both** `HEAD` and `origin/main` — a peer's **uncommitted** edit — and by 17:56Z
+that peer had committed it, so all three agreed again. The served revision therefore moved twice
+inside a single turn, and in between it existed at **no named ref**: not stale, but
+**unreproducible** — unreviewed, unnamed, and liable to vanish or be rewritten by a rebase. A lane
+that has met only the *behind* case reaches for a `pull`; a `pull` cannot fix this one, because
+there is nothing to pull.
+
 **This does not contradict "two paths, one file" above — it qualifies what that claim covers.** The
 shipped half and the reloaded half are one inode and cannot drift *from each other*; an inode can
 still be **behind**, and nothing in the distribution model measures that. The pair gate
@@ -433,7 +442,9 @@ matter: it sets the revision every sibling lane reloads.
 
 Two rules for a reader:
 - **When the served revision matters, compare the served bytes against the tip** — never trust the
-  symlink. `git diff --stat HEAD origin/main -- <path>` answers it for the shared tree.
+  symlink. `git diff origin/main -- <path>` answers it: that form reads the **working tree** against
+  the tip, so it catches an uncommitted edit. `git diff HEAD origin/main -- <path>` does **not** — it
+  compares two refs and is blind to the case above, which is the state the check exists to catch.
 - **The shared tree is not a lane's to bring current.** It may carry peers' uncommitted work, and
   touching it is the boundary §7.3 draws. Reading the divergence, or landing one's own change from a
   worktree, is the shape that leaves the tree alone.
