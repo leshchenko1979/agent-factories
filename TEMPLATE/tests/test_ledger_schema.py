@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -380,6 +381,33 @@ def run_self_probes() -> bool:
             print(f"  FAIL self-probe '{name}': expected error containing {expected_err_substr!r}, got: {errs}")
             probes_passed = False
 
+    class _DeclarationPin:
+        """Pin the authorization seam for a block, then restore it exactly.
+
+        `load_authorizations` reads `OC_AUTHORIZATIONS_PATH` at CALL time, so the pin
+        governs whatever runs inside the block and nothing outside it -- the isolation
+        shape `OC_ACTORS_PATH` already provides for membership.
+        """
+
+        def __init__(self, path):
+            self._path = path
+            self._prev = None
+
+        def __enter__(self):
+            self._prev = os.environ.get("OC_AUTHORIZATIONS_PATH")
+            if self._path is None:
+                os.environ.pop("OC_AUTHORIZATIONS_PATH", None)
+            else:
+                os.environ["OC_AUTHORIZATIONS_PATH"] = str(self._path)
+            return self
+
+        def __exit__(self, *exc):
+            if self._prev is None:
+                os.environ.pop("OC_AUTHORIZATIONS_PATH", None)
+            else:
+                os.environ["OC_AUTHORIZATIONS_PATH"] = self._prev
+            return False
+
     def assert_clean(name: str, row: dict, line_no: int = 1):
         """The inverse probe: a row declaring nothing malformed must produce NO error.
 
@@ -447,12 +475,37 @@ def run_self_probes() -> bool:
         "non-monotonic sequence",
         line_no=1,
     )
-    # Probe 5: Unauthorized actor for ruling (e.g. worker issuing a ruling)
-    assert_probe(
-        "unauthorized ruling actor",
-        {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "ruling", "actor": "worker", "subject": "#1", "detail": "d"},
-        "unauthorized actor 'worker' for event 'ruling'",
-    )
+    # Probe 5: Unauthorized actor for ruling (e.g. worker issuing a ruling).
+    #
+    # THIS PROBE PINS THE CORE MATRIX, and it must, because the pair it asserts is one a
+    # declaration may LAWFULLY grant. `docs/ledger-authorizations.json` exists so a factory
+    # can ADD to the core matrix (additive; the constant stays the floor), so in a tree that
+    # declared `ruling` for `worker` this probe asserted a default the declaration is designed
+    # to change and red the gate -- refusing what the tool lawfully wrote, at the exact moment
+    # the tool told the factory to make the declaration. Measured 2026-09-27 on inferhub-watch:
+    # it declared that pair (self-corrections of its own prior rows) and this gate returned
+    # rc=1 with this probe's message. Same discipline as Probe 0, which states it reads the
+    # REAL actor set: a probe must say which world it asserts in.
+    _absent = REPO / "docs" / ".oc-probe-no-authorizations.json"
+    with _DeclarationPin(_absent):
+        assert_probe(
+            "unauthorized ruling actor",
+            {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "ruling", "actor": "worker", "subject": "#1", "detail": "d"},
+            "unauthorized actor 'worker' for event 'ruling'",
+        )
+
+    # Probe 5b: THE DECLARED ARM -- the extension surface itself, proven rather than assumed.
+    # A probe that can only assert the default cannot tell "no declaration" from "a declaration
+    # that extends the default", which is precisely the failure measured above. Declaring the
+    # pair must make the SAME row clean, and the seam is the only thing that changed.
+    with tempfile.TemporaryDirectory() as _td:
+        _decl = Path(_td) / "authorizations.json"
+        _decl.write_text(json.dumps({"actors": [], "by_event": {"ruling": ["worker"]}}), encoding="utf-8")
+        with _DeclarationPin(_decl):
+            assert_clean(
+                "declared ruling actor",
+                {"n": 1, "ts": "2026-09-12T10:00:00Z", "event": "ruling", "actor": "worker", "subject": "#1", "detail": "d"},
+            )
     # Probe 6: Invalid cost format
     assert_probe(
         "bad cost format",
@@ -499,7 +552,6 @@ def run_self_probes() -> bool:
     # the ledger is BOOTSTRAP-created and `TEMPLATE/` carries no `evidence/` at all. BOTH
     # directions are pinned below: a skip that swallowed a REAL absence would be the vacuity
     # this clause exists to prevent, so the guard is probed as hard as the skip.
-    import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         # (i) A tree that ships no `evidence/` BY DESIGN -> SKIP, with the reason STATED.

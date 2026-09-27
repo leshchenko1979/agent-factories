@@ -374,13 +374,26 @@ def test_the_offline_denominator_is_non_zero_on_the_live_ledger() -> None:
     either the ledger was replaced or the predicate was narrowed to nothing — and a
     clean verdict over an empty population is indistinguishable from a verified
     one, which is the failure this assertion exists to make impossible.
+    CORRECTED 2026-09-27. The paragraph above names two cases -- the ledger replaced, or the
+    predicate narrowed to nothing -- and misses a third: a REPAIRED ledger. Once every acted
+    subject has been backfilled an intake row, `subjects_acted_without_intake` returns []
+    legitimately, so requiring it non-empty reds a ledger in its best state. Measured on
+    inferhub-watch: 608 rows, predicate returned 0, gate rc=1 with the message below. The
+    anchor is therefore the population the leg WALKS, which survives repair, and not the
+    defect it counts, which repair erases.
     """
     rows = _load_rows()
-    examined = subjects_acted_without_intake(rows)
-    assert examined, (
-        "the offline leg examined NOTHING — a clean verdict over an empty population "
+    walked = [
+        row for row in rows
+        if row.get("event") in ("claim", "close")
+        and isinstance(row.get("subject"), str)
+        and issue_reference(row["subject"]) is not None
+    ]
+    assert walked, (
+        "the offline leg walked NOTHING — a clean verdict over an empty population "
         "is indistinguishable from a verified one (acceptance 2 of #116)"
     )
+    examined = subjects_acted_without_intake(rows)
     coverage = board_intake_coverage([], rows, complete_board=False)
     assert coverage["offline_subjects_examined"] == len(examined), coverage
 
