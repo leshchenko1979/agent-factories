@@ -15,9 +15,11 @@ would destroy the thing the declaration exists to record.
 
 WHY A LOCAL MODIFICATION IS SKIPPED, NOT OVERWRITTEN. A file whose bytes differ from the
 member's OWN pin is the member's deliberate work. Overwriting it would silently discard a
-fork; skipping it leaves the pin claiming the new state, so the member's own gate reds
-until they either take the update or declare the fork. The gate says so; the transport
-does not decide for them.
+fork, so the bytes are left alone. The PIN then claims the MEMBER's digest for that path
+rather than ours (#198): a pin claiming bytes this run deliberately did not write would red
+the member's gate on a state WE created. Their digest keeps their gate green and keeps the
+fork visible where it can be acted on -- the patrol compares this pin against OUR
+`registry/kit.json` and sees the divergence. The transport does not decide for them.
 
 WHY THE PIN MOVES WITH THE BYTES, ATOMICALLY. If the bytes moved and the pin did not, the
 member's own gate would red on a state WE created — the worst possible outcome, since it
@@ -92,7 +94,8 @@ def plan(target: Path) -> dict:
             verdict, why = "CURRENT", "already at the delivered bytes"
         else:
             verdict, why = "UPDATE", "at the pin's older bytes"
-        rows.append({"rel": rel, "local": local, "verdict": verdict, "cls": cls, "why": why})
+        rows.append({"rel": rel, "local": local, "verdict": verdict, "cls": cls,
+                     "actual": actual, "why": why})
     retired = sorted(rel for rel in pin_files if rel not in files)
     return {"problem": None, "rows": rows, "pin_path": pin_path,
             "kit_version": kit, "note": note, "pin_version": pin.get("kit_version"),
@@ -157,6 +160,14 @@ def deliver(target: Path, dry_run: bool) -> int:
         return 1
     merged_files = dict(files)
     merged_classes = dict(classes)
+    # A LOCAL-MODIFICATION keeps the MEMBER's own digest (#198). The bytes are deliberately
+    # NOT written, so a pin claiming OUR digest would red the member's gate on a state this
+    # deliver itself created -- the one outcome the atomicity rule exists to prevent, and
+    # indistinguishable to them from having broken something. Their digest keeps their gate
+    # green; the fork stays visible where it can be acted on, because the patrol compares
+    # this pin against OUR registry/kit.json and sees the divergence.
+    for r in skipped:
+        merged_files[r["rel"]] = r["actual"]
     for rel in planned["retired"]:
         merged_files[rel] = (pin.get("files") or {})[rel]
         merged_classes[rel] = (pin.get("classes") or {}).get(rel, "seed")

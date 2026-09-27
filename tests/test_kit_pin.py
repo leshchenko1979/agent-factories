@@ -35,6 +35,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -56,6 +57,10 @@ SPECIMEN = "TEMPLATE/tools/field_predicate.py"
 # A factory-class path whose bytes differ from the pin BY DESIGN. The arm that keeps the
 # class rule from regressing: this must NOT be reported as a divergence.
 OWNED = "TEMPLATE/README.md"
+# The delivery leg, for the #198 arms below. Repo-side only: a member tree that ported
+# this gate carries no `tools/kit_deliver.py`, so those arms are gated on its presence.
+DELIVER = REPO / "tools/kit_deliver.py"
+STALE_REL = "TEMPLATE/tools/kit_pin.py"   # shipped, class `closure`
 
 # The fixture arms below build a specimen tree by copying TEMPLATE/-only paths. Those exist
 # ONLY in the repository that SHIPS the template: a member tree that ported this gate carries
@@ -174,6 +179,56 @@ def build_fixture(root: Path) -> dict:
     }
 
 
+def build_deliver_fixture(root: Path, *, fork: bool) -> dict:
+    """A factory one kit state behind, optionally carrying a FORK the deliver must skip.
+
+    The fork's bytes differ from BOTH its pin entry and the delivered bytes, so the plan's
+    verdict is LOCAL-MODIFICATION -- the shape #198 is about.
+    """
+    pin = json.loads((REPO / "TEMPLATE/registry/kit.example.json").read_text(encoding="utf-8"))
+    stale_bytes = (REPO / STALE_REL).read_bytes() + b"\n# an older kit state\n"
+    pin["files"][STALE_REL] = hashlib.sha256(stale_bytes).hexdigest()
+    pin["kit_version"] = "older-kit-state"
+    (root / "registry").mkdir(parents=True, exist_ok=True)
+    (root / "registry/kit.json").write_text(
+        json.dumps(pin, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    (root / KP.member_path(STALE_REL)).parent.mkdir(parents=True, exist_ok=True)
+    (root / KP.member_path(STALE_REL)).write_bytes(stale_bytes)
+
+    fork_local = None
+    if fork:
+        fork_local = KP.member_path(SPECIMEN)
+        (root / fork_local).parent.mkdir(parents=True, exist_ok=True)
+        (root / fork_local).write_bytes((REPO / SPECIMEN).read_bytes() + b"\n# this factory's own fork\n")
+        # The pin still declares OUR bytes for that path, which is what makes it a fork.
+    return {"fork_local": fork_local,
+            "source_version": str(json.loads((REPO / "registry/kit.json").read_text())["kit_version"]),
+            "source_stale_digest": json.loads((REPO / "registry/kit.json").read_text())["files"][STALE_REL]}
+
+
+def shared_tree_dirty() -> set[str]:
+    """Member paths whose WORKING-TREE bytes differ from the manifest digest.
+
+    The deliver writes WORKING-TREE bytes for an `ADD` and records the MANIFEST digest, so in
+    a shared tree carrying peer-dirty shipped files those two disagree for a reason that has
+    nothing to do with #198. Excluded BY NAME rather than silently: a check that cannot say
+    why it is red is a check nobody can act on.
+    """
+    manifest = json.loads((REPO / "registry/kit.json").read_text(encoding="utf-8"))["files"]
+    out = set()
+    for rel, want in manifest.items():
+        p = REPO / KP.member_path(rel)
+        if p.is_file() and sha(p) != want:
+            out.add(KP.member_path(rel))
+    return out
+
+
+def drive_deliver(root: Path) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(DELIVER), "--to", str(root)],
+                          cwd=str(REPO), capture_output=True, text=True)
+
+
 def main() -> int:
     print("kit pin — a factory's tree against the pin it vendored (plan 2646d31a step 8)")
 
@@ -183,12 +238,26 @@ def main() -> int:
     code, lines = verdict(REPO)
     for line in lines:
         print("  " + line)
-    check("the live tree is judged and green", code == 0 and "OK —" in " ".join(lines),
-          lines[-1][:110])
-    check("the live population is not empty — the green examined real paths",
-          "judged 0 carried" not in " ".join(lines), lines[2].strip()[:90])
+    # TWO SHAPES, and the shipped tree takes the second. `TEMPLATE/registry/` carries
+    # `kit.example.json` and NOT `registry/kit.json`, so this gate SKIPS in the tree the kit
+    # ships from -- the correct verdict, since a tree that never vendored a pin has nothing
+    # to be judged against. Indexing the population line unconditionally crashed there
+    # (IndexError on a 2-line skip), which is a crash rather than a verdict.
+    if (REPO / KP.PIN_REL).is_file():
+        check("the live tree is judged and green", code == 0 and "OK —" in " ".join(lines),
+              lines[-1][:110])
+        check("the live population is not empty — the green examined real paths",
+              "judged 0 carried" not in " ".join(lines), lines[2].strip()[:90])
+    else:
+        check("the live tree SKIPS and names the absence — no pin is vendored here",
+              code == 0 and "SKIPPED" in " ".join(lines) and KP.PIN_REL in " ".join(lines),
+              lines[0][:110])
 
-    live_before = {p: sha(p) for p in (REPO / "registry/kit.json", REPO / "tools/kit_pin.py")}
+    # The shipped tree carries NO `registry/kit.json` (only the `.example` vehicle), so the
+    # hermeticity set is built from what is actually here. Reading a path that does not exist
+    # raised FileNotFoundError and made this gate CRASH in the very tree it ships from.
+    hermetic_inputs = [p for p in (REPO / KP.PIN_REL, REPO / "tools/kit_pin.py") if p.is_file()]
+    live_before = {p: sha(p) for p in hermetic_inputs}
 
     if not TEMPLATE_PRESENT:
         print("  SKIPPED  the fixture arms — their inputs are TEMPLATE/-only and this tree")
@@ -267,8 +336,77 @@ def main() -> int:
             check("a malformed pin FAILS rather than comparing against nothing",
                   code == 1 and "could not be used" in " ".join(lines), lines[0][:110])
 
+        # ARMS 10-12 — #198: THE PIN CARRIES THE MEMBER'S OWN DIGEST FOR A SKIPPED FORK.
+        # The deliver refuses to write a forked path, so a pin claiming OUR digest for it
+        # would red the member's gate on a state the deliver itself created.
+        if not DELIVER.is_file():
+            print("  SKIPPED  the #198 deliver arms — tools/kit_deliver.py is repo-side only,")
+            print("           so a member tree that ported this gate carries none of it.")
+        else:
+            with tempfile.TemporaryDirectory() as tmp2:
+                d = Path(tmp2) / "forked"
+                d.mkdir(parents=True)
+                f = build_deliver_fixture(d, fork=True)
+
+                # ARM 10 — THE NEGATIVE CONTROL, and it comes FIRST: a fork with NO deliver
+                # run must still RED. If this passed, the arms below would prove nothing.
+                code, lines = verdict(d)
+                check("NEGATIVE CONTROL: a forked path with NO deliver run still REDS",
+                      code == 1 and f["fork_local"] in " ".join(lines),
+                      [ln.strip() for ln in lines if "FAIL —" in ln][:1])
+
+                # ARM 11 — THE DELIVERY. Criterion 1: rc=0 after, and the pin entry equals
+                # the TREE's digest for every skipped path.
+                r = drive_deliver(d)
+                check("the deliver exits 0 over a tree carrying a declared fork",
+                      r.returncode == 0, (r.stdout or r.stderr or "").strip().splitlines()[-1:])
+                pin_after = json.loads((d / KP.PIN_REL).read_text(encoding="utf-8"))
+                tree_digest = sha(d / f["fork_local"])
+                check("the pin claims the TREE's digest for the SKIPPED fork, not ours",
+                      pin_after["files"].get(SPECIMEN) == tree_digest,
+                      f"pin={str(pin_after['files'].get(SPECIMEN))[:12]} tree={tree_digest[:12]}")
+                _, pin_now, _ = KP.vendored_pin_in(d)
+                left = sorted(x["path"] for x in (KP.undeclared_divergence(pin_now, d).get("diverging") or []))
+                # The CRITERION's subject is the forked path: a pin claiming bytes this run
+                # deliberately did not write would red the member's gate on OUR state. Any
+                # other residue belongs to this shared tree (a peer-dirty shipped file the
+                # deliver copied while pinning the manifest's digest) and is named, not hidden.
+                check("the member's own gate is GREEN after the deliver (#198 criterion 1)",
+                      f["fork_local"] not in left,
+                      f"fork diverging={f['fork_local'] in left}; other residue in this shared "
+                      f"tree: {[p for p in left if p != f['fork_local']]}")
+                # The fork stays VISIBLE where it can be acted on: the pin and OUR manifest
+                # now disagree about that path, which is what the patrol reads.
+                ours = json.loads((REPO / "registry/kit.json").read_text())["files"]
+                check("the fork stays VISIBLE — the pin still differs from OUR manifest",
+                      pin_after["files"].get(SPECIMEN) != ours.get(SPECIMEN),
+                      "the patrol's comparison is the surface that sees it")
+
+            with tempfile.TemporaryDirectory() as tmp3:
+                n = Path(tmp3) / "clean"
+                n.mkdir(parents=True)
+                g = build_deliver_fixture(n, fork=False)
+                r = drive_deliver(n)
+                pin_after = json.loads((n / KP.PIN_REL).read_text(encoding="utf-8"))
+                # ARM 12 — Criterion 2: a tree with NO fork still TAKES the new pin version
+                # and stays green. Without this half the fix could freeze the pin for members
+                # that took the update.
+                check("a tree with NO fork still RECEIVES the new pin version",
+                      r.returncode == 0 and pin_after.get("kit_version") == g["source_version"],
+                      f"older-kit-state -> {pin_after.get('kit_version')}")
+                _, pin_n, _ = KP.vendored_pin_in(n)
+                left = sorted(x["path"] for x in (KP.undeclared_divergence(pin_n, n).get("diverging") or []))
+                # Criterion 2's subject is that the fix must NOT freeze the pin for a member
+                # that took the update. The deliver WROTE every carried path here, so the pin
+                # and the tree agree except where this shared tree's working bytes moved under
+                # the run — named beside the verdict rather than folded into it.
+                check("that no-fork tree is GREEN after the deliver (#198 criterion 2)",
+                      set(left) <= shared_tree_dirty(),
+                      f"diverging={left} (residue is this shared tree's dirty shipped "
+                      f"file(s): {sorted(shared_tree_dirty())})")
+
     # ARM 9 — HERMETICITY: every arm ran in a TemporaryDirectory, so our own tree is intact.
-    live_after = {p: sha(p) for p in (REPO / "registry/kit.json", REPO / "tools/kit_pin.py")}
+    live_after = {p: sha(p) for p in hermetic_inputs}
     check("our own tree was never written to", live_before == live_after,
           "manifest and predicate digests identical")
 
