@@ -31,7 +31,7 @@ Per the frame's §1 (what an instrument is) and §2 (the full set), this instrum
 | **data surfaces** | `evidence/ledger.jsonl` (factory-owned, never overwritten by an update); `docs/ledger-*.json` (factory-owned declarations, shipped as `.example.json`); `evidence/.ledger-index.sqlite` (derived, gitignored, deletable) |
 
 The instrument's LAW is this file. Before 2026-09-27 it had no home: it was prose woven through
-`skills/meta-factory/SKILL.md`, measured at **48 `ledger` mentions and ZERO headings naming it**,
+`skills/meta-factory/SKILL.md`, measured at **49 lines carrying `ledger` (82 occurrences) and ZERO headings naming it** (case-insensitive; lines != occurrences, so both are stated),
 with no `docs/ledger*.md` anywhere — so it could not be cited by section, could not be versioned
 independently of the skill, and its divergence was invisible to the kit census.
 
@@ -84,7 +84,7 @@ three independent counts:
 
 | the join | measured | predicate / scope / instant |
 |---|---|---|
-| session → binding | **117 of 1558 = 7.5 %** | `opencrabs.db` `sessions` vs `session_bindings`, `mode=ro`, 2026-09-27T03:2xZ |
+| session → binding | **118 of 1609 = 7.3 %** | `opencrabs.db` `sessions` vs `session_bindings`, `mode=ro`, 2026-09-27T10:28Z |
 | lane → role | **37 of 62 declared lanes carry no role** | `registry/factories/*.json` → `lanes[].role`, same instant |
 | the lane is ambiguous anyway | **two lanes declare `role: worker`** in one factory (threads 32, 559) | same read |
 
@@ -97,7 +97,7 @@ re-derive in order to read.**
 ### The `session` key
 
 With only a role, a row cannot be traced to the LANE that wrote it, and the fleet paid for that
-twice: **245 of 1269 meta rows (19.3 %)** paste a session uuid into the free-text `detail`, and
+twice: **246 of 1322 meta rows (18.6 %)** paste a session uuid into the free-text `detail`, and
 one inferhub row carries a uuid in the **`actor` field itself** — it needed identity, found no
 field for it, and took the role field, which is why the matrix cannot bind that row.
 
@@ -118,16 +118,16 @@ member copies are not broken on day one.
 ## 3. The extension surface — how a row points, and how a factory speaks
 
 Before 2026-09-27 the instrument had no **declared** extension surface, so every extension anyone
-needed was taken by forking the file. Measured on the meta ledger (1294 rows, 2026-09-27): edges
+needed was taken by forking the file. Measured on the meta ledger (1322 rows, 2026-09-27T10:28Z): edges
 were asserted in free-text `detail`, and no instrument could follow one.
 
 | edge asserted in prose | rows | share |
 |---|---|---|
-| `#N` (board issue) | 947 | 73.2 % |
-| sha | 859 | 66.4 % |
-| `n=<digits>` (row ref) | 700 | 54.1 % |
-| session uuid | 245 | 18.9 % |
-| `row <digits>` | 79 | 6.1 % |
+| `#N` (board issue) | 1001 | 75.7 % |
+| sha | 895 | 67.7 % |
+| `n=<digits>` (row ref) | 820 | 62.0 % |
+| session uuid | 246 | 18.6 % |
+| `row <digits>` | 79 | 6.0 % |
 
 ### `refs` — a typed pointer
 
@@ -224,20 +224,20 @@ passed the tool and red the gate. It now reads the same declaration through the 
 
 ## 6. This instrument's divergence matrix
 
-Measured 2026-09-27T04:42Z. **Predicate:** the manifest's ledger paths, against each registered
+Measured 2026-09-27T10:28Z. **Predicate:** the manifest's ledger paths, against each registered
 member's tree. **Scope:** the manifest at `kit_version` for this commit, and the five member
 factories registered in `registry/fleet.json`. **Instant:** as stated. A member acts on its **own
 pin**, judged by its own gate, never on this figure.
 
 | member | ledger paths present | gates present | `ledger_declaration.py` | `tools/ledger.py` |
 |---|---|---|---|---|
-| ai-antispam | 3 of 17 | 2 | absent | 277 lines |
-| infra-factory | 2 of 17 | 1 | absent | 311 lines |
-| inferhub-watch | 4 of 17 | 1 | present (120) | 1117 lines |
-| miidas | 3 of 17 | 2 | absent | 365 lines |
-| opencrabs-dev | 0 of 17 | 0 | absent | no ledger object — a different object entirely |
+| ai-antispam | 3 of 18 | 2 | absent | 277 lines |
+| infra-factory | 2 of 18 | 1 | absent | 311 lines |
+| inferhub-watch | 4 of 18 | 1 | present (120) | 1117 lines |
+| miidas | 5 of 18 | 4 | absent | 453 lines |
+| opencrabs-dev | 0 of 18 | 0 | absent | no ledger object — a different object entirely |
 
-Against the template's `tools/ledger.py` at **1308 lines** before this round's additions.
+Against the template's `tools/ledger.py` at **1484 lines**, including this round's additions.
 
 **Three of the four member ledger-holders accept an unauthorized pair silently today** — but the
 population is **inverted** against file presence, so a file count cannot stand in for the
