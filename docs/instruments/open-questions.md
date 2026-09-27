@@ -60,6 +60,32 @@ The re-homed contract above states the page URL law. Its **mechanism** was wrong
 
 **No clause authored in this file binds a member factory.** Every clause above governs how this instrument behaves for the lane that invokes it; a member that adopts the instrument inherits that behaviour and takes on no new cross-factory duty. Where a clause would bind member factories it is HQ's, and is cited rather than authored.
 
+### 3.1 The page model — ONE page, honestly titled, filterable per factory
+
+The instrument publishes ONE page and it carries every open factory's questions. That was always the design — one pointer, one directory, populated from the register's own set list — but the page did not SAY so, and the gap reached the owner as a false statement about the instrument.
+
+- **The title names the SUBJECT, never one factory.** The page is titled `Factory Open Questions (N)`, N being the count of open questions SHOWN. The title previously interpolated the pointer's slug, so a page carrying four factories announced itself as one of them — the owner read a single factory's name over a fleet-wide page. A title derived from a path is a claim about the path, not about the content.
+- **The count describes what is SHOWN, and is computed after the filter.** A total taken before narrowing prints a fleet figure beside a filtered view — the same mis-scope that once reached `--json` as a filtered lane list beside an unfiltered total.
+- **The per-factory filter is a VIEW, never a partition.** A control lists every factory present on the page plus "All"; choosing one hides the sections whose `data-set` does not name it. The sections already carry `data-set` for exactly this purpose — the renderer's own comment says it is for the READER, not the tool — and the filter ships inside the UI script the instrument already generates and tests. No second asset, no server change, no per-factory directory.
+- **The filter defaults to "All", and the page works with scripting disabled.** The control is built by the script, so the delivered HTML carries none: with scripting off the reader sees the full page rather than a dead bar. That property is asserted, not assumed.
+- **The URL does not change, and that is deliberate.** The bookmarked path keeps serving the whole page — the owner order that pins the pointer's slug as a permanent bookmark is cited here, not restated. The filter changes what the page SHOWS; it does not repurpose the path.
+
+### 3.2 The `--set` contract change
+
+`publish` no longer accepts `--set`. It is REFUSED non-zero with the reason named: the page carries every open set, so a narrowing flag has nothing to address. The verb's contract is now the whole register, and a caller wanting one factory's questions asks for a VIEW (the filter above), never a narrower publish.
+
+**Why removed rather than kept.** The flag was the mechanism by which the published page could be narrowed to a single set, and narrowing STRANDS the sets it excludes: the answer backend validates a posted set against that page's own recorded set list, so an excluded set's open questions become unanswerable from the page that serves them. A flag whose use can silently strand an owner decision does not belong on the publish path.
+
+`--set` remains the ADDRESSING flag on the set-scoped verbs; only `publish` loses it.
+
+### 3.3 The addressing key — `qid`
+
+Every question carries a **`qid`**, and it is the key a consumer must address it by.
+
+- **Stamped at ask time, never re-derived.** It continues the standing set's own numbering, so it is unique within the set and stable across every later mutation — an answer, a clarify, an amendment, a withdrawal. Nothing renumbers it: a new question appends, and a withdrawal sets a status rather than removing the row.
+- **`--qid` is its flag.** The set-scoped verbs address a question by `--qid`; the set itself is addressed by `--factory`.
+- **Do not reach for `id`.** The set-level field is `id` and it names the SET, so a consumer who reads the law and reaches for the question's `id` gets a missing key — and a missing key reads exactly like an absent value. Stated because it has already happened: a peer enumerated the question object, read `id`, found nothing, and reported that questions carry no identifier at all, while `qid` was present on every row. The failure is silent in both directions and cost a full round.
+
 ## 4. Operational law
 
 Each section below exists because it has already cost a real cycle. All of it asserts SHAPE — never a byte size, a digest, or a line number (§4.5).
@@ -101,6 +127,27 @@ The member leg is an ADOPTION STEP, not a push from here: the transport copies f
 ### 4.5 Assert SHAPE, not hash
 
 Every copy named in this file MOVES — one of them moved twice while this file was being written. So no clause here may pin a byte size, a digest, or a line number of any copy. Derive a boundary at run time from heading text rather than from a remembered position, and state the PROPERTY that must hold — the pointer is read first, the closure is two files, exactly one CLI resolves — never the measurement that happened to hold at writing time.
+
+### 4.6 The ontology collapse — fields that were written and never read
+
+The register carried fields no consumer reads, and one of them produced a false finding before it was removed. They are gone; this records which, and the bar for keeping one: a READER, never a writer.
+
+| removed | why it went |
+|---|---|
+| the register's top-level `version` | written once, read by nothing |
+| the set entry's `factory` | a second name for the set's own `id` — one value under two keys |
+| the set entry's `updated_at`, the question's `amended_at` and `withdrawn_at` | write-only timestamps; the mutation that sets them is already recorded by the field it changes |
+| the page meta's `created_at` | write-only |
+| the page meta's `token` | a second name for the same page's `slug`, and the answer path takes the token from the REQUEST and uses it as a path component — it never reads the stored field |
+
+**The pointer is now a pointer.** `pages/latest.json` previously carried a full COPY of the page meta it points at, while the only field its reader needs is the slug. It now carries the slug alone, so the two surfaces cannot disagree — which is exactly what the duplicate was inviting.
+
+**"Unused" is not "unread", and a population count cannot tell them apart.** Two categories survive on purpose and must not be swept:
+
+- **A capability with no rows yet is not dead.** A field can be written by one path and read by another while no live row carries it; a row-count sweep reads that as unused and would delete an owner-ordered feature. Check for a READER, not for a row.
+- **Provenance on ARCHIVED rows is the payload, not residue.** A closed set keeps who answered it and when, because the archive is history.
+
+**A write-only field is not merely unused bytes — it is a trap for the next reader.** One removed timestamp disagreed with its question's own status on a handful of rows, because an amendment re-opens a question and leaves the earlier stamp behind. The rows were healthy and the FIELD was the defect: a reader comparing the two reports a contradiction that does not exist. This lane filed precisely that false finding before the field was removed.
 
 ## 5. Ownership, and the reload leg
 

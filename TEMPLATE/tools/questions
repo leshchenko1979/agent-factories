@@ -283,7 +283,7 @@ def fmt_age(asked_at):
 
 
 def empty_register():
-    return {"version": 1, "sets": []}
+    return {"sets": []}
 
 
 def read_register():
@@ -774,7 +774,6 @@ def cmd_ask(argv):
         if entry is None:
             entry = {
                 "id": factory,
-                "factory": factory,
                 # The lane that CREATED the standing set. Per-question lanes are
                 # authoritative for grouping; this field records provenance.
                 "lane": lane,
@@ -807,7 +806,6 @@ def cmd_ask(argv):
             if close_when:
                 question.setdefault("close_when", close_when)
         entry["questions"].extend(questions)
-        entry["updated_at"] = now_iso()
         write_register_atomic(data)
 
     oc_log_extra("set", factory)
@@ -1035,7 +1033,6 @@ def cmd_answer(argv):
         # anchors are permanent. Answering the last question leaves the set OPEN
         # with 0 open questions.
         archived = 0
-        entry["updated_at"] = now_iso()
         write_register_atomic(data)
 
     oc_log_extra("set", set_id)
@@ -1131,7 +1128,6 @@ def cmd_amend(argv):
         # Found live 2026-09-25: q14 read status=open, answer=None, but
         # answer_kind="clarify" after a clarify was amended back open.
         question.pop("answer_kind", None)
-        question["amended_at"] = now_iso()
         question["amend_count"] = int(question.get("amend_count") or 0) + 1
         if flags.get("--by"):
             question["amended_by"] = flags["--by"]
@@ -1191,12 +1187,10 @@ def cmd_withdraw(argv):
             return 3
         was = question.get("status")
         question["status"] = "withdrawn"
-        question["withdrawn_at"] = now_iso()
         if flags.get("--text"):
             question["withdrawn_reason"] = flags["--text"]
         if flags.get("--by"):
             question["withdrawn_by"] = flags["--by"]
-        entry["updated_at"] = now_iso()
         write_register_atomic(data)
 
     oc_log_extra("set", set_id)
@@ -1811,6 +1805,51 @@ UI_JS = """(function () {
       r.addEventListener('change', function () { if (r.checked) box.value = ''; });
     });
   });
+
+  // Per-factory filter (owner order 2026-09-27): the page carries EVERY open
+  // factory's questions, and this narrows the view to one WITHOUT touching the
+  // URL, so the owner's pinned bookmark keeps working. The factory list comes
+  // from each section's own data-set attribute -- already in the DOM, so no
+  // spec, renderer or backend change is needed. The control is an ENHANCEMENT:
+  // it is built here, so with JS off the page still reads in full.
+  var setSections = document.querySelectorAll('section.set[data-set]');
+  if (setSections.length) {
+    var factories = [];
+    setSections.forEach(function (s) {
+      s.getAttribute('data-set').split(',').forEach(function (f) {
+        f = f.trim();
+        if (f && factories.indexOf(f) < 0) factories.push(f);
+      });
+    });
+    if (factories.length > 1) {
+      var bar = document.createElement('div');
+      bar.className = 'filterbar';
+      var buttons = [];
+      var current = '';
+      var apply = function (f) {
+        current = f;
+        document.querySelectorAll('section.set[data-set]').forEach(function (s) {
+          s.hidden = !!f && s.getAttribute('data-set').split(',').indexOf(f) < 0;
+        });
+        buttons.forEach(function (b) {
+          b.setAttribute('aria-pressed',
+            b.getAttribute('data-f') === f ? 'true' : 'false');
+        });
+      };
+      [''].concat(factories).forEach(function (f) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = f || 'All';
+        b.setAttribute('data-f', f);
+        b.addEventListener('click', function () { apply(f); });
+        bar.appendChild(b);
+        buttons.push(b);
+      });
+      setSections[0].parentNode.insertBefore(bar, setSections[0]);
+      document.addEventListener('htmx:afterSwap', function () { apply(current); });
+      apply('');
+    }
+  }
 })();
 """
 
@@ -1884,6 +1923,11 @@ margin:0 .5rem .35rem 0;transition:border-color .12s ease,background .12s ease,o
 button:hover{border-color:var(--dim)}
 button.primary{background:var(--teal);border-color:var(--teal);color:var(--on-accent);font-weight:600}
 button.ghost{color:var(--dim);border-style:dashed}
+.filterbar{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.7rem}
+.filterbar button{width:auto;margin:0;padding:.42rem .85rem;font-size:.82rem;
+border-radius:999px;color:var(--dim)}
+.filterbar button[aria-pressed="true"]{background:var(--teal-soft);border-color:var(--teal);
+color:var(--teal);font-weight:600}
 .age{font:.68rem/1.5 var(--mono);color:var(--dim);margin:1rem 0 0;padding-top:.75rem;
 border-top:1px solid var(--soft)}
 .answered{border-left-color:var(--teal);background:var(--strip)}
@@ -1975,11 +2019,13 @@ def build_page(entries, slug, expires_at, action):
         oc_log_extra("publish_failed", why)
         die(4, "renderer fault: %s" % why)
     oc_log_extra("renderer", "json-render")
-    # The tab title names the page AND how much is waiting on it, so a browser
-    # with several factory pages open says which one has questions (owner order
-    # 2026-09-26). The count is the OPEN QUESTIONS count, the same predicate the
-    # pointer publishes -- never len(entries), which counts sets.
-    title = "%s (%d) - Factory Open Questions" % (slug, open_question_count(entries))
+    # The tab title names the page AND how much is waiting on it (owner order
+    # 2026-09-26). The subject is the FLEET, never the path: the slug is where
+    # the page is SERVED FROM, not what it is, and printing it made the tab
+    # read "opencrabs-dev (10)" for a page carrying every factory's questions.
+    # The count is the OPEN QUESTIONS count, the same predicate the pointer
+    # publishes -- never len(entries), which counts sets.
+    title = "Factory Open Questions (%d)" % open_question_count(entries)
     return page_wrapper(html_body, expires_at, title)
 
 
@@ -2092,7 +2138,7 @@ def latest_page():
             meta = json.load(fh)
     except (OSError, ValueError) as exc:
         return None, "pages/latest.json unreadable (%s)" % exc.__class__.__name__
-    token = meta.get("slug") or meta.get("token")
+    token = meta.get("slug")
     if not token:
         return None, "pages/latest.json carries no slug"
     live, why = page_is_live(token)
@@ -2171,7 +2217,7 @@ def _note_publish_fault(why):
         "%s: warning: the page was NOT refreshed \u2014 %s\n" % (PROG, why))
 
 
-def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=False):
+def publish_page(action=None, prune=False, quiet=False):
     """Build or refresh the public page. (meta, pruned).
 
     The path is a CONSTANT slug derived from the factory key, never a rotating
@@ -2183,30 +2229,19 @@ def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=Fals
     bookmark. DEFAULT_TTL_DAYS still governs QUESTION staleness -- a different
     thing, and unchanged.
 
-    `--rotate` no longer mints a URL (there is nothing to mint). It forces a
-    full re-render and records rotated_at, which is all "rotate" can mean once
-    the path is constant. Changing the path means changing the FACTORY KEY, and
-    that has exactly one home: page_slug().
-
-    `set_id` narrows the rendered questions but NOT the path: every publish
-    writes the one shared page. republish() never passes it.
+    Changing the path means changing the FACTORY KEY, and that has exactly one
+    home: page_slug().
     """
     with RegisterLock():
         data = read_register()
     all_open = [s for s in data["sets"] if s.get("status") == "open"]
-    entries = all_open
-    if set_id:
-        entries = [s for s in entries if s.get("id") == set_id]
-        if not entries:
-            die(1, f"no open question set {set_id!r}")
-    entries = sorted(entries, key=lambda s: s.get("asked_at") or "")
+    entries = sorted(all_open, key=lambda s: s.get("asked_at") or "")
     slug = page_slug_for(all_open)
     pruned = prune_pages(keep=slug)
     # No early return on an empty register (owner order 2026-09-24): the page
     # must always be deployed, so an empty state is rendered to the SAME slug
     # rather than leaving the previous page serving stale questions.
 
-    created = datetime.datetime.now(datetime.timezone.utc)
     directory = os.path.join(pages_dir(), slug)
     # Render FIRST: a fault must leave no half-made directory behind and must
     # leave the previous page serving (owner order 2026-09-24).
@@ -2219,20 +2254,17 @@ def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=Fals
     # `expires_at` stays PRESENT and null: the live answer backend reads it and
     # fails OPEN on an empty value (backend.py: expired() -> False when unset),
     # so a null is "never expires" rather than "unknown".
-    meta = {"slug": slug, "token": slug,
-            "created_at": created.replace(microsecond=0).isoformat(),
+    meta = {"slug": slug,
             "expires_at": None,
             "action": action or "/answer", "sets": [e["id"] for e in entries],
             "url": page_url(slug),
-            "rotated_at": (created.replace(microsecond=0).isoformat()
-                           if rotate else None),
             "questions": open_question_count(entries)}
     with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=2)
 
     # The pointer render reads. Written AFTER the page and its meta exist, so a
     # reader never resolves a slug whose directory is still incomplete.
-    pointer = dict(meta)
+    pointer = {"slug": slug}
     with open(latest_pointer_path(), "w", encoding="utf-8") as fh:
         json.dump(pointer, fh, indent=2)
 
@@ -2248,24 +2280,17 @@ def publish_page(set_id=None, action=None, prune=False, rotate=False, quiet=Fals
     return meta, pruned
 
 def cmd_publish(argv):
-    _, flags = parse_flags(argv, valued=["--set", "--action"],
-                           boolean=["--json", "--prune", "--rotate"])
+    if "--set" in argv:
+        die(2, "publish does not take --set: the page carries every open set. "
+               "--set addresses ONE set, and belongs to amend, withdraw and notify")
+    _, flags = parse_flags(argv, valued=["--action"],
+                           boolean=["--json", "--prune"])
     action = flags.get("--action") or "/answer"
-    with RegisterLock():
-        data = read_register()
-    entries = [s for s in data["sets"] if s.get("status") == "open"]
-    if flags.get("--set"):
-        wanted = flags["--set"]
-        entries = [s for s in entries if s.get("id") == wanted]
-        if not entries:
-            die(1, f"no open question set {wanted!r}")
-    entries = sorted(entries, key=lambda s: s.get("asked_at") or "")
 
-    meta, pruned = publish_page(set_id=flags.get("--set"), action=action,
-                                prune=bool(flags.get("--prune")),
-                                rotate=bool(flags.get("--rotate")), quiet=True)
+    meta, pruned = publish_page(action=action,
+                                prune=bool(flags.get("--prune")), quiet=True)
     if flags.get("--json"):
-        print(json.dumps({"slug": meta["slug"], "token": meta["slug"],
+        print(json.dumps({"slug": meta["slug"],
                           "path": os.path.join(pages_dir(), meta["slug"]),
                           "meta": meta, "pruned": pruned}, indent=2))
     else:
@@ -2693,8 +2718,8 @@ def selftest():
         page = json.loads(out)
         ck(rc == 0 and page["slug"] == page_slug(page["slug"]),
            "the page path is a SLUG, not a rotating token (%r)" % page["slug"])
-        ck(page["slug"] == page["token"],
-           "…and the retired 'token' key still mirrors it (backend compat)")
+        ck("token" not in page and "token" not in page["meta"],
+           "…and there is no second name for it (the retired token key is gone)")
         body = open(os.path.join(page["path"], "index.html"), encoding="utf-8").read()
         ck("noindex" in body, "the page carries the noindex directive")
         ck("<table>" in body, "a Markdown table in a description renders as a <table>")
@@ -2784,23 +2809,60 @@ def selftest():
         pointer = os.path.join(env["OC_QUESTIONS_DIR"], "pages", "latest.json")
         ck(os.path.isfile(pointer),
            "publish records pages/latest.json -- the pointer the tool reads")
+        # -- the ontology collapse (owner order 2026-09-27) ---------------
+        # The pointer used to be a byte-identical COPY of the page meta, two
+        # names stood for one value (token/slug, factory/id), and five fields
+        # were written that NOTHING read. A write-only field is not idle
+        # bytes: `answered_at` was the same class and it disagreed with
+        # `status` on amended rows, which is what made a reader report healthy
+        # rows as contradictory. Asserted on the ARTIFACTS so a later edit
+        # that reintroduces one is caught here rather than in the register.
+        _oq_ptr = json.load(open(pointer, encoding="utf-8"))
+        ck(list(_oq_ptr) == ["slug"],
+           "the pointer is the slug and NOTHING else -- not a copy of the "
+           "page meta (%r)" % (list(_oq_ptr),))
+        _oq_top = json.load(open(os.path.join(env["OC_QUESTIONS_DIR"],
+                                             "open.json"), encoding="utf-8"))
+        ck("version" not in _oq_top,
+           "\u2026and the register carries no top-level version (write-only)")
+        _oq_set = _oq_top["sets"][0]
+        ck("factory" not in _oq_set and _oq_set.get("id"),
+           "\u2026the set names itself ONCE, as id, never also as factory "
+           "(%r)" % (sorted(_oq_set),))
+        ck("updated_at" not in _oq_set,
+           "\u2026and carries no set-level updated_at (write-only)")
+        _oq_q = (_oq_set.get("questions") or [{}])[0]
+        ck("amended_at" not in _oq_q and "withdrawn_at" not in _oq_q,
+           "\u2026nor per-question amended_at / withdrawn_at (write-only) "
+           "(%r)" % (sorted(_oq_q),))
+        _oq_meta = json.load(open(os.path.join(os.path.dirname(pointer),
+                                              _oq_ptr["slug"], "meta.json"),
+                                 encoding="utf-8"))
+        ck("token" not in _oq_meta and "created_at" not in _oq_meta
+           and "rotated_at" not in _oq_meta,
+           "\u2026and the page meta drops token / created_at / rotated_at "
+           "(%r)" % (sorted(_oq_meta),))
+        _oq_rc, _oq_out, _oq_err = run("publish", "--set", first["slug"])
+        ck(_oq_rc == 2 and "--set" in _oq_err,
+           "publish REFUSES --set, naming where it belongs -- it addresses "
+           "ONE set, and the page carries every open set (rc=%d)" % _oq_rc)
         rc, out, _ = run("publish", "--json")
         second = json.loads(out)
-        ck(second["token"] == first["token"],
-           "two consecutive publishes REUSE one token -- the URL does not churn "
-           "(%r vs %r)" % (first["token"][:8], second["token"][:8]))
+        ck(second["slug"] == first["slug"],
+           "two consecutive publishes REUSE one slug -- the URL does not churn "
+           "(%r vs %r)" % (first["slug"][:8], second["slug"][:8]))
         page_dirs = [d for d in os.listdir(os.path.join(env["OC_QUESTIONS_DIR"], "pages"))
                      if d != "latest.json"]
         ck(len(page_dirs) == 1,
            "\u2026so exactly ONE live page directory exists, not one per publish "
            "(%r)" % (page_dirs,))
-        rc, out, _ = run("publish", "--rotate", "--json")
+        rc, out, _ = run("publish", "--json")
         rotated = json.loads(out)
         ck(rotated["slug"] == first["slug"],
-           "--rotate re-renders IN PLACE: the slug cannot churn, because the "
+           "a re-publish re-renders IN PLACE: the slug cannot churn, because the "
            "link is permanent (%r)" % rotated["slug"])
-        ck(rotated["meta"].get("rotated_at"),
-           "…and the forced re-render is recorded, not silent")
+        ck("rotated_at" not in rotated["meta"],
+           "…and no rotation timestamp is recorded (the field was write-only)")
         rc, out, _ = run("publish", "--json")
         ck(json.loads(out)["slug"] == rotated["slug"],
            "\u2026and the slug is the one subsequently reused")
@@ -2828,7 +2890,7 @@ def selftest():
             empty_meta = json.loads(out)
         except ValueError:
             empty_meta = {}
-        empty_dir = os.path.join(empty_root, "pages", empty_meta.get("token", "?"))
+        empty_dir = os.path.join(empty_root, "pages", empty_meta.get("slug", "?"))
         ck(os.path.isfile(os.path.join(empty_dir, "index.html")),
            "\u2026and still writes index.html -- the page is always deployed")
         empty_body = ""
@@ -2846,11 +2908,11 @@ def selftest():
            "\u2026and reports 0 open questions, not a stale count")
         rc, out, _ = run_empty("publish", "--json")
         try:
-            again = json.loads(out).get("meta", {}).get("token")
+            again = json.loads(out).get("meta", {}).get("slug")
         except ValueError:
             again = None
-        ck(again is not None and again == empty_meta.get("token"),
-           "\u2026on the SAME token -- an empty publish does not churn the URL")
+        ck(again is not None and again == empty_meta.get("slug"),
+           "\u2026on the SAME slug -- an empty publish does not churn the URL")
 
         # C4: a mutation re-publishes, so the page is never hours stale.
         before = json.load(open(pointer, encoding="utf-8"))
@@ -2860,13 +2922,13 @@ def selftest():
                          "--json")
         ck(rc == 0, "ask with auto-republish exits 0 (rc=%d)" % rc)
         asked = json.loads(out)
-        ck(asked.get("page", "").endswith(before["token"] + "/"),
+        ck(asked.get("page", "").endswith(before["slug"] + "/"),
            "ask returns the page url (%r)" % asked.get("page"))
         after = json.load(open(pointer, encoding="utf-8"))
-        ck(after.get("token") == before["token"],
-           "the auto-republish did NOT move the URL (token unchanged)")
+        ck(after.get("slug") == before["slug"],
+           "the auto-republish did NOT move the URL (slug unchanged)")
         body = open(os.path.join(env["OC_QUESTIONS_DIR"], "pages",
-                                 after["token"], "index.html"), encoding="utf-8").read()
+                                 after["slug"], "index.html"), encoding="utf-8").read()
         ck("f-republish-lane" in body,
            "\u2026and the re-rendered page actually carries the new set")
         rc, out, _ = run("ask", "--factory", "f-no-publish-lane",
@@ -2910,15 +2972,18 @@ def selftest():
         page = json.loads(out)
         body = open(os.path.join(page["path"], "index.html"), encoding="utf-8").read()
         # The BROWSER TAB title names the page and how much is waiting on it
-        # (owner order 2026-09-26), so a browser with several factory pages open
-        # says which one has questions. Read from the RENDERED page, not the
-        # source: the title is emitted by the shell, and only the artifact shows
-        # whether the derivation reached it.
+        # (owner order 2026-09-26). The subject is the FLEET, never the slug --
+        # the slug is the path the page is SERVED FROM, not what it is. Read
+        # from the RENDERED page, not the source: the title is emitted by the
+        # shell, and only the artifact shows whether the derivation reached it.
         _t = re.search(r"<title>([^<]*)</title>", body)
         ck(_t is not None, "the page carries a <title>")
-        ck(_t.group(1) == "%s (%d) - Factory Open Questions"
-           % (page["slug"], page["meta"]["questions"]),
-           "the tab title is '<slug> (<n>) - Factory Open Questions' (%r)"
+        ck(_t.group(1) == "Factory Open Questions (%d)"
+           % page["meta"]["questions"],
+           "the tab title names the page and the open count (%r)"
+           % (_t.group(1),))
+        ck(page["slug"] not in _t.group(1),
+           "the tab does NOT print the slug as the page's subject (%r)"
            % (_t.group(1),))
         # NON-VACUITY, in a fixture BUILT to distinguish the two counts: ONE
         # open set holding TWO open questions. The assertion above cannot see
@@ -2951,9 +3016,30 @@ def selftest():
                          encoding="utf-8").read()
             _t2 = re.search(r"<title>([^<]*)</title>", _html)
             ck(_t2 is not None
-               and _t2.group(1).endswith("(2) - Factory Open Questions"),
+               and _t2.group(1) == "Factory Open Questions (2)",
                "the tab counts OPEN QUESTIONS, never sets (%r)"
                % (_t2.group(1) if _t2 else None,))
+            # -- the per-factory filter (owner order 2026-09-27) ----------
+            # The page carries EVERY open factory's questions; the filter
+            # narrows the view to one. Asserted on the DELIVERED files: the
+            # control must be an ENHANCEMENT (built by the script, absent
+            # from the markup) and the sections must carry the data-set the
+            # script reads. Lose either half and the filter silently does
+            # nothing while every other arm stays green.
+            _oq_js = open(os.path.join(_p["path"], "questions.js"),
+                          encoding="utf-8").read()
+            ck("filterbar" in _oq_js and "data-set" in _oq_js,
+               "\u2026and the vendored UI carries the per-factory filter")
+            _oq_body = _html.split("<body", 1)[-1]
+            ck("filterbar" not in _oq_body,
+               "\u2026which the SCRIPT builds, so the page reads in full "
+               "with JS disabled -- a control in the markup would be a dead "
+               "one")
+            ck(".filterbar" in _html,
+               "\u2026with the CSS the bar needs shipped on the page")
+            ck('class="set"' in _oq_body and 'data-set="' in _oq_body,
+               "\u2026over sections that carry the data-set it reads -- "
+               "without either half the filter silently does nothing")
         finally:
             env["OC_QUESTIONS_DIR"] = _saved_dir
         # Owner question 2026-09-24: the answer form should swap inline instead
@@ -3413,8 +3499,8 @@ def selftest():
         ck(rc == 0, "ask --factory works with NO --lane and NO --session (rc=%d)"
            % rc)
         first_entry = json.loads(out).get("entry", {})
-        ck(first_entry.get("id") == _fac and first_entry.get("factory") == _fac,
-           "\u2026the factory key IS the set id (%r)" % first_entry.get("id"))
+        ck(first_entry.get("id") == _fac and "factory" not in first_entry,
+           "\u2026the factory key IS the set id, and there is no second name for it (%r)" % first_entry.get("id"))
         ck(first_entry.get("lane") == "Carrier tools",
            "\u2026and the lane is DERIVED from the session's own binding, never "
            "supplied by the caller (%r)" % first_entry.get("lane"))
@@ -3682,8 +3768,8 @@ USAGE = """questions — the Open Questions register (#547)
                                        CREATOR's session; each question carries
                                        its own, and that is what routes.
   list     [--lane NAME] [--session id] [--all] [--json] [--quiet]
-  publish  [--set id] [--action URL] [--prune] [--rotate] [--json]
-           reuses the live token; --rotate mints a new URL explicitly
+  publish  [--action URL] [--prune] [--json]
+           re-renders the one shared page at its constant slug
   lint     [--json]
   gc       [--dry-run] [--json]        also applies mechanical closure
 
