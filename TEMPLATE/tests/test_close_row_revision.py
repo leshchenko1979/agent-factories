@@ -344,8 +344,8 @@ def close_row_revision_problems(
     factory declared rather than one this file carries. This leg reads the field through
     `field_predicate.declared_revision` — the SAME predicate the existence leg uses and the
     same one the write path enforces — because one field judged by two predicates is how
-    the split this function now reports came to exist (#190, and §11's one-field-one-
-    predicate rule).
+    the split this function now reports came to exist (#190, and the one-field-one-predicate
+    rule SKILL.md §State — every surface has one writer states).
     """
     boundary = parse_ts(boundary_text)
     run_boundary = parse_ts(run_boundary_text)
