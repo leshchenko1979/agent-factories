@@ -1899,6 +1899,19 @@ background:var(--teal-soft);font-size:.95rem;line-height:1.5;color:var(--text)}
 .clarifyband::before{content:'clarification requested';display:block;
 font:.6rem/1.4 var(--mono);letter-spacing:.15em;text-transform:uppercase;
 color:var(--teal);margin-bottom:.28rem}
+/* A clarifying question waits on the LANE, not the reader (owner order
+2026-09-27): the lane must amend it back to open. So it no longer takes the
+space of an actionable question -- the card shrinks and its form collapses
+behind a native <details>. No JS, no URL state; opening the summary restores
+the full form, so the question stays answerable. */
+.q.clarifying{padding:.85rem 1.05rem;border-left-color:var(--teal)}
+.q.clarifying .qt{font-size:1.05rem}
+.q.clarifying .clarifyband{margin:.55rem 0 .35rem;padding:.55rem .75rem;font-size:.9rem}
+.clarifybox{margin:.4rem 0 0}
+.clarifybox>summary{cursor:pointer;font:.62rem/1.5 var(--mono);letter-spacing:.13em;
+text-transform:uppercase;color:var(--dim);padding:.3rem 0}
+.clarifybox>summary:hover{color:var(--text)}
+.clarifybox[open]>summary{margin-bottom:.3rem}
 .opt{display:flex;gap:.65rem;align-items:flex-start;margin:.45rem 0;padding:.65rem .8rem;
 border:1px solid var(--line);border-radius:6px;cursor:pointer;
 transition:border-color .12s ease,background .12s ease}
@@ -1979,9 +1992,12 @@ def page_wrapper(body, expires_at, title):
     <h1> inside the body -- so the two are not two homes for one fact: the tab
     names the page and its open count, the heading names the page.
 
-    The page is PERMANENT (owner order 2026-09-25), so the line says so rather
-    than printing an expiry that no longer exists."""
-    meta_line = (f"expires {expires_at}" if expires_at else "permanent link")
+    The page is PERMANENT (owner order 2026-09-25), so no expiry is printed --
+    and NO meta line is printed either (owner report 2026-09-27: the
+    "permanent link" line sat above the h1, was the first thing the reader met,
+    and carried nothing they need. Permanence is a property of the REGISTER,
+    not a line of chrome). expires_at stays in the page meta, which is where
+    the answer backend reads it from."""
     return ("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
             "<meta name=\"robots\" content=\"noindex, nofollow\">\n"
@@ -1992,7 +2008,6 @@ def page_wrapper(body, expires_at, title):
             f'<script src="{UI_FILE}" defer></script>\n'
             f"<style>{PAGE_CSS}</style>\n"
             "</head><body>\n"
-            f'<p class="meta">{html.escape(meta_line)}</p>\n'
             + body
             + "\n</body></html>\n")
 
@@ -2601,6 +2616,19 @@ def selftest():
            "the page RENDERS the clarifying state, so a reload shows the change")
         ck("Clarification requested" in _body,
            "\u2026naming the reader's own request in the band")
+        # Owner order 2026-09-27: a clarifying question waits on the LANE, so
+        # it must not occupy the space of an actionable one. It renders compact
+        # and its form collapses behind a native <details> -- while staying in
+        # the DOM, so the question is still answerable when opened.
+        ck('class="q clarifying"' in _body,
+           "a clarifying question renders COMPACT, not as an actionable one")
+        ck('<details class="clarifybox">' in _body,
+           "\u2026with its form collapsed behind a native <details>")
+        ck('<summary' in _body,
+           "\u2026and a summary toggle that opens it (native HTML, no JS)")
+        ck('name="qid" value="%s"' % _cq in _body,
+           "\u2026and the form is STILL in the DOM, so it stays answerable "
+           "(qid=%s)" % _cq)
         _uijs = open(os.path.join(_uidir, "questions.js"), encoding="utf-8").read()
         ck("htmx:responseError" in _uijs,
            "the vendored UI surfaces a REFUSED submit -- htmx swaps only 2xx, "
@@ -2760,14 +2788,17 @@ def selftest():
            "the age paragraph is not double-worded (%r)" % (sorted(_ages),))
         # owner report 2026-09-24 22:24Z: "Why two expiration lines?" Two
         # emitters carried the same expiry -- the shell (page_wrapper) and the
-        # Page catalog component, which rendered props.expires_at as well. The
-        # shell owns the visible line; exactly one must reach the page.
+        # Page catalog component. The shell then owned ONE visible line. The
+        # owner removed even that (2026-09-27): the line said "permanent link",
+        # carried nothing the reader needs, and sat above the h1 as the first
+        # thing they met. The page carries NO meta line now -- permanence is
+        # asserted on the page META (expires_at null, below), not in chrome.
         _ttl = body.count('class="meta">')
-        ck(_ttl == 1,
-           "the page carries exactly ONE meta line, not two (%d found)" % _ttl)
-        ck("permanent link" in body,
-           "…and it says the link is permanent (owner order: the page never "
-           "expires, so a 7-day TTL would kill the bookmark weekly)")
+        ck(_ttl == 0,
+           "the page carries NO meta line -- the 'permanent link' accretion "
+           "above the h1 is gone (%d found)" % _ttl)
+        ck("permanent link" not in body,
+           "\u2026and no 'permanent link' text survives anywhere on the page")
         meta = json.load(open(os.path.join(page["path"], "meta.json"), encoding="utf-8"))
         ck(meta.get("expires_at") is None,
            "meta carries expires_at as null -- the backend fails OPEN on it "

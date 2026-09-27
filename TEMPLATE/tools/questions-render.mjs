@@ -106,7 +106,24 @@ const { registry } = defineRegistry(catalog, {
     // submitting -- the one regression that would break the live endpoint. The
     // description blocks are children of the form, which is where the pre-port
     // page carried them.
-    Question: ({ props, children }) => h('section', { id: props.set + '-' + props.qid, className: 'q' },
+    Question: ({ props, children }) => {
+      // Owner order 2026-09-27: a CLARIFYING question is waiting on the LANE
+      // (it must be amended back to open), not on the reader -- so it must not
+      // occupy the space of an actionable question. The card shrinks and its
+      // form collapses behind a native <details>: no JS, keyboard-accessible,
+      // and opening the summary restores the FULL form, so the question stays
+      // answerable. Inert with JS off, because <details> is native HTML.
+      const clarifying = props.status === 'clarifying';
+      const form = h('form', { method: 'post', action: props.action,
+                  'hx-post': props.action,
+                  'hx-target': "[id='" + props.set + '-' + props.qid + "']",
+                  'hx-swap': 'outerHTML' },
+        h('input', { type: 'hidden', name: 'token', value: props.token }),
+        h('input', { type: 'hidden', name: 'set', value: props.set }),
+        h('input', { type: 'hidden', name: 'qid', value: props.qid }),
+        children);
+      return h('section', { id: props.set + '-' + props.qid,
+                            className: 'q' + (clarifying ? ' clarifying' : '') },
       h('h3', { className: 'qt' }, props.title),
       // The recommendation band is the page's SIGNATURE: an amber-ruled block
       // carrying the lane's own counsel. The words "lane recommends" come from
@@ -128,15 +145,12 @@ const { registry } = defineRegistry(catalog, {
       // invalid and htmx threw on querySelectorAll -- reported live by the
       // owner 2026-09-25. An attribute selector is valid for ANY id, so no
       // future factory key can break the swap.
-      h('form', { method: 'post', action: props.action,
-                  'hx-post': props.action,
-                  'hx-target': "[id='" + props.set + '-' + props.qid + "']",
-                  'hx-swap': 'outerHTML' },
-        h('input', { type: 'hidden', name: 'token', value: props.token }),
-        h('input', { type: 'hidden', name: 'set', value: props.set }),
-        h('input', { type: 'hidden', name: 'qid', value: props.qid }),
-        children),
-      h('p', { className: 'age' }, props.footer)),
+      clarifying
+        ? h('details', { className: 'clarifybox' },
+            h('summary', null, 'Answer anyway'), form)
+        : form,
+      h('p', { className: 'age' }, props.footer));
+    },
     Heading: ({ props }) => h('h' + Math.min(props.level + 1, 6), null, props.text),
     Paragraph: ({ props }) => h('p', null, renderSpans(props.spans)),
     Table: ({ props }) => {
