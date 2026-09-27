@@ -118,7 +118,7 @@ The substantive work runs inside that persistent session, under the current law.
   invokes a session notify — **and** (b) its prompt carries **no work order**. A session
   target is the wake leg and nothing more: it does **not** make a row thin, and a row whose
   prompt carries a work order is a violation however it is routed. The reason is the
-  dual-writer shape §11 forbids, applied to an actor rather than to the append path — a
+  dual-writer shape SKILL.md §State — every surface has one writer forbids, applied to an actor rather than to the append path — a
   prompt carrying a work order executes the process in the cron's own session, and the wake
   makes the lane it notifies execute the same process again. The second reason is STALENESS,
   and it is P7's own original purpose: a cron prompt cannot be updated by a skill change, so
