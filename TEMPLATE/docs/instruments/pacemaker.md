@@ -169,7 +169,24 @@ row of class **`closure`**, byte-paired with its root twin (`cmp` rc=0) and stdl
 self-sufficient. It is **not** in §3's table because the RUNNER does not load it — it belongs to the
 ADOPTION's closure, not the executable's. What it provides is the pair coupling: a member whose audit
 discovers gates by glob holds no mechanism that notices the runner was dropped, and §8 step 3 is
-unimplementable without it. Porting these gates means porting this file.
+unimplementable without it. Porting these gates means porting this file **AND the wrapper that runs
+it** — and the second half is measured, not assumed.
+
+**The registry is a LIBRARY, and a file nothing invokes is the defect §4 exists to prevent.**
+Executed directly, `gate_registry.py` exits **rc=0 and prints nothing**: it defines functions and runs
+none. What executes it is `TEMPLATE/tests/test_gate_registration.py` (manifest class `standalone`),
+which matches the `test_*.py` glob a glob-discovering audit uses. So a member that ports the registry
+alone holds a file nothing invokes — the disease reproduced by its own remedy. `infra-factory` is the
+specimen: it holds `gate_registry.py` and its audit globs `tests/test_*.py`, and running the registry
+by hand returns rc=0 with **empty output**.
+
+**And the wrapper couples to the audit's INTERFACE, not just its presence.** It calls
+`audit.run_gate(cmd, cwd, budget_sec)`. Measured in `infra-factory`'s tree, whose `tools/audit.py` is
+a **484-line** revision with a **2-argument** `run_gate` (against the template's 2 414-line, 3-argument
+form), the wrapper raises `TypeError: run_gate() takes 2 positional arguments but 3 were given` — it
+crashes rather than reporting. So §8 step 3's honest options are: port the registry **and** the wrapper
+**and** a compatible `tools/audit.py`; or state the gap. A member on a divergent audit has no cheap
+path to this protection, and that is a measurement rather than a preference.
 
 | gate | registered at | grain | why that grain |
 |---|---|---|---|
@@ -199,6 +216,7 @@ which is the one thing `job_prefixes` exists to state.
 | surface | ships as | owner | why it must not be overwritten |
 |---|---|---|---|
 | `registry/fleet.json` → `job_prefixes` | `registry/fleet.example.json` | **the factory** | it IS the ownership declaration: the runner attributes each cron row to a factory by this field, never by the home a row sits in (measured: all twelve ai-antispam rows live in the ops home) |
+| `docs/ledger-invariants.json` | `docs/ledger-invariants.example.json` | **the factory** | the DECLARED duty-receipt boundary (#78 clause b): the runner's `duty_receipt_leg` reads it through the one reader, and a tree that has not declared one gets `DeclarationUnavailable` — measured in `ai-antispam`, whose gate exits **rc=1** on the absent file |
 | `registry/factories/*.json` | the adopter writes its own | **the factory** | the fragment store the attestation round reads and writes |
 | `evidence/ledger.jsonl` | created on first append | **the factory** | the duty-receipt store — the run rows that make a duty's completion provable |
 | `/tmp/<job-name>.log` | created by the job | **the factory** | the redirect log; its label must equal the job name, which is a contract between every pacemaker and the leg that reads it |
@@ -236,14 +254,25 @@ dispatch):
 1. **Port the kit rows.** The three paths in §2, carrying the classes the manifest assigns them, plus
    the six closure modules in §3. Nothing here is optional and nothing is ported "later": the closure
    is what makes the executable run, and a missing module crashes rather than degrades (§3).
-2. **Write your own `registry/fleet.json` — a PREREQUISITE, not a nicety.** The runner will not start
-   without it: `load_fleet_manifest` raises `FleetManifestError` (absent, unparseable, missing key, an
-   empty `factories` list), and that call sits outside the board-read guard — so a member holding every
-   shipped path still gets a crash, not a quiet week. Copy `registry/fleet.example.json` and fill it in.
-   Your record's `job_prefixes` is what attributes your own cron rows to you; until it is declared,
-   every row you own is reported as unattributable — named and counted, never judged, and never
-   silently folded into someone else's factory. The two effects are separate: the file makes the
-   runner RUN, the `job_prefixes` field makes its verdicts YOURS.
+2. **Write your own declarations — `registry/fleet.json` and `docs/ledger-invariants.json`. Both are
+   PREREQUISITES, not niceties, and both skeletons ship as manifest class `seed` (the class a member
+   instantiates under its own name).**
+   - **`registry/fleet.json`.** The runner will not start without it: `load_fleet_manifest` raises
+     `FleetManifestError` (absent, unparseable, missing key, an empty `factories` list), and that call
+     sits outside the board-read guard — so a member holding every shipped path still gets a crash, not
+     a quiet week. Copy `registry/fleet.example.json` and fill it in. Your record's `job_prefixes` is
+     what attributes your own cron rows to you; until it is declared, every row you own is reported as
+     unattributable — named and counted, never judged, and never silently folded into someone else's
+     factory. The two effects are separate: the file makes the runner RUN, the `job_prefixes` field
+     makes its verdicts YOURS.
+   - **`docs/ledger-invariants.json`.** The duty-receipt boundary is a DECLARED factory parameter (#78
+     clause b), read through one reader. A tree that has not declared one gets
+     `DeclarationUnavailable`, which surfaces as an **unhandled `SkipGate`** and exits **rc=1** — so
+     here it is the **gate**, not the runner, that a member meets first (measured in `ai-antispam`,
+     2026-09-27). Copy `docs/ledger-invariants.example.json` and fill in your own boundary. Note the
+     shape rather than the fix: the skip vocabulary EXISTS and is keyed on a data condition, so a
+     structural absence arriving as an unhandled raise is a shape worth reporting to this instrument's
+     owner rather than working around.
 3. **Register the gates** at the grain §4 states, so the manifest can keep you from dropping the
    runner and keeping the file. This step needs `tests/gate_registry.py` (§4) — if your tree has no
    gate registry and your audit discovers gates by glob, discovery gives you the RUN but not the
@@ -253,9 +282,11 @@ dispatch):
    §6.1 defines it and it is **your** act, in **your** tree; it is never installed from the template.
    Absent from your tree is a **declared state**, not a failure.
 
-**Two prerequisites, and they fail in different places.** Step 1's closure fails **loud** (§3) — the
+**Three prerequisites, and they fail in different places.** Step 1's closure fails **loud** (§3) — the
 runner crashes. Step 2's manifest also fails **loud**, and earlier: the `legs = [...]` expression raises
-before any leg runs. The board convention (§9.1 item 4) fails **quiet in the legs and loud in the
+before any leg runs. Step 2's SECOND declaration fails loud in the other entry point: a tree with no
+`docs/ledger-invariants.json` gets `DeclarationUnavailable` from the gate rather than the runner
+(measured in `ai-antispam`, rc=1). The board convention (§9.1 item 4) fails **quiet in the legs and loud in the
 gates**: the runner completes and honestly reports `examined 0`, while two of the discovered gates red
 on every post-invariant close row the member's ledger holds. A member whose board surface is not
 GitHub — one whose issue board *is* its own ledger — either carries the token convention or has those
@@ -268,20 +299,23 @@ that leaves the member's own suite permanently red.
 (a member counts as present only if the path is there — the closure of §3 is measured separately,
 because a partially-ported closure is a crash rather than a smaller number).
 **Scope:** all five member manifests in `registry/factories/*.json` (the key is `factory`, not `slug`).
-**Instant:** 2026-09-27T07:27:09Z; dispositions re-measured 2026-09-27T08:38Z after the adoption
-round (all five member HQs briefed, one nudged). The declared-set counts are unchanged between the
-two reads; only two disposition rows moved.
+**Instant:** declared-set counts re-measured **2026-09-27T15:19:17Z** (predicate re-run over all five
+member repos, byte-identity by `cmp`, and both entry points EXECUTED in each adopting tree);
+dispositions carried forward from the 08:38Z round plus two briefs sent 15:21Z. Earlier instants:
+07:27:09Z and 08:38Z. The counts MOVED between the 08:38Z read and this one — `ai-antispam` and
+`inferhub-watch` both went 0/3 → 3/3 — which is why the instant travels with the figure rather than
+the figure alone.
 
 | factory | declared set | own `fleet.json` | disposition |
 |---|---|---|---|
 | `infra-factory` | **3/3** | **written** | **ADOPTED** — commits `e334161e` + `5cd8aefe`, pushed 0/0; closure 11 of 12 paths present (the twelfth is `registry/factories/`, the fragment store). Its own runner gate passes **86 check(s), rc=0**, and the runner itself executes all **eight legs** in its tree. |
-| `ai-antispam` | 0/3 | absent | DEFER (declared) — behind by 3/3, closure 1/6; `registry/fleet.json` owed as a PREREQUISITE (§9.1 item 1); blocked on its own project-write gate |
-| `inferhub-watch` | 0/3 | absent | DEFER (declared) — behind by 8 of 9 declared paths; re-entry scoped against two adjacent instruments first |
+| `ai-antispam` | **3/3** (untracked) | absent | **PORTING** — plan approved 13:53:31Z. Declared set + 4 of 6 closure byte-identical to TEMPLATE (`cmp` rc=0), all untracked. Two measured crashes remain: the runner raises `FleetManifestError` (no `profile_root`), the gate raises `DeclarationUnavailable` → unhandled `SkipGate` → rc=1. Both fixes ship as `seed` skeletons. |
+| `inferhub-watch` | **3/3** (untracked) | absent | **PORTING** — declared set byte-identical (`cmp` rc=0), untracked; already holds `docs/ledger-invariants.json`. Two measured crashes: `tools/field_predicate.py` is a stale revision (`9a42a73`) lacking `declared_duty` → `AttributeError` at `patrol_host_state.py:1233`; and the runner raises `FleetManifestError` (no `profile_root`). |
 | `miidas` | 0/3 | absent | DEFER (declared) — behind by 8 of 9. Its **transport blocker is discharged**: the manual port proved in `infra-factory` needs no selector (§9.1 item 3), and the requirement was relayed to it 2026-09-27T08:35:59Z. The **board-convention prerequisite** (§9.1 item 4) stands, and its own board-vs-ledger unit remains owed regardless of branch. |
-| `opencrabs-dev` | 0/3 | absent | BRIEFED and NUDGED — no disposition yet. The brief landed 2026-09-27T06:40:25Z; the nudge landed 2026-09-27T08:38:05Z, and the lane was **mid-turn** at that instant (`run_tool_loop` span live), so the ask is in flight rather than declined. |
+| `opencrabs-dev` | 0/3 | absent | DEFER (declared) — 0 of 3 confirmed, and `registry/` **does not exist** in its tree at all (`ls` rc=2). Its reason is SCOPE rather than effort: the prerequisite (`registry/kit.json` + `tools/kit_pin.py`) does not bootstrap one instrument — it **enrols the factory in the kit manifest system for every instrument at once**, a fleet-level decision that a pacemaker brief would otherwise decide by side effect. Re-entry: when it enrols in the kit for ANY instrument. |
 
-**One of five members has adopted it; three have declared a deferral with a reason and a re-entry
-condition; one has not yet answered.** The distinction is the point of frame §7.2: a declared deferral
+**One of five members has adopted it; two are PORTING with the full set already on disk; two have
+declared a deferral with a reason and a re-entry condition.** The distinction is the point of frame §7.2: a declared deferral
 is a *state*, and only undeclared divergence reds. A census that reported "1 of 5" alone would erase
 the difference between a member that measured itself and said why, and one that has gone quiet — so
 the disposition column is not decoration, it is the half of the figure that a bare count destroys.
