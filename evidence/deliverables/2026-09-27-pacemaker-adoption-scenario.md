@@ -159,3 +159,49 @@ it is frame §7.2's silence rendered as silence. The declaration is each member'
 **Re-entry, stated so this is not silence:** the pacemaker's first live `ADOPTED` row appears the
 moment one holder replies with `state: adopted` + its own `green`. Everything already exists to
 render it; §6.2 is the receipt that it will.
+
+---
+
+## 7. The closure warning, proven at CI level — "green locally, red in a fresh clone"
+
+Added 2026-09-27T17:5xZ. §3 of `docs/instruments/pacemaker.md` warns that the closure must travel
+with the pair. Until now the evidence was a crash in a **constructed** partial copy. A member's own
+CI produced the same failure on real work, and it is a sharper specimen because of *when* it shows.
+
+**The mechanism, read from the runner's own constants.** `patrol_host_state.py` loads its
+dependencies by path, not by import:
+
+| constant | line | loaded by |
+|---|---|---|
+| `REGISTRY = REPO / "tools" / "registry.py"` | `:198` | `load_module("oc_registry", REGISTRY)` at `:594`, `:612`, `:751` |
+| `LEDGER_BOUNDARY` | — | `load_module("ledger_boundary", …)` at `:1188` |
+| `KIT_PIN` | — | `load_module("kit_pin", …)` at `:1530` |
+| `PREDICATE` / `CLOSE_BOARD_GATE` | `:131`, `:189` | the board legs |
+
+`load_module` raises when the path is absent, and those calls build the `legs = [...]` list — so an
+absent closure is a crash, and the crash happens **while the list is being built**, before any leg
+runs. That is §3's loud tier, confirmed at four call sites rather than one.
+
+**The specimen.** In `inferhub-watch`'s tree, measured 2026-09-27T17:53Z: the patrol gate and runner
+were **tracked**, while `tools/registry.py` was **present but UNTRACKED** (`git ls-files
+--error-unmatch` → not tracked; the file is on disk). Local runs pass, because the loader reads the
+working tree. A fresh CI clone has no `registry.py`, so `:594` raises and the gate fails **there and
+only there**.
+
+**Why this is a new class rather than a restatement.** A partial copy fails everywhere, and a
+missing gate fails nowhere. This specimen fails in exactly one place: **the tree that does not carry
+the untracked file — which is every tree but the author's working copy.** The gate's own verdict
+locally is "102 checks passed" and the commit does not carry the file its verdict depended on. It is
+the examined-nothing class one level up: the gate examined something, but the *commit* cannot
+reproduce the examination.
+
+**The rule it implies**, and the reason it belongs beside §3 rather than in a footnote: *a member
+adopting the pair must adopt the closure **in the same commit**, and "it passes in my tree" is not
+evidence until the same command passes from a clone of the commit.* A green local run over a
+present-but-untracked dependency is indistinguishable from a green local run over a tracked one —
+the difference is invisible in every surface except a fresh checkout.
+
+**Status: the member found it, not us, and repaired it by untracking the pair.** Recorded as
+evidence about the *instrument's* adoption shape; the member's CI state is its own to settle, and
+nothing here asks it to change course. The peer's report of the mechanism is confirmed first-hand
+against the two files it named.
