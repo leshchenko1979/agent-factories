@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "cycle_id": "20260925-c24",
+  "status": "COMPLETED",
+  "started_at": "2026-09-25T17:24:14Z",
+  "ended_at": "2026-09-25T19:00:00Z",
+  "duration_review_min": 74,
+  "duration_cycle_min": 96,
+  "cadence": {
+    "trigger": {
+      "kind": "version_bumps",
+      "every": 5,
+      "note": "12/5 FIRE (boundary n=10519) \u2014 Duties 4+6 due; owner ordered DUTY 6 ONLY 2026-09-25T17:19Z"
+    },
+    "boundary": {
+      "ref": null,
+      "at": null,
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+ ACCEPTED",
+      "accepted_since": 0
+    },
+    "fires": false,
+    "evaluated_at": "2026-09-27T16:51:07Z"
+  },
+  "corpus": {
+    "hash": null,
+    "pack": null,
+    "pack_status": "absent"
+  },
+  "lenses": {
+    "A": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-A-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "B": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-B-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "G": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-G-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "J": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-J-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "P": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "C": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-C-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "E": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-E-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "F": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-F-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "D": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-D-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "H": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-H-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "M": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "T": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "I": {
+      "status": "COMPLETED",
+      "report_path": "/root/.opencrabs/profiles/ops/opencrabs-dev/reviews/20260925-c24/reports/skill-review-I-20260925.md",
+      "sha256": null,
+      "verdict": "FINDINGS",
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    },
+    "S": {
+      "status": "PENDING",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": null,
+      "reason": null
+    }
+  },
+  "waivers": [],
+  "proposals": [],
+  "codification_plan": [
+    "HQ law (mine): G-F1 role router denies the fifth role file; G-F2/B-M3 harvest.md absent from discovery+reload surfaces; G-F3 live law nested under a RETIRED heading; G-F4/B-H3/J-F3 editor.md routes IDEA to retired Duty T1; G-F5/F6 phase-name drift; G-F7 lifecycle table split; G-F8 review-lenses self-pointer; G-F9 README layout+phases; G-F10 ops brain anchor glob; J-F2 trailer retention as human memory; J-F1 lint-laws not on the battery path.",
+    "HQ law, citation class (I's six): review-lenses.md ref-consistency, provenance sediment, enumeration rules broken on itself.",
+    "Toolsmith tools (incl. TWO regressions from my regroup): F-H1 oc-claims-single-source scans 1 of 36 units; F-M3 watcher-audit primary lib reach broken, hidden by fallback+silent except; F-M1 tautology survives; F-M2 lint selftest never loads DEFAULT_CORPUS; F-L1 oc_tools_dir lacks the symlink guard; F-L2 documented bootstrap != the one 43 callers run; F-M4 fixture drift.",
+    "Owner decision: B-H1 runbook 46.8% retired section w/ live law nested; B-H2 SKILL.md past router scope + line budget (corpus growth vs the 2215-compactions/day problem).",
+    "No action: D proposed 0 deletions again (9 clean bills). H: freeze retirement complete as removal; one dead SOAKING pointer."
+  ],
+  "frozen_at": null,
+  "inputs_snapshot": null,
+  "step0_log": [],
+  "updated_at": "2026-09-27T16:51:07Z"
+}
