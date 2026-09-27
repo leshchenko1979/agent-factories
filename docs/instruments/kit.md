@@ -103,10 +103,20 @@ frame §7.2's *not applicable* wearing a shortfall's clothing, and it is the sam
 `opencrabs-dev` 0-of-2: a scope mistake filed as a shortfall, which is worse than no measurement
 because it looks like one.
 
-Their class lives in `TEMPLATE/tests/gate_registry.py` as `meta-factory-only` entries — the home §4
-names for an executable outside the manifest population — so a reader grepping `kit.json` for
-`kit_surfaces` finds nothing, **and that absence is not a part-3 defect.** One instrument, two class
-homes, and this section is where the split is stated rather than left to be rediscovered.
+The class of **four** of the five lives in `TEMPLATE/tests/gate_registry.py` as `meta-factory-only`
+entries — the home §4 names for an executable outside the manifest population. So a reader grepping
+`kit.json` for `kit_manifest`, `kit_census`, `kit_names` or `kit_deliver` finds nothing, **and that
+absence is not a part-3 defect.** One instrument, two class homes, and this section is where the
+split is stated rather than left to be rediscovered.
+
+**The fifth is the exception, and it is the reason this row says four rather than five.**
+`tools/kit_surfaces.py` has **no** registry entry and **no** gate — `grep -c kit_surfaces
+TEMPLATE/tests/gate_registry.py` → **0** — so it is the one root-side executable whose class lives
+**nowhere**: neither in `kit.json` (outside that population) nor in `gate_registry.py` (no entry).
+That is the sharpest gap this instrument carries, it is measured and owed in full at **§4.1**, and
+it is listed as **F1** in §9.2. A reader who takes this section's rule as a blanket would stop
+looking at exactly the path that needs looking at — so the exception is stated here, where the rule
+is, rather than left to be found further down.
 
 ## 3. The closure — declared, never derived
 
