@@ -101,7 +101,51 @@ at the instant shown. They are a reading of a live corpus, not a constant: a lat
 re-derives them should get the same numbers **for the same 17 files**, and should expect them
 to move when the donor runs another cycle.
 
-## 4. What this file does NOT claim
+## 4. The donor-side boundary — and the AC3 receipt
+
+### 4.1 What lands where, and by whom
+
+The migration is a **completion of the template plus a carve at the donor**, not a file install
+into the donor's tree. Every landing is attributed, because this is the part of the promotion
+that is easiest to over-read:
+
+| landing | the path | who lands it | why not this lane |
+|---|---|---|---|
+| the promoted law pair + the reload link | `TEMPLATE/docs/instruments/review-rotation.md` + `docs/…` + `skills/meta-factory/review-rotation.md` | **this lane** ✓ landed | — |
+| the executable, the gate, the schema, the catalogue | `tools/review.py` · `tests/test_review.py` · `docs/review-cycle.schema.json` · `docs/review-lenses.md` | **this lane** ✓ landed | — |
+| the donor's `hq.md` Duty 4 / Duty 6 / cadence regions → `[LANE]` pointers | `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/hq.md` | **OC DEV HQ** — text supplied, dispatched | the donor's own `SKILL.md:390` ("ONLY HQ edits skill files: … `hq.md` …") and `fleet-directives.md:97` (the per-instrument exception covers **one file per instrument** and "does NOT extend to skill markdown generally") |
+| the donor's reload link (if it wants one) | the donor's own skill tree | **the donor** — its own act | frame §6.1: it "is **your** act, in **your** tree; it is never installed from the template", and "the shape is each member's own decision" |
+| the donor's kit initialization | — | **HQ** (obligation O6, an HQ-authored clause) | n=1283 Q2: a clause binding a member factory stays at HQ |
+
+**A file install into the donor's tree was considered and deliberately NOT done.** Two reasons,
+both decisive rather than stylistic: the donor is not a kit member (no `registry/kit.json` —
+`kit_deliver.py` refuses without one, which is its designed behaviour, not a defect), and
+frame §6.1 places the member leg with the member. The instrument's own adoption steps are
+stated in the law doc §8 and are the donor's to take.
+
+### 4.2 AC3 — the donor's own gates, read from the donor's own receipt
+
+The donor's battery writes its result to its own artifact, so the reading is taken from there
+rather than from a report:
+
+| reading | value | predicate | scope | instant |
+|---|---|---|---|---|
+| battery before | **281 pass / 2 fail — FAIL** | `tools/tests/battery-last.json` | the donor's battery, mode `parallel jobs=4` | `2026-09-27T16:22:17Z` |
+| battery after | **283 pass / 0 fail — PASS** | same artifact, same predicate | same | `2026-09-27T16:56:17Z` |
+| the failing check, re-run first-hand | **PASS=48 FAIL=0, rc=0** | `./tools/state/oc-drift-check --selftest` | the donor tree, run OUT of this session's cgroup | 2026-09-27 ~16:5xZ |
+
+**Attribution, stated so the green is not over-claimed.** The donor's gates are green, and the
+boundary is proved mechanically: **not one changed path in this migration resolves under the
+donor tree.** Enumerated this turn — every path in this lane's task-9 commits is under the
+meta-factory repo, and no such path exists in the donor tree. So the donor's battery reading is
+a statement about the donor, and its move from FAIL to PASS between 16:22 and 16:56 is a peer's
+work on the donor's own tools, **not this migration's**.
+
+**Both readings are given because the pair is the honest one.** A single green cannot show what
+the migration did; the two together show that a red existed at 16:22 and had cleared by 16:56,
+with this lane's work outside the donor tree the whole time.
+
+## 5. What this file does NOT claim
 
 - **It does not claim the donor's gates pass.** They are measured separately, and the reading
   belongs with the donor-side change.
