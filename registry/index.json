@@ -1,12 +1,12 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-27T10:33:20Z",
+  "resolved_at": "2026-09-27T10:41:01Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 62,
-    "announcements": 18,
+    "announcements": 19,
     "jobs": 59,
     "unattributed_jobs": 4
   },
@@ -25,6 +25,23 @@
       ],
       "origins": [
         "inferhub-watch"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "ops-daemon-dies-at-cgroup-cap",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.",
+      "since": "2026-09-27T06:13:19Z",
+      "review_by": "2026-10-11",
+      "check": null,
+      "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup.",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "infra-factory"
       ],
       "conflict": []
     },
@@ -723,7 +740,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-09-26T06:21:03Z",
+      "attested_at": "2026-09-27T10:39:50Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -915,6 +932,19 @@
             "profile"
           ],
           "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493."
+        },
+        {
+          "id": "ops-daemon-dies-at-cgroup-cap",
+          "severity": "warning",
+          "text": "The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.",
+          "scope": "profile",
+          "since": "2026-09-27T06:13:19Z",
+          "review_by": "2026-10-11",
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup."
         }
       ]
     },

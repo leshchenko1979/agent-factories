@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-09-27T10:33:20Z",
+  "resolved_at": "2026-09-27T10:41:01Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -482,6 +482,18 @@
             "since": "2026-09-26",
             "review_by": "2026-10-10",
             "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493."
+          },
+          {
+            "id": "ops-daemon-dies-at-cgroup-cap",
+            "text": "The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.",
+            "severity": "warning",
+            "affects": [
+              "profile"
+            ],
+            "scope": "profile",
+            "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup.",
+            "review_by": "2026-10-11",
+            "since": "2026-09-27T06:13:19Z"
           }
         ],
         "lanes": [
@@ -517,7 +529,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-26T06:21:03Z"
+        "attested_at": "2026-09-27T10:39:50Z"
       }
     },
     {
@@ -1404,9 +1416,9 @@
       "thread_id": 7198,
       "updated_at": 1790504603,
       "last_origin": "callback",
-      "turn_open_at": 1790504603,
+      "turn_open_at": null,
       "session_title": "bash guard forced-variation design",
-      "session_updated_at": 1790504607,
+      "session_updated_at": 1790505631,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -1911,9 +1923,9 @@
       "thread_id": 42311,
       "updated_at": 1790504480,
       "last_origin": "callback",
-      "turn_open_at": 1790504480,
+      "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311]",
-      "session_updated_at": 1790504491,
+      "session_updated_at": 1790505608,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2225,7 +2237,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1790504938,
+      "session_updated_at": 1790505632,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2277,7 +2289,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790504718,
+      "session_updated_at": 1790505590,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2420,7 +2432,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1790505008,
+      "session_updated_at": 1790505422,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2446,7 +2458,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790505078,
+      "session_updated_at": 1790505636,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2459,7 +2471,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1790500072,
+      "session_updated_at": 1790505310,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2823,7 +2835,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Ledger [chat:-1004497192134:topic:3981]",
-      "session_updated_at": 1790504750,
+      "session_updated_at": 1790505527,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2862,7 +2874,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186]",
-      "session_updated_at": 1790505199,
+      "session_updated_at": 1790505454,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2888,7 +2900,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555]",
-      "session_updated_at": 1790505092,
+      "session_updated_at": 1790505435,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }

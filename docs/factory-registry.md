@@ -2,23 +2,25 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-27T10:33:20Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-27T10:41:01Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-27T10:33:20Z` |
+| generated | live reads | resolved `2026-09-27T10:41:01Z` |
 
 ## Announcements
 
 Deduplicated by `id` across every fragment: several lanes noticing one fact is one statement with several declarers. An entry naming a `check` is mechanically verified; the rest rest on `review_by` alone.
 
-### 🟡 warning (13)
+### 🟡 warning (14)
 
 - 🟡 **`inferhub-auto-route-failure-escalation`** — Routing through the ops fallback chain's first hop (inferhub) is currently degrading, independent of the retired auto-switcher: measured over 24h to 2026-09-27T05:08Z, 21,242 requests with 2,852 failures (13.4%) — 499 client-abort x1218, 502 'upstream chain exhausted' x994, 429 rate-limit x486, 402 bid-starved x140 — concentrated on cheap iq-75-plus combo members (two gemini effort-variant aliases at ~76% failure over 7d, zai/glm-5.3 at ~97%). Not model-specific and not load-shaped.
   - affects: profile · since: 2026-09-27T06:36:31Z · declared by: inferhub-watch
+- 🟡 **`ops-daemon-dies-at-cgroup-cap`** — The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.
+  - affects: profile · since: 2026-09-27T06:13:19Z · review by: 2026-10-11 · declared by: infra-factory
 - 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.
   - affects: profile · since: 2026-09-26 · review by: 2026-10-10 · declared by: infra-factory
 - 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.
@@ -209,7 +211,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-26T06:21:03Z |
+| freshness | ✅ attested 2026-09-27T10:39:50Z |
 | purpose | Keep the VDS fleet (vpn, apps, agents) and the services it hosts observable, healthy and self-healing: intake Gatus alerts, diagnose hosts, apply safe remediation, and own the fleet infrastructure source repo. |
 | profile | `ops` |
 | repo | `/root/vds-servers` |
@@ -217,7 +219,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 | owns | ['Fleet host operations on vpn, apps and agents - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation', 'Gatus monitoring: endpoint configuration, alert intake and recovery routing (gatus-notify on vpn)', 'The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger', 'Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation', 'The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC', 'Infra Factory process law and its own lanes (HQ, Triage, Surveys)'] |
 | does not own | ['OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev', 'The factory template, cross-factory laws and fleet measurement - that is meta-factory', 'ai-antispam business logic, its outreach campaign and its Postgres state - that is ai-antispam', 'Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers', 'InferHub model routing, pricing and token economics - that is inferhub-watch', 'Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos', "Other profiles' brain files and configuration (default, family)", 'The OpenCrabs log-guard watchdog and its root-crontab line on agents (/usr/local/bin/opencrabs-log-guard.sh) - host infrastructure operated by the owner (Alexey). Its source exists in no factory repo, so no factory can declare it as code it owns; it mitigates a closed OpenCrabs daemon defect class (leshchenko1979/opencrabs#21).'] |
 | substrates owned | ['/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)', 'The fleet hosts vpn, apps and agents - host-level state: systemd units, containers, disk, /usr/local/bin scripts', 'Gatus monitoring configuration and alert routing on vpn', 'The Mac access path (vpn/mac-access: CDP tunnel and route pin)'] |
-| attested at | 2026-09-26T06:21:03Z |
+| attested at | 2026-09-27T10:39:50Z |
 
 **Services**
 
@@ -243,6 +245,8 @@ Attribution basis: deliver_to -> lane, name prefix.
   - affects: profile · since: 2026-09-23 · review by: 2026-10-07 · declared by: infra-factory
 - 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.
   - affects: profile · since: 2026-09-26 · review by: 2026-10-10 · declared by: infra-factory
+- 🟡 **`ops-daemon-dies-at-cgroup-cap`** — The ops daemon has died mid-turn at its cgroup soft cap with zero OOM kills — three core dumps on 2026-09-27 (06:13:19 SEGV, 06:20:02 SEGV, 06:27:27 BUS) with memory.events high climbing and MemoryPeak measured ABOVE MemoryHigh. An unanswered notify to any ops-profile lane may therefore be a crash, not indiscipline — re-notify rather than assume the lane declined.
+  - affects: profile · since: 2026-09-27T06:13:19Z · review by: 2026-10-11 · declared by: infra-factory
 
 **Lanes**
 
