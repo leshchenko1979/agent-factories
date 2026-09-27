@@ -95,7 +95,7 @@ def _issue(number: int, state: str) -> dict:
 def _rows(*pairs) -> list[dict]:
     """Ledger rows from (event, subject, n) triples."""
     return [
-        {"n": n, "ts": "2026-09-19T10:00:00Z", "event": event, "actor": "triage",
+        {"n": n, "ts": _CLOSE_TS, "event": event, "actor": "triage",
          "subject": subject, "detail": "probe"}
         for event, subject, n in pairs
     ]
@@ -297,7 +297,7 @@ def _ledger_with(*subjects) -> Path:
     path = Path(tempfile.mkdtemp()) / "ledger.jsonl"
     path.write_text(
         "".join(
-            json.dumps({"n": i + 1, "ts": "2026-09-19T10:00:00Z", "event": "close",
+            json.dumps({"n": i + 1, "ts": _CLOSE_TS, "event": "close",
                         "actor": "worker", "subject": s, "detail": "probe"}) + "\n"
             for i, s in enumerate(subjects)
         ),
@@ -612,7 +612,11 @@ def test_the_leg_binds_to_the_gate_own_constant_not_a_private_copy() -> None:
     )
     gate = RUNNER.load_close_board_gate()
     assert gate.BOARD_TOKEN == "board=closed", gate.BOARD_TOKEN
-    assert gate.INVARIANT_LANDED == "2026-09-18T18:04:24Z", gate.INVARIANT_LANDED
+    # The ANCHOR is this tree's own instant: the gate ships `standalone` precisely so a
+    # factory can carry its own, so a member that does is not a defect. The probe asserts
+    # the leg reaches the gate's constant and that the constant is a well-formed instant.
+    anchor = gate.INVARIANT_LANDED
+    assert anchor and anchor.endswith("Z") and len(anchor) == 20, anchor
 
 
 def test_a_false_board_declaration_is_reported_and_fails_the_run() -> None:
@@ -624,8 +628,8 @@ def test_a_false_board_declaration_is_reported_and_fails_the_run() -> None:
     """
     issues = [_issue(1, "OPEN"), _issue(2, "CLOSED")]
     rows = _rows(("intake", "#1", 1), ("intake", "#2", 2)) + [
-        _close_row(3, "#1", "2026-09-19T10:00:00Z", "settled board=closed"),
-        _close_row(4, "#2", "2026-09-19T10:05:00Z", "settled board=closed"),
+        _close_row(3, "#1", _CLOSE_TS, "settled board=closed"),
+        _close_row(4, "#2", _CLOSE_TS2, "settled board=closed"),
     ]
     rc, out, _ = _run(issues, rows)
     assert rc == 1, f"a false board declaration must fail the run, got rc={rc}\n{out}"
@@ -653,7 +657,7 @@ def test_a_true_board_declaration_reads_clean_and_states_its_population() -> Non
     """The complement: a green must be green over a NON-ZERO examined count."""
     issues = [_issue(1, "CLOSED")]
     rows = _rows(("intake", "#1", 1)) + [
-        _close_row(2, "#1", "2026-09-19T10:00:00Z", "settled board=closed"),
+        _close_row(2, "#1", _CLOSE_TS, "settled board=closed"),
     ]
     rc, out, _ = _run(issues, rows)
     assert rc == 0, out
@@ -671,7 +675,7 @@ def test_a_mid_detail_token_is_judged_not_only_a_canonical_trailer() -> None:
     """
     issues = [_issue(1, "OPEN")]
     rows = _rows(("intake", "#1", 1)) + [
-        _close_row(2, "#1", "2026-09-19T10:00:00Z",
+        _close_row(2, "#1", _CLOSE_TS,
                    "settled board=closed and then prose trails after it"),
     ]
     rc, out, _ = _run(issues, rows)
@@ -684,7 +688,7 @@ def test_a_subject_absent_from_the_board_is_a_problem_not_a_silent_pass() -> Non
     """`absent` and `closed` are different facts; only one is what the row declares."""
     issues = [_issue(1, "CLOSED")]
     rows = _rows(("intake", "#1", 1)) + [
-        _close_row(2, "#99", "2026-09-19T10:00:00Z", "settled board=closed"),
+        _close_row(2, "#99", _CLOSE_TS, "settled board=closed"),
     ]
     rc, out, _ = _run(issues, rows)
     assert rc == 1, out
@@ -695,7 +699,7 @@ def test_a_pre_invariant_close_row_is_outside_the_population() -> None:
     """The GATE's own boundary is honoured: a pre-invariant row is not judged here."""
     issues = [_issue(1, "OPEN")]
     rows = _rows(("intake", "#1", 1)) + [
-        _close_row(2, "#1", "2026-09-01T10:00:00Z", "settled board=closed"),
+        _close_row(2, "#1", _PRE_CLOSE_TS, "settled board=closed"),
     ]
     rc, out, _ = _run(issues, rows)
     assert rc == 0, out
@@ -1246,7 +1250,7 @@ def test_a_finding_reports_the_id_read_from_the_box_not_a_placeholder() -> None:
 
 def _tier_row(n: int, subject: str, detail: str, event: str = "ruling") -> dict:
     """A ledger row carrying whatever `detail` says — trailer discipline is the caller's."""
-    return {"n": n, "ts": "2026-09-19T10:00:00Z", "event": event, "actor": "hq",
+    return {"n": n, "ts": _CLOSE_TS, "event": event, "actor": "hq",
             "subject": subject, "detail": detail}
 
 
@@ -1401,23 +1405,67 @@ _RECEIPT_PROMPT = (
     "session_notify tool exactly ONCE, then stop.\n\nreceipt_subject: registry-attest\n"
 )
 
+# --- the TREE's own instants, never the kit's literals ---------------------------
+# Every instant in the duty and board fixtures below is derived from the boundary and the
+# gate anchor THIS tree declares, read through the same readers the legs themselves use.
+# This file ships as a byte-identical pair, and in the half that ships "this factory" is
+# the ADOPTING MEMBER, whose instants are its own (#78 clause b). A fixture pinned to the
+# kit's literal therefore exercises the leg against a date no member need share — the same
+# failure the file guards against for the leg, applied to its own probes. Measured in the
+# adoption pilot: 8 of 102 probes failed in a member tree that had done nothing wrong.
+def _plus(literal: str, hours: float) -> str:
+    """`literal` shifted by `hours`, in the ISO-8601 UTC form this tree stores."""
+    t = dt.datetime.strptime(literal, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+    return (t + dt.timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _tree_bound(key: str, fallback: str) -> str:
+    """The instant THIS tree declares for `key`, or the kit's literal when it declares none."""
+    try:
+        reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
+        _instant, text = reader.declared_boundary(REPO, key)
+        return text or fallback
+    except Exception:  # noqa: BLE001 — an undeclared bound is the LEG's refusal to raise;
+        return fallback  # here the literal only keeps the probes runnable before adoption.
+
+
+def _close_anchor() -> str:
+    """The close-board gate's own anchor, as this tree carries it."""
+    try:
+        return RUNNER.load_close_board_gate().INVARIANT_LANDED
+    except Exception:  # noqa: BLE001 — the leg reports a gate it cannot load; the fixture
+        return "2026-09-18T18:04:24Z"  # only needs a well-formed instant to order against.
+
+
+_DUTY_BOUND = _tree_bound(RUNNER.DUTY_RECEIPT_BOUNDARY_KEY, "2026-09-25T07:01:07Z")
+_DUTY_FIRE = _plus(_DUTY_BOUND, 0.5)
+_DUTY_ROUND = _DUTY_FIRE[:10]
+_RECEIPT_TS = _plus(_DUTY_BOUND, 1.0)
+_DUTY_READ_AT = _plus(_DUTY_BOUND, 2.0)
+_CLOSE_ANCHOR = _close_anchor()
+_CLOSE_TS = _plus(_CLOSE_ANCHOR, 1.0)
+_CLOSE_TS2 = _plus(_CLOSE_ANCHOR, 1.1)
+_PRE_CLOSE_TS = _plus(_CLOSE_ANCHOR, -1.0)
+
+
 def _duty_row(name="factory-registry-attest", *, prompt=_RECEIPT_PROMPT,
-              last_run_at="2026-09-25T07:30:00Z",  # AFTER the #175 bound, see _DUTY_BOUND
+              last_run_at=_DUTY_FIRE,  # AFTER this tree's own #175 bound, see _DUTY_BOUND
               row_id="9ec28cec-100c-4325-ba3e-62972351ff0d") -> dict:
     return {
         "id": row_id, "name": name, "deliver_to": "", "prompt": prompt,
         "last_run_at": last_run_at, "home": "probe-home",
     }
 
-def _receipt_row(subject="registry-attest-2026-09-25",
+def _receipt_row(subject=None,
                  detail="the round completed. duty=completed", n=1) -> dict:
+    subject = f"registry-attest-{_DUTY_ROUND}" if subject is None else subject
     """A receipt row. The `duty=` token is what MAKES it a receipt (#160).
 
     The default carries it, because a row that declares nothing is not a receipt at all —
     the leg's first version accepted any subject match, which is how a dispatch record
     written before the round completed certified the round.
     """
-    return {"n": n, "ts": "2026-09-25T07:41:00Z", "event": "run", "actor": "delegate",
+    return {"n": n, "ts": _RECEIPT_TS, "event": "run", "actor": "delegate",
             "subject": subject, "detail": detail}
 
 # THE FORWARD BOUND the duty probes are driven against (#175). Declared HERE rather than
@@ -1426,7 +1474,7 @@ def _receipt_row(subject="registry-attest-2026-09-25",
 # probe that inherited the live declaration would fail in the very tree it ships to.
 # The instant is the one this factory declares in docs/ledger-invariants.json, so the
 # probes exercise the same boundary the live leg does without depending on it.
-_DUTY_BOUND = "2026-09-25T07:01:07Z"
+# `_DUTY_BOUND` is derived ABOVE, from the tree's own declaration.
 
 
 def _duty_tree(*, invariants=None, declaration=None) -> Path:
@@ -1448,7 +1496,7 @@ _DUTY_TREE = _duty_tree()
 def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None) -> dict:
     return RUNNER.duty_receipt_leg(
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
-        read_at="2026-09-25T08:00:00Z",
+        read_at=_DUTY_READ_AT,
         store=store if store is not None else Path(tempfile.mkdtemp()),
         repo=repo if repo is not None else _DUTY_TREE,
     )
@@ -1462,11 +1510,11 @@ def test_the_duty_leg_BITES_when_a_fired_round_left_no_receipt() -> None:
     """
     leg = _duty_leg([_duty_row()], [])
     assert leg["status"] == "ASSERTED", leg
-    assert leg["coverage"]["duties_judged"][0]["round"] == "2026-09-25", leg["coverage"]
+    assert leg["coverage"]["duties_judged"][0]["round"] == _DUTY_ROUND, leg["coverage"]
     assert len(leg["problems"]) == 1, leg["problems"]
     problem = leg["problems"][0]
     assert "NO duty receipt" in problem, problem
-    assert "registry-attest-2026-09-25" in problem, problem
+    assert f"registry-attest-{_DUTY_ROUND}" in problem, problem
     assert "9ec28cec" in problem, "the finding must RESOLVE the row it names, by id"
     assert "TRIGGER fired" in problem, "the finding must say what a green run does mean"
 
@@ -1554,7 +1602,7 @@ def test_an_HOUR_BEARING_subject_names_the_round() -> None:
     leg = _duty_leg(
         [_duty_row(name="factory-triage-patrol", prompt=_RECEIPT_PROMPT.replace(
             "registry-attest", "patrol-verify"))],
-        [_receipt_row(subject="patrol-verify-2026-09-25T06",
+        [_receipt_row(subject=f"patrol-verify-{_DUTY_ROUND}T06",
                       detail="the patrol ran. duty=completed")],
     )
     assert leg["problems"] == [], leg["problems"]
@@ -1564,7 +1612,7 @@ def test_a_DECORATED_AFTER_the_date_subject_names_the_round() -> None:
     """#159: a decoration that FOLLOWS the date is reached by the ruled prefix."""
     leg = _duty_leg(
         [_duty_row()],
-        [_receipt_row(subject="registry-attest-2026-09-25-writeback",
+        [_receipt_row(subject=f"registry-attest-{_DUTY_ROUND}-writeback",
                       detail="the write-back round. duty=completed")],
     )
     assert leg["problems"] == [], leg["problems"]
@@ -1605,7 +1653,7 @@ def test_the_PREFIX_IS_BOUNDARY_CHECKED_so_a_longer_date_cannot_match() -> None:
     """
     leg = _duty_leg(
         [_duty_row()],
-        [_receipt_row(subject="registry-attest-2026-09-250",
+        [_receipt_row(subject=f"registry-attest-{_DUTY_ROUND}0",
                       detail="some other round. duty=completed")],
     )
     assert len(leg["problems"]) == 1, leg["problems"]
@@ -2187,9 +2235,9 @@ def test_the_bound_NARROWS_the_population_and_the_leg_STILL_REDs_after_it() -> N
     still RED. This is the arm that proves the bound narrows rather than hides.
     """
     leg = _duty_leg(
-        [_duty_row(name="factory-old", last_run_at="2026-09-21T06:00:27Z",
+        [_duty_row(name="factory-old", last_run_at=_plus(_DUTY_BOUND, -48),
                    row_id="aaaa1111-0000-0000-0000-000000000001"),
-         _duty_row(name="factory-new", last_run_at="2026-09-25T09:00:00Z",
+                  _duty_row(name="factory-new", last_run_at=_DUTY_FIRE,
                    row_id="bbbb2222-0000-0000-0000-000000000002")],
         [],
     )
