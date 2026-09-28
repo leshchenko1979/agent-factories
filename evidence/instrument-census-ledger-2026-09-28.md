@@ -1,13 +1,13 @@
 # Instrument adoption census — one predicate over the declared population
 
-Read at **2026-09-28T13:20:21Z** by `tools/instrument_census.py`.
+Read at **2026-09-28T15:30:30Z** by `tools/instrument_census.py`.
 
 ## The predicate, stated before the figures
 
 **Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the
 law doc's declared-set table declares — **15 path(s)** — plus the reload link's own state.
 **Scope:** the member fragments in `registry/factories/*.json`.
-**Instant:** 2026-09-28T13:20:21Z.
+**Instant:** 2026-09-28T15:30:30Z.
 
 **WHAT THIS DOES NOT MEASURE.** It is ONE predicate on file PRESENCE. A present file may
 differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —
@@ -44,12 +44,12 @@ guarded: zero parsed paths refuses rather than censusing an empty set):
 
 | member | held | reload link | fragment declares | status |
 |---|---|---|---|---|
-| `ai-antispam` | 15/15 | absent | absent | **HELD-UNDECLARED** |
+| `ai-antispam` | 15/15 | absent | partial · green=false | **DECLARED-PARTIAL** |
 | `inferhub-watch` | 8/15 | absent | partial · green=false | **DECLARED-PARTIAL** |
 | `infra-factory` | 6/15 | absent | deferred · green=true | **DECLARED-DEFERRED** |
 | `meta-factory` | 15/15 | resolves | absent | **SOURCE** |
 | `miidas` | 6/15 | absent | absent | **PARTIAL-UNDECLARED** |
-| `opencrabs-dev` | 0/15 | absent | absent | **ABSENT** |
+| `opencrabs-dev` | 0/15 | absent | not-applicable · green=false | **DECLARED-NOT-APPLICABLE** |
 
 ## The two legs, and why a copy alone is not adoption
 
