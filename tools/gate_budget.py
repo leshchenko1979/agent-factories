@@ -452,6 +452,151 @@ def gate_key_for_cmd(cmd: list[str], repo_root: Path) -> str | None:
     return None
 
 
+# The default's own derivation. A declared entry must carry its basis -- a `budget_sec`
+# with no `measured_sec` beside it is a cap picked by feel, which is the defect this
+# manifest exists to fix. The DEFAULT carried a bare number until #208, and the shape it
+# was missing is the same one: the value, the margin, the measured runtime it rests on, the
+# absolute revision of that measurement, and the POPULATION the measurement was taken over.
+# The population is what makes the derivation checkable. An undeclared gate is a gate
+# NOBODY has measured, so the honest default is bounded by the gates that actually fall
+# through to it -- never by the largest entry that happens to exist, which is how the
+# withdrawn `_note` sentence came to be false at 8.51x (#208).
+DEFAULT_BASIS_KEYS = ("margin_x", "measured_sec", "measured_at", "population")
+
+# The margin law the manifest's own header STATES, encoded so the default's containment leg
+# computes the margin the way a declared entry's recorded `margin_x` does. Measured over the
+# live 48 entries: 47 reproduce this expression at 3 dp, and the 48th
+# (`tests/test_shipped_mechanism_law.py`) is a STATED EXCEPTION at 8.0 rather than the law's
+# 8.167, so this is the derivation rule for a fresh measurement and not a universal
+# reproduction of the recorded ones. Prose cannot be recomputed: the header remains the
+# statement, this is its predicate.
+MARGIN_ASYMPTOTIC = 4.0
+MARGIN_FIXED_SEC = 0.75
+
+
+def margin_for(measured_sec: float) -> float:
+    """The margin the manifest's header states for a `measured_sec`-second measurement."""
+    return MARGIN_ASYMPTOTIC + MARGIN_FIXED_SEC / measured_sec
+
+
+def default_basis_problems(
+    default: object, tolerance: float = MARGIN_LAW_TOLERANCE
+) -> list[str]:
+    """Problems in the derivation the DEFAULT states. Empty when none is stated.
+
+    SCOPED TO A STATED DERIVATION, and the scope is load-bearing rather than convenient:
+    the kit ships `registry/gates.example.json` with a bare `default` ON PURPOSE, so a
+    factory inherits the SHAPE and not this box's measurement. A manifest that states no
+    derivation asserts no relation, and there is nothing here that can be false; a manifest
+    that states one asserts all of what follows, and is refused wherever its own numbers
+    contradict it.
+    """
+    if not isinstance(default, dict):
+        return ["`default` is not an object, so no derivation can be read from it"]
+    if not _is_positive_number(default.get("budget_sec")):
+        return [
+            f"default.budget_sec must be a positive number, not {default.get('budget_sec')!r}"
+        ]
+    if not any(key in default for key in DEFAULT_BASIS_KEYS):
+        return []
+    missing = [key for key in DEFAULT_BASIS_KEYS if key not in default]
+    if missing:
+        return [
+            f"default states a PARTIAL derivation -- no {sorted(missing)}. A basis is stated "
+            f"whole or not at all: a partial one reads as measured while the measurement it "
+            f"rests on is absent"
+        ]
+    problems: list[str] = []
+    margin, measured = default["margin_x"], default["measured_sec"]
+    if not _is_positive_number(margin) or not _is_positive_number(measured):
+        return [
+            f"default.margin_x / default.measured_sec must be positive numbers, not "
+            f"{margin!r} / {measured!r}"
+        ]
+    if not isinstance(default["measured_at"], str) or not default["measured_at"]:
+        problems.append(
+            "default.measured_at must name the ABSOLUTE revision the population was measured at"
+        )
+    population = default["population"]
+    if not isinstance(population, dict) or not population:
+        return problems + [
+            "default.population must be a non-empty object of gate -> measured seconds; the "
+            "population IS the derivation, and an empty one describes nothing"
+        ]
+    malformed = sorted(k for k, v in population.items() if not _is_positive_number(v))
+    if malformed:
+        return problems + [
+            f"default.population carries {len(malformed)} non-positive runtime(s): "
+            f"{malformed[:3]}"
+        ]
+    largest = max(population.values())
+    if abs(measured - largest) > 0.005:
+        problems.append(
+            f"default.measured_sec {measured} is not the largest recorded runtime "
+            f"{round(largest, 2)} -- the stated largest and the population disagree"
+        )
+    budget = default["budget_sec"]
+    required = margin * measured
+    if budget < required - tolerance * budget:
+        problems.append(
+            f"default.budget_sec {budget} is BELOW its own stated derivation "
+            f"({margin} x {measured} = {round(required, 4)}) -- the default does not contain "
+            f"the population it says it was derived from"
+        )
+    above = sorted(
+        k for k, v in population.items() if margin_for(v) * v > budget * (1 + tolerance)
+    )
+    # IMPLIED, and shipped anyway for the reason the ruling names the property directly: a
+    # gate above the default is the REALIZED harm, and an invariant that holds only as a
+    # consequence of two others is one nobody has written down. Because margin(v) x v expands
+    # to 4v + 0.75 -- monotonic in v -- the largest runtime carries the largest margin-budget,
+    # so the two checks above already imply this one. Stated rather than left as a surprise
+    # for a reader who finds the check unreachable in isolation.
+    if above:
+        problems.append(
+            f"{len(above)} recorded entr(ies) sit ABOVE the default {budget}: {above[:3]} -- "
+            f"each would be killed by the very cap this population is the basis of"
+        )
+    return problems
+
+
+def default_population_problems(
+    default: object, live_undeclared: object, tolerance: float = MARGIN_LAW_TOLERANCE
+) -> list[str]:
+    """Problems in the DEFAULT's stated population against the LIVE undeclared set.
+
+    Split from `default_basis_problems` because the two halves need different inputs: the
+    intrinsic half is readable wherever the manifest is, while this half needs the
+    registration list, which only a caller that holds the tree can read. A manifest with no
+    stated derivation has no population to compare, and is silent here for the same reason
+    it is silent there.
+    """
+    if not isinstance(default, dict):
+        return []
+    if not any(key in default for key in DEFAULT_BASIS_KEYS):
+        return []
+    population = default.get("population")
+    if not isinstance(population, dict) or not population:
+        return []
+    recorded = set(population)
+    live = {key for key in (live_undeclared or ()) if isinstance(key, str)}
+    problems: list[str] = []
+    missing = sorted(live - recorded)
+    if missing:
+        problems.append(
+            f"{len(missing)} gate(s) fall through to the default and are NOT in the stated "
+            f"population: {missing[:3]} -- the default is re-derived whenever this "
+            f"population changes"
+        )
+    retired = sorted(recorded - live)
+    if retired:
+        problems.append(
+            f"{len(retired)} recorded name(s) no longer fall through to the default: "
+            f"{retired[:3]}"
+        )
+    return problems
+
+
 def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -> GateBudgets:
     """Read the gate-budget manifest. Raises `GateBudgetManifestError` on a malformed one.
 
@@ -491,6 +636,17 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
     if not _is_positive_number(default_sec):
         raise GateBudgetManifestError(
             f"{target}: default.budget_sec must be a positive number, not {default_sec!r}"
+        )
+    # A default that STATES its derivation must follow it, on the same terms a declared entry
+    # is held to: the value is a function of its basis, and a number edited away from that
+    # basis is the defect this manifest exists to remove. A default that states NONE is not
+    # refused -- the shipped example carries a bare one on purpose, so a factory inherits the
+    # SHAPE without this box's measurement (#208).
+    stated_default_problems = default_basis_problems(default)
+    if stated_default_problems:
+        raise GateBudgetManifestError(
+            f"{target}: the default's stated derivation does not hold — "
+            + "; ".join(stated_default_problems)
         )
 
     entries = data.get("gates", {})

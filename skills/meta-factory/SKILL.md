@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.34
+version: 0.1.35
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -557,6 +557,7 @@ outside it, the issue board. Every other path to it is read-only.
 | the questions register (profile home, outside this repo) | the open questions lanes have DECLARED, one standing set per factory key | the `oc-questions` tool | read-only; the rendered page is served from `vpn` behind basic auth; law: `docs/instruments/open-questions.md` |
 | `registry/fleet.json` and `registry/factories/<slug>.json` | what each factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` / `show` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
+| `registry/gates.json` | the per-gate time budgets and the **default's derivation** — every declared value is `budget_sec = margin_x x measured_sec`, and the default is `margin_x x the largest measured runtime among the UNDECLARED population` (the registered gates with no entry), re-derived whenever that population changes | the measurement duty (`Surveys`), on the same derivation rule the budget values follow — **except the DEFAULT's VALUE, which is a policy choice about what the suite does with a gate nobody has measured, and is `HQ`'s** (n=574 PART 5) | read-only; `tools/gate_budget.py` REFUSES a stated derivation its own numbers contradict, and `tests/test_gate_registration.py` asserts the live one holds and bites on a synthetic manifest that violates it |
 
 **The ledger carries a SECOND object, and its author is not the append path.** `evidence/ledger.jsonl` has one *writer* — `tools/ledger.py append` — and two *objects*. The first is a state transition, authored by the lane that makes it. The second is a **duty receipt**: a `run` row written by the **woken lane** when a thin trigger's duty actually completes, on behalf of the duty rather than of the trigger. The distinction is load-bearing because the two are separated by a silent gap: a pacemaker's own run row records that the **trigger fired**, never that the **duty ran**, so a job can read `success` on every fire while the work it exists to produce fails every day (#147). Nothing in the trigger's own record can close that gap — only the duty's lane can, by declaring the receipt, and the receipt is what the patrol consumes. A lane that wakes, does the work and writes no receipt row leaves the duty **unproven**, not discharged.
 
