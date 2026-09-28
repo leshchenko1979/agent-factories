@@ -124,7 +124,14 @@ const { registry } = defineRegistry(catalog, {
         children);
       return h('section', { id: props.set + '-' + props.qid,
                             className: 'q' + (clarifying ? ' clarifying' : '') },
-      h('h3', { className: 'qt' }, props.title),
+      // Owner order 2026-09-28: the factory name PRECEDES the heading,
+      // subtly, so a card read outside its lane section still says what it is
+      // about -- the aggregate page mixes every factory, and the section
+      // heading is not in view when one card is read on its own. It sits
+      // INSIDE the h3 because the factory is part of what the heading MEANS,
+      // not decoration beside it: a screen reader gets the context too.
+      h('h3', { className: 'qt' },
+        h('span', { className: 'qset' }, props.set), ' ', props.title),
       // The recommendation band is the page's SIGNATURE: an amber-ruled block
       // carrying the lane's own counsel. Owner order 2026-09-27: it FOLDS like
       // the clarifying form -- a compact label, the counsel one tap away -- so
