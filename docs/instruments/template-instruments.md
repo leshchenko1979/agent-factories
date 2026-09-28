@@ -286,7 +286,9 @@ Each rests on evidence already in hand:
    go stale, "22 probes" can. Measured cost of getting this wrong, in this file: §1.5's refusing-set
    count moved 3 → 1 → 0 inside one evening and needed correcting twice, and §7.6's 12-vs-11
    specimen was invalidated the same day by the ruling it prompted. Lens A check 5 (Enumeration
-   Consistency) is the review instrument; this is the promotion criterion it serves.
+   Consistency) is the review instrument, scoped by `review-lenses.md` to role cards, process
+   registers, process law **and instrument law docs** (`docs/instruments/*.md`); this is the
+   promotion criterion it serves.
 
 **Criterion 3 is gateable and the shape already exists** (`close_row_revision` is a declared
 invariant with a boundary instant, read through `tests/ledger_boundary.py`); the gate lands with the
