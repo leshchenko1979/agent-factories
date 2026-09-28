@@ -12,23 +12,37 @@ own `detail` text — written after the append, where the real number can be rea
 
 **Forward-only, and why.** A history-wide form would be permanently red: 55 of 146
 historical commits touching the ledger cite row numbers in their subject. The gate is
-therefore bounded by a MARKER commit — the first ledger commit obeying the clause — and
+therefore bounded by a marker commit — the first ledger commit obeying the clause — and
 examines only commits after it. Nothing is backfilled: those historical violations are
 history, not a backlog.
 
-**The marker is a hardcoded sha.** A history rewrite invalidates it, and that is stated
-rather than left implicit. If the marker no longer resolves, this gate FAILS LOUDLY
-instead of passing vacuously: a gate that silently examines zero commits is
-indistinguishable from a gate that examines zero commits and passes. A factory
-bootstrapped from the template re-anchors MARKER at birth — the shipped sha belongs to
-the history of the repo the template was written in, not to the new factory's.
+**The marker is DECLARED FACTORY DATA, not a hardcoded sha.** The shipped default is the
+template's own first-obeying commit, and a factory bootstrapped from the template does not
+carry that history — but this file is byte-paired into `TEMPLATE/`
+(`tests/test_template_sync.py`), so editing the sha here to re-anchor is either a fork of a
+shipped file or a RED on that gate. Measured 2026-09-28: two members (ai-antispam,
+inferhub-watch) were blocked from adopting this gate by exactly that, holding a shipped
+gate they could neither satisfy nor lawfully anchor. The marker is therefore the `marker`
+key of this gate's own data file (`docs/ledger-commit-exemptions.json`) — the surface the
+gate already reads, which is never shipped — and `resolve_marker` is its one reader. The
+mechanism is `tests/ledger_boundary.py`'s (issue #78, P35): the LOGIC is universal, the
+PARAMETERS are declared.
+
+Three outcomes, and the difference between them is the point:
+* a DECLARED marker that does not resolve FAILS LOUDLY — the factory named a sha it cannot
+  honour, and a declared parameter that cannot be honoured is a defect, not an absence;
+* no declaration and the shipped default RESOLVES — judged over the default's range, which
+  is this template's own home factory;
+* no declaration and the shipped default does NOT resolve — SKIP, with the reason and the
+  route named. It examines nothing and says so, rather than passing vacuously or reding a
+  tree that has declared nothing.
 
 **The sanctioned exit, and why the marker is not it (ruled at n=328).** A violation
 inside the window has an EMPTY REPAIR SPACE, so without a lawful exit one violation reds
 the suite forever and the next lane learns to ignore a red gate — which destroys every
 other gate's signal. The repairs are all barred: the commit is pushed (rewriting it is
 barred by the identity law), a revert does not clear the gate (it reads subjects across
-MARKER..HEAD, so the offending subject stays in range), and re-anchoring the marker past
+the marker range, so the offending subject stays in range), and re-anchoring the marker past
 the violation would make the marker's own definition — "the first commit touching the
 ledger whose subject obeys the clause", whose predecessors "predate the rule" — false,
 silently converting a live violation into an excused one. So the marker is re-anchored
@@ -114,10 +128,32 @@ MISSING_REASON = (
     "makes its remedy (issue #47, ruled at n=405) is not shipped"
 )
 
-# The first commit touching the ledger whose subject obeys the clause. Commits at or
-# before it predate the rule and are not examined. See the docstring: a missing marker
-# fails loudly, so a history rewrite cannot turn this gate into a silent pass.
-MARKER = "743b543"
+# The SHIPPED DEFAULT marker: the first commit touching the ledger whose subject obeys
+# the clause IN THE TEMPLATE'S OWN HISTORY. It is a default and not a constant because a
+# factory bootstrapped from the template does not carry that history, and this file is
+# byte-paired (guarded by `tests/test_template_sync.py`) -- so editing the sha here is
+# either a fork of a shipped file or a RED on that gate. Measured 2026-09-28: two members
+# (ai-antispam, inferhub-watch) were blocked from adopting this gate by exactly that,
+# with no non-forking route to re-anchor.
+#
+# The marker is therefore FACTORY DATA, declared as the `marker` key of this gate's own
+# data file (`docs/ledger-commit-exemptions.json`), which is the surface the gate already
+# reads and which is never shipped. The mechanism is the one `tests/ledger_boundary.py`
+# was created for (issue #78, P35): a byte-paired gate must not assert a live-tree fact
+# its own tree cannot satisfy, so the PARAMETERS are declared while the LOGIC is
+# universal. Three outcomes, and the difference between them is the point:
+#   * declared marker that does not resolve -> FAIL, loudly. The factory asked to be
+#     judged over a range and named a sha it cannot honour; that is a defect, not an
+#     absence (the #69 clause (e) shape).
+#   * no declaration, shipped default resolves -> judged over the default's range. This is
+#     the template's own home factory, where the default is real history.
+#   * no declaration, shipped default does not resolve -> SKIP with the reason, naming the
+#     route. The default belongs to a history this tree does not carry, so the gate says
+#     so instead of passing vacuously or reding a tree that has declared nothing.
+DEFAULT_MARKER = "743b543"
+
+# The key a factory sets in its own data file to anchor the clause in its own history.
+MARKER_KEY = "marker"
 
 # A row citation. The word boundary is load-bearing: without it, `version=3` and
 # `conversion=2` both contain the substring `n=` and would be reported as citations.
@@ -186,11 +222,85 @@ def exemptions_file() -> Path:
     """
     return (repo_toplevel() or REPO) / EXEMPTIONS_PATH
 
-def marker_resolves(marker: str = MARKER) -> bool:
+def declared_marker(path: Path | None = None) -> tuple[str | None, list[str]]:
+    """`(marker, problems)` read from the factory's own data file, or `(None, [])`.
+
+    The READS are shared with `load_exemptions`, from the same file, so the gate cannot
+    hold two opinions about the surface it declares itself on. `None` means the factory
+    declared nothing -- which is not an error, and is exactly the state every adopter is
+    in until it anchors. A MALFORMED declaration is a problem and never a silent fallback
+    to the default: substituting another factory's sha would examine the wrong range and
+    call the result a verdict.
+    """
+    path = path or exemptions_file()
+    if not path.is_file():
+        return None, []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return None, [f"{path.name} is not JSON: {exc}"]
+    if not isinstance(data, dict):
+        return None, [f"{path.name}: expected a JSON object"]
+    raw = data.get(MARKER_KEY)
+    if raw is None:
+        return None, []
+    if not isinstance(raw, str) or not raw.strip():
+        return None, [
+            f"{path.name}: {MARKER_KEY!r} must be a non-empty string naming the first "
+            "commit that touches the ledger and obeys the clause"
+        ]
+    return raw.strip(), []
+
+def resolve_marker() -> tuple[str, str, list[str]]:
+    """`(marker, source, problems)`. `source` is `'declared'` or `'default'`.
+
+    Reads the declaration and applies `marker_outcome` to it. Kept thin so that the
+    DECISION lives in one pure place the probes can drive with both values of the single
+    fact that decides it.
+    """
+    declared, problems = declared_marker()
+    if problems:
+        return (declared or DEFAULT_MARKER), ("declared" if declared else "default"), problems
+    return marker_outcome(declared, resolves=marker_resolves(declared or DEFAULT_MARKER))
+
+def marker_outcome(
+    declared: str | None, *, resolves: bool
+) -> tuple[str, str, list[str], str | None]:
+    """The marker decision, factored pure: `(marker, source, problems, skip_reason)`.
+
+    Factored because the three outcomes are decided by exactly two facts -- whether the
+    factory declared a marker, and whether the marker in play RESOLVES -- and driving them
+    through `main()` would need a repository standing in each state, which is how a
+    rule ends up having only ever seen good input.
+    """
+    if declared is not None:
+        if resolves:
+            return declared, "declared", [], None
+        return declared, "declared", [
+            f"the DECLARED marker {declared} does not resolve — this factory declared the "
+            f"sha its ledger clause is bounded by, as {MARKER_KEY!r} in {EXEMPTIONS_PATH}, "
+            "and that commit is not in this repository. A declared parameter that cannot be "
+            "honoured is a defect, not an absence: correct the key to the first commit "
+            "touching the ledger whose subject obeys the clause, or REMOVE it to take the "
+            "shipped default. Do not delete the gate."
+        ], None
+    if resolves:
+        return DEFAULT_MARKER, "default", [], None
+    return DEFAULT_MARKER, "default", [], (
+        f"the shipped default marker {DEFAULT_MARKER} does not resolve in this repository "
+        "— it is the template's own first-obeying commit, and a factory bootstrapped from "
+        f"the template does not carry that history. Declare this factory's own marker as "
+        f"the {MARKER_KEY!r} key in {EXEMPTIONS_PATH} (the first commit touching "
+        f"{LEDGER_PATH} whose subject obeys the clause) to begin judging this factory's "
+        "range. Until then this gate examines nothing, and says so rather than passing "
+        "vacuously."
+    )
+
+def marker_resolves(marker: str) -> bool:
     rc, _, _ = _git("rev-parse", "--verify", "--quiet", f"{marker}^{{commit}}")
     return rc == 0
 
-def ledger_commits_after(marker: str = MARKER) -> list[tuple[str, str, str]]:
+def ledger_commits_after(marker: str) -> list[tuple[str, str, str]]:
     """`[(full_sha, short_sha, subject)]` for commits after `marker`, newest first.
 
     The full sha is carried because exemptions are keyed by it; the short one is carried
@@ -365,6 +475,77 @@ def probe() -> list[str]:
         if not hook_state_problems(**kwargs):
             failures.append(f"probe: {why} must be reported, not passed")
 
+    # The marker's three outcomes, driven directly. Both values of the one fact that
+    # decides them (whether the marker in play resolves) are exercised for both states of
+    # the declaration, because a rule that has only ever seen good input has not been shown
+    # to reject bad input -- and the SKIP arm in particular is the one a fresh factory
+    # meets first, where a silent pass would be indistinguishable from a verified range.
+    for declared, resolves, want_source, want_problems, want_skip, why in (
+        ("a1b2c3d4", True, "declared", False, False,
+         "a DECLARED marker that resolves is used, as declared"),
+        ("deadbeefdeadbeef", False, "declared", True, False,
+         "a DECLARED marker that does not resolve must FAIL, not skip"),
+        (None, True, "default", False, False,
+         "an undeclared shipped default that resolves is judged over its range"),
+        (None, False, "default", False, True,
+         "an undeclared shipped default that does not resolve must SKIP with its reason"),
+    ):
+        marker, source, probs, skip = marker_outcome(declared, resolves=resolves)
+        if source != want_source:
+            failures.append(f"probe: {why} — source was {source!r}")
+        if bool(probs) != want_problems:
+            failures.append(f"probe: {why} — problems={probs}")
+        if bool(skip) != want_skip:
+            failures.append(f"probe: {why} — skip={skip!r}")
+        if want_skip and skip is not None:
+            # The SKIP must name the ROUTE, or the adopter is told it examined nothing
+            # without being told what to do about it.
+            if MARKER_KEY not in skip or LEDGER_PATH not in skip:
+                failures.append(
+                    "probe: the SKIP reason must name both the declaration key and the "
+                    "ledger it governs"
+                )
+        if source == "declared" and not probs:
+            if marker != declared:
+                failures.append(f"probe: {why} — marker was {marker!r}, not the declared sha")
+
+    # The declaration's own parsing, on fixtures: absent, well-formed, and the two
+    # malformed shapes. A malformed value must never fall back to the default silently,
+    # because substituting another factory's sha examines the wrong range.
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        absent = tmp / "absent.json"
+        absent.write_text('{"exemptions": []}', encoding="utf-8")
+        got, probs = declared_marker(absent)
+        if got is not None or probs:
+            failures.append("probe: an absent marker key means undeclared, with no problem")
+
+        good = tmp / "good.json"
+        good.write_text('{"marker": "a1b2c3d4", "exemptions": []}', encoding="utf-8")
+        got, probs = declared_marker(good)
+        if got != "a1b2c3d4" or probs:
+            failures.append(f"probe: a well-formed marker must load cleanly (got {got!r})")
+
+        for payload, why in (
+            ('{"marker": 12345}', "a numeric marker"),
+            ('{"marker": ""}', "an empty marker"),
+            ('{"marker": null}', "an explicitly null marker (undeclared, not an error)"),
+        ):
+            f = tmp / "bad.json"
+            f.write_text(payload, encoding="utf-8")
+            got, probs = declared_marker(f)
+            if why.endswith("undeclared, not an error)"):
+                if got is not None or probs:
+                    failures.append(f"probe: {why} must read as undeclared with no problem")
+            elif not probs:
+                failures.append(f"probe: {why} must be a problem, never a silent fallback")
+
+        broken = tmp / "broken.json"
+        broken.write_text('{"marker": ', encoding="utf-8")
+        got, probs = declared_marker(broken)
+        if not probs:
+            failures.append("probe: malformed JSON in the marker's own file must be an ERROR")
+
     return failures
 
 def main() -> int:
@@ -380,19 +561,31 @@ def main() -> int:
         problems.extend(hook_installation_problems(top))
     excused: list[tuple[str, dict]] = []
 
-    if not marker_resolves():
-        problems.append(
-            f"the marker commit {MARKER} does not resolve — a history rewrite "
-            "invalidates it. Re-anchor MARKER to the first ledger commit obeying the "
-            "clause; do not delete the gate."
-        )
+    declared, problems_read = declared_marker()
+    problems.extend(problems_read)
+    # The guard is this flag and NOT `problems`: an unrelated probe failure must not
+    # suppress the history scan, or a gate with a broken probe would report a smaller
+    # range than it read -- the silent-coverage-loss shape.
+    marker_ok = False
+    if problems_read:
+        marker = declared or DEFAULT_MARKER
+        source = "declared" if declared else "default"
     else:
+        marker, source, marker_problems, skip_reason = marker_outcome(
+            declared, resolves=marker_resolves(declared or DEFAULT_MARKER)
+        )
+        problems.extend(marker_problems)
+        if skip_reason is not None:
+            print(f"SKIP: {skip_reason}")
+            return 0
+        marker_ok = not marker_problems
+    if marker_ok:
         exemptions, data_problems = load_exemptions(exemptions_file())
         problems.extend(data_problems)
 
-        commits = ledger_commits_after()
+        commits = ledger_commits_after(marker)
         bad = offenders(commits)
-        print(f"ledger clause: examined {len(commits)} commit(s) after {MARKER}")
+        print(f"ledger clause: examined {len(commits)} commit(s) after {marker} ({source})")
 
         for full, short, subject in bad:
             entry = exemptions.get(full)
@@ -406,7 +599,7 @@ def main() -> int:
         # silently does nothing is a gate lying about its own coverage.
         for full in sorted(set(exemptions) - {f for f, _, _ in bad}):
             problems.append(
-                f"exemption {full} matches no violation in {MARKER}..HEAD — a stale "
+                f"exemption {full} matches no violation in {marker}..HEAD — a stale "
                 "exemption excuses nothing; remove it or correct the sha"
             )
 
@@ -421,7 +614,7 @@ def main() -> int:
     if excused:
         print(
             f"ledger clause: excused — {len(excused)} exempted violation(s) in "
-            f"{MARKER}..HEAD; this is a visible debt, not a clean run"
+            f"{marker}..HEAD; this is a visible debt, not a clean run"
         )
     else:
         print("ledger clause: clean — no commit after the marker cites row numbers")

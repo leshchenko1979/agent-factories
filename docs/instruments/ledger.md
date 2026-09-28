@@ -459,6 +459,47 @@ without deleting this write path's identity law, so the sweep is **not** ported:
 verbatim would red 67 of 88 on a false premise and invite muting the reds, which is worse than the
 missing coverage.
 
+### 5.2 A gate's PARAMETERS are factory data, never source inside it
+
+Measured 2026-09-28, and it blocked adoption outright. `tests/test_ledger_commit_cites_no_rows.py`
+bounds the clause it upholds with a **marker commit** — the first commit touching the ledger whose
+subject obeys the clause, with only commits after it examined. That marker was a module constant:
+`MARKER = "743b543"`, a sha belonging to **this factory's** history, inside a file the template
+copies byte-identically (`tests/test_template_sync.py`). A factory bootstrapped from the template
+therefore carried the gate in a state it could neither satisfy nor lawfully correct: editing the sha
+is a fork of a shipped file, and leaving it reds the gate on a history the tree does not have. Two
+members reported the wall in the same round — `ai-antispam` HQ and `inferhub-watch` HQ — each
+holding a shipped gate they were told to adopt and could not anchor.
+
+That is **P35**, and this is its second instance, which is exactly the condition
+`tests/ledger_boundary.py` was created for (issue #78, ruled at ledger `n=515` clause 4): *a
+byte-paired gate must not assert a live-tree fact its own tree cannot satisfy*, and a second
+instance makes the remedy a MECHANISM rather than another exemption. The split is the one that
+module already states: the gate's **LOGIC is universal** — a commit after the boundary must declare
+what the boundary requires — while its **PARAMETERS are factory-specific** — the boundary itself,
+and the ledger it reads. So the parameters are DECLARED, in the factory's own tree, and one reader
+serves both the gate and the repair path.
+
+The marker now follows the same shape, on the surface the gate already reads:
+`docs/ledger-commit-exemptions.json`, whose skeleton (`…example.json`) ships while the filled file
+does not. Three outcomes, and the difference between them is the point:
+
+| state | outcome |
+|---|---|
+| a DECLARED marker that **does not resolve** | **FAILS loudly** — the factory named a sha it cannot honour, and a declared parameter that cannot be honoured is a defect, not an absence (the `#69` clause (e) shape). It never falls back to the default: substituting another factory's sha examines the wrong range and calls the result a verdict |
+| no declaration, the shipped default **resolves** | judged over the default's range — the template's own home factory, where the default is real history |
+| no declaration, the shipped default **does not resolve** | **SKIP, with the reason and the route named** — the state every fresh adopter is in, and it examines nothing and says so rather than passing vacuously |
+
+Two migrations follow from that, and both are member-side: **declare** the marker (one key, no
+fork), or **send the gate the sha it needs** as a kit change if the mechanism itself is wrong. The
+first is available to every adopter today, which is the whole point of moving the parameter out of
+the source.
+
+The declaration is also where the two **exits** stay, unchanged: an exemption entry is still keyed
+by a full 40-character sha, still printed on every run, and still admitted only where a violation
+has an EMPTY REPAIR SPACE. Nothing about the marker's move touches what may be excused — it only
+changes *who* names the range.
+
 ## 6. This instrument's divergence matrix
 
 Measured 2026-09-27T10:28Z. **Predicate:** the manifest's ledger paths, against each registered
