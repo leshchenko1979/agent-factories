@@ -1634,6 +1634,85 @@ def main() -> int:
         check("(e) a MULTI-WORD reclose= is refused AND the malformation is named",
               r.returncode != 0 and "ONE token" in msg, msg[-110:])
 
+    # --- #210 the claim-release transition, DRIVEN -----------------------------------
+    # HQ's ruling (n=1577) makes a withdrawal REPRESENTABLE: `release` is DECLARED as an
+    # event in docs/ledger-refs-kinds.json, the row NAMES the claim it withdraws, and the
+    # read side treats it as that claim's TERMINAL transition. Eight arms, each closing a
+    # half the ruling names: (a) the control, (b) a release naming no claim refused, (c) a
+    # release naming a NON-claim refused, (d) a lawful release accepted, (e) a second
+    # release refused BY NAME, and (f)/(g) the sweep READING it -- that pair is the arm
+    # that reds if the declaration is written and never read (#218). (h) is the both-ways
+    # control: the SAME ledger without the release, where the claim must read OPEN.
+    with tempfile.TemporaryDirectory() as td:
+        rel_ledger = Path(td) / "release.jsonl"
+        rel_subj = "#4343"
+        run(rel_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        run(rel_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", rel_subj, "--detail", f"intake: {rel_subj}")
+        r = run(rel_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", rel_subj, "--detail", f"claim: {rel_subj}")
+        check("(210a) the claim lands (the control)", r.returncode == 0,
+              r.stderr.strip()[-90:])
+        # The row numbers are READ from the fixture, never assembled: a hand-built
+        # identifier is the class this ledger files against itself.
+        _rows = [json.loads(line) for line in
+                 rel_ledger.read_text().splitlines() if line.strip()]
+        claim_n = _rows[-1]["n"]
+        intake_n = next(r_["n"] for r_ in _rows if r_["event"] == "intake")
+
+        r = run(rel_ledger, "append", "--event", "release", "--actor", "worker",
+                "--subject", rel_subj, "--detail", "release: the lane gave it up")
+        msg = (r.stdout + r.stderr).strip()
+        check("(210b) a release naming NO claim is REFUSED",
+              r.returncode != 0 and "must name the claim" in msg, msg[-110:])
+
+        r = run(rel_ledger, "append", "--event", "release", "--actor", "worker",
+                "--subject", rel_subj, "--detail", "release: names a non-claim",
+                "--ref", f"row:{intake_n}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(210c) a release naming a row that is NOT a claim is REFUSED",
+              r.returncode != 0 and "is the only row it can terminate" in msg,
+              msg[-110:])
+
+        r = run(rel_ledger, "append", "--event", "release", "--actor", "worker",
+                "--subject", rel_subj, "--detail", "release: the lane gave it up",
+                "--ref", f"row:{claim_n}")
+        check("(210d) a release naming the claim is ACCEPTED", r.returncode == 0,
+              (r.stdout + r.stderr).strip()[-110:])
+
+        r = run(rel_ledger, "append", "--event", "release", "--actor", "worker",
+                "--subject", rel_subj, "--detail", "release: retried",
+                "--ref", f"row:{claim_n}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(210e) a SECOND release of one claim is REFUSED, naming the one that landed",
+              r.returncode != 0 and "already carries a release" in msg and "n=" in msg,
+              msg[-130:])
+
+        r = run(rel_ledger, "verify")
+        out = r.stdout
+        check("(210f) the sweep reads the release as the claim's TERMINAL transition "
+              "(the declaration is READ, not merely written)",
+              r.returncode == 0 and "1 terminal by release, 0 open" in out, out[-420:])
+        check("(210g) and it NAMES the released claim rather than counting it silently",
+              "released claim:" in out, out[-420:])
+
+        # (210h) THE BOTH-WAYS CONTROL. The same fixture WITHOUT the release: the claim
+        # must read OPEN. Without this arm (f) would pass on a leg that simply counted
+        # every claim as released.
+        with tempfile.TemporaryDirectory() as td2:
+            open_ledger = Path(td2) / "open.jsonl"
+            run(open_ledger, "append", "--event", "genesis", "--actor", "owner",
+                "--subject", "genesis", "--detail", "genesis: fixture ledger")
+            run(open_ledger, "append", "--event", "intake", "--actor", "triage",
+                "--subject", rel_subj, "--detail", f"intake: {rel_subj}")
+            run(open_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", rel_subj, "--detail", f"claim: {rel_subj}")
+            r = run(open_ledger, "verify")
+            check("(210h) with no release the SAME claim reads OPEN (the control)",
+                  r.returncode == 0 and "0 terminal by release, 1 open" in r.stdout,
+                  r.stdout[-420:])
+
     print()
     if failures:
         print(f"ledger gate FAILED: {len(failures)} check(s)")

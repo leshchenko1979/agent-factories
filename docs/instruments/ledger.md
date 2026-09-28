@@ -213,6 +213,52 @@ lawfully — which is precisely the pressure that pushes a member to fork the fi
 A declaration **ADDS**; it never removes or redefines a core entry, so a factory cannot shadow
 `close` and quietly escape the sequence law.
 
+### A claim is withdrawn by a `release`, never by a `close`
+
+This factory **declares `release`** in `docs/ledger-refs-kinds.json` (#210, ruling n=1577), and
+declares it *here* rather than widening the core tuple: a member that never withdraws a claim carries
+no dead vocabulary, and the transition promotes to the core set when a second factory needs it — the
+owner's promotion law applied to one event.
+
+**A withdrawal wearing a `close` is refused.** `close` means COMPLETION in this instrument — its
+contract carries the board state observed, `head=<sha>` and a rework disposition — so a withdrawal
+dressed as a close asserts a completion that never happened *and* would satisfy the intake→claim
+sequence while meaning the opposite. That is the false-clean class, and it is why the withdrawal gets
+its own event instead of borrowing a terminal one.
+
+**The row NAMES the claim it terminates.** The released claim's own row number travels as a ref of
+kind `row` (already core), plus a stated reason. Three refusals at the write path, and each answers a
+different way of writing a release that terminates nothing:
+
+| written | refused because |
+|---|---|
+| a release with no `row:` ref | indistinguishable from an intake, and the claim it meant to withdraw stays open forever |
+| a release naming a row that is **not** a claim | a claim is the only row a release can terminate |
+| a **second** release of one claim | refused **naming the release that landed** — the `#213` class on a new event, since `append` is not idempotent and a retry after a client-side timeout would mint a duplicate |
+
+**The read side learns it in the same change** — `#218`: a declaration nothing reads is a field
+written but never read. `verify` carries the **claim-lifecycle leg**: a claim terminates by a `close`
+for its subject *after* it, or by a `release` naming its own row; anything else is **OPEN**. It prints
+its population and names its findings, counted *and* named:
+
+```
+  claim lifecycle examined: 195 claim row(s) over 189 subject(s) — 192 terminal by
+  close, 0 terminal by release, 3 open; 0 release(s) examined
+```
+
+*Predicate: every `claim` row in `evidence/ledger.jsonl`, terminal-by-close positional and
+terminal-by-release by ref · scope: this factory's live ledger · instant 2026-09-28T21:58Z.*
+
+**It reports and never gates.** An open claim is NORMAL — work in flight — not a defect, so this leg
+has no red to give; what it makes visible is the reading a reader could not previously get: finished,
+withdrawn, or still open. Measured at the instant it landed, it named the two prose withdrawals this
+ruling exists for — `#52` (n=316, superseded) and `#172` (n=1357, withdrawn) — which had sat
+indistinguishable from in-flight work ever since they were written.
+
+**THE BOUND:** a declared event has no row in the core authorization matrix, so the matrix does not
+bind `release` — the same state as inferhub-watch's declared `ack`. The substantive constraint on a
+release is its ref (it must name a claim), not the role that writes it.
+
 ### The authorization declaration — a factory's own lane, without a fork
 
 Membership had a declaration surface (`tools/actors.txt`) and **authorization did not**: the

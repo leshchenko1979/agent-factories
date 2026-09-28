@@ -815,6 +815,67 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"that does not exist -- this ledger holds {_max_n} row(s), "
                         f"and a ref is a pointer to something, never a wish"
                     )
+        # A RELEASE MUST NAME THE CLAIM IT WITHDRAWS (#210, ruling n=1577). The body
+        # offered a withdrawal wearing a `close`, and that shape is REFUSED: `close`
+        # means COMPLETION here, its contract carrying the board state observed,
+        # `head=<sha>` and a rework disposition, so a withdrawal dressed as a close
+        # asserts a completion that never happened (the false-clean class) and would
+        # satisfy the intake+claim sequence while meaning the opposite. So the
+        # transition is its own event, DECLARED locally in `ledger-refs-kinds.json`
+        # rather than widened into the core tuple, and the row POINTS AT the claim it
+        # terminates -- a release naming no claim is indistinguishable from an intake,
+        # and the claim it was meant to withdraw stays open forever, so the ledger
+        # cannot answer "withdrawn, or still in flight?". Asked HERE, beside the other
+        # ref predicates, because the rows list is already in hand under the lock and
+        # only write time can prevent a release that names nothing.
+        if args.event == "release":
+            released_ns = [
+                int(value) for _ref in refs for kind, value in _ref.items()
+                if kind == "row" and str(value).isdigit()
+            ]
+            if not released_ns:
+                sys.exit(
+                    "ledger append refused: a 'release' must name the claim it "
+                    "withdraws as a ref of kind 'row' (--ref row:<n>). A release "
+                    "naming no claim is indistinguishable from an intake, and the "
+                    "claim it was meant to withdraw stays open forever"
+                )
+            for _n in released_ns:
+                _target = next((r for r in rows if r.get("n") == _n), None)
+                if _target is None:
+                    sys.exit(
+                        f"ledger append refused: release names row n={_n}, which "
+                        f"this ledger does not hold"
+                    )
+                if _target.get("event") != "claim":
+                    sys.exit(
+                        f"ledger append refused: release names row n={_n}, whose "
+                        f"event is {_target.get('event')!r} -- a release withdraws a "
+                        f"CLAIM, and a claim is the only row it can terminate"
+                    )
+                # A SECOND RELEASE OF ONE CLAIM IS REFUSED, AND THE REFUSAL NAMES THE
+                # RELEASE THAT LANDED -- #213's class on a brand-new event: `append` is
+                # not idempotent, so a client-side timeout on a COMPLETED write leaves
+                # the caller with no output, and a caller reading "no output" as "the
+                # write did not happen" retries and mints a duplicate. Measured four
+                # times on `close` in one day before that refusal landed. The same
+                # predicate, the same remedy: name the row that landed, so the writer
+                # learns its first write succeeded.
+                _prior = [
+                    r for r in rows
+                    if r.get("event") == "release"
+                    and any(str(ref.get("row")) == str(_n)
+                            for ref in (r.get("refs") or []))
+                ]
+                if _prior:
+                    _p = _prior[-1]
+                    sys.exit(
+                        f"ledger append refused: claim n={_n} already carries a "
+                        f"release at n={_p.get('n')} ({_p.get('ts')}). A claim is "
+                        f"released once; a second release is either a deliberate "
+                        f"re-release, which is a new claim, or a DUPLICATE minted by "
+                        f"retrying an append that had already completed (#213)"
+                    )
         # A close row is refused at the WRITE PATH when its subject has no
         # preceding intake and claim — the SAME predicate `verify` runs, asked
         # here about the row about to be written, with `index = len(rows)`, the
@@ -1758,6 +1819,83 @@ def cmd_verify(args: argparse.Namespace) -> int:
         f"  multiple closes examined: {len(close_subjects)} closed subject(s), "
         f"{len(multi_closes)} carrying more than one close"
     )
+
+    # THE CLAIM LIFECYCLE (#210, ruling n=1577). A claim terminates one of two ways: a
+    # `close` for its subject AFTER it (work finished), or a `release` naming its own
+    # row (work withdrawn). Anything else is OPEN -- claimed, and neither finished nor
+    # withdrawn.
+    #
+    # WHY THIS LEG EXISTS. HQ's ruling names "the claim-without-close sweep", and
+    # measured at source there was NO such leg: `verify` modelled a subject's life as
+    # intake -> claim -> close, and the claim leg asked only whether an intake existed
+    # ANYWHERE (#137 half 2). So a claim that was given up sat indistinguishable from
+    # work in flight, and the two `#172`/`#52` withdrawals lived in PROSE because no row
+    # could say it. Build what the ruling names, then read it: a declaration nothing
+    # READS is a field written but never read (#218), so the declaration and this reader
+    # land in the same change.
+    #
+    # IT PRINTS ITS POPULATION AND ITS FINDINGS, AND IT NEVER GATES. An open claim is
+    # NORMAL -- work in flight -- so this leg reports rather than reds, exactly as the
+    # dispatch-malformed leg does. What it makes visible is the reading a reader could
+    # not previously get: finished, withdrawn, or still open, counted AND named. The
+    # population is printed BESIDE the verdict (#94's law): a leg that examined nothing
+    # must not read as a leg that examined the ledger and found it clean.
+    claim_life_rows = [(i, r) for i, r in enumerate(rows) if r.get("event") == "claim"]
+    release_targets: dict[int, list[dict]] = {}
+    for _r in rows:
+        if _r.get("event") != "release":
+            continue
+        for _ref in (_r.get("refs") or []):
+            for _kind, _value in _ref.items():
+                if _kind == "row" and str(_value).isdigit():
+                    release_targets.setdefault(int(_value), []).append(_r)
+    close_index: dict[str, list[int]] = {}
+    for _i, _r in enumerate(rows):
+        if _r.get("event") == "close":
+            close_index.setdefault(_r.get("subject"), []).append(_i)
+    released_claims: list[dict] = []
+    open_claims: list[dict] = []
+    for _i, _r in claim_life_rows:
+        if release_targets.get(_r.get("n")):
+            released_claims.append(_r)
+        elif any(_j > _i for _j in close_index.get(_r.get("subject"), [])):
+            continue
+        else:
+            open_claims.append(_r)
+    # A RELEASE WHOSE REF NAMES NO CLAIM is the write path's predicate read at its other
+    # call site -- one predicate, two call sites, the shape the sequence leg already has
+    # (#98). Only read time can see a release whose target stopped being a claim after it
+    # was written; the write path is the half that prevents it.
+    orphan_releases: list[dict] = []
+    for _n, _rels in sorted(release_targets.items()):
+        _t = next((r for r in rows if r.get("n") == _n), None)
+        if _t is not None and _t.get("event") != "claim":
+            orphan_releases.extend(_rels)
+    print(
+        f"  claim lifecycle examined: {len(claim_life_rows)} claim row(s) over "
+        f"{len({r.get('subject') for _i, r in claim_life_rows})} subject(s) — "
+        f"{len(claim_life_rows) - len(released_claims) - len(open_claims)} terminal by "
+        f"close, {len(released_claims)} terminal by release, {len(open_claims)} open; "
+        f"{len(release_targets)} release(s) examined"
+    )
+    for _r in released_claims:
+        print(
+            f"  released claim: n={_r.get('n')} {_r.get('subject')} — withdrawn by "
+            f"release n={release_targets[_r.get('n')][-1].get('n')}, so it is terminal "
+            f"and not counted as in flight"
+        )
+    for _r in open_claims:
+        print(
+            f"  open claim: n={_r.get('n')} {_r.get('subject')} claimed by "
+            f"{_r.get('actor')} — no close after it and no release naming it, so the "
+            f"ledger cannot tell in-flight work from withdrawn work. A withdrawal is "
+            f"recorded as a `release` naming this row"
+        )
+    for _r in orphan_releases:
+        print(
+            f"  release at n={_r.get('n')} names a row that is not a claim — a release "
+            f"withdraws a CLAIM, and a claim is the only row it can terminate"
+        )
 
     # The revision comparison runs whatever the structure check found: a ledger that is
     # internally consistent can still have had a row's identity changed, which is exactly
