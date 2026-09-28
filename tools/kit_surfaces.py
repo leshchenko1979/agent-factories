@@ -142,7 +142,13 @@ def local_imports(src: str, local: set[str]) -> set[str]:
 
 
 def named(stem: str, text: str) -> bool:
-    alts = (stem, stem.replace("_", "-"))
+    # Both spellings, in BOTH directions. Mapping `_` -> `-` alone is one-way: for a
+    # hyphenated stem (`ledger-index`) both alternatives come out identical, so a gate
+    # named with underscores (`test_ledger_index.py`) can NEVER be reached -- and that
+    # false negative was this instrument's own headline red (#214). ONE normalisation
+    # serves S1-S3; a second, hand-rolled one diverges from it, which is how the defect
+    # arose in the first place.
+    alts = (stem, stem.replace("_", "-"), stem.replace("-", "_"))
     return any(a in text or (a + ".py") in text for a in alts)
 
 
@@ -194,8 +200,10 @@ def build() -> dict:
         stem = p.stem
         src = p.read_text()
         kind = "executable" if is_executable(src) else "closure"
-        norm = stem.replace("_", "")
-        s1 = any(norm in t.replace("_", "") for t in tests)
+        # S1 asks the SAME question S2/S3 ask -- does a gate exercise this tool? -- over a
+        # different corpus, so it answers it with the SAME function (#214). The hand-rolled
+        # normalisation that stood here was a SECOND predicate, and it was wrong.
+        s1 = any(named(stem, t) for t in tests)
         s2 = named(stem, boot)
         s3 = named(stem, law_text)
         s4 = "TEMPLATE/tools/%s" % p.name in kit_paths
@@ -248,7 +256,7 @@ def print_report(data: dict) -> int:
     print("              by shape, not by waiver.")
     print()
     print("SURFACE PREDICATES")
-    print("  S1  some gate's name carries the stem (normalised), i.e. the tool is exercised")
+    print("  S1  some gate's name carries the stem in EITHER spelling, i.e. the tool is exercised")
     print("  S2  TEMPLATE/BOOTSTRAP.md installs it (stem, hyphen variant, or filename)")
     print("  S3  the law corpus names it: %d .md files under skills/ + docs/ + TEMPLATE/skills/,"
           % data["law_corpus_files"])
