@@ -162,7 +162,7 @@ registration is stated as an absence rather than invented.
 
 Measured this turn, and the two facts are different:
 
-- `tests/gate_registry.py`'s `REQUIRED_GATES` carries **54** entries and **`test_review.py` is not
+- `tests/gate_registry.py`'s `REQUIRED_GATES` carries **56** entries and **`test_review.py` is not
   among them**. The module's own scope statement names it explicitly: *"`TEMPLATE/tests/test_review.py`
   is a raw file that is NOT a gate"* (its line 358), listed beside `test_telemetry.py` as a
   false-positive the registry's pattern-based derivation must not pick up.
@@ -188,6 +188,25 @@ reason is a recorded decision rather than an oversight — the registry's own sc
 this file a deliberate **false positive** for its pattern-based derivation. A member that adopts the
 five paths of §2 inherits a gate it must invoke itself, which is why §4's manifest grain, and not an
 aggregate running green, is what answers a member's coverage question.
+
+**One row of that table runs when INVOKED and is absent from every aggregate surface, so a lane
+reading the audit green has not run it.** Measured 2026-09-28T14:0xZ, `tests/test_review.py` appears
+in **none** of the three places a tree declares a gate:
+
+| surface | size | this gate present? |
+|---|---|---|
+| `registry/gates.json` → `gates` | 48 entries | **no** |
+| `registry/gates.json` → `modes` (pytest vs `script`) | 74 entries | **no** |
+| `tests/gate_registry.py` → `REQUIRED_GATES` | 56 entries | **no** |
+
+The cause is a recorded decision rather than an oversight — the registry's own scope statement names
+this file a deliberate **false positive** for its pattern-based derivation. The consequence is what
+the table above owes a reader: **a member adopting §2's five paths inherits a gate it must invoke
+itself**, and §4's manifest grain, never an aggregate running green, is what answers a member's
+coverage question. (The kit as a whole is explicit about this distinction — `BOOTSTRAP.md` records
+that 30 of the 73 gate call sites are invoked by `pytest` and 43 as scripts, and that a CI running
+only `pytest` enforces only the pytest-invoked population. This instrument's gate is in the 43, and
+in no registry at all.)
 
 **The instrument asserts its own non-absence:** `test_schema_artifact_is_generated` fails if the
 shipped schema is stale against `review.py schema`, so the artifact and its emitter cannot drift
