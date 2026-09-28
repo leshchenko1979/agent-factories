@@ -15,17 +15,26 @@ BOOTSTRAP-created, so a gate that reds on non-green there would be a PERMANENT r
 a permanent red teaches lanes to ignore red (the class #83 closed). Building that would
 ship a rubber stamp.
 
-FOUR VERDICT CLASSES, and a SILENT skip is a defect exactly as a FAIL is:
+FIVE VERDICT CLASSES, and a SILENT skip is a defect exactly as a FAIL is:
 
   PASS           the gate ran and passed
   STATED SKIP    the gate ran, could not apply, and SAID SO — the reason is printed by
                  the gate itself and its declared marker is found in that output
   NAMED ABSENCE  the gate is REGISTERED and the file is absent from this tree, named
+  NO VERDICT     the gate was KILLED at its budget: it did not pass, it did not fail, and
+                 it must not be counted in either — #206
   FAIL           anything else, including a declared skip whose reason has gone missing
 
 The distinction between STATED SKIP and NAMED ABSENCE is the whole finding: a gate that
 is REGISTERED and ABSENT is a different fact from a gate that RAN and could not apply.
 Folding them together hides the population `is_file()` guards currently skip in silence.
+
+WHY NO VERDICT IS ITS OWN CLASS (#206). A budget kill is already modelled in this factory
+and modelled exactly once: `tools/audit.py` records `unknown: True` beside the kill code, so
+the fleet's own audits exclude it from both the failed set and the pass total. A classifier
+that read the code alone would agree with the audit's constant but not with its MODEL, and
+would misread a future kill code. So the class reads the FLAG first and falls back to the
+code for a record that carries no flag.
 
 Run:  python3 tests/test_shipped_audit_runs.py
 Exit: 0 the shipped audit ran and every verdict is accounted for; 1 a FAIL, a silent
@@ -41,6 +50,12 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# The kill code has ONE home — the constant the root audit writes into the payload it
+# records for a budget kill (`TEMPLATE/tools/audit.py` imports it from here too). Imported
+# rather than copied, so the two surfaces cannot drift apart.
+sys.path.insert(0, str(REPO / "tools"))
+from gate_budget import TIMEOUT_EXIT_CODE  # noqa: E402
 SHIPPED = REPO / "TEMPLATE"
 SHIPPED_AUDIT = SHIPPED / "tools" / "audit.py"
 # The declared non-green population: FACTORY DATA, repo-side, in its own file so an entry
@@ -101,7 +116,8 @@ def classify(registered: list[str], absent: set[str], results: dict[str, dict],
     that something was printed. A declared gate whose marker has been removed from its
     source is a SILENT skip, which is a defect exactly as a FAIL is.
     """
-    out: dict[str, list[str]] = {"PASS": [], "STATED SKIP": [], "NAMED ABSENCE": [], "FAIL": []}
+    out: dict[str, list[str]] = {"PASS": [], "STATED SKIP": [], "NAMED ABSENCE": [],
+                                 "NO VERDICT": [], "FAIL": []}
     for path in registered:
         if path in absent:
             out["NAMED ABSENCE"].append(path)
@@ -111,6 +127,20 @@ def classify(registered: list[str], absent: set[str], results: dict[str, dict],
             out["FAIL"].append(f"{path} — registered, present, and NO RESULT: it did not run")
             continue
         entry = declared.get(path)
+        # NO VERDICT — a gate killed at its budget (#206). Reached BEFORE the declared and
+        # the FAIL branches, so a kill is never read as a failure and never as a skip whose
+        # contract it did not meet. The FLAG is the model the fleet's audits already apply;
+        # the code is the fallback for a record that carries no flag.
+        killed = bool(rec.get("unknown")) or rec.get("exit_code") == TIMEOUT_EXIT_CODE
+        if killed:
+            line = (f"{path} — NO VERDICT: killed at its budget "
+                    f"(exit {rec.get('exit_code')}, unknown={bool(rec.get('unknown'))})")
+            if entry:
+                line += (f"; it is declared as a STATED SKIP (marker {entry.get('marker')!r}), "
+                         f"and a budget kill fails against ANY declaration — the declaration "
+                         f"does not make the kill a skip")
+            out["NO VERDICT"].append(line)
+            continue
         if rec.get("exit_code") == 0 and not entry:
             out["PASS"].append(path)
             continue
@@ -223,6 +253,66 @@ def probes() -> None:
           len(fold["NAMED ABSENCE"]) == 1 and len(fold["STATED SKIP"]) == 0,
           fold["NAMED ABSENCE"])
 
+    # ---- #206: the kill is its OWN class, never a FAIL and never a skip --------------
+    #
+    # The population is driven SYNTHETICALLY, never from today's tree: whether any gate is
+    # killed this run is a property of the instant, so a probe reading the live verdict
+    # would pass on every day the budget happened to be sufficient.
+
+    # (1) THE RULING'S OWN CASE. A bare kill code and nothing else: no declaration, no
+    # output, no name it could hide behind. It must NOT be a FAIL.
+    kill = classify(["tests/k.py"], absent=set(),
+                    results={"tests/k.py": {"exit_code": TIMEOUT_EXIT_CODE}},
+                    declared={}, source_of=lambda p: "")
+    check("KILL: a bare exit 124 is NO VERDICT, never a FAIL",
+          len(kill["NO VERDICT"]) == 1 and len(kill["FAIL"]) == 0,
+          f"NO VERDICT={len(kill['NO VERDICT'])} FAIL={len(kill['FAIL'])}")
+    check("KILL: the verdict NAMES the gate it could not judge",
+          any("tests/k.py" in v for v in kill["NO VERDICT"]), kill["NO VERDICT"][:1])
+
+    # (2) THE FLAG GOVERNS THE CODE. A kill at a DIFFERENT code still reads as a kill,
+    # because the class reads the audit's own model rather than one number -- so a future
+    # kill code (or a signal) inherits the class instead of silently becoming a FAIL.
+    flagged = classify(["tests/k.py"], absent=set(),
+                       results={"tests/k.py": {"exit_code": 137, "unknown": True}},
+                       declared={}, source_of=lambda p: "")
+    check("KILL: the audit's own `unknown` flag governs, not one hard-coded number",
+          len(flagged["NO VERDICT"]) == 1 and len(flagged["FAIL"]) == 0,
+          flagged["NO VERDICT"][:1])
+
+    # (3) A DECLARATION DOES NOT MAKE A KILL A SKIP. The contradiction is PRINTED on the
+    # same line: an entry declaring this gate as a stated skip is still not satisfied by a
+    # budget kill, because a kill fails against any declaration.
+    contradicted = classify(
+        ["tests/k.py"], absent=set(),
+        results={"tests/k.py": {"exit_code": TIMEOUT_EXIT_CODE, "unknown": True}},
+        declared={"tests/k.py": {"marker": "no evidence/ in this tree", "artifact": "evidence/"}},
+        source_of=lambda p: "print('SKIPPED - no evidence/ in this tree')\n",
+    )
+    check("KILL: a declared skip killed at budget is NO VERDICT, and the contradiction is printed",
+          len(contradicted["NO VERDICT"]) == 1 and len(contradicted["STATED SKIP"]) == 0
+          and "declared" in (contradicted["NO VERDICT"][0] if contradicted["NO VERDICT"] else ""),
+          contradicted["NO VERDICT"][:1])
+
+    # (4) FAIL IS UNTOUCHED. The same call, a gate that exited non-zero on its OWN merits,
+    # is still a FAIL -- the class is shown not to absorb failures, which is the whole risk
+    # of adding one.
+    still_fails = classify(["tests/f.py"], absent=set(),
+                           results={"tests/f.py": {"exit_code": 1, "unknown": False}},
+                           declared={}, source_of=lambda p: "")
+    check("KILL: a gate that exited 1 on its own merits is STILL a FAIL",
+          len(still_fails["FAIL"]) == 1 and len(still_fails["NO VERDICT"]) == 0,
+          still_fails["FAIL"][:1])
+
+    # (5) THE POPULATION IS PRINTED EVEN AT ZERO. The class is in the headline's loop on
+    # every run, so a clean run shows `NO VERDICT: 0` rather than omitting the class -- the
+    # difference between "none were killed" and "kills are not tracked".
+    clean = classify(["tests/a.py"], absent=set(),
+                     results={"tests/a.py": {"exit_code": 0}}, declared={},
+                     source_of=lambda p: "")
+    check("KILL: the class is accounted for even when EMPTY, so 0 is readable as 0",
+          clean["NO VERDICT"] == [], "NO VERDICT == []")
+
 
 def main() -> int:
     print("shipped audit — the tree the kit hands to members, EXECUTED (#199)")
@@ -282,7 +372,7 @@ def main() -> int:
             return ""
 
     got = classify(registered, absent, results, declared, _source_of)
-    for cls in ("PASS", "STATED SKIP", "NAMED ABSENCE", "FAIL"):
+    for cls in ("PASS", "STATED SKIP", "NAMED ABSENCE", "NO VERDICT", "FAIL"):
         print(f"  {cls}: {len(got[cls])}")
     if got["NAMED ABSENCE"]:
         print("  — NAMED ABSENCE, registered and not carried by this tree:")
@@ -291,6 +381,10 @@ def main() -> int:
     if got["STATED SKIP"]:
         print("  — STATED SKIP, ran and said why:")
         for p in got["STATED SKIP"]:
+            print(f"      {p}")
+    if got["NO VERDICT"]:
+        print("  — NO VERDICT, killed at budget (neither a pass nor a failure):")
+        for p in got["NO VERDICT"]:
             print(f"      {p}")
     if got["FAIL"]:
         print("  — FAIL:")
@@ -304,7 +398,8 @@ def main() -> int:
               f"{len(got['FAIL'])} unaccounted verdict(s)")
         return 1
     print(f"shipped audit gate passed — {len(registered)} gate(s): {len(got['PASS'])} pass, "
-          f"{len(got['STATED SKIP'])} stated skip, {len(got['NAMED ABSENCE'])} named absence")
+          f"{len(got['STATED SKIP'])} stated skip, {len(got['NAMED ABSENCE'])} named absence, "
+          f"{len(got['NO VERDICT'])} no verdict")
     return 0
 
 
