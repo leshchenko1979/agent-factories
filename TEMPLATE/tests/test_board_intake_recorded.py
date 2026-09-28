@@ -61,7 +61,6 @@ from ledger_boundary import module_skip as _module_skip  # noqa: E402
 import datetime as dt
 import json
 import re
-import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent

@@ -68,7 +68,6 @@ from __future__ import annotations
 import ast
 import re
 import sys
-import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent

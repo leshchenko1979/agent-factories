@@ -40,7 +40,6 @@ import ast
 import datetime as dt
 import io
 import os
-import shutil
 import subprocess
 import sys
 import tempfile

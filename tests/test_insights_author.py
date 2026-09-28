@@ -155,7 +155,7 @@ def test_title_leg_reads_the_channel_name():
 
 def test_owner_author_is_a_first_class_value(tmp_path, monkeypatch):
     """The owner is not a lane and no session resolves to him, so the literal must pass."""
-    register = _redirect(tmp_path, monkeypatch)
+    _redirect(tmp_path, monkeypatch)
     entry = _append(author=insights.OWNER_AUTHOR)
     assert entry["author"] == "Alexey"
     ok, errors = insights.verify_insights()

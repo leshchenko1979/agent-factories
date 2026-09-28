@@ -58,7 +58,6 @@ import os
 import sqlite3
 import shutil
 import subprocess
-import sys
 import tempfile
 import datetime as dt
 from pathlib import Path

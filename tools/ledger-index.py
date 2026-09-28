@@ -263,7 +263,7 @@ def check() -> int:
             print(f"  ok       subject query {probe!r}: {len(scan)} row(s) in both")
     if absent:
         print(f"  absent (not judged): {', '.join(absent)}")
-    print(f"index agrees with the scan" if not problems else f"{problems} mismatch(es)")
+    print("index agrees with the scan" if not problems else f"{problems} mismatch(es)")
     return 1 if problems else 0
 
 

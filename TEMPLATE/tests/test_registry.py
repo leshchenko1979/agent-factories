@@ -100,7 +100,6 @@ from __future__ import annotations
 
 import copy
 import datetime
-import difflib
 import hashlib
 import json
 import re

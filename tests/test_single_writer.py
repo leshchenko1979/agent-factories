@@ -11,7 +11,6 @@ Exit: 0 clean, 1 un-declared state surface or single-writer violation.
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 

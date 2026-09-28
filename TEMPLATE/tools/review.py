@@ -53,7 +53,6 @@ import argparse
 import datetime
 import hashlib
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -1263,7 +1262,6 @@ def cmd_compile(cycle_id: str) -> int:
 
     cycle_dir = get_cycle_dir(cycle_id)
     verdict_file = cycle_dir / "verdict.md"
-    reports_dir = cycle_dir / "reports"
 
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     lines = [

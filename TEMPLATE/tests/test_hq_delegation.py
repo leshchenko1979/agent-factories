@@ -31,7 +31,6 @@ Exit: 0 clean, 1 a surface permits the doctrine or names no delegation lane.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

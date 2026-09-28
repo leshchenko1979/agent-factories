@@ -956,8 +956,8 @@ def render_tree_line(tree: dict[str, Any]) -> str:
         # modification count is UNKNOWN rather than zero. Printing "0 modified tracked
         # path(s)" would assert the strongest provenance claim -- a clean tree -- on the
         # weakest evidence, which is the false clean this whole field exists to prevent.
-        return (f"  - Tree read: HEAD UNREADABLE, modification count UNKNOWN "
-                f"\u2014 the verdict names no revision, so it is not a claim about any")
+        return ("  - Tree read: HEAD UNREADABLE, modification count UNKNOWN "
+                "\u2014 the verdict names no revision, so it is not a claim about any")
     if count:
         return (f"  - Tree read: HEAD {sha_txt} with {count} modified tracked path(s) "
                 f"\u2014 the verdict describes THIS tree, not necessarily HEAD: "

@@ -428,7 +428,6 @@ def mutation_control(tmp: Path) -> list:
 
 
 def main() -> int:
-    argv = [a for a in sys.argv[1:] if a != "--mutation-control"]
     print("subject-anchor gate — probes")
     failures: list = []
     with tempfile.TemporaryDirectory(prefix="subject-anchor-gate-") as td:

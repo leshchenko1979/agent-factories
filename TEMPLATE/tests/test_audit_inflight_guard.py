@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
-import os
 import shutil
 import subprocess
 import sys

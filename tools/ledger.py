@@ -129,6 +129,14 @@ from ledger_declaration import (
     parse_ts,
 )
 
+# RE-EXPORTED, and not used by this module's own code: `tests/test_ledger_schema.py` reads
+# AND writes `ledger.AUTHORIZED_ACTORS_BY_EVENT` (the convergence cases), so the binding has
+# to live on THIS namespace. Written as an explicit assignment rather than left as a bare
+# import because pyflakes 3.4 reports a bare re-export as an unused import, and the
+# `as`-alias form does NOT read as a re-export to it -- both measured 2026-09-28. Keep the
+# assignment: deleting it as a no-op removes the binding the schema gate mutates.
+AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
+
 # The field predicate is shared with both schema gates (#88, ledger n=405 clause 5), on the
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
