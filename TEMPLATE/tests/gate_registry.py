@@ -699,6 +699,17 @@ OPTIONAL_GATES: dict[str, str] = {
         "passes a stored blank while still accepting a legacy key-less row. Every probe is "
         "fixture-driven, because the live register IS the artifact under measurement."
     ),
+    "test_insights_status.py": (
+        "meta-factory-only (owner order 2026-09-28) — its subject tool tools/insights.py is "
+        "live-only and does not ship, the same reason its author and class siblings above are "
+        "OPTIONAL. It carries the probes for the STATUS field, the WORKFLOW axis: that a new "
+        "entry OPENS at `pending` and is stamped, that a blank or unknown status is refused at "
+        "the append, that `status_at` travels WITH the status, that verify rejects a stored "
+        "blank or an unstamped status while still accepting a legacy key-less row, that a "
+        "transition rewrites the label and NOTHING else, and that the two axes stay "
+        "orthogonal. Every probe is fixture-driven, because the live register IS the artifact "
+        "under measurement."
+    ),
     "test_template_sync.py": (
         "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "
         "need its own pair-guard."

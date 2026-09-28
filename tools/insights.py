@@ -19,12 +19,30 @@ Every entry also carries a CLASS, and there are exactly two:
 the two are read by different downstream surfaces, so an unclassified row is
 unusable rather than merely tidy.
 
+Every entry also carries a STATUS, which is where it stands in the WORKFLOW rather
+than what kind of claim it is. The two axes are orthogonal, and a row needs both to
+be actionable:
+
+  pending     recorded; no destination ruled on yet
+  publishing  earmarked for the content funnel (the site, the channel, X)
+  hq          earmarked for HQ, as an internal process amendment
+  published   terminal: the public unit went out
+  landed      terminal: HQ acted and a process changed
+  dropped     terminal: deliberately not acted on
+
+Unlike `--class`, status is NOT demanded at the append. Class is a property of the
+CLAIM, which the author is the one who knows; status is a property of the WORKFLOW,
+whose destination is the owner's routing call. A new entry therefore OPENS at
+`pending` — an assertion about the row's own state, never a guess at someone else's
+decision.
+
 Usage:
   python3 tools/insights.py append <id> <topic> <stage> <naive_assumption> <empirical_reality> <mechanism> [options]
   python3 tools/insights.py list
   python3 tools/insights.py format <id> [--format=tweet|ru|markdown]
   python3 tools/insights.py verify
   python3 tools/insights.py classify --file <mapping.json>   # backfill the class on existing rows
+  python3 tools/insights.py status --file <mapping.json>     # move existing rows to a new status
 """
 
 from __future__ import annotations
@@ -49,6 +67,13 @@ ALLOWED_STAGES = ["stage-0", "stage-1", "stage-2", "stage-3", "stage-4", "fleet-
 # be a second axis pretending to be this one.
 ALLOWED_CLASSES = ["general", "implementation"]
 
+# The second axis, deliberately NOT a renaming of the first: `class` says what kind of
+# claim the entry is (who it serves), `status` says where it stands in the workflow
+# (what has been DONE about it). The values name the two destinations and the terminals
+# they can reach, because a routing register that cannot tell "queued for publishing"
+# from "published" is a register of intentions rather than of state.
+ALLOWED_STATUSES = ["pending", "publishing", "hq", "published", "landed", "dropped"]
+
 # The owner is an AUTHOR no session can stand for, so this literal is accepted
 # as a first-class value and is NEVER derived.
 OWNER_AUTHOR = "Alexey"
@@ -57,9 +82,9 @@ OWNER_AUTHOR = "Alexey"
 # position here, and every other key keeps the place it already had — so the diff
 # a backfill produces is ADDITIVE: a reader scanning it meets one inserted label
 # and no restated claim.
-CANONICAL_ORDER = ["n", "id", "ts", "author", "class", "topic", "stage",
-                   "naive_assumption", "empirical_reality", "mechanism",
-                   "tweet_hook", "ru_summary"]
+CANONICAL_ORDER = ["n", "id", "ts", "author", "class", "status", "status_at",
+                   "topic", "stage", "naive_assumption", "empirical_reality",
+                   "mechanism", "tweet_hook", "ru_summary"]
 _RANK = {k: i for i, k in enumerate(CANONICAL_ORDER)}
 
 
@@ -183,6 +208,7 @@ def append_insight(
     ru_summary: str = "",
     author: str = "",
     insight_class: str = "",
+    status: str = "pending",
 ) -> dict:
     if stage not in ALLOWED_STAGES:
         raise ValueError(f"stage must be one of {ALLOWED_STAGES}, got '{stage}'")
@@ -194,6 +220,14 @@ def append_insight(
                          "neither the content pipeline nor HQ")
     if insight_class not in ALLOWED_CLASSES:
         raise ValueError(f"class must be one of {ALLOWED_CLASSES}, got '{insight_class}'")
+    # Status is NOT required the way class is, and the asymmetry is the point: the author
+    # knows the CLAIM's kind, but the destination is the owner's call, so this DEFAULTS
+    # rather than being demanded. A value that IS given must still be in the vocabulary —
+    # a typo'd status reads as a routing decision while feeding no consumer.
+    if not str(status or "").strip():
+        raise ValueError("status must not be blank — omit it to open at 'pending'")
+    if status not in ALLOWED_STATUSES:
+        raise ValueError(f"status must be one of {ALLOWED_STATUSES}, got '{status}'")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -217,6 +251,8 @@ def append_insight(
                 "ts": now_iso(),
                 "author": str(author).strip(),
                 "class": str(insight_class).strip(),
+                "status": str(status).strip(),
+                "status_at": now_iso(),
                 "topic": topic,
                 "stage": stage,
                 "naive_assumption": naive_assumption,
@@ -236,29 +272,48 @@ def append_insight(
             fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 
-def classify_insights(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
-    """Set `class` on entries that PREDATE the field.
+# Every labelled field, with the vocabulary its values come from. One table, so a new
+# label is declared in ONE place and every verb below inherits its validation.
+FIELD_VOCAB: dict[str, list[str]] = {"class": ALLOWED_CLASSES, "status": ALLOWED_STATUSES}
 
-    The register is append-only in its CLAIMS, and this keeps that promise in the
+
+def _backfill(updates: dict[str, dict], fields: list[str], noun: str) -> list[tuple[str, dict]]:
+    """Set the labelled `fields` on entries that ALREADY EXIST, in one transaction.
+
+    Shared by `classify` and `status`: both write a routing label onto existing rows,
+    so both owe the same guarantees, and a second copy of this logic would be a second
+    place for those guarantees to drift apart.
+
     The register is append-only in its CLAIMS, and this keeps that promise in the only
-    way a backfill can: it adds ONE routing label to an existing row, INSERTED at its
-    canonical position, and never touches a claim field. Every other key keeps the place
-    it already had, so the diff is additive — a reader meets one inserted label rather
-    than a reshaped row. The owner rules on the values; this applies the ruling.
+    way a backfill can: it writes the named fields and nothing else, INSERTED at their
+    canonical positions, never touching a claim field. Every other key keeps the place
+    it already had, so the diff is additive — a reader meets inserted labels rather than
+    a reshaped row.
 
-    All-or-nothing by construction: every id and every value is validated before a
-    single byte is written, so a mapping carrying one unknown id writes NOTHING
-    rather than a partial backfill — a half-applied classification is worse than
+    All-or-nothing by construction: every id, every field name and every value is
+    validated before a single byte is written, so a mapping carrying one unknown id
+    writes NOTHING rather than a partial backfill — a half-applied change is worse than
     none, because it reads as complete.
 
-    Returns `[(id, old_class, new_class)]` for the rows it set, oldest first.
+    Returns `[(id, {field: prior_value})]` in register order. A prior value is None when
+    the row predated the field, which is a different thing from an empty one.
     """
-    if not mapping:
-        raise ValueError("no classifications given — pass a {id: class} mapping")
-    for slug, value in mapping.items():
-        if value not in ALLOWED_CLASSES:
-            raise ValueError(f"class for '{slug}' must be one of {ALLOWED_CLASSES}, "
-                             f"got '{value}'")
+    if not updates:
+        raise ValueError(f"no {noun} given — pass an {{id: value}} mapping")
+    for slug, value in updates.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"{noun} for '{slug}' must be an object, got "
+                             f"{type(value).__name__}")
+        extra = sorted(set(value) - set(fields))
+        if extra:
+            raise ValueError(f"{noun} for '{slug}' carries unsettable field(s): "
+                             f"{', '.join(extra)}")
+        for name in fields:
+            if name not in value:
+                raise ValueError(f"{noun} for '{slug}' names no '{name}'")
+            if name in FIELD_VOCAB and value[name] not in FIELD_VOCAB[name]:
+                raise ValueError(f"{name} for '{slug}' must be one of "
+                                 f"{FIELD_VOCAB[name]}, got '{value[name]}'")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -271,32 +326,60 @@ def classify_insights(mapping: dict[str, str]) -> list[tuple[str, str | None, st
                         entries.append(json.loads(line))
 
             known = {e.get("id") for e in entries}
-            unknown = sorted(s for s in mapping if s not in known)
+            unknown = sorted(s for s in updates if s not in known)
             if unknown:
                 raise ValueError(f"unknown id(s), nothing written: {', '.join(unknown)}")
 
-            changes: list[tuple[str, str | None, str]] = []
+            changes: list[tuple[str, dict]] = []
             out_rows: list[dict] = []
             for entry in entries:
                 slug = entry.get("id")
-                if slug not in mapping:
+                if slug not in updates:
                     out_rows.append(entry)
                     continue
-                changes.append((slug, entry.get("class") or None, mapping[slug]))
-                out_rows.append(_with_field(entry, "class", mapping[slug]))
+                before = {name: entry.get(name) for name in fields}
+                row = entry
+                for name in fields:
+                    row = _with_field(row, name, updates[slug][name])
+                changes.append((slug, before))
+                out_rows.append(row)
 
             # Atomic replace under the same lock the append takes, so a peer's
             # concurrent append can never interleave with this rewrite.
             tmp = INSIGHTS_PATH.parent / (INSIGHTS_PATH.name + ".tmp")
             with open(tmp, "w", encoding="utf-8") as f:
-                f.writelines(json.dumps(row, ensure_ascii=False) + "\n"
-                             for row in out_rows)
+                for row in out_rows:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp, INSIGHTS_PATH)
             return changes
         finally:
             fcntl.flock(lock_f, fcntl.LOCK_UN)
+
+
+def classify_insights(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Set `class` on entries that PREDATE the field. The owner rules on the values;
+    this applies the ruling, and `_backfill` carries the guarantees behind it.
+    """
+    changes = _backfill({k: {"class": v} for k, v in mapping.items()},
+                        ["class"], "classifications")
+    return [(slug, before["class"] or None, mapping[slug]) for slug, before in changes]
+
+
+def set_statuses(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Move existing entries to a new workflow `status`, stamping the instant they moved.
+
+    `status_at` travels WITH the status rather than beside it, because an undated routing
+    register cannot answer the question it exists to answer — which items are still owed,
+    and for how long. A status that has never been set reads as absent, not as blank, so
+    `pending` and "no status recorded" stay distinguishable in the same way `author` and
+    `class` kept their legacy rows distinguishable from empty ones.
+    """
+    stamp = now_iso()
+    changes = _backfill({k: {"status": v, "status_at": stamp} for k, v in mapping.items()},
+                        ["status", "status_at"], "statuses")
+    return [(slug, before["status"] or None, mapping[slug]) for slug, before in changes]
 
 
 def verify_insights() -> tuple[bool, list[str]]:
@@ -352,6 +435,20 @@ def verify_insights() -> tuple[bool, list[str]]:
             elif data["class"] not in ALLOWED_CLASSES:
                 errors.append(f"line {idx}: unknown class '{data['class']}'")
 
+        # `status` follows the same rule as the two fields before it: a row predating the
+        # field carries no key and stays valid, while an EMPTY or UNKNOWN value is a
+        # defect either way. Its one shape unique to this field is a status with NO
+        # instant — it cannot be aged out or swept by a deadline, so it is reported rather
+        # than tolerated, since "how long has this been sitting here?" is the question the
+        # field exists to make answerable.
+        if "status" in data:
+            if not data.get("status"):
+                errors.append(f"line {idx}: empty status")
+            elif data["status"] not in ALLOWED_STATUSES:
+                errors.append(f"line {idx}: unknown status '{data['status']}'")
+            elif not data.get("status_at"):
+                errors.append(f"line {idx}: status '{data['status']}' carries no status_at")
+
     return len(errors) == 0, errors
 
 
@@ -375,6 +472,10 @@ def main() -> int:
                           help="the audience this entry serves: 'general' for publishable "
                                "content, 'implementation' for an internal HQ amendment. "
                                "Required.")
+    p_append.add_argument("--status", default="pending", choices=ALLOWED_STATUSES,
+                          help="where the entry stands in the workflow. Omitted: opens at "
+                               "'pending', which asserts the row's own state and never "
+                               "guesses the owner's routing decision")
     p_append.add_argument("--tweet", default="", help="Draft tweet narrative hook")
     p_append.add_argument("--ru", default="", help="Russian summary for Miidas/Ru-speaking audience")
 
@@ -385,6 +486,11 @@ def main() -> int:
                            help="Set the class on entries that predate the field")
     p_cls.add_argument("--file", required=True, metavar="MAPPING.json",
                        help="JSON object {id: class}, applied in ONE transaction")
+
+    p_st = sub.add_parser("status",
+                          help="Move existing entries to a new workflow status")
+    p_st.add_argument("--file", required=True, metavar="MAPPING.json",
+                      help="JSON object {id: status}, applied in ONE transaction")
 
     p_fmt = sub.add_parser("format", help="Format insight for publishing")
     p_fmt.add_argument("id", help="Insight slug")
@@ -411,9 +517,10 @@ def main() -> int:
                 ru_summary=args.ru,
                 author=author,
                 insight_class=args.insight_class,
+                status=args.status,
             )
             print(f"appended insight #{entry['n']}: {entry['id']} [{entry['stage']}] "
-                  f"by {entry['author']} [{entry['class']}]")
+                  f"by {entry['author']} [{entry['class']}] [{entry['status']}]")
             return 0
         except ValueError as e:
             print(f"FAIL: {e}", file=sys.stderr)
@@ -439,6 +546,7 @@ def main() -> int:
                 # A row predating the field prints `legacy` rather than a blank,
                 # so "no author recorded" is never mistaken for an authored blank.
                 print(f"#{d['n']} [{d['stage']}] [{d.get('class') or 'legacy'}] "
+                      f"[{d.get('status') or 'unrouted'}] "
                       f"{d['id']} ({d.get('author') or 'legacy'}): {d['topic']}")
         return 0
 
@@ -465,6 +573,8 @@ def main() -> int:
             print(f"## Insight #{target['n']}: {target['topic']} ({target['stage']})\n")
             print(f"**Author:** {target.get('author') or 'legacy — predates the field'}\n")
             print(f"**Class:** {target.get('class') or 'legacy — predates the field'}\n")
+            since = f" (since {target['status_at']})" if target.get("status_at") else ""
+            print(f"**Status:** {target.get('status') or 'unrouted'}{since}\n")
             print(f"**Naive assumption:** {target['naive_assumption']}\n")
             print(f"**Empirical reality:** {target['empirical_reality']}\n")
             print(f"**Structural mechanism:** {target['mechanism']}\n")
@@ -494,6 +604,29 @@ def main() -> int:
             counts[new] = counts.get(new, 0) + 1
         summary = ", ".join(f"{n} {cls}" for cls, n in sorted(counts.items()))
         print(f"classified {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: {summary}")
+        return 0
+
+    elif args.cmd == "status":
+        try:
+            mapping = json.loads(Path(args.file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"FAIL: cannot read mapping {args.file}: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(mapping, dict):
+            print("FAIL: the mapping must be a JSON object {id: status}", file=sys.stderr)
+            return 1
+
+        try:
+            changes = set_statuses({str(k): str(v) for k, v in mapping.items()})
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        counts: dict[str, int] = {}
+        for slug, old, new in changes:
+            print(f"  {slug}: {old or 'unrouted'} -> {new}")
+            counts[new] = counts.get(new, 0) + 1
+        summary = ", ".join(f"{n} {st}" for st, n in sorted(counts.items()))
+        print(f"set status on {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: {summary}")
         return 0
 
     return 0

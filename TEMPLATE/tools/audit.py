@@ -2136,6 +2136,15 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_insights_class.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_class.py"])
 
+    # tests/test_insights_status.py -- the STATUS field on the same register: the WORKFLOW
+    # axis, orthogonal to what KIND of claim an entry is. It guards the failure modes the
+    # class field does not have: a row that opens with a silent blank instead of `pending`,
+    # a status stored without the instant that lets it be aged out, and a transition that
+    # restates a claim while moving the label. Its MODE is declared in registry/gates.json
+    # in the SAME landing -- the omission #204 had to repair, not repeated here.
+    if (repo_root / "tests/test_insights_status.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_status.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

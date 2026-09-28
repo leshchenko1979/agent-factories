@@ -29,15 +29,20 @@ exists and cannot be read is a FAILURE, never a skip: the two are the same outpu
 caller that only sees a verdict, and one of them hides a broken declaration.
 
 Run:  python3 tests/test_gate_invocation_mode.py
+      python3 tests/test_gate_invocation_mode.py --emit-modes
 Exit: 0 every invoked gate's declared mode matches its call site, 1 a problem, 2 the
-      declaration could not be read at all.
+      declaration could not be read at all. Under `--emit-modes` it exits 2 when the
+      call sites cannot be parsed, because an emitted empty map is not a map.
 """
 
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -218,8 +223,84 @@ def probe_a_dual_SHAPED_file_is_judged_by_its_CALL_SITE() -> None:
             f"`{invoked[path]}` — the declaration must follow the call site, not the shape"
         )
 
+def emit_modes(audit_path: Path = AUDIT) -> int:
+    """Print the mode map this tree's call sites IMPLY, as JSON, and exit 0.
+
+    `modes` is a property of `tools/audit.py`, which ships byte-identical into every tree,
+    so hand-transcribing 73 mechanical facts is transcription for no gain -- and it is the
+    class that produces stale counts, because nothing re-derives them when a call site moves.
+    Budgets stay DECLARED (a runtime is box-specific); modes are DERIVED (a call site is not).
+
+    This bypasses nothing. The map below is produced by the same `invoked_gates()` the gate
+    asserts the declaration against, so an emitted map cannot disagree with the judged one;
+    merging it into `registry/gates.json` is how the two stay in step. A tree whose call
+    sites cannot be parsed, or where one path is invoked under BOTH forms, is REFUSED --
+    an emitted empty map declares nothing and would read as agreement.
+    """
+    invoked = invoked_gates(audit_path)
+    if not invoked:
+        print(
+            "no gate call sites parsed — refusing to emit an empty map, which would "
+            "declare nothing and read as agreement",
+            file=sys.stderr,
+        )
+        return 2
+    ambiguous = sorted(p for p, form in invoked.items() if "+" in form)
+    if ambiguous:
+        for path in ambiguous:
+            print(
+                f"  AMBIGUOUS  {path}: invoked under BOTH forms, so no single mode can be "
+                f"right — that is a call-site defect, not a declaration gap",
+                file=sys.stderr,
+            )
+        return 2
+    print(json.dumps(dict(sorted(invoked.items())), indent=2, ensure_ascii=False))
+    return 0
+
+def probe_the_EMITTER_prints_the_map_the_gate_judges() -> None:
+    """`--emit-modes` is the member's path, so its output is asserted, not assumed.
+
+    A derivation that printed a different map would be a second, silent declaration of the
+    same fact. This probe runs the emit path and holds it to the call sites AND to the
+    declaration, so the three can only ever be one map.
+    """
+    invoked = invoked_gates()
+    assert invoked, (
+        "no call sites parsed — the emitter REFUSES on that, so this probe would pass "
+        "vacuously; it is asserted non-vacuous here"
+    )
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = emit_modes()
+    assert rc == 0, f"emit_modes returned {rc} on a tree whose call sites DO parse"
+    emitted = json.loads(buf.getvalue())
+    declared, _note = declared_modes()
+    assert emitted == invoked == declared, (
+        "the emitted map, the call sites and the declaration must be ONE map — "
+        f"emitted={len(emitted)}, invoked={len(invoked)}, declared={len(declared)}"
+    )
+
+def probe_the_EMITTER_refuses_an_empty_map() -> None:
+    """Zero call sites must be a REFUSAL, never an empty map that reads as agreement."""
+    with tempfile.TemporaryDirectory() as tmp:
+        empty = Path(tmp) / "audit_with_no_call_sites.py"
+        empty.write_text("x = 1\n", encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = emit_modes(empty)
+        assert rc == 2, (
+            f"the emitter returned {rc} for zero call sites; an empty map declares nothing "
+            f"and would read as agreement"
+        )
+        assert buf.getvalue() == "", (
+            "the refusal printed to STDOUT — a caller capturing stdout would receive an "
+            "empty map, which is the failure this refusal exists to prevent"
+        )
+
 def main() -> int:
 # STATED SKIP: registry/gates.json (factory data)
+    if "--emit-modes" in sys.argv[1:]:
+        return emit_modes()
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("probe_") and callable(value)]
     failures: list[str] = []

@@ -971,6 +971,66 @@ def test_an_empty_plan_is_not_a_gap() -> None:
             shutil.rmtree(cycle_dir)
 
 
+def test_codify_records_a_finding_and_refuses_a_carrier_less_one() -> None:
+    """The WRITER the enforcement needs — without it the gate watches an empty field.
+
+    `codification_plan` had a reader (verify, close) and no writer at all, so the
+    field stayed at the empty list `_empty_state` seeds and a carrier check over it
+    would have read green forever. This arm pins both halves: the refusal happens
+    at WRITE time (where the operator still has the finding in hand) and the
+    lawful form records a plan entry that verify then accepts.
+    """
+    cycle_id = "test-codify-writer"
+    cycle_dir = _lens_clean_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+
+        res = subprocess.run(cmd_base + ["codify", cycle_id, "--finding", "F1", "--disposition", "landed"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout + res.stderr
+        assert "owes a home" in res.stderr, res.stderr
+
+        res = subprocess.run(cmd_base + ["codify", cycle_id, "--finding", "F1", "--disposition", "rejected",
+                                         "--home", "somewhere"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout + res.stderr
+        assert "owes a reason" in res.stderr, res.stderr
+
+        res = subprocess.run(cmd_base + ["codify", cycle_id, "--finding", "   ", "--disposition", "rejected",
+                                         "--reason", "no"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout + res.stderr
+        assert "cannot be empty" in res.stderr, res.stderr
+
+        for disp, flag, val in (("landed", "--home", "docs/x.md §1"),
+                                ("routed", "--home", "session 4515ea72"),
+                                ("rejected", "--reason", "covered by an existing clause")):
+            res = subprocess.run(cmd_base + ["codify", cycle_id, "--finding", f"F-{disp}",
+                                             "--disposition", disp, flag, val],
+                                 cwd=REPO_ROOT, capture_output=True, text=True)
+            assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert len(state["codification_plan"]) == 3, state["codification_plan"]
+        assert "codification_log" not in state, "a second home for findings is the two-homes defect"
+
+        res = subprocess.run(cmd_base + ["verify", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "3 accepted finding(s), all accounted for" in res.stdout, res.stdout
+
+        res = subprocess.run(cmd_base + ["close", cycle_id, "--status", "COMPLETED"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        res = subprocess.run(cmd_base + ["codify", cycle_id, "--finding", "late", "--disposition",
+                                         "rejected", "--reason", "too late"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout + res.stderr
+        assert "FROZEN" in res.stderr, res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -996,4 +1056,5 @@ if __name__ == "__main__":
     test_an_unlanded_accepted_finding_cannot_complete_the_cycle()
     test_a_landed_finding_and_a_recorded_non_fix_are_lawful()
     test_an_empty_plan_is_not_a_gap()
+    test_codify_records_a_finding_and_refuses_a_carrier_less_one()
     print("ALL TESTS PASSED")

@@ -1149,6 +1149,69 @@ def cmd_waive(cycle_id: str, lens: str, reason: str, by: str | None = None) -> i
     return 0
 
 
+def cmd_codify(cycle_id: str, finding: str, disposition: str, home: str | None,
+               reason: str | None) -> int:
+    """Record an ACCEPTED finding with the carrier its disposition owes.
+
+    This is the producer the enforcement needs.  Without it `codification_plan`
+    had a reader (verify, close) and no writer at all — so the field stayed at
+    the empty list `_empty_state` seeds, `codification_gaps` saw no entries, and
+    a gate over a permanently-empty population would have read green forever.
+    That is the same defect class one level up: the contract was unenforced, and
+    this command is what makes it enforced rather than merely declarable.
+
+    The carrier is validated HERE as well as in verify, and for a different
+    reason: a refusal at write time names the mistake while the operator still
+    has the finding in hand, where a refusal at close time is a puzzle.
+    """
+    if disposition not in CODIFICATION_DISPOSITIONS:
+        print(f"Error: disposition must be one of {CODIFICATION_DISPOSITIONS}", file=sys.stderr)
+        return 2
+    if not finding.strip():
+        print("Error: --finding cannot be empty.", file=sys.stderr)
+        return 2
+    owed = CODIFICATION_OBLIGATIONS[disposition]
+    supplied = home if owed == "home" else reason
+    if not (supplied or "").strip():
+        print(
+            f"Error: disposition {disposition!r} owes a {owed}; pass --{owed}.",
+            file=sys.stderr,
+        )
+        return 2
+
+    state = read_state(cycle_id)
+    if not state:
+        print(f"Error: Cycle '{cycle_id}' not found.", file=sys.stderr)
+        return 2
+    if is_frozen(state):
+        print(
+            f"Error: Cycle '{cycle_id}' is FROZEN ({state.get('frozen_at')}). "
+            f"A closed cycle's inputs are historical; record the finding in a new cycle.",
+            file=sys.stderr,
+        )
+        return 2
+
+    # ONE home for accepted findings: the plan array. A second log would be the
+    # two-homes defect the waivers leg already collapsed.
+    entry: dict[str, Any] = {
+        "finding": finding.strip(),
+        "disposition": disposition,
+        "home": (home.strip() if isinstance(home, str) and home.strip() else None),
+        "reason": (reason.strip() if isinstance(reason, str) and reason.strip() else None),
+        "recorded_at": _now(),
+    }
+    state.setdefault("codification_plan", []).append(entry)
+    rc = save_state(cycle_id, state)
+    if rc != 0:
+        return rc
+
+    where = entry["home"] or entry["reason"]
+    print(
+        f"Recorded finding as {disposition} ({owed}={where!r}) — "
+        f"plan now carries {len(state['codification_plan'])} accepted finding(s)."
+    )
+    return 0
+
 def cmd_status(cycle_id: str) -> int:
     state = read_state(cycle_id)
     if not state:
@@ -1878,6 +1941,16 @@ def main() -> int:
     p_intake.add_argument("--live", action="store_true",
                           help="Read today's bytes even on a FROZEN cycle, and say so")
 
+    p_codify = subparsers.add_parser(
+        "codify", help="Record an accepted finding with the carrier its disposition owes"
+    )
+    p_codify.add_argument("cycle_id", help="Cycle identifier")
+    p_codify.add_argument("--finding", required=True, help="The accepted finding, in one line")
+    p_codify.add_argument("--disposition", required=True, choices=CODIFICATION_DISPOSITIONS,
+                          help="landed (owes --home) | routed (owes --home) | rejected (owes --reason)")
+    p_codify.add_argument("--home", default=None, help="The file+section it landed in, or where it was routed")
+    p_codify.add_argument("--reason", default=None, help="Why it was not fixed (required for `rejected`)")
+
     p_step0 = subparsers.add_parser(
         "step0", help="Recovery point: where a resumed reader stands, read from state alone"
     )
@@ -1913,6 +1986,8 @@ def main() -> int:
         return cmd_intake(args.cycle_id, args.record, args.live)
     elif args.subcommand == "step0":
         return cmd_step0(args.cycle_id, args.record)
+    elif args.subcommand == "codify":
+        return cmd_codify(args.cycle_id, args.finding, args.disposition, args.home, args.reason)
     return 1
 
 

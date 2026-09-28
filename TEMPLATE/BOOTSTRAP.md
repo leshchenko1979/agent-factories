@@ -9,6 +9,24 @@ skeleton in this directory uses them as `{{PLACEHOLDER}}`.
 
 ---
 
+## Prerequisites — the box, before anything
+
+Two things must exist before Step 0, and this procedure does not install either:
+
+| Need | Why it is not optional |
+|---|---|
+| `python3` | every tool and gate in this kit is a Python module run directly. **No third-party packages are required** — the kit is stdlib-only. |
+| `pytest` | **30 of the kit's 73 gate call sites are invoked by pytest**; the other 43 are run as scripts. The split is intended (#144), and which is which is declared per gate in `registry/gates.json`'s `modes`. |
+
+**A box without pytest does not SKIP those 30 gates — it reports them FAILED**, which
+reads as "the kit is broken" when the remedy is an install. The inverse trap bites once
+you wire CI: a CI that runs only `pytest` enforces only the pytest-invoked population, so
+a green CI is not evidence that every gate passed. `registry/gates.example.json`'s `_note`
+carries the mode map's own documentation, and
+`python3 tests/test_gate_invocation_mode.py --emit-modes` prints the map your tree implies.
+
+---
+
 ## Step 0 — Decide the shape
 
 Write down, before creating anything:
