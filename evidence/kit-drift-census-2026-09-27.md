@@ -1,6 +1,6 @@
 # Kit-drift census — member adoption of the template's shipped set
 
-Read at **2026-09-27T09:35:38Z** by `tools/kit_census.py`, which calls the patrol's
+Read at **2026-09-27T21:25:19Z** by `tools/kit_census.py`, which calls the patrol's
 `kit_drift_leg` — this artifact renders that leg's own result. It adds ONE
 measurement of its own (section 2, the answering path), which is a DIFFERENT
 predicate and not a second comparison of the same bytes.
@@ -8,7 +8,7 @@ predicate and not a second comparison of the same bytes.
 ## 1. The reference, stated first
 
 Every figure below compares a member's tree against **OUR** `registry/kit.json`
-(`kit_version` `a49eaba9ada7`, 128 paths). That is a
+(`kit_version` `7c9e280a354c`, 135 paths). That is a
 fact about our shipped bytes as much as about their tree, and it moves when
 **we** move — so a DIFF here is not a member's to act on. A member acts on
 its own vendored pin, judged by `tests/test_kit_pin.py`.
@@ -26,7 +26,7 @@ copy at all — so neither can be read off the other.
 - candidates: **1** — the backend requires exactly one, so a count
   other than 1 is reported above as a refusal, not as a partial reading
 - **executing copy**: `/root/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/state/oc-questions`
-  - **187971 B**, mtime **2026-09-27T08:05:39Z** — size and time only, no digest: this copy
+  - **201239 B**, mtime **2026-09-27T14:37:23Z** — size and time only, no digest: this copy
     moved twice inside one day, so a fixed hash here would be a stale
     claim rather than a measurement
 
@@ -35,7 +35,7 @@ Each leg is probed with ITS OWN control and reported on its own row:
 | leg | control | fix marker | old marker | reads |
 |---|---|---|---|---|
 | clarify — what an owner's empty tap does | 1 | 4 | 0 | **fixed** |
-| publisher fault — what a caller learns when a page fails to build | 1 | 0 | 1 | **PRE-FIX** |
+| publisher fault — what a caller learns when a page fails to build | 1 | 3 | 0 | **fixed** |
 
 One row per leg because the legs can DISAGREE — on 2026-09-27 this copy
 carried the clarify fix and NOT the publisher-fault fix, so a single marker
@@ -50,8 +50,8 @@ inert for owner taps.
 ## 3. The population
 
 - members declared: **5**, reachable: **5**
-- **every manifest cell** (640 pairs): same 21 · DIFF 51 · ABSENT 568
-- **bootstrap-named subset** (50 cells, the 10 files `TEMPLATE/BOOTSTRAP.md` names): same 3 · DIFF 20 · ABSENT 27
+- **every manifest cell** (675 pairs): same 125 · DIFF 56 · ABSENT 494
+- **bootstrap-named subset** (50 cells, the 10 files `TEMPLATE/BOOTSTRAP.md` names): same 13 · DIFF 16 · ABSENT 21
 
 Two populations are reported because a number must travel with its own predicate:
 the bootstrap subset is what the earlier 1/20/29 baseline was taken over, and quoting
@@ -61,11 +61,11 @@ only one of them would leave the other unreproducible.
 
 | member | same | DIFF | ABSENT | own pin | own copy | zone own/not | declared |
 |---|---|---|---|---|---|---|---|
-| `ai-antispam` | 2 | 9 | 117 | **none** | ABSENT | 5/6 | 2026-09-26T06:20:28Z · attested |
-| `infra-factory` | 10 | 17 | 101 | vendored · 0 exempt | ABSENT | 6/8 | 2026-09-26T06:21:03Z · attested |
-| `inferhub-watch` | 4 | 8 | 116 | vendored · 0 exempt | ABSENT | 7/6 | 2026-09-26T06:19:04Z · attested |
-| `miidas` | 5 | 16 | 107 | vendored · 14 exempt | inert | 8/5 | 2026-09-26T06:31:01Z · attested |
-| `opencrabs-dev` | 0 | 1 | 127 | **none** | ABSENT | 5/5 | 2026-09-26T06:41:11Z · attested |
+| `ai-antispam` | 88 | 7 | 40 | vendored · 5 exempt | inert | 5/6 | 2026-09-27T06:35:23Z · attested |
+| `infra-factory` | 14 | 22 | 99 | vendored · 0 exempt | ABSENT | 6/8 | 2026-09-27T13:57:34Z · attested |
+| `inferhub-watch` | 17 | 7 | 111 | vendored · 6 exempt | ABSENT | 7/6 | 2026-09-27T06:36:31Z · attested |
+| `miidas` | 6 | 19 | 110 | vendored · 17 exempt | inert | 8/5 | 2026-09-27T11:39:51Z · attested |
+| `opencrabs-dev` | 0 | 1 | 134 | **none** | ABSENT | 5/5 | 2026-09-27T13:50:18Z · attested |
 
 Four columns carry the point. **own pin** is the member-actionable half: a
 member with no pin has no figure of its own, and the DIFF beside it is against
@@ -83,38 +83,38 @@ section 6 carries what each one said.
 
 ### `ai-antispam`
 
-- attested: **2026-09-26T06:20:28Z** · status `attested`
+- attested: **2026-09-27T06:35:23Z** · status `attested`
 - declared surfaces: zone owns 5 / not-owns 6 · services 15 · lanes 6 · announcements 3
-- DIFF: `tests/test_close_board_recorded.py`, `tests/test_hygiene_namespace.py`, `tests/test_ledger.py`, `tests/test_ledger_schema.py`, `tests/test_ontology.py`, `tests/test_rework.py`, `tools/audit.py`, `tools/hygiene.py` (+1 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+109 more)
+- DIFF: `docs/instruments/review-rotation.md`, `docs/instruments/template-instruments.md`, `tests/test_board_intake_recorded.py`, `tests/test_close_board_recorded.py`, `tests/test_ledger_schema.py`, `tests/test_rework.py`, `tools/audit.py`
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+32 more)
 
 ### `infra-factory`
 
-- attested: **2026-09-26T06:21:03Z** · status `attested`
-- declared surfaces: zone owns 6 / not-owns 8 · services 9 · lanes 5 · announcements 4
-- DIFF: `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `roles/carrier.md`, `roles/hq.md`, `roles/triage.md`, `roles/worker.md` (+9 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+93 more)
+- attested: **2026-09-27T13:57:34Z** · status `attested`
+- declared surfaces: zone owns 6 / not-owns 8 · services 9 · lanes 5 · announcements 5
+- DIFF: `docs/instruments/kit.md`, `docs/instruments/ledger.md`, `docs/instruments/open-questions.md`, `docs/instruments/pacemaker.md`, `docs/instruments/template-instruments.md`, `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md` (+14 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `README.md`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md` (+91 more)
 
 ### `inferhub-watch`
 
-- attested: **2026-09-26T06:19:04Z** · status `attested`
-- declared surfaces: zone owns 7 / not-owns 6 · services 6 · lanes 4 · announcements 3
-- DIFF: `README.md`, `tests/test_ontology.py`, `tests/test_rework.py`, `tests/test_single_writer.py`, `tools/audit.py`, `tools/field_predicate.py`, `tools/ledger.py`, `tools/ledger_declaration.py`
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+108 more)
+- attested: **2026-09-27T06:36:31Z** · status `attested`
+- declared surfaces: zone owns 7 / not-owns 6 · services 6 · lanes 4 · announcements 4
+- DIFF: `README.md`, `tests/ledger_boundary.py`, `tests/test_ontology.py`, `tests/test_rework.py`, `tests/test_single_writer.py`, `tools/audit.py`, `tools/ledger.py`
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+103 more)
 
 ### `miidas`
 
-- attested: **2026-09-26T06:31:01Z** · status `attested`
-- declared surfaces: zone owns 8 / not-owns 5 · services 6 · lanes 5 · announcements 4
-- DIFF: `README.md`, `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `docs/subject/client-requirements.md`, `docs/subject/domain-model.md`, `tests/test_ledger.py` (+8 more)
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+99 more)
+- attested: **2026-09-27T11:39:51Z** · status `attested`
+- declared surfaces: zone owns 8 / not-owns 5 · services 6 · lanes 5 · announcements 6
+- DIFF: `README.md`, `docs/methodology/01-llm-weakness-counters.md`, `docs/methodology/02-quality-management.md`, `docs/methodology/03-documentation-standards.md`, `docs/methodology/04-harness-binding.md`, `docs/subject/client-requirements.md`, `docs/subject/domain-model.md`, `tests/test_ledger.py` (+11 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+102 more)
 
 ### `opencrabs-dev`
 
-- attested: **2026-09-26T06:41:11Z** · status `attested`
-- declared surfaces: zone owns 5 / not-owns 5 · services 6 · lanes 37 · announcements 1
+- attested: **2026-09-27T13:50:18Z** · status `attested`
+- declared surfaces: zone owns 5 / not-owns 5 · services 6 · lanes 36 · announcements 1
 - DIFF: `README.md`
-- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+119 more)
+- ABSENT: `AGENTS.md.tmpl`, `BOOTSTRAP.md`, `ONTOLOGY.md.tmpl`, `SKILL.md.tmpl`, `docs/addons.md`, `docs/addons/domain/consulting.md`, `docs/addons/domain/outreach.md`, `docs/addons/domain/platform.md` (+126 more)
 
 ## 6. Declared decisions — what each member SAID about its own figure
 
@@ -191,7 +191,7 @@ MEMBER STATED THEM, so some are approximate; the round's own ledger rows
   forked, and those need opposite actions.
 - **ABSENT is not a verdict.** A factory ports a subset by design; a path it
   never took cannot diverge from anything.
-- **The pin gate is the member's own view.** 2 of 5 members have vendored no pin (`ai-antispam`, `opencrabs-dev`), so for those the figure above is against OUR manifest and is not theirs to
+- **The pin gate is the member's own view.** 1 of 5 members have vendored no pin (`opencrabs-dev`), so for those the figure above is against OUR manifest and is not theirs to
   act on. The vehicle exists (`TEMPLATE/registry/kit.example.json`) and `tests/test_kit_pin.py`
   is the gate that judges it; this census is where that adoption is observed.
 
