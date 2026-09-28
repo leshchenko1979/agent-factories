@@ -1284,25 +1284,23 @@ def probe_a_bare_default_still_loads() -> None:
 def probe_a_live_population_the_manifest_omits_is_reported() -> None:
     """The population half: a gate that falls through and is NOT recorded is named."""
     module = _gate_budget_module()
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        recorded = {"tests/test_recorded.py": 1.0}
-        stated = {
-            "budget_sec": 100.0,
-            "margin_x": module.margin_for(1.0),
-            "measured_sec": 1.0,
-            "measured_at": "HEAD",
-            "population": recorded,
-        }
-        problems = module.default_population_problems(
-            stated, ["tests/test_recorded.py", "tests/test_unrecorded.py"]
-        )
-        check("a gate falling through but ABSENT from the stated population is reported",
-              len(problems) == 1 and "test_unrecorded.py" in problems[0], str(problems)[:130])
-        check("a recorded name that no longer falls through is reported too",
-              any("no longer fall through" in p for p in module.default_population_problems(
-                  stated, [])),
-              "nothing reported for an empty live population")
+    recorded = {"tests/test_recorded.py": 1.0}
+    stated = {
+        "budget_sec": 100.0,
+        "margin_x": module.margin_for(1.0),
+        "measured_sec": 1.0,
+        "measured_at": "HEAD",
+        "population": recorded,
+    }
+    problems = module.default_population_problems(
+        stated, ["tests/test_recorded.py", "tests/test_unrecorded.py"]
+    )
+    check("a gate falling through but ABSENT from the stated population is reported",
+          len(problems) == 1 and "test_unrecorded.py" in problems[0], str(problems)[:130])
+    check("a recorded name that no longer falls through is reported too",
+          any("no longer fall through" in p for p in module.default_population_problems(
+              stated, [])),
+          "nothing reported for an empty live population")
 
 def probe_the_live_default_states_a_derivation_that_holds() -> None:
     """On the LIVE manifest: the derivation is stated, it holds, and its population is live.
