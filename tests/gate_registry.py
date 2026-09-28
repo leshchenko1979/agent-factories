@@ -683,6 +683,14 @@ OPTIONAL_GATES: dict[str, str] = {
         "DECLARED rather than left to a by-hand run: a probe the audit never executes is "
         "dead text."
     ),
+    "test_insights_author.py": (
+        "meta-factory-only (owner order 2026-09-28) — its subject tool tools/insights.py is "
+        "live-only and does not ship, the same reason both synthesizer siblings above are "
+        "OPTIONAL. It carries the probes for the AUTHOR field's three failure modes: an "
+        "append that accepts a blank, a verify that passes one, and a derivation that "
+        "defaults instead of refusing. Every probe is fixture-driven, because the live "
+        "register IS the artifact under measurement."
+    ),
     "test_template_sync.py": (
         "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "
         "need its own pair-guard."

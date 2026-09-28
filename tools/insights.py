@@ -4,10 +4,15 @@
 Insights record the empirical discoveries, paradoxes, and mechanisms uncovered
 while operating and observing agent factories.
 
+Every entry carries an AUTHOR, so the register distinguishes the owner's own
+insights from a lane's. `--author` is explicit; omitted, it is DERIVED from the
+writing session (`OPENCRABS_SESSION_ID`) and never defaulted — the same identity
+law the ledger reads its own actor under.
+
 Usage:
   python3 tools/insights.py append <id> <topic> <stage> <naive_assumption> <empirical_reality> <mechanism> [options]
   python3 tools/insights.py list
-  python3 tools/insights.py format <id> [--format=tweet|summary|full]
+  python3 tools/insights.py format <id> [--format=tweet|ru|markdown]
   python3 tools/insights.py verify
 """
 
@@ -17,6 +22,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,9 +33,95 @@ LOCK_PATH = REPO / "evidence" / ".insights.lock"
 
 ALLOWED_STAGES = ["stage-0", "stage-1", "stage-2", "stage-3", "stage-4", "fleet-wide"]
 
+# The owner is an AUTHOR no session can stand for, so this literal is accepted
+# as a first-class value and is NEVER derived.
+OWNER_AUTHOR = "Alexey"
+
+# A binding title is written by the daemon and ends with the channel reference,
+# e.g. `Telegram: Factories / Insights [chat:-100…:topic:6865]`.
+_TITLE_TAIL_RE = re.compile(r"\[chat:[^\]]*\]\s*$")
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _lane_from_title(title: str | None) -> str | None:
+    """The lane name carried by a binding title, or None.
+
+    `Telegram: Factories / Insights [chat:-100…:topic:6865]` -> `Insights`.
+
+    The last path segment is the lane, because the leading segments are the
+    chat's and the chat is not the lane. This is the ONLY source for a topic no
+    factory fragment declares, which is why it is read rather than assumed away.
+    """
+    text = _TITLE_TAIL_RE.sub("", str(title or "")).strip()
+    if ":" in text:
+        text = text.split(":", 1)[1].strip()
+    lane = text.rsplit("/", 1)[-1].strip()
+    return lane or None
+
+
+def resolve_author(session_id: str | None = None) -> tuple[str | None, str]:
+    """The authoring lane, derived from the session that is WRITING.
+
+    Identity is DERIVED from `OPENCRABS_SESSION_ID`, never declared — the same
+    rule `tools/ledger.py` reads its own actor under, so a lane cannot silently
+    mislabel itself here either. Two sources, in order:
+
+    1. the fleet registry's DECLARED lanes — a factory fragment names its topics,
+       so the answer is canonical, reviewed, and versioned in the repo;
+    2. the session's own BINDING TITLE — the daemon records the chat and topic
+       name there, and that is the only source for a topic no fragment declares.
+
+    Returns `(lane, reason)`. `lane` is None when neither source places the
+    session, and `reason` then names what failed — never a silent fallback. A
+    guessed author is worse than a missing one, because it reads as provenance.
+    """
+    sid = (session_id or os.environ.get("OPENCRABS_SESSION_ID") or "").strip()
+    if not sid:
+        return None, ("OPENCRABS_SESSION_ID is not set, so the authoring lane is "
+                      "unidentifiable — pass --author")
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    try:
+        import registry  # noqa: PLC0415 — lazy: an append must not pay for it
+    except Exception as exc:  # an import failure is environmental, never an identity
+        return None, f"the lane resolver is unavailable (registry import failed: {exc})"
+    try:
+        bindings, errors = registry.all_bindings()
+    except Exception as exc:
+        return None, f"the lane resolver is unavailable (binding read failed: {exc})"
+    if not bindings:
+        detail = f" ({'; '.join(errors)})" if errors else ""
+        return None, f"no live binding was readable{detail}"
+    mine = [b for b in bindings if b.get("session_id") == sid]
+    if not mine:
+        return None, f"session {sid} holds no live channel binding"
+
+    paths: list[str] = []
+    try:
+        paths = registry.live_fragment_paths([])
+        for path in paths:
+            data, err = registry.load_fragment(path)
+            if err or not isinstance(data, dict):
+                continue
+            chat_id = registry.FACTORY_CHATS.get(data.get("factory"))
+            for lane in data.get("lanes") or []:
+                if not isinstance(lane, dict):
+                    continue
+                resolved = registry.resolve_lane(lane, mine, {}, chat_id)
+                if resolved.get("session_id") == sid and lane.get("topic"):
+                    return str(lane["topic"]), ""
+    except Exception as exc:
+        return None, f"the lane resolver is unavailable (fragment read failed: {exc})"
+
+    lane = _lane_from_title(mine[0].get("session_title"))
+    if lane:
+        return lane, ""
+    return None, (f"session {sid} matches no lane declared in {len(paths)} fragment(s) "
+                  f"and its binding title carries no channel name — pass --author")
 
 
 def append_insight(
@@ -41,9 +133,13 @@ def append_insight(
     mechanism: str,
     tweet_hook: str = "",
     ru_summary: str = "",
+    author: str = "",
 ) -> dict:
     if stage not in ALLOWED_STAGES:
         raise ValueError(f"stage must be one of {ALLOWED_STAGES}, got '{stage}'")
+    if not str(author or "").strip():
+        raise ValueError("author is required — a row with no author reads as provenance "
+                         "while carrying none")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -65,6 +161,7 @@ def append_insight(
                 "n": next_n,
                 "id": slug,
                 "ts": now_iso(),
+                "author": str(author).strip(),
                 "topic": topic,
                 "stage": stage,
                 "naive_assumption": naive_assumption,
@@ -120,6 +217,13 @@ def verify_insights() -> tuple[bool, list[str]]:
             if not data.get(req):
                 errors.append(f"line {idx}: missing required field '{req}'")
 
+        # `author` is required on every row written since the field landed. Rows
+        # predating it carry no key at all and stay valid — the register is
+        # append-only, so history is not rewritten to invent one. An EMPTY value
+        # is a defect either way: it reads as provenance while carrying none.
+        if "author" in data and not data.get("author"):
+            errors.append(f"line {idx}: empty author")
+
     return len(errors) == 0, errors
 
 
@@ -134,6 +238,10 @@ def main() -> int:
     p_append.add_argument("naive_assumption", help="The common naive intuition")
     p_append.add_argument("empirical_reality", help="What empirical telemetry proved")
     p_append.add_argument("mechanism", help="The structural fix or mechanism that solved it")
+    p_append.add_argument("--author", default="",
+                          help=f"the authoring lane, or the literal {OWNER_AUTHOR} for the "
+                               f"owner's own insights. Omitted: DERIVED from "
+                               f"OPENCRABS_SESSION_ID, and refused when it resolves to nothing")
     p_append.add_argument("--tweet", default="", help="Draft tweet narrative hook")
     p_append.add_argument("--ru", default="", help="Russian summary for Miidas/Ru-speaking audience")
 
@@ -147,6 +255,12 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.cmd == "append":
+        author = (args.author or "").strip()
+        if not author:
+            author, why = resolve_author()
+            if not author:
+                print(f"FAIL: --author is required — {why}", file=sys.stderr)
+                return 2
         try:
             entry = append_insight(
                 slug=args.id,
@@ -157,8 +271,10 @@ def main() -> int:
                 mechanism=args.mechanism,
                 tweet_hook=args.tweet,
                 ru_summary=args.ru,
+                author=author,
             )
-            print(f"appended insight #{entry['n']}: {entry['id']} [{entry['stage']}]")
+            print(f"appended insight #{entry['n']}: {entry['id']} [{entry['stage']}] "
+                  f"by {entry['author']}")
             return 0
         except ValueError as e:
             print(f"FAIL: {e}", file=sys.stderr)
@@ -181,7 +297,10 @@ def main() -> int:
         for line in INSIGHTS_PATH.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 d = json.loads(line)
-                print(f"#{d['n']} [{d['stage']}] {d['id']}: {d['topic']}")
+                # A row predating the field prints `legacy` rather than a blank,
+                # so "no author recorded" is never mistaken for an authored blank.
+                print(f"#{d['n']} [{d['stage']}] {d['id']} "
+                      f"({d.get('author') or 'legacy'}): {d['topic']}")
         return 0
 
     elif args.cmd == "format":
@@ -205,6 +324,7 @@ def main() -> int:
             print(target.get("ru_summary") or "No Russian summary recorded.")
         else:
             print(f"## Insight #{target['n']}: {target['topic']} ({target['stage']})\n")
+            print(f"**Author:** {target.get('author') or 'legacy — predates the field'}\n")
             print(f"**Naive assumption:** {target['naive_assumption']}\n")
             print(f"**Empirical reality:** {target['empirical_reality']}\n")
             print(f"**Structural mechanism:** {target['mechanism']}\n")

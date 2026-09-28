@@ -2107,6 +2107,25 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_header_closure.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_header_closure.py"])
 
+    # 65. Insights AUTHOR gate (owner order 2026-09-28): the register's rows must say WHO
+    #     authored them — the lane's name, or `Alexey` for the owner's own insights. Until
+    #     now the register carried no author at all, so a lane's insight and an
+    #     auto-synthesised one were indistinguishable to every reader, and the ambiguity is
+    #     exactly what a second consumer (the miidas content unit the owner derives from the
+    #     same rows) cannot survive. Under test is the field's THREE failure modes, each a
+    #     way it can LIE rather than merely be absent: an append that accepts a blank, a
+    #     `verify` that passes one, and a derivation that DEFAULTS instead of refusing —
+    #     the ledger's own defect class one surface over, where a default stamps an author
+    #     no lane ever claimed and reads as provenance. The fragment leg is asserted to WIN
+    #     over the title leg, so the ordering is checked rather than assumed.
+    #     FIXTURE-DRIVEN BY CONSTRUCTION: every probe redirects INSIGHTS_PATH into a
+    #     temporary directory, because a probe that appended to evidence/insights.jsonl to
+    #     test the append would be writing the artifact it measures. Registered as OPTIONAL,
+    #     not REQUIRED — its subject tool `tools/insights.py` is meta-factory-only and does
+    #     not ship, the same reason its synthesizer sibling sits in OPTIONAL_GATES.
+    if (repo_root / "tests/test_insights_author.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_author.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
