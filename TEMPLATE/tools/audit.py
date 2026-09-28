@@ -1961,6 +1961,16 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_names.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_names.py"])
 
+    # `test_kit_surfaces.py` (issue #214) is the gate for the surface census itself. It was
+    # run by NOTHING -- `grep -c kit_surfaces tools/audit.py` -> 0 -- so the instrument's own
+    # verdict reached no consumer, which is how an S1 predicate that could never match a
+    # hyphenated tool survived as its own headline red. OPTIONAL for the same reason as its
+    # siblings: its population is `TEMPLATE/tools/`, and `tools/kit_surfaces.py` does not
+    # ship (docs/instruments/kit.md section 2.1), so a member has neither the tool nor the
+    # tree it sweeps.
+    if (repo_root / "tests/test_kit_surfaces.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_surfaces.py"])
+
     # 56. Publish gate (issue #146, ruling n=1168): the pusher holds a commit inside its
     #     grace window, publishes one past it, reports a diverged branch without resolving
     #     it, and carries no force or rebase in its executable path. Registered rather than

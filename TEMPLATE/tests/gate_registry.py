@@ -745,6 +745,16 @@ OPTIONAL_GATES: dict[str, str] = {
         "verdict is a REFUSAL when the leg reached no member, so an absent fleet fails "
         "loudly rather than publishing an empty census that reads as a clean one."
     ),
+    "test_kit_surfaces.py": (
+        "meta-factory-only (issue #214) — its POPULATION is `TEMPLATE/tools/`, and the tool "
+        "it judges (`tools/kit_surfaces.py`) is one of the five root-side executables that "
+        "do not ship (docs/instruments/kit.md section 2.1): the manifest is 100% "
+        "TEMPLATE-rooted, so a member has neither the tool nor the tree it sweeps. It is "
+        "this factory's own gate for the surface census, and it exists because that census "
+        "was run by NOTHING until #214 — an instrument whose verdict reaches no consumer is "
+        "indistinguishable from one that passes, which is how an S1 predicate that could "
+        "never match a hyphenated tool survived as its own headline red."
+    ),
 }
 
 REQUIRED_PREDICATE = (

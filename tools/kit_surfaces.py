@@ -151,6 +151,16 @@ def named(stem: str, text: str) -> bool:
     alts = (stem, stem.replace("_", "-"), stem.replace("-", "_"))
     return any(a in text or (a + ".py") in text for a in alts)
 
+def exercised_by_gate(stem: str, tests) -> bool:
+    """S1: does some gate's NAME carry this tool's stem?
+
+    Named rather than inlined so the census and its probe drive ONE expression (#214) --
+    and so the leg can be shown to return FALSE as well as True. A live population in
+    which every row reads True cannot demonstrate that it is able to say no, which is
+    exactly how a spelling-sensitive predicate looked harmless.
+    """
+    return any(named(stem, t) for t in tests)
+
 
 def build() -> dict:
     # The population is PYTHON MODULES AND EXTENSIONLESS EXECUTABLES, not `*.py`.
@@ -203,7 +213,7 @@ def build() -> dict:
         # S1 asks the SAME question S2/S3 ask -- does a gate exercise this tool? -- over a
         # different corpus, so it answers it with the SAME function (#214). The hand-rolled
         # normalisation that stood here was a SECOND predicate, and it was wrong.
-        s1 = any(named(stem, t) for t in tests)
+        s1 = exercised_by_gate(stem, tests)
         s2 = named(stem, boot)
         s3 = named(stem, law_text)
         s4 = "TEMPLATE/tools/%s" % p.name in kit_paths
