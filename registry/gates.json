@@ -320,6 +320,7 @@
     "tests/test_insights_author.py": "pytest",
     "tests/test_insights_class.py": "pytest",
     "tests/test_insights_gate_recorded.py": "pytest",
+    "tests/test_insights_status.py": "pytest",
     "tests/test_instrument_census.py": "script",
     "tests/test_kit_census.py": "script",
     "tests/test_kit_deliver.py": "script",
