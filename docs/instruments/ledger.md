@@ -386,6 +386,20 @@ Two rules came with it:
   coverage.** `unittest.main()` never fires when the file is run as a script. The runner is called
   from BOTH exit paths, including the by-design `SkipGate` one — a tree with no ledger is exactly a
   tree that needs the seam proven.
+- **AND IT MUST BE RUN AS A SCRIPT — `pytest` reports rc=5 over it, which reads exactly like a
+  failure.** Measured 2026-09-28 by HQ re-verifying the ledger set: SIX of the eight gates
+  (`test_ledger`, `test_ledger_identity`, `test_ledger_no_shrink`, `test_ledger_index`,
+  `test_docs_sync`, `test_template_sync`) are `__main__` scripts, so `python3 -m pytest
+  tests/<x>.py` returns **rc=5 "no tests ran"** — a number that means *the harness found nothing to
+  run*, never *the gate failed*. Run them as `python3 tests/<x>.py`. This is the mirror of the
+  blind-counter class: there a counter could not SEE the fault, here a runner INVENTS one, and both
+  are silent for the same reason — the exit code is read as a verdict without asking what the
+  harness can observe. A gate's wrapper and a gate's body are different instruments.
+- **GREEN AND CLEAN ARE NOT THE SAME OUTPUT, and a receipt must carry which one it read.**
+  `test_ledger_no_shrink` on origin/main is green WITH ONE DECLARED EXEMPTION, which the gate prints
+  itself ("a visible debt, not a clean run"). So "all rc=0" is true and would still be an
+  over-reading if it were offered as "nothing outstanding" — the exemption is the difference, and it
+  is stated in the gate's own output rather than in its exit code.
 
 **THE BOUND, measured, and stated so it is not rediscovered as a defect.** The same source carries
 `TestWriterGateConvergence`, which asserts the writer and the gate return the **SAME** verdict for
