@@ -142,7 +142,9 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
     declared_keys,
+    declared_reclose,
     declared_revision,
+    mentions_reclose,
     declared_telemetry_provenance,
     declares_field,
     split_canonical_run,
@@ -869,7 +871,25 @@ def cmd_append(args: argparse.Namespace) -> int:
             # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the two refusals
             # above state: this binds the row about to be written, so it can never
             # reach history. EXEMPTIONS govern `verify`'s reading of history only.
-            if args.event == "close" and not declares_field(args.detail, "reclose"):
+            if args.event == "close" and not declared_reclose(args.detail):
+                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED. A
+                # `reclose` value containing a SPACE terminates the canonical
+                # trailing run, so the row declares nothing even though its author
+                # wrote the token -- measured 2026-09-28: the guard prescribed a
+                # declaration, `declares_field` could never accept it (it type-tests
+                # the value), and once that was fixed a multi-word reason turned out
+                # to break the run itself. Two stacked defects reached the shipped
+                # tool because the leg had NO behavioural probe, so the message below
+                # states the VALUE FORM as well as the key.
+                if mentions_reclose(args.detail):
+                    sys.exit(
+                        "ledger append refused: this detail carries `reclose=` but NOT "
+                        "as a declaration -- its value must be ONE token (no spaces), "
+                        "because a value containing a space TERMINATES the canonical "
+                        "trailing run and the token then sits outside the run every "
+                        "trailer-scoped reader stops at. Write `reclose=<one-token>` "
+                        "with the explanation in the detail's prose (#213)."
+                    )
                 prior_closes = [r for r in rows
                                 if r.get("event") == "close"
                                 and r.get("subject") == args.subject]
@@ -880,7 +900,7 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"n={last.get('n')} ({last.get('ts')}). IF THIS IS A RETRY after a "
                         f"timeout, THE FIRST WRITE LANDED -- do not append again. A "
                         f"deliberate re-close (the subject was re-opened) declares itself "
-                        f"with `reclose=<reason>` in its own detail (#213)."
+                        f"with `reclose=<one-token>` in its canonical trailer (#213)."
                     )
             # AND THE ROW MUST DECLARE THE REVISION ITS RECEIPTS DESCRIBE (#187). The
             # invariant is `close_row_revision`, enforced by

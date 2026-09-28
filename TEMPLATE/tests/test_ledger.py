@@ -1576,6 +1576,64 @@ def main() -> int:
             check(f"and it declared no {key} (the probe is not vacuous)",
                   not declares_field(detail, key), detail[-90:])
 
+    # --- #213 leg 1, DRIVEN rather than grepped -------------------------------------
+    # The refusal shipped with NO behavioural probe. It was "verified" by grepping its
+    # own source for the word `reclose`, which proves the mechanism EXISTS and says
+    # nothing about whether it FUNCTIONS -- and it did not. `declares_field` serves a
+    # NUMERIC key and TYPE-TESTS the value, so `reclose=<reason>` could never satisfy it
+    # and the escape hatch the refusal's own message prescribed was unreachable: every
+    # second close was refused, the lawful re-close included. Four arms, so a green that
+    # could not have failed is impossible -- (a) accepts, (b) refuses BY NAME, (c) proves
+    # the refusal wrote nothing, and (d) is the arm that reds under the defect above.
+    with tempfile.TemporaryDirectory() as td:
+        rc_ledger = Path(td) / "reclose.jsonl"
+        subj = "#4242"
+        run(rc_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        run(rc_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", subj, "--detail", f"intake: {subj}")
+        run(rc_ledger, "append", "--event", "claim", "--actor", "worker",
+            "--subject", subj, "--detail", f"claim: {subj}")
+        rc_detail = (f"close {subj}: a fixture close. rework=none board=closed "
+                     f"head={'a' * 40}")
+
+        r = run(rc_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", subj, "--detail", rc_detail)
+        check("(a) the lawful close is ACCEPTED (the control)",
+              r.returncode == 0, r.stderr.strip()[-90:])
+
+        before = rc_ledger.read_bytes()
+        r = run(rc_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", subj, "--detail", rc_detail)
+        msg = (r.stdout + r.stderr).strip()
+        check("(b) an identical second close is REFUSED",
+              r.returncode != 0, msg[-90:])
+        check("(b) and the refusal NAMES the existing row, not merely refuses",
+              "already carries a close" in msg and "n=" in msg, msg[-110:])
+        check("(c) a refused append wrote NOTHING",
+              rc_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (d) THE ARM THIS PROBE EXISTS FOR. Under `declares_field` this reds: the
+        # declaration cannot satisfy a type-tested predicate, so a lawful re-close
+        # was refused while the refusal's own message told the author to declare it.
+        r = run(rc_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", subj, "--detail", rc_detail + " reclose=reopened-by-probe")
+        check("(d) a second close DECLARING reclose=<one-token> is ACCEPTED "
+              "(the escape hatch is reachable)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+
+        # (e) THE MALFORMED FORM IS NAMED, not silently ignored. A multi-word value
+        # terminates the canonical trailing run, so the row declares nothing while its
+        # author believes it did -- measured: `trailer_tokens` returns [] for
+        # `... head=<sha> reclose=two words`. The refusal must say WHY, or the author
+        # is told to declare the token they already wrote.
+        r = run(rc_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", subj,
+                "--detail", rc_detail + " reclose=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(e) a MULTI-WORD reclose= is refused AND the malformation is named",
+              r.returncode != 0 and "ONE token" in msg, msg[-110:])
+
     print()
     if failures:
         print(f"ledger gate FAILED: {len(failures)} check(s)")

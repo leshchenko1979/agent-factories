@@ -707,6 +707,26 @@ one subject are lawful — two duty receipts — so a blanket rule would refuse 
 legitimate RE-CLOSE (after a reopen) declares itself in the row's own `detail` with the `reclose=`
 token; `close` first, stated rather than inferred.
 
+**The re-close declaration's VALUE is ONE token, and that is not a style rule — a value containing
+a space TERMINATES the canonical trailing run.** Measured 2026-09-28:
+`trailer_tokens("... head=<sha> reclose=the subject was reopened")` is `[]`, so a row written in
+that form declares nothing at all while its author believes the re-close declared. Write
+`reclose=<one-token>` and keep the explanation in the detail's prose, which is where this ledger
+has always put narrative.
+
+**Two stacked defects reached the shipped tool, and the probe that catches either is now in
+`tests/test_ledger.py` (arms a-e).** The refusal first called `declares_field`, which serves a
+NUMERIC key and TYPE-TESTS the value it finds — so no free-text `reclose` value could satisfy it,
+and the escape hatch the refusal's own message prescribed was UNREACHABLE while every second
+`close` was refused, the lawful re-close included. It had been "verified" by grepping its own
+source for the word `reclose`: a receipt that proves a mechanism EXISTS and says nothing about
+whether it FUNCTIONS. Fixing the predicate exposed the second defect, the disappearing run above.
+Hence the pair of readers — `declared_reclose` reads the canonical run and IS the guard's
+predicate, while `mentions_reclose` reads the whole detail and never may be (a lexical test lets a
+row that merely DISCUSSES a re-close satisfy its own guard, the `#88` / `n=405` clause 5 damage).
+The lexical half exists for one job: so the refusal can NAME a malformed declaration rather than
+silently not seeing it, since otherwise an author is told to declare the token they already wrote.
+
 **The upstream half is not optional, and this is where the budget comes from.** The refusal stops
 the duplicate; it does not stop the timeout, and callers keep timing out until the append's own
 budget is a **declared multiple of a measured runtime**. Measured 2026-09-28 on the ops session DB,
@@ -721,7 +741,8 @@ whose `messages` table carries NO index on `created_at` (only the rowid autoinde
 
 **The cost is the SCAN, not the window** — a one-hour range costs what a week costs — so narrowing
 the range does not help. The bound is therefore a declared budget,
-`TELEMETRY_QUERY_BUDGET_SEC = 30.0` in `tools/telemetry.py`, which is **0.28x of the 106.1 s worst
+`TELEMETRY_QUERY_BUDGET_SEC` in `tools/telemetry.py` (default **30.0 s**, read through the
+`OC_TELEMETRY_BUDGET_S` seam so a factory can state its OWN measured multiple), which is **0.28x of the 106.1 s worst
 case**, enforced by a SQLite progress handler so a runaway scan is aborted rather than allowed to
 outlive its caller. A cut-off query returns **`None`**, which every call site already renders as the
 STATED ABSENCE `telemetry=unavailable` (`§9.8`, and the `#130` class): a row of zeros would read as

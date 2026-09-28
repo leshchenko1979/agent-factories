@@ -198,7 +198,43 @@
       "dated": true
     }
   ],
-  "codification_plan": [],
+  "codification_plan": [
+    {
+      "finding": "DATE_TOKEN rejects the ISO-8601 instant form (fleet law's mandated dating form)",
+      "disposition": "landed",
+      "home": "tools/review.py DATE_TOKEN (commit 348f758)",
+      "reason": null,
+      "recorded_at": "2026-09-28T19:02:20Z"
+    },
+    {
+      "finding": "the promotion has no ledger close row (no intake/claim/dispatch/close names it)",
+      "disposition": "routed",
+      "home": "evidence/ledger.jsonl - the close row this cycle's closure writes",
+      "reason": null,
+      "recorded_at": "2026-09-28T19:02:21Z"
+    },
+    {
+      "finding": "no gate reads a promotion's close-row declarations (promotion=/naming=/review=/vocabulary= -> 0 files)",
+      "disposition": "routed",
+      "home": "tests/ - the promotion close-row gate the methodology lane lands with this cycle's close row",
+      "reason": null,
+      "recorded_at": "2026-09-28T19:02:21Z"
+    },
+    {
+      "finding": "codification_plan was read and initialised but written by nothing, so the schema's own close condition could never be met",
+      "disposition": "landed",
+      "home": "tools/review.py cmd_codify (commit 6c4f42f)",
+      "reason": null,
+      "recorded_at": "2026-09-28T19:10:17Z"
+    },
+    {
+      "finding": "close --status COMPLETED returned rc=0 over 14 PENDING lenses and over an accepted finding carrying no carrier, so the cycle reached a terminal state on unrun work",
+      "disposition": "landed",
+      "home": "tools/review.py cmd_close (commit 5b2fe9f)",
+      "reason": null,
+      "recorded_at": "2026-09-28T19:10:18Z"
+    }
+  ],
   "frozen_at": null,
   "inputs_snapshot": null,
   "step0_log": [
@@ -253,5 +289,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-09-27T21:42:54Z"
+  "updated_at": "2026-09-28T19:10:18Z"
 }
