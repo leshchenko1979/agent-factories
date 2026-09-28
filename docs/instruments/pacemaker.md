@@ -363,35 +363,42 @@ the one it came from.**
   directions, each correct for its own predicate (frame §7.5).
 
 **Scope:** the member fragments in `registry/factories/*.json`. **Instant:** HELD read by
-`tools/instrument_census.py` at **2026-09-27T21:40:04Z** — the stamp the committed artifact
-`evidence/instrument-census-pacemaker-2026-09-27.md` carries, so this citation resolves to a receipt
+`tools/instrument_census.py` at **2026-09-28T02:40:27Z** — the stamp the artifact
+`evidence/instrument-census-pacemaker-2026-09-28.md` carries, so this citation resolves to a receipt
 that agrees with it. **The artifact RE-STAMPS on every run** — the tool always writes it
 (`--stdout` only *also* prints) — so read the stamp from the copy in hand rather than from this line.
 An earlier revision of this sentence cited `2026-09-27T19:16:27Z` and called it the artifact's *first
 line*; measured against the committed copy it matched neither, since the stamp rides the artifact's
 `Read at` / `Instant:` lines and moves every run. Its readings were unaffected by that re-stamp —
 only the stamp moved, which is the reference moving while the measurement stands still. That artifact
-reads the **eleven**-path set §2 declares (its predecessor at 18:58:07Z read nine). **CURRENT** read by `md5sum` against the **committed**
-template halves (`git show HEAD:TEMPLATE/<path>`, not a working tree other lanes are editing) at
-**2026-09-27T19:05Z** over the same eleven paths in the same five member repos, and re-read at
-**2026-09-27T21:21:50Z** at HEAD `29a117c` after `3793de5` (19:58:46Z) moved row 10. Earlier instants:
-07:27:09Z, 08:38Z, 15:19:17Z, 18:49:37Z.
+reads the **eleven**-path set §2 declares (its predecessor at 18:58:07Z read nine). **CURRENT** read by
+blob hash — `git rev-parse HEAD:<path>` on both sides, so the comparison is like-with-like, plus
+`git hash-object` for a working-tree file — against the **committed** template halves
+(`git show HEAD:TEMPLATE/<path>`, not a working tree other lanes are editing) at
+**2026-09-28T02:42:06Z** at HEAD `2884edf` over the same eleven paths in the same six member repos,
+with the authoring repo as a **positive control**: it must read 11/11 against itself, and did.
+Earlier instants: 07:27:09Z, 08:38Z, 15:19:17Z, 18:49:37Z, 19:05Z, 21:21:50Z.
 
-**The reference moves under a census.** Row 10 (`tests/ledger_boundary.py`) changed at 19:58:46Z,
-twenty-three minutes after the 19:35 reading that called all three holders byte-identical — so that
-reading was true at its instant and is false against HEAD now. This is the second time in one day a
-count moved because the reference moved, and in both cases the measurements were correct when taken.
-The predicate that survives is the frame's (§7.5): read the **committed** revision and name its sha
-beside the instant, because a figure without the sha is unreproducible the moment anyone else runs it.
-**Resolve the member's repo from its own registry fragment — never from `/root/<slug>`.** `infra-factory`
-lives at `/root/vds-servers`; a probe that assumed the slug returned a clean *all eleven absent* for a
-directory that was never there, which reads exactly like a member that adopted nothing.
+**The reference moves under a census, and it has now moved twice on the same rows.** Row 10
+(`tests/ledger_boundary.py`) changed at 19:58:46Z (`3793de5`), twenty-three minutes after a 19:35
+reading that had called all three holders byte-identical. Then `94f69b8` (2026-09-28T01:08:03Z,
+*"the shipped tree's own audit is EXECUTED"*) moved **three declared rows at once — 8, 9 and 10** —
+and every adopter's declaration predates it. So all three now lag on at least one declared row
+**without any of them changing a file**: the counts moved, the members did not, and every measurement
+was correct when taken. That is the purest form of the class. The predicate that survives is the
+frame's (§7.5): read the **committed** revision and name its sha beside the instant, because a figure
+without the sha is unreproducible the moment anyone else runs it. **Resolve the member's repo from its
+own registry fragment — never from `/root/<slug>`.** `infra-factory` lives at `/root/vds-servers`; a
+probe that assumed the slug returned a clean *all eleven absent* for a directory that was never there,
+which reads exactly like a member that adopted nothing. **And the authoring repo is the probe's own
+positive control:** a reading in which the SOURCE differs from its own standard is not a finding about
+the fleet, it is a broken instrument — which is how both defects in §9.1 item 8 were caught.
 
 | factory | held | current | disposition |
 |---|---|---|---|
-| `infra-factory` | **11/11** | **11/11** | **ADOPTED** — the fleet's FIRST declared instrument row, and the member that found a defect in this declaration. Its fragment carries `instruments.pacemaker` = `state: adopted`, `green: true`, `behind_by: 0`, `measured_at 2026-09-27T18:35:18Z` (committed `a83b40e`), so the census reads **ADOPTED** on a live member rather than `HELD-UNDECLARED`. Its own gate: `rc=0`, **101 check(s), 1 SKIPPED**; `cron_thinness` `rc=0`. It re-copied all five files this instrument's briefs flagged — including a fourth the brief did not name (`test_board_intake_recorded.py`, found at 17:53Z) — plus the boundary reader and `ledger_declaration` closure, commit `c41d4e8e`. **It adopted five files rather than three** and named `tests/ledger_boundary.py` + `tools/ledger_declaration.py` as the closure the boundary reader needs — which is why §2 now declares eleven paths (§9.1 item 6). It also corrected my framing: the pre-fix gate did **not** crash in its tree, it read green while never exercising the reader's declared SKIP path, so *coverage gap* is the true statement and *adopting fixed a crash* must not travel. **CURRENT, re-measured by this lane at HEAD `29a117c` (2026-09-27T21:21:50Z), member committed bytes vs `git show HEAD:TEMPLATE/<path>`: 9/11 same, 2 differ.** Row 10 lags — `3793de5` (19:58:46Z) added the absence contract to `TEMPLATE/tests/ledger_boundary.py` (+36 lines) after this member copied at 18:19Z. Row 8 is a **committed lag with a clean disk**: its repaired form sits on disk byte-identical to TEMPLATE HEAD (`e3fd9f1a…`) while this member's own HEAD carries the pre-repair `49ed31df…` (`M` dirty in its tree), so that repair exists in **no clone**. On the **on-disk** predicate this member reads 10/11 — which is what the Delegate measured at 21:05Z — and the two readings differ by PREDICATE, not by error (frame §7.5: the STANDARD is committed; a live-tree SUBJECT owes its axis). Its `reason` field carries the one qualifier honestly: two board gates are RED on a **declared inapplicability** — its issue board IS its ledger, one surface, so a board/ledger close-agreement predicate has nothing to agree about (§9.1 item 4) — filed at ledger n=611 and routed to the Instruments-methodology lane. |
-| `ai-antispam` | **11/11** | 9/11 | **HELD-UNDECLARED** — the patrol pair landed (`95b7388`, re-ported to the fixed upstream) and the pin re-vendored (`657108d`); the gate is **registered as its own audit row, gate 14**, and reads `rc=0` / 102 checks in BOTH its script and pytest forms. The held gate that was blocking its deploy path is therefore gone — the declared-skip fix turned a build-push red into a green gate, after a 15.5 h block earlier the same day. **Its declaration was sent to the Delegate at 18:17Z but is not yet in the store**, so the census reads silence. Two paths differ at HEAD `29a117c` (21:21:50Z) and **both are its declared board forks** (rows 8–9: own anchor + the #59 exemption surface), so its restated `behind_by 0` holds and the Delegate verified it. The third divergence this row formerly named (`tools/registry.py`) closed at 20:18Z, and row 10 was taken with the `3793de5` contract — which makes this the **one adopter current on row 10**, and the only one whose two differences are decisions rather than lags. |
-| `inferhub-watch` | **11/11** | 10/11 | **HELD-UNDECLARED** — refreshed the three pre-fix files (`4566913`, verified a strict subset before overwrite) and its gate reads `rc=0`, 101 checks, 1 SKIPPED. **Row 10 lags** — `dd0005c2…` against HEAD's `3638680f…`, the `3793de5` contract — measured 21:21:50Z at HEAD `29a117c`; this row's earlier 11/11 was true at 19:05Z and the reference moved underneath it. **My earlier row for this member was wrong in two particulars and is withdrawn**: it said the runner "still raises `FleetManifestError` until it writes `registry/fleet.json`". Measured this turn, `registry/fleet.json` exists, is **tracked**, and carries `profile_root` / `profile` / `factories[]` with `job_prefixes ["inferhub-"]`; the runner **completes all eight legs** and `rc=1` is a **verdict, not a crash** — 4 problems over 9 open issues examined, 4 cron rows attributed and judged. A false "cannot start" in a census row sends the next adopter to fix something already fixed, which is why the row carries the re-measurement instead of the claim. It self-corrected the same class one level down: it had told the Delegate it "declared the ledger fork in `kit-decisions.json`" when that file was never written — and `kit-decisions.json` is the meta-factory's own record, not a member surface. |
+| `infra-factory` | **11/11** | 8/11 | **ADOPTED** — the fleet's FIRST declared instrument row, and the member that found a defect in this declaration. Its fragment carries `instruments.pacemaker` = `state: adopted`, `green: true`, `behind_by: 0`, `measured_at 2026-09-27T22:12Z`, so the census reads **ADOPTED** on a live member rather than `HELD-UNDECLARED`. Its own gate: `rc=0`, **101 check(s), 1 SKIPPED**; `cron_thinness` `rc=0`. It re-copied all five files this instrument's briefs flagged — including a fourth the brief did not name (`test_board_intake_recorded.py`) — plus the boundary reader and `ledger_declaration` closure. **It adopted five files rather than three**, which is why §2 now declares eleven paths (§9.1 item 6). It also corrected my framing: the pre-fix gate did **not** crash in its tree, it read green while never exercising the reader's declared SKIP path, so *coverage gap* is the true statement and *adopting fixed a crash* must not travel. **CURRENT 8/11, measured at HEAD `2884edf` (2026-09-28T02:42:06Z): rows 8, 9 and 10 differ and all three are LAGS** — each holds the pre-`94f69b8` revision, so this member is behind by a **revision**, not by a port: re-copy three files and it is current. Its `behind_by: 0` was true at 22:12Z and is stale now by the standard's own move, not by any error in its measurement. Its `reason` field carries the one qualifier honestly: two board gates are RED on a **declared inapplicability** — its issue board IS its ledger, one surface, so a board/ledger close-agreement predicate has nothing to agree about (§9.1 item 4) — filed at ledger n=611 and routed to the Instruments-methodology lane. Its `reason` also carries the two wrong mechanisms §9.1 item 7 corrects. |
+| `ai-antispam` | **11/11** | 8/11 | **ADOPTED** — declared `adopted · green=true · behind_by 0` at `measured_at 2026-09-27T20:24Z` and the declaration is in the store, so the census reads **ADOPTED**. The patrol pair landed (`95b7388`, re-ported to the fixed upstream) and the pin re-vendored (`657108d`); the gate is **registered as its own audit row, gate 14**, and reads `rc=0` / 102 checks in BOTH its script and pytest forms — the declared-skip fix turned a build-push red into a green gate, after a 15.5 h block earlier the same day. **CURRENT 8/11 at HEAD `2884edf` (2026-09-28T02:42:06Z): rows 8–9 differ as its DECLARED BOARD FORKS** (own anchor + the #59 exemption surface, each a decision) **and row 10 differs as a LAG** (the pre-`94f69b8` revision). Its `behind_by 0` was true at 20:24Z — when it was the one adopter current on row 10 — and the standard's 01:08:03Z move made it 1 without this member touching anything. |
+| `inferhub-watch` | **11/11** | 6/11 | **ADOPTED** — declared `adopted · green=true · behind_by 1` at `measured_at 2026-09-28T02:36Z`, and its own reason separates the two axes correctly: TRACKEDNESS (8 of 11 in its commit tree; 3 untracked) from REVISION LAG. **CURRENT 6/11 at HEAD `2884edf` (2026-09-28T02:42:06Z): three paths are ABSENT from its commit tree** — rows 1, 3 and 9 (`tools/patrol_host_state.py`, `tests/test_patrol_host_state.py`, `tests/test_close_board_recorded.py`), its declared carve-out, present on disk and in **no clone**; **rows 8 and 10 differ and both are LAGS** (row 8 pre-`94f69b8`; row 10 `ce314a20…` = `3878936`'s revision, two moves deep). Its gate reads `rc=0`, 101 checks, 1 SKIPPED. **Its earlier row here was wrong in two particulars and is withdrawn**: it said the runner *still raises `FleetManifestError` until it writes* `registry/fleet.json`. Measured, `registry/fleet.json` exists, is **tracked**, and carries `profile_root` / `profile` / `factories[]` with `job_prefixes ["inferhub-"]`; the runner **completes all eight legs** and `rc=1` is a **verdict, not a crash** — 4 problems over 9 open issues examined, 4 cron rows attributed and judged. A false *cannot start* in a census row sends the next adopter to fix something already fixed. Its declared `behind_by 1` does not reproduce on my reading of the same predicate — I count **two** lagging tracked rows, 8 and 10 — and the field is the member's own measurement, so the discrepancy is recorded here rather than silently reconciled. |
 | `miidas` | 1/11 | 1/11 | DEFER (declared) — behind by 10 of 11. Its **transport blocker is discharged**: the manual port proved in `infra-factory` needs no selector (§9.1 item 3), and the requirement was relayed to it 2026-09-27T08:35:59Z. The **board-convention prerequisite** (§9.1 item 4) stands. |
 | `opencrabs-dev` | 0/11 | 0/11 | DEFER (declared) — `registry/` **does not exist** in its tree at all (`ls` rc=2). Its reason is SCOPE rather than effort: the prerequisite (`registry/kit.json` + `tools/kit_pin.py`) does not bootstrap one instrument — it **enrols the factory in the kit manifest system for every instrument at once**, a fleet-level decision that a pacemaker brief would otherwise decide by side effect. Re-entry: when it enrols in the kit for ANY instrument. |
 
@@ -402,16 +409,15 @@ first and `adopted · green=true` in the second, which is a complete adoption wi
 a partial one. Raised by the Delegate from the artifact rather than from a defect report, and recorded
 here because the header that disambiguates them is a scroll away.
 
-**The version gap closed, then reopened on one path.** At the 18:49Z
-reading all three were 6/9 CURRENT on the same three files; `infra-factory` and `inferhub-watch`
-re-ported and both read 11/11 against the committed template halves at 19:05Z, while `ai-antispam`
-differed on three paths of which two are its **declared forks**. Then `3793de5` (19:58:46Z) moved row
-10, so at 21:21:50Z only `ai-antispam` is current on it and the other two lag by exactly one row —
-which is why every figure above carries the sha it was read at. The lesson that survives
-the specific numbers is the one `infra-factory` paid for: a member can hold every declared path and
-still be behind, because **adoption is a revision, not a copy** — and the kit's `behind_by` field
-exists to declare it. Silence is what must not happen, since a member holding a pre-fix gate reads
-green over a defect the fix removed.
+**The version gap closed, reopened on one path, then reopened on three at once.** At the 18:49Z
+reading all three were 6/9 CURRENT; `infra-factory` and `inferhub-watch` re-ported and read 11/11 at
+19:05Z; `3793de5` (19:58:46Z) moved row 10 and left `ai-antispam` the only adopter current on it; then
+`94f69b8` (2026-09-28T01:08:03Z) moved rows **8, 9 and 10** and left **all three** behind — a pure
+reference move, since none of them changed a file. The lesson that survives the specific numbers is the
+one `infra-factory` paid for: a member can hold every declared path and still be behind, because
+**adoption is a revision, not a copy** — and the kit's `behind_by` field exists to declare it. Silence
+is what must not happen, since a member holding a pre-fix gate reads green over a defect the fix
+removed.
 
 **HELD is not ADOPTED — the second leg is the reason, and it is now written by a member.** The
 census reads the per-instrument disposition from `registry/factories/<slug>.json` →
@@ -423,19 +429,23 @@ rather than `unestablished` for all six. The distinction the original reading ex
 survives the fix, and it still decides the row: a `kit`-level `adopted` can never produce `ADOPTED`
 here, because a member that declared its kit adopted has said nothing about this instrument.
 
-**The reading has MOVED, and this is the instrument's first live adoption.** At the 17:48:33Z read
-every row was silent; at **2026-09-27T18:49:37Z** `infra-factory` reads **ADOPTED** — the fleet's
-first declared instrument row, transcribed by the Delegate from the member's own declaration and
-committed. The two other holders (`ai-antispam`, `inferhub-watch`) remain `HELD-UNDECLARED`: they
-hold the complete set and have not declared into `instruments.<slug>`. That is the frame's §7.2
-silence rendered as silence, and it is a member's own act — not a gap in the reader, which now reads
-the surface and produced a state the moment one existed.
+**The reading has MOVED three times, and all three holders have now declared.** At the 17:48:33Z
+read every row was silent; `infra-factory` read **ADOPTED** from 2026-09-27T18:49:37Z — the fleet's
+first declared instrument row — and by 2026-09-28T02:37:37Z **`ai-antispam` and `inferhub-watch` read
+ADOPTED as well**. Three of the five members, and three of the four non-source members, carry a live
+declaration. Every one was written by the member's OWN HQ (`tools/registry.py`: the fragment is
+written by that factory's HQ and by nobody else) and transcribed by the Delegate — never by this
+lane, because `green` is the member's own verdict over the member's own tree, and a declaration
+written from here would be the manufactured adoption the census's two-leg design exists to catch.
 
-**Three of five members hold the complete declared set; two have declared a deferral with a reason and
-a re-entry condition.** The distinction is the point of frame §7.2: a declared deferral
-is a *state*, and only undeclared divergence reds. A census that reported "3 of 5" alone would erase
-the difference between a member that measured itself and said why, and one that has gone quiet — so
-the disposition column is not decoration, it is the half of the figure that a bare count destroys.
+**Three of five members have declared ADOPTED; two have declared a deferral with a reason and
+a re-entry condition.** The distinction is the point of frame §7.2: a declared deferral is a *state*,
+and only undeclared divergence reds. A census that reported "3 of 5" alone would erase the difference
+between a member that measured itself and said why, and one that has gone quiet — so the disposition
+column is not decoration, it is the half of the figure that a bare count destroys. **No row reads
+`HELD-UNDECLARED` at this instant**, which is the state the whole round existed to eliminate: every
+member either holds the complete set with a declaration behind it, or has declared what it lacks and
+why.
 
 **The live path for a member that cannot take the whole kit is the MANUAL PORT, and it is the only
 one.** `infra-factory` is the worked example: it took the declared set plus the closure as ordinary
@@ -443,8 +453,7 @@ files, wrote its own `registry/fleet.json`, and its runner executes all eight le
 selector exists on the transport (§9.1 item 3) and none is required — which matters because a selector
 would hand a member a *subset* of the closure, the exact partial-copy state §3 says raises rather than
 degrades. A member adopting this instrument takes the FULL closure, by hand if necessary.
-
-### 9.1 Six corrections from the adoption round, all measured
+### 9.1 Eight corrections from the adoption round, all measured
 
 1. **A record in another factory's manifest does not satisfy step 2.** `ai-antispam` reported step 2
    already satisfied, citing a `registry/fleet.json` record carrying its own slug and job prefix. Read
@@ -509,6 +518,35 @@ degrades. A member adopting this instrument takes the FULL closure, by hand if n
    by exactly the paths it reaches indirectly.** Routed to the frame's author as a cross-instrument
    clause rather than patched here.
 
+
+7. **A citation can carry the right number in the wrong ROLE, and this one sits in a durable field.**
+   `infra-factory`'s `reason` justifies its `gate_registry.py` divergence with two claims that do not
+   reproduce. (a) *"resolves `<cwd>/tools/audit.py`, which is `/root/tools/audit.py`, absent"* — the
+   source is `REPO = Path(__file__).resolve().parent.parent`, so it resolves the **member's own repo**,
+   and the measured failure is `ImportError: cannot import name 'render_tree_line' from 'audit'
+   (/root/vds-servers/tools/audit.py)`: the **symbol** is absent from that member's deliberately-forked
+   audit, not a path outside the tree. (b) *"`gate_registry.py`'s own law at `:671`"* — `:671` sits
+   inside the `test_kit_names.py` entry of the same file; the clause meant (*each absent one FAILS
+   naming it*) is at **`:687`**. Both are the class this record keeps returning to: an arithmetic
+   check on the number passes, and only reading the line settles the role. The fork itself is genuine
+   and justified — the template registry registers two gates whose symbols this member's audit does not
+   carry, and its second gate is **not present in that tree at all** (and its `registry/gates.json`
+   ships only as `gates.example.json`, a manifest `seed`) — so the correction is to the mechanism, not
+   to the decision. The general form (*a citation asserts a role; no recomputation of its number tests
+   that*) is the frame's reading discipline and is supplied there, not encoded here.
+8. **This instrument's own census probe was wrong twice, and a positive control is what caught both.**
+   Each defect returned a *uniform* verdict that looked like a finding. (a) The declared-set table's
+   right-hand cell **already carries the `TEMPLATE/` prefix**, and the probe prefixed it again, so every
+   comparison ran against `TEMPLATE/TEMPLATE/…` — a path that never existed — and returned *every
+   member 0/11*, including the member that IS the authoring repo. (b) The disk axis compared a
+   **sha256 of the file's contents** against the other side's **git blob hash**: different quantities
+   inside one comparison, so every row read *"[disk differs from commit]"* — again including the
+   source against itself. The tell is the same in both and it is the general rule: **the authoring repo
+   is the probe's own positive control.** If the SOURCE does not read clean against its own standard,
+   the instrument is broken and nothing below it is a finding. A probe that returns one uniform answer
+   for every subject has not measured the subjects; it has measured itself. The corrected probe reads
+   **11/11** for the source and is the one whose figures §9 now carries. The general form (*a sweep
+   that must prove an absence carries a control that can FAIL*) is routed to the frame's author.
 ## 10. Where this instrument's law lives
 
 This file is the instrument's law home. The law it **takes over** is currently stated elsewhere, and
