@@ -9,6 +9,16 @@ insights from a lane's. `--author` is explicit; omitted, it is DERIVED from the
 writing session (`OPENCRABS_SESSION_ID`) and never defaulted — the same identity
 law the ledger reads its own actor under.
 
+Every entry also carries a CLASS, and there are exactly two:
+
+  general         the claim stands outside this fleet: publishable content
+  implementation  its subject is this fleet's own machinery: an internal
+                  amendment for HQ
+
+`--class` is required. An entry that names no audience feeds neither consumer, and
+the two are read by different downstream surfaces, so an unclassified row is
+unusable rather than merely tidy.
+
 Usage:
   python3 tools/insights.py append <id> <topic> <stage> <naive_assumption> <empirical_reality> <mechanism> [options]
   python3 tools/insights.py list
@@ -32,6 +42,11 @@ INSIGHTS_PATH = REPO / "evidence" / "insights.jsonl"
 LOCK_PATH = REPO / "evidence" / ".insights.lock"
 
 ALLOWED_STAGES = ["stage-0", "stage-1", "stage-2", "stage-3", "stage-4", "fleet-wide"]
+
+# The register feeds TWO consumers, so every entry names the one it serves. The values
+# are deliberately coarse: an AUDIENCE split, not a topic taxonomy. A finer value would
+# be a second axis pretending to be this one.
+ALLOWED_CLASSES = ["general", "implementation"]
 
 # The owner is an AUTHOR no session can stand for, so this literal is accepted
 # as a first-class value and is NEVER derived.
@@ -134,12 +149,18 @@ def append_insight(
     tweet_hook: str = "",
     ru_summary: str = "",
     author: str = "",
+    insight_class: str = "",
 ) -> dict:
     if stage not in ALLOWED_STAGES:
         raise ValueError(f"stage must be one of {ALLOWED_STAGES}, got '{stage}'")
     if not str(author or "").strip():
         raise ValueError("author is required — a row with no author reads as provenance "
                          "while carrying none")
+    if not str(insight_class or "").strip():
+        raise ValueError("class is required — an entry that names no audience feeds "
+                         "neither the content pipeline nor HQ")
+    if insight_class not in ALLOWED_CLASSES:
+        raise ValueError(f"class must be one of {ALLOWED_CLASSES}, got '{insight_class}'")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -162,6 +183,7 @@ def append_insight(
                 "id": slug,
                 "ts": now_iso(),
                 "author": str(author).strip(),
+                "class": str(insight_class).strip(),
                 "topic": topic,
                 "stage": stage,
                 "naive_assumption": naive_assumption,
@@ -224,6 +246,16 @@ def verify_insights() -> tuple[bool, list[str]]:
         if "author" in data and not data.get("author"):
             errors.append(f"line {idx}: empty author")
 
+        # `class` follows the same rule as `author`: rows predating the field carry no
+        # key at all and stay valid, while an EMPTY value is a defect either way. An
+        # UNKNOWN value is the same defect wearing a value — a typo'd class feeds
+        # neither consumer while reading as a classification.
+        if "class" in data:
+            if not data.get("class"):
+                errors.append(f"line {idx}: empty class")
+            elif data["class"] not in ALLOWED_CLASSES:
+                errors.append(f"line {idx}: unknown class '{data['class']}'")
+
     return len(errors) == 0, errors
 
 
@@ -242,6 +274,11 @@ def main() -> int:
                           help=f"the authoring lane, or the literal {OWNER_AUTHOR} for the "
                                f"owner's own insights. Omitted: DERIVED from "
                                f"OPENCRABS_SESSION_ID, and refused when it resolves to nothing")
+    p_append.add_argument("--class", dest="insight_class", default="",
+                          choices=ALLOWED_CLASSES,
+                          help="the audience this entry serves: 'general' for publishable "
+                               "content, 'implementation' for an internal HQ amendment. "
+                               "Required.")
     p_append.add_argument("--tweet", default="", help="Draft tweet narrative hook")
     p_append.add_argument("--ru", default="", help="Russian summary for Miidas/Ru-speaking audience")
 
@@ -272,9 +309,10 @@ def main() -> int:
                 tweet_hook=args.tweet,
                 ru_summary=args.ru,
                 author=author,
+                insight_class=args.insight_class,
             )
             print(f"appended insight #{entry['n']}: {entry['id']} [{entry['stage']}] "
-                  f"by {entry['author']}")
+                  f"by {entry['author']} [{entry['class']}]")
             return 0
         except ValueError as e:
             print(f"FAIL: {e}", file=sys.stderr)
@@ -299,8 +337,8 @@ def main() -> int:
                 d = json.loads(line)
                 # A row predating the field prints `legacy` rather than a blank,
                 # so "no author recorded" is never mistaken for an authored blank.
-                print(f"#{d['n']} [{d['stage']}] {d['id']} "
-                      f"({d.get('author') or 'legacy'}): {d['topic']}")
+                print(f"#{d['n']} [{d['stage']}] [{d.get('class') or 'legacy'}] "
+                      f"{d['id']} ({d.get('author') or 'legacy'}): {d['topic']}")
         return 0
 
     elif args.cmd == "format":
@@ -325,6 +363,7 @@ def main() -> int:
         else:
             print(f"## Insight #{target['n']}: {target['topic']} ({target['stage']})\n")
             print(f"**Author:** {target.get('author') or 'legacy — predates the field'}\n")
+            print(f"**Class:** {target.get('class') or 'legacy — predates the field'}\n")
             print(f"**Naive assumption:** {target['naive_assumption']}\n")
             print(f"**Empirical reality:** {target['empirical_reality']}\n")
             print(f"**Structural mechanism:** {target['mechanism']}\n")

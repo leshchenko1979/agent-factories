@@ -2126,6 +2126,16 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_insights_author.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_author.py"])
 
+    # tests/test_insights_class.py -- the CLASS field on the same register: the AUDIENCE
+    # every entry names, because the two consumers are different surfaces. The same three
+    # failure modes one field over: an append that accepts no class, an append that accepts
+    # an UNKNOWN one (a typo'd class passes any "is it set?" check and still feeds neither
+    # consumer), and a `verify` that passes a stored blank. Its MODE is declared in
+    # registry/gates.json in the SAME landing -- the omission #204 had to repair, not
+    # repeated here.
+    if (repo_root / "tests/test_insights_class.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_class.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

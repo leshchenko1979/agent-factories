@@ -691,6 +691,14 @@ OPTIONAL_GATES: dict[str, str] = {
         "defaults instead of refusing. Every probe is fixture-driven, because the live "
         "register IS the artifact under measurement."
     ),
+    "test_insights_class.py": (
+        "meta-factory-only (owner order 2026-09-28) — its subject tool tools/insights.py is "
+        "live-only and does not ship, the same reason its author sibling above is OPTIONAL. "
+        "It carries the probes for the CLASS field's three failure modes: an append that "
+        "accepts a missing class, an append that accepts an unknown one, and a verify that "
+        "passes a stored blank while still accepting a legacy key-less row. Every probe is "
+        "fixture-driven, because the live register IS the artifact under measurement."
+    ),
     "test_template_sync.py": (
         "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "
         "need its own pair-guard."
