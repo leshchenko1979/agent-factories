@@ -107,10 +107,10 @@
       "measured_sec": 9.35
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 13.31,
-      "margin_x": 4.239,
-      "measured_at": "ef16cc601ea39637571e815d0b3f35878da6c1ec",
-      "measured_sec": 3.14
+      "budget_sec": 17.79,
+      "margin_x": 4.176,
+      "measured_at": "e09aa74138ce294668571a3e1396410a5c1b1539",
+      "measured_sec": 4.26
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -173,10 +173,10 @@
       "measured_sec": 55.39
     },
     "tests/test_ledger_schema.py": {
-      "budget_sec": 8.07,
-      "margin_x": 4.41,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 1.83
+      "budget_sec": 17.47,
+      "margin_x": 4.179,
+      "measured_at": "e09aa74138ce294668571a3e1396410a5c1b1539",
+      "measured_sec": 4.18
     },
     "tests/test_ontology.py": {
       "budget_sec": 5.07,
@@ -185,10 +185,10 @@
       "measured_sec": 1.08
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 49.47,
-      "margin_x": 4.062,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 12.18
+      "budget_sec": 56.87,
+      "margin_x": 4.053,
+      "measured_at": "e09aa74138ce294668571a3e1396410a5c1b1539",
+      "measured_sec": 14.03
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 17.67,
@@ -197,10 +197,10 @@
       "measured_sec": 4.23
     },
     "tests/test_registry.py": {
-      "budget_sec": 6.67,
-      "margin_x": 4.507,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 1.48
+      "budget_sec": 9.83,
+      "margin_x": 4.33,
+      "measured_at": "4cfda12c7b0f03897fe2860ddda34422cbd89d82",
+      "measured_sec": 2.27
     },
     "tests/test_registry_render.py": {
       "budget_sec": 23.51,
@@ -299,10 +299,10 @@
       "measured_sec": 0.57
     },
     "tools/ledger.py": {
-      "budget_sec": 5.71,
-      "margin_x": 4.605,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 1.24
+      "budget_sec": 14.87,
+      "margin_x": 4.212,
+      "measured_at": "e09aa74138ce294668571a3e1396410a5c1b1539",
+      "measured_sec": 3.53
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
