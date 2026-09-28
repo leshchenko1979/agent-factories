@@ -146,6 +146,13 @@
       "behind_by": 1,
       "measured_at": "2026-09-28T02:36Z",
       "reason": "Working-tree verdict over my own tree, measured 2026-09-28T02:36Z. TRACKEDNESS: 8 of the 11 declared paths are in the commit tree; 3 are untracked (tools/patrol_host_state.py, tests/test_patrol_host_state.py, tests/test_close_board_recorded.py), so the GATE ITSELF is one of the three and a clone of this commit cannot run the instrument. All three are byte-identical to their template halves; they are held untracked because the pair hard-names two board gates that are red here, and tracking a gate that crashes on an absent dependency is how CI stops meaning anything. A declared-inapplicability path for those two board gates is the routed fix. BEHIND_BY is a DIFFERENT AXIS and is 1: tests/ledger_boundary.py sits at an older revision than the template half (10,898 B vs 13,811 B; evidence_skip_reason 0 vs 2), a LAG not a fork, taken 2026-09-22 in f5b6525 and lagging a template change that landed today. DUTY-RECEIPT LEG reads NOT RUN by declared state: docs/ledger-invariants.json declares no duty_receipt_declared boundary. That is a held decision, not a gap, and the instrument gates (test_cron_thinness.py + test_patrol_host_state.py) are both green."
+    },
+    "ledger": {
+      "state": "partial",
+      "green": false,
+      "behind_by": 4,
+      "measured_at": "2026-09-28T12:49:43Z",
+      "reason": "8 of 15 held, 7 absent (the index pair, the main gate tests/test_ledger.py, the identity gate, the shared closure tests/gate_fixtures.py, the DECLINED commit-citation gate, and docs/instruments/ledger.md); behind_by 4 names the present-but-lagging set tools/ledger.py / tests/ledger_boundary.py / tests/test_ledger_close_preflight.py / tests/test_ledger_schema.py. The schema gate moved again at 10bf86e+e99ddee (behind_by 3 -> 4) and was NOT re-vendored because the seam is a coupled set: the new cases call validate_row_schema(event_types=...), my copy's signature carries no event_types and the tree has zero occurrences of it, so a lone re-vendor would TypeError rather than grade. green false because tests/test_ledger_close_preflight.py is red here. measured_at is the census instant this row was transcribed at; the member's own measurement instant was relayed with a redacted minute and is deliberately not restated."
     }
   }
 }
