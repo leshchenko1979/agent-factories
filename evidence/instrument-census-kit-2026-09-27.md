@@ -1,13 +1,13 @@
 # Instrument adoption census — one predicate over the declared population
 
-Read at **2026-09-27T21:23:57Z** by `tools/instrument_census.py`.
+Read at **2026-09-27T21:56:27Z** by `tools/instrument_census.py`.
 
 ## The predicate, stated before the figures
 
 **Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the
 law doc's declared-set table declares — **2 path(s)** — plus the reload link's own state.
 **Scope:** the member fragments in `registry/factories/*.json`.
-**Instant:** 2026-09-27T21:23:57Z.
+**Instant:** 2026-09-27T21:56:27Z.
 
 **WHAT THIS DOES NOT MEASURE.** It is ONE predicate on file PRESENCE. A present file may
 differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —
