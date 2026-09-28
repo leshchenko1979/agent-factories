@@ -138,5 +138,14 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-27T06:36:31Z"
+  "attested_at": "2026-09-27T06:36:31Z",
+  "instruments": {
+    "pacemaker": {
+      "state": "adopted",
+      "green": true,
+      "behind_by": 1,
+      "measured_at": "2026-09-28T02:36Z",
+      "reason": "Working-tree verdict over my own tree, measured 2026-09-28T02:36Z. TRACKEDNESS: 8 of the 11 declared paths are in the commit tree; 3 are untracked (tools/patrol_host_state.py, tests/test_patrol_host_state.py, tests/test_close_board_recorded.py), so the GATE ITSELF is one of the three and a clone of this commit cannot run the instrument. All three are byte-identical to their template halves; they are held untracked because the pair hard-names two board gates that are red here, and tracking a gate that crashes on an absent dependency is how CI stops meaning anything. A declared-inapplicability path for those two board gates is the routed fix. BEHIND_BY is a DIFFERENT AXIS and is 1: tests/ledger_boundary.py sits at an older revision than the template half (10,898 B vs 13,811 B; evidence_skip_reason 0 vs 2), a LAG not a fork, taken 2026-09-22 in f5b6525 and lagging a template change that landed today. DUTY-RECEIPT LEG reads NOT RUN by declared state: docs/ledger-invariants.json declares no duty_receipt_declared boundary. That is a held decision, not a gap, and the instrument gates (test_cron_thinness.py + test_patrol_host_state.py) are both green."
+    }
+  }
 }
