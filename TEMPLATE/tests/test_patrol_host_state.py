@@ -1555,6 +1555,85 @@ def test_a_duty_value_OUTSIDE_the_domain_is_an_ERROR_never_a_silent_pass() -> No
     assert "outside the domain" in leg["problems"][0], leg["problems"][0]
     assert "duty=done" in leg["problems"][0], leg["problems"][0]
 
+def test_the_NEWEST_receipt_GOVERNS_a_round_that_failed_then_completed() -> None:
+    """#217: a round can fail at T and complete at T+n, and that is not a standing problem.
+
+    The measured instance: round 2026-09-28 on `registry-attest` carried a `duty=failed` row
+    written at 5-of-6, then a `duty=completed` row when the sixth fragment answered. Every
+    row is honest and neither corrects the other, so before this the round red for the rest
+    of its key and a lane had NO lawful way to record the recovery.
+
+    BOTH halves are asserted, because either alone is passable by a wrong implementation:
+    the verdict must go CLEAN, and the SUPERSEDED row must still be printed. A leg that
+    simply dropped the incomplete rows would pass the first half and hide the failure.
+    """
+    failed = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}",
+                          detail="5 of 6 fragments written back. duty=failed", n=1499)
+    failed["ts"] = _plus(_DUTY_BOUND, 0.9)
+    completed = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}",
+                             detail="6 of 6 fragments written back. duty=completed", n=1529)
+    completed["ts"] = _plus(_DUTY_BOUND, 1.5)
+    leg = _duty_leg([_duty_row()], [failed, completed])
+
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["rounds_superseded"] == 1, leg["coverage"]
+    superseded = [e for e in leg["excused"] if "SUPERSEDED" in e]
+    assert len(superseded) == 1, leg["excused"]
+    note = superseded[0]
+    assert "n=1499" in note, note                      # the superseded row, NAMED
+    assert "duty=failed" in note, note                 # with the value it declared
+    assert "n=1529" in note, note                      # and its successor
+    assert "not backfilled" in note, note              # the row is not rewritten
+
+def test_a_round_whose_NEWEST_receipt_failed_still_REDs() -> None:
+    """The discriminator must not weaken the finding it was added alongside.
+
+    Same round, the OPPOSITE order: it completed, then a later row says it failed. The
+    newest declaration governs, so the round is a problem — which is what stops the fix
+    from becoming "any completed row anywhere clears the round".
+    """
+    completed = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}",
+                             detail="6 of 6 fragments written back. duty=completed", n=1529)
+    completed["ts"] = _plus(_DUTY_BOUND, 0.9)
+    failed = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}",
+                          detail="a fragment regressed on re-read. duty=failed", n=1540)
+    failed["ts"] = _plus(_DUTY_BOUND, 1.5)
+    leg = _duty_leg([_duty_row()], [completed, failed])
+
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "did NOT complete" in leg["problems"][0], leg["problems"][0]
+    assert "n=1540" in leg["problems"][0], "the finding must name the GOVERNING row"
+    assert "NEWEST" in leg["problems"][0], leg["problems"][0]
+
+def test_a_SINGLE_incomplete_receipt_still_REDs() -> None:
+    """The single-row case is the one the leg was always right about — unchanged by #217."""
+    leg = _duty_leg([_duty_row()], [_receipt_row(
+        subject=f"registry-attest-{_DUTY_ROUND}",
+        detail="nothing ran today. duty=skipped", n=7)])
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "did NOT complete" in leg["problems"][0], leg["problems"][0]
+    assert leg["coverage"]["rounds_superseded"] == 0, leg["coverage"]
+
+def test_the_DOMAIN_leg_is_NOT_superseded_by_a_later_row() -> None:
+    """A vocabulary fault is not a state a later row settles — the carve-out, pinned.
+
+    An unrecognised token is the WRITER's error, so it is reported even when a later row
+    declares a clean completion. Folding it into the supersession would let a typo be
+    buried by a subsequent correct row, which is the fabrication direction the domain leg
+    exists to refuse.
+    """
+    bad = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}",
+                       detail="the round finished. duty=done", n=1500)
+    bad["ts"] = _plus(_DUTY_BOUND, 0.9)
+    good = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}",
+                        detail="6 of 6 fragments written back. duty=completed", n=1529)
+    good["ts"] = _plus(_DUTY_BOUND, 1.5)
+    leg = _duty_leg([_duty_row()], [bad, good])
+
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "outside the domain" in leg["problems"][0], leg["problems"][0]
+    assert "n=1500" in leg["problems"][0], leg["problems"][0]
+
 def test_a_row_that_DECLARES_NOTHING_is_NOT_a_receipt() -> None:
     """THE false-clean fix (#160), and the probe the first version would have passed.
 

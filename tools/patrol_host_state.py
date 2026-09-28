@@ -1273,6 +1273,7 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     problems: list[str] = []
     excused: list[str] = []
     judged: list[dict] = []
+    rounds_superseded = 0
     rounds_excused_by_bound = 0
     rounds_excused_by_residual = 0
     # The residual's reference instant is the READ's own instant, so every age this leg
@@ -1367,6 +1368,22 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                 f"the TRIGGER fired, so a green run here is a MISSING duty and not a clean one"
             )
             continue
+        # THE ROUND'S NEWEST DECLARATION GOVERNS (#217). A round can fail at T and complete
+        # at T+n — the reporting lane measured exactly that on round 2026-09-28, where a
+        # `duty=failed` row at 5-of-6 was cleared by a later `duty=completed` row and the
+        # verdict did not move. A lane had no lawful way to record "failed, then completed"
+        # without leaving a standing finding, so the verdict is taken from the NEWEST row.
+        #
+        # WHAT SUPERSESSION MUST NOT DO, and it is why this prints rather than filters: it
+        # must not silently swallow a `failed` token. The superseded rows go to `excused`
+        # WITH their instant and value, so a reader meets "failed, superseded by completed"
+        # rather than only the happy ending. A supersession that hides the failure is a
+        # false clean, which is worse than the standing problem this replaces.
+        #
+        # THE DOMAIN LEG IS NOT SUPERSEDED, and deliberately: an unrecognised token is a
+        # fault in the WRITER'S VOCABULARY, not a state a later row settles. So it runs over
+        # every receipt below, while only the newest decides the verdict.
+        newest = max(receipts, key=lambda r: str(r.get("ts") or ""))
         for receipt in receipts:
             detail = str(receipt.get("detail") or "")
             n = receipt.get("n")
@@ -1378,11 +1395,24 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                         f"{'/'.join(predicate.DUTY_DOMAIN)}. An unrecognised value is an "
                         f"ERROR, never a silent pass"
                     )
-                elif value in DUTY_INCOMPLETE_VALUES:
-                    problems.append(
-                        f"{name} (cron id {job_id}): the round {round_date} did NOT complete — "
-                        f"receipt row n={n} declares {predicate.DUTY_KEY}={value}"
+                elif receipt is not newest and value in DUTY_INCOMPLETE_VALUES:
+                    rounds_superseded += 1
+                    excused.append(
+                        f"{name}: the round {round_date} — SUPERSEDED receipt row n={n} "
+                        f"declares {predicate.DUTY_KEY}={value} at {receipt.get('ts')}, "
+                        f"superseded by n={newest.get('n')} "
+                        f"({predicate.DUTY_KEY}="
+                        f"{'/'.join(predicate.declared_duty(str(newest.get('detail') or ''))) or 'none'} "
+                        f"at {newest.get('ts')}) — the round failed before it succeeded, and "
+                        f"the earlier row is not backfilled"
                     )
+        for value in predicate.declared_duty(str(newest.get("detail") or "")):
+            if value in DUTY_INCOMPLETE_VALUES:
+                problems.append(
+                    f"{name} (cron id {job_id}): the round {round_date} did NOT complete — "
+                    f"its NEWEST receipt row n={newest.get('n')} declares "
+                    f"{predicate.DUTY_KEY}={value} at {newest.get('ts')}"
+                )
 
     state, state_reason = attestation_state(store)
     return {
@@ -1408,6 +1438,7 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "duties_judged": judged,
             "bound": bound_text,
             "bound_refusal": bound_refusal,
+            "rounds_superseded": rounds_superseded,
             "rounds_excused_by_bound": rounds_excused_by_bound,
             "residual_secs": DUTY_RESIDUAL_SECS,
             "rounds_excused_by_residual": rounds_excused_by_residual,
