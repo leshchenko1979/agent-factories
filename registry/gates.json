@@ -357,6 +357,7 @@
     "tests/test_kit_manifest.py": "script",
     "tests/test_kit_names.py": "script",
     "tests/test_kit_pin.py": "script",
+    "tests/test_kit_surfaces.py": "script",
     "tests/test_law_coverage.py": "pytest",
     "tests/test_law_structure.py": "pytest",
     "tests/test_ledger.py": "script",
