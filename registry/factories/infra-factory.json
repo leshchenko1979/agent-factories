@@ -200,6 +200,13 @@
       "behind_by": 0,
       "reason": "behind_by 0 counts UNDECLARED lag only. Basis: the ELEVEN declared paths of docs/instruments/pacemaker.md section 2, measured on BOTH predicates (on-disk, and against my own HEAD) at 2026-09-27T22:12Z — 11 byte-identical to TEMPLATE HEAD, 0 differing. A TWELFTH path, tests/gate_registry.py, belongs to the ADOPTION's closure rather than section 2 (the doc states this at section 8 step 5) and DOES differ: it is a DECLARED FORK, not a lag. The template revision (3809561e2a22) registers two gates as REQUIRED that this tree cannot run — test_audit_tree_condition.py imports `from audit import render_tree_line, tree_condition`, and tools/audit.py here carries 0 of both symbols; test_gate_invocation_mode.py resolves `<cwd>/tools/audit.py`, which from this repo is /root/tools/audit.py, absent. Adopting the registry would register two REQUIRED gates that fail by construction, and gate_registry.py's own law at :671 states each absent declared gate FAILS naming it. Porting the two gate files does not fix it, because their dependencies are absent here.",
       "measured_at": "2026-09-27T22:12Z"
+    },
+    "ledger": {
+      "state": "deferred",
+      "green": true,
+      "behind_by": 13,
+      "reason": "Declared fork, DELIBERATE and stdlib-only: tools/ledger.py is 387 lines against the template's 1722, single-file with no import closure, so the factory's own write path ports anywhere with no dependency tree. behind_by 13 is stated on THE BRIEF'S OWN POPULATION (the instrument's 15 declared paths): 9 absent + 4 differing. MY OWN re-derivation disagrees, and both are stated because the POPULATION MOVED: against registry/kit.json at my pin b0bb09cb288f the manifest ships FOURTEEN ledger paths and I hold 4, 0 byte-identical (behind_by 14); the instrument's own law (docs/instruments/ledger.md section 6) says 2 of 18 at 2026-09-27T10:28Z, which is now STALE in one cell I can correct first-hand - tools/ledger_declaration.py is NO LONGER ABSENT, I adopted it 2026-09-27 with the pacemaker closure. Three published figures for this one member (2/18, 6/15, 4/14) are three predicates, not three errors, and the instability is the finding. RE-ENTRY CONDITION: adopt when the enforcement seam is usable without the closure, or when a planned migration lands. Migration cost is MEASURED, not assumed: the template's row schema carries a session key my 684 live rows do not, so migration is a data migration on an append-only surface, not a file swap.",
+      "measured_at": "2026-09-28T11:07Z"
     }
   }
 }

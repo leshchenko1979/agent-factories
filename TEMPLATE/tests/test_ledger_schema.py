@@ -103,6 +103,7 @@ OPTIONAL_FIELDS = {"refs", "session"}
 # (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
 # only copy, `append` could not consult it, so an unauthorized row was written silently and
 # reported here a day later: the blind spot was exactly one audit wide by construction.
+import ledger_declaration  # noqa: E402  # the matrix's ONE home (identity pin)
 from ledger_declaration import authorized_for_event, load_authorizations  # noqa: E402
 
 ISO_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -920,6 +921,113 @@ class TestVocabularyConvergence(unittest.TestCase):
     # above; the rest is a design difference, not a defect, and grafting it verbatim
     # would red 67 of 88 on a false premise.
     # ------------------------------------------------------------------------------
+
+
+class TestDeclarations(unittest.TestCase):
+    """The declaration's OWN properties -- the half of miidas's lead this tree lacked.
+
+    Grafted from miidas's `tests/test_ledger_schema.py` (`TestDeclarations`), which guards
+    a class the write-path cases above cannot reach: they exercise the WRITER, these
+    exercise the OBJECTS it consults. None of the convergence cases above notices if the
+    gate and the writer stop sharing ONE object, if the tool's core constants drift, or if
+    the live vocabulary grows an event no authorized set covers.
+
+    THAT LAST ONE IS SILENT BY CONSTRUCTION, and it is why this class exists: an event with
+    no matrix entry authorizes NOBODY, so every row carrying it is refused by the writer --
+    or, on an older write path that only checks membership, accepted while the reviewer
+    checks nothing. Either way the declaration reads as coverage and is not. miidas named
+    this shape in #50/#53.
+
+    TWO RULES came with the graft, both miidas's, both now measured here:
+      * a test's POPULATION comes from the POLICY, never from the universe under test --
+        the pins below iterate `EVENT_TYPES` (the live vocabulary), so an event is covered
+        the moment it is declared; iterating the TABLE would test only what the table
+        already covers and pass on the day an event arrives without one.
+      * a pin that cannot FAIL reads exactly like a pin that holds -- so the vacuity pin is
+        paired with the mutation that must break it.
+    """
+
+    def test_the_matrix_has_one_home(self) -> None:
+        """One OBJECT, not two equal copies: `is`, never `==`.
+
+        Equality is satisfied the day two copies are written and drifts on the first edit
+        of either. While this gate held its own copy, a declared authorization passed the
+        tool and red the gate, so a member learned its lawful row was unlawful at the exact
+        moment the tool told it otherwise.
+        """
+        self.assertIs(ledger.AUTHORIZED_ACTORS_BY_EVENT,
+                      ledger_declaration.AUTHORIZED_ACTORS_BY_EVENT)
+
+    def test_the_tool_declares_the_core_vocabulary(self) -> None:
+        """The tool's core events are the eight this gate also hardcodes.
+
+        The two constants are still two copies (`ledger.EVENTS` and `_CORE_EVENT_TYPES`),
+        so this is the change-notice: it names WHICH direction a silent edit moved. It is
+        the honest form of an `EXPECTED_EVENTS` delta -- the tool's OWN declaration is read
+        rather than a third literal typed here.
+        """
+        self.assertEqual(tuple(ledger.EVENTS), tuple(_CORE_EVENT_TYPES),
+                         "the tool's core event vocabulary moved away from this gate's")
+
+    def test_the_tool_declares_the_core_actors(self) -> None:
+        """The tool's core roles are the five this gate also assumes."""
+        self.assertEqual(tuple(ledger.ACTORS), tuple(CORE_ACTORS),
+                         "the tool's core actor vocabulary moved away from this gate's")
+
+    def test_every_vocabulary_event_has_an_authorized_set(self) -> None:
+        """THE VACUITY PIN: a vocabulary event that authorizes nobody is UNCHECKED.
+
+        Population from the POLICY (`EVENT_TYPES`), never from the table under test. A
+        factory declaring an event without authorizing anyone for it has declared a dead
+        event: the writer refuses every actor, and no reviewer is looking.
+        """
+        unchecked = [e for e in EVENT_TYPES if not authorized_for_event(REPO, e)]
+        self.assertEqual(
+            unchecked, [],
+            f"vocabulary event(s) with no authorized set, so no writer may emit them "
+            f"and no reviewer checks them: {unchecked}",
+        )
+
+    def test_a_dropped_table_entry_is_visible(self) -> None:
+        """The mutation that proves the pin above can FAIL.
+
+        Without this arm, a pin that passes because the predicate is a no-op is
+        indistinguishable from one that passes because the property holds.
+        """
+        # THE OBJECT MUTATED IS THE ONE `authorized_for_event` READS, and getting that
+        # wrong is the whole trap: `ledger.AUTHORIZED_ACTORS_BY_EVENT` is a module-level
+        # REBINDING of the same object, so assigning to it changes ledger's name only,
+        # while the predicate does its own global lookup in `ledger_declaration`. The
+        # first version of this arm rebound `ledger`'s name and reported the pin holding
+        # -- a mutation that tested nothing, which is exactly what an arm like this is for.
+        real = ledger_declaration.AUTHORIZED_ACTORS_BY_EVENT
+        try:
+            ledger_declaration.AUTHORIZED_ACTORS_BY_EVENT = {
+                k: v for k, v in real.items() if k != "score"}
+            unchecked = [e for e in EVENT_TYPES if not authorized_for_event(REPO, e)]
+        finally:
+            ledger_declaration.AUTHORIZED_ACTORS_BY_EVENT = real
+        self.assertEqual(
+            unchecked, ["score"],
+            "the vacuity pin did not bite on a table entry dropped under it",
+        )
+
+    def test_the_writer_admits_every_role_this_gate_assumes(self) -> None:
+        """Direction B, in the form that holds in EVERY tree.
+
+        NOT asserted: "every authorized actor is known to the writer". The core table
+        authorizes `delegate` and `surveys`, neither is in the core `ACTORS` tuple, and
+        `TEMPLATE/tools/actors.txt` does not exist -- so that form would RED every factory
+        on the day it is created, for a matrix that ships as core. What IS asserted is the
+        direction that must never break: the writer admits every role this gate hardcodes,
+        so the gate cannot be assuming a role the write path has never heard of.
+        """
+        known = set(ledger.known_actors())
+        missing = [a for a in CORE_ACTORS if a not in known]
+        self.assertEqual(
+            missing, [],
+            f"this gate assumes role(s) the writer cannot admit: {missing}",
+        )
 
 
 def run_case_suite() -> bool:
