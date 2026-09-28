@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-28T07:46:45Z",
+  "resolved_at": "2026-09-28T10:24:10Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -15,7 +15,7 @@
       "id": "miidas-slot-volume-git-config-carries-remote-credential",
       "severity": "warning",
       "scope": null,
-      "text": "Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.",
+      "text": "Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) — leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing — it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.",
       "since": "2026-09-27T11:39:51Z",
       "review_by": null,
       "check": null,
@@ -572,7 +572,7 @@
           "session_id": "6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T09:59:22Z",
+          "bound_at": "2026-09-28T08:59:05Z",
           "announcements": []
         },
         {
@@ -710,7 +710,7 @@
           "session_id": "359fe71b-c7a1-420b-b856-acfb49939a7b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T14:50:43Z",
+          "bound_at": "2026-09-28T09:56:00Z",
           "announcements": []
         },
         {
@@ -740,7 +740,7 @@
           "session_id": "1122b15e-0b26-420f-a7b3-d0719479bbd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T07:51:07Z",
+          "bound_at": "2026-09-28T09:57:36Z",
           "announcements": []
         }
       ],
@@ -1108,7 +1108,7 @@
           "session_id": "5c99ad51-8889-40cb-b589-fa13fd673c06",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-23T10:47:40Z",
+          "bound_at": "2026-09-28T09:52:18Z",
           "announcements": []
         },
         {
@@ -1118,7 +1118,7 @@
           "session_id": "f4c192c9-a8e9-4268-9026-ee3e4970cc8a",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T03:10:12Z",
+          "bound_at": "2026-09-28T09:52:08Z",
           "announcements": []
         },
         {
@@ -1128,7 +1128,7 @@
           "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T03:10:01Z",
+          "bound_at": "2026-09-28T09:15:43Z",
           "announcements": []
         },
         {
@@ -1138,7 +1138,7 @@
           "session_id": "23549292-77ff-40d1-97e3-5aa0bdd19d74",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T07:45:49Z",
+          "bound_at": "2026-09-28T10:23:33Z",
           "announcements": []
         },
         {
@@ -1148,7 +1148,7 @@
           "session_id": "dcd8f7a9-c1e7-48c3-b184-d901dc08eac7",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T07:44:52Z",
+          "bound_at": "2026-09-28T09:59:50Z",
           "announcements": []
         },
         {
@@ -1158,7 +1158,7 @@
           "session_id": "d0cba805-92c9-4377-8808-a1cf715bce9e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T07:43:39Z",
+          "bound_at": "2026-09-28T09:51:16Z",
           "announcements": []
         },
         {
@@ -1168,7 +1168,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T22:09:31Z",
+          "bound_at": "2026-09-28T10:15:48Z",
           "announcements": []
         },
         {
@@ -1188,7 +1188,7 @@
           "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T21:20:27Z",
+          "bound_at": "2026-09-28T09:48:16Z",
           "announcements": []
         }
       ],
@@ -1416,7 +1416,7 @@
         {
           "id": "miidas-slot-volume-git-config-carries-remote-credential",
           "severity": "warning",
-          "text": "Until leshchenko1979/miidas#61 lands, every miidas client slot volume's .git/config (mode 644) carries the template remote with an inline account-level token. A peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing: it outlives the container, and the credential is readable by the client's own agent, not only by a host operator.",
+          "text": "Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) — leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing — it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.",
           "scope": null,
           "since": "2026-09-27T11:39:51Z",
           "review_by": null,
@@ -1504,7 +1504,7 @@
           "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T12:51:33Z",
+          "bound_at": "2026-09-28T08:25:25Z",
           "announcements": []
         },
         {
@@ -1514,7 +1514,7 @@
           "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T14:20:37Z",
+          "bound_at": "2026-09-28T08:03:56Z",
           "announcements": []
         },
         {
@@ -1544,7 +1544,7 @@
           "session_id": "1a63f103-b899-4ad2-a5b3-c89f2902bf97",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-22T21:16:18Z",
+          "bound_at": "2026-09-28T08:13:31Z",
           "announcements": []
         },
         {
@@ -1554,7 +1554,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T07:37:29Z",
+          "bound_at": "2026-09-28T09:44:13Z",
           "announcements": []
         },
         {
@@ -1574,7 +1574,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T14:20:06Z",
+          "bound_at": "2026-09-28T08:20:03Z",
           "announcements": []
         },
         {
@@ -1594,7 +1594,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-26T22:48:29Z",
+          "bound_at": "2026-09-28T08:18:44Z",
           "announcements": []
         },
         {
@@ -1604,7 +1604,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T20:25:16Z",
+          "bound_at": "2026-09-28T08:28:02Z",
           "announcements": []
         },
         {
@@ -1634,7 +1634,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T13:26:10Z",
+          "bound_at": "2026-09-28T08:31:04Z",
           "announcements": []
         },
         {
@@ -1644,7 +1644,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T12:48:27Z",
+          "bound_at": "2026-09-28T09:46:35Z",
           "announcements": []
         },
         {
@@ -1654,7 +1654,7 @@
           "session_id": "c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T15:32:58Z",
+          "bound_at": "2026-09-28T08:15:21Z",
           "announcements": []
         },
         {
@@ -1674,7 +1674,7 @@
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T14:28:37Z",
+          "bound_at": "2026-09-28T08:12:34Z",
           "announcements": []
         },
         {
@@ -1734,7 +1734,7 @@
           "session_id": "63d775f9-18e2-4097-8696-d9a2ca796f14",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T01:33:51Z",
+          "bound_at": "2026-09-28T08:25:45Z",
           "announcements": []
         },
         {
@@ -1744,7 +1744,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T08:22:58Z",
+          "bound_at": "2026-09-28T08:31:21Z",
           "announcements": []
         },
         {
@@ -1784,7 +1784,7 @@
           "session_id": "95bec69b-0e96-46a9-9d91-dc355e8af18f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T14:27:03Z",
+          "bound_at": "2026-09-28T08:11:47Z",
           "announcements": []
         },
         {
@@ -1794,7 +1794,7 @@
           "session_id": "6630dc9a-0eeb-46c2-95b8-bfae43e0766b",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:12:47Z",
+          "bound_at": "2026-09-28T08:07:23Z",
           "announcements": []
         },
         {
@@ -1804,7 +1804,7 @@
           "session_id": "a38499fc-76a4-4aff-8953-fa5931ad0e5c",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-25T21:05:31Z",
+          "bound_at": "2026-09-28T08:20:54Z",
           "announcements": []
         },
         {
@@ -1814,7 +1814,7 @@
           "session_id": "6cd8175f-fb27-4cf3-a390-971ff2519a47",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-27T10:27:41Z",
+          "bound_at": "2026-09-28T08:22:22Z",
           "announcements": []
         },
         {
@@ -2140,8 +2140,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-28T09:00:00+00:00",
-      "last_run_at": "2026-09-27T09:00:48Z",
+      "next_run_at": "2026-09-29T09:00:00+00:00",
+      "last_run_at": "2026-09-28T09:00:07Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2156,8 +2156,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-28T09:00:00+00:00",
-      "last_run_at": "2026-09-21T09:00:50Z",
+      "next_run_at": "2026-10-05T09:00:00+00:00",
+      "last_run_at": "2026-09-28T09:00:07Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2428,8 +2428,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-28T09:00:00+00:00",
-      "last_run_at": "2026-09-27T09:00:48Z",
+      "next_run_at": "2026-09-29T09:00:00+00:00",
+      "last_run_at": "2026-09-28T09:00:07Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
