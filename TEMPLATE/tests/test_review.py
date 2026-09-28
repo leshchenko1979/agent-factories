@@ -275,15 +275,12 @@ def test_legacy_state_is_refused_and_migrated_explicitly(tmp_path: Path) -> None
 def test_close_sets_both_durations(tmp_path: Path) -> None:
     """`close` writes an explicit terminal state and TWO distinct durations."""
     cycle_id = "test-close-01"
-    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    # A COMPLETED close now requires the census to be complete as well as the plan
+    # accounted for, so the fixture runs or waives every lens. This test's subject
+    # is the two DURATIONS, which a complete census makes real rather than moot.
+    cycle_dir = _lens_clean_cycle(cycle_id)
     cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
     try:
-        res = subprocess.run(cmd_base + ["init", cycle_id], cwd=REPO_ROOT,
-                             capture_output=True, text=True)
-        assert res.returncode == 0, res.stderr
-        res = subprocess.run(cmd_base + ["record", cycle_id, "A", "# Lens A\nfinding\n"],
-                             cwd=REPO_ROOT, capture_output=True, text=True)
-        assert res.returncode == 0, res.stderr
 
         # Before close: null, never absent.
         state = json.loads((cycle_dir / "state.json").read_text())
@@ -563,7 +560,9 @@ def test_frozen_cycle_refuses_a_live_channel_read() -> None:
     say the reader means today's bytes, and it must SAY SO rather than pass.
     """
     cycle_id = "test-frozen-refusal"
-    cycle_dir = _fresh_cycle(cycle_id)
+    # Same reason as test_close_sets_both_durations: its subject is the FREEZE and
+    # the live-read refusal, and reaching COMPLETED now requires a complete census.
+    cycle_dir = _lens_clean_cycle(cycle_id)
     try:
         cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
         proposals = cycle_dir / "proposals"
@@ -1031,6 +1030,49 @@ def test_codify_records_a_finding_and_refuses_a_carrier_less_one() -> None:
             shutil.rmtree(cycle_dir)
 
 
+def test_close_completed_is_refused_while_the_census_is_incomplete() -> None:
+    """The completion formula the donor's own law names: a census, not a timestamp.
+
+    Measured before this arm existed: a cycle with all 14 lenses PENDING closed
+    COMPLETED (rc=0) and froze — `verify` failed while `close` returned success,
+    so the census apparatus was advisory. This is the worse of the two
+    completion gaps because it needs no mistake: a lane that never ran the
+    review reached the same terminal state as one that ran it clean.
+    """
+    cycle_id = "test-census-gate"
+    cycle_dir = _fresh_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+
+        # A cycle with nothing run cannot be COMPLETED...
+        res = subprocess.run(cmd_base + ["close", cycle_id, "--status", "COMPLETED"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 1, res.stdout + res.stderr
+        assert "neither run nor explicitly waived" in res.stderr, res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["status"] == "IN_PROGRESS", "a refused close must not have moved the status"
+
+        # ...but a WAIVED lens with no reason is a gap too, never a pass.
+        res = subprocess.run(cmd_base + ["waive", cycle_id, "A", "--reason", "x"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        state["lenses"]["B"] = {"status": "WAIVED", "reason": "   "}
+        (cycle_dir / "state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        res = subprocess.run(cmd_base + ["close", cycle_id, "--status", "COMPLETED"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 1, res.stdout + res.stderr
+        assert "waived with no reason" in res.stderr, res.stderr
+
+        # ABANDONED stays legal, so a cycle that cannot complete is not trapped.
+        res = subprocess.run(cmd_base + ["close", cycle_id, "--status", "ABANDONED"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -1057,4 +1099,5 @@ if __name__ == "__main__":
     test_a_landed_finding_and_a_recorded_non_fix_are_lawful()
     test_an_empty_plan_is_not_a_gap()
     test_codify_records_a_finding_and_refuses_a_carrier_less_one()
+    test_close_completed_is_refused_while_the_census_is_incomplete()
     print("ALL TESTS PASSED")

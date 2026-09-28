@@ -1310,6 +1310,33 @@ def codification_gaps(plan: Any) -> list[str]:
     return gaps
 
 
+def census_gaps(state: dict[str, Any]) -> list[str]:
+    """Lenses that are neither run nor explicitly waived.
+
+    The mirror of `codification_gaps`, and a SEPARATE obligation: the plan check
+    asks what happened to what the review FOUND, this one asks whether the review
+    HAPPENED. Measured before this function existed: `verify` failed over 14
+    PENDING lenses while `close --status COMPLETED` returned 0 and froze the
+    cycle — so the census apparatus was advisory and a cycle could read COMPLETED
+    with no lens ever run. That is the silent pass the lifecycle exists to
+    forbid, and it is the worse of the two gaps because it needs no mistake:
+    a lane that simply never ran the review reached the same state as one that
+    ran it clean.
+    """
+    gaps: list[str] = []
+    lenses = state.get("lenses") or {}
+    for lens in CATALOG_LENSES:
+        info = lenses.get(lens) or {}
+        status = info.get("status", "PENDING")
+        if status == "WAIVED":
+            if not (info.get("reason") or "").strip():
+                gaps.append(f"{lens} (waived with no reason)")
+            continue
+        if status != "COMPLETED":
+            gaps.append(f"{lens} ({status})")
+    return gaps
+
+
 def cmd_verify(cycle_id: str) -> int:
     state = read_state(cycle_id)
     if not state:
@@ -1509,6 +1536,20 @@ def cmd_close(cycle_id: str, status: str, stamp: bool,
     # still be closable, or the enforcement traps it in IN_PROGRESS forever, which is
     # worse than the silent pass it prevents.
     if status == "COMPLETED":
+        # TWO obligations, checked separately so a refusal says WHICH one failed.
+        # A COMPLETED close means the review happened AND what it found is
+        # accounted for; either alone is a cycle that reads finished without
+        # being finished.
+        ran = census_gaps(state)
+        if ran:
+            print(
+                f"Error: Cycle '{cycle_id}' cannot close COMPLETED — "
+                f"{len(ran)} lens(es) neither run nor explicitly waived:",
+                file=sys.stderr,
+            )
+            for g in ran:
+                print(f"  - {g}", file=sys.stderr)
+            return 1
         gaps = codification_gaps(state.get("codification_plan"))
         if gaps:
             print(

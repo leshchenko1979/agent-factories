@@ -77,7 +77,7 @@ the cycle; the third is what happens to the cycle's own record when either is sk
    spawned sub-agent is handed, one lens per sub-agent, so the isolation is a command and not a
    convention a busy lane can skip.
 2. **The cycle VALIDATES every finding, and holds itself open until each accepted finding has a
-   carrier.** `verify` fails, and `close --status COMPLETED` is REFUSED, while any accepted finding
+   carrier — and it cannot complete without a census either.** `verify` fails, and `close --status COMPLETED` is REFUSED, while any accepted finding
    carries none; the contract is the schema's own sentence at `codification_plan` ("an accepted
    finding with no landed home is a cycle-completion FAILURE, never a scheduling choice"), which
    shipped with the engine and which **nothing read until this promotion** — the defeated-guard
@@ -95,7 +95,14 @@ the cycle; the third is what happens to the cycle's own record when either is sk
    where. An accepted finding whose
    declared `home` does not resolve is therefore **not** caught here, which is stated as a scope
    limit rather than left to be discovered — the enforcement is over the DECLARATION, and a
-   declaration is not a receipt.
+   declaration is not a receipt. **The same close enforces the census**, which is a SEPARATE
+   obligation and the reason it is stated here rather than assumed: before this promotion a cycle
+   with **all 14 lenses PENDING** closed `COMPLETED` (rc=0) and froze, while `verify` failed over the
+   identical state — so the census apparatus was advisory and the completion formula the donor's own
+   law names ("the per-lens census and the checkable completion formula", `hq.md`) was not carried.
+   That is the worse of the two gaps, because it needs no mistake: a lane that never ran the review
+   reached the same terminal state as one that ran it clean. A COMPLETED close now requires both, and
+   refuses with the count and the names.
 3. **An unfixed finding is a defect of THIS instrument, not a footnote on the cycle.** Two different
    things travel under "unfixed" and the law must not conflate them. An accepted finding **with** a
    disposition and its carrier is a lawful outcome, and the recorded non-fix (`rejected` + a
@@ -114,7 +121,7 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (§5).
 | # | path (root half ↔ TEMPLATE half) | class | what it is |
 |---|---|---|---|
 | 1 | `tools/review.py` ↔ `TEMPLATE/tools/review.py` | `standalone` | **the executable** — every leg of the lifecycle |
-| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **26 collected** (`pytest --collect-only`) at the instant named in §5's last row |
+| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **27 collected** (`pytest --collect-only`) at the instant named in §5's last row |
 | 3 | `docs/review-cycle.schema.json` ↔ `TEMPLATE/docs/review-cycle.schema.json` | `standalone` | the state schema, **emitted** by `review.py schema`, never hand-kept |
 | 4 | `docs/review-lenses.md` ↔ `TEMPLATE/docs/review-lenses.md` | `standalone` | the lens catalogue law and the Adversarial Isolation Requirement |
 | 5 | `docs/instruments/review-rotation.md` ↔ `TEMPLATE/docs/instruments/review-rotation.md` | `standalone` | this file |
@@ -155,7 +162,7 @@ registration is stated as an absence rather than invented.
 
 Measured this turn, and the two facts are different:
 
-- `tests/gate_registry.py`'s `REQUIRED_GATES` carries **54** entries and **`test_review.py` is not
+- `tests/gate_registry.py`'s `REQUIRED_GATES` carries **56** entries and **`test_review.py` is not
   among them**. The module's own scope statement names it explicitly: *"`TEMPLATE/tests/test_review.py`
   is a raw file that is NOT a gate"* (its line 358), listed beside `test_telemetry.py` as a
   false-positive the registry's pattern-based derivation must not pick up.
@@ -167,7 +174,7 @@ Measured this turn, and the two facts are different:
 
 | gate | property it holds over this instrument |
 |---|---|
-| `tests/test_review.py` | the instrument's own behaviour — the 26 named tests of §7 |
+| `tests/test_review.py` | the instrument's own behaviour — the 27 named tests of §7 |
 | `tests/test_docs_sync.py` | the doc pair — every `docs/` ↔ `TEMPLATE/docs/` pair byte-identical |
 | `tests/test_template_sync.py` | all **84** pairs, and the portability scan (0 hex literals resolving) |
 | `tests/test_kit_pin.py` | the manifest pin — a member's verdict depends on **its own** pin, never ours |
@@ -181,6 +188,25 @@ reason is a recorded decision rather than an oversight — the registry's own sc
 this file a deliberate **false positive** for its pattern-based derivation. A member that adopts the
 five paths of §2 inherits a gate it must invoke itself, which is why §4's manifest grain, and not an
 aggregate running green, is what answers a member's coverage question.
+
+**One row of that table runs when INVOKED and is absent from every aggregate surface, so a lane
+reading the audit green has not run it.** Measured 2026-09-28T14:0xZ, `tests/test_review.py` appears
+in **none** of the three places a tree declares a gate:
+
+| surface | size | this gate present? |
+|---|---|---|
+| `registry/gates.json` → `gates` | 48 entries | **no** |
+| `registry/gates.json` → `modes` (pytest vs `script`) | 74 entries | **no** |
+| `tests/gate_registry.py` → `REQUIRED_GATES` | 56 entries | **no** |
+
+The cause is a recorded decision rather than an oversight — the registry's own scope statement names
+this file a deliberate **false positive** for its pattern-based derivation. The consequence is what
+the table above owes a reader: **a member adopting §2's five paths inherits a gate it must invoke
+itself**, and §4's manifest grain, never an aggregate running green, is what answers a member's
+coverage question. (The kit as a whole is explicit about this distinction — `BOOTSTRAP.md` records
+that 30 of the 73 gate call sites are invoked by `pytest` and 43 as scripts, and that a CI running
+only `pytest` enforces only the pytest-invoked population. This instrument's gate is in the 43, and
+in no registry at all.)
 
 **The instrument asserts its own non-absence:** `test_schema_artifact_is_generated` fails if the
 shipped schema is stale against `review.py schema`, so the artifact and its emitter cannot drift
@@ -258,8 +284,8 @@ adopt, which is why §4's manifest grain carries the whole weight.
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This
-instrument's probes are named, not implied — all **26** are in `tests/test_review.py`, and each is
-named for the behaviour it pins. The eight this promotion added are the ones that make the new
+instrument's probes are named, not implied — all **27** are in `tests/test_review.py`, and each is
+named for the behaviour it pins. The nine this promotion added are the ones that make the new
 mechanisms non-vacuous:
 
 | probe | what it shows |
@@ -272,6 +298,7 @@ mechanisms non-vacuous:
 | `test_a_landed_finding_and_a_recorded_non_fix_are_lawful` | all three dispositions pass **with** their carrier and fail without it — `routed` owes a destination, `rejected` owes a reason, an unenumerated disposition is a gap |
 | `test_an_empty_plan_is_not_a_gap` | a cycle that accepted no findings owes no landing, so the gate cannot red a clean cycle — a gate that cannot pass is not a gate |
 | `test_codify_records_a_finding_and_refuses_a_carrier_less_one` | the WRITER: a carrier-less finding is refused at write time, the lawful form records one home (never a second log), and a FROZEN cycle refuses new findings |
+| `test_close_completed_is_refused_while_the_census_is_incomplete` | a cycle with nothing run cannot be `COMPLETED`, a waiver without a reason is a gap, and a refused close does not move the status |
 
 **The remaining eighteen pin the older surface**, and they are listed because a probe set stated as a
 count is not a probe set stated by name: `test_review_lifecycle`, `test_schema_artifact_is_generated`,
@@ -299,7 +326,7 @@ from the tree under test — holds here by construction: `REPO_ROOT` resolves fr
 cycle the probes use is built by the probe itself under a test-local id (`test-cycle-01`,
 `test-migrate-synonym`, `test-lens-key-rename`), and no probe reads a kit or donor tree. The dates and
 tokens those fixtures carry are the donor's **shape**, reproduced as input, never a value read back
-from the donor's state. Measured: the suite returns **26 passed** in a foreign copy materialized with
+from the donor's state. Measured: the suite returns **27 passed** in a foreign copy materialized with
 no `.git` and no history — so the verdict is a reading of the tree it runs in, which is the property
 the clause exists to secure. Clauses 2 and 3 are **N/A**: there is no hand-rolled probe driver and no
 hand-rolled runner — the gate is `pytest`, which honours its readers' declared skip vocabulary
