@@ -4,22 +4,22 @@
   "profile": "ops",
   "repo": "/root/miidas",
   "skill": "/root/miidas/SKILL.md",
-  "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
+  "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners \u2014 dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
   "zone": {
     "owns": [
       "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps",
       "leshchenko1979/miidas and leshchenko1979/miidas-template",
-      "per-client slot state: pool/slots/miidas-*.env on apps — apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ — plus the miidas-* container and miidas_* volume namespaces",
+      "per-client slot state: pool/slots/miidas-*.env on apps \u2014 apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces",
       "the Miidas Factory Telegram chat (-1003996392908) and its topics",
-      "/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer",
+      "/root/miidas/SKILL.md \u2014 the live skill path is a symlink to it, so the repo file is the single writer",
       "cron miidas-hq-daily-trigger",
       "the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle",
-      "leshchenko1979/miidas-landing — the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing"
+      "leshchenko1979/miidas-landing \u2014 the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing"
     ],
     "does_not_own": [
-      "client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface",
-      "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle",
-      "the apps host beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows",
+      "client product surfaces \u2014 the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface",
+      "the LLM gateway itself (llm.l1979.ru) \u2014 consumed, not operated; we own only our service user's key lifecycle",
+      "the apps host beyond our own compose stack \u2014 other projects' containers and volumes, host packages, other factories' cron rows",
       "other factories' repos, chats and processes",
       "OpenCrabs core and the dev process"
     ]
@@ -105,12 +105,12 @@
       "id": "miidas-platform-compose-is-repo-written",
       "scope": "profile",
       "severity": "warning",
-      "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+      "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable \u2014 use the sanctioned scripts, or pass --env-file ../.master.env.",
       "affects": [
         "profile"
       ],
       "since": "2026-09-26",
-      "evidence": "deploy_lib.sh:148-152 — miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
+      "evidence": "deploy_lib.sh:148-152 \u2014 miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
     },
     {
       "id": "miidas-kit-forks-declared",
@@ -129,7 +129,7 @@
       "affects": [
         "profile"
       ],
-      "text": "Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) — leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing — it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.",
+      "text": "Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) \u2014 leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing \u2014 it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.",
       "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply)."
     }
   ],
@@ -166,5 +166,14 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-28T06:42:00Z"
+  "attested_at": "2026-09-28T06:42:00Z",
+  "instruments": {
+    "ledger": {
+      "state": "deferred",
+      "green": true,
+      "behind_by": 6,
+      "measured_at": "2026-09-28T16:33:57Z",
+      "reason": "6 of the instrument's 15 declared paths held, 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to TEMPLATE HEAD b074b95a7705, so behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated, as infra-factory's row does, because this fleet encodes two. green true is their own run, not a transcription: tests/test_ledger.py rc=0, tests/test_ledger_schema.py rc=0 (182 rows audited), tests/test_ledger_no_shrink.py rc=0 (131 commits on origin/main), tests/test_ledger_close_preflight.py rc=0 (10 cases), tests/test_ledger_commit_cites_no_rows.py rc=0 (14 commits after cda23fe), tools/ledger.py verify rc=0 (182 rows, monotonic) - held and green are independent axes, so an incomplete SET declared green is the reading, not a contradiction. RE-ENTRY CONDITION: this is a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
+    }
+  }
 }
