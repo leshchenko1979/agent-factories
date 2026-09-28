@@ -844,6 +844,44 @@ def cmd_append(args: argparse.Namespace) -> int:
             if problems:
                 sys.exit("ledger append refused: "
                          + "; ".join(message for _subject, _leg, message in problems))
+            # A SECOND CLOSE FOR ONE SUBJECT IS REFUSED, AND THE REFUSAL NAMES THE
+            # EXISTING ROW (#213). The job is not tidiness: `append` is not idempotent,
+            # so a client-side timeout on a COMPLETED write leaves the caller with no
+            # output, and a caller that reads "no output" as "the write did not happen"
+            # retries and mints a byte-equivalent duplicate. Measured 4 times in one
+            # day (`#140` n=930/931, `#169` n=1361/1363, `#202` n=1502/1504,
+            # `#84` n=1509/1511), and `verify` was CLEAN over every one of them —
+            # the sequence leg looks for PRESENCE of a close, never for a second one.
+            #
+            # SO THE REFUSAL CARRIES THE ANSWER THE RETRYING WRITER NEEDED: it prints
+            # the existing row's `n` and `ts`, which is the one fact that tells that
+            # writer its first write landed. A refusal that merely said "already
+            # closed" would leave the same ambiguity the timeout created.
+            #
+            # RE-ENTRY IS DECLARED, NOT IMPLIED, and it uses the idiom this ledger
+            # already carries (`claim=reconstructed`, `head=<sha>`): a deliberate
+            # re-close states `reclose=<reason>` in its own detail. Measured: two of
+            # the six multi-close subjects (`#22` n=95/125, `#26` n=118/135) are
+            # genuine re-closes hours apart by different actors, so a blanket
+            # one-close-per-subject rule would have been wrong -- the declaration is
+            # what separates a re-open from a retry.
+            #
+            # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the two refusals
+            # above state: this binds the row about to be written, so it can never
+            # reach history. EXEMPTIONS govern `verify`'s reading of history only.
+            if args.event == "close" and not declares_field(args.detail, "reclose"):
+                prior_closes = [r for r in rows
+                                if r.get("event") == "close"
+                                and r.get("subject") == args.subject]
+                if prior_closes:
+                    last = prior_closes[-1]
+                    sys.exit(
+                        f"ledger append refused: {args.subject} already carries a close at "
+                        f"n={last.get('n')} ({last.get('ts')}). IF THIS IS A RETRY after a "
+                        f"timeout, THE FIRST WRITE LANDED -- do not append again. A "
+                        f"deliberate re-close (the subject was re-opened) declares itself "
+                        f"with `reclose=<reason>` in its own detail (#213)."
+                    )
             # AND THE ROW MUST DECLARE THE REVISION ITS RECEIPTS DESCRIBE (#187). The
             # invariant is `close_row_revision`, enforced by
             # `tests/test_close_row_revision.py` and — until this refusal existed — by
@@ -1634,6 +1672,72 @@ def cmd_verify(args: argparse.Namespace) -> int:
             f"was intended and no subject-keyed predicate can resolve it. The row's "
             f"identity is immutable once pushed; the repair is a NEW row"
         )
+
+    # A SUBJECT CLOSED MORE THAN ONCE (#213). The write path now REFUSES a second
+    # close that declares no `reclose=`, so the class cannot be created going
+    # forward -- but refusing new ones says nothing about the ones already here,
+    # and this leg is what makes the population visible. It printed nothing before:
+    # the sequence predicate looks for PRESENCE of a close, so a subject carrying
+    # TWO of them satisfied it twice over, and `verify` returned "sequences
+    # complete" over four measured duplicate pairs in a single day (`#140`, `#169`,
+    # `#202`, `#84`). An instrument that cannot OBSERVE a defect class cannot clear
+    # the surface it is aimed at, and this one was reading those four as clean.
+    #
+    # IT NAMES THEM ON BOTH PATHS, beside `malformed subject`, and for the same
+    # reason: a historical defect with no in-place repair must stay visible even
+    # when the ledger is otherwise clean, because the alternative is a reader who
+    # never meets it. The repair is a NEW row -- identity is immutable once pushed.
+    #
+    # IT PRINTS ITS POPULATION, NOT ONLY ITS HITS (#94's law, and HQ's #213 ruling):
+    # "count examined, each pair named". A finding printed over an UNSTATED
+    # population cannot be told from a finding printed over a narrowed one, so the
+    # count of subjects examined is stated even when it finds nothing.
+    #
+    # IT PRINTS WHETHER THE DECLARATION IS PRESENT, not merely the count, because
+    # the two populations need different readings: a pair declaring `reclose=` is a
+    # recorded re-open, and a pair declaring nothing is either an undeclared
+    # re-close or a retried-append duplicate. Measured split: 2 re-closes hours
+    # apart by different actors (`#22` n=95/125, `#26` n=118/135) against 4
+    # same-text pairs minutes apart.
+    #
+    # THE FORM FOR A LAWFUL RE-CLOSE IS THE DECLARED TOKEN, and it is stated here
+    # because the choice IS the decision (HQ, #213): the predicate is NOT
+    # "byte-equivalent detail", it is "declares `reclose=`". Byte-equivalence would
+    # have passed all four observed duplicates silently -- they are the SAME text
+    # by construction, which is what a retry produces -- so it is the weaker form
+    # of the two. A re-open that means it says so; a retry that cannot know
+    # whether it landed is told by the refusal, which names the row that landed.
+    close_subjects = sorted({r.get("subject") for r in rows
+                             if r.get("event") == "close"})
+    multi_closes: list[str] = []
+    for subject in close_subjects:
+        closes = [r for r in rows
+                  if r.get("event") == "close" and r.get("subject") == subject]
+        if len(closes) < 2:
+            continue
+        ns = ", ".join(f"n={r.get('n')}" for r in closes)
+        undeclared = [r for r in closes[1:]
+                      if not declares_field(r.get("detail") or "", "reclose")]
+        multi_closes.append(subject)
+        if undeclared:
+            print(
+                f"  multiple closes: {subject} carries {len(closes)} close rows "
+                f"({ns}), and {len(undeclared)} of them declare no `reclose=` reason — "
+                f"either a deliberate re-close that did not declare itself, or a "
+                f"DUPLICATE minted by retrying an append that had already completed "
+                f"(#213). A second close declaring no `reclose=` is now refused at the "
+                f"write path; this reading is of history, whose rows are immutable"
+            )
+        else:
+            print(
+                f"  multiple closes: {subject} carries {len(closes)} close rows "
+                f"({ns}), each after the first declaring `reclose=` — declared "
+                f"re-closes, not duplicates"
+            )
+    print(
+        f"  multiple closes examined: {len(close_subjects)} closed subject(s), "
+        f"{len(multi_closes)} carrying more than one close"
+    )
 
     # The revision comparison runs whatever the structure check found: a ledger that is
     # internally consistent can still have had a row's identity changed, which is exactly
