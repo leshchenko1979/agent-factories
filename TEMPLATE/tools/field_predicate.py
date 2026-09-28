@@ -117,6 +117,44 @@ def token_key(token: str) -> str | None:
         return None
     return key
 
+CAUSE_COUNT_TOKEN = "oc-cause-count"
+"""The DECLARED summary marker a failing gate prints about ITSELF (#205, ruled shape (b)).
+
+One line, anchored at the start, carrying the count as an integer:
+
+    oc-cause-count: 7
+
+It exists because a noun list is a GUESS AT ENGLISH and this factory's own tool proved it:
+`tools/audit.py::reported_cause` recognises `problem|violation`, while `tools/hygiene.py`
+prints `found 7 issue(s)` — so the count leg silently did nothing and the recorded cause fell
+through to the output's LAST line, an INFORMATIONAL declaration line the tool prints on every
+run, clean or not. A reader who trusted that headline was sent to a fix that could not clear
+the gate, with the severity number dropped.
+
+Widening the noun class was measured and REFUSED: it would have matched correctly only by
+COINCIDENCE — the advisory block prints first and its noun is `item(s)`, which no widened
+class matches, so a class whose first match can sit in an advisory block records a non-cause
+as the cause, one noun away from the defect it was meant to close.
+"""
+
+CAUSE_COUNT_RE = re.compile(rf"^[ \t]*{CAUSE_COUNT_TOKEN}:[ \t]*(\d+)[ \t]*$", re.MULTILINE)
+
+
+def declared_cause_count(text: str) -> int | None:
+    """The failure count a gate DECLARES on its own output, or None when it declares none.
+
+    Read ANCHOR-FIRST and by declaration alone: the token, then `:`, then digits, on a line
+    of its own. Nothing is inferred from the surrounding prose, so a tool's phrasing cannot
+    move the reading — the rule the mixed class above was written to honour.
+
+    The bound is stated rather than implied: a tool that has NOT adopted the marker returns
+    None here, and its caller keeps whatever heuristic it already had. That is why this is
+    additive — no tool regresses, and each author has a lawful route that costs one line.
+    """
+    m = CAUSE_COUNT_RE.search(str(text))
+    return int(m.group(1)) if m else None
+
+
 def declares_field(detail: str, key: str) -> bool:
     """True when `detail` declares `key` with a value that PARSES for that key's type.
 

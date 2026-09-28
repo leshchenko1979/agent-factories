@@ -386,6 +386,13 @@ def main() -> int:
             for a in advisories:
                 print(f"  ~ {a}", file=sys.stderr)
         if total_violations > 0:
+            # The marker comes FIRST and is a DECLARATION of the count (#205): the audit's
+            # headline reads it rather than guessing from the sentence below, whose noun
+            # (`issue(s)`) its noun class did not carry -- so the count was dropped and the
+            # recorded cause fell through to the LAST line, an informational declaration
+            # line this tool prints on EVERY run, clean or not. A reader sent there was
+            # sent to a fix that could not clear the gate.
+            print(f"oc-cause-count: {total_violations}", file=sys.stderr)
             # The header states the window it judged on: a verdict that does not
             # carry its own predicate cannot be reproduced by its reader.
             print(

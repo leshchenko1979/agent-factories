@@ -111,6 +111,7 @@ from field_predicate import (  # noqa: E402
     declared_rework,
     declared_telemetry,
     mentioned_telemetry,
+    declared_cause_count,
 )
 
 # The gate-budget reader, on the SAME path-insert convention and for the same
@@ -831,9 +832,22 @@ to reproduce the log.
 """
 
 _COUNT_FIRST_RE = re.compile(r"\b\d+\s+(?:problem|violation)\(s\)", re.IGNORECASE)
+"""The FALLBACK count shape, reached only when a gate declares no marker (#205).
+
+Two nouns, and they are a GUESS AT ENGLISH rather than a property: this factory's own
+`tools/hygiene.py` prints `found N issue(s)`, which this class does not match, so the count
+leg silently did nothing and the recorded cause fell to the output's last line. Widening the
+class was measured and REFUSED — it would have landed correctly only by COINCIDENCE, because
+the advisory block prints first and its noun is `item(s)`, which no widened class matches.
+A class whose first match can sit in an advisory block records a NON-CAUSE as the cause.
+
+So the primary reading is the DECLARED marker (`field_predicate.declared_cause_count`) and
+this is the fallback, kept unchanged so a tool that has not adopted the marker behaves
+byte-identically to before.
+"""
 
 def reported_cause(text: str, limit: int = GATE_CAUSE_LIMIT) -> str:
-    """A failing gate's cause: its COUNT when the output carries one, AND its last line.
+    """A failing gate's cause: its COUNT, AND its last line.
 
     The kit ships TWO output shapes and they put the summary in DIFFERENT places. A
     PYTEST-shaped gate writes its failure list LAST and carries no count line, so the last
@@ -841,6 +855,12 @@ def reported_cause(text: str, limit: int = GATE_CAUSE_LIMIT) -> str:
     N violations, so the last line is one ARBITRARY specimen and the total is lost --
     measured on tests/test_ledger_schema.py, where SIX problems were recorded as a single
     truncated tail violation (issue #158).
+
+    PRECEDENCE, and it is the whole of #205's ruling: the tool's own DECLARED marker is read
+    FIRST, and the noun heuristic is the FALLBACK. A declaration cannot be moved by phrasing;
+    a noun list is a guess at English, and reading it first is what recorded an INFORMATIONAL
+    line as the cause of a real failure. The fallback stays because the change must be purely
+    additive -- a tool that has not adopted the marker reads exactly as it did before.
 
     So the count line is recorded FIRST when one exists, and the last line is appended as
     the specimen. Both share ONE bound, and the join keeps the HEAD, so the count cannot be
@@ -850,7 +870,9 @@ def reported_cause(text: str, limit: int = GATE_CAUSE_LIMIT) -> str:
     if not lines:
         return ""
     last = lines[-1]
-    counted = next((ln for ln in lines if _COUNT_FIRST_RE.search(ln)), None)
+    counted = next((ln for ln in lines if declared_cause_count(ln) is not None), None)
+    if counted is None:
+        counted = next((ln for ln in lines if _COUNT_FIRST_RE.search(ln)), None)
     if counted is None or counted == last:
         return last[:limit]
     return f"{counted} \u2014 {last}"[:limit]

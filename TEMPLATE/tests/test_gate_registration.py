@@ -1399,6 +1399,21 @@ def _audit_module():
 
     return audit
 
+def _field_predicate_module():
+    """`tools/field_predicate.py` ITSELF -- the declared-marker predicate's one home.
+
+    Loaded by the module's own NAME on the same path-insert convention as
+    `_audit_module`, so the reader under probe is the one the audit imports rather than
+    a copy beside it. The marker's ANCHOR-FIRST rule is the property probed, and it can
+    only be probed against the real predicate.
+    """
+    tools = str(REPO / "tools")
+    if tools not in sys.path:
+        sys.path.append(tools)
+    import field_predicate  # noqa: PLC0415
+
+    return field_predicate
+
 
 def _synthetic_gate(passed: bool, unknown: bool) -> dict:
     """One gate result shaped exactly as `run_gate` returns them."""
@@ -1653,6 +1668,124 @@ def probe_a_script_shaped_failure_records_its_count() -> None:
         repr(audit.reported_cause("only 2 problem(s) here\n")),
     )
 
+def probe_a_declared_marker_is_read_first_and_the_heuristic_is_the_fallback() -> None:
+    """Issue #205, ruled shape (b): the tool DECLARES its count; the noun list is fallback.
+
+    The defect this closes is not a missing noun -- it is that a noun list is a GUESS AT
+    ENGLISH. `tools/hygiene.py` prints `found N issue(s)`, which the `problem|violation`
+    class does not match, so the count leg silently did nothing and the recorded cause fell
+    through to the output's LAST line -- an INFORMATIONAL declaration line the tool prints on
+    EVERY run, clean or not. A reader who trusted that headline was sent to a fix that could
+    not clear the gate, with the severity number dropped.
+
+    Widening the class was measured and REFUSED: it would have landed on the right line only
+    by COINCIDENCE, because the advisory block prints first with the noun `item(s)`, which no
+    widened class matches. So BOTH arms are probed -- a fix whose only evidence is the marker
+    arm cannot show it left the fallback intact.
+    """
+    audit = _audit_module()
+
+    # ARM 1 -- the marker is present, and the noun is one the heuristic CANNOT see.
+    marked = (
+        "hygiene audit: 3 advisory item(s) — not failures:\n"
+        "  ~ a dirty path\n"
+        "oc-cause-count: 7\n"
+        "hygiene audit found 7 issue(s) (stranded = untouched for 60m or more):\n"
+        "  - modified tracked file: evidence/x.md (untouched for 655m)\n"
+        "hygiene declaration: 0 path(s) declared live, 0 declared scratch\n"
+    )
+    cause = audit.reported_cause(marked)
+    check(
+        "the DECLARED count is carried when the noun is one the heuristic misses",
+        "oc-cause-count: 7" in cause,
+        repr(cause),
+    )
+    check(
+        "...and the count leads, so an informational tail cannot displace it",
+        cause.startswith("oc-cause-count: 7"),
+        repr(cause),
+    )
+    check(
+        "the ADVISORY block is not read as the cause — the ordering hazard the ruling names",
+        "3 advisory item(s)" not in cause,
+        repr(cause),
+    )
+    check(
+        "the OLD predicate records the informational line here — the defect, reproduced",
+        "issue(s)" not in audit.last_reported_line(marked)
+        and "declared live" in cause,
+        repr(audit.last_reported_line(marked)) + " | " + repr(cause),
+    )
+
+    # ARM 2 -- no marker: the pre-#205 behaviour must survive, so a tool that has not
+    # adopted the marker cannot regress.
+    unmarked_script = (
+        "ledger schema: 6 problem(s) in /repo/evidence/ledger.jsonl\n"
+        "  line 15: n=15 (#41) — actor 'worker' is not authorized\n"
+    )
+    check(
+        "with NO marker the noun heuristic still works, as before",
+        "6 problem(s)" in audit.reported_cause(unmarked_script),
+        repr(audit.reported_cause(unmarked_script)),
+    )
+    pytest_shaped = (
+        "=================== FAILURES ===================\n"
+        "E   assert 1 == 2\n"
+        "=========== 1 failed, 31 passed in 1.42s ===========\n"
+    )
+    check(
+        "with NO marker a pytest-shaped failure is still UNCHANGED",
+        audit.reported_cause(pytest_shaped) == audit.last_reported_line(pytest_shaped),
+        repr(audit.reported_cause(pytest_shaped)),
+    )
+
+    # The predicate's own arms, at its one home.
+    predicate = _field_predicate_module()
+    check(
+        "the marker is read ANCHOR-FIRST — a mid-sentence mention is not a declaration",
+        predicate.declared_cause_count("we saw oc-cause-count: 7 inline\n") is None,
+        repr(predicate.declared_cause_count("we saw oc-cause-count: 7 inline\n")),
+    )
+    check(
+        "a marker line declares its integer",
+        predicate.declared_cause_count("oc-cause-count: 0\n") == 0,
+        repr(predicate.declared_cause_count("oc-cause-count: 0\n")),
+    )
+    check(
+        "an output with no marker declares nothing rather than zero",
+        predicate.declared_cause_count("hygiene audit found 7 issue(s)\n") is None,
+        repr(predicate.declared_cause_count("hygiene audit found 7 issue(s)\n")),
+    )
+
+    # The ADOPTION, pinned BEHAVIOURALLY, and this arm is not redundant with the predicate
+    # arms above: a predicate can be perfectly right while the tool that must USE it never
+    # emits it, and that failure is silent — the audit simply falls back to the heuristic
+    # this change exists to stop trusting. Measured: deleting `hygiene.py`'s emission
+    # leaves every predicate probe above GREEN, so only driving the real tool can see it.
+    # The drive is deterministic: `--require-committed` on an absent path reports a
+    # violation with NO grace, whatever the tree's age or state.
+    driven = subprocess.run(
+        [sys.executable, str(REPO / "tools" / "hygiene.py"), "--audit",
+         "--require-committed", "/nonexistent/oc-205-adoption-probe"],
+        capture_output=True, text=True, timeout=300,
+    )
+    hout = (driven.stdout or "") + (driven.stderr or "")
+    check(
+        "hygiene.py EMITS the marker on its failure path — the adoption, not merely the predicate",
+        predicate.declared_cause_count(hout) is not None,
+        repr(predicate.declared_cause_count(hout)),
+    )
+    check(
+        "the audit's recorded cause for hygiene LEADS with that declared count",
+        audit.reported_cause(hout).startswith("oc-cause-count:"),
+        repr(audit.reported_cause(hout)),
+    )
+    check(
+        "the OLD predicate would send the reader to a line that cannot clear the gate — the defect, reproduced",
+        not audit.reported_cause(hout).startswith("hygiene declaration:"),
+        repr(audit.reported_cause(hout)),
+    )
+
 def probe_the_note_is_attached_once_for_every_surface() -> None:
     """The cause is computed ONCE and read by all three surfaces (#158).
 
@@ -1755,6 +1888,7 @@ def main() -> int:
     probe_a_skipped_suite_is_still_no_verdict()
     probe_the_fail_line_cause_is_read_by_one_predicate()
     probe_a_script_shaped_failure_records_its_count()
+    probe_a_declared_marker_is_read_first_and_the_heuristic_is_the_fallback()
     probe_the_note_is_attached_once_for_every_surface()
 
     print("  live manifest — the declared revisions, swept")
