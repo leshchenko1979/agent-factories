@@ -221,6 +221,9 @@ def resolvable(ref: str, cwd: Path) -> bool:
     return rc == 0 and bool(out.strip())
 
 
+_WALK_CACHE: dict[tuple[str, str, str], tuple] = {}
+
+
 def history_entries(
     ref: str, rel_path: str, cwd: Path
 ) -> tuple[list[dict] | None, str]:
@@ -229,9 +232,18 @@ def history_entries(
     The deletion counts are a stated OPTIMISATION, not the predicate: a row occupies at
     least one line and any change to that line counts as a deletion, so a commit with zero
     deleted lines cannot remove a row identity and needs no set comparison. The live
-    history bears it out — 260 commits touch the ledger, only 8 carry deletions, and the
-    full comparison runs over those 8 rather than all 260.
+    history bears it out — at 2026-09-28, 831 commits touch the ledger and only 15 carry
+    deletions, so the full comparison runs over those 15 rather than all 831. THE FIGURES
+    MOVE: this was 260/8 when the sentence was written, and the walk's cost is
+    O(history x filesize) — measured 55.7 s for one walk at 831 commits over a 3.4 MB
+    file. That is why the result is CACHED: the gate walks the live ledger twice, and a
+    second identical walk of immutable history buys nothing and cost the run its budget
+    (rc=124 against a 200 s cap, 2026-09-28).
     """
+    _key = ("history", ref, rel_path, str(cwd))
+    if _key in _WALK_CACHE:
+        return _WALK_CACHE[_key]
+
     rc, out, err = _git(
         "log", "--numstat", "--format=%x01%H%x01%s", ref, "--", rel_path, cwd=cwd
     )
@@ -290,6 +302,10 @@ def build_transitions(
     ref: str, rel_path: str, cwd: Path
 ) -> tuple[list[dict] | None, list[dict] | None, str]:
     """`(transitions, entries, error)` — a transition per commit that deleted any line."""
+    _key = ("transitions", ref, rel_path, str(cwd))
+    if _key in _WALK_CACHE:
+        return _WALK_CACHE[_key]
+
     entries, err = history_entries(ref, rel_path, cwd)
     if entries is None:
         return None, None, err
@@ -309,6 +325,7 @@ def build_transitions(
                 "after": after,
             }
         )
+    _WALK_CACHE[("transitions", ref, rel_path, str(cwd))] = (transitions, entries, "")
     return transitions, entries, ""
 
 
