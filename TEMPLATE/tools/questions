@@ -1061,9 +1061,10 @@ def cmd_answer(argv):
         remaining = [q for q in entry.get("questions", [])
                      if not question_is_closed(q)]
         # A factory set is NEVER auto-archived (owner order 2026-09-25): it stays
-        # open at 0..N questions, so the page, its lane sections and their
-        # anchors are permanent. Answering the last question leaves the set OPEN
-        # with 0 open questions.
+        # open at 0..N questions, so the page and its ADDRESS are permanent.
+        # Answering the last question leaves the set OPEN with 0 open questions;
+        # its lane section stops rendering (owner order 2026-09-28), so the
+        # section is explicitly NOT part of what "permanent" names here.
         archived = 0
         write_register_atomic(data)
 
@@ -1625,9 +1626,11 @@ def build_spec(entries, slug, expires_at, action):
 
     Sections are per LANE, not per set (owner order 2026-09-25): one standing
     factory set holds questions from many lanes, and the owner addresses a
-    sub-part of the page by LANE ANCHOR. A lane whose questions are all answered
-    STILL renders its section, so an anchor handed out yesterday keeps resolving
-    today -- the anchor's stability is the whole point of it.
+    sub-part of the page by LANE ANCHOR. A lane renders while it has an OPEN
+    question (owner order 2026-09-28): an all-answered lane is NOT rendered, so
+    the page never carries a block reporting nothing. That SUPERSEDES the
+    earlier rule that an all-answered lane kept its section for the sake of a
+    handed-out anchor -- the page is what the owner reads.
 
     `slug` rides in the form's `token` field: the answer backend's token check
     is a SLUG check now. The field NAME is unchanged because that is the wire
@@ -1703,13 +1706,28 @@ def build_spec(entries, slug, expires_at, action):
                                            lane, set_id, qid)},
                     "children": children}
                 question_keys.append(base)
+        if not question_keys:
+            # Owner order 2026-09-28: a lane with nothing OPEN renders NO
+            # section. It used to render one carrying "0 open", on the argument
+            # that a handed-out lane anchor should keep resolving -- but the
+            # cost was a page of empty blocks reporting nothing, and the owner
+            # READS the page, not the anchors. A lane's anchor resolves while
+            # that lane has an open question; a register with nothing open at
+            # all falls through to the typed empty state below.
+            continue
         n_open = sum(1 for (_e, q) in by_lane[lane] if not question_is_closed(q))
         # set_id: the section can span several sets, so it names the set only
         # when there is exactly one. data-set is for the reader, not the tool.
+        # Derived from the CARDS this section renders (owner order 2026-09-28):
+        # a lane also holds questions that are already CLOSED, and naming their
+        # factory here put a control on the selector for a block holding none
+        # of that factory's cards -- another empty set offered to the reader,
+        # and a filter that scopes someone else's question.
         set_ids = []
-        for (entry, _q) in by_lane[lane]:
-            if entry["id"] not in set_ids:
-                set_ids.append(entry["id"])
+        for key in question_keys:
+            sid = elements[key]["props"]["set"]
+            if sid not in set_ids:
+                set_ids.append(sid)
         elements[anchor] = {
             "type": "QuestionSet",
             "props": {"set_id": ",".join(set_ids), "lane": lane, "anchor": anchor,
@@ -1844,6 +1862,17 @@ UI_JS = """(function () {
   // from each section's own data-set attribute -- already in the DOM, so no
   // spec, renderer or backend change is needed. The control is an ENHANCEMENT:
   // it is built here, so with JS off the page still reads in full.
+  // Per-factory OPEN COUNTS (owner order 2026-09-28): the selector names how
+  // many questions are waiting on each factory. Counted from each CARD's own
+  // set field rather than from its section's data-set, because a lane section
+  // can span two sets (lane-hq carries meta-factory,ai-antispam) and its cards
+  // belong to different factories -- a section-level tally would credit BOTH
+  // with the same cards.
+  var counts = {};
+  document.querySelectorAll('input[name="set"]').forEach(function (inp) {
+    counts[inp.value] = (counts[inp.value] || 0) + 1;
+  });
+
   var setSections = document.querySelectorAll('section.set[data-set]');
   if (setSections.length) {
     var factories = [];
@@ -1871,7 +1900,7 @@ UI_JS = """(function () {
       [''].concat(factories).forEach(function (f) {
         var b = document.createElement('button');
         b.type = 'button';
-        b.textContent = f || 'All';
+        b.textContent = f ? f + ' (' + (counts[f] || 0) + ')' : 'All';
         b.setAttribute('data-f', f);
         b.addEventListener('click', function () { apply(f); });
         bar.appendChild(b);
@@ -1917,6 +1946,11 @@ background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
 .q{background:var(--strip);border:1px solid var(--line);border-left:3px solid var(--line);
 border-radius:0 7px 7px 0;padding:1.2rem 1.3rem 1.1rem;margin:0 0 .85rem}
 .qt{font:600 clamp(1.2rem,2.7vw,1.42rem)/1.3 var(--serif);letter-spacing:-.015em;margin:0}
+/* The factory tag that precedes a question's heading (owner order 2026-09-28).
+It borrows the page's own micro-label idiom -- mono, dim, uppercase -- so it
+reads as metadata ABOUT the question and never as part of its title. */
+.qt .qset{font:.62rem/1.5 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+color:var(--dim);margin-right:.5rem;white-space:nowrap}
 .rec{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;border-left:2px solid var(--amber);
 border-radius:0 5px 5px 0;background:var(--amber-soft);font-size:.95rem;line-height:1.5}
 /* No ::before label here any more: the label is the <summary> above, because a
@@ -2595,8 +2629,8 @@ def selftest():
         rc, _, _ = run("answer", set_id, "q2", "0")
         ck(rc == 0, "a later real answer closes the clarifying question")
         # Owner order 2026-09-25: a factory set is NEVER auto-archived. It
-        # stays open at 0..N questions, so the page, its lane sections and
-        # their anchors are permanent.
+        # stays open at 0..N questions, so the page and its address are
+        # permanent -- the lane SECTION is not (owner order 2026-09-28).
         live = get_set(set_id)
         ck(live is not None and live.get("status") == "open",
            "a fully answered factory set STAYS OPEN (status=%r)"
@@ -3235,6 +3269,40 @@ def selftest():
             ck('class="set"' in _oq_body and 'data-set="' in _oq_body,
                "\u2026over sections that carry the data-set it reads -- "
                "without either half the filter silently does nothing")
+            # Owner order 2026-09-28: the factory name precedes each question's
+            # heading, so a card says what it is ABOUT with its lane heading
+            # scrolled off -- or filtered out of view. Asserted as a COUNT
+            # against the cards, not a substring: one page-level tag would
+            # satisfy "qset in html" while telling no card anything.
+            _cards = (_html.count('class="q"')
+                      + _html.count('class="q clarifying"'))
+            ck(_html.count('class="qset"') == _cards and _cards > 0,
+               "every question's heading is preceded by its OWN factory name "
+               "(%d tag(s), %d card(s))" % (_html.count('class="qset"'), _cards))
+            # Owner order 2026-09-28: the selector names each factory's OPEN
+            # COUNT. A lane section can span two sets, so the count is derived
+            # from each CARD's own set field -- both halves must ship, or the
+            # bar silently shows a bare name again.
+            ck('input[name="set"]' in _oq_js and "counts[" in _oq_js,
+               "\u2026and the selector derives each factory's open count from "
+               "the cards' own set fields")
+            ck("counts[f]" in _oq_js,
+               "\u2026naming it on the button, not a bare factory name")
+            # The section's data-set must name only factories it HOLDS a card
+            # for: a lane also carries CLOSED questions, and naming their
+            # factory here put a control on the selector for a block with none
+            # of that factory's cards in it.
+            _leaks = []
+            for _chunk in _oq_body.split('<section id="lane-')[1:]:
+                _names = re.search(r'data-set="([^"]*)"', _chunk)
+                _names = set(x for x in (_names.group(1).split(",") if _names else []) if x)
+                _held = set(re.findall(r'name="set" value="([^"]+)"', _chunk))
+                if not _names <= _held:
+                    _leaks.append((sorted(_names - _held), sorted(_held)))
+            ck(not _leaks,
+               "\u2026and a section names only the factories whose cards it "
+               "holds, so no selector control scopes another factory's question "
+               "(leaked, held: %r)" % (_leaks,))
         finally:
             env["OC_QUESTIONS_DIR"] = _saved_dir
         # Owner question 2026-09-24: the answer form should swap inline instead
@@ -3787,20 +3855,22 @@ def selftest():
         ck(json.loads(out)["slug"] == acc_page["slug"],
            "\u2026at the IDENTICAL page path (asserted twice, per the order)")
 
-        # The page ALWAYS deploys, and a lane whose questions are all answered
-        # still renders its section, so an anchor handed out yesterday resolves.
+        # Owner order 2026-09-28 SUPERSEDES the property this block pinned. An
+        # all-answered lane no longer renders its section: the page showed a
+        # wall of blocks reporting "0 open", and the reader meets the PAGE, not
+        # the anchors. The page still ALWAYS deploys, and a lane with OPEN
+        # questions still renders.
         rc, _, _ = run("answer", _fac, "q1", "0")
         rc, _, _ = run("answer", _fac, "q2", "0")
         rc, out, _ = run("publish", "--json")
         zero_body = open(os.path.join(json.loads(out)["path"], "index.html"),
                          encoding="utf-8").read()
-        ck("lane-carrier-tools" in zero_body
-           and "lane-governance-ontology-rsi" in zero_body,
-           "a lane whose questions are all answered STILL renders its section "
-           "(the anchor stays resolvable)")
-        ck("0 open" in zero_body,
-           "\u2026reporting its open count, so 0 is visible rather than the "
-           "section vanishing")
+        ck("0 open" not in zero_body,
+           "an empty lane renders NO section -- no lane block reports 0 open "
+           "(owner order 2026-09-28)")
+        ck("<main>" in zero_body and "<h1>" in zero_body,
+           "\u2026and the page still deploys the lanes that ARE open, rather "
+           "than vanishing with the empty ones")
         _rec = get_set(_fac)
         ck(_rec is not None and _rec.get("status") == "open",
            "answering the last question leaves the set OPEN (status=%r)"
