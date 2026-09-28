@@ -41,9 +41,27 @@ examining modified tracked files at all. It still examines them, and a stranded 
 still fails — it now has to be older than the window to be judged stranded, which is
 what "stranded" means. The measurement run's own-artifact invariant gets the sharper
 form: `--require-committed <path>` fails on a fresh dirty path with no grace at all,
-because the run knows which artifacts are its own. A whole-tree check and a
-run-scoped check coincide in a single-lane repo and diverge here; the run-scoped one
-is the blocking one.
+because the run knows which artifacts are its own.
+
+**The run-scoped form does NOT exist, and this docstring used to claim it did.** The
+sentence "a whole-tree check and a run-scoped check ... the run-scoped one is the
+blocking one" promised a narrowing the tool has never had, and a reader who believed it
+went looking for a flag that is not here (#201, ruled 2026-09-28). The claim is
+WITHDRAWN rather than made true, because the two are not the same thing and only one of
+them is honest. `<path>` is named because a reader must not infer a form that does not exist.
+
+The real contract, stated so nothing has to be inferred:
+
+  * the walk is WHOLE-TREE and every invocation gets it — nothing narrows it, and
+    `--grace-minutes N` moves the boundary for every path, which is why #38 refused it as
+    an allowlist by the back door;
+  * a run declares its OWN artifacts with `--require-committed <path>`, which ADDS a leg
+    and never removes one: it catches a run that has not committed its own output, and it
+    is deliberately not a way to stop looking at anyone else's;
+  * a foreign stranded path is therefore a state the run must RECORD, not one it can
+    silence: the closing invariant admits the second verdict
+    `workspace_gate=blocked-by-unowned`, lawful only when the run NAMES the blocking paths,
+    and never a forged clean.
 """
 
 from __future__ import annotations

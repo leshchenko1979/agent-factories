@@ -79,22 +79,79 @@ from ledger_boundary import (  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
+# THE SHARED PREDICATE, not a private scan (#215). Both legs of this gate read a field
+# that `tools/field_predicate.py` already owns, and this file had its own answer for each:
+# a substring test for the verdict and `_has_head_sha` for the revision. Two readers for
+# one field is the class section 11 codifies against, and here it was worse than
+# duplication — the private forms asked whether a token APPEARS IN THE TEXT while the law
+# asks whether the row DECLARES it, so a row that merely MENTIONED the verdict satisfied
+# the leg that exists to require it.
+sys.path.insert(0, str(REPO / "tools"))
+from field_predicate import (  # noqa: E402
+    declared_revision,
+    keyed_value,
+    trailer_tokens,
+)
+
 # The key this gate's boundary is declared under, in the factory's own
 # `docs/ledger-invariants.json`. The key is the gate's own name, so the declaration says
 # which invariant each date belongs to.
 INVARIANT_KEY = "score_gate_recorded"
 
 VERDICT_KEY = "workspace_gate=rc=0"
-_HEX = set("0123456789abcdef")
+# The verdict's two halves, named so the check reads the FIELD and VALUE separately: the
+# canonical run must declare `workspace_gate` WITH the value `rc=0`. Declaring the key with
+# a different value is a FAILING gate, which is a finding rather than a pass.
+VERDICT_FIELD = "workspace_gate"
+VERDICT_VALUE = "rc=0"
 
-def _has_head_sha(detail: str) -> bool:
-    """True when `detail` carries a `head=<sha>` token with a plausible sha."""
-    for token in detail.replace(",", " ").replace(";", " ").split():
-        if not token.startswith("head="):
-            continue
-        sha = token[len("head="):].strip(").")
-        if len(sha) >= 7 and all(c in _HEX for c in sha):
+# THE SECOND LAWFUL VERDICT (#201, ruled 2026-09-28). The closing-invariant clause admits
+# two verdicts, because on a shared tree a run's OWN artifacts can be committed and clean
+# while an unrelated lane holds a tracked file past the grace window: `hygiene.py --audit`
+# then returns rc=1 correctly for the whole tree, and the law says that is NOT this run's
+# defect. The run records that state instead of forging a clean.
+#
+# The token is DELIBERATELY NOT `rc=0-blocked-by-unowned`: embedding `rc=0` lets a reader
+# scan past it as a clean run, and the whole point of the second verdict is that it must
+# never be readable as one.
+#
+# AND IT IS LAWFUL ONLY WHEN THE ROW NAMES THE BLOCKING PATHS (#201 ruling point 3). A
+# token without the paths is an unexaminable excuse — nothing can re-read it, so the
+# blocked verdict would become the back door the ruling refused as shape (a). Naming the
+# paths is what gives the standing patrol something to cross-read against the live tree.
+VERDICT_BLOCKED_VALUE = "blocked-by-unowned"
+BLOCKED_PATHS_KEY = "blocked_paths"
+
+def _verdict_declared(detail: str) -> bool:
+    """True when `detail`'s CANONICAL RUN declares a LAWFUL workspace-gate verdict.
+
+    Read through the shared predicate rather than over the whole text, because the law's
+    definition of a declaration is positional: the canonical run is the row's trailer, and
+    a token outside it is a QUOTATION. A row that says "no `workspace_gate=rc=0` was
+    written here" satisfies a substring test while carrying no verdict at all — so the
+    more lawfully a run REFUSES the token, the blinder a lexical leg becomes (#215).
+
+    Two verdicts are lawful, and the second carries a condition (#201):
+
+      * `workspace_gate=rc=0` — the run's own closing gate was clean;
+      * `workspace_gate=blocked-by-unowned` — the gate was blocked by paths this run does
+        not own, AND the row names them. The token without the paths is refused here, so
+        an excuse that cannot be re-read never reads as a verdict.
+
+    A third value (a failing gate, say `rc=1`) is NOT lawful and is reported as a missing
+    verdict: a run whose gate genuinely failed must record that as a defect, not as a pass
+    and not as a foreign block.
+    """
+    tokens = trailer_tokens(detail)
+    for token in tokens:
+        value = keyed_value(token, VERDICT_FIELD)
+        if value == VERDICT_VALUE:
             return True
+        if value == VERDICT_BLOCKED_VALUE:
+            return any(
+                (keyed_value(t, BLOCKED_PATHS_KEY) or "").strip(" ,")
+                for t in tokens
+            )
     return False
 
 def score_gate_problems(
@@ -125,9 +182,9 @@ def score_gate_problems(
             continue
         detail = str(row.get("detail") or "")
         missing = []
-        if VERDICT_KEY not in detail:
+        if not _verdict_declared(detail):
             missing.append(VERDICT_KEY)
-        if not _has_head_sha(detail):
+        if declared_revision(detail) is None:
             missing.append("head=<sha>")
         if missing:
             problems.append(f"n={n} ({ts}) missing {' and '.join(missing)}")
@@ -338,3 +395,119 @@ def test_probe_ignores_non_score_events() -> None:
     other = {"n": 901, "ts": "2026-09-19T06:00:00Z", "event": "dispatch", "detail": "x"}
     problems, excused = score_gate_problems([other], _PROBE_BOUNDARY)
     assert problems == [] and excused == []
+
+# --- the legs' POSITIONAL reads (#215) ------------------------------------------
+#
+# Every specimen below ends in a VALID `head=<sha>`, deliberately. The row must be judged
+# on the leg under test, so the OTHER leg is satisfied by construction — a probe that let
+# both legs fail could not tell which predicate caught the row, and the whole defect is
+# that the verdict leg went blind while the head leg kept working (the real `n=1458` is
+# exactly that shape: it fails on `head=<sha>` ALONE today).
+_STAMP = "head=deadbeef985b0f1a6c8919c362a0a56ec7d0d42e"
+
+def _specimen(detail: str) -> list[dict]:
+    return [{**_OK, "detail": detail}]
+
+def test_probe_AC1_a_row_mentioning_nothing_fails() -> None:
+    """Specimen A — the positive control: nothing is mentioned, so the leg bites."""
+    problems, _ = score_gate_problems(_specimen(f"survey-2026-09-19 — {_STAMP}"), _PROBE_BOUNDARY)
+    assert problems and VERDICT_KEY in problems[0], problems
+
+def test_probe_AC1_a_row_QUOTING_the_token_in_prose_fails() -> None:
+    """Specimen B — the law's own honest refusal. It must NOT satisfy the leg.
+
+    The canonical run here is `[head=<sha>]` alone: the token appears mid-sentence, so it
+    is a quotation. A lexical leg accepts it (that was the defect); the positional leg must
+    not, or the more lawfully a row explains its refusal, the blinder the gate becomes.
+    """
+    problems, _ = score_gate_problems(
+        _specimen(
+            "survey-2026-09-19 — writing workspace_gate=rc=0 would forge a verdict the "
+            f"tool did not return, so none was written {_STAMP}"
+        ),
+        _PROBE_BOUNDARY,
+    )
+    assert problems and VERDICT_KEY in problems[0], problems
+
+def test_probe_AC1_a_row_mentioning_the_token_in_prose_fails() -> None:
+    """Specimen D — a bare mention, same shape as B with plainer wording."""
+    problems, _ = score_gate_problems(
+        _specimen(f"survey-2026-09-19 — we did not record workspace_gate=rc=0 today {_STAMP}"),
+        _PROBE_BOUNDARY,
+    )
+    assert problems and VERDICT_KEY in problems[0], problems
+
+def test_probe_AC1_a_row_DECLARING_the_token_in_the_run_passes() -> None:
+    """Specimen E — the real declaration at the end. This is the leg that must keep passing."""
+    problems, excused = score_gate_problems(
+        _specimen(f"survey-2026-09-19 — workspace_gate=rc=0 {_STAMP}"), _PROBE_BOUNDARY
+    )
+    assert problems == [] and excused == [], (problems, excused)
+
+def test_probe_AC1_a_row_QUOTING_a_foreign_sha_fails() -> None:
+    """Specimen G — the sha is quoted from elsewhere, so neither leg reads a declaration."""
+    problems, _ = score_gate_problems(
+        _specimen(
+            "survey-2026-09-19 — n=565 quotes head=4ae1ffdb0987654321ff in prose workspace_gate=rc=0"
+        ),
+        _PROBE_BOUNDARY,
+    )
+    assert problems and "head=<sha>" in problems[0], problems
+
+def test_probe_AC2_the_REAL_row_1458_is_caught_by_the_VERDICT_leg() -> None:
+    """AC2 (reverse leg) — driven over the live ledger, asserted on the LEG.
+
+    `n=1458` fails on `head=<sha>` ALONE under the old predicate, so a probe counting FAIL
+    passes while the defect is fully present: the specimen must name WHICH leg caught it.
+    This asserts the VERDICT leg, which is the half the fix moves.
+    """
+    _, _, rows = boundary_and_rows(REPO, INVARIANT_KEY)
+    target = next((r for r in rows if r.get("n") == 1458), None)
+    if target is None:
+        pytest.skip("n=1458 is not in this ledger")
+    problems, _ = score_gate_problems([target], "2020-01-01T00:00:00Z")
+    assert problems, "n=1458 must fail"
+    assert VERDICT_KEY in problems[0], (
+        "n=1458 must be caught by the VERDICT leg, not only by head= — got: %r" % problems
+    )
+
+def test_probe_AC4_a_nameABLE_row_missing_the_paths_fails() -> None:
+    """#201 — the blocked verdict is lawful only when the row NAMES the blocking paths.
+
+    A token without the paths is an unexaminable excuse: nothing can re-read it, so it
+    would become the back door the ruling refused. The same row WITH paths passes, which
+    is what shows the refusal discriminates rather than rejecting the token outright.
+    """
+    unnamed, _ = score_gate_problems(
+        _specimen(f"survey-2026-09-19 — workspace_gate=blocked-by-unowned {_STAMP}"),
+        _PROBE_BOUNDARY,
+    )
+    assert unnamed and VERDICT_KEY in unnamed[0], unnamed
+
+    named, excused = score_gate_problems(
+        _specimen(
+            "survey-2026-09-19 — workspace_gate=blocked-by-unowned "
+            "blocked_paths=evidence/census-2026-09-28.md,evidence/other.md "
+            f"{_STAMP}"
+        ),
+        _PROBE_BOUNDARY,
+    )
+    assert named == [] and excused == [], (named, excused)
+
+def test_probe_AC4_the_two_verdicts_are_NOT_confusable() -> None:
+    """The blocked token must never read as a clean run, and a failing gate never passes."""
+    clean, _ = score_gate_problems(
+        _specimen(f"survey-2026-09-19 — workspace_gate=rc=0 {_STAMP}"), _PROBE_BOUNDARY
+    )
+    blocked, _ = score_gate_problems(
+        _specimen(
+            "survey-2026-09-19 — workspace_gate=blocked-by-unowned blocked_paths=a.md " + _STAMP
+        ),
+        _PROBE_BOUNDARY,
+    )
+    assert clean == [] and blocked == [], (clean, blocked)
+    # and the FAILING gate is neither: `rc=1` is not in the lawful set.
+    failing, _ = score_gate_problems(
+        _specimen(f"survey-2026-09-19 — workspace_gate=rc=1 {_STAMP}"), _PROBE_BOUNDARY
+    )
+    assert failing and VERDICT_KEY in failing[0], failing
