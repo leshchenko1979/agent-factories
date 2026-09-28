@@ -925,7 +925,8 @@ def cmd_list(argv):
                      "title": question.get("title"),
                      "status": question.get("status"),
                      "age": fmt_age(question.get("asked_at")
-                                    or entry.get("asked_at"))}
+                                    or entry.get("asked_at")),
+                     "delivery": question.get("delivery")}
                     for (entry, question) in pairs],
             })
         print(json.dumps({"open_questions": total_open, "lanes": rows},
@@ -957,6 +958,7 @@ def cmd_list(argv):
                 detail += f"  -> {question.get('status')}"
                 if question.get("answer") is not None:
                     detail += f": {question.get('answer')}"
+                detail += delivery_note(question)
             print(detail)
     return 0
 
@@ -1403,12 +1405,7 @@ def find_set_anywhere(set_id):
     return None
 
 def compose_answer_body(entry, qid=None):
-    questions = entry.get("questions") or []
-    if qid:
-        questions = [q for q in questions if q.get("qid") == qid]
-    answered = [q for q in questions
-                if q.get("answer") is not None
-                or q.get("status") in ("clarifying", "clarified")]
+    answered = answerable_questions(entry, qid)
     if not answered:
         return None
     # The lane comes from the ANSWERING questions, not from the set: one
@@ -1435,6 +1432,64 @@ def compose_answer_body(entry, qid=None):
     if len(body) > NOTIFY_BODY_MAX:
         body = body[:NOTIFY_BODY_MAX] + " (truncated)"
     return body
+
+def answerable_questions(entry, qid=None):
+    """The questions a delivery BODY carries: answered, or awaiting a clarify.
+    Extracted so the body and the delivery stamp cannot disagree about which
+    questions were actually in the message."""
+    questions = entry.get("questions") or []
+    if qid:
+        questions = [q for q in questions if q.get("qid") == qid]
+    return [q for q in questions
+            if q.get("answer") is not None
+            or q.get("status") in ("clarifying", "clarified")]
+
+def delivery_outcome(status):
+    """HTTP status -> the vocabulary the register records."""
+    if 200 <= status < 300:
+        return "delivered"
+    if status == 0:
+        return "unreachable"
+    return "refused"
+
+def stamp_delivery(set_id, qids, outcome, http, mode):
+    """Record that a delivery was ATTEMPTED and what happened. Returns the count
+    stamped, or None when the set is not in the live register.
+
+    A consequence is not a receipt: "answered" says the register closed the
+    question, not that the lane ever saw the answer. Only `notify` knows, so
+    only `notify` can record it.
+
+    BOUND: this stamps the LIVE register. A set that has been archived carries
+    its questions in archive.jsonl, which this does not rewrite -- an archive is
+    history, and rewriting history to record a delivery would be worse than the
+    gap it closes.
+    """
+    stamp = {"attempted_at": now_iso(), "outcome": outcome,
+             "http": http, "mode": mode}
+    with RegisterLock():
+        data = read_register()
+        live = next((s for s in data["sets"] if s.get("id") == set_id), None)
+        if live is None:
+            return None
+        targets = answerable_questions(live) if qids is None else [
+            q for q in (live.get("questions") or []) if q.get("qid") in qids]
+        for question in targets:
+            question["delivery"] = dict(stamp)
+        write_register_atomic(data)
+        return len(targets)
+
+def delivery_note(question):
+    """How the register read renders delivery. An answer with no stamp reads as
+    NOT RECORDED rather than as delivered -- the absence is the finding, so it
+    is printed rather than omitted."""
+    delivery = question.get("delivery") or {}
+    if not delivery:
+        return "  [delivery: NOT RECORDED]"
+    if delivery.get("outcome") == "delivered":
+        return "  [delivered %s]" % (delivery.get("attempted_at") or "?")
+    return "  [delivery FAILED: %s %s]" % (delivery.get("outcome"),
+                                           delivery.get("attempted_at") or "?")
 
 def a2a_deliver(session, body, mode="turn-end"):
     import urllib.error
@@ -1507,13 +1562,27 @@ def cmd_notify(argv):
         return 0
 
     status, response = a2a_deliver(session, body, mode)
+
+    # Stamp the ATTEMPT on the questions the body carried. A delivery the exit
+    # code reports and the register forgets leaves a lane blocked while every
+    # surface it can read says the question is closed.
+    stamped = stamp_delivery(entry.get("id"),
+                             [q.get("qid") for q in answerable_questions(
+                                 entry, flags.get("--qid"))],
+                             delivery_outcome(status), status, mode)
+
     if flags.get("--json"):
         print(json.dumps({"set": entry.get("id"), "session": session,
-                          "mode": mode, "http": status, "response": response},
+                          "mode": mode, "http": status, "response": response,
+                          "delivery": delivery_outcome(status),
+                          "stamped": stamped},
                          indent=2, ensure_ascii=False))
     else:
-        print("notified %s (set %s) — http %s"
-              % (lane_name, entry.get("id"), status))
+        note = ("stamped %d question(s) as %s"
+                % (stamped, delivery_outcome(status))) if stamped else \
+               "not stamped: the set is not in the live register"
+        print("notified %s (set %s) — http %s (%s)"
+              % (lane_name, entry.get("id"), status, note))
     if status == 0:
         return 4
     if status >= 400:
@@ -4063,6 +4132,102 @@ def selftest():
            "an unreachable A2A endpoint is rc=4, never a false success (rc=%d)"
            % proc.returncode)
 
+        # -- 12. DELIVERY STAMP ------------------------------------------
+        # A consequence is not a receipt: "answered" says the register closed the
+        # question, NOT that the lane ever received the answer. `answer` does not
+        # notify, so before this the register read "answered" while a lane could
+        # still be blocked, and no surface could tell the two apart.
+        #
+        # The FAILED case is free: the "unreachable A2A endpoint" arm above is a
+        # real delivery attempt that returned 4. Its stamp is what the exit code
+        # cannot carry to anyone but the caller.
+        _dq = (get_set(rset) or {}).get("questions", [{}])[0]
+        _dd = _dq.get("delivery") or {}
+        ck(_dd.get("outcome") in ("unreachable", "refused"),
+           "a FAILED delivery is STAMPED on the question (outcome=%r)"
+           % (_dd.get("outcome"),))
+        ck(bool(_dd.get("attempted_at")),
+           "\u2026and the stamp carries its instant (%r)" % (_dd.get("attempted_at"),))
+        ck(_dd.get("http") == 0,
+           "\u2026and the transport failure is recorded as http 0, not a code "
+           "that could be read as an HTTP answer (%r)" % (_dd.get("http"),))
+
+        # A delivery that SUCCEEDS is stamped delivered. The endpoint is local, so
+        # the arm is deterministic and needs no daemon.
+        import http.server
+        import threading
+
+        class _Ok(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"jsonrpc":"2.0","id":"1","result":{}}')
+            def log_message(self, *args):
+                pass
+
+        _srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Ok)
+        threading.Thread(target=_srv.serve_forever, daemon=True).start()
+        ok_env = dict(env)
+        ok_env["OC_QUESTIONS_A2A"] = ("http://127.0.0.1:%d/a2a/v1"
+                                      % _srv.server_address[1])
+        try:
+            # MUTATION KILL: skip the stamp write in cmd_notify and the delivered
+            # leg below reddens (the stamp still reads the EARLIER failure).
+            proc = subprocess.run([tool, "notify", "--set", rset], env=ok_env,
+                                  capture_output=True, text=True, timeout=90)
+            ck(proc.returncode == 0,
+               "a REACHABLE endpoint delivers (rc=%d)" % proc.returncode)
+            ck("stamped 1 question(s) as delivered" in (proc.stdout or ""),
+               "\u2026and the verb SAYS what it stamped (%r)"
+               % ((proc.stdout or "").strip()[:90],))
+        finally:
+            _srv.shutdown()
+            _srv.server_close()
+        _dq = (get_set(rset) or {}).get("questions", [{}])[0]
+        _dd = _dq.get("delivery") or {}
+        ck(_dd.get("outcome") == "delivered",
+           "a SUCCESSFUL delivery is STAMPED delivered (outcome=%r, http=%r)"
+           % (_dd.get("outcome"), _dd.get("http")))
+
+        # --dry-run delivers nothing, so it must stamp nothing: a dry run that
+        # wrote a stamp would make the register claim a delivery nobody made.
+        _before = ((get_set(rset) or {}).get("questions", [{}])[0]
+                   .get("delivery") or {}).get("attempted_at")
+        rc, _, _ = run("notify", "--set", rset, "--dry-run")
+        ck(rc == 0, "dry-run still succeeds (rc=%d)" % rc)
+        _after = ((get_set(rset) or {}).get("questions", [{}])[0]
+                  .get("delivery") or {}).get("attempted_at")
+        ck(_before == _after,
+           "a DRY RUN stamps nothing (attempted_at %r -> %r)"
+           % (_before, _after))
+
+        # An answered question that was NEVER notified must read as NOT RECORDED
+        # rather than as delivered -- the absence is the finding, so it prints.
+        rc, out, _ = run("ask", "--factory", "f-delivery-arm",
+                         "--title", "Never notified?", "--description", "d",
+                         "--option", "yes", "--json")
+        nset = json.loads(out)["set"]
+        run("answer", nset, "q1", "0")
+        rc, out, _ = run("list", "--all")
+        ck("[delivery: NOT RECORDED]" in out,
+           "list prints NOT RECORDED for an answer nobody delivered")
+        ck("[delivered " in out,
+           "list prints the DELIVERED state beside the answer")
+        rc, out, _ = run("list", "--all", "--json")
+        try:
+            _rows = [q for r in json.loads(out)["lanes"] for q in r["questions"]]
+        except Exception:
+            _rows = []
+        ck(any(q.get("delivery", {}).get("outcome") == "delivered"
+               for q in _rows if q.get("delivery")),
+           "list --json carries the delivery object")
+        ck(any(q.get("delivery") is None for q in _rows),
+           "\u2026and an undelivered question carries no object, so a machine "
+           "reader sees the gap too")
+
         if fails:
             print("  %d FAILED" % len(fails))
             return 1
@@ -4088,6 +4253,11 @@ USAGE = """questions — the Open Questions register (#547)
            is an override for callers outside a turn. Prints the open-question
            TOTAL and the page URL -- there is no card.
   answer   <set-id> <qid> <choice-index|clarify> [--text T] [--via card|page|cli]
+           recording an answer does NOT notify the asker: delivery is the
+           separate `notify` verb, and an answer whose asker never received it
+           reads as closed on every surface. `notify` now stamps each question
+           it carried with the outcome and instant (delivery: delivered |
+           refused | unreachable), and `list` prints that beside the answer.
            [--no-publish]
            clarify with NO --text is a COMPLETE request (#183): the owner's
            click alone asks the lane to restate the question in wider context

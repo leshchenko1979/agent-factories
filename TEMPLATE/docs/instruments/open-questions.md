@@ -197,6 +197,20 @@ The register carried fields no consumer reads, and one of them produced a false 
 
 **A write-only field is not merely unused bytes — it is a trap for the next reader.** One removed timestamp disagreed with its question's own status on a handful of rows, because an amendment re-opens a question and leaves the earlier stamp behind. The rows were healthy and the FIELD was the defect: a reader comparing the two reports a contradiction that does not exist. This lane filed precisely that false finding before the field was removed.
 
+### 5.7 Delivery is a separate fact from the answer (#Triage q7)
+
+**The register can be complete and a lane still be blocked.** Recording an answer and delivering it are two acts: `answer` records, `notify` delivers. The store held the answer's state and nothing about its delivery, so a question read `answered` while the lane that asked had never seen the reply — and no surface, machine or human, could tell the two apart. That is the shape where a state is enterable with no reader and no representation, so its absence is invisible from the machine's own side.
+
+**The duty: whoever delivers records the attempt.** `notify` stamps the outcome and the instant on every question its body carried, and the outcome distinguishes delivered from refused from unreachable. A consequence is not a receipt — the same split the ledger keeps between an attestation and the thing it attests.
+
+**A delivery that FAILED must be recorded as failed, not omitted.** An exit code reaches the caller that ran the verb and nobody else; the register is what a later reader has. So a failure is stamped as loudly as a success, and the transport failure has its own value rather than borrowing an HTTP code it never received.
+
+**An answer with no stamp reads as NOT RECORDED, and that absence is PRINTED rather than omitted.** Every answer recorded before this duty existed, and every answer a lane recorded without notifying, is in exactly that state; suppressing it would restore the ambiguity the stamp exists to remove.
+
+**`answer` does NOT notify, and must not grow the duty.** Two distinct failures would then ride one verb, and every caller that already notifies would deliver twice. This is the same separation the ledger's write path keeps, and for the same reason.
+
+**Bound: the stamp covers the LIVE register.** A set that has been archived carries its questions in the archive, which is history and is not rewritten to record a delivery — rewriting history to close a gap is worse than the gap. A question in the archive therefore still reads without a delivery record, and that is a stated bound, not an oversight.
+
 ## 6. Ownership, and the reload leg
 
 | who | what |
