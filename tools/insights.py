@@ -24,6 +24,7 @@ Usage:
   python3 tools/insights.py list
   python3 tools/insights.py format <id> [--format=tweet|ru|markdown]
   python3 tools/insights.py verify
+  python3 tools/insights.py classify --file <mapping.json>   # backfill the class on existing rows
 """
 
 from __future__ import annotations
@@ -51,6 +52,38 @@ ALLOWED_CLASSES = ["general", "implementation"]
 # The owner is an AUTHOR no session can stand for, so this literal is accepted
 # as a first-class value and is NEVER derived.
 OWNER_AUTHOR = "Alexey"
+
+# The canonical key order. A field ADDED to an existing row is INSERTED at its
+# position here, and every other key keeps the place it already had — so the diff
+# a backfill produces is ADDITIVE: a reader scanning it meets one inserted label
+# and no restated claim.
+CANONICAL_ORDER = ["n", "id", "ts", "author", "class", "topic", "stage",
+                   "naive_assumption", "empirical_reality", "mechanism",
+                   "tweet_hook", "ru_summary"]
+_RANK = {k: i for i, k in enumerate(CANONICAL_ORDER)}
+
+
+def _with_field(row: dict, key: str, value) -> dict:
+    """`row` with `key` set, INSERTED at its canonical position.
+
+    Nothing else moves: a key already present keeps its place, and a key absent from
+    CANONICAL_ORDER is left where the row put it. Setting an ABSENT field is therefore
+    purely additive, which is what makes a backfill reviewable — the diff shows one
+    inserted label rather than a reshaped row.
+    """
+    if key in row:
+        return {**row, key: value}
+    target = _RANK[key]
+    out: dict = {}
+    placed = False
+    for k, v in row.items():
+        if not placed and _RANK.get(k, len(CANONICAL_ORDER)) > target:
+            out[key] = value
+            placed = True
+        out[k] = v
+    if not placed:
+        out[key] = value
+    return out
 
 # A binding title is written by the daemon and ends with the channel reference,
 # e.g. `Telegram: Factories / Insights [chat:-100…:topic:6865]`.
@@ -203,6 +236,69 @@ def append_insight(
             fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 
+def classify_insights(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Set `class` on entries that PREDATE the field.
+
+    The register is append-only in its CLAIMS, and this keeps that promise in the
+    The register is append-only in its CLAIMS, and this keeps that promise in the only
+    way a backfill can: it adds ONE routing label to an existing row, INSERTED at its
+    canonical position, and never touches a claim field. Every other key keeps the place
+    it already had, so the diff is additive — a reader meets one inserted label rather
+    than a reshaped row. The owner rules on the values; this applies the ruling.
+
+    All-or-nothing by construction: every id and every value is validated before a
+    single byte is written, so a mapping carrying one unknown id writes NOTHING
+    rather than a partial backfill — a half-applied classification is worse than
+    none, because it reads as complete.
+
+    Returns `[(id, old_class, new_class)]` for the rows it set, oldest first.
+    """
+    if not mapping:
+        raise ValueError("no classifications given — pass a {id: class} mapping")
+    for slug, value in mapping.items():
+        if value not in ALLOWED_CLASSES:
+            raise ValueError(f"class for '{slug}' must be one of {ALLOWED_CLASSES}, "
+                             f"got '{value}'")
+
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOCK_PATH, "w") as lock_f:
+        fcntl.flock(lock_f, fcntl.LOCK_EX)
+        try:
+            entries = []
+            if INSIGHTS_PATH.is_file():
+                for line in INSIGHTS_PATH.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        entries.append(json.loads(line))
+
+            known = {e.get("id") for e in entries}
+            unknown = sorted(s for s in mapping if s not in known)
+            if unknown:
+                raise ValueError(f"unknown id(s), nothing written: {', '.join(unknown)}")
+
+            changes: list[tuple[str, str | None, str]] = []
+            out_rows: list[dict] = []
+            for entry in entries:
+                slug = entry.get("id")
+                if slug not in mapping:
+                    out_rows.append(entry)
+                    continue
+                changes.append((slug, entry.get("class") or None, mapping[slug]))
+                out_rows.append(_with_field(entry, "class", mapping[slug]))
+
+            # Atomic replace under the same lock the append takes, so a peer's
+            # concurrent append can never interleave with this rewrite.
+            tmp = INSIGHTS_PATH.parent / (INSIGHTS_PATH.name + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.writelines(json.dumps(row, ensure_ascii=False) + "\n"
+                             for row in out_rows)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, INSIGHTS_PATH)
+            return changes
+        finally:
+            fcntl.flock(lock_f, fcntl.LOCK_UN)
+
+
 def verify_insights() -> tuple[bool, list[str]]:
     errors: list[str] = []
     if not INSIGHTS_PATH.is_file():
@@ -284,6 +380,11 @@ def main() -> int:
 
     sub.add_parser("list", help="List all insights")
     sub.add_parser("verify", help="Verify integrity of insights ledger")
+
+    p_cls = sub.add_parser("classify",
+                           help="Set the class on entries that predate the field")
+    p_cls.add_argument("--file", required=True, metavar="MAPPING.json",
+                       help="JSON object {id: class}, applied in ONE transaction")
 
     p_fmt = sub.add_parser("format", help="Format insight for publishing")
     p_fmt.add_argument("id", help="Insight slug")
@@ -371,6 +472,28 @@ def main() -> int:
                 print(f"**Tweet hook:**\n```\n{target['tweet_hook']}\n```\n")
             if target.get("ru_summary"):
                 print(f"**Russian publication summary:**\n{target['ru_summary']}\n")
+        return 0
+
+    elif args.cmd == "classify":
+        try:
+            mapping = json.loads(Path(args.file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"FAIL: cannot read mapping {args.file}: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(mapping, dict):
+            print("FAIL: the mapping must be a JSON object {id: class}", file=sys.stderr)
+            return 1
+        try:
+            changes = classify_insights({str(k): str(v) for k, v in mapping.items()})
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        counts: dict[str, int] = {}
+        for slug, old, new in changes:
+            print(f"  {slug}: {old or 'legacy'} -> {new}")
+            counts[new] = counts.get(new, 0) + 1
+        summary = ", ".join(f"{n} {cls}" for cls, n in sorted(counts.items()))
+        print(f"classified {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: {summary}")
         return 0
 
     return 0
