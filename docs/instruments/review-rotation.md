@@ -164,6 +164,15 @@ Measured this turn, and the two facts are different:
 | `tests/test_kit_pin.py` | the manifest pin — a member's verdict depends on **its own** pin, never ours |
 | `tests/test_kit_manifest.py` | that every shipped path carries a class and the digest matches the tree |
 
+**One row of that table runs when INVOKED and is absent from the aggregate, so a lane reading the
+audit green has not run it:** measured 2026-09-28T13:2xZ, `registry/gates.json` carries **48**
+entries and **none** names `tests/test_review.py`, and the `REQUIRED_GATES` tuple above (54) does
+not either. The instrument's own gate is therefore the *declared-but-not-aggregated* shape, and the
+reason is a recorded decision rather than an oversight — the registry's own scope statement names
+this file a deliberate **false positive** for its pattern-based derivation. A member that adopts the
+five paths of §2 inherits a gate it must invoke itself, which is why §4's manifest grain, and not an
+aggregate running green, is what answers a member's coverage question.
+
 **The instrument asserts its own non-absence:** `test_schema_artifact_is_generated` fails if the
 shipped schema is stale against `review.py schema`, so the artifact and its emitter cannot drift
 apart unnoticed. That is a *self*-check, and it is the reason part 3 is enforceable without a
