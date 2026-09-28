@@ -12,7 +12,7 @@ Periodic multi-lens reviews prevent process decay, law bloat, tool rot, ledger d
 ## 🏛️ Family 1: DOCS & LANGUAGE (Role Cards, Directives, Procedures)
 
 ### Lens A — Redundancy, Ontology & Provenance Sediment
-- **Scope:** All role cards (`roles/*.md`), process registers (`processes.md`), and process law (`SKILL.md`).
+- **Scope:** All role cards (`roles/*.md`), process registers (`processes.md`), process law (`SKILL.md`), and instrument law docs (`docs/instruments/*.md`).
 - **Core Checks:**
   1. **Rule Duplication:** Find the same requirement or constraint stated twice across different files.
   2. **One Concept = One Name:** Enforce single canonical terms (from `ONTOLOGY.md`). Flag synonyms, colloquial aliases, and undefined coinages.
