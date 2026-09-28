@@ -7,7 +7,7 @@
   "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
   "zone": {
     "owns": [
-      "the template instrument surface — methodology, development and cross-member deployment (owner-commissioned 2026-09-27)",
+      "the template instrument surface \u2014 methodology, development and cross-member deployment (owner-commissioned 2026-09-27)",
       "the ASIF template and rulebook (TEMPLATE/ and the derived laws)",
       "the fleet registry (registry/)",
       "member-factory surveys, scores and the measurement cadence",
@@ -74,7 +74,7 @@
   "announcements": [
     {
       "id": "pacemaker-triggers-still-pass-mode-quiet",
-      "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-28T11:35:19Z: of 63 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous censuses in this notice (2026-09-26T06:20Z: of 57 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) are kept as the steps this one follows, never overwritten.",
+      "text": "Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) \u2014 all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE \u2014 the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-28T11:35:19Z: of 63 cron rows, 12 jobs carry --mode \u2014 9 turn-end, 3 quiet. The previous censuses in this notice (2026-09-26T06:20Z: of 57 cron rows, 12 carry --mode \u2014 9 turn-end, 3 quiet; then 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode \u2014 10 turn-end, 3 quiet) are kept as the steps this one follows, never overwritten.",
       "severity": "warning",
       "since": "2026-09-19T03:36:54Z",
       "affects": [
@@ -148,8 +148,35 @@
       "thread_id": 4186,
       "role": "methodology",
       "announcements": []
+    },
+    {
+      "topic": "Factories / Fleet instruments",
+      "thread_id": 4555,
+      "role": "fleet-instruments",
+      "announcements": []
+    },
+    {
+      "topic": "Factories / Review Rotation",
+      "thread_id": 5574,
+      "role": "review-rotation",
+      "announcements": []
+    },
+    {
+      "topic": "Factories / Insights",
+      "thread_id": 6865,
+      "role": "insights",
+      "announcements": []
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-28T11:47:47Z"
+  "attested_at": "2026-09-28T11:47:47Z",
+  "instruments": {
+    "ledger": {
+      "state": "adopted",
+      "green": true,
+      "behind_by": 0,
+      "measured_at": "2026-09-28T15:20Z",
+      "reason": "Home factory: the ledger instrument's source tree. Declared set complete (15 of 15 held, no absent, no lag), and every ledger gate green \u2014 re-measured FIRST-HAND by this lane at cd9ca7e rather than transcribed from the relaying lane's e2d9baf reading, which is one revision behind on the kit manifest only. Run as each gate is designed rather than through pytest: test_ledger_schema, test_ledger_close_preflight, test_ledger, test_ledger_identity, test_ledger_no_shrink, test_ledger_index, test_docs_sync and test_template_sync all rc=0, and kit_manifest --check reports agreement. test_ledger_no_shrink is green with ONE declared exemption on origin/main, which the gate prints itself \u2014 a visible debt, not a clean run. behind_by 0: the fragment is in no kit pair, so it has no template half to lag."
+    }
+  }
 }
