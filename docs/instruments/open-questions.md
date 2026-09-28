@@ -134,6 +134,17 @@ Every question carries a **`qid`**, and it is the key a consumer must address it
 - **`--qid` is its flag.** The set-scoped verbs address a question by `--qid`; the set itself is addressed by `--factory`.
 - **Do not reach for `id`.** The set-level field is `id` and it names the SET, so a consumer who reads the law and reaches for the question's `id` gets a missing key — and a missing key reads exactly like an absent value. Stated because it has already happened: a peer enumerated the question object, read `id`, found nothing, and reported that questions carry no identifier at all, while `qid` was present on every row. The failure is silent in both directions and cost a full round.
 
+### 4.4 The question model — how many options an answer may carry
+
+A question **declares how many of its options an answer may carry**, and that declaration is `kind`: `single` or `multi`. **The control the reader sees is the code's business, not this file's** (owner order 2026-09-28); what is law is the count, and that a reader can tell which applies before answering.
+
+- **Question-level, and fixed at ask time.** The count is a property of the QUESTION, not of an answer and not of the page, so it is declared once, where the options are declared. An answer cannot widen it — the same rule that keeps an asker from setting the wrong subject (the `--subject` refusal).
+- **Absent means one.** A question that declares nothing takes a single option. This is the rule that lets every question registered before this field existed keep working unchanged: nothing is reinterpreted, and a default is never guessed from the shape of an answer.
+- **A refusal, never a truncation.** An answer carrying more options than the question allows is **refused**, naming the question and the count it got. Taking the first of several and reporting success is the silent-drop class this instrument exists to remove: it records something the reader did not say.
+- **A multi answer is recorded as the list of chosen options, in the order chosen, and says so.** `answer_kind` distinguishes one label from several, so a consumer never has to infer the cardinality from the option set — the same reason the delivery stamp exists: a state must be readable, not inferred.
+- **A multi question with nothing to choose between is refused at ask time.** It is a question no reader can answer, and registering it puts one on the owner's page.
+- **The act is the same however the choices are spelled.** Several of them, one per value or joined into one, are one act with one meaning.
+
 ## 5. Operational law
 
 Each section below exists because it has already cost a real cycle. All of it asserts SHAPE — never a byte size, a digest, or a line number (§5.5).

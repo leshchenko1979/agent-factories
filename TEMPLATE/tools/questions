@@ -704,6 +704,17 @@ def normalise_questions(raw):
         if not isinstance(options, list):
             die(2, f"question {position}: options must be an array")
         options = [str(o) for o in options]
+        # kind: SINGLE (radio, the default) or MULTI (checkboxes). Question-level
+        # and fixed at ask time (owner order 2026-09-28) -- it says how many
+        # options an answer may carry, which is a property of the question, not
+        # of an answer or of the page.
+        kind = str(item.get("kind") or "single").strip().lower()
+        if kind not in ("single", "multi"):
+            die(2, f"question {position}: kind must be 'single' or 'multi' "
+                   f"(got {kind!r})")
+        if kind == "multi" and not options:
+            die(2, f"question {position}: kind=multi needs options to choose "
+                   f"between; it carries none")
         recommended = item.get("recommended")
         if recommended is not None:
             if not isinstance(recommended, int) or isinstance(recommended, bool):
@@ -720,6 +731,7 @@ def normalise_questions(raw):
             "description": description,
             "options": options,
             "recommended": recommended,
+            "kind": kind,
             "clarify": bool(item.get("clarify", True)),
             "status": "open",
             "answer": None,
@@ -749,6 +761,8 @@ def questions_from_flags(flags):
             "description": flags.get("--description", ""),
             "options": flag_list(flags, "--option"),
             "recommended": int(flags["--recommended"]) if "--recommended" in flags else None,
+            "kind": ("multi" if "--multi" in flags
+                     else (flags.get("--kind") or "single")),
             "clarify": "--no-clarify" not in flags,
         }]
     die(2, "supply --questions-file, --questions-json, or --title/--description")
@@ -762,8 +776,8 @@ def cmd_ask(argv):
         argv,
         valued=["--factory", "--session", "--questions-file", "--questions-json",
                 "--title", "--description", "--option", "--recommended",
-                "--ttl-days", "--subject", "--close-when"],
-        boolean=["--no-clarify", "--json", "--no-publish"],
+                "--ttl-days", "--subject", "--close-when", "--kind"],
+        boolean=["--no-clarify", "--json", "--no-publish", "--multi"],
     )
     # --lane was REMOVED (owner order 2026-09-25): the lane is resolved from the
     # asking session's own binding, so a caller cannot mislabel itself. parse_flags
@@ -924,6 +938,7 @@ def cmd_list(argv):
                     {"set": entry.get("id"), "qid": question.get("qid"),
                      "title": question.get("title"),
                      "status": question.get("status"),
+                     "kind": question.get("kind") or "single",
                      "age": fmt_age(question.get("asked_at")
                                     or entry.get("asked_at")),
                      "delivery": question.get("delivery")}
@@ -956,6 +971,8 @@ def cmd_list(argv):
                     detail += f"  (recommended: {options[recommended]})"
             else:
                 detail += f"  -> {question.get('status')}"
+                if (question.get("kind") or "single") == "multi":
+                    detail += " [multi-select]"
                 if question.get("answer") is not None:
                     detail += f": {question.get('answer')}"
                 detail += delivery_note(question)
@@ -990,11 +1007,13 @@ def cmd_answer(argv):
     if len(positional) < 2:
         die(2, "answer requires <set-id> <question-id> [choice-index|clarify]")
     set_id, qid = positional[0], positional[1]
-    choice = positional[2] if len(positional) > 2 else None
+    # Several choices arrive as several positionals or as one comma-joined
+    # value, so `answer S q1 0 2` and `answer S q1 0,2` are the same act.
+    choice = ",".join(positional[2:]) if len(positional) > 2 else None
     if flags.get("--clarify"):
         choice = "clarify"
     if choice is None and flags.get("--text") is None:
-        die(2, "supply a choice index, the literal 'clarify', or --text")
+        die(2, "supply one or more choice indices, the literal 'clarify', or --text")
     via = flags.get("--via") or "cli"
     if via not in ("card", "page", "cli"):
         die(2, "--via must be card, page or cli")
@@ -1042,16 +1061,28 @@ def cmd_answer(argv):
             question["answer_kind"] = "clarify"
         else:
             options = question.get("options") or []
-            index = None
+            kind = question.get("kind") or "single"
+            indices = []
             if choice is not None:
                 try:
-                    index = int(choice)
+                    indices = [int(piece) for piece in str(choice).split(",")
+                               if piece.strip() != ""]
                 except ValueError:
                     die(2, f"{choice!r} is neither an option index nor 'clarify'")
+                if not indices:
+                    die(2, "no option index given")
                 if not options:
                     die(2, f"set {set_id}/{qid} has no options; answer with --text")
-                if not 0 <= index < len(options):
-                    die(2, f"option {index} is outside 0..{len(options) - 1}")
+                for _i in indices:
+                    if not 0 <= _i < len(options):
+                        die(2, f"option {_i} is outside 0..{len(options) - 1}")
+                if kind != "multi" and len(indices) > 1:
+                    # The kind is fixed at ASK time, so an answer cannot widen it.
+                    # Silently taking the first would record an answer the reader
+                    # did not give, which is the class this instrument exists to
+                    # remove.
+                    die(2, f"{set_id}/{qid} is single-select and takes ONE option; "
+                           f"got {len(indices)} ({choice!r})")
             # A TYPED ANSWER IS NEVER DISCARDED (owner report 2026-09-25). The
             # page pre-checks the recommended radio, so the browser always posts
             # a choice index; a filled text box therefore arrives with BOTH
@@ -1061,11 +1092,27 @@ def cmd_answer(argv):
             if text:
                 question["answer"] = text
                 question["answer_kind"] = "text"
-                if index is not None:
-                    question["selected_option"] = index
-            elif index is not None:
-                question["answer"] = options[index]
-                question["answer_kind"] = "option"
+                if indices:
+                    # The NAME follows the kind, so an existing reader of a
+                    # single-select question finds what it always found. A typed
+                    # answer keeps the chosen index as context (owner rule: a
+                    # typed answer is never discarded).
+                    if kind == "multi":
+                        question["selected_options"] = indices
+                    else:
+                        question["selected_option"] = indices[0]
+            elif indices:
+                if kind == "multi":
+                    # A multi answer is a LIST, and answer_kind says so: a reader
+                    # must be able to tell one label from several without
+                    # inspecting the option set.
+                    question["answer"] = [options[_i] for _i in indices]
+                    question["answer_kind"] = "options"
+                    question["selected_options"] = indices
+                else:
+                    question["answer"] = options[indices[0]]
+                    question["answer_kind"] = "option"
+                    question["selected_option"] = indices[0]
             else:
                 question["answer"] = flags.get("--text")
                 question["answer_kind"] = "text"
@@ -1742,6 +1789,10 @@ def build_spec(entries, slug, expires_at, action):
                 base = "%s-%s" % (set_id, qid)
                 options = question.get("options") or []
                 recommended = question.get("recommended")
+                # Absent means SINGLE (owner order 2026-09-28) -- the store's 44
+                # pre-existing questions carry no kind and must keep rendering
+                # radios, so the default lives here as well as in normalise.
+                is_multi = (question.get("kind") or "single") == "multi"
                 # One element per BLOCK, in document order: the description is no
                 # longer a single opaque fragment but typed children of the question.
                 children = []
@@ -1755,7 +1806,8 @@ def build_spec(entries, slug, expires_at, action):
                     elements[key] = {
                         "type": "Option",
                         "props": {"label": options[index], "value": str(index),
-                                  "recommended": index == recommended},
+                                  "recommended": index == recommended,
+                                  "multi": is_multi},
                         "children": []}
                     children.append(key)
                 children.append(base + "-text")
@@ -1774,6 +1826,7 @@ def build_spec(entries, slug, expires_at, action):
                 elements[base] = {
                     "type": "Question",
                     "props": {"qid": qid, "title": question["title"],
+                              "multi": is_multi,
                               "recommendation": (options[recommended]
                                                  if options and recommended is not None
                                                  and 0 <= recommended < len(options)
@@ -3662,6 +3715,87 @@ def selftest():
         ck(rc == 2, "amend with no field to change is rc=2 (rc=%d)" % rc)
         rc, _, _ = run("amend", "--set", am_set, "--qid", "nope", "--title", "t")
         ck(rc == 1, "amend on an unknown qid is rc=1 (rc=%d)" % rc)
+
+        # -- 8c-bis. MULTI-SELECT (owner order 2026-09-28). Questions may take
+        # several options at once. The kind is QUESTION-LEVEL and FIXED AT ASK
+        # TIME, and an absent kind means single -- so the register's pre-existing
+        # questions keep rendering radios and no stored answer is reinterpreted.
+        rc, out, _ = run("ask", "--factory", "f-multi-lane",
+                         "--title", "Pick several", "--description", "d",
+                         "--option", "A", "--option", "B", "--option", "C",
+                         "--multi", "--json")
+        ck(rc == 0, "a multi question registers (rc=%d)" % rc)
+        multi_set = json.loads(out)["set"]
+        mq = get_set(multi_set)["questions"][0]
+        ck(mq.get("kind") == "multi",
+           "the register RECORDS the kind rather than leaving a reader to infer "
+           "it (kind=%r)" % (mq.get("kind"),))
+        # The spec is what the renderer reads, so the control type is asserted
+        # where it is decided -- and on BOTH the question and each option, since
+        # a flat spec gives a component only its own props.
+        _spec = build_spec([get_set(multi_set)], "t", None, "answer")
+        _opts = [e for e in _spec["elements"].values() if e["type"] == "Option"]
+        _qs = [e for e in _spec["elements"].values() if e["type"] == "Question"]
+        ck(_qs and all(e["props"].get("multi") is True for e in _qs),
+           "a multi question's spec carries multi=True on the Question")
+        ck(_opts and all(e["props"].get("multi") is True for e in _opts),
+           "\u2026and on EVERY option, so the renderer needs no parent context "
+           "to pick the control (%d options)" % len(_opts))
+        rc, out, _ = run("answer", multi_set, "q1", "0", "2", "--json")
+        ck(rc == 0, "several choices are accepted on a multi question (rc=%d)" % rc)
+        answered = get_set(multi_set)["questions"][0]
+        ck(answered.get("answer") == ["A", "C"],
+           "the answer records EVERY chosen option, in order (%r)"
+           % (answered.get("answer"),))
+        ck(answered.get("answer_kind") == "options",
+           "\u2026and answer_kind says it is several, so a reader can tell one "
+           "label from many without inspecting the option set (%r)"
+           % (answered.get("answer_kind"),))
+        # The comma-joined spelling is the SAME act: the answer backend posts one
+        # `choice` field per checked box, and joining is how several reach the
+        # CLI as one value. A FRESH factory, because the factory key IS the
+        # standing set: asking into f-multi-lane again appends q2 and the arm
+        # would address q1, which is already answered.
+        rc, out, _ = run("ask", "--factory", "f-multi-comma-lane",
+                         "--title", "Comma form", "--description", "d",
+                         "--option", "P", "--option", "Q", "--multi", "--json")
+        c2 = json.loads(out)["set"]
+        ck(c2 == "f-multi-comma-lane", "\u2026the factory key is the set id (%r)" % c2)
+        rc, _, err = run("answer", c2, "q1", "0,1")
+        ck(rc == 0 and get_set(c2)["questions"][0].get("answer") == ["P", "Q"],
+           "the comma-joined form is the same act as separate positionals "
+           "(rc=%d, err=%r)" % (rc, (err or "").strip()[:60]))
+
+        # -- 8c-ter. The KIND IS FIXED AT ASK TIME, so an answer cannot widen it.
+        # Silently taking the first of several would record an answer the reader
+        # did not give -- the class this instrument exists to remove.
+        rc, out, _ = run("ask", "--factory", "f-single-lane",
+                         "--title", "Pick one", "--description", "d",
+                         "--option", "Yes", "--option", "No", "--json")
+        single_set = json.loads(out)["set"]
+        ck(get_set(single_set)["questions"][0].get("kind") == "single",
+           "an ask with no kind records single, not absent-and-guessed")
+        rc, out, err = run("answer", single_set, "q1", "0", "1")
+        ck(rc == 2, "several choices on a SINGLE-select question are REFUSED "
+                   "(rc=%d)" % rc)
+        ck("single-select" in (err or ""),
+           "\u2026and the refusal names the reason (%r)" % ((err or "").strip()[:80],))
+        ck(get_set(single_set)["questions"][0]["status"] == "open",
+           "\u2026and nothing was recorded by the refused answer")
+        rc, _, _ = run("answer", single_set, "q1", "1")
+        ck(rc == 0 and get_set(single_set)["questions"][0].get("answer") == "No",
+           "one choice on a single-select question still works (rc=%d)" % rc)
+        # kind=multi with nothing to choose between is refused at ASK time: a
+        # check box set with no boxes is a question nobody can answer.
+        rc, _, err = run("ask", "--factory", "f-multi-bad-lane",
+                         "--title", "No options", "--description", "d", "--multi")
+        ck(rc == 2, "kind=multi with no options is refused (rc=%d)" % rc)
+        # The register read says which kind, so a lane sees that a question takes
+        # several answers BEFORE it tries to answer it.
+        rc, out, _ = run("list", "--all")
+        ck("[multi-select]" in out,
+           "list marks a multi question as such, so a reader sees the kind "
+           "before answering")
 
         # -- 8d. C6: mechanical closure. The register used to close only on an
         # explicit answer or TTL, so questions outlived the thing they asked

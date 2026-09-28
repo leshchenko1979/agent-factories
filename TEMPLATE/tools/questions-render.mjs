@@ -49,6 +49,10 @@ const catalog = defineCatalog(schema, {
     Question: { props: z.object({
       qid: z.string(), title: z.string(), recommendation: z.string().nullable(),
       token: z.string(), set: z.string(), action: z.string(), footer: z.string(),
+      // multi (owner order 2026-09-28): how many options an answer may carry.
+      // Optional, and an ABSENT value means single -- the store's pre-existing
+      // questions carry no kind and must keep rendering radios.
+      multi: z.boolean().optional(),
       // status + clarifyText (owner report 2026-09-25): a question in the
       // CLARIFYING state rendered identically to an open one, so the owner
       // tapped Clarify, reloaded, and saw no change at all -- the state
@@ -63,7 +67,7 @@ const catalog = defineCatalog(schema, {
     CodeBlock: { props: z.object({ lang: z.string(), code: z.string() }), description: 'A fenced code block' },
     List: { props: z.object({ items: z.array(spans), ordered: z.boolean() }), description: 'A bullet or numbered list' },
     // --- form controls ---
-    Option: { props: z.object({ label: z.string(), value: z.string(), recommended: z.boolean().nullable() }), description: 'A radio option' },
+    Option: { props: z.object({ label: z.string(), value: z.string(), recommended: z.boolean().nullable(), multi: z.boolean().optional() }), description: 'A radio or checkbox option' },
     FreeText: { props: z.object({ label: z.string() }), description: 'Free-text answer' },
     Submit: { props: z.object({ label: z.string(), value: z.string() }), description: 'Submit button' },
     Clarify: { props: z.object({ label: z.string() }), description: 'Clarify button' },
@@ -202,8 +206,12 @@ const { registry } = defineRegistry(catalog, {
     // `chip`, not `rec`: the recommendation BAND and this badge are different
     // elements, and giving them one class name is the specificity trap where a
     // rule for one silently restyles the other.
+    // A MULTI option is a checkbox and a single one a radio. They share the
+    // name `choice` deliberately: the backend collects every value under that
+    // name as a list, which is how several choices reach the CLI in one post.
     Option: ({ props }) => h('label', { className: 'opt' },
-      h('input', { type: 'radio', name: 'choice', value: props.value, defaultChecked: !!props.recommended }),
+      h('input', { type: props.multi ? 'checkbox' : 'radio', name: 'choice',
+                   value: props.value, defaultChecked: !!props.recommended }),
       h('span', null, props.label,
         props.recommended ? h('span', { className: 'chip' }, 'recommended') : null)),
     FreeText: ({ props }) => h('textarea', { name: 'text', rows: 2, placeholder: props.label }),
