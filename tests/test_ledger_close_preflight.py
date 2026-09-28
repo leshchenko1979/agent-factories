@@ -148,10 +148,17 @@ def test_a_close_with_no_claim_leg_is_refused() -> None:
 
 
 def test_a_close_with_no_intake_leg_is_refused() -> None:
-    """Both legs, not only the claim leg: a claim alone does not license a close."""
+    """Both legs, not only the claim leg: a claim alone does not license a close.
+
+    The claim is written AROUND the append path, not through it, and that is now the only
+    way this state can exist: the claim leg (#137 half 2) refuses a claim whose subject has
+    no intake anywhere, so `append` cannot create the fixture this probe needs. Writing it
+    raw keeps the property under test exactly as it was and strengthens the demonstration —
+    the close leg catches a state that no lawful writer could have produced.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         ledger = _throwaway(tmp)
-        assert append(ledger, "claim", "worker", "claim probe").returncode == 0
+        write_around(ledger, [("claim", "worker")])
 
         refused = append(ledger, "close", "worker", "close probe")
         assert refused.returncode != 0, "a close with no intake leg must be refused"

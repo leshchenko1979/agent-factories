@@ -218,6 +218,14 @@ PAIRS = [
     # diverges from its own declaration. It ships, so the copy is held here.
     ("tests/test_kit_pin.py", "TEMPLATE/tests/test_kit_pin.py"),
     ("tests/test_ledger_close_preflight.py", "TEMPLATE/tests/test_ledger_close_preflight.py"),
+    # The ledger header's declared closure (#137 half 1). It ships because the claim it
+    # guards — "this file is copied byte-identically" — is the thing a factory READS before
+    # copying, and a header that drifts from the code it describes misleads every member.
+    ("tests/test_ledger_header_closure.py", "TEMPLATE/tests/test_ledger_header_closure.py"),
+    # The claim half of the pre-flight (#137 half 2). It ships for the same reason the close
+    # half does: a factory that ports the ledger must be able to check the sequence rule it
+    # was given, and the leg's own law lives in the file it pins.
+    ("tests/test_ledger_claim_preflight.py", "TEMPLATE/tests/test_ledger_claim_preflight.py"),
     # The telemetry-reader registry gate (#99). It classifies the tools the template
     # SHIPS, so its allow-list is structural and must travel byte-identically with the
     # code it describes — a factory that adds its own writer edits its own copy.

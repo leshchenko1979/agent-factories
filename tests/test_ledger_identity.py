@@ -505,16 +505,19 @@ def main() -> int:
         # ARM 4 — CONTROL. The same session on an event it IS authorized for must land.
         # Without this the refusals above are indistinguishable from a tool that refuses
         # everything.
-        r = run(root, "append", "--event", "claim", "--subject", "#A4", "--detail", MARKER,
+        # `run`, not `claim`: this arm tests the ACTOR MATRIX, and `claim` now carries a
+        # sequence precondition (#137 half 2) that would refuse the row for an unrelated
+        # reason. The carrier must be an event with no sequence leg.
+        r = run(root, "append", "--event", "run", "--subject", "#A4", "--detail", MARKER,
                 session=worker)
-        check("arm4 CONTROL derived worker + claim -> ACCEPTED",
+        check("arm4 CONTROL derived worker + run -> ACCEPTED",
               r.returncode == 0 and len(rows(led)) == 1, f"rc={r.returncode} rows={len(rows(led))}")
         check("arm4 the row records the DERIVED role, not a default",
               bool(rows(led)) and rows(led)[0].get("actor") == "worker",
               str(rows(led)[0].get("actor") if rows(led) else None))
 
         # ARM 5 — a declaration that CONTRADICTS the derivation is refused, naming both.
-        r = run(root, "append", "--event", "claim", "--actor", "hq", "--subject", "#A5",
+        r = run(root, "append", "--event", "run", "--actor", "hq", "--subject", "#A5",
                 "--detail", MARKER, session=worker)
         check("arm5 a contradicting --actor -> refused",
               r.returncode != 0 and len(rows(led)) == 1, f"rc={r.returncode} rows={len(rows(led))}")
