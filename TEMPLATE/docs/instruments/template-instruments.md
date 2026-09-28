@@ -522,6 +522,29 @@ Two rules for a reader:
   touching it is the boundary §7.3 draws. Reading the divergence, or landing one's own change from a
   worktree, is the shape that leaves the tree alone.
 
+### 6.3 A law doc may be home-factory-only — and the reload leg is NOT waived with the pair
+
+**The three legs above describe the SHIPPED class.** An instrument that exists only in this factory —
+one `TEMPLATE/` bootstraps nothing from, because a new factory has no such register to govern — may
+carry a law doc with **no `TEMPLATE/` half and no manifest entry**. Asking for a pair there would put
+an undeliverable path into the shipped set, which is the same error as scoring a member short for a
+state that is correct by design (§1.1).
+
+**The reload leg survives the exemption.** A law doc that binds lanes has to outlive a compaction, and
+the reload path is what carries it across — so a home-factory-only doc carries its own link at the same
+drop point, pointing at its **actual home** and skipping `TEMPLATE/`:
+
+    skills/meta-factory/<instrument>.md -> ../../docs/instruments/<instrument>.md
+
+Measured: the relative form resolves through the containing skill directory — itself a symlink into
+this repo — and reads the root half **in full** (12 375 B through the link on the specimen that
+prompted this clause). So the leg is available to a doc that ships nowhere.
+
+**And the class is DECLARED, never inferred.** A reader meeting a law doc with no `TEMPLATE/` half
+cannot tell a deliberate home-factory-only instrument from a promotion that stopped halfway. The doc
+states the class and its reason **in its own text** — §7.2's declared-state discipline, applied to a
+distribution class rather than to a member's adoption.
+
 ## 7. The version identifier and the deferred state
 
 **These two are defined here, once, because they are cross-instrument: an owner coining their own
