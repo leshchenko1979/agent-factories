@@ -461,10 +461,20 @@ def test_probe_AC2_the_REAL_row_1458_is_caught_by_the_VERDICT_leg() -> None:
     passes while the defect is fully present: the specimen must name WHICH leg caught it.
     This asserts the VERDICT leg, which is the half the fix moves.
     """
-    _, _, rows = boundary_and_rows(REPO, INVARIANT_KEY)
+    try:
+        _, _, rows = boundary_and_rows(REPO, INVARIANT_KEY)
+    except SkipGate as exc:
+        # A tree with no ledger has no row to drive. That is a STATED inability, not a
+        # failure and not a silent pass: this probe's population is a real row, and the
+        # shipped tree carries none (the ledger is bootstrap-created). The reason NAMES
+        # what is absent, so this skip is never indistinguishable from a clean run.
+        pytest.skip("the AC2 specimen is a live ledger row and this tree carries none: %s" % exc)
     target = next((r for r in rows if r.get("n") == 1458), None)
     if target is None:
-        pytest.skip("n=1458 is not in this ledger")
+        pytest.skip(
+            "n=1458 is not in this ledger — the probe could not reach its population "
+            "(a ledger that has not grown to that row is not a defect)"
+        )
     problems, _ = score_gate_problems([target], "2020-01-01T00:00:00Z")
     assert problems, "n=1458 must fail"
     assert VERDICT_KEY in problems[0], (
