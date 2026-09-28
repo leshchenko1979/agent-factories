@@ -36,6 +36,20 @@ whose destination is the owner's routing call. A new entry therefore OPENS at
 `pending` — an assertion about the row's own state, never a guess at someone else's
 decision.
 
+A DROPPED row carries a REASON, and this is the one status that demands a second
+field. `dropped` says a unit was deliberately not acted on; the reason says why, and
+without it the record cannot be checked later or reused. Law section 6 rule 4 has
+stated that requirement since the axis landed; here it stops being prose and becomes a
+check — the write path REFUSES a row left `dropped` with no reason, and `verify`
+REPORTS one that reached the store anyway.
+
+A CORRECTION is a SUPERSEDING ROW, never an edit. The claims are append-only, so
+fixing a stored figure is a NEW row that names the row it corrects (`--supersedes N`)
+and carries the corrected value. Readers take the NEWEST governing row, and every
+superseded row PRINTS with its number, value and instant — never silence, because a
+value that quietly stopped applying is the failure this shape exists to prevent. One
+row has ONE successor, or "the newest governs" stops being decidable.
+
 Usage:
   python3 tools/insights.py append <id> <topic> <stage> <naive_assumption> <empirical_reality> <mechanism> [options]
   python3 tools/insights.py list
@@ -82,7 +96,8 @@ OWNER_AUTHOR = "Alexey"
 # position here, and every other key keeps the place it already had — so the diff
 # a backfill produces is ADDITIVE: a reader scanning it meets one inserted label
 # and no restated claim.
-CANONICAL_ORDER = ["n", "id", "ts", "author", "class", "status", "status_at",
+CANONICAL_ORDER = ["n", "id", "ts", "supersedes", "author", "class", "status",
+                   "status_at", "reason",
                    "topic", "stage", "naive_assumption", "empirical_reality",
                    "mechanism", "tweet_hook", "ru_summary"]
 _RANK = {k: i for i, k in enumerate(CANONICAL_ORDER)}
@@ -216,6 +231,8 @@ def append_insight(
     author: str = "",
     insight_class: str = "",
     status: str = "pending",
+    reason: str = "",
+    supersedes: int | None = None,
 ) -> dict:
     if stage not in ALLOWED_STAGES:
         raise ValueError(f"stage must be one of {ALLOWED_STAGES}, got '{stage}'")
@@ -235,6 +252,13 @@ def append_insight(
         raise ValueError("status must not be blank — omit it to open at 'pending'")
     if status not in ALLOWED_STATUSES:
         raise ValueError(f"status must be one of {ALLOWED_STATUSES}, got '{status}'")
+    # Law §6 rule 4, at the one place the row can still be refused. Checked HERE rather
+    # than left to `verify` because a store-level check can only report a bad row, while
+    # this one stops it existing — and `dropped` is the status whose whole content is the
+    # decision behind it, so a bare verdict is a record with its reason missing.
+    if status == "dropped" and not str(reason or "").strip():
+        raise ValueError("status 'dropped' requires a --reason — a refusal and a silence "
+                         "are different records, and only one is checkable later")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -246,28 +270,57 @@ def append_insight(
                     if line.strip():
                         entries.append(json.loads(line))
 
-            # Check duplicate slug
-            for e in entries:
-                if e.get("id") == slug:
-                    raise ValueError(f"insight with id '{slug}' already exists")
-
             next_n = len(entries) + 1
-            entry = {
-                "n": next_n,
-                "id": slug,
-                "ts": now_iso(),
-                "author": str(author).strip(),
-                "class": str(insight_class).strip(),
-                "status": str(status).strip(),
-                "status_at": now_iso(),
-                "topic": topic,
-                "stage": stage,
-                "naive_assumption": naive_assumption,
-                "empirical_reality": empirical_reality,
-                "mechanism": mechanism,
-                "tweet_hook": tweet_hook,
-                "ru_summary": ru_summary,
-            }
+
+            # An id identifies an INSIGHT, so a second row for one id is a REVISION and
+            # must say which row it revises. Left unmarked it would be an ordinary
+            # duplicate, and "the newest governs" would have nothing to resolve against.
+            same_id = [e for e in entries if e.get("id") == slug]
+            if same_id and supersedes is None:
+                raise ValueError(
+                    f"insight with id '{slug}' already exists — a second row for one id is "
+                    f"a REVISION and must name the row it corrects (`--supersedes <n>`)")
+
+            if supersedes is not None:
+                if not isinstance(supersedes, int) or isinstance(supersedes, bool):
+                    raise ValueError(
+                        "supersedes must be the integer n of the row it corrects")
+                prior = next((e for e in entries if e.get("n") == supersedes), None)
+                if prior is None:
+                    raise ValueError(
+                        f"supersedes names n={supersedes}, which is not in the register "
+                        f"(it holds {len(entries)} row(s))")
+                if supersedes >= next_n:
+                    raise ValueError(
+                        f"supersedes must name an EARLIER row, got n={supersedes}")
+                if prior.get("id") != slug:
+                    raise ValueError(
+                        f"supersedes names n={supersedes}, whose id is "
+                        f"'{prior.get('id')}' — a revision carries the id of the insight "
+                        f"it revises")
+                already = next((e.get("n") for e in entries
+                                if e.get("supersedes") == supersedes), None)
+                if already is not None:
+                    raise ValueError(
+                        f"n={supersedes} is already superseded by n={already} — one row has "
+                        f"ONE successor, or 'the newest governs' stops being decidable")
+
+            entry: dict = {"n": next_n, "id": slug, "ts": now_iso()}
+            if supersedes is not None:
+                entry["supersedes"] = supersedes
+            entry["author"] = str(author).strip()
+            entry["class"] = str(insight_class).strip()
+            entry["status"] = str(status).strip()
+            entry["status_at"] = now_iso()
+            if str(reason or "").strip():
+                entry["reason"] = str(reason).strip()
+            entry["topic"] = topic
+            entry["stage"] = stage
+            entry["naive_assumption"] = naive_assumption
+            entry["empirical_reality"] = empirical_reality
+            entry["mechanism"] = mechanism
+            entry["tweet_hook"] = tweet_hook
+            entry["ru_summary"] = ru_summary
 
             with open(INSIGHTS_PATH, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -284,12 +337,19 @@ def append_insight(
 FIELD_VOCAB: dict[str, list[str]] = {"class": ALLOWED_CLASSES, "status": ALLOWED_STATUSES}
 
 
-def _backfill(updates: dict[str, dict], fields: list[str], noun: str) -> list[tuple[str, dict]]:
+def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
+              optional_fields: list[str] | None = None) -> list[tuple[str, dict]]:
     """Set the labelled `fields` on entries that ALREADY EXIST, in one transaction.
 
     Shared by `classify` and `status`: both write a routing label onto existing rows,
     so both owe the same guarantees, and a second copy of this logic would be a second
     place for those guarantees to drift apart.
+
+    `optional_fields` names fields a caller may set WITHOUT demanding one on every row —
+    the split matters because `reason` is required only where a status makes it
+    meaningful, so "every row must name it" would refuse the 23 rows it does not apply
+    to. An optional field IS validated when it is given, and an unknown name is still
+    refused, so the narrow-writer guarantee binds both kinds.
 
     The register is append-only in its CLAIMS, and this keeps that promise in the only
     way a backfill can: it writes the named fields and nothing else, INSERTED at their
@@ -305,13 +365,14 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str) -> list[tu
     Returns `[(id, {field: prior_value})]` in register order. A prior value is None when
     the row predated the field, which is a different thing from an empty one.
     """
+    optional = list(optional_fields or [])
     if not updates:
         raise ValueError(f"no {noun} given — pass an {{id: value}} mapping")
     for slug, value in updates.items():
         if not isinstance(value, dict):
             raise ValueError(f"{noun} for '{slug}' must be an object, got "
                              f"{type(value).__name__}")
-        extra = sorted(set(value) - set(fields))
+        extra = sorted(set(value) - set(fields) - set(optional))
         if extra:
             raise ValueError(f"{noun} for '{slug}' carries unsettable field(s): "
                              f"{', '.join(extra)}")
@@ -321,6 +382,10 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str) -> list[tu
             if name in FIELD_VOCAB and value[name] not in FIELD_VOCAB[name]:
                 raise ValueError(f"{name} for '{slug}' must be one of "
                                  f"{FIELD_VOCAB[name]}, got '{value[name]}'")
+        for name in optional:
+            if name in value and not str(value[name] or "").strip():
+                raise ValueError(f"{name} for '{slug}' is empty — omit the field rather "
+                                 f"than writing a blank one")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -348,6 +413,19 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str) -> list[tu
                 row = entry
                 for name in fields:
                     row = _with_field(row, name, updates[slug][name])
+                for name in optional:
+                    if name in updates[slug]:
+                        row = _with_field(row, name, updates[slug][name])
+                # Law §6 rule 4, checked on the row AS IT WOULD BE WRITTEN rather than on
+                # the mapping alone: a row moved `dropped` here is the same defect as one
+                # appended that way, and a rule enforced on one write path and not the
+                # other is the shape this factory files against. Raised before any byte
+                # is written, so a mapping that would strand a row writes nothing.
+                if (row.get("status") == "dropped"
+                        and not str(row.get("reason") or "").strip()):
+                    raise ValueError(
+                        f"'{slug}' would be left 'dropped' with no reason — law §6 rule 4 "
+                        f"requires one, so name it in the same mapping")
                 changes.append((slug, before))
                 out_rows.append(row)
 
@@ -374,7 +452,7 @@ def classify_insights(mapping: dict[str, str]) -> list[tuple[str, str | None, st
     return [(slug, before["class"] or None, mapping[slug]) for slug, before in changes]
 
 
-def set_statuses(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]]:
     """Move existing entries to a new workflow `status`, stamping the instant they moved.
 
     `status_at` travels WITH the status rather than beside it, because an undated routing
@@ -382,12 +460,68 @@ def set_statuses(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
     and for how long. A status that has never been set reads as absent, not as blank, so
     `pending` and "no status recorded" stay distinguishable in the same way `author` and
     `class` kept their legacy rows distinguishable from empty ones.
+
+    A value may be the status alone or `{"status": …, "reason": …}`, because a row moved
+    to `dropped` owes a reason and one transaction should carry both — the alternative is
+    a window in which a dropped row has no reason, which is the state §6 rule 4 forbids.
     """
     stamp = now_iso()
-    changes = _backfill({k: {"status": v, "status_at": stamp} for k, v in mapping.items()},
-                        ["status", "status_at"], "statuses")
-    return [(slug, before["status"] or None, mapping[slug]) for slug, before in changes]
+    updates: dict[str, dict] = {}
+    for k, v in mapping.items():
+        if isinstance(v, dict):
+            names = sorted(set(v) - {"status", "reason"})
+            if names:
+                raise ValueError(f"status for '{k}' carries unsettable field(s): "
+                                 f"{', '.join(names)}")
+            if "status" not in v:
+                raise ValueError(f"status for '{k}' names no 'status'")
+            updates[k] = {"status": v["status"], "status_at": stamp}
+            if "reason" in v:
+                updates[k]["reason"] = v["reason"]
+        else:
+            updates[k] = {"status": v, "status_at": stamp}
+    changes = _backfill(updates, ["status", "status_at"], "statuses",
+                        optional_fields=["reason"])
+    return [(slug, before["status"] or None, updates[slug]["status"])
+            for slug, before in changes]
 
+def set_reasons(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Set `reason` on entries that already exist, WITHOUT touching their status instant.
+
+    A separate verb from `status` on purpose: re-stating a row's status to record a
+    reason would move `status_at`, and the instant is the field's whole value. This sets
+    the reason and nothing else, so a backfilled reason cannot silently re-date the
+    routing decision that produced it.
+    """
+    changes = _backfill({k: {"reason": v} for k, v in mapping.items()},
+                        ["reason"], "reasons")
+    return [(slug, before["reason"] or None, mapping[slug]) for slug, before in changes]
+
+
+def _read_entries() -> list[dict]:
+    """Every parsed row, in store order. The reader's one view of the register."""
+    if not INSIGHTS_PATH.is_file():
+        return []
+    out: list[dict] = []
+    for line in INSIGHTS_PATH.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            out.append(json.loads(line))
+    return out
+
+def _superseded_by(entries: list[dict]) -> dict[int, int]:
+    """`{superseded_n: successor_n}` — the newest governing row, made explicit.
+
+    A reader that resolves a correction must be able to SAY so, so this returns the map
+    rather than a bare predicate: the superseded row prints the number that governs it,
+    which is what turns "the newest wins" from a rule the reader applies silently into
+    one the output shows.
+    """
+    out: dict[int, int] = {}
+    for row in entries:
+        target = row.get("supersedes")
+        if isinstance(target, int) and not isinstance(target, bool):
+            out[target] = row.get("n")
+    return out
 
 def verify_insights() -> tuple[bool, list[str]]:
     errors: list[str] = []
@@ -397,6 +531,7 @@ def verify_insights() -> tuple[bool, list[str]]:
     lines = [l.strip() for l in INSIGHTS_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
     seen_ids = set()
     expected_n = 1
+    parsed: list[dict] = []
 
     for idx, line in enumerate(lines, start=1):
         try:
@@ -404,6 +539,10 @@ def verify_insights() -> tuple[bool, list[str]]:
         except json.JSONDecodeError as exc:
             errors.append(f"line {idx}: invalid JSON: {exc}")
             continue
+        if not isinstance(data, dict):
+            errors.append(f"line {idx}: a row must be a JSON object")
+            continue
+        parsed.append(data)
 
         n = data.get("n")
         if n != expected_n:
@@ -414,7 +553,12 @@ def verify_insights() -> tuple[bool, list[str]]:
         if not slug:
             errors.append(f"line {idx}: missing id")
         elif slug in seen_ids:
-            errors.append(f"line {idx}: duplicate id '{slug}'")
+            # A second row for one id is a REVISION, and must say which row it revises.
+            # Unmarked it is an ordinary duplicate, and "the newest governs" would have
+            # nothing to resolve against.
+            if data.get("supersedes") is None:
+                errors.append(f"line {idx}: duplicate id '{slug}' — a second row for one id "
+                              f"is a revision and must declare 'supersedes'")
         else:
             seen_ids.add(slug)
 
@@ -456,6 +600,54 @@ def verify_insights() -> tuple[bool, list[str]]:
             elif not data.get("status_at"):
                 errors.append(f"line {idx}: status '{data['status']}' carries no status_at")
 
+        # Law §6 rule 4 — `dropped` requires a stated reason — is enforced at the write
+        # path, and REPORTED here. Both are owed: the write path stops the row existing,
+        # and this leg catches one that reached the store by another route, which is the
+        # difference between a rule and a rule that holds.
+        if data.get("status") == "dropped" and not str(data.get("reason") or "").strip():
+            errors.append(f"line {idx}: status 'dropped' carries no reason — §6 rule 4 "
+                          f"requires one (a refusal and a silence are different records)")
+        # A `reason` on a row that is NOT dropped is the field's other lie: it reads as a
+        # decision's grounds while the status says no decision was taken.
+        if "reason" in data:
+            if not str(data.get("reason") or "").strip():
+                errors.append(f"line {idx}: empty reason")
+            elif data.get("status") != "dropped":
+                errors.append(f"line {idx}: reason recorded on status "
+                              f"'{data.get('status')}' — a reason states why a unit was "
+                              f"NOT acted on, so it belongs to 'dropped'")
+
+    # Half 2 — supersession. A correction is a NEW row naming the row it corrects, and
+    # the reader takes the NEWEST. Two ways that reading breaks, both checked here: a
+    # pointer to a row that does not exist, and two successors for one row, which leaves
+    # "newest" undecidable. Checked over the parsed rows, so a superseded row that was
+    # never written is caught as the dangling reference it is.
+    successors: dict[int, list[int]] = {}
+    by_n = {r.get("n"): r for r in parsed if isinstance(r.get("n"), int)}
+    for row in parsed:
+        target = row.get("supersedes")
+        if target is None:
+            continue
+        n = row.get("n")
+        if not isinstance(target, int) or isinstance(target, bool):
+            errors.append(f"n={n}: supersedes must be the integer n of the row it corrects")
+            continue
+        if target not in by_n:
+            errors.append(f"n={n}: supersedes names n={target}, which is not in the register")
+            continue
+        if target >= n:
+            errors.append(f"n={n}: supersedes names n={target}, which is not an EARLIER row")
+        elif by_n[target].get("id") != row.get("id"):
+            errors.append(f"n={n}: supersedes n={target} whose id is "
+                          f"'{by_n[target].get('id')}' — a revision carries the id of the "
+                          f"insight it revises")
+        successors.setdefault(target, []).append(n)
+    for target, rows in sorted(successors.items()):
+        if len(rows) > 1:
+            errors.append(f"n={target}: superseded by {len(rows)} rows "
+                          f"({', '.join('n=' + str(r) for r in sorted(rows))}) — one row "
+                          f"has ONE successor, or 'the newest governs' is undecidable")
+
     return len(errors) == 0, errors
 
 
@@ -485,6 +677,13 @@ def main() -> int:
                                "guesses the owner's routing decision")
     p_append.add_argument("--tweet", default="", help="Draft tweet narrative hook")
     p_append.add_argument("--ru", default="", help="Russian summary for Miidas/Ru-speaking audience")
+    p_append.add_argument("--reason", default="",
+                          help="why the entry was not acted on. REQUIRED when --status is "
+                               "'dropped' (law section 6 rule 4) and refused when empty")
+    p_append.add_argument("--supersedes", type=int, default=None, metavar="N",
+                          help="the n of the row this one CORRECTS. Required when the id "
+                               "already exists: a second row for one id is a revision, and "
+                               "readers take the NEWEST governing row")
 
     sub.add_parser("list", help="List all insights")
     sub.add_parser("verify", help="Verify integrity of insights ledger")
@@ -497,7 +696,16 @@ def main() -> int:
     p_st = sub.add_parser("status",
                           help="Move existing entries to a new workflow status")
     p_st.add_argument("--file", required=True, metavar="MAPPING.json",
-                      help="JSON object {id: status}, applied in ONE transaction")
+                      help="JSON object {id: status}, or {id: {\"status\": …, \"reason\": …}} "
+                           "when a row moves to 'dropped' and owes its reason in the same "
+                           "transaction. Applied in ONE transaction")
+
+    p_rs = sub.add_parser("reason",
+                          help="Set the reason on entries that already exist")
+    p_rs.add_argument("--file", required=True, metavar="MAPPING.json",
+                      help="JSON object {id: reason}. Sets the reason and NOTHING else — "
+                           "re-stating the status would move status_at, and the instant is "
+                           "the field's whole value")
 
     p_fmt = sub.add_parser("format", help="Format insight for publishing")
     p_fmt.add_argument("id", help="Insight slug")
@@ -525,9 +733,13 @@ def main() -> int:
                 author=author,
                 insight_class=args.insight_class,
                 status=args.status,
+                reason=args.reason,
+                supersedes=args.supersedes,
             )
             print(f"appended insight #{entry['n']}: {entry['id']} [{entry['stage']}] "
                   f"by {entry['author']} [{entry['class']}] [{entry['status']}]")
+            if entry.get("supersedes") is not None:
+                print(f"  revises n={entry['supersedes']} — the newest governing row wins")
             return 0
         except ValueError as e:
             print(f"FAIL: {e}", file=sys.stderr)
@@ -547,30 +759,38 @@ def main() -> int:
         if not INSIGHTS_PATH.is_file():
             print("no insights recorded yet")
             return 0
-        for line in INSIGHTS_PATH.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                d = json.loads(line)
-                # A row predating the field prints `legacy` rather than a blank,
-                # so "no author recorded" is never mistaken for an authored blank.
-                print(f"#{d['n']} [{d['stage']}] [{d.get('class') or 'legacy'}] "
-                      f"[{d.get('status') or 'unrouted'}] "
-                      f"{d['id']} ({d.get('author') or 'legacy'}): {d['topic']}")
+        entries = _read_entries()
+        superseded_by = _superseded_by(entries)
+        for d in entries:
+            # A row predating the field prints `legacy` rather than a blank,
+            # so "no author recorded" is never mistaken for an authored blank.
+            mark = ""
+            if d.get("supersedes") is not None:
+                mark = f" [revises n={d['supersedes']}]"
+            elif d["n"] in superseded_by:
+                # NEVER SILENT: a value that quietly stopped applying is the failure the
+                # supersession shape exists to prevent, so the row says so in place.
+                mark = f" [superseded by n={superseded_by[d['n']]}]"
+            print(f"#{d['n']} [{d['stage']}] [{d.get('class') or 'legacy'}] "
+                  f"[{d.get('status') or 'unrouted'}] "
+                  f"{d['id']} ({d.get('author') or 'legacy'}): {d['topic']}{mark}")
         return 0
 
     elif args.cmd == "format":
         if not INSIGHTS_PATH.is_file():
             print("no insights file", file=sys.stderr)
             return 1
-        target = None
-        for line in INSIGHTS_PATH.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                d = json.loads(line)
-                if d.get("id") == args.id:
-                    target = d
-                    break
-        if not target:
+        entries = _read_entries()
+        # A reader takes the NEWEST governing row for the id, and every superseded row
+        # prints beneath it with its own values and instant — so a corrected figure is
+        # never silently replaced, it is visibly retired.
+        matches = [e for e in entries if e.get("id") == args.id]
+        if not matches:
             print(f"insight '{args.id}' not found", file=sys.stderr)
             return 1
+        target = max(matches, key=lambda e: e["n"])
+        superseded_by = _superseded_by(entries)
+        retired = [e for e in matches if e["n"] != target["n"]]
 
         if args.format == "tweet":
             print(target.get("tweet_hook") or "No tweet draft recorded.")
@@ -582,6 +802,8 @@ def main() -> int:
             print(f"**Class:** {target.get('class') or 'legacy — predates the field'}\n")
             since = f" (since {target['status_at']})" if target.get("status_at") else ""
             print(f"**Status:** {target.get('status') or 'unrouted'}{since}\n")
+            if target.get("reason"):
+                print(f"**Reason:** {target['reason']}\n")
             print(f"**Naive assumption:** {target['naive_assumption']}\n")
             print(f"**Empirical reality:** {target['empirical_reality']}\n")
             print(f"**Structural mechanism:** {target['mechanism']}\n")
@@ -589,6 +811,20 @@ def main() -> int:
                 print(f"**Tweet hook:**\n```\n{target['tweet_hook']}\n```\n")
             if target.get("ru_summary"):
                 print(f"**Russian publication summary:**\n{target['ru_summary']}\n")
+            # The supersession PRINTS. A reader takes the newest governing row, and the
+            # rows it retired are shown with their own number, value and instant — so a
+            # corrected figure is visibly retired rather than silently replaced, and a
+            # reader can tell a correction from a row that always said this.
+            if retired:
+                print(f"**Superseded rows ({len(retired)})** — the row above governs; "
+                      f"these are printed, never deleted:\n")
+                for old in sorted(retired, key=lambda e: e["n"]):
+                    print(f"- n={old['n']} ({old.get('ts') or 'no ts'}) — "
+                          f"*{old['empirical_reality']}*")
+                print("")
+            if target["n"] in superseded_by:
+                print(f"**Superseded by n={superseded_by[target['n']]}** — this row no "
+                      f"longer governs.\n")
         return 0
 
     elif args.cmd == "classify":
@@ -623,8 +859,18 @@ def main() -> int:
             print("FAIL: the mapping must be a JSON object {id: status}", file=sys.stderr)
             return 1
 
+        # A value may be the status alone, or an object naming the reason too — a row
+        # moved to `dropped` owes one, and both must travel in ONE transaction or the
+        # register passes through a state §6 rule 4 forbids.
+        normalized: dict[str, object] = {}
+        for k, v in mapping.items():
+            if isinstance(v, dict):
+                normalized[str(k)] = {str(a): b for a, b in v.items()}
+            else:
+                normalized[str(k)] = str(v)
+
         try:
-            changes = set_statuses({str(k): str(v) for k, v in mapping.items()})
+            changes = set_statuses(normalized)
         except ValueError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
@@ -634,6 +880,25 @@ def main() -> int:
             counts[new] = counts.get(new, 0) + 1
         summary = ", ".join(f"{n} {st}" for st, n in sorted(counts.items()))
         print(f"set status on {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: {summary}")
+        return 0
+
+    elif args.cmd == "reason":
+        try:
+            mapping = json.loads(Path(args.file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"FAIL: cannot read mapping {args.file}: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(mapping, dict):
+            print("FAIL: the mapping must be a JSON object {id: reason}", file=sys.stderr)
+            return 1
+        try:
+            changes = set_reasons({str(k): str(v) for k, v in mapping.items()})
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        for slug, old, new in changes:
+            print(f"  {slug}: {old or 'no reason'} -> {new}")
+        print(f"set reason on {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}")
         return 0
 
     return 0

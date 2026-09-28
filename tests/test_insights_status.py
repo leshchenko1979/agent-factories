@@ -26,6 +26,17 @@ the field can LIE rather than merely be absent:
    is left untouched, because a half-applied move reads exactly like a complete one.
 6. **The two axes are ORTHOGONAL.** Setting a status must not disturb the class, and
    re-routing a row must not disturb any other row.
+7. **`dropped` carries its reason, and the rule holds on BOTH write paths.** Law §6 rule 4
+   states the requirement; the append and the status move are the two ways a row can END UP
+   dropped, so a check on one and not the other is the half-rule this factory files against.
+   `verify` reports what the write paths refuse, because a rule that only holds on the happy
+   path is not a rule. The field's other lie is checked too: a `reason` on a row that is NOT
+   dropped reads as a decision's grounds while the status says no decision was taken.
+8. **A correction is a SUPERSEDING ROW, and the reader takes the NEWEST.** The claims are
+   append-only, so a second row for one id is a REVISION — it must name the row it corrects,
+   and one row has ONE successor or "the newest governs" stops being decidable. The
+   superseded row is never deleted, and every reader PRINTS that it was superseded: a value
+   that quietly stopped applying is the failure this shape exists to prevent.
 
 **Fixture-driven by construction, and that is load-bearing.** Every probe redirects
 `INSIGHTS_PATH` and `LOCK_PATH` into a temporary directory, because the live register is
@@ -111,7 +122,11 @@ def test_append_opens_at_pending_and_stamps_it(tmp_path, monkeypatch):
 def test_append_accepts_each_allowed_status(tmp_path, monkeypatch):
     register = _redirect(tmp_path, monkeypatch)
     for value in insights.ALLOWED_STATUSES:
-        entry = _append(slug=f"probe-{value}", status=value)
+        # `dropped` is the one status that owes a second field (§6 rule 4), so it carries
+        # its reason here — the vocabulary test is about the LABEL being accepted, and a
+        # rule that is real must be honoured by the probe that exercises the vocabulary.
+        extra = {"reason": "probe"} if value == "dropped" else {}
+        entry = _append(slug=f"probe-{value}", status=value, **extra)
         assert entry["status"] == value
     assert [r["status"] for r in _rows(register)] == insights.ALLOWED_STATUSES
 
@@ -320,3 +335,182 @@ def test_class_and_status_share_one_backfill_and_neither_accepts_the_others_fiel
     else:
         raise AssertionError("a CLASS value was accepted as a status")
     assert "status" not in register.read_text(encoding="utf-8")
+
+# --- §6 rule 4: a dropped row carries its REASON, on both write paths -----------------
+
+def test_append_refuses_dropped_with_no_reason(tmp_path, monkeypatch):
+    """`dropped` says a unit was not acted on; the reason says why, and the append owes it."""
+    register = _redirect(tmp_path, monkeypatch)
+    for missing in ("", "   "):
+        try:
+            _append(slug="probe-dropped", status="dropped", reason=missing)
+        except ValueError as exc:
+            assert "reason" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"a reasonless 'dropped' append {missing!r} was accepted")
+    assert not register.exists(), "a refused append must write nothing"
+
+def test_append_records_the_reason_and_leaves_other_statuses_free_of_one(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    entry = _append(slug="probe-dropped", status="dropped", reason="not-an-outcome")
+    assert entry["reason"] == "not-an-outcome", "the reason must reach the RETURNED row"
+    # And a row that was not dropped carries no reason key at all — absent, not blank.
+    _append(slug="probe-kept", status="hq")
+    rows = _rows(register)
+    assert rows[0]["reason"] == "not-an-outcome"
+    assert "reason" not in rows[1], "a row that was not dropped gained a reason key"
+
+def test_verify_reports_a_reasonless_dropped_row(tmp_path, monkeypatch):
+    """The write path refuses it; this leg catches one that reached the store anyway."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "dropped", "status_at": "2026-09-14T09:00:00Z"})])
+
+    ok, errors = insights.verify_insights()
+    assert not ok, "a dropped row with no reason must be reported"
+    assert any("reason" in e for e in errors), errors
+
+def test_verify_reports_a_reason_on_a_row_that_is_not_dropped(tmp_path, monkeypatch):
+    """The field's other lie: it reads as a decision's grounds while none was taken."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [
+        _row(1, **{"status": "hq", "status_at": "2026-09-14T09:00:00Z", "reason": "why"})])
+
+    ok, errors = insights.verify_insights()
+    assert not ok, "a reason on a non-dropped row must be reported"
+    assert any("reason" in e for e in errors), errors
+
+def test_status_move_that_would_strand_a_dropped_row_is_refused(tmp_path, monkeypatch):
+    """Both write paths, one rule: a move to `dropped` needs its reason in the SAME mapping."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1)])
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_statuses({"row-1": "dropped"})
+    except ValueError as exc:
+        assert "reason" in str(exc), str(exc)
+    else:
+        raise AssertionError("a move that stranded a dropped row was accepted")
+    assert register.read_text(encoding="utf-8") == before, (
+        "a refused move must leave the register byte-identical")
+
+def test_status_move_can_carry_the_reason_in_the_same_transaction(tmp_path, monkeypatch):
+    """One transaction, both fields — so no window exists in which the row is non-compliant."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1)])
+
+    insights.set_statuses({"row-1": {"status": "dropped", "reason": "duplicate"}})
+
+    row = _rows(register)[0]
+    assert row["status"] == "dropped"
+    assert row["reason"] == "duplicate"
+    assert insights.verify_insights()[0], "the move must leave a compliant row"
+
+def test_set_reasons_backfills_without_moving_the_status_instant(tmp_path, monkeypatch):
+    """A backfilled reason must not silently re-date the routing decision that produced it."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "dropped", "status_at": "2026-09-14T09:00:00Z"})])
+    stamped = _rows(register)[0]["status_at"]
+
+    insights.set_reasons({"row-1": "duplicate"})
+
+    row = _rows(register)[0]
+    assert row["reason"] == "duplicate"
+    assert row["status_at"] == stamped, "the status instant must NOT move with the reason"
+    assert insights.verify_insights()[0]
+
+# --- half 2: a correction is a SUPERSEDING ROW ----------------------------------------
+
+def _correct(**over):
+    kwargs = dict(slug="probe-insight", status="published", supersedes=1)
+    kwargs.update(over)
+    return _append(**kwargs)
+
+def test_a_second_row_for_one_id_must_declare_supersedes(tmp_path, monkeypatch):
+    """Unmarked it is an ordinary duplicate, and 'the newest governs' has nothing to resolve."""
+    register = _redirect(tmp_path, monkeypatch)
+    _append(slug="probe-insight")
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        _append(slug="probe-insight")
+    except ValueError as exc:
+        assert "supersedes" in str(exc), str(exc)
+    else:
+        raise AssertionError("a second row for one id was accepted without naming its target")
+    assert register.read_text(encoding="utf-8") == before
+
+def test_supersedes_must_name_an_existing_earlier_row_of_the_same_id(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _append(slug="probe-insight")
+
+    # A row that is not in the register at all.
+    try:
+        _correct(supersedes=999)
+    except ValueError as exc:
+        assert "999" in str(exc), str(exc)
+    else:
+        raise AssertionError("a supersedes pointer to a nonexistent row was accepted")
+
+    # A row that exists but carries a DIFFERENT id: a revision keeps the id it revises.
+    _append(slug="another")
+    try:
+        _correct(supersedes=2)
+    except ValueError as exc:
+        assert "2" in str(exc), str(exc)
+    else:
+        raise AssertionError("a supersedes pointer across two ids was accepted")
+
+def test_one_row_has_one_successor(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _append(slug="probe-insight")
+    _correct(supersedes=1)
+
+    try:
+        _correct(supersedes=1)
+    except ValueError as exc:
+        assert "successor" in str(exc) or "already superseded" in str(exc), str(exc)
+    else:
+        raise AssertionError("two successors for one row were accepted")
+
+def test_verify_reports_a_dangling_supersedes_pointer(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1), dict(_row(2, **{"supersedes": 99}))])
+
+    ok, errors = insights.verify_insights()
+    assert not ok and any("99" in e for e in errors), errors
+
+def test_the_reader_resolves_to_the_newest_and_prints_the_supersession(tmp_path, monkeypatch, capsys):
+    """Never silence: the corrected row prints what it replaced and when."""
+    register = _redirect(tmp_path, monkeypatch)
+    first = _row(1, **{"id": "probe-insight", "status": "published",
+                       "status_at": "2026-09-14T09:00:00Z"})
+    _legacy_register(register, [first])
+    _correct(supersedes=1, empirical_reality="the corrected figure", status="published")
+
+    # `list` marks the superseded row IN PLACE, so a reader scanning it is not misled.
+    monkeypatch.setattr(sys, "argv", ["insights.py", "list"])
+    assert insights.main() == 0
+    listed = capsys.readouterr().out
+    assert "superseded by n=2" in listed, listed
+
+    # `format` governs with the NEWEST row and prints the retired one with its instant.
+    monkeypatch.setattr(sys, "argv", ["insights.py", "format", "probe-insight"])
+    assert insights.main() == 0
+    formatted = capsys.readouterr().out
+    assert "the corrected figure" in formatted, formatted
+    assert "Superseded rows (1)" in formatted, formatted
+    assert f"n=1 ({first['ts']})" in formatted, (
+        "the retired row prints with its OWN instant, so a correction is auditable")
+
+def test_a_correction_leaves_the_corrected_row_byte_identical(tmp_path, monkeypatch):
+    """Append-only: a correction ADDS a row and rewrites nothing that was already written."""
+    register = _redirect(tmp_path, monkeypatch)
+    _append(slug="probe-insight")
+    original = register.read_text(encoding="utf-8")
+
+    _correct(supersedes=1)
+
+    after = register.read_text(encoding="utf-8")
+    assert after.startswith(original), (
+        "the corrected row and every row before the correction are byte-identical")

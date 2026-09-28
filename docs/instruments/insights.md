@@ -13,7 +13,7 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 | field (frame §1) | this instrument |
 |---|---|
 | **name** | Insights register |
-| **executable(s)** | `tools/insights.py` — verbs `append` · `list` · `verify` · `format` · `classify` · `status`. One writer, six verbs (§6) |
+| **executable(s)** | `tools/insights.py` — verbs `append` · `list` · `verify` · `format` · `classify` · `status` · `reason`. One writer, seven verbs (§6, §7) |
 | **closure** | **none** — the CLI imports only the standard library, and its one repo-relative constant is the store it writes. There is no asset that must sit beside the binary (contrast `open-questions.md` §1, whose render asset is a closure member) |
 | **gate set** | the instrument's own suite, all root-local: `tests/test_insights_author.py` · `tests/test_insights_class.py` · `tests/test_insights_status.py`, plus the ledger-invariant gate `tests/test_insights_gate_recorded.py` — it judges this artifact's closing verdict and belongs to a shared family (`test_close_row_revision.py`, `test_score_gate_recorded.py`), and it is factory-local since 2026-09-28 (§2) |
 | **version source** | **none** — the instrument is not a kit member, so it carries no manifest hash and owes no version (§2) |
@@ -56,10 +56,18 @@ One JSON object per line, append-only. A row is one insight, and it carries thre
 |---|---|---|
 | **identity** | `n` · `id` · `ts` · `topic` · `stage` | which record this is, when, and what it is called |
 | **the claim** | `naive_assumption` · `empirical_reality` · `mechanism` | what was assumed, what was measured, and why they differ |
-| **routing** | `author` · `class` · `status` (+ `status_at`) | who wrote it, what it requires of its reader, and where it stands |
+| **routing** | `author` · `class` · `status` (+ `status_at` · `reason`) | who wrote it, what it requires of its reader, and where it stands |
+| **revision** | `supersedes` | present only on a row that corrects an earlier one — the `n` it names |
 | **publication seed** | `tweet_hook` · `ru_summary` | material for the content funnel (`ru_summary` is REQUIRED at the append) |
 
-`n` is the store's own ordinal and `id` is the stable slug; both are cited elsewhere, so neither is ever reassigned. Corrections are **appended as new rows citing the old `id`** — a stored claim is never restated to make room for a new field, which is the property §6's backfill verbs are built around.
+`n` is the store's own ordinal and `id` is the stable slug; both are cited elsewhere, so neither is ever reassigned. A stored claim is never restated to make room for a new field, which is the property §6's backfill verbs are built around.
+
+**A correction is a SUPERSEDING ROW, and the reader takes the NEWEST.** The claims are append-only by construction, so a correction is not an edit: it is a **new row naming the row it corrects** — `supersedes: <n>` — carrying the corrected value. Two requirements travel with it, and neither is optional:
+
+1. **The newest governing row decides.** `supersedes` names an **earlier** row whose `id` it shares, so "newest" is decidable rather than inferred; `verify` refuses a marker that names a later row, a missing row, a row of a different `id`, or a row that already has a successor. One row has **one** successor, or *"the newest governs"* stops resolving.
+2. **The supersession PRINTS.** `list` marks both ends — `[revises n=N]` on the successor, `[superseded by n=N]` on the row it governs — and `format` states it in the body. Never silence: a reader meets *"superseded by n=N"* rather than only a value, so a stale figure cannot be read as the current one.
+
+`verify` also refuses a second row for an existing `id` that carries **no** `supersedes`: a duplicate and a revision are different records, and left unmarked the duplicate would leave *"the newest governs"* with nothing to resolve against. The `n`-integer marker is this store's own expression of *"names the row it corrects"* — the ledger's typed `refs` are the same shape stated for a different surface, and this file does not need that machinery, because an insight row's only correction target is another insight row.
 
 ---
 
@@ -104,14 +112,15 @@ Both bullets answer *what the claim requires of its reader*. Neither answers *wh
 | `hq` | earmarked for HQ as an internal amendment (§8) |
 | `published` | **terminal** — the unit went out |
 | `landed` | **terminal** — HQ changed a process |
-| `dropped` | **terminal** — deliberately not acted on, with the reason |
+| `dropped` | **terminal** — deliberately not acted on, with the reason in `reason` |
 
-Four rules, each of which has a way of going wrong that this file closes:
+Five rules, each of which has a way of going wrong that this file closes:
 
 1. **A fresh row opens `pending`, and `status` is NOT required at the append.** A destination is a *routing* decision, not a property of the claim, so a new row asserts only its own state rather than guessing someone else's decision. If the two axes were coupled at the append, the register would record an intent nobody formed.
 2. **`status_at` travels with `status`.** Without the instant, *"what has been sitting in `hq` for a fortnight?"* — the question the field exists to answer — is unanswerable.
 3. **Terminal states are recorded when they happen, never forecast.** `published` and `landed` are outcomes; a row that asserted one on expectation would be a prediction wearing a record's clothes.
-4. **`dropped` requires a stated reason.** Silence and refusal are different records, and only one of them is checkable later.
+4. **`dropped` requires a stated reason — and the rule is MECHANICALLY ENFORCED.** Silence and refusal are different records, and only one of them is checkable later — so the requirement is not left to the law's own reader. The **write path REFUSES** a row left `dropped` with no `reason` (the append and every backfill that sets the status), and `verify` **REPORTS** a stored row that carries none. A law whose only enforcer is whoever reads it is the shape this rule was written to close: the clause and its check land together, or the clause is decoration. Setting the status and setting the reason are one act — `status {"<id>": {"status": "dropped", "reason": "…"}}` — so there is no window in which a dropped row exists without one.
+5. **`reason` is prose, not a vocabulary.** It is a **settable field** (`classify` · `status` · `reason`) and never a `FIELD_VOCAB` member, because the vocabulary is closed and a reason's whole value is saying the specific thing that was decided. A `reason` on a row that is **not** dropped is the field's other lie — it reads as a refusal where none was recorded — and `verify` refuses it.
 
 ---
 
@@ -119,7 +128,7 @@ Four rules, each of which has a way of going wrong that this file closes:
 
 - **`tools/insights.py` is the ONE writer.** Every write verb it exposes is the SAME writer; there is no second path by construction rather than by good intentions.
 - **The weekly proposer does not write.** `tools/synthesize_insights.py` prints JSON and has **no** write path to the store — `INSIGHTS_PATH` is only ever read, and the `insights` it builds is a local list. A lane does the appending. This matters twice over: the register has one writer, and adding a required field cannot break the weekly cron, because the proposer never appends.
-- **`classify` and `status` are BACKFILLS over one shared mechanism**, and their safety property is asserted rather than asserted-to-be-true: strip the keys they add and the store is **byte-identical** to its previous revision. A backfill adds a label; it never restates a claim.
+- **`classify`, `status` and `reason` are BACKFILLS over one shared mechanism**, and their safety property is asserted rather than asserted-to-be-true: strip the keys they add and the store is **byte-identical** to its previous revision. A backfill adds a label; it never restates a claim. `reason` is a settable field rather than a vocabulary member (§6 rule 5), and it is its own verb because a backfilled reason must not re-date the row: `status` moves `status_at`, while `reason` sets the prose and nothing else, so an unset field filled in later cannot silently move the instant that field's sibling exists to record.
 - **All-or-nothing.** One unknown `id` writes nothing.
 - **Refusal is loud.** An unspecified or unrecognised verb exits non-zero rather than reporting success.
 
@@ -127,7 +136,7 @@ Four rules, each of which has a way of going wrong that this file closes:
 
 ## 8. `verify`, and what each axis feeds
 
-`verify` is the store's own precondition: it rejects a stored **blank** or **unknown** value on any axis, while **accepting an absent key** on a legacy row — the distinction between *unrecorded* and *recorded as empty* is the whole point. `list` and `format` print `[legacy]` for a row that predates a field, so "not recorded" can never be read as a category.
+`verify` is the store's own precondition: it rejects a stored **blank** or **unknown** value on any axis, while **accepting an absent key** on a legacy row — the distinction between *unrecorded* and *recorded as empty* is the whole point. `list` and `format` print `[legacy]` for a row that predates a field, so "not recorded" can never be read as a category. Three further refusal classes ride the same reader, each one a rule §3 or §6 states and this section enforces: a row left `dropped` with no `reason` (§6 rule 4), a `reason` recorded on a row that is **not** dropped (§6 rule 5), and a broken **supersession** chain — a marker naming a later, missing, differently-`id`d or already-superseded row (§3).
 
 The two classes feed two different consumers, and both are DECLARED:
 
