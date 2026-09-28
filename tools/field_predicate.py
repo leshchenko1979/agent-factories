@@ -530,3 +530,57 @@ def declared_duty(detail: str) -> list[str]:
     exactly as `rework_bucket` sits beside `OUTCOME_DOMAIN`.
     """
     return _declared_values(detail, DUTY_KEY)
+
+
+RECLOSE_KEY = "reclose"
+
+
+def declared_reclose(detail: str) -> list[str]:
+    """Every `reclose` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE read of this field, imported by the append path that refuses a SECOND
+    `close` for a subject (#213) -- a private `token.split("=")` there would be the
+    class ruled at `n=405` PART 5: one field, one predicate.
+
+    WHY NOT `declares_field`, WHICH THE REFUSAL FIRST USED, and the defect that
+    proves why this function exists: `declares_field` serves a NUMERIC key and
+    TYPE-TESTS the value it finds (`_value_parses`). `reclose` carries a free-text
+    REASON, so no value it can hold passes that test. Measured 2026-09-28:
+    `declares_field(detail, "reclose")` is False for EVERY form tried, including
+    `reclose=yes` as the last token of the trailer -- so the escape hatch the
+    refusal's own message prescribed was UNREACHABLE, and every second `close` was
+    refused, the lawful re-close this refusal exists to allow included. A
+    behavioural probe found it; the grep that "verified" the leg did not, because a
+    mechanism's EXISTENCE is not its FUNCTION.
+
+    The run is POSITIONAL (`trailer_tokens`), matching `declared_rework`,
+    `declared_duty` and `declared_telemetry_provenance`: section 11 puts a
+    declaration in the canonical trailer, so a value quoted mid-sentence is prose.
+    Values are read VERBATIM.
+
+    A LIST, for `declared_rework`'s reason: a row carries one token (a field with
+    two values has no canonical reading, SKILL.md section 8), and the caller must
+    be able to SEE a second rather than read the first silently.
+    """
+    return _declared_values(detail, RECLOSE_KEY)
+
+
+def mentions_reclose(detail: str) -> bool:
+    """True when `detail` carries the `reclose` KEY anywhere, trailer or prose.
+
+    The LEXICAL half of the pair above, and it exists for ONE job: to let the
+    append path NAME a malformed declaration instead of silently not seeing it.
+    `declared_reclose` reads the canonical trailing run, and a `reclose` value
+    containing a SPACE terminates that run -- measured 2026-09-28,
+    `trailer_tokens("... head=<sha> reclose=the subject was reopened")` is `[]`,
+    so the row declares nothing at all and its author is told to declare the very
+    token they believe they declared.
+
+    It is deliberately NOT the predicate the guard uses: a LEXICAL test lets a row
+    that merely DISCUSSES a re-close in prose satisfy its own guard, which is the
+    #88 / `n=405` clause 5 damage ("prose must not SATISFY a field"). The guard
+    reads the positional form; this answers only "did the author write the token
+    somewhere I can point at?" so the refusal can say WHY it is not being seen.
+    """
+    return any(keyed_value(token, RECLOSE_KEY) is not None
+               for token in str(detail).split())
