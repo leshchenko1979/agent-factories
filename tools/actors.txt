@@ -10,3 +10,6 @@
 # live in a constant that must match everywhere.
 delegate
 surveys
+fleet-instruments
+review-rotation
+insights
