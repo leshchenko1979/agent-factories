@@ -803,6 +803,20 @@ def cmd_ask(argv):
         data = read_register()
         entry = find_set(data, factory)
         created = entry is None
+        if not created and flags.get("--subject") is not None:
+            # Defect reported 2026-09-28 (miidas): on an EXISTING set the flag
+            # parsed, was never read, and the command exited 0 -- the caller's
+            # unit key went nowhere, and only a read of the stored set showed
+            # it. The set subject is CREATION-ONLY: it is recorded when the set
+            # is minted, and a set names ONE unit, so a second value could not
+            # describe a set holding questions about two. Refusing converts a
+            # silent no-op into a loud one: a field that cannot be updated must
+            # not read as one that can.
+            die(2, "--subject is CREATION-ONLY: set %r already carries %r, and "
+                   "a set names ONE unit. This add cannot change it, so the "
+                   "value would be discarded rather than recorded. Omit "
+                   "--subject, or name the unit in the question's own "
+                   "title/description." % (factory, entry.get("subject")))
         if entry is None:
             entry = {
                 "id": factory,
@@ -1946,11 +1960,13 @@ background:var(--amber);box-shadow:0 0 0 3px var(--amber-soft)}
 .q{background:var(--strip);border:1px solid var(--line);border-left:3px solid var(--line);
 border-radius:0 7px 7px 0;padding:1.2rem 1.3rem 1.1rem;margin:0 0 .85rem}
 .qt{font:600 clamp(1.2rem,2.7vw,1.42rem)/1.3 var(--serif);letter-spacing:-.015em;margin:0}
-/* The factory tag that precedes a question's heading (owner order 2026-09-28).
-It borrows the page's own micro-label idiom -- mono, dim, uppercase -- so it
-reads as metadata ABOUT the question and never as part of its title. */
-.qt .qset{font:.62rem/1.5 var(--mono);letter-spacing:.13em;text-transform:uppercase;
-color:var(--dim);margin-right:.5rem;white-space:nowrap}
+/* The factory name in a SECTION heading (owner order 2026-09-28, moved there
+the same day from the question's own heading). It borrows the page's own
+micro-label idiom -- mono, dim, uppercase -- so it reads as context ABOUT the
+lane's questions and never as part of the lane name. Inherits the h2's size so
+the heading stays one line of type. */
+.set h2 .qset{font:inherit;letter-spacing:.13em;color:var(--dim);
+margin-right:.55rem;white-space:nowrap}
 .rec{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;border-left:2px solid var(--amber);
 border-radius:0 5px 5px 0;background:var(--amber-soft);font-size:.95rem;line-height:1.5}
 /* No ::before label here any more: the label is the <summary> above, because a
@@ -3269,16 +3285,41 @@ def selftest():
             ck('class="set"' in _oq_body and 'data-set="' in _oq_body,
                "\u2026over sections that carry the data-set it reads -- "
                "without either half the filter silently does nothing")
-            # Owner order 2026-09-28: the factory name precedes each question's
-            # heading, so a card says what it is ABOUT with its lane heading
-            # scrolled off -- or filtered out of view. Asserted as a COUNT
-            # against the cards, not a substring: one page-level tag would
-            # satisfy "qset in html" while telling no card anything.
-            _cards = (_html.count('class="q"')
-                      + _html.count('class="q clarifying"'))
-            ck(_html.count('class="qset"') == _cards and _cards > 0,
-               "every question's heading is preceded by its OWN factory name "
-               "(%d tag(s), %d card(s))" % (_html.count('class="qset"'), _cards))
+            # Owner order 2026-09-28 (14:32): the factory name sits in the
+            # SECTION heading, not beside each question's own title -- the card
+            # already carries its context on a bottom line. Asserted as a COUNT
+            # against the sections, so the arm cannot go green on one page-level
+            # tag, and the card-heading arm below pins the OTHER half: the chip
+            # must not come back beside a question title.
+            _sections = _html.count('class="set"')
+            _sectags = _html.count('class="qset"')
+            ck(_sectags == _sections and _sections > 0,
+               "every lane SECTION heading names its OWN factory/ies "
+               "(%d tag(s), %d section(s))" % (_sectags, _sections))
+            # The negative half: no question heading may carry the chip. This is
+            # what makes the move a MOVE rather than an addition -- without it a
+            # page carrying both placements would pass the count above.
+            _qheads = re.findall(r'<h3 class="qt">(.*?)</h3>', _oq_body, re.S)
+            ck(bool(_qheads)
+               and all('qset' not in head for head in _qheads),
+               "no question heading carries the factory chip any more "
+               "(%d heading(s) checked)" % len(_qheads))
+            # Owner order 2026-09-28 (15:5x): the card's own CONTEXT LINE --
+            # "asked .. / lane .. / set qid" -- OPENS the card, before the
+            # title. It is the context a reader needs in order to read the
+            # question, so it belongs above it, not as a footnote under the
+            # form. Asserted POSITIONALLY over the card's own body, because a
+            # page-level count cannot tell a line at the top from one at the
+            # bottom -- the failure this arm exists to catch.
+            _cards = re.findall(r'<section id="[^"]*" class="q[^"]*">(.*?)</section>',
+                                _oq_body, re.S)
+            _ordered = [c for c in _cards
+                        if c.find('class="age"') >= 0 and c.find('class="qt"') >= 0]
+            ck(bool(_ordered)
+               and all(c.find('class="age"') < c.find('class="qt"')
+                       for c in _ordered),
+               "the card's context line opens the card, above its own title "
+               "(%d card(s) checked)" % len(_ordered))
             # Owner order 2026-09-28: the selector names each factory's OPEN
             # COUNT. A lane section can span two sets, so the count is derived
             # from each CARD's own set field -- both halves must ship, or the
@@ -3653,6 +3694,38 @@ def selftest():
                        "--option", "a", "--option", "b", "--recommended", "3")
         ck(rc == 2, "a recommendation outside the option range is refused (rc=%d)" % rc)
 
+        # -- 10. --subject is CREATION-ONLY (defect reported 2026-09-28) -----
+        # On an EXISTING set the flag parsed, was never read, and the command
+        # exited 0 -- the caller's unit key went nowhere, and only a read of the
+        # stored set showed it. A field that cannot be updated must not read as
+        # one that can, so the add REFUSES rather than discarding.
+        rc, _, _ = run("ask", "--factory", "f-subject-probe",
+                       "--subject", "unit-A", "--title", "t", "--description",
+                       "d", "--option", "a", "--no-publish")
+        ck(rc == 0, "ask creates a set WITH --subject (rc=%d)" % rc)
+        ck((get_set("f-subject-probe") or {}).get("subject") == "unit-A",
+           "\u2026and the subject IS recorded at creation (%r)"
+           % ((get_set("f-subject-probe") or {}).get("subject"),))
+        before = len((get_set("f-subject-probe") or {}).get("questions") or [])
+        rc, _, err = run("ask", "--factory", "f-subject-probe",
+                         "--subject", "unit-B", "--title", "t2", "--description",
+                         "d2", "--option", "a", "--no-publish")
+        ck(rc == 2, "\u2026and a LATER --subject is REFUSED, not silently "
+                    "discarded (rc=%d)" % rc)
+        ck("CREATION-ONLY" in err,
+           "\u2026and the refusal NAMES the contract, not only the failure (%r)"
+           % (err.strip()[-80:],))
+        ck(len((get_set("f-subject-probe") or {}).get("questions") or []) == before,
+           "\u2026and nothing was written: the refused add left the set "
+           "unchanged (%d questions)" % before)
+        ck((get_set("f-subject-probe") or {}).get("subject") == "unit-A",
+           "\u2026and the stored subject is untouched (%r)"
+           % ((get_set("f-subject-probe") or {}).get("subject"),))
+        rc, _, _ = run("ask", "--factory", "f-subject-probe",
+                       "--title", "t3", "--description", "d3", "--option", "a",
+                       "--no-publish")
+        ck(rc == 0, "\u2026and an add WITHOUT --subject still succeeds (rc=%d)" % rc)
+
         # -- 10. a CORRUPT register is an error, never a silent reset --------
         store = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
         good = open(store, encoding="utf-8").read()
@@ -4004,6 +4077,9 @@ USAGE = """questions — the Open Questions register (#547)
            [--questions-file F | --questions-json J |
             --title T --description D [--option O]... [--recommended N]]
            [--ttl-days N] [--subject S] [--no-clarify] [--close-when CMD]
+           --subject is CREATION-ONLY: it is recorded when the set is minted,
+           and a set names ONE unit. Passing it on an add to an existing set is
+           REFUSED (rc=2) rather than silently discarded.
            [--no-publish] [--json]
            --factory is REQUIRED: the factory key IS the standing set id,
            reused on every ask. There is no --lane: the asking session is read

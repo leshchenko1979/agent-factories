@@ -95,11 +95,25 @@ const { registry } = defineRegistry(catalog, {
       children),
     // The LANE section (owner order 2026-09-25): a STABLE anchor so the owner
     // can be handed a URL pointing at one lane's questions. The anchor arrives
-    // in the spec, so the page and the CLI cannot disagree about it, and a lane
-    // whose questions are all answered still renders its section.
+    // in the spec, so the page and the CLI cannot disagree about it.
+    // A lane with nothing OPEN renders no section at all (owner order
+    // 2026-09-28), superseding the earlier rule that an all-answered lane kept
+    // its section so a handed-out anchor stayed live. The page ADDRESS is what
+    // is permanent; a lane SECTION exists while that lane has an open question.
     QuestionSet: ({ props, children }) => h('section',
       { id: props.anchor, className: 'set', 'data-set': props.set_id },
-      h('h2', null, props.lane + ' — ' + props.open + ' open'),
+      // Owner order 2026-09-28 (14:32): the factory name sits HERE, in the
+      // section heading, not beside each question's own title. The card already
+      // carries its context on a bottom line ("asked .. / lane .. / set qid"),
+      // so a per-card chip said the same thing twice and crowded the heading the
+      // reader actually scans. Section level is also where the name is USEFUL on
+      // the aggregate, which mixes every factory. The names come from the
+      // section's own card-derived set list, so a lane spanning two factories
+      // names both. Subtle by idiom -- mono, dim, uppercase, small.
+      h('h2', null,
+        h('span', { className: 'qset' },
+          props.set_id.split(',').join(' + ')), ' ',
+        props.lane + ' — ' + props.open + ' open'),
       children),
     // The form carries token, set and qid as hidden inputs: the answer backend
     // reads all three, and dropping any of them silently stops the page
@@ -124,14 +138,19 @@ const { registry } = defineRegistry(catalog, {
         children);
       return h('section', { id: props.set + '-' + props.qid,
                             className: 'q' + (clarifying ? ' clarifying' : '') },
-      // Owner order 2026-09-28: the factory name PRECEDES the heading,
-      // subtly, so a card read outside its lane section still says what it is
-      // about -- the aggregate page mixes every factory, and the section
-      // heading is not in view when one card is read on its own. It sits
-      // INSIDE the h3 because the factory is part of what the heading MEANS,
-      // not decoration beside it: a screen reader gets the context too.
-      h('h3', { className: 'qt' },
-        h('span', { className: 'qset' }, props.set), ' ', props.title),
+      // Owner order 2026-09-28 (15:5x): the card's OWN CONTEXT LINE opens the
+      // card. It already states the age, the lane and the set+qid ("asked 2.9d
+      // ago / lane HQ / meta-factory q3"), so it is the context a reader needs
+      // BEFORE the title -- not a chip beside the title, and not a footnote
+      // under the form. Moved from the bottom on the owner's order; the class
+      // name is unchanged, so the page's existing styling idiom still applies.
+      h('p', { className: 'age' }, props.footer),
+      // Owner order 2026-09-28: the factory name is NOT repeated here. It
+      // moved up into the section heading (see QuestionSet) -- the card already
+      // states its own context on the bottom line below, so a chip before the
+      // title said it twice. The heading is the question's title and nothing
+      // else.
+      h('h3', { className: 'qt' }, props.title),
       // The recommendation band is the page's SIGNATURE: an amber-ruled block
       // carrying the lane's own counsel. Owner order 2026-09-27: it FOLDS like
       // the clarifying form -- a compact label, the counsel one tap away -- so
@@ -163,8 +182,7 @@ const { registry } = defineRegistry(catalog, {
       clarifying
         ? h('details', { className: 'clarifybox' },
             h('summary', null, 'Answer anyway'), form)
-        : form,
-      h('p', { className: 'age' }, props.footer));
+        : form);
     },
     Heading: ({ props }) => h('h' + Math.min(props.level + 1, 6), null, props.text),
     Paragraph: ({ props }) => h('p', null, renderSpans(props.spans)),
