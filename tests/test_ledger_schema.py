@@ -15,11 +15,15 @@ Exit: 0 clean, 1 schema or domain invariant violation.
 
 from __future__ import annotations
 
+import argparse
+import contextlib
+import io
 import json
 import os
 import re
 import sys
 import tempfile
+import unittest
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -64,6 +68,7 @@ class SkipGate(Exception):
 # the same way — the shape `tools/ledger.py` already uses for `telemetry`.
 sys.path.insert(0, str(REPO / "tools"))
 from field_predicate import telemetry_problems  # noqa: E402
+import ledger  # noqa: E402  # the WRITE PATH, for the convergence cases (#50/#53)
 
 CORE_ACTORS = ("hq", "triage", "worker", "carrier", "owner")
 # The CORE events. A factory's OWN events are declared, and they are read from the SAME
@@ -128,8 +133,22 @@ def get_known_actors() -> set[str]:
     return actors
 
 
-def validate_row_schema(row: dict[str, Any], line_num: int, known_actors: set[str]) -> list[str]:
-    """Validate raw row structure, types, and schema boundaries."""
+def validate_row_schema(
+    row: dict[str, Any],
+    line_num: int,
+    known_actors: set[str],
+    event_types: tuple[str, ...] | None = None,
+) -> list[str]:
+    """Validate raw row structure, types, and schema boundaries.
+
+    `event_types` is the SEAM that makes the one-home property PROVABLE (#53,
+    promoted from miidas 2026-09-28). It defaults to the declaration this gate
+    consumes, so the live audit is byte-for-byte unchanged; a caller may pass the
+    OLD private copy to demonstrate that the shape #53 removed really does reject a
+    row the shipped writer accepts. Without the parameter the divergence is
+    describable but not demonstrable -- which is how it survived unnoticed.
+    """
+    vocabulary = EVENT_TYPES if event_types is None else event_types
     errors: list[str] = []
 
     # 1. Field completeness & strictness
@@ -158,8 +177,8 @@ def validate_row_schema(row: dict[str, Any], line_num: int, known_actors: set[st
             errors.append(f"line {line_num}: invalid calendar timestamp in 'ts': {exc}")
 
     event_val = row.get("event")
-    if event_val not in EVENT_TYPES:
-        errors.append(f"line {line_num}: unknown event type {event_val!r}, must be one of {EVENT_TYPES}")
+    if event_val not in vocabulary:
+        errors.append(f"line {line_num}: unknown event type {event_val!r}, must be one of {vocabulary}")
 
     actor_val = row.get("actor")
     if actor_val not in known_actors:
@@ -740,6 +759,182 @@ def run_self_probes() -> bool:
     return probes_passed
 
 
+class TestVocabularyConvergence(unittest.TestCase):
+    """The event vocabulary has ONE home: the tool declares it, the gate consumes it (#53).
+
+    PROMOTED from miidas (2026-09-28), whose gate was 496 lines ahead of this one on the
+    enforcement path. This class is the part of that lead which TRANSFERS; the exhaustive
+    writer-vs-gate sweep is the part that does not, and the bound is recorded below it.
+
+    The old shape gave the gate a private copy of the same eight names. They were
+    identical, so nothing failed -- and the divergence would have surfaced silently on the
+    first edit of either, in both directions. These cases DRIVE that shape rather than
+    describing it: a real write through `cmd_append`, the row read back off disk, then this
+    gate's own row validator run over it under each vocabulary.
+
+    ADAPTED FOR THIS TREE, and the adaptation is the point: the writer here resolves a
+    DERIVED actor on the live path and refuses every event but `genesis` when no lane
+    binds, so these cases drive it through the FIXTURE seam (`OC_LEDGER_PATH`) -- the
+    documented route by which a throwaway ledger names its own actors. Without it the
+    probe cannot write at all and every case would be vacuously green.
+    """
+
+    PROBE_SUBJECT = "#42"
+
+    def _undeclared_event(self) -> str:
+        """An event the vocabulary does not carry -- DERIVED, never assumed.
+
+        Hardcoding the name couples these cases to live state: admitting it to the
+        declaration later breaks them for a reason unrelated to the defect. Ask the
+        vocabulary for a free name instead.
+        """
+        name, i = "probe-event", 0
+        while name in EVENT_TYPES:
+            i += 1
+            name = f"probe-event-{i}"
+        return name
+
+    @contextlib.contextmanager
+    def _tool_declaring(self, events, table):
+        """Temporarily widen the TOOL's declarations, then restore them.
+
+        A coherent ninth event needs both: the writer refuses a declared event that has
+        no table entry, so widening `EVENTS` alone is refused by the coupling #50 built.
+        That is the realistic edit and the one a private gate copy was blind to.
+        """
+        real_events = ledger.EVENTS
+        real_table = ledger.AUTHORIZED_ACTORS_BY_EVENT
+        ledger.EVENTS, ledger.AUTHORIZED_ACTORS_BY_EVENT = events, table
+        try:
+            yield
+        finally:
+            ledger.EVENTS, ledger.AUTHORIZED_ACTORS_BY_EVENT = real_events, real_table
+
+    def _writer_accepts(self, ledger_path: Path, event: str, actor: str) -> bool:
+        ns = argparse.Namespace(
+            event=event, actor=actor, subject=self.PROBE_SUBJECT, detail="vocabulary probe"
+        )
+        real_ledger, real_lock = ledger.LEDGER, ledger.LOCK
+        prior = os.environ.get("OC_LEDGER_PATH")
+        os.environ["OC_LEDGER_PATH"] = str(ledger_path)  # THE FIXTURE SEAM
+        ledger.LEDGER = ledger_path
+        ledger.LOCK = ledger_path.parent / ".ledger.lock"
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                ledger.cmd_append(ns)
+            return True
+        except SystemExit:
+            return False
+        finally:
+            ledger.LEDGER, ledger.LOCK = real_ledger, real_lock
+            if prior is None:
+                os.environ.pop("OC_LEDGER_PATH", None)
+            else:
+                os.environ["OC_LEDGER_PATH"] = prior
+
+    def test_the_private_copy_reported_a_row_the_writer_had_written(self):
+        """Direction 1: the tool's vocabulary gains an event; the gate's private copy does not."""
+        with tempfile.TemporaryDirectory() as td:
+            led = Path(td) / "ledger.jsonl"
+            led.write_text("", encoding="utf-8")
+            probe = self._undeclared_event()
+            widened = EVENT_TYPES + (probe,)
+            widened_table = dict(ledger.AUTHORIZED_ACTORS_BY_EVENT, **{probe: ("hq",)})
+
+            with self._tool_declaring(widened, widened_table):
+                self.assertTrue(
+                    self._writer_accepts(led, probe, "hq"),
+                    "premise: the widened tool must actually write the row",
+                )
+
+            # Read the row back off disk; do not construct one.
+            rows = [
+                json.loads(ln)
+                for ln in led.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            self.assertEqual(len(rows), 1, "exactly one row should have been written")
+            row = rows[0]
+            self.assertEqual(row["event"], probe)
+            known = set(ledger.known_actors())
+
+            # The shape #53 removed: a private copy, equal to the tool's on the day it was
+            # written. It rejects the row the writer just wrote.
+            errs = validate_row_schema(row, 1, known, event_types=tuple(_CORE_EVENT_TYPES))
+            self.assertTrue(
+                any("unknown event type" in e for e in errs),
+                f"the private copy must reject the row the writer accepted; got {errs}",
+            )
+
+            # Consuming the one declaration, the same row passes: no divergence is possible.
+            self.assertEqual(
+                validate_row_schema(row, 1, known, event_types=widened),
+                [],
+                "the gate consuming the tool's declaration must accept the row the tool wrote",
+            )
+
+    def test_a_gate_ahead_of_the_tool_is_refused_by_both(self):
+        """Direction 2: a gate whose vocabulary ran AHEAD of the tool's.
+
+        A row cannot reach the ledger by the shipped path while holding an event the
+        writer refuses, so such a gate validated against a vocabulary the tool does not
+        implement. Measured both ways: the unedited writer refuses the event, and the
+        private copy passes a row carrying it.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            led = Path(td) / "ledger.jsonl"
+            led.write_text("", encoding="utf-8")
+            probe = self._undeclared_event()
+
+            self.assertFalse(
+                self._writer_accepts(led, probe, "hq"),
+                "the unedited writer must refuse an undeclared event",
+            )
+            row = {
+                "n": 1, "ts": "2026-09-01T00:00:00Z", "event": probe, "actor": "hq",
+                "subject": self.PROBE_SUBJECT, "detail": "vocabulary probe",
+            }
+            errs = validate_row_schema(
+                row, 1, set(ledger.known_actors()), event_types=tuple(_CORE_EVENT_TYPES)
+            )
+            self.assertTrue(
+                any("unknown event type" in e for e in errs),
+                f"a gate ahead of the tool must refuse the row the writer refuses; got {errs}",
+            )
+
+    # ------------------------------------------------------------------------------
+    # THE BOUND, stated so a later reader does not graft the rest of miidas's lead and
+    # then mute the reds. `TestWriterGateConvergence` asserts that the writer and the
+    # gate return the SAME verdict for every (event, actor) pair. MEASURED 2026-09-28
+    # against this write path, 8 events x 11 actors = 88 pairs: 21 agree, 67 disagree,
+    # decomposing into three BY-DESIGN differences --
+    #   45 pairs writer ACCEPT / gate REFUSE: the matrix binds a DERIVED actor only, so a
+    #        fixture (which declares its actor) is authorized for everything membership
+    #        permits, while the gate has no fixture concept;
+    #   21 pairs writer REFUSE / gate ACCEPT: the writer enforces PREDECESSOR LEGS
+    #        (claim needs an intake) and the gate validates a single row in isolation;
+    #    1 pair  both refuse (claim/owner).
+    # The premise holds in miidas's tree because its fork carries none of those three
+    # predicates -- verified there: rc=0, 33 tests. It cannot hold here without deleting
+    # the write path's identity law. The properties this tree CAN promise are asserted
+    # above; the rest is a design difference, not a defect, and grafting it verbatim
+    # would red 67 of 88 on a false premise.
+    # ------------------------------------------------------------------------------
+
+
+def run_case_suite() -> bool:
+    """Run this file's `unittest` cases and report whether they all held.
+
+    The gate is invoked as a SCRIPT (`python3 tests/test_ledger_schema.py`), so any
+    `unittest.main()` in the `__main__` block never fires -- without this call every
+    `TestCase` in this file is DEAD CODE THAT READS AS COVERAGE. That was the state of
+    miidas's `TestLedgerSubjectLaw` (#28) until #30 wired it in, and it is why the
+    promotion carries the runner and not only the cases.
+    """
+    suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    return unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
+
+
 def main() -> int:
     # 1. Run internal self-probes — ALWAYS, and BEFORE the ledger read. The skip below is
     #    raised from the LOADER, so it can never stand in front of a defect these catch.
@@ -754,6 +949,9 @@ def main() -> int:
         row_count, errors, excused = validate_ledger_file(LEDGER_PATH)
     except SkipGate as exc:
         print(f"ledger schema gate SKIPPED: {exc}")
+        if not run_case_suite():
+            print("ledger schema gate case suite FAILED", file=sys.stderr)
+            return 1
         return 0
 
     # Every MATCHING entry prints as an `excused:` line on EVERY run, and the closing
@@ -773,6 +971,9 @@ def main() -> int:
               f"all domain invariants & schemas verified")
     else:
         print(f"ledger schema clean: {row_count} row(s) audited, all domain invariants & schemas verified")
+    if not run_case_suite():
+        print("ledger schema gate case suite FAILED", file=sys.stderr)
+        return 1
     return 0
 
 
