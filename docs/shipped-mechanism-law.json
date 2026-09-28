@@ -1,0 +1,68 @@
+{
+  "_note": [
+    "The clauses the SHIPPED law must state for the mechanisms the kit ships (board #170).",
+    "",
+    "WHY THIS FILE EXISTS. TEMPLATE/ ships the patrol's receipt legs, the shared field",
+    "predicate and their tests, and its law stated NONE of their preconditions: measured",
+    "2026-09-28, TEMPLATE/SKILL.md.tmpl carried 0 occurrences of `receipt_subject`,",
+    "`duty=completed`, `retired_logs` and `named after ITS OWN JOB`, against 1/1/1/2 in the",
+    "live law. A factory bootstrapped from the template therefore inherits both legs with",
+    "none of the rules that make them work, which is section 11's own clause: a mechanism",
+    "whose precondition is undocumented is a permanent silent exclusion.",
+    "",
+    "WHY IT IS NOT A PAIRS ENTRY. `skills/meta-factory/SKILL.md` and",
+    "`TEMPLATE/SKILL.md.tmpl` are deliberately NOT byte-paired - they are independent",
+    "documents that happen to share a structure, with different section numbering. So no",
+    "gate can assert equivalence of the two files, and this file is where 'what the shipped",
+    "law must state' is DECLARED instead.",
+    "",
+    "HOW AN ENTRY IS READ. Each entry names the MECHANISM that needs the clause, the TOKEN",
+    "the mechanism keys on, and the CLAUSE PHRASE the law must carry. The gate asserts BOTH",
+    "sides: the token is present in the shipped mechanism's own source (so a declaration",
+    "cannot go stale when the mechanism changes) and the clause phrase is present in the",
+    "shipped law (so a mechanism cannot ship with its precondition unstated).",
+    "",
+    "A CLAUSE IS NAMED BY ITS PHRASE, NEVER BY A SECTION NUMBER. The two law files number",
+    "their sections differently - this factory's section 11 is State, the template's is",
+    "Escalation - so a section number resolves to a DIFFERENT clause in each tree (#184,",
+    "ruled on the kit's own citation law)."
+  ],
+  "law": "TEMPLATE/SKILL.md.tmpl",
+  "required_clauses": [
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "duty_receipt_leg",
+      "token": "receipt_subject",
+      "clause": "A duty receipt is DECLARED, and the declaration is one whole line",
+      "why": "RECEIPT_DECL_RE (patrol_host_state.py) reads the anchored line `receipt_subject: <stem>` on the row. Without the clause stating that the declaration is one whole line on its own, a member reads a row that omits it as a duty that owed nothing, and the leg passes by silence."
+    },
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "duty_receipt_leg",
+      "token": "receipt_subject_matches",
+      "clause": "The receipt's SUBJECT is canonical, and the reader's key is deliberately NOT widened",
+      "why": "receipt_subject_matches() keys on the boundary-checked prefix `<stem>-<round>`. Without the clause stating the subject form and refusing the fuzzy match, a member widens the key to meet a deviation and the leg reports a false CLEAN, which is the failure it cannot see (#160)."
+    },
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "duty_receipt_leg",
+      "token": "DUTY_DOMAIN",
+      "clause": "A subject match is not a receipt \u2014 the row must DECLARE its completion",
+      "why": "The leg reads `duty=completed|failed|skipped` through declared_duty() against DUTY_DOMAIN. Without the clause, a DISPATCH record written before the round completed certifies it, and a round with no receipt at all reads clean."
+    },
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "notify_receipt_leg",
+      "token": "NOTIFY_LOG_RE",
+      "clause": "A pacemaker's redirect log is named after ITS OWN JOB",
+      "why": "NOTIFY_LOG_RE takes the log filename's stem as a cron job NAME and looks it up among the rows the factory declares. That makes `the redirect label equals the job name` a load-bearing contract between every pacemaker prompt and the leg; unwritten, one job carried a hand-typed label for 16 rounds and every log landed in retired_logs as history, never judged (#163)."
+    },
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "duty_receipt_leg",
+      "token": "NOT JUDGED",
+      "clause": "Which pacemakers owe a receipt",
+      "why": "The clause states that a job declaring no stem is NOT JUDGED and is counted and named so its silence is visible, and that the declaration is an ATTRIBUTION KEY rather than a claim that nothing else records the work. Without it a member reads a NOT JUDGED row as a pass."
+    }
+  ]
+}

@@ -1453,6 +1453,26 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_shipped_audit_runs.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_shipped_audit_runs.py"])
 
+    # 71. THE SHIPPED LAW STATES ITS MECHANISMS' PRECONDITIONS (#170). TEMPLATE/ ships the
+    #     patrol's receipt legs, the shared field predicate and their tests, and its law
+    #     stated NONE of their preconditions: measured 2026-09-28, TEMPLATE/SKILL.md.tmpl
+    #     carried 0 occurrences of `receipt_subject`, `duty=completed`, `retired_logs` and
+    #     `named after ITS OWN JOB`, against 1/1/1/2 in the live law. A factory bootstrapped
+    #     from the template therefore inherited both legs with none of the rules that make
+    #     them work -- section 11's own clause: a mechanism whose precondition is undocumented
+    #     is a permanent silent exclusion. No gate could see it: the two law files are
+    #     deliberately NOT byte-paired (independent documents, different section numbering),
+    #     so test_template_sync reports clean over them BY CONSTRUCTION, and
+    #     test_law_structure asserts section-numbering contiguity only. This gate asserts
+    #     BOTH ends of each declared clause: the TOKEN is present in the shipped mechanism's
+    #     own source (so a declaration cannot go stale when the mechanism changes) and the
+    #     CLAUSE PHRASE is present in the shipped law (so a mechanism cannot ship with its
+    #     precondition unstated). Repo-side only, and OPTIONAL rather than REQUIRED: it
+    #     judges the tree the deliver HANDS OUT, so it reads TEMPLATE/ and would red in a
+    #     bootstrapped factory that has none.
+    if (repo_root / "tests/test_shipped_mechanism_law.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_shipped_mechanism_law.py"])
+
     # 38. Telemetry-reader registry gate: a telemetry field read out of a row's `detail`
     #     must go through the shared predicate in `tools/field_predicate.py`, because a
     #     free-prose `detail` QUOTES trailers as evidence and a private scan takes a

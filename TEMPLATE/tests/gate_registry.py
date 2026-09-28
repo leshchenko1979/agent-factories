@@ -643,6 +643,18 @@ REQUIRED_GATES: tuple[str, ...] = (
 # enrolled its own fragment. It moved into REQUIRED_GATES in the change that shipped
 # `TEMPLATE/registry/`, which is the condition its own entry named.
 OPTIONAL_GATES: dict[str, str] = {
+    "test_shipped_mechanism_law.py": (
+        "REPO-SIDE BY CONSTRUCTION (board #170). It asserts a property of the tree the deliver "
+        "HANDS OUT — that the shipped law STATES the preconditions of the mechanisms the kit "
+        "ships — so it reads TEMPLATE/SKILL.md.tmpl and TEMPLATE/tools/*, and a bootstrapped "
+        "factory has neither. It is therefore not a PAIRS entry, not in registry/kit.json, and "
+        "NOT REQUIRED: a member inherits the CORRECT law from the template, so the harm is "
+        "created here and is caught here. The class it guards had no observer at all — the "
+        "template carried the patrol's receipt legs with 0 of their five precondition clauses "
+        "stated, measured 2026-09-28, against 1/1/1/2 in the live law — because the two law "
+        "files are deliberately not byte-paired and test_template_sync is clean over them BY "
+        "CONSTRUCTION."
+    ),
     "test_shipped_audit_runs.py": (
         "REPO-SIDE BY CONSTRUCTION (board #199). It runs the SHIPPED tree's own audit, so it "
         "cannot live in that tree — there is no nested TEMPLATE for it to run. It is therefore "

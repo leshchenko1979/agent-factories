@@ -285,6 +285,12 @@
       "measured_sec": 252.0,
       "measured_at": "2026-09-28T00:35Z",
       "margin_x": 4.003
+    },
+    "tests/test_shipped_mechanism_law.py": {
+      "budget_sec": 1.44,
+      "measured_sec": 0.18,
+      "measured_at": "2026-09-28T03:20Z",
+      "margin_x": 8.0
     }
   },
   "modes": {
@@ -357,6 +363,7 @@
     "tools/ledger.py": "script",
     "tools/roadmap.py": "script",
     "tests/test_ledger_claim_preflight.py": "pytest",
-    "tests/test_shipped_audit_runs.py": "script"
+    "tests/test_shipped_audit_runs.py": "script",
+    "tests/test_shipped_mechanism_law.py": "script"
   }
 }
