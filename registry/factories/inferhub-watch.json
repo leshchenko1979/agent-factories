@@ -102,7 +102,7 @@
     },
     {
       "id": "inferhub-auto-route-failure-escalation",
-      "text": "Routing through the ops fallback chain's first hop (inferhub) is currently degrading, independent of the retired auto-switcher: measured over 24h to 2026-09-27T05:08Z, 21,242 requests with 2,852 failures (13.4%) — 499 client-abort x1218, 502 'upstream chain exhausted' x994, 429 rate-limit x486, 402 bid-starved x140 — concentrated on cheap iq-75-plus combo members (two gemini effort-variant aliases at ~76% failure over 7d, zai/glm-5.3 at ~97%). Not model-specific and not load-shaped.",
+      "text": "Routing through the ops fallback chain's first hop (inferhub) is degraded and has NOT recovered: the 24h failure rate stepped 12x on 2026-09-26 (0.95% -> 12.03%), peaked there, and reads 9.32% (30,455 reqs / 2,839 failed) as of 2026-09-28T06:25Z. The dominant class is 499 client-abort (79% of failures) — our own daemon abandoning the request — not gateway or upstream error: gateway-side channel errors are 14 in 24h. Mechanism partly established (leshchenko1979/inferhub-watch#160): prompt-cache hit rate collapsed 86.6% -> 58.5% at approximately 2026-09-26T00:00Z on an UNCHANGED route and channel, and because cache reads bill 10x below uncached prompt tokens that doubled the unit cost ($0.0322 -> $0.0673 per 1M input tokens). The cause of the cache collapse is UPSTREAM and not visible from this box. Tracked as #158; two gemini effort-variant aliases (~76% failure over 7d) were removed from the iq-75-plus combo at 2026-09-27T07:25Z.",
       "severity": "warning",
       "affects": [
         "profile"
@@ -138,7 +138,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-27T06:36:31Z",
+  "attested_at": "2026-09-28T06:24:41Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

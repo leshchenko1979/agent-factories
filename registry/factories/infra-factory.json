@@ -145,6 +145,18 @@
       "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup.",
       "review_by": "2026-10-11",
       "since": "2026-09-27T06:13:19Z"
+    },
+    {
+      "id": "board-gates-declared-inapplicable",
+      "text": "Two gates in this factory suite are RED BY DESIGN and must not be reported as a regression: tests/test_board_intake_recorded.py and tests/test_close_board_recorded.py assert a board/ledger close agreement, and this factory issue board IS its ledger - ONE surface - so the two-surface predicate is INAPPLICABLE rather than failed. Declared at ledger n=611 and carried in instruments.pacemaker.reason.",
+      "severity": "info",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "since": "2026-09-27",
+      "evidence": "Ledger n=611 (two layers: the requirement origin commit d6c9d55 is absent from this repo, and SKILL.md:29 declares the issue board to be the local ledger). Independently raised as a false regression by two lanes before it was declared.",
+      "review_by": "2026-10-12"
     }
   ],
   "lanes": [
@@ -180,7 +192,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-27T13:57:34Z",
+  "attested_at": "2026-09-28T06:24:04Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
