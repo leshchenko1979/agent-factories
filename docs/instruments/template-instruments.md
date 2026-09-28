@@ -536,9 +536,17 @@ drop point, pointing at its **actual home** and skipping `TEMPLATE/`:
 
     skills/meta-factory/<instrument>.md -> ../../docs/instruments/<instrument>.md
 
-Measured: the relative form resolves through the containing skill directory — itself a symlink into
-this repo — and reads the root half **in full** (12 375 B through the link on the specimen that
-prompted this clause). So the leg is available to a doc that ships nowhere.
+Measured twice, and the second reading is why the figure is not the claim: the relative form
+resolves through the containing skill directory — itself a symlink into this repo — and reads the
+root half **in full** (12 375 B at 2026-09-28T18:25Z; **13 140 B** fourteen minutes later, when the
+specimen's own §2 grew). The property is *the link yields the whole file, never a truncated head*,
+and a byte count here is the decoration §5.1.7 forbids carrying as the claim. So the leg is
+available to a doc that ships nowhere.
+
+**And a reload leg is verified in the MEMBER's tree, never in a worktree.** `instrument_census`
+resolves each member's repo from its own fragment, so a link that exists only in a worktree reads
+**absent** — correctly, because the member's tree has not advanced. The leg can only be confirmed
+once it has landed where a lane would actually read it.
 
 **And the class is DECLARED, never inferred.** A reader meeting a law doc with no `TEMPLATE/` half
 cannot tell a deliberate home-factory-only instrument from a promotion that stopped halfway. The doc
