@@ -741,7 +741,8 @@ whose `messages` table carries NO index on `created_at` (only the rowid autoinde
 
 **The cost is the SCAN, not the window** — a one-hour range costs what a week costs — so narrowing
 the range does not help. The bound is therefore a declared budget,
-`TELEMETRY_QUERY_BUDGET_SEC = 30.0` in `tools/telemetry.py`, which is **0.28x of the 106.1 s worst
+`TELEMETRY_QUERY_BUDGET_SEC` in `tools/telemetry.py` (default **30.0 s**, read through the
+`OC_TELEMETRY_BUDGET_S` seam so a factory can state its OWN measured multiple), which is **0.28x of the 106.1 s worst
 case**, enforced by a SQLite progress handler so a runaway scan is aborted rather than allowed to
 outlive its caller. A cut-off query returns **`None`**, which every call site already renders as the
 STATED ABSENCE `telemetry=unavailable` (`§9.8`, and the `#130` class): a row of zeros would read as

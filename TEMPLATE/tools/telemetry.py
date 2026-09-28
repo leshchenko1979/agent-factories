@@ -47,7 +47,26 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # (which would read as a measurement of nothing) or a caller timeout (which reads as a
 # failed write). Declared, not derived: a budget the instrument cannot state is a
 # budget no reader can check.
-TELEMETRY_QUERY_BUDGET_SEC = 30.0
+def _budget_secs(default: float = 30.0) -> float:
+    """The declared budget, or `default` when the environment states none usable.
+
+    `OC_TELEMETRY_BUDGET_S` exists so a factory can tune the bound to ITS measured
+    runtime -- the law doc's principle is that a budget is a DECLARED multiple of a
+    measurement, and this box's 106.1 s worst case is not every box's. A malformed or
+    non-positive value falls back to the default rather than raising: this module is
+    imported on the LEDGER APPEND path, so a crash here would refuse a write for a
+    reason that has nothing to do with the row being written.
+    """
+    raw = os.environ.get("OC_TELEMETRY_BUDGET_S")
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+TELEMETRY_QUERY_BUDGET_SEC = _budget_secs()
 
 
 def find_database_path() -> Path | None:
