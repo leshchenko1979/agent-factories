@@ -298,14 +298,24 @@ forbid.
 - **Code and law** — read both, **by a subagent scoped to the template's copy and law** (the
   adversarial-isolation requirement is `review-lenses.md`'s and is cited, not restated here); name
   every assumption the member's tree made that the template does not; produce either a landed fix or
-  a **recorded non-fix with its reason**. The member already reviewed its own copy; re-reviewing that
-  is duplicated work.
+  a **recorded non-fix whose reason names its disposition class** — `declared-fork`, `factory-specific`
+  or `out-of-scope-here` (below). The member already reviewed its own copy; re-reviewing that is
+  duplicated work.
 - **Vocabulary** — read the identifiers and prose against `ONTOLOGY.md`. **Not optional, and
   measured:** `questions` was promoted into the template and shipped with **zero gates** — nothing
   named `test_*questions*` exists, and its only `tools/audit.py` appearance is the English word in
   three comments. Its verification is a `selftest` no gate invokes, so a green selftest is not
   evidence anything ran it. One review would have caught it; the vocabulary review would have caught
   it twice.
+
+**A finding is DISPOSITIONED, not completed — the completeness bar does not come with the promotion.**
+Duty 4/6's rule is that every ACCEPTed finding names a landed home and the partition sums to the
+census count, because a cycle that records findings and remediates none is theatre (`c24`: 79
+findings, 24 converged, 17 silently dropped). A promotion finding is often *"this is
+factory-specific — declare it"*, where **fix** is the wrong verb, so that bar would force either a
+false fix or a silent drop. What a promotion review inherits is the **disposition discipline**: every
+finding carries a class, and a non-fix names which one. **Authority:** owner ruling on the
+open-questions register, set `meta-factory`, **q10**, answered 2026-09-28.
 
 **The ontology-quality requirement binds the FILE, not only the review:** a per-instrument law file
 states, for every term it uses, either the canonical `ONTOLOGY.md` row it resolves to or the row it

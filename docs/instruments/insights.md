@@ -55,7 +55,7 @@ One JSON object per line, append-only. A row is one insight, and it carries thre
 |---|---|---|
 | **identity** | `n` · `id` · `ts` · `topic` · `stage` | which record this is, when, and what it is called |
 | **the claim** | `naive_assumption` · `empirical_reality` · `mechanism` | what was assumed, what was measured, and why they differ |
-| **routing** | `author` · `class` · `status` (+ `status_at`) | who wrote it, who it serves, and where it stands |
+| **routing** | `author` · `class` · `status` (+ `status_at`) | who wrote it, what it requires of its reader, and where it stands |
 | **publication seed** | `tweet_hook` · `ru_summary` | material for the content funnel (`ru_summary` is REQUIRED at the append) |
 
 `n` is the store's own ordinal and `id` is the stable slug; both are cited elsewhere, so neither is ever reassigned. Corrections are **appended as new rows citing the old `id`** — a stored claim is never restated to make room for a new field, which is the property §6's backfill verbs are built around.
@@ -75,14 +75,16 @@ This is the one definition in this file that is not a free choice, and the reaso
 
 ---
 
-## 5. `class` — who the claim serves
+## 5. `class` — what the claim requires of its reader
 
 Two values, and the test is stated rather than left to judgement:
 
 **Does the claim hold for a reader who has never heard of agent-factories?**
 
-- **`general`** — yes. It survives without our internal machinery, so it has wider appeal and is publishable (§8).
+- **`general`** — yes. It survives without our internal machinery, so it travels beyond this factory. **It does NOT follow that it is publishable.** The first live use of this axis sent 14 `general` claims to the content funnel and **8 came back `dropped`** — gate-independence is *necessary* for publication and not *sufficient* for it.
 - **`implementation`** — no; it is only intelligible once you know our gates, ledgers or processes. It is a technical finding for a narrower audience, and its consumer is HQ (§8).
+
+Both bullets answer *what the claim requires of its reader*. Neither answers *who will want to read it*, and the 2026-09-28 measurement is the proof: of 14 `general` claims the funnel took 5 and dropped 8 — four because one finding appeared in four spellings, three because they were specifications rather than outcomes, and one because it partly duplicated an already-published post. **Class is not an audience axis**, and reading it as one is the error this paragraph exists to block.
 
 **Class is REQUIRED at the append**, and rightly so: the class is a property of the claim itself, and the author is the one who knows it. A default would be this file inventing a routing decision the author was in a position to make.
 
@@ -92,7 +94,7 @@ Two values, and the test is stated rather than left to judgement:
 
 ## 6. `status` — where it stands in the workflow
 
-`status` is **orthogonal to `class`**. `class` says *who the claim serves*; `status` says *what has been DONE about it*. They divide the same population differently, and neither derives from the other — a `general` claim can be `pending` just as an `implementation` claim can be `dropped`.
+`status` is **orthogonal to `class`**. `class` says *what the claim requires of its reader*; `status` says *what has been DONE about it*. They divide the same population differently, and neither derives from the other — a `general` claim can be `pending` just as an `implementation` claim can be `dropped`.
 
 | status | meaning |
 |---|---|
