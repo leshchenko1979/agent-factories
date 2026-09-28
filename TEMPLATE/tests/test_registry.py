@@ -98,10 +98,12 @@ Exit: 0 clean, 1 on any failed check.
 
 from __future__ import annotations
 
+import argparse
 import copy
 import datetime
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -1528,6 +1530,138 @@ CHECKS = (
     ("7. every announcement is well-formed and unambiguous", check_announcements),
 )
 
+def _mutate_harness(fragment: dict) -> tuple[tempfile.TemporaryDirectory, Path]:
+    """A throwaway fragment store holding one real fragment.
+
+    The store is INJECTED rather than read from the ambient tree (#211's own
+    lesson, and #199's (C1) shape): `cmd_mutate` resolves its store from the
+    module's location, so a probe that let it find the LIVE store would write
+    into this factory's own registry while the gate ran.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    path = Path(tmp.name) / f"{fragment['factory']}.json"
+    path.write_text(json.dumps(fragment, indent=2) + "\n", encoding="utf-8")
+    return tmp, path
+
+def _fragment_for_mutation() -> dict:
+    """A fragment carrying the three keys the validator cannot see.
+
+    `_fragment` covers the required set; these three are exactly the optional ones
+    #211 measured as droppable without a validator problem, so a probe about their
+    loss needs all three present or it would be dropping a key that was never there.
+    """
+    fragment = _fragment(probe_slugs()[0], [])
+    fragment["attested_at"] = "2026-09-28T06:24:41Z"
+    fragment["instruments"] = {}
+    return fragment
+
+def _mutate_args(**kw: object) -> argparse.Namespace:
+    base = {"factory": "", "patch": None, "replace": None, "dry_run": False, "force": False}
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+def _write_tmp(payload: dict) -> Path:
+    fd, name = tempfile.mkstemp(suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+    return Path(name)
+
+def probe_a_key_set_change_is_refused_naming_the_lost_keys() -> None:
+    """A write-back must preserve every key. This drives the three keys the VALIDATOR
+    cannot see — `attested_at`, `display_name`, `instruments` — each measured as 0
+    validator problems against HEAD's own fragment (#211's body), which is why the
+    key-set leg is a second predicate rather than ceremony.
+
+    Both halves are asserted, so the probe also fails if someone later *does* teach the
+    validator to catch them: the justification would then be stale and must be re-measured.
+    """
+    fragment = _fragment_for_mutation()
+    tmp, path = _mutate_harness(fragment)
+    with tmp:
+        original = path.read_bytes()
+        saved = reg.FRAGMENT_STORE
+        reg.FRAGMENT_STORE = path.parent
+        try:
+            for key in ("attested_at", "display_name", "instruments"):
+                candidate = {k: v for k, v in json.loads(original).items() if k != key}
+                blind = reg.validate_fragment(candidate, str(path))
+                check(
+                    f"the validator is BLIND to a dropped `{key}` — the reason the key-set "
+                    f"leg exists",
+                    blind == [],
+                    "; ".join(blind)[:100],
+                )
+                problems = reg.key_set_refusal(json.loads(original), candidate, path)
+                check(
+                    f"...and the key-set refusal NAMES the dropped `{key}`",
+                    len(problems) == 1 and key in problems[0],
+                    (problems[0] if problems else "no problem reported")[:100],
+                )
+                rc = reg.cmd_mutate(
+                    _mutate_args(factory=fragment["factory"], replace=str(_write_tmp(candidate)))
+                )
+                check(
+                    f"...and the write path refuses it, writing nothing (`{key}`)",
+                    rc == 1 and path.read_bytes() == original,
+                    f"rc={rc} bytes_moved={path.read_bytes() != original}",
+                )
+        finally:
+            reg.FRAGMENT_STORE = saved
+
+def probe_a_mutation_preserves_every_key_the_fragment_carried() -> None:
+    """The verb that makes the one-writer claim true: a patch writes, and the key set
+    survives it. Without this arm the refusal above could be satisfied by a verb that
+    refuses everything."""
+    fragment = _fragment_for_mutation()
+    tmp, path = _mutate_harness(fragment)
+    with tmp:
+        before = set(json.loads(path.read_text(encoding="utf-8")))
+        saved = reg.FRAGMENT_STORE
+        reg.FRAGMENT_STORE = path.parent
+        try:
+            rc = reg.cmd_mutate(
+                _mutate_args(
+                    factory=fragment["factory"],
+                    patch=str(_write_tmp({"purpose": "a mutated purpose"})),
+                )
+            )
+            after = json.loads(path.read_text(encoding="utf-8"))
+            check("a value-level patch writes through the named writer", rc == 0, f"rc={rc}")
+            check(
+                "...the key set is preserved exactly",
+                set(after) == before,
+                f"lost={sorted(before - set(after))} added={sorted(set(after) - before)}",
+            )
+            check(
+                "...and the patched value is the one that landed",
+                after.get("purpose") == "a mutated purpose",
+                str(after.get("purpose")),
+            )
+        finally:
+            reg.FRAGMENT_STORE = saved
+
+def probe_the_verb_refuses_to_create_a_fragment() -> None:
+    """Mutation-only, by construction: creating a fragment is `enroll`'s job, so a
+    write-back verb that could create one would be a second writer for the same file."""
+    fragment = _fragment_for_mutation()
+    tmp, path = _mutate_harness(fragment)
+    with tmp:
+        saved = reg.FRAGMENT_STORE
+        reg.FRAGMENT_STORE = path.parent
+        try:
+            rc = reg.cmd_mutate(
+                _mutate_args(factory="no-such-factory", patch=str(_write_tmp({"purpose": "x"})))
+            )
+            check("the mutation verb refuses to CREATE a fragment", rc == 2, f"rc={rc}")
+            made = path.parent / "no-such-factory.json"
+            check(
+                "...and writes no file for the absent slug",
+                not made.exists(),
+                f"a file appeared at {made}" if made.exists() else "",
+            )
+        finally:
+            reg.FRAGMENT_STORE = saved
+
 PROBES = (
     probe_a_supersession_chain_is_not_ambiguity,
     probe_a_hand_edit_is_named,
@@ -1548,6 +1682,9 @@ PROBES = (
     probe_a_factory_with_no_prefixes_fails,
     probe_overlapping_prefixes_fail,
     probe_the_live_manifest_satisfies_the_prefix_law,
+    probe_a_key_set_change_is_refused_naming_the_lost_keys,
+    probe_a_mutation_preserves_every_key_the_fragment_carried,
+    probe_the_verb_refuses_to_create_a_fragment,
 )
 
 def main() -> int:

@@ -27,6 +27,8 @@ Commands
                         the fixtures). Exit 1 on the first file that is invalid.
   resolve               (step 2) the live half, read through a mode=ro URI
   enroll --all          (step 3) scaffold one stub per factory
+  mutate <factory>      write back an EXISTING fragment — mutation-only,
+                        never a rebuild; refuses a top-level key-set change
   render                (step 5) write docs/factory-registry.md + registry/index.json
 
 Exit: 0 ok, 1 problem (invalid fragment, bad usage, unreadable store).
@@ -1801,6 +1803,131 @@ def cmd_render(args: argparse.Namespace) -> int:
     )
     return 0
 
+def read_json_object(source: str, what: str) -> tuple[object, str | None]:
+    """Read one JSON object, from a path or `-` for stdin. Returns (data, error)."""
+    if source == "-":
+        raw, where = sys.stdin.read(), "<stdin>"
+    else:
+        p = Path(source)
+        if not p.is_file():
+            return None, f"{what}: no such file: {p}"
+        try:
+            raw = p.read_text(encoding="utf-8")
+        except OSError as exc:
+            return None, f"{what}: {p}: cannot read — {exc}"
+        where = str(p)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return None, f"{what}: {where}: does not parse as JSON — {exc}"
+    if not isinstance(data, dict):
+        return None, f"{what}: {where}: must be a JSON object"
+    return data, None
+
+def key_set_refusal(loaded: dict, candidate: dict, path: Path) -> list[str]:
+    """The rebuild signature: a write that changes the top-level key set.
+
+    This is a DIFFERENT leg from `validate_fragment`, and the measurement is why
+    both are needed (#211, ruled 2026-09-28). `REQUIRED_ROOT_KEYS` has 9 entries
+    while a real fragment carries 14, so three optional keys drop without a single
+    validator problem — measured by dropping one at a time from HEAD's own
+    fragment: `attested_at`, `display_name` and `instruments` each return 0
+    problems. Two of the three are the fields a rebuild destroyed while the
+    result still validated clean, and `instruments` is the key the writer was
+    editing at the time.
+
+    The validator checks that REQUIRED keys are present. Only a key-set comparison
+    checks that NO key was lost — a rebuild does not lose a key by accident, it
+    loses every key it did not think to carry.
+    """
+    lost = sorted(set(loaded) - set(candidate))
+    added = sorted(set(candidate) - set(loaded))
+    if not lost and not added:
+        return []
+    parts = []
+    if lost:
+        parts.append(f"loses {len(lost)} key(s): {', '.join(lost)}")
+    if added:
+        parts.append(f"adds {len(added)} key(s): {', '.join(added)}")
+    return [
+        f"{path}: a mutation must not change the top-level key set — it "
+        + "; ".join(parts)
+        + ". The key set is invariant under a mutation; pass --force if the "
+        "change is intended."
+    ]
+
+def cmd_mutate(args: argparse.Namespace) -> int:
+    """Write back an EXISTING fragment through the one named writer.
+
+    Why this verb exists (#211): `enroll` builds a stub, so a write-back had no
+    route through this tool at all — every one of them was an out-of-tool
+    hand-edit, and one of those rebuilt the object instead of mutating it,
+    destroying a factory's own declaration and a peer's write-back in a single
+    pass. A surface that claims ONE named writer needs a verb every write can
+    take, or the claim is false.
+
+    Mutation-only, by construction: the fragment must already exist (creating one
+    is `enroll`'s job), and no rebuild path is offered, because a rebuild path is
+    the defect this verb closes.
+    """
+    path = FRAGMENT_STORE / f"{args.factory}.json"
+    if not path.is_file():
+        print(
+            f"mutate: no fragment at {path} — this verb mutates a fragment that "
+            f"already exists; `enroll` creates one",
+            file=sys.stderr,
+        )
+        return 2
+    loaded, error = load_fragment(path)
+    if error:
+        print(f"mutate: {error}", file=sys.stderr)
+        return 1
+    if not isinstance(loaded, dict):
+        print(f"mutate: {path}: fragment must be a JSON object", file=sys.stderr)
+        return 1
+
+    source = args.patch if args.patch is not None else args.replace
+    what = "--patch" if args.patch is not None else "--replace"
+    supplied, error = read_json_object(source, what)
+    if error:
+        print(f"mutate: {error}", file=sys.stderr)
+        return 1
+
+    if args.patch is not None:
+        # A merge cannot drop a key, so the candidate carries every loaded key.
+        candidate = {**loaded, **supplied}
+    else:
+        # A substitution can drop every key it does not carry — which is the
+        # incident's shape, and why the key-set leg sits BEFORE validation: a
+        # rebuild names the keys it loses, while the validator reports shape.
+        candidate = dict(supplied)
+
+    problems = key_set_refusal(loaded, candidate, path)
+    if problems and not args.force:
+        for line in problems:
+            print(f"mutate: {line}", file=sys.stderr)
+        return 1
+
+    problems = validate_fragment(candidate, str(path))
+    if problems:
+        for line in problems:
+            print(f"mutate: {line}", file=sys.stderr)
+        return 1
+
+    if args.dry_run:
+        print(
+            f"mutate: {path} — dry run, nothing written "
+            f"({len(loaded)} key(s) in, {len(candidate)} out)"
+        )
+        return 0
+
+    path.write_text(json.dumps(candidate, indent=2) + "\n", encoding="utf-8")
+    print(
+        f"mutate: {path} — {len(candidate)} key(s) written "
+        f"({'patched' if args.patch is not None else 'replaced'})"
+    )
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="The factory registry.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1831,6 +1958,29 @@ def main(argv: list[str] | None = None) -> int:
         help="print every thread the derivation kept without a role, and every one it dropped",
     )
     p_enroll.set_defaults(func=cmd_enroll)
+    p_mutate = sub.add_parser(
+        "mutate",
+        help="write back an EXISTING fragment: apply a declared mutation, never a rebuild",
+    )
+    p_mutate.add_argument("factory", help="one factory slug")
+    p_mutate_input = p_mutate.add_mutually_exclusive_group(required=True)
+    p_mutate_input.add_argument(
+        "--patch",
+        metavar="FILE",
+        help="a JSON object merged onto the loaded fragment's top level ('-' = stdin)",
+    )
+    p_mutate_input.add_argument(
+        "--replace",
+        metavar="FILE",
+        help="a JSON object substituted for the loaded fragment ('-' = stdin)",
+    )
+    p_mutate.add_argument("--dry-run", action="store_true", help="report without writing")
+    p_mutate.add_argument(
+        "--force",
+        action="store_true",
+        help="allow a change to the top-level key set, the deliberate override",
+    )
+    p_mutate.set_defaults(func=cmd_mutate)
     p_render = sub.add_parser(
         "render", help="write docs/factory-registry.md and registry/index.json"
     )
