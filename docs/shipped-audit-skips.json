@@ -1,0 +1,64 @@
+{
+  "_note": "The shipped tree's NON-GREEN population, declared as FACTORY DATA (#199). The tree the kit ships is NOT a factory: its evidence/, its ontology, its product declaration, its registry and its invocation modes are all BOOTSTRAP-created, so gates that judge those populations cannot apply there. Each entry names the ARTIFACT absent at this depth, and the `marker` is a line that must exist in the gate's OWN SOURCE \u2014 pytest captures both streams from session start, so a stated reason never reaches the audit's log, and the source is the surface that actually carries it. Removing a marker turns that gate's verdict into a FAIL: a skip whose reason has gone is a SILENT skip, which is a defect exactly as a FAIL is.",
+  "skips": {
+    "tests/test_ontology.py": {
+      "artifact": "ONTOLOGY.md (BOOTSTRAP-created, BOOTSTRAP.md step 3)",
+      "marker": "# STATED SKIP: ONTOLOGY.md",
+      "reason": "the ontology is the factory's own vocabulary, so the shipped tree carries ONTOLOGY.md.tmpl and the gate's whole subject \u2014 a table parsed out of it \u2014 is absent"
+    },
+    "tests/test_self_audit_instant.py": {
+      "artifact": "docs/processes.md (BOOTSTRAP-created)",
+      "marker": "# STATED SKIP: docs/processes.md",
+      "reason": "the process register is factory data; the coupling probe reads its Process 1 row, which does not exist here"
+    },
+    "tests/test_registry.py": {
+      "artifact": "docs/factory-registry.md + registry/index.json (factory data)",
+      "marker": "# STATED SKIP: docs/factory-registry.md",
+      "reason": "both artifacts are generated from this factory's own fleet manifest; the kit ships the shape, not a member's records"
+    },
+    "tests/test_gate_invocation_mode.py": {
+      "artifact": "registry/gates.json (factory data)",
+      "marker": "# STATED SKIP: registry/gates.json",
+      "reason": "the kit ships registry/gates.example.json: a bootstrapped factory must measure its own runtimes and cannot inherit this box's"
+    },
+    "tests/test_commit_pair_hook.py": {
+      "artifact": "TEMPLATE/ (a tree with no shipped kit of its own)",
+      "marker": "# STATED SKIP: TEMPLATE/",
+      "reason": "REPO resolves to the TEMPLATE directory itself when run from inside it, which correctly carries no nested TEMPLATE/ \u2014 exactly like a bootstrapped factory. The predicate is pinned by the pure arm and the empty-directory arm"
+    },
+    "tests/test_audit_rates.py": {
+      "artifact": "evidence/ (BOOTSTRAP-created, BOOTSTRAP.md steps 4b/4c)",
+      "marker": "# STATED SKIP: evidence/",
+      "reason": "five population legs read the ledger, the rework log and the ontology; the four legs that read only the SHIPPED source still run"
+    },
+    "tests/test_close_board_recorded.py": {
+      "artifact": "evidence/ledger.jsonl (BOOTSTRAP-created, step 4b)",
+      "marker": "# STATED SKIP: evidence/ledger.jsonl",
+      "reason": "the gate's whole subject is the live ledger's close rows"
+    },
+    "tests/test_board_intake_recorded.py": {
+      "artifact": "evidence/ledger.jsonl (BOOTSTRAP-created, step 4b)",
+      "marker": "# STATED SKIP: evidence/ledger.jsonl",
+      "reason": "both the live-ledger and the offline-denominator legs read the ledger"
+    },
+    "tools/roadmap.py": {
+      "artifact": "docs/products.json (factory data; the kit ships products.example.json)",
+      "marker": "no product declaration at",
+      "exits": [
+        0,
+        1
+      ],
+      "reason": "the tool's own contract is RED until the factory onboards, which is CORRECT for a factory and a permanent red in the tree that ships it. It names the missing declaration and the subprocess that fills it, so the verdict is stated rather than silent \u2014 hence exit 1 is accepted HERE, for this one entry, and the marker is still verified MARKER NOTE: an earlier marker ('has not been onboarded') was NOT contiguous in the source \u2014 the reason is built from two adjacent string literals \u2014 and this gate failed that entry by name, which is the behaviour it exists for."
+    },
+    "tools/hygiene.py": {
+      "artifact": "the ENCLOSING repo's working tree (the shipped tree is not a git repository)",
+      "marker": "STATED SKIP: the ENCLOSING repo's working tree",
+      "exits": [
+        0,
+        1
+      ],
+      "reason": "`hygiene_namespace` resolves the MAIN worktree deliberately (#174), so run from the shipped tree this leg judges the repository that CONTAINS it -- a population the ROOT audit already owns -- and can go RED for reasons entirely outside the shipped tree, measured: a peer's in-flight evidence file past the 60m grace window. The shipped tree has no git working tree of its own, so there is no 'the shipped tree's hygiene' for this leg to judge. Exit 1 is accepted for THIS entry only, because the tool's own contract is a violation report and the marker is still verified in the source. MARKER HOME: `marker_in` names `tools/audit.py` rather than the tool, because the reason belongs to the audit's own registration comment \u2014 the leg is a shared tool whose behaviour is not the kit's to change.",
+      "marker_in": "tools/audit.py"
+    }
+  }
+}

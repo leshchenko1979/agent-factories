@@ -87,14 +87,28 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+
 # The absence contract is SHARED, not re-implemented per gate (#83).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ledger_boundary import (  # noqa: E402
     GateError,
     SkipGate,
     evidence_skip_reason,
+    module_skip,
     read_rows,
 )
+
+# BOTH INVOCATION MODES MUST REACH THE GUARD (#199). The audit invokes this gate in pytest
+# mode and pytest never calls `main()`, so a guard there protects only the script-mode run —
+# #195's split exactly. `pytestmark` COLLECTS the tests and skips them (exit 0); a module-level
+# `pytest.skip` would exit 5, which the audit reads as a failure.
+# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)
+_SKIP_REASON = module_skip(REPO)
+if _SKIP_REASON:
+    import pytest as _pytest  # noqa: E402
+
+    pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
+
 AUDIT = REPO / "tools" / "audit.py"
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 REWORK = REPO / "evidence" / "rework.md"

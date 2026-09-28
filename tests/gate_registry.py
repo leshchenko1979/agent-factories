@@ -643,6 +643,15 @@ REQUIRED_GATES: tuple[str, ...] = (
 # enrolled its own fragment. It moved into REQUIRED_GATES in the change that shipped
 # `TEMPLATE/registry/`, which is the condition its own entry named.
 OPTIONAL_GATES: dict[str, str] = {
+    "test_shipped_audit_runs.py": (
+        "REPO-SIDE BY CONSTRUCTION (board #199). It runs the SHIPPED tree's own audit, so it "
+        "cannot live in that tree — there is no nested TEMPLATE for it to run. It is therefore "
+        "not a PAIRS entry, not in registry/kit.json, and NOT REQUIRED: a bootstrapped factory "
+        "has no shipped tree, and the gate states that skip rather than reding. The class it "
+        "guards is the one nothing else could see — the 65 gate registrations in "
+        "TEMPLATE/tools/audit.py that nothing executed, five of which were found red by hand "
+        "in a single day."
+    ),
     "test_law_coverage.py": (
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md and "
         "would RED in a bootstrapped factory."

@@ -279,6 +279,12 @@
       "margin_x": 4.974,
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
       "measured_sec": 0.77
+    },
+    "tests/test_shipped_audit_runs.py": {
+      "budget_sec": 1008.75,
+      "measured_sec": 252.0,
+      "measured_at": "2026-09-28T00:35Z",
+      "margin_x": 4.003
     }
   },
   "modes": {
@@ -350,6 +356,7 @@
     "tools/hygiene.py": "script",
     "tools/ledger.py": "script",
     "tools/roadmap.py": "script",
-    "tests/test_ledger_claim_preflight.py": "pytest"
+    "tests/test_ledger_claim_preflight.py": "pytest",
+    "tests/test_shipped_audit_runs.py": "script"
   }
 }

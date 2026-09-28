@@ -227,6 +227,21 @@ def inspect_git_working_tree(
             text=True,
             check=True,
         )
+        # THE PATHS ARE REPO-ROOT-RELATIVE, WHICHEVER DIRECTORY THE TOOL SITS IN (#199).
+        # `git status --porcelain` reports paths relative to the REPOSITORY ROOT, while
+        # `repo_dir` above is the TOOL's own directory. Those coincide only when the tool is
+        # at the root: run from a subdirectory -- the shipped tree's `TEMPLATE/`, say -- every
+        # modified file was joined against the wrong base, `getmtime` raised OSError, and the
+        # file was reported as "missing from the working tree". A false POSITIVE for every
+        # dirty path, which is worse than a miss: it names files that are present.
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=repo_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        root = toplevel.stdout.strip() if toplevel.returncode == 0 else repo_dir
     except Exception as e:
         return ([f"git status failed: {e}"], [], [])
 
@@ -238,7 +253,7 @@ def inspect_git_working_tree(
         if not line:
             continue
         status_code, path = _split_status_line(line)
-        full = os.path.join(repo_dir, path)
+        full = os.path.join(root, path)
         try:
             age_min = int((now - os.path.getmtime(full)) / 60)
         except OSError:
@@ -263,7 +278,7 @@ def inspect_git_working_tree(
                 )
 
     for path in REQUIRED_COMMITTED:
-        full = os.path.join(repo_dir, path)
+        full = os.path.join(root, path)
         status = subprocess.run(
             ["git", "status", "--porcelain", "--", path],
             cwd=repo_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,

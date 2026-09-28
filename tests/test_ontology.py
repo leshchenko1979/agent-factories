@@ -173,6 +173,20 @@ def is_exempt(rel: str, line: str) -> bool:
 
 
 def main() -> int:
+# STATED SKIP: ONTOLOGY.md (BOOTSTRAP-created, step 3)
+    # THE SHIPPED TREE CARRIES `ONTOLOGY.md.tmpl`, NOT `ONTOLOGY.md` (#199). The ontology is
+    # BOOTSTRAP-created (BOOTSTRAP.md step 3) because it is the factory's own vocabulary, so
+    # the tree the kit ships has none — and this gate's entire subject is a table parsed out of
+    # it. Without this arm the gate died with FileNotFoundError in the tree it ships from: a
+    # CRASH, not a verdict. The reason is printed and names the artifact.
+    if not ONTOLOGY.is_file():
+        shipped = ONTOLOGY.with_suffix(".md.tmpl")
+        print(
+            f"ontology gate: SKIPPED — no {ONTOLOGY.name} in this tree, so there is no banned-"
+            f"synonym table to judge against. It is BOOTSTRAP-created (BOOTSTRAP.md step 3)"
+            + (f"; this tree carries the shipped {shipped.name} instead." if shipped.is_file() else ".")
+        )
+        return 0
     banned = parse_banned(ONTOLOGY)
     terms = parse_terms(ONTOLOGY)
     patterns = [

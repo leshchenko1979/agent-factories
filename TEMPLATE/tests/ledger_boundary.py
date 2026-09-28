@@ -267,3 +267,21 @@ def synthetic_tree(
         )
 
     return root
+
+
+def module_skip(repo: Path) -> str:
+    """Return the stated skip reason for this tree, for `pytestmark` (#199).
+
+    WHY `pytestmark` AND NOT `pytest.skip(allow_module_level=True)`. The audit invokes these
+    gates in PYTEST mode, and pytest never calls `main()` — so a guard there protects only the
+    script-mode run, which is #195's split exactly. But a MODULE-LEVEL skip makes pytest exit
+    **5** ("no tests were collected"), and the audit reads any non-zero exit as a failure; the
+    module must be COLLECTED and its tests SKIPPED, which is exit 0.
+
+    The reason is not printed here: pytest CAPTURES both streams from session start, so no
+    in-process write reaches the audit's captured log (measured — `print`, `sys.__stdout__`
+    and a `dup(1)` taken at import all land in the capture). What makes the skip VERIFIABLE
+    is the reason text living in this file's source, which `tests/test_shipped_audit_runs.py`
+    reads and asserts.
+    """
+    return evidence_skip_reason(repo)

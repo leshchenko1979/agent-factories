@@ -45,7 +45,22 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ledger_boundary import evidence_skip_reason, module_skip  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
+
+# BOTH INVOCATION MODES MUST REACH THE GUARD (#199). The audit invokes this gate in pytest
+# mode and pytest never calls `main()`, so a guard there protects only the script-mode run —
+# #195's split exactly. `pytestmark` COLLECTS the tests and skips them (exit 0); a module-level
+# `pytest.skip` would exit 5, which the audit reads as a failure.
+# STATED SKIP: evidence/ledger.jsonl (BOOTSTRAP-created, step 4b)
+_SKIP_REASON = module_skip(REPO)
+if _SKIP_REASON:
+    import pytest as _pytest  # noqa: E402
+
+    pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
+
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 
 # The commit that landed the step-6 board-close requirement in docs/processes.md.
@@ -210,6 +225,15 @@ def test_gate_is_registered_in_the_audit() -> None:
 
 
 def main() -> int:
+    # THE SHIPPED TREE IS NOT A FACTORY (#199). `evidence/` is BOOTSTRAP-created (BOOTSTRAP.md
+    # steps 4b/4c), so the tree the kit ships carries none of it and this gate's whole subject
+    # is absent. Without this arm the gate died with FileNotFoundError in the tree it ships
+    # from -- a CRASH, not a verdict, which is neither a pass nor a stated skip. The reason is
+    # printed and names the artifact, so a reader can tell "nothing to judge yet" from "clean".
+    skip = evidence_skip_reason(REPO)
+    if skip:
+        print(f"close-board gate: SKIPPED — {skip}")
+        return 0
     try:
         test_live_ledger_records_the_board_close()
     except AssertionError as exc:

@@ -51,6 +51,13 @@ Exit: 0 all checks pass, 1 a check failed.
 
 from __future__ import annotations
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from ledger_boundary import evidence_skip_reason as _evidence_skip_reason  # noqa: E402
+from ledger_boundary import module_skip as _module_skip  # noqa: E402
+
 import datetime as dt
 import json
 import re
@@ -58,6 +65,18 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# BOTH INVOCATION MODES MUST REACH THE GUARD (#199). The audit invokes this gate in pytest
+# mode and pytest never calls `main()`, so a guard there protects only the script-mode run —
+# #195's split exactly. `pytestmark` COLLECTS the tests and skips them (exit 0); a module-level
+# `pytest.skip` would exit 5, which the audit reads as a failure.
+# STATED SKIP: evidence/ledger.jsonl (BOOTSTRAP-created, step 4b)
+_SKIP_REASON = _module_skip(REPO)
+if _SKIP_REASON:
+    import pytest as _pytest  # noqa: E402
+
+    pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
+
 LEDGER = REPO / "evidence" / "ledger.jsonl"
 
 # The day the intake requirement became mechanically gated — the day this gate
@@ -398,6 +417,14 @@ def test_the_offline_denominator_is_non_zero_on_the_live_ledger() -> None:
     assert coverage["offline_subjects_examined"] == len(examined), coverage
 
 def main() -> int:
+    # THE SHIPPED TREE IS NOT A FACTORY (#199). Its `evidence/` is BOOTSTRAP-created, so both
+    # the live-ledger and the offline-denominator legs have nothing to read here; without this
+    # arm the gate died with FileNotFoundError in the tree it ships from, which is a CRASH
+    # rather than a verdict. The reason is printed and names the artifact.
+    _skip = _evidence_skip_reason(_Path(__file__).resolve().parent.parent)
+    if _skip:
+        print(f"board-intake gate: SKIPPED — {_skip}")
+        return 0
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]
     failures: list[str] = []

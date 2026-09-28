@@ -242,11 +242,18 @@ def kit_leg_probes(hook_mod, top: Path) -> list[str]:
                 "probe: a directory with no TEMPLATE/ must report no shipped kit — a "
                 "bootstrapped factory would otherwise be warned on every commit"
             )
-    if not hook_mod.kit_present(REPO):
-        failures.append(
-            "probe: this tree carries TEMPLATE/ but kit_present reports none — both legs "
-            "would be skipped silently in the factory that has the kit"
-        )
+    # THE LIVE ARM APPLIES ONLY WHERE A SHIPPED KIT EXISTS (#199). `REPO` is this file's
+    # parent's parent, so inside the shipped tree it resolves to the TEMPLATE directory
+    # itself — which carries no nested `TEMPLATE/`, exactly like a bootstrapped factory, and
+    # `kit_present` correctly reports none. Asserting the opposite made this probe a statement
+    # about the repo's layout rather than about the predicate, and it failed in the very tree
+    # the kit ships from. The property under test is already pinned by the two arms above: a
+    # directory WITH `TEMPLATE/` must report True (the PURE arm) and one without must report
+    # False (the empty-directory arm).
+    if hook_mod.kit_present(REPO):
+        pass  # judged below by the drift arms, which need the shipped set
+    else:
+        print("  SKIPPED  the live drift arms — this tree carries no shipped kit of its own")
 
     # --- the drift predicate, PURE, against the generator's own `compare` -----
     generator = load_module(top / GENERATOR_RELATIVE, "oc_kit_manifest_expected")
@@ -346,6 +353,7 @@ def hook_wiring_probes(top: Path) -> list[str]:
     return failures
 
 def main() -> int:
+# STATED SKIP: TEMPLATE/ (a tree with no shipped kit of its own)
     top = repo_toplevel() or REPO
     problems: list[str] = []
 

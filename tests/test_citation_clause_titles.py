@@ -128,6 +128,16 @@ def carried_docs() -> set[str]:
     """Basenames of every markdown document this repo holds (shipped or not)."""
     return {p.name for p in REPO.rglob("*.md*") if ".git" not in p.parts}
 
+# THE PROBES' OWN CARRIED SET, injected rather than read off the ambient tree.
+#
+# `carried_docs()` answers a question about THE TREE THIS GATE RUNS IN, and the shipped tree
+# is not this one: `TEMPLATE/` carries `SKILL.md.tmpl` and no `SKILL.md`, so every probe that
+# cites a clause of `SKILL.md` gets its citation EXEMPTED as "not carried by this repo" and
+# the probe reads no problem — three probes failed exactly that way, and only in the tree the
+# kit ships. A probe's subject is the PREDICATE, so it must supply its own inputs; reading
+# the environment makes the probe a statement about where it happens to run.
+PROBE_CARRIED = {"SKILL.md", "measurement-procedure.md"}
+
 
 def scoped_files() -> list[Path]:
     out: list[Path] = []
@@ -245,7 +255,7 @@ def probe(
     failures: list[str],
     member: set[str] | None = None,
 ) -> None:
-    problems, _ = citation_problems(text, corpus, carried_docs(), member)
+    problems, _ = citation_problems(text, corpus, PROBE_CARRIED, member)
     got = bool(problems)
     if got != want:
         failures.append(f"probe {name!r}: expected problems={want}, got {problems or 'none'}")
@@ -253,8 +263,24 @@ def probe(
         print(f"  PASS  {name}")
 
 
-def _probes(corpus: dict[str, set[str]]) -> list[str]:
+# THE PROBES' OWN CORPUS, for the same reason as PROBE_CARRIED and found the same way: two
+# more probes failed only in the shipped tree. They cite clause titles of THIS factory's law
+# ("The hard boundary — never do a member's work" is the meta-factory's own), and a title the
+# ambient law file does not carry reads as unresolvable. A probe's subject is the PREDICATE —
+# "does a citation resolve against the corpus it was given?" — so the probes supply a corpus
+# with known contents, and the live scan keeps reading the real one.
+PROBE_CORPUS: dict[str, set[str]] = {
+    "SKILL.md": {
+        "State — every surface has one writer",
+        "Verdicts and claims",
+        "The hard boundary — never do a member's work",
+    },
+}
+
+
+def _probes() -> list[str]:
     failures: list[str] = []
+    corpus = PROBE_CORPUS
     probe("a SKILL.md section NUMBER is the defect", "see SKILL.md §11 for the rule", corpus, True, failures)
     probe("a bare section number is the defect", "the residue §11 leaves behind", corpus, True, failures)
     probe("a TITLE that resolves is clean",
@@ -295,7 +321,7 @@ def main() -> int:
               "a predicate that examined nothing has reported nothing")
         return 1
 
-    failures = _probes(corpus)
+    failures = _probes()
     problems, exempt, files, citations = scan()
 
     print(f"citation clause-title gate: {files} source file(s), {citations} '§' citation(s) examined")

@@ -1142,6 +1142,14 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
         # The namespace is passed EXPLICITLY. The tool's own default follows its
         # RUN SITE, so an audit run from a worktree would grade a namespace
         # belonging to nobody and read clean (#174).
+        #
+        # STATED SKIP: the ENCLOSING repo's working tree. `hygiene_namespace` resolves the
+        # MAIN worktree deliberately (#174), so run from the SHIPPED tree this leg judges the
+        # repository that CONTAINS it — a population the ROOT audit already owns — and can go
+        # RED for reasons entirely outside the shipped tree (a peer's in-flight file past the
+        # grace window). The shipped tree is not a git repository of its own, so there is no
+        # "the shipped tree's hygiene" for this leg to judge; #199 declares the leg rather
+        # than reading that ambient verdict as a property of the kit.
         gates_to_run.append([
             sys.executable, "tools/hygiene.py", "--audit",
             "--namespace", hygiene_namespace(repo_root),
@@ -1431,6 +1439,19 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     adapted because this repo RETIRED that clause (two lanes, independent wake latencies).
     if (repo_root / "tests/test_ledger_claim_preflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_claim_preflight.py"])
+
+    # 66. THE SHIPPED TREE'S OWN AUDIT (#199). Nothing in the root audit executed any of the
+    #     gates `TEMPLATE/` ships, so a shipped gate that reds or crashes IN THE TREE IT SHIPS
+    #     FROM was invisible until someone ran it by hand -- measured: five instances in one
+    #     day, one of them the SAME gate crashing twice, the second crash 15 h after the first
+    #     fix, because each was found by a lane reading a file rather than by a mechanism.
+    #     This gate runs that audit and classifies every verdict into four classes, with a
+    #     SILENT skip a defect exactly as a FAIL is. It asserts the shipped tree's OWN
+    #     CONTRACT and never "green by the root standard": that tree is not a factory, so a
+    #     gate reding on non-green would be a permanent red and would teach lanes to ignore
+    #     red -- the class #83 closed. Repo-side only (it cannot live in the tree it runs).
+    if (repo_root / "tests/test_shipped_audit_runs.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_shipped_audit_runs.py"])
 
     # 38. Telemetry-reader registry gate: a telemetry field read out of a row's `detail`
     #     must go through the shared predicate in `tools/field_predicate.py`, because a

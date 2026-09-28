@@ -653,7 +653,13 @@ def test_a_factory_without_the_procedure_declares_nothing() -> None:
         assert test_post_boundary_artifacts_carry_every_required_section() is None
     finally:
         PROCEDURE = saved
-    assert declared() is True
+    # Assert the RESTORE, not an ambient property the restore has just changed underneath it.
+    # `declared()` is `PROCEDURE.is_file()`, so asserting it here reads the TREE, not this
+    # probe: true wherever the repo happens to carry a measurement procedure, false in the
+    # shipped tree, which by design carries none. The property this probe owes is that the
+    # module global came back — that is what the finally exists to establish — and it holds
+    # in every tree.
+    assert PROCEDURE == saved, f"the probe must restore PROCEDURE, not leak it: {PROCEDURE}"
 
 
 def main() -> int:

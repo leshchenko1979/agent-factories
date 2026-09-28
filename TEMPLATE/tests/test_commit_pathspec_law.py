@@ -104,12 +104,20 @@ def _skill_surfaces() -> list[Path]:
 
     The template-repo layout first, then the bootstrapped factory's own skill directory.
     That directory's name is not knowable from here, which is why this half globs.
+
+    `SKILL.md.tmpl` AT THIS TREE'S OWN ROOT is also a candidate (#199): from inside the
+    shipped tree, the template's law is `SKILL.md.tmpl` one level up from where the repo-root
+    spelling looks for it, so resolving only `TEMPLATE/SKILL.md.tmpl` reported "no skill
+    surface found" in the tree that carries one.
     """
     found: list[Path] = []
     for rel in SKILL_LAW:
         path = REPO_ROOT / rel
         if path.is_file():
             found.append(path)
+    own_law = REPO_ROOT / "SKILL.md.tmpl"
+    if own_law.is_file() and own_law not in found:
+        found.append(own_law)
     for path in sorted(REPO_ROOT.glob(SKILL_LAW_GLOB)):
         if path.is_file() and path not in found:
             found.append(path)

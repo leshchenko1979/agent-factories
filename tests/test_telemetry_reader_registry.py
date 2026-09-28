@@ -411,7 +411,12 @@ def test_probe_the_live_trees_are_clean() -> None:
     problems, examined, _excused, _notes = evaluate(REPO)
     assert problems == [], problems
     assert len(examined) >= 8, f"population too small to be meaningful: {examined}"
-    assert "synthesize_insights.py" in examined, examined
+    # A TOOL THAT SHIPS IN EVERY TREE, not one that happens to live here (#199).
+    # `synthesize_insights.py` is repo-side only — the kit does not carry it — so naming it
+    # made this probe a statement about THIS repo's layout and it failed in the tree the kit
+    # ships. `audit.py` is in the scanned population of both, so the property the probe owes
+    # ("the population is the real tree, not a stub") holds wherever it runs.
+    assert "audit.py" in examined, examined
 
 
 def test_probe_the_printed_form_states_its_population_and_allow_list(capsys) -> None:

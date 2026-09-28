@@ -34,11 +34,19 @@ SECTION_RE = re.compile(r"^##\s+(\d+)\.", re.MULTILINE)
 
 
 def law_files() -> list[Path]:
-    """Every law file in this repo: factory laws, plus the template's law."""
+    """Every law file in the tree this gate RUNS IN: factory laws, plus the template's law.
+
+    THE TEMPLATE'S LAW IS AT A DIFFERENT PATH FROM INSIDE THE TEMPLATE (#199). From the repo
+    root it is `TEMPLATE/SKILL.md.tmpl`; from inside the shipped tree it is `SKILL.md.tmpl`
+    at that tree's own root. Resolving only the first made this gate report "no law file
+    found" in the very tree the kit ships — a CRASH-shaped verdict over a law file that was
+    sitting right there, and the class #199 exists to make visible. Both candidates are read,
+    so the gate judges whichever tree it finds itself in.
+    """
     found = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
-    template_law = REPO_ROOT / "TEMPLATE" / "SKILL.md.tmpl"
-    if template_law.is_file():
-        found.append(template_law)
+    for cand in (REPO_ROOT / "TEMPLATE" / "SKILL.md.tmpl", REPO_ROOT / "SKILL.md.tmpl"):
+        if cand.is_file() and cand not in found:
+            found.append(cand)
     return found
 
 

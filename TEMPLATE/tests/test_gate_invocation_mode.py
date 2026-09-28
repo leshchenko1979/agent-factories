@@ -152,6 +152,11 @@ def probe_the_population_is_the_call_sites_and_is_non_empty() -> None:
 
 def probe_every_invoked_gate_declares_the_mode_its_call_site_uses() -> None:
     """The core assertion: declared mode == call-site form, for every invoked gate."""
+    # The declaration is FACTORY DATA and the shipped tree carries none (#199) — the kit ships
+    # the shape, not this box's measurement. Stated rather than crashing.
+    if not MANIFEST.is_file():
+        print("  SKIP  the declaration leg — this tree declares no invocation modes")
+        return
     invoked = invoked_gates()
     declared, note = declared_modes()
     found = problems(invoked, declared)
@@ -186,6 +191,15 @@ def probe_a_dual_SHAPED_file_is_judged_by_its_CALL_SITE() -> None:
     the audit invokes it as a SCRIPT. Judging by the file's shape would declare it
     `pytest` and be wrong; the declaration must come from the call site.
     """
+    # THE DECLARATION IS FACTORY DATA (#199). The shipped tree carries no
+    # `registry/gates.json` — the kit ships the SHAPE, `registry/gates.example.json`, because a
+    # bootstrapped factory must measure its own runtimes and cannot inherit this box's. Without
+    # this guard the probe raised FileNotFoundError inside the tree the kit ships from, which is
+    # a crash rather than a verdict; the mode declaration simply does not exist to compare
+    # against there, and `main` states that skip separately.
+    if not MANIFEST.is_file():
+        print("  SKIP  the dual-shaped probe — this tree declares no invocation modes")
+        return
     invoked = invoked_gates()
     declared, _ = declared_modes()
     dual = [
@@ -205,6 +219,7 @@ def probe_a_dual_SHAPED_file_is_judged_by_its_CALL_SITE() -> None:
         )
 
 def main() -> int:
+# STATED SKIP: registry/gates.json (factory data)
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("probe_") and callable(value)]
     failures: list[str] = []

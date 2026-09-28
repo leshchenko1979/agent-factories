@@ -1552,8 +1552,20 @@ PROBES = (
 )
 
 def main() -> int:
+# STATED SKIP: docs/factory-registry.md + registry/index.json (factory data)
     print("Gate: factory registry")
     print(f"  predicate: {PREDICATE}")
+    # THE REGISTRY IS FACTORY DATA (#199). `docs/factory-registry.md` and `registry/index.json`
+    # are this factory's own records — generated from ITS fleet manifest — and the tree the kit
+    # ships carries neither. Without this arm the gate died with FileNotFoundError in that tree:
+    # a CRASH rather than a verdict, over a subject that is absent by design. The artifact is
+    # named, so a reader can tell "nothing to judge yet" from "clean".
+    if not rr.MD_PATH.is_file() or not rr.INDEX_PATH.is_file():
+        missing = [str(p.relative_to(REPO)) for p in (rr.MD_PATH, rr.INDEX_PATH) if not p.is_file()]
+        print(f"  SKIPPED — no {', '.join(missing)} in this tree, so there is no registry to "
+              f"judge. Both are FACTORY DATA generated from this factory's own fleet manifest; "
+              f"the kit ships the shape, not a member's records.")
+        return 0
     print("")
     for label, function in CHECKS:
         problems = function()
