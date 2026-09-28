@@ -317,6 +317,7 @@
     "tests/test_hq_delegation.py": "pytest",
     "tests/test_hygiene_inflight.py": "pytest",
     "tests/test_hygiene_namespace.py": "pytest",
+    "tests/test_insights_author.py": "pytest",
     "tests/test_insights_gate_recorded.py": "pytest",
     "tests/test_instrument_census.py": "script",
     "tests/test_kit_census.py": "script",
