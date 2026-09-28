@@ -1492,10 +1492,11 @@ def _duty_tree(*, invariants=None, declaration=None) -> Path:
 _DUTY_TREE = _duty_tree()
 
 
-def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None) -> dict:
+def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None,
+              read_at=None) -> dict:
     return RUNNER.duty_receipt_leg(
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
-        read_at=_DUTY_READ_AT,
+        read_at=read_at if read_at is not None else _DUTY_READ_AT,
         store=store if store is not None else Path(tempfile.mkdtemp()),
         repo=repo if repo is not None else _DUTY_TREE,
     )
@@ -1752,6 +1753,46 @@ def test_the_duty_leg_is_WIRED_into_the_runner_and_prints_its_population() -> No
         assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
     assert rc == 1, "the leg's verdict must fail the run"
 
+
+def test_a_round_YOUNGER_than_the_residual_is_NOT_JUDGED_with_its_AGE_printed() -> None:
+    """#200's whole defect: a round IN FLIGHT read as a missing duty.
+
+    The filed specimen judged three live lanes MISSING at age 1136 s. A round younger than
+    the declared residual has a trigger that fired and a lane that has not finished, which
+    this leg cannot tell from a duty never done -- so it must not judge it. The age AND the
+    window are both asserted: a bare skip would trade a false RED for a false clean (#160).
+    """
+    young_read = _plus(_DUTY_FIRE, 0.3)          # 18 min after the fire, well inside 30 min
+    leg = _duty_leg([_duty_row()], [], read_at=young_read)
+    assert leg["problems"] == [], (
+        f"a round still inside its residual must not be judged MISSING: {leg['problems']}")
+    assert leg["coverage"]["rounds_excused_by_residual"] == 1, leg["coverage"]
+    line = [e for e in leg["excused"] if "IN FLIGHT" in e]
+    assert len(line) == 1, leg["excused"]
+    assert "18.0 min old" in line[0], line[0]      # the AGE
+    assert "30.0 min" in line[0], line[0]          # the WINDOW, beside it
+    assert "factory-registry-attest" in line[0], "the round is NAMED, never a bare count"
+
+def test_the_residual_is_PRINTED_in_the_coverage_beside_its_sibling() -> None:
+    """Criterion 3: the window travels in the coverage, so an ACCEPTED window is never a
+    hidden one -- the same discipline PUBLISH_RESIDUAL_SECS follows for the pusher."""
+    leg = _duty_leg([_duty_row()], [_receipt_row()])
+    assert leg["coverage"]["residual_secs"] == RUNNER.DUTY_RESIDUAL_SECS, leg["coverage"]
+    rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"])
+    assert "forward residual:" in out, out[-3000:]
+    assert f"{RUNNER.DUTY_RESIDUAL_SECS} s" in out, out[-3000:]
+
+def test_the_residual_does_NOT_excuse_a_round_OLDER_than_it() -> None:
+    """The counter-control, and the half that keeps the fix honest: a window that excused
+    everything would make the leg permanently clean, which is the pre-fix defect inverted.
+
+    The same round with the same absence, read PAST the residual, must still read MISSING.
+    """
+    old_read = _plus(_DUTY_FIRE, 5.0)               # 5 h after the fire, far past 30 min
+    leg = _duty_leg([_duty_row()], [], read_at=old_read)
+    assert leg["coverage"]["rounds_excused_by_residual"] == 0, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
 
 # ------------------------------------------------------------------- kit-drift leg
 
@@ -2320,7 +2361,8 @@ def test_the_leg_prints_the_bound_beside_the_population_it_judged() -> None:
     rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"])
     assert rc == 1, (rc, out[-2000:], err[-2000:])  # the fixture round carries no receipt
     assert "LEG duty-receipt" in out, out
-    assert "forward bound `duty_receipt_declared`" in out, out[-3000:]
+    assert "backward bound `duty_receipt_declared`" in out, out[-3000:]
+    assert "forward residual:" in out, out[-3000:]
     assert (_DUTY_BOUND in out) or ("UNDECLARED" in out), (
         "the run must print either the instant it bounded against or say plainly that "
         f"no bound is declared: {out[-3000:]}")
