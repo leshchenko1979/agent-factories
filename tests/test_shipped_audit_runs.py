@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import ast
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path

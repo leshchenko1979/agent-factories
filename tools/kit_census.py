@@ -356,8 +356,8 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
     out.append("")
     out.append("## 1. The reference, stated first")
     out.append("")
-    out.append(f"Every figure below compares a member's tree against **OUR** "
-               f"`registry/kit.json`")
+    out.append("Every figure below compares a member's tree against **OUR** "
+               "`registry/kit.json`")
     out.append(f"(`kit_version` `{cov.get('kit_version')}`, {cov.get('manifest_files')} "
                f"paths). That is a")
     out.append("fact about our shipped bytes as much as about their tree, and it moves when")
@@ -531,7 +531,7 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
                 if wave.get("note"):
                     out.append(f"  - {wave['note']}")
                 if wave.get("filed"):
-                    out.append(f"  - filed on its own tracker: "
+                    out.append("  - filed on its own tracker: "
                                + ", ".join(f"`{f}`" for f in wave["filed"]))
             out.append("")
     out.append("## 7. Bounds — what this census does not say")

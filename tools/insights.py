@@ -138,7 +138,7 @@ def main() -> int:
     p_append.add_argument("--ru", default="", help="Russian summary for Miidas/Ru-speaking audience")
 
     sub.add_parser("list", help="List all insights")
-    p_verify = sub.add_parser("verify", help="Verify integrity of insights ledger")
+    sub.add_parser("verify", help="Verify integrity of insights ledger")
 
     p_fmt = sub.add_parser("format", help="Format insight for publishing")
     p_fmt.add_argument("id", help="Insight slug")

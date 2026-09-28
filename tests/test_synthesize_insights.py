@@ -36,7 +36,6 @@ Exit: 0 the classifier matches words and the guard reads the file; non-zero othe
 import json
 import shutil
 import tempfile
-import pytest
 from pathlib import Path
 import sys
 

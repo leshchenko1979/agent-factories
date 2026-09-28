@@ -183,7 +183,7 @@ def classify_rework_entries() -> list[dict]:
             # instead of skipping the one row.
             if len(cols) < 7:
                 continue
-            defect, cause, fix, prevented_by = cols[2], cols[3], cols[4], cols[5]
+            defect, cause, prevented_by = cols[2], cols[3], cols[5]
             text = f"{defect} {cause} {prevented_by}".lower()
             category, fired = classify_defect(text)
             classified.append({

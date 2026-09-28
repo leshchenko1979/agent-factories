@@ -297,7 +297,7 @@ def render(result: dict, read_at: str, names: list[str]) -> str:
     out.append("  ONE purpose. That limit was measured rather than assumed: over **656** `.py`")
     out.append("  files in five trees, **0** carry a docstring placed after another statement,")
     out.append("  so the misplaced case is theoretical and the convention holds fleet-wide.")
-    out.append(f"- **Reworded purposes are NOT conflicts** (token overlap at or above")
+    out.append("- **Reworded purposes are NOT conflicts** (token overlap at or above")
     out.append(f"  {REWORD_CEILING}). The threshold is a judgement and is printed per name so it")
     out.append("  can be argued with: a false conflict costs a look, a missed one costs the")
     out.append("  defect this census exists for.")

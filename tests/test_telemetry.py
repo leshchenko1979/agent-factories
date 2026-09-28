@@ -15,7 +15,6 @@ sys.path.insert(0, str(REPO_ROOT))
 from tools.telemetry import (
     extract_task_telemetry,
     extract_window_telemetry,
-    find_database_path,
     format_detail_string,
     parse_timestamp_to_epoch,
 )
