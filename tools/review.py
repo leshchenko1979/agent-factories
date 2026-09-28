@@ -1196,6 +1196,57 @@ def cmd_status(cycle_id: str) -> int:
     return 0 if pending == 0 else 1
 
 
+# --- codification plan enforcement -------------------------------------------------
+# The schema declares this contract at "codification_plan": an accepted finding with
+# no landed home "is a cycle-completion FAILURE, never a scheduling choice".  A
+# declaration nothing reads is the defect this block exists to close — the same class
+# as a claim in a docstring, which is why the enforcement sits in both verify and
+# close rather than in prose.
+CODIFICATION_DISPOSITIONS = ["landed", "routed", "rejected"]
+CODIFICATION_OBLIGATIONS = {
+    # the file+section the finding landed in
+    "landed": "home",
+    # where it was routed TO: a route with no destination is indistinguishable
+    # from a drop, so a routed finding owes the same carrier as a landed one
+    "routed": "home",
+    # the recorded non-fix, which stays legal (F5's narrower reading) but only
+    # with its reason on the surface
+    "rejected": "reason",
+}
+
+
+def codification_gaps(plan: Any) -> list[str]:
+    """Name every plan entry that owes a carrier and does not carry one.
+
+    An EMPTY plan is not a gap: a cycle that accepted no findings owes no landing.
+    The gap is an accepted finding whose disposition names no home and no reason,
+    which is a finding that goes nowhere while the cycle reads COMPLETED.
+    """
+    if not plan:
+        return []
+    if not isinstance(plan, list):
+        return [f"codification_plan is {type(plan).__name__}, not a list"]
+    gaps: list[str] = []
+    for i, entry in enumerate(plan, 1):
+        if not isinstance(entry, dict):
+            gaps.append(f"#{i}: not an object ({type(entry).__name__})")
+            continue
+        finding = (entry.get("finding") or "").strip() if isinstance(entry.get("finding"), str) else f"#{i}"
+        finding = finding or f"#{i}"
+        disp = entry.get("disposition")
+        disp = disp.strip() if isinstance(disp, str) else ""
+        if disp not in CODIFICATION_DISPOSITIONS:
+            gaps.append(
+                f"{finding}: disposition {disp!r} is not one of {CODIFICATION_DISPOSITIONS}"
+            )
+            continue
+        owed = CODIFICATION_OBLIGATIONS[disp]
+        val = entry.get(owed)
+        if not (isinstance(val, str) and val.strip()):
+            gaps.append(f"{finding}: disposition {disp!r} owes a {owed} and carries none")
+    return gaps
+
+
 def cmd_verify(cycle_id: str) -> int:
     state = read_state(cycle_id)
     if not state:
@@ -1240,7 +1291,9 @@ def cmd_verify(cycle_id: str) -> int:
         if info.get("receipt") != "verified":
             unverified.append(lens)
 
-    if missing or corrupted or unverified:
+    unlanded = codification_gaps(state.get("codification_plan"))
+
+    if missing or corrupted or unverified or unlanded:
         print(f"FAIL: Cycle '{cycle_id}' census check failed.")
         if missing:
             print(f"  Missing or incomplete lenses: {', '.join(missing)}")
@@ -1248,9 +1301,15 @@ def cmd_verify(cycle_id: str) -> int:
             print(f"  Checksum corrupted lenses: {', '.join(corrupted)}")
         if unverified:
             print(f"  UNRECEIPTED lenses (no index line): {', '.join(unverified)}")
+        if unlanded:
+            print(f"  UNLANDED codification entries (accepted finding, no carrier): {', '.join(unlanded)}")
         return 1
 
-    print(f"PASS: Cycle '{cycle_id}' census verified clean across all {len(CATALOG_LENSES)} lenses.")
+    plan = state.get("codification_plan") or []
+    print(
+        f"PASS: Cycle '{cycle_id}' census verified clean across all {len(CATALOG_LENSES)} lenses "
+        f"(codification plan: {len(plan)} accepted finding(s), all accounted for)."
+    )
     return 0
 
 
@@ -1381,6 +1440,22 @@ def cmd_close(cycle_id: str, status: str, stamp: bool,
     if state.get("status") != "IN_PROGRESS":
         print(f"Error: Cycle '{cycle_id}' is already {state.get('status')}.", file=sys.stderr)
         return 2
+
+    # A COMPLETED close is refused over an unlanded accepted finding — that is the
+    # schema's own words.  ABANDONED is NOT refused: a cycle that cannot complete must
+    # still be closable, or the enforcement traps it in IN_PROGRESS forever, which is
+    # worse than the silent pass it prevents.
+    if status == "COMPLETED":
+        gaps = codification_gaps(state.get("codification_plan"))
+        if gaps:
+            print(
+                f"Error: Cycle '{cycle_id}' cannot close COMPLETED — "
+                f"{len(gaps)} accepted finding(s) with no carrier:",
+                file=sys.stderr,
+            )
+            for g in gaps:
+                print(f"  - {g}", file=sys.stderr)
+            return 1
 
     started = _parse_ts(state.get("started_at"))
     state["status"] = status

@@ -61,6 +61,41 @@ in it is a silent pass**:
   terminal lifecycle FREEZES the cycle and snapshots its declared channels; a later live read is
   REFUSED unless the reader says `--live` and the read says so on stderr (§6).
 
+**Three obligations on the review itself, stated here because none is implied by the others and
+none of the three was stated in this file before this promotion.** The first two are properties of
+the cycle; the third is what happens to the cycle's own record when either is skipped.
+
+1. **The lenses run as ISOLATED SUB-AGENTS.** The requirement is the lens catalogue's own — the
+   Adversarial Isolation Requirement in `docs/review-lenses.md`, restored as a close condition by
+   `template-instruments.md` §5.1.3 — cited rather than restated, because the reason (an authoring
+   lane's self-confirmation bias) is what makes it a requirement instead of a preference. The
+   consequence for THIS instrument is a boundary a lane can check: **the lane that authored the
+   work under review may not be the lane that supplies that cycle's lens reports.** Its own
+   authors are the one set of readers guaranteed to lack the isolation, so a cycle whose lenses
+   were written in-context reads clean for the same reason a self-assessment does. `brief <LENS>`
+   is what makes the isolation executable rather than advisory — it emits the adversarial brief a
+   spawned sub-agent is handed, one lens per sub-agent, so the isolation is a command and not a
+   convention a busy lane can skip.
+2. **The cycle VALIDATES every finding, and holds itself open until each accepted finding has a
+   carrier.** `verify` fails, and `close --status COMPLETED` is REFUSED, while any accepted finding
+   carries none; the contract is the schema's own sentence at `codification_plan` ("an accepted
+   finding with no landed home is a cycle-completion FAILURE, never a scheduling choice"), which
+   shipped with the engine and which **nothing read until this promotion** — the defeated-guard
+   class, and the reason the clause is now a mechanism rather than a paragraph. `landed` owes a
+   home, `routed` owes a destination, `rejected` owes a reason. What the cycle does **not** do is
+   apply the fix: the fix lands in the tree and the cycle records where. An accepted finding whose
+   declared `home` does not resolve is therefore **not** caught here, which is stated as a scope
+   limit rather than left to be discovered — the enforcement is over the DECLARATION, and a
+   declaration is not a receipt.
+3. **An unfixed finding is a defect of THIS instrument, not a footnote on the cycle.** Two different
+   things travel under "unfixed" and the law must not conflate them. An accepted finding **with** a
+   disposition and its carrier is a lawful outcome, and the recorded non-fix (`rejected` + a
+   reason) is the **only** lawful way a finding goes unlanded. An accepted finding with **no**
+   carrier is the defect: it is precisely the silent pass the lifecycle exists to forbid — a review
+   that found something, did nothing with it, and closed green. The instrument's job here is to make
+   that state unrepresentable on disk, and it is the *instrument's* defect rather than the cycle's
+   because a cycle is a record while the instrument is the thing supposed to stop the record lying.
+
 ## 2. The declared file set
 
 **Predicate:** the shipped paths the manifest classifies `standalone` that carry this instrument.
@@ -70,7 +105,7 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (§5).
 | # | path (root half ↔ TEMPLATE half) | class | what it is |
 |---|---|---|---|
 | 1 | `tools/review.py` ↔ `TEMPLATE/tools/review.py` | `standalone` | **the executable** — every leg of the lifecycle |
-| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **21 collected** (`pytest --collect-only`) at the instant named in §5's last row |
+| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **25 collected** (`pytest --collect-only`) at the instant named in §5's last row |
 | 3 | `docs/review-cycle.schema.json` ↔ `TEMPLATE/docs/review-cycle.schema.json` | `standalone` | the state schema, **emitted** by `review.py schema`, never hand-kept |
 | 4 | `docs/review-lenses.md` ↔ `TEMPLATE/docs/review-lenses.md` | `standalone` | the lens catalogue law and the Adversarial Isolation Requirement |
 | 5 | `docs/instruments/review-rotation.md` ↔ `TEMPLATE/docs/instruments/review-rotation.md` | `standalone` | this file |
@@ -123,7 +158,7 @@ Measured this turn, and the two facts are different:
 
 | gate | property it holds over this instrument |
 |---|---|
-| `tests/test_review.py` | the instrument's own behaviour — the 17 named tests of §7 |
+| `tests/test_review.py` | the instrument's own behaviour — the 25 named tests of §7 |
 | `tests/test_docs_sync.py` | the doc pair — every `docs/` ↔ `TEMPLATE/docs/` pair byte-identical |
 | `tests/test_template_sync.py` | all **84** pairs, and the portability scan (0 hex literals resolving) |
 | `tests/test_kit_pin.py` | the manifest pin — a member's verdict depends on **its own** pin, never ours |
@@ -205,8 +240,8 @@ adopt, which is why §4's manifest grain carries the whole weight.
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This
-instrument's probes are named, not implied — all **22** are in `tests/test_review.py`, and each is
-named for the behaviour it pins. The four this promotion added are the ones that make the new
+instrument's probes are named, not implied — all **25** are in `tests/test_review.py`, and each is
+named for the behaviour it pins. The seven this promotion added are the ones that make the new
 mechanisms non-vacuous:
 
 | probe | what it shows |
@@ -215,6 +250,9 @@ mechanisms non-vacuous:
 | `test_frozen_cycle_refuses_a_live_channel_read` | the freeze REFUSES a live read (rc=2) **and** `--live` warns rather than silently proceeding; the close also wrote a snapshot carrying a digest |
 | `test_a_lens_waiver_requires_a_named_reason` | a blank waiver is refused, so the census cannot read complete over an undecided lens |
 | `test_a_missing_closure_cannot_pass_verify` | the status says COMPLETED and the bytes are gone → verify FAILS; a status trusted alone reports a clean census over absent evidence |
+| `test_an_unlanded_accepted_finding_cannot_complete_the_cycle` | an accepted finding with no carrier FAILS verify **and** refuses a `COMPLETED` close; `ABANDONED` stays legal, so the enforcement cannot trap a cycle it is meant to hold |
+| `test_a_landed_finding_and_a_recorded_non_fix_are_lawful` | all three dispositions pass **with** their carrier and fail without it — `routed` owes a destination, `rejected` owes a reason, an unenumerated disposition is a gap |
+| `test_an_empty_plan_is_not_a_gap` | a cycle that accepted no findings owes no landing, so the gate cannot red a clean cycle — a gate that cannot pass is not a gate |
 
 **The remaining eighteen pin the older surface**, and they are listed because a probe set stated as a
 count is not a probe set stated by name: `test_review_lifecycle`, `test_schema_artifact_is_generated`,
@@ -242,7 +280,7 @@ from the tree under test — holds here by construction: `REPO_ROOT` resolves fr
 cycle the probes use is built by the probe itself under a test-local id (`test-cycle-01`,
 `test-migrate-synonym`, `test-lens-key-rename`), and no probe reads a kit or donor tree. The dates and
 tokens those fixtures carry are the donor's **shape**, reproduced as input, never a value read back
-from the donor's state. Measured: the suite returns **22 passed** in a foreign copy materialized with
+from the donor's state. Measured: the suite returns **25 passed** in a foreign copy materialized with
 no `.git` and no history — so the verdict is a reading of the tree it runs in, which is the property
 the clause exists to secure. Clauses 2 and 3 are **N/A**: there is no hand-rolled probe driver and no
 hand-rolled runner — the gate is `pytest`, which honours its readers' declared skip vocabulary
