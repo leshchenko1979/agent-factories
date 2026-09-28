@@ -211,6 +211,13 @@
       "behind_by": 0,
       "measured_at": "2026-09-27T20:24Z",
       "reason": "behind_by counts UNDECLARED lag only, not a declared fork. Measured 2026-09-27T20:24Z against the eleven rows of docs/instruments/pacemaker.md section 2, comparing each path byte-for-byte (sha256) with git show HEAD:TEMPLATE/<path> in leshchenko1979/agent-factories: 9 identical, 2 differ, 0 absent. Both differing paths are declared forks in registry/kit-exemptions.json - tests/test_close_board_recorded.py (own INVARIANT_LANDED anchor plus the #59 exemption surface) and tests/test_board_intake_recorded.py (ADAPTED: the live population is legitimately empty, so the loud-fail-on-zero form is wrong here and the probe proves the predicate instead). The pin gate reads both as declared exempt (5 exempt, every carried path matches the pin). Gate receipts: tools/patrol_host_state.py rc=0, 102 checks; tests/test_cron_thinness.py rc=0."
+    },
+    "ledger": {
+      "state": "partial",
+      "green": false,
+      "behind_by": 8,
+      "measured_at": "2026-09-28T15:21:11Z",
+      "reason": "15/15 present. 2 of 7 gates RED, 1 SKIPs by declaration. test_ledger_commit_cites_no_rows: MARKER '743b543' is the KIT's commit and does not resolve here; its own docstring says a bootstrapped factory re-anchors at birth, but re-anchoring to our first ledger commit cd2a3f8 opens 136 commits of PUSHED history carrying 2 subjects that cite row numbers (5d88cc3, 3cf6c18) - immutable, so the repair space is empty and an exemption surface would be needed. Same gate also FAILs core.hooksPath 'unset' - an owner call, tracked as #61. test_ledger_index: 2 FAILs - not registered in tools/audit.py, and the index path is not gitignored (kit's .gitignore:7 carries .ledger-index.sqlite; ours has no line). test_ledger_identity: rc=0 but SKIPPED - its Worker lane does not resolve here, so it examined nothing. 5 gates GREEN: test_ledger (rc=0 'ledger gate passed'), test_ledger_schema (rc=0, 4 excused, 107 rows), test_ledger_no_shrink (rc=0), test_ledger_close_preflight (7 passed), docs. behind_by 8 = raw byte-identity in sha256 against TEMPLATE HEAD: 7 same, 8 differ, of which 1 (test_ledger_schema) is a DECLARED fork in registry/kit-exemptions.json and 7 are undeclared drift since the 3fa45c2 migration."
     }
   }
 }
