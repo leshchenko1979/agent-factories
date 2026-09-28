@@ -167,7 +167,6 @@ PAIRS = [
     ("tests/ledger_boundary.py", "TEMPLATE/tests/ledger_boundary.py"),
     ("tests/test_close_row_revision.py", "TEMPLATE/tests/test_close_row_revision.py"),
     ("tests/test_score_gate_recorded.py", "TEMPLATE/tests/test_score_gate_recorded.py"),
-    ("tests/test_insights_gate_recorded.py", "TEMPLATE/tests/test_insights_gate_recorded.py"),
     ("tests/test_subject_form.py", "TEMPLATE/tests/test_subject_form.py"),
     ("tests/test_rework_relative_revision.py", "TEMPLATE/tests/test_rework_relative_revision.py"),
     ("tests/test_reconstructed_claim_declared.py", "TEMPLATE/tests/test_reconstructed_claim_declared.py"),

@@ -502,16 +502,6 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_hq_delegation.py",
     "test_hygiene_inflight.py",
     "test_hygiene_namespace.py",
-    # Added with its registration (issue #46). REQUIRED is the correct grain and OPTIONAL
-    # is not, and the deciding fact is the same one that put the score-run pair
-    # (`test_score_gate_recorded.py`) in this tuple: its boundary is FORWARD-ONLY. The rule
-    # governs rows written at or after the instant a factory declares, nothing is ever
-    # backfilled, and a ledger row is immutable — so a factory that ships the gate OPTIONAL
-    # and omits it writes its next synthesis run ungoverned and can never repair that,
-    # because the record it did not take is the one thing that cannot be reconstructed.
-    # It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory
-    # from dropping the runner and keeping the file.
-    "test_insights_gate_recorded.py",
     # Added with plan 2646d31a task 8 (2026-09-25). This is the MEMBER-side half of drift:
     # `test_kit_manifest.py` measures what every member has ported (ours), while this one
     # lets a factory judge ITSELF against the pin IT vendored — so a member's verdict moves
@@ -709,6 +699,19 @@ OPTIONAL_GATES: dict[str, str] = {
         "transition rewrites the label and NOTHING else, and that the two axes stay "
         "orthogonal. Every probe is fixture-driven, because the live register IS the artifact "
         "under measurement."
+    ),
+    "test_insights_gate_recorded.py": (
+        "meta-factory-only (OWNER ORDER 2026-09-28: 'this insights tool should not be a part of "
+        "the kit — it's the meta factory's subject matter only'). It was REQUIRED and shipped "
+        "as the one insights surface in the kit; that is now withdrawn. The register is this "
+        "factory's own subject matter, so a bootstrapped factory has no such artifact to "
+        "govern — the template's own doctrine already says so (`TEMPLATE/docs/addons/domain/"
+        "stories.md` classes `tools/insights.py` and `evidence/insights.jsonl` as 'the factory "
+        "creates it'), and this gate joining the kit contradicted it. Its subject is "
+        "`evidence/insights.jsonl`, which never shipped, so the member inherited a boundary "
+        "parameter it had no artifact to apply. It stays REGISTERED and GREEN here, by the "
+        "same presence-guard idiom every factory-local gate uses, and its reason for the "
+        "move is the owner's — not the 'parameterize first' class the two entries above carry."
     ),
     "test_template_sync.py": (
         "meta-factory-only (n=432 Part 5), self-documented — a copy of a pair-guard would "

@@ -46,16 +46,25 @@ this one's digits (`...-2026-09-250`) is a DIFFERENT date. A round-key variant o
 round (`T06`, `-writeback`, or nothing) is admitted, which is what the prefix is for. The
 pre-convention name stays in scope so the pre-boundary history keeps printing as excused.
 
-The boundary is DECLARED, and this file SHIPS
----------------------------------------------
+The boundary is DECLARED, and this file is factory-local
+--------------------------------------------------------
 The boundary is a DECLARED factory parameter, read from the factory's own
 `docs/ledger-invariants.json` through `tests/ledger_boundary.py` — the ONE reader, shared
 with `test_close_row_revision.py` and `test_score_gate_recorded.py` so the class has ONE
 implementation (#78, ruled `n=515` clause 4). A hardcoded date here would be this factory's
-history baked into a file that ships to every new factory: RED, or vacuously green, on the
-very tree it ships to (P35). A tree that has not declared a boundary SKIPS with a stated
-reason; a declaration it cannot read FAILS, because a declared parameter that cannot be read
-is a defect, not an absence.
+history baked into the file: RED, or vacuously green, on a tree that never declared it
+(P35). A tree that has not declared a boundary SKIPS with a stated reason; a declaration it
+cannot read FAILS, because a declared parameter that cannot be read is a defect, not an
+absence.
+
+This file does NOT ship (owner order 2026-09-28: the insights tool is the meta-factory's
+subject matter only). It was byte-paired into `TEMPLATE/tests/` and REQUIRED; both are
+withdrawn, because a bootstrapped factory has no insights register to govern and would have
+inherited a boundary parameter with no artifact to apply. Its subject
+`evidence/insights.jsonl` never shipped either — the template's own doctrine classes the
+tool and the store as "the factory creates it"
+(`TEMPLATE/docs/addons/domain/stories.md`). It remains registered in this factory's audit
+behind the presence guard, exactly as a member's own gates are.
 
 Three outcomes, and the difference between them is the point:
 

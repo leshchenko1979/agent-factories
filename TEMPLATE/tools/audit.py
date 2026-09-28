@@ -1741,13 +1741,21 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     undeclared.
     #
     #     The boundary is a DECLARED FACTORY PARAMETER read from
-    #     `docs/ledger-invariants.json`, never a date hardcoded here: this gate file is
-    #     paired byte-identically into `TEMPLATE/tests/`, and a baked-in date would RED in
-    #     the tree it ships to, or pass it vacuously (#76's class, P35). It is FORWARD-ONLY:
-    #     rows written before the boundary -- including the run row that motivated it --
-    #     print as `excused:` on every run and are never backfilled, because a verdict
-    #     written today for a run that predates the rule would be a falsified record rather
-    #     than a repair.
+    #     `docs/ledger-invariants.json`, never a date hardcoded here, so no factory's
+    #     history is baked into the file (#76's class, P35). It is FORWARD-ONLY: rows
+    #     written before the boundary -- including the run row that motivated it -- print
+    #     as `excused:` on every run and are never backfilled, because a verdict written
+    #     today for a run that predates the rule would be a falsified record rather than a
+    #     repair.
+    #
+    #     FACTORY-LOCAL, and no longer a kit member (owner order 2026-09-28: "this insights
+    #     tool should not be a part of the kit -- it's the meta factory's subject matter
+    #     only"). It was byte-paired into TEMPLATE/tests/ and REQUIRED; both are withdrawn.
+    #     A bootstrapped factory has no insights register to govern, so it inherited a
+    #     boundary parameter with no artifact to apply -- which the template's own doctrine
+    #     already stated (`TEMPLATE/docs/addons/domain/stories.md` classes the insights tool
+    #     and store as "the factory creates it"). The gate stays registered HERE, behind the
+    #     same presence guard every factory-local gate uses: absent file, no gate, clean run.
     if (repo_root / "tests/test_insights_gate_recorded.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_gate_recorded.py"])
 

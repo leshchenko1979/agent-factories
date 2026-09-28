@@ -15,7 +15,7 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 | **name** | Insights register |
 | **executable(s)** | `tools/insights.py` — verbs `append` · `list` · `verify` · `format` · `classify` · `status`. One writer, six verbs (§6) |
 | **closure** | **none** — the CLI imports only the standard library, and its one repo-relative constant is the store it writes. There is no asset that must sit beside the binary (contrast `open-questions.md` §1, whose render asset is a closure member) |
-| **gate set** | the instrument's own suite, root-local: `tests/test_insights_author.py` · `tests/test_insights_class.py` · `tests/test_insights_status.py`. Plus the shipped ledger-invariant gate `tests/test_insights_gate_recorded.py`, which judges this artifact's closing verdict and belongs to a shared family, not to this tool (§2) |
+| **gate set** | the instrument's own suite, all root-local: `tests/test_insights_author.py` · `tests/test_insights_class.py` · `tests/test_insights_status.py`, plus the ledger-invariant gate `tests/test_insights_gate_recorded.py` — it judges this artifact's closing verdict and belongs to a shared family (`test_close_row_revision.py`, `test_score_gate_recorded.py`), and it is factory-local since 2026-09-28 (§2) |
 | **version source** | **none** — the instrument is not a kit member, so it carries no manifest hash and owes no version (§2) |
 | **data surfaces** | `evidence/insights.jsonl` — factory-owned, in-repo, append-only (§3). No external store, so no member owes a migration |
 
@@ -23,27 +23,28 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 
 ## 2. The declared file set
 
-**Predicate:** the shipped paths the kit manifest classifies `standalone` that carry this instrument. **Scope:** `registry/kit.json`, whose population is the `TEMPLATE/` half; the member adopts the root half.
+**Predicate:** the shipped paths the kit manifest classifies that carry this instrument. **Scope:** `registry/kit.json`, whose population is the `TEMPLATE/` half; a member adopts the root half.
 
-Exactly **one** path in this instrument ships:
+**No path in this instrument ships — the declared set is empty.**
 
-| # | path (root half ↔ TEMPLATE half) | class | what it is |
-|---|---|---|---|
-| 1 | `tests/test_insights_gate_recorded.py` ↔ `TEMPLATE/tests/test_insights_gate_recorded.py` | `standalone` | the **ledger-invariant gate** — the closing workspace-gate verdict for this artifact, sibling to `test_close_row_revision.py` and `test_score_gate_recorded.py`, sharing ONE boundary reader (`tests/ledger_boundary.py`). It ships because it is parameterised by the factory's own `docs/ledger-invariants.json`; a factory whose pacemaker is named differently finds no governed row and SKIPS with its reason |
+This is the owner's order of 2026-09-28: *"this insights tool should not be a part of the kit — it's the meta factory's subject matter only."* It was one path until then, and this section is where that decision lives.
 
-It ships alone, and that asymmetry is deliberate rather than an omission: the *rule* it enforces (an artifact's run records its closing verdict) is cross-factory, while the tool and the store it judges are this factory's own.
+The class is **home-factory-only** (frame §6.3), and the reason is not an omission: a new factory bootstraps from `TEMPLATE/`, and a new factory has no insights register to govern. The template's own doctrine already said so — `TEMPLATE/docs/addons/domain/stories.md` classes `tools/insights.py` and `evidence/insights.jsonl` as **"the factory creates it"**, because *"a ledger of discoveries a factory never made is a file of another factory's history"*. The shipped ledger-invariant gate contradicted that doctrine: it governed `evidence/insights.jsonl`, which never shipped, so a member inherited a boundary parameter with no artifact to apply.
 
-Everything else in the instrument is **factory-local** and is NOT in the kit. Listed here for completeness, in a shape this file's census reader does not parse — **no member adopts these, so they are not a declared set**:
+Everything in the instrument is therefore **factory-local** and in no kit manifest:
 
 | path | kind | what it is |
 |---|---|---|
 | `tools/insights.py` | tool | the writer (§6) |
 | `tools/synthesize_insights.py` | tool | the weekly **proposer** — it prints JSON and has no write path to the store (§7) |
 | `tests/test_insights_author.py` · `tests/test_insights_class.py` · `tests/test_insights_status.py` | gates | the three axes' gates |
+| `tests/test_insights_gate_recorded.py` | gate | the ledger-invariant gate — the closing workspace-gate verdict for this artifact, sibling to `test_close_row_revision.py` and `test_score_gate_recorded.py`, sharing ONE boundary reader (`tests/ledger_boundary.py`). Factory-local by the order above; registered in this factory's audit behind a presence guard |
 | `tests/test_synthesize_insights.py` | gate | the proposer's gate |
 | `evidence/insights.jsonl` | data | the store |
 
-**Consequence, stated so a reader does not derive it wrongly:** this instrument is **home-factory-only**. It has no `TEMPLATE/docs/instruments/insights.md` twin and needs none — `TEMPLATE/` is what a new factory bootstraps from, and a new factory has no insights register to govern. A future decision to ship it changes this section first.
+**The census is NOT APPLICABLE to this instrument, and that is a declared state rather than a malformed table.** `tools/instrument_census.py` measures member *adoption* of a declared set, and an empty set has no adoption to measure: the parser returns no rows and the census REFUSES by design (`test_instrument_census.py` arm 6 — a zero parsed declared set is a refusal, never a clean census). So no census is published for this instrument, and `instrument_census.py insights` is expected to refuse rather than print `0/0`. The reload link (frame §6.3) is unaffected and still carries this doc across a compaction.
+
+**Consequence, stated so a reader does not derive it wrongly:** a future decision to ship any part of this instrument changes this section FIRST — and moves the path concerned into `registry/kit.json`, a `TEMPLATE/` half, a `PAIRS` entry and `REQUIRED_GATES`/`OPTIONAL_GATES` together, since a half-shipped instrument is the state this section now rules out.
 
 ---
 
