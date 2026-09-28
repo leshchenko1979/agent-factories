@@ -56,7 +56,7 @@ the rework family: a *landed change* is a closed work unit, and a change
 *needing immediate intervention* is one whose close produced a rework entry.
 
 **Its numerator is the `Subject` column, and it is reported with its linkage
-coverage** — re-measured 2026-09-28T20:05Z with `tools/audit.py`, **134 of 153** entries carry (was **132 of 151** at the 2026-09-28T20:05Z read; **131 of 150** at the 2026-09-28T19:45Z read; **130 of 149** at the 2026-09-28T18:41Z read; **129 of 148** at the 2026-09-28T11:54Z read; **127 of 146** at the 2026-09-28T15:55Z read; **125 of 144** at the 2026-09-27T20:31Z read; **124 of 143** at the 2026-09-28T02:5xZ read; **122 of 141** at the 2026-09-28T00:04Z read; **121 of 140** at the 2026-09-27T20:31Z read; **120 of 139** at the 16:31Z read)
+coverage** — re-measured 2026-09-28T22:27Z with `tools/audit.py`, **135 of 154** entries carry (was **134 of 153** at the 2026-09-28T21:4xZ read; **132 of 151** at the 2026-09-28T20:05Z read; **131 of 150** at the 2026-09-28T19:45Z read; **130 of 149** at the 2026-09-28T18:41Z read; **129 of 148** at the 2026-09-28T11:54Z read; **127 of 146** at the 2026-09-28T15:55Z read; **125 of 144** at the 2026-09-27T20:31Z read; **124 of 143** at the 2026-09-28T02:5xZ read; **122 of 141** at the 2026-09-28T00:04Z read; **121 of 140** at the 2026-09-27T20:31Z read; **120 of 139** at the 16:31Z read)
 a determinate Subject. **Two predicates travel under this one figure and they are
 not the same predicate.** The *coverage* counts determinate cells — a `#N` or
 `none` — and is **invariant** to the ledger's closed-subject set: it reads **116 of 135**
