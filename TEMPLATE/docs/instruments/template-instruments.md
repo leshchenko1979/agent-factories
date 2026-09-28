@@ -253,7 +253,7 @@ mechanism that reads it — never against a hand-written example of the URL.
    files are byte-identical between `TEMPLATE/` and the donor, so nothing needs porting and scoping
    a port would be work with nothing to do.
 
-### 5.1 The six promotion criteria
+### 5.1 The seven promotion criteria
 
 Each rests on evidence already in hand:
 
@@ -277,6 +277,16 @@ Each rests on evidence already in hand:
    artifact reports each term's senses and every collision it found. This is a criterion and not
    advice: the first vocabulary review, run over the kit's own classes, found **two false claims in
    `ONTOLOGY.md` itself**.
+7. **Enumeration** — a numeric claim in the instrument's law is one of three kinds and no other: a
+   **parameter the law sets** (nothing external moves it), a **contract a gate reads** (drift is
+   loud, because something compares it), or a **dated reading** carrying its predicate and scope. A
+   count that nothing reads and nothing dates is a claim of **currency**, and currency is the one
+   thing a number cannot carry — it goes stale silently, in the direction that looks current.
+   Prefer the **property** over the count wherever both can be stated: "every probe is named" cannot
+   go stale, "22 probes" can. Measured cost of getting this wrong, in this file: §1.5's refusing-set
+   count moved 3 → 1 → 0 inside one evening and needed correcting twice, and §7.6's 12-vs-11
+   specimen was invalidated the same day by the ruling it prompted. Lens A check 5 (Enumeration
+   Consistency) is the review instrument; this is the promotion criterion it serves.
 
 **Criterion 3 is gateable and the shape already exists** (`close_row_revision` is a declared
 invariant with a boundary instant, read through `tests/ledger_boundary.py`); the gate lands with the
@@ -669,18 +679,22 @@ Three behaviours were measured among the paired tests' template-side copies, and
 | **green over a DIFFERENT population** — the sharpest | `test_single_writer.py` | 0 |
 
 The third is the one a reader cannot catch. Both halves read *"single-writer state clean"* and exit 0,
-while the root side audits **12** declared surfaces (parsed from `skills/meta-factory/SKILL.md`) and the
+while the root side audits **14** declared surfaces (parsed from `skills/meta-factory/SKILL.md`) and the
 TEMPLATE side audits **11** (parsed from `TEMPLATE/SKILL.md.tmpl`). Identical code, a **different
 standard**, both green — so the two verdicts are not one check run twice, and neither says so.
 
-**And the difference is not one row.** Nine surfaces are shared; **three** are declared only by the
-meta-factory (`evidence/*.md`, `evidence/subprocesses/*.jsonl`, the questions register) and **two**
-only by the template (the `registry/` surfaces: `registry/fleet.json`, `registry/index.json`,
-`docs/factory-registry.md`). Three of the remaining differences are pure naming — the same surface
+**And the difference is not one row.** **Eleven** surfaces are shared; **three** are declared only by
+the meta-factory (`evidence/*.md`, `evidence/subprocesses/*.jsonl`, the questions register) and
+**none** only by the template. The `registry/` surfaces (`registry/fleet.json`,
+`registry/index.json`, `docs/factory-registry.md`) were **template-only** until the ruling this
+specimen prompted declared them here (`b51e4f0`, 2026-09-27) — which is what moved the root half
+from 12 audited surfaces to 14 and closed the asymmetry. Three of the remaining differences are pure naming — the same surface
 rendered with a literal repo slug versus `{{REPO}}`, `skills/meta-factory/SKILL.md` versus *"this
 law"*, `docs/processes.md` versus `processes.md` — which is why a raw `comm` over the two tables
-over-reports the gap. The substantive shape is that **each half audits state the other half's law does
-not cover**, and a green from either is silent about that.
+over-reports the gap. The substantive shape is **one-directional**: the root half audits **three**
+surfaces the template's law does not cover, and the template half audits **nothing** the root does
+not — so a green from the template half is silent about those three, and it is the weaker reading of
+the pair.
 
 **The rule:** for a shipped pair, exactly one half is the fleet gate — the half whose `REPO` resolves
 to the repository root — and it is the only half whose verdict may be quoted. A green from the other
