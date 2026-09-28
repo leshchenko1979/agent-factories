@@ -39,7 +39,7 @@ event -- which is how a member factory carries an object the core vocabulary doe
 not have, without forking this file. A refusal exits 2.
 
 Exit: 0 ok, 1 problem (bad usage, corrupted ledger, unknown event type, or a
-close whose transition sequence is incomplete).
+`close` — or a `claim` — whose transition sequence is incomplete).
 
 Row shape (one JSON object per line, append-only):
   {"n":1,"ts":"...","event":"claim","actor":"triage","subject":"#6","detail":"..."}
@@ -48,8 +48,17 @@ The transition sequence
 -----------------------
 A subject's rows are a sequence, not a row count: `intake` (filed), then
 `claim` (taken), then `close` (finished). A close with no intake is work that
-was never filed; a close with no claim is work nobody took. `verify` reads the
-sequence and names the subject and the missing leg.
+was never filed; a close with no claim is work nobody took. And a `claim` whose
+subject has no intake ANYWHERE is work taken on a subject the ledger never
+admitted — a leg that used to be invisible until the close failed, so the defect
+was discovered hours after it was made, by whoever tried to close. It is now
+reported at the claim and refused at the write path.
+
+`verify` reads the sequence and names the subject and the missing leg; `append`
+asks the SAME predicate about the row it is about to write, so a defect is named
+at the moment it would be created. The claim leg looks for an intake anywhere in
+the subject's history, because a late-reconstruction intake lands AFTER the
+original claim by design; the close leg stays positional.
 
 The unit you are copying
 ------------------------
@@ -534,16 +543,38 @@ def index_by_subject(rows: list[dict]) -> dict[str, list[tuple[int, str]]]:
     return by_subject
 
 def sequence_problems(
-    by_subject: dict[str, list[tuple[int, str]]], subject: str, index: int
+    by_subject: dict[str, list[tuple[int, str]]], subject: str, index: int,
+    event: str = "close",
 ) -> list[tuple[str, str, str]]:
-    """What a `close` of `subject` at `index` is missing, as (subject, leg, message).
+    """What a `close` — or a `claim` — of `subject` at `index` is missing.
 
-    ONE predicate, TWO call sites. `verify` asks it about every close row it
-    reads; `append` asks it about the row it is about to write, with
-    `index = len(rows)` — the line that row will occupy — so the refusal names
-    the leg the audit would have named later, at the moment the write would have
-    created the defect. The order leg is bounded by the *latest* intake before
-    the close, so a re-opened subject must be re-claimed after its re-open.
+    ONE predicate, and TWO events x TWO call sites. `verify` asks it about every
+    close row it reads AND every claim row; `append` asks it about the row it is
+    about to write, with `index = len(rows)` — the line that row will occupy — so
+    the refusal names the leg the audit would have named later, at the moment the
+    write would have created the defect. The close leg is bounded by the *latest*
+    intake before the close, so a re-opened subject must be re-claimed after its
+    re-open.
+
+    WHY A CLAIM IS CHECKED AT ALL (#137 half 2, the reporter's diff). `close` was
+    the only event the sequence predicate ever looked at, so a `claim` whose
+    subject had no `intake` ANYWHERE was invisible: `verify` read GREEN while the
+    ledger was already defective, and the defect surfaced hours later when someone
+    tried to close. Measured by the reporting factory at their ledger 257 rows:
+    `verify` returned 0 problems while this leg named a claim with no intake,
+    about nine minutes before the close that turned the gate red. A claim is work
+    being taken, and work cannot be taken on a subject the ledger never admitted.
+
+    WHY THE CLAIM LEG IS "anywhere" AND NOT "before it". A late-reconstruction
+    intake lands AFTER the original claim by design, so a positional claim
+    predicate would re-flag the very repair it exists to prompt. The CLOSE leg
+    keeps its positional form, because a close could not have been lawful on the
+    row it occupies unless its subject was admitted by then.
+
+    WHY NOT A `dispatch` LEG (measured, not assumed). Three legacy subjects carry
+    a dispatch and no intake and none has a claim or a close, so a dispatch-keyed
+    leg fires false positives on rows that are not defective. The dispatch leg is
+    a SEPARATE predicate with its own three classifications; see below.
 
     Each missing leg is reported INDEPENDENTLY, with no short-circuit: one pass
     should tell the reader everything that is absent, not the first thing the
@@ -553,14 +584,28 @@ def sequence_problems(
         return []  # a missing subject is a structural problem, reported as one
 
     legs = by_subject.get(subject, [])
-    intakes = [j for j, ev in legs if ev == "intake" and j < index]
+    # A CLAIM's intake is looked for ANYWHERE, never only before it: the intake it
+    # needs may be a late reconstruction that landed after it by design (#137 half
+    # 2). A CLOSE's legs stay positional — a close could not have been lawful on
+    # the row it occupies unless its subject was already admitted by then.
+    # `j` is a GLOBAL ledger index, never a position within `legs`: bounding it by
+    # `len(legs)` compares an index against a length and silently misses every
+    # intake on the ledger's early rows (the reporting factory measured 39 false
+    # positives at 270 rows from exactly that).
+    if event == "close":
+        intakes = [j for j, ev in legs if ev == "intake" and j < index]
+    else:
+        intakes = [j for j, ev in legs if ev == "intake"]
     claims = [j for j, ev in legs if ev == "claim" and j < index]
 
     problems: list[tuple[str, str, str]] = []
     if not intakes:
+        tail = " before it" if event == "close" else " anywhere in the ledger"
         problems.append((subject, "intake",
-            f"line {index + 1}: close for {subject} has no intake before it"))
-    if not claims:
+            f"line {index + 1}: {event} for {subject} has no intake{tail}"))
+    # The claim leg is a CLOSE leg only: a `claim` row IS its own claim, so asking
+    # a claim for a claim would report every claim in the ledger against itself.
+    if event == "close" and not claims:
         problems.append((subject, "claim",
             f"line {index + 1}: close for {subject} has no claim before it"))
     # THE ORDER LEG IS RETIRED (2026-09-25, plan 2646d31a step 5). It read `claim
@@ -777,8 +822,17 @@ def cmd_append(args: argparse.Namespace) -> int:
         # can never predate the gate. EXEMPTIONS governs `verify`'s reading of
         # history only, and stays printed there. This does not replace `verify`
         # — the order leg and any row written around this path remain its.
-        if args.event == "close" and target_ledger == LEDGER:
-            problems = sequence_problems(index_by_subject(rows), args.subject, len(rows))
+        # A `close` AND a `claim` are both refused at the WRITE PATH when the row
+        # about to be written would create an incomplete sequence — the SAME
+        # predicate `verify` runs, asked here with `index = len(rows)`, the line it
+        # will occupy. A claim whose subject was never admitted anywhere in the
+        # ledger is invisible to a close-keyed reading until the close fails
+        # (#137 half 2), so the leg is asked of the claim itself. The predicate
+        # phrases the message for the event that triggered it — `claim` stays
+        # `claim`.
+        if args.event in ("close", "claim") and target_ledger == LEDGER:
+            problems = sequence_problems(
+                index_by_subject(rows), args.subject, len(rows), args.event)
             if problems:
                 sys.exit("ledger append refused: "
                          + "; ".join(message for _subject, _leg, message in problems))
@@ -1448,9 +1502,16 @@ def cmd_verify(args: argparse.Namespace) -> int:
     by_subject = index_by_subject(rows)
     seq_problems: list[tuple[str, str, str]] = []  # (subject, leg, message)
     for i, row in enumerate(rows):
-        if row.get("event") != "close":
+        event = row.get("event")
+        # `claim` is checked as well as `close` (#137 half 2). A claim whose subject
+        # has no intake anywhere in the ledger is a defect a close-keyed reading
+        # cannot see until the close is attempted, hours later — and by then the
+        # ledger has been carrying it. The predicate keeps the close leg positional
+        # and the claim leg global; see sequence_problems for why.
+        if event not in ("close", "claim"):
             continue
-        seq_problems.extend(sequence_problems(by_subject, row.get("subject"), i))
+        seq_problems.extend(
+            sequence_problems(by_subject, row.get("subject"), i, event))
 
     # The dispatch leg is INDEPENDENT of the close sequence above (n=524: the malformed
     # check "may land with it or before it"), and its two halves have different

@@ -1419,6 +1419,19 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_close_preflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_close_preflight.py"])
 
+    # 65. The CLAIM half of the same pre-flight (#137 half 2). The sequence predicate ran on
+    #     `close` rows only, so a `claim` whose subject had no `intake` ANYWHERE was invisible:
+    #     `verify` read GREEN while the ledger was already defective, and the defect surfaced
+    #     hours later when someone tried to close. Measured by the reporting factory at their
+    #     ledger 257 rows: `verify` returned 0 problems while this leg named the claim, about
+    #     nine minutes before the close that turned the gate red. The leg is asked of the claim
+    #     itself at BOTH call sites, and its intake search is ANYWHERE in the subject's history
+    #     rather than positional, because a late-reconstruction intake lands AFTER the original
+    #     claim by design. Ported from the reporter's own diff; their one ordering test was
+    #     adapted because this repo RETIRED that clause (two lanes, independent wake latencies).
+    if (repo_root / "tests/test_ledger_claim_preflight.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_claim_preflight.py"])
+
     # 38. Telemetry-reader registry gate: a telemetry field read out of a row's `detail`
     #     must go through the shared predicate in `tools/field_predicate.py`, because a
     #     free-prose `detail` QUOTES trailers as evidence and a private scan takes a

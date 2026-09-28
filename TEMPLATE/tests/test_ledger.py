@@ -192,7 +192,11 @@ def main() -> int:
         # row count, so a probe appending to `ledger` breaks a NEIGHBOUR test
         # rather than its own (measured 2026-09-27: 20 -> 22 rows).
         refs_ledger = Path(tmp) / "refs.jsonl"
-        run(refs_ledger, "append", "--event", "claim", "--actor", "triage",
+        # The first row is an INTAKE, not a claim: a claim whose subject was never admitted
+        # anywhere is refused at the write path by the claim leg (#137 half 2), so a fixture
+        # seeding a bare claim no longer describes a lawful ledger. The two-row shape and
+        # every assertion below are unchanged — only the event that carries row 1 moved.
+        run(refs_ledger, "append", "--event", "intake", "--actor", "triage",
             "--subject", "#1", "--detail", "first")
         r2 = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
                  "--subject", "#2", "--detail", "points at row 1",
@@ -391,7 +395,7 @@ def main() -> int:
         # ARM 4: a MALFORMED declaration FAILS LOUDLY, never reads as none. A factory whose own
         # lanes silently vanished on a typo would get a membership error naming no file.
         auth_file.write_text("{ this is not json")
-        r = run(auth_tree / "ledger.jsonl", "append", "--event", "claim", "--actor", "triage",
+        r = run(auth_tree / "ledger.jsonl", "append", "--event", "score", "--actor", "triage",
                 "--subject", "#2", "--detail", "malformed declaration",
                 extra_env=AUTH, **auth_kw)
         check("a malformed declaration fails loudly rather than reading as none",
@@ -414,7 +418,7 @@ def main() -> int:
                     sys.executable,
                     str(TOOL),
                     "append",
-                    "--event", "claim",
+                    "--event", "score",
                     "--actor", "triage",
                     "--subject", f"probe-{i}",
                     "--detail", f"parallel append {i}",
@@ -466,18 +470,18 @@ def main() -> int:
         act = Path(tmp) / "actors.jsonl"
         declared = Path(tmp) / "actors.txt"
 
-        r = run(act, "append", "--event", "claim", "--actor", "worker",
+        r = run(act, "append", "--event", "score", "--actor", "worker",
                 "--subject", "x", "--detail", "a shipped role")
         check("a role the template ships is accepted", r.returncode == 0,
               r.stderr.strip()[:60])
 
-        r = run(act, "append", "--event", "claim", "--actor", "delegate",
+        r = run(act, "append", "--event", "score", "--actor", "delegate",
                 "--subject", "x", "--detail", "not declared here")
         check("a lane this factory has not declared is refused",
               r.returncode != 0, r.stderr.strip()[:60])
 
         declared.write_text("delegate\n", encoding="utf-8")
-        r = run(act, "append", "--event", "claim", "--actor", "delegate",
+        r = run(act, "append", "--event", "score", "--actor", "delegate",
                 "--subject", "x", "--detail", "declared", actors=declared)
         check("a declared lane is accepted", r.returncode == 0, r.stderr.strip()[:60])
 

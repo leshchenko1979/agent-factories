@@ -349,6 +349,7 @@
     "tests/test_template_sync.py": "script",
     "tools/hygiene.py": "script",
     "tools/ledger.py": "script",
-    "tools/roadmap.py": "script"
+    "tools/roadmap.py": "script",
+    "tests/test_ledger_claim_preflight.py": "pytest"
   }
 }

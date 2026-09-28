@@ -529,6 +529,14 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_law_structure.py",
     "test_ledger.py",
     "test_ledger_close_preflight.py",
+    # Added with its registration (board #137 half 2). REQUIRED is the correct grain: the
+    # gate drives THROWAWAY ledgers under a temp directory through `OC_LEDGER_PATH` — no
+    # live ledger, no fleet manifest, no box-local fixture — so it passes in a bootstrapped
+    # factory exactly as it does here. It is byte-paired with a TEMPLATE copy, so the
+    # manifest grain is what keeps a factory from dropping the runner and keeping the file.
+    # The leg it guards is the CLAIM half of the pre-flight: a claim whose subject has no
+    # intake anywhere was invisible to a close-keyed reading until the close failed.
+    "test_ledger_claim_preflight.py",
     "test_ledger_commit_cites_no_rows.py",
     # Added with its registration (board #137). REQUIRED is the correct grain: the gate
     # parses the ledger header's own declaration and compares it to the file's ACTUAL
