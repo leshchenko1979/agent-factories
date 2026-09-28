@@ -363,6 +363,42 @@ Two probe-design rules follow, and they are what this class keeps teaching:
 
 ---
 
+### 5.1 What the gate must make PROVABLE, not merely describe
+
+Promoted (scoped) from `miidas` 2026-09-28, whose gate ran 496 lines ahead of ours on the
+enforcement path. The part that transfers is the **seam**, not the file.
+
+`validate_row_schema` takes `event_types=...`, defaulting to the declaration this gate already
+consumes. The live audit is byte-for-byte unchanged; what changes is that a caller can now pass
+the **OLD private copy** and demonstrate — not describe — that the shape removed for #53 rejects a
+row the shipped writer accepts. Without the parameter the divergence was **describable but not
+demonstrable**, which is how it survived unnoticed: two consumers holding the same eight names in
+two places agree on the day they are written and diverge on the first edit of either.
+
+Two rules came with it:
+
+- **A test's POPULATION comes from the policy, never from the universe under test.** Iterating
+  `known_actors()` lets a narrowed universe shrink its own test set instead of failing it — a
+  vacuous green. The promoted cases derive the actor set from the policy, and the probe event from
+  the vocabulary's own free names, so admitting a name later cannot break them for a reason
+  unrelated to the defect.
+- **A script-mode gate needs its `unittest` cases WIRED, or they are dead code that reads as
+  coverage.** `unittest.main()` never fires when the file is run as a script. The runner is called
+  from BOTH exit paths, including the by-design `SkipGate` one — a tree with no ledger is exactly a
+  tree that needs the seam proven.
+
+**THE BOUND, measured, and stated so it is not rediscovered as a defect.** The same source carries
+`TestWriterGateConvergence`, which asserts the writer and the gate return the **SAME** verdict for
+every `(event, actor)` pair. Against THIS write path — 8 events × 11 actors = 88 pairs — **21 agree
+and 67 do not**, in three by-design classes: the matrix binds a **derived** actor only, so a fixture
+(which declares its actor) is authorized for whatever membership permits while the gate has no
+fixture concept (45); the writer enforces **predecessor legs** while the gate validates a single row
+in isolation (21); one pair is refused by both. The premise holds in the source tree because that
+fork carries none of those three predicates — verified there, `rc=0`, 33 tests. It cannot hold here
+without deleting this write path's identity law, so the sweep is **not** ported: grafting it
+verbatim would red 67 of 88 on a false premise and invite muting the reds, which is worse than the
+missing coverage.
+
 ## 6. This instrument's divergence matrix
 
 Measured 2026-09-27T10:28Z. **Predicate:** the manifest's ledger paths, against each registered

@@ -147,27 +147,59 @@ DEFAULT_FACTORY = (os.environ.get("OC_QUESTIONS_FACTORY") or _declared_slug())
 # a future second factory's readable slug can never be swept by accident.
 LEGACY_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{32}$")
 
-def page_slug_for(entries):
-    """The page slug. STABLE by construction.
+# The aggregate page's slug: the neutral address carrying EVERY factory's open
+# questions (owner order 2026-09-28). RESERVED -- a factory whose slug collides
+# with it is REFUSED rather than allowed to overwrite the aggregate, because the
+# two are different objects that would otherwise share one directory.
+AGGREGATE_SLUG = "all"
 
-    A slug derived from the register alone would MOVE when a set is added or
-    removed -- the first open set by asked_at changes, the path changes, and the
-    owner's bookmark 404s. So the slug is recorded in pages/latest.json on the
-    first publish and REUSED from then on; the register only supplies it when
-    there is no pointer yet.
+def page_targets(sets):
+    """[(slug, entries)] -- the aggregate, plus one page per factory.
 
-    That is the same reuse discipline the retired token had (C7), which is what
-    made the URL stable; dropping it here would have reintroduced the churn the
-    constant-slug order exists to remove.
+    TWO ADDRESSES, ONE OBJECT EACH (owner order 2026-09-28). The single page used
+    to carry every factory's questions while being served from ONE factory's name
+    (`/opencrabs-dev/`), so the path named a factory and the content was the
+    fleet -- and there was no address for the union at all. Now:
+
+      /all/          every factory's open questions
+      /<factory>/    that factory's OWN open questions
+
+    The slug is DERIVED from the factory name, never recorded and reused, so it
+    cannot churn when a set is added or removed: adding a question to
+    inferhub-watch cannot move opencrabs-dev's path. That is the stability the
+    retired mint-per-publish token and the single reuse-pointer both existed to
+    provide, held here by construction instead of by a stored value.
+
+    A factory page is minted even when the factory has NOTHING open, because the
+    address is a permanent anchor: a page that existed only while questions did
+    would 404 the moment they were answered. Such a page renders its empty state.
+    Names come from EVERY set the register holds, not only the open ones, so a
+    factory that answered its last question keeps its address.
+
+    `entries` is always drawn from the OPEN sets -- an answered question is not on
+    any page, and that predicate is shared with the title and the pointer through
+    open_question_count().
     """
-    pointer = read_pointer()
-    if pointer and pointer.get("slug"):
-        return pointer["slug"]
-    for entry in entries:
+    open_entries = sorted([s for s in sets if s.get("status") == "open"],
+                          key=lambda s: s.get("asked_at") or "")
+    names = []
+    for entry in sets:
         key = entry.get("factory") or entry.get("id")
-        if key:
-            return page_slug(key)
-    return page_slug(os.environ.get("OC_QUESTIONS_FACTORY") or DEFAULT_FACTORY)
+        if key and key not in names:
+            names.append(key)
+    takes = {AGGREGATE_SLUG: "the aggregate page"}
+    targets = [(AGGREGATE_SLUG, open_entries)]
+    for name in names:
+        slug = page_slug(name)
+        if slug in takes:
+            die(2, "page address collision: factory %r needs /%s/, which is "
+                   "already taken by %s. Two different objects must not share "
+                   "one directory -- one would overwrite the other, so this is "
+                   "refused rather than published." % (name, slug, takes[slug]))
+        takes[slug] = "factory %r" % name
+        targets.append((slug, [e for e in open_entries
+                               if (e.get("factory") or e.get("id")) == name]))
+    return targets
 
 def questions_db_path():
     return (os.environ.get("OC_QUESTIONS_DB")
@@ -2104,25 +2136,29 @@ def vendor_ui(directory):
         oc_log_extra("ui_vendor_failed", exc.__class__.__name__)
         return False
 
-def prune_pages(keep=None):
+def prune_pages(keeps=None):
     """Remove retired ROTATING-TOKEN directories, and only those.
 
-    The path is a constant slug now, so a token-shaped directory is residue from
+    The path is a readable slug now, so a token-shaped directory is residue from
     the retired model: nothing can address it and its link is dead. The test is
-    the SHAPE (LEGACY_TOKEN_RE), never "anything that is not the current slug",
-    so a second factory's readable slug can never be swept by accident.
+    the SHAPE (LEGACY_TOKEN_RE), never "anything that is not a current slug", so
+    a live page can never be swept by accident.
 
-    The live slug is NEVER removed: its link is bookmarked and permanent
-    (owner order 2026-09-25)."""
+    `keeps` is the WHOLE live set -- the aggregate plus every factory page -- not
+    one slug: there is more than one page now, and protecting only one would let
+    a factory whose slug happens to be token-shaped be swept. Live pages are
+    NEVER removed: their links are bookmarked and permanent (owner order
+    2026-09-25)."""
     import shutil
     removed = []
     root = pages_dir()
     if not os.path.isdir(root):
         return removed
+    keeps = set(keeps or ())
     for name in sorted(os.listdir(root)):
         if not os.path.isdir(os.path.join(root, name)):
             continue
-        if keep and name == keep:
+        if name in keeps:
             continue
         if not LEGACY_TOKEN_RE.match(name):
             continue
@@ -2149,13 +2185,15 @@ def page_is_live(token):
     return True, "live at %s" % page_url(token)
 
 def latest_page():
-    """The current published page as (url, meta), or (None, reason).
+    """The AGGREGATE page as (url, meta), or (None, reason).
 
     publish records pages/latest.json so render does not have to guess which
-    token directory is current. A pointer whose token has expired or been pruned
-    reports the reason rather than omitting the link silently: a card with no
-    pointer and a card whose pointer is dead look identical otherwise, and only
-    one of them is a defect."""
+    directory is current. The pointer names the AGGREGATE (owner order
+    2026-09-28): with a page per factory there is no single "the" page, and the
+    union is the address that stays put no matter which factory moved. A pointer
+    whose page has been pruned reports the reason rather than omitting the link
+    silently: a card with no pointer and a card whose pointer is dead look
+    identical otherwise, and only one of them is a defect."""
     path = latest_pointer_path()
     if not os.path.isfile(path):
         return None, "no page published yet (run: %s publish)" % PROG
@@ -2221,7 +2259,7 @@ def republish(flags):
     if flags.get("--no-publish"):
         return None
     try:
-        meta, _ = publish_page(quiet=True)
+        meta, _, _metas = publish_page(quiet=True)
         return meta
     except SystemExit:
         _note_publish_fault(
@@ -2244,66 +2282,81 @@ def _note_publish_fault(why):
 
 
 def publish_page(action=None, prune=False, quiet=False):
-    """Build or refresh the public page. (meta, pruned).
+    """Build or refresh the public pages. (meta, pruned, metas).
 
-    The path is a CONSTANT slug derived from the factory key, never a rotating
-    token (owner order 2026-09-25). A fresh URL per publish would 404 the link
-    the owner bookmarked, so re-render-on-change and a stable URL have to hold
-    together or the feature is unusable.
+    TWO ADDRESSES (owner order 2026-09-28): the neutral aggregate /all/ carries
+    every factory's open questions, and every factory the register names keeps its
+    OWN page carrying only its own. Both paths are readable CONSTANT slugs, never
+    a rotating token (owner order 2026-09-25) -- a fresh URL per publish would 404
+    the link the owner bookmarked, so re-render-on-change and a stable URL have to
+    hold together or the feature is unusable.
 
-    The page NEVER expires: a 7-day PAGE TTL is incompatible with a permanent
+    The pages NEVER expire: a 7-day PAGE TTL is incompatible with a permanent
     bookmark. DEFAULT_TTL_DAYS still governs QUESTION staleness -- a different
     thing, and unchanged.
 
-    Changing the path means changing the FACTORY KEY, and that has exactly one
-    home: page_slug().
+    `meta` is the AGGREGATE page's, and is what the pointer records: with several
+    pages live there is no "the" page, and the union is the one address that is
+    stable no matter which factory moved.
     """
     with RegisterLock():
         data = read_register()
-    all_open = [s for s in data["sets"] if s.get("status") == "open"]
-    entries = sorted(all_open, key=lambda s: s.get("asked_at") or "")
-    slug = page_slug_for(all_open)
-    pruned = prune_pages(keep=slug)
-    # No early return on an empty register (owner order 2026-09-24): the page
-    # must always be deployed, so an empty state is rendered to the SAME slug
+    targets = page_targets(data["sets"])
+    pruned = prune_pages(keeps=[slug for slug, _ in targets])
+    # No early return on an empty register (owner order 2026-09-24): the pages
+    # must always be deployed, so an empty state is rendered to the SAME slugs
     # rather than leaving the previous page serving stale questions.
 
-    directory = os.path.join(pages_dir(), slug)
-    # Render FIRST: a fault must leave no half-made directory behind and must
-    # leave the previous page serving (owner order 2026-09-24).
-    page = build_page(entries, slug, None, action or "/answer")
-    os.makedirs(directory, exist_ok=True)
-    vendor_htmx(directory)
-    vendor_ui(directory)
-    with open(os.path.join(directory, "index.html"), "w", encoding="utf-8") as fh:
-        fh.write(page)
-    # `expires_at` stays PRESENT and null: the live answer backend reads it and
-    # fails OPEN on an empty value (backend.py: expired() -> False when unset),
-    # so a null is "never expires" rather than "unknown".
-    meta = {"slug": slug,
-            "expires_at": None,
-            "action": action or "/answer", "sets": [e["id"] for e in entries],
-            "url": page_url(slug),
-            "questions": open_question_count(entries)}
-    with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as fh:
-        json.dump(meta, fh, indent=2)
+    # Render EVERY page BEFORE writing ANY of them: a renderer fault must leave
+    # no half-made directory behind and must leave the previous pages serving
+    # (owner order 2026-09-24). One bad page must not leave the others half-live.
+    built = [(slug, entries,
+              build_page(entries, slug, None, action or "/answer"))
+             for slug, entries in targets]
 
-    # The pointer render reads. Written AFTER the page and its meta exist, so a
-    # reader never resolves a slug whose directory is still incomplete.
-    pointer = {"slug": slug}
+    metas = {}
+    for slug, entries, page in built:
+        directory = os.path.join(pages_dir(), slug)
+        os.makedirs(directory, exist_ok=True)
+        vendor_htmx(directory)
+        vendor_ui(directory)
+        with open(os.path.join(directory, "index.html"), "w", encoding="utf-8") as fh:
+            fh.write(page)
+        # `expires_at` stays PRESENT and null: the live answer backend reads it
+        # and fails OPEN on an empty value (backend.py: expired() -> False when
+        # unset), so a null is "never expires" rather than "unknown".
+        # `sets` is THIS page's own sets, never the register's: the answer
+        # backend validates a posted set against the page's own meta, so a card
+        # is answerable exactly when its set is listed HERE.
+        meta = {"slug": slug,
+                "expires_at": None,
+                "action": action or "/answer", "sets": [e["id"] for e in entries],
+                "url": page_url(slug),
+                "questions": open_question_count(entries)}
+        with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, indent=2)
+        metas[slug] = meta
+        oc_log_extra("slug", slug)
+        oc_log_extra("questions", str(meta["questions"]))
+
+    meta = metas[AGGREGATE_SLUG]
+
+    # The pointer render reads. Written AFTER the pages and their metas exist, so
+    # a reader never resolves a slug whose directory is still incomplete.
+    pointer = {"slug": AGGREGATE_SLUG}
     with open(latest_pointer_path(), "w", encoding="utf-8") as fh:
         json.dump(pointer, fh, indent=2)
 
-    oc_log_extra("slug", slug)
-    oc_log_extra("questions", str(meta["questions"]))
     if not quiet:
-        print(f"published {meta['questions']} question(s) to {directory}")
-        print(f"  slug {slug} (permanent)")
-        print(f"  url {page_url(slug)}")
+        for slug, m in metas.items():
+            print(f"published {m['questions']} question(s) to "
+                  f"{os.path.join(pages_dir(), slug)}")
+            print(f"  slug {slug} (permanent)")
+            print(f"  url {m['url']}")
         print(f"  action {meta['action']}")
         for name in pruned:
             print(f"  pruned retired token dir {name}")
-    return meta, pruned
+    return meta, pruned, metas
 
 def cmd_publish(argv):
     if "--set" in argv:
@@ -2313,17 +2366,22 @@ def cmd_publish(argv):
                            boolean=["--json", "--prune"])
     action = flags.get("--action") or "/answer"
 
-    meta, pruned = publish_page(action=action,
-                                prune=bool(flags.get("--prune")), quiet=True)
+    meta, pruned, metas = publish_page(action=action,
+                                       prune=bool(flags.get("--prune")),
+                                       quiet=True)
     if flags.get("--json"):
         print(json.dumps({"slug": meta["slug"],
                           "path": os.path.join(pages_dir(), meta["slug"]),
-                          "meta": meta, "pruned": pruned}, indent=2))
+                          "meta": meta, "pruned": pruned,
+                          "pages": [{"slug": s, "questions": m["questions"],
+                                     "sets": m["sets"], "url": m["url"]}
+                                    for s, m in metas.items()]}, indent=2))
     else:
-        directory = os.path.join(pages_dir(), meta["slug"])
-        print(f"published {meta['questions']} question(s) to {directory}")
-        print(f"  slug {meta['slug']} (permanent)")
-        print(f"  url {page_url(meta['slug'])}")
+        for slug, m in metas.items():
+            directory = os.path.join(pages_dir(), slug)
+            print(f"published {m['questions']} question(s) to {directory}")
+            print(f"  slug {slug} (permanent)")
+            print(f"  url {m['url']}")
         print(f"  action {meta['action']}")
         for name in pruned:
             print(f"  pruned retired token dir {name}")
@@ -2911,11 +2969,88 @@ def selftest():
         ck(second["slug"] == first["slug"],
            "two consecutive publishes REUSE one slug -- the URL does not churn "
            "(%r vs %r)" % (first["slug"][:8], second["slug"][:8]))
-        page_dirs = [d for d in os.listdir(os.path.join(env["OC_QUESTIONS_DIR"], "pages"))
-                     if d != "latest.json"]
-        ck(len(page_dirs) == 1,
-           "\u2026so exactly ONE live page directory exists, not one per publish "
-           "(%r)" % (page_dirs,))
+        page_dirs = sorted(d for d in os.listdir(os.path.join(env["OC_QUESTIONS_DIR"], "pages"))
+                           if d != "latest.json")
+        _want_pages = sorted(p["slug"] for p in second["pages"])
+        # Every TARGET has a directory -- but not set equality. A factory whose
+        # set LEAVES the register (only via an explicit `gc --archive-closed`;
+        # factory sets are never auto-archived, owner order 2026-09-25) keeps its
+        # page directory, because the address is a permanent anchor. Nothing
+        # removes a readable slug, so the directory outlives the target.
+        ck(set(_want_pages) <= set(page_dirs),
+           "\u2026and every published target HAS a directory -- the aggregate "
+           "plus one per factory the register names, never one per publish "
+           "(missing %r)" % (sorted(set(_want_pages) - set(page_dirs)),))
+        ck("all" in page_dirs,
+           "\u2026including the neutral aggregate /all/, the one address that is "
+           "not a factory name (%r)" % (page_dirs,))
+
+        # -- the TWO-ADDRESS model (owner order 2026-09-28) ----------------
+        # The page used to carry every factory's questions while being served
+        # from ONE factory's name, so the path named a factory and the content
+        # was the fleet -- and the union had no address at all. Asserted on the
+        # ARTIFACTS: the published metas, and each page's own HTML.
+        _reg = store_json()
+        _open_ids = sorted(s["id"] for s in _reg["sets"] if s.get("status") == "open")
+        _agg = json.load(open(os.path.join(env["OC_QUESTIONS_DIR"], "pages",
+                                          "all", "meta.json"), encoding="utf-8"))
+        ck(_agg["slug"] == "all",
+           "the aggregate is published at the NEUTRAL slug /all/ -- not under a "
+           "factory's name (%r)" % _agg["slug"])
+        ck(sorted(_agg["sets"]) == _open_ids,
+           "\u2026and it carries EVERY open set in the register, so the union has "
+           "an address of its own (%r vs %r)" % (sorted(_agg["sets"]), _open_ids))
+
+        _factory_pages = [p for p in second["pages"] if p["slug"] != "all"]
+        ck(len(_factory_pages) >= 2,
+           "\u2026while every factory the register names gets its OWN page "
+           "(%d factory page(s))" % len(_factory_pages))
+        _bad = []
+        for _p in _factory_pages:
+            _m = json.load(open(os.path.join(env["OC_QUESTIONS_DIR"], "pages",
+                                             _p["slug"], "meta.json"),
+                                encoding="utf-8"))
+            # ONLY its own: every set it lists must be one that slugifies to it.
+            if any(page_slug(_sid) != _p["slug"] for _sid in _m["sets"]):
+                _bad.append((_p["slug"], _m["sets"]))
+        ck(not _bad,
+           "\u2026each of which carries ONLY its own sets, never another "
+           "factory's (%r)" % (_bad,))
+        _mine = {p["slug"]: p["sets"] for p in _factory_pages}
+        ck(all(_s in _mine.get(page_slug(_s), []) for _s in _open_ids),
+           "\u2026and every open set is reachable on its OWN factory page "
+           "(missing %r)" % (sorted(s for s in _open_ids
+                                    if s not in _mine.get(page_slug(s), [])),))
+
+        # The answerability property, from the RENDERED side: the answer backend
+        # accepts a posted set iff it is listed in that page's meta.sets, so a
+        # card that renders under a set the page does not list is unanswerable.
+        _unanswerable = []
+        for _slug in ["all"] + [p["slug"] for p in _factory_pages]:
+            _dir = os.path.join(env["OC_QUESTIONS_DIR"], "pages", _slug)
+            _h = open(os.path.join(_dir, "index.html"), encoding="utf-8").read()
+            _m = json.load(open(os.path.join(_dir, "meta.json"), encoding="utf-8"))
+            listed = set(_m["sets"])
+            rendered = set()
+            for _grp in re.findall(r'data-set="([^"]+)"', _h):
+                rendered.update(x for x in _grp.split(",") if x)
+            posted = set(re.findall(r'name="set" value="([^"]+)"', _h))
+            if not (rendered <= listed) or not (posted <= listed):
+                _unanswerable.append((_slug, sorted(rendered - listed),
+                                      sorted(posted - listed)))
+        ck(not _unanswerable,
+           "\u2026and every set a page RENDERS is listed in that page's own "
+           "meta.sets, so no card is rendered unanswerable (slug, rendered-vs-"
+           "meta, posted-vs-meta: %r)" % (_unanswerable,))
+
+        # The address outlives the set: f-leaky-lane was archived by
+        # `gc --archive-closed` and is no longer a target, yet its page dir --
+        # and so its bookmark -- is still there. Nothing removes a readable slug.
+        _archived_dir = os.path.join(env["OC_QUESTIONS_DIR"], "pages", "f-leaky-lane")
+        ck(os.path.isdir(_archived_dir) and "f-leaky-lane" not in _want_pages,
+           "\u2026and a page whose set LEFT the register keeps its directory, "
+           "because the address is a permanent anchor (%s, target=%s)"
+           % (os.path.isdir(_archived_dir), "f-leaky-lane" in _want_pages))
         rc, out, _ = run("publish", "--json")
         rotated = json.loads(out)
         ck(rotated["slug"] == first["slug"],
