@@ -122,7 +122,13 @@ def test_derivation_refuses_when_the_session_holds_no_binding(monkeypatch):
 
 
 def test_fragment_leg_wins_over_the_title_leg(monkeypatch):
-    """The ordering is the contract: a DECLARED topic is canonical, a title is a fallback."""
+    """The ordering is the contract: a DECLARED role is canonical, a title is a fallback.
+
+    The two legs return DIFFERENT KINDS of string — the fragment leg a curated ROLE
+    (`ledger`), the title leg a display name (`Factories / Ledger`) — so the ordering is
+    not a preference between synonyms. It is what keeps a register row joinable to the
+    ledger row for the same lane.
+    """
     sid = "11111111-2222-3333-4444-555555555555"
     monkeypatch.setenv("OPENCRABS_SESSION_ID", sid)
     import registry
@@ -141,8 +147,8 @@ def test_fragment_leg_wins_over_the_title_leg(monkeypatch):
                         lambda lane, bindings, topic_names, chat_id=None: {
                             "session_id": sid, "role": lane.get("role")})
     lane, why = insights.resolve_author()
-    assert lane == "Factories / Ledger", (
-        f"the declared fragment topic must win over the title, got {lane!r} ({why})")
+    assert lane == "ledger", (
+        f"the declared fragment ROLE must win over the title, got {lane!r} ({why})")
 
 
 def test_title_leg_reads_the_channel_name():
@@ -161,3 +167,38 @@ def test_owner_author_is_a_first_class_value(tmp_path, monkeypatch):
     assert entry["author"] == "Alexey"
     ok, errors = insights.verify_insights()
     assert ok, errors
+
+
+def test_declared_leg_agrees_with_the_ledgers_own_actor_derivation(monkeypatch):
+    """The register's author and the ledger's actor must be the SAME string.
+
+    They are two instruments naming one lane, and a disagreement between them fails
+    SILENTLY: a row authored `Factories / Insights` cannot join to a ledger row whose
+    actor is `insights`, and nothing raises when it cannot. The declared leg once
+    returned the fragment's TOPIC while the ledger returned its ROLE, which is why this
+    is pinned rather than left to the two docstrings to agree.
+    """
+    sid = "11111111-2222-3333-4444-555555555555"
+    monkeypatch.setenv("OPENCRABS_SESSION_ID", sid)
+    import ledger
+    import registry
+
+    monkeypatch.setattr(registry, "all_bindings", lambda: ([
+        {"session_id": sid, "chat_id": "-1", "thread_id": 6865,
+         "session_title": "Telegram: Factories / Insights [chat:-1:topic:6865]"},
+    ], []))
+    monkeypatch.setattr(registry, "live_fragment_paths", lambda _args: ["fragment.json"])
+    monkeypatch.setattr(registry, "load_fragment",
+                        lambda _p: ({"factory": "meta-factory",
+                                     "lanes": [{"topic": "Factories / Insights",
+                                                "thread_id": 6865, "role": "insights"}]}, None))
+    monkeypatch.setattr(registry, "FACTORY_CHATS", {"meta-factory": "-1"}, raising=False)
+    monkeypatch.setattr(registry, "resolve_lane",
+                        lambda lane, bindings, topic_names, chat_id=None: {
+                            "session_id": sid, "role": lane.get("role")})
+
+    author, a_why = insights.resolve_author()
+    actor, b_why = ledger.session_to_role()
+    assert author == actor == "insights", (
+        f"the register and the ledger must name one lane one way — "
+        f"register author {author!r} ({a_why}) vs ledger actor {actor!r} ({b_why})")

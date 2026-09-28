@@ -140,12 +140,17 @@ def resolve_author(session_id: str | None = None) -> tuple[str | None, str]:
 
     Identity is DERIVED from `OPENCRABS_SESSION_ID`, never declared — the same
     rule `tools/ledger.py` reads its own actor under, so a lane cannot silently
-    mislabel itself here either. Two sources, in order:
+    mislabel itself here either. Two sources, in order, and they return DIFFERENT
+    KINDS of string, which is why the order is a contract and not a preference:
 
-    1. the fleet registry's DECLARED lanes — a factory fragment names its topics,
-       so the answer is canonical, reviewed, and versioned in the repo;
-    2. the session's own BINDING TITLE — the daemon records the chat and topic
-       name there, and that is the only source for a topic no fragment declares.
+    1. the fleet registry's DECLARED lanes — a factory fragment carries the lane's
+       ROLE, so the answer is the SAME token `tools/ledger.py` derives and
+       `tools/actors.txt` declares (`insights`, not `Factories / Insights`). A
+       register row can therefore join to a ledger row on the same actor;
+    2. the session's own BINDING TITLE — a last resort for a topic NO fragment
+       declares, where it returns the title's final segment, a display name such
+       as `Insights`. There is no curated role to read in that case, so the two
+       legs are NOT interchangeable and the declared leg is asserted to win.
 
     Returns `(lane, reason)`. `lane` is None when neither source places the
     session, and `reason` then names what failed — never a silent fallback. A
@@ -185,8 +190,10 @@ def resolve_author(session_id: str | None = None) -> tuple[str | None, str]:
                 if not isinstance(lane, dict):
                     continue
                 resolved = registry.resolve_lane(lane, mine, {}, chat_id)
-                if resolved.get("session_id") == sid and lane.get("topic"):
-                    return str(lane["topic"]), ""
+                if resolved.get("session_id") == sid:
+                    role = resolved.get("role") or lane.get("role")
+                    if role:
+                        return str(role), ""
     except Exception as exc:
         return None, f"the lane resolver is unavailable (fragment read failed: {exc})"
 
