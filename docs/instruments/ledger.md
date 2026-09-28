@@ -686,6 +686,50 @@ for two rates — change fail rate and rework rate — and neither is computable
 is the **numerator**, the ledger's `close` rows are the **denominator**, and both are recomputed on
 each measurement run, never recalled: a remembered rate is an impression with a decimal point.
 
+### 9.10 The append budget, and why a duplicate pair is a LATENCY symptom
+
+**A write that exceeds its CALLER's budget while COMPLETING server-side is read by that caller as a
+failed write, and retried.** The ledger then carries a duplicate pair — and `verify` returns rc=0
+over it, because the sequence leg looks for the PRESENCE of intake/claim/close and nothing checks
+uniqueness on `(event, subject)`. Measured 2026-09-28: `#202` at `n=1502/1504` and `#84` at
+`n=1509/1511`, each pair byte-equivalent, each written by a caller that had read a 120 s timeout as
+"did not happen".
+
+Two legs answer it, deliberately INDEPENDENT — a refusal prevents, a predicate detects:
+
+| leg | site | rule |
+|---|---|---|
+| **detect** | `verify` | a subject carrying more than one `close` is a FINDING over a stated population (count examined, each pair named). It is **printed, never gated red**: a history-wide red whose repair space is empty is the #83 class — the pairs are append-only and stand |
+| **prevent** | the append path | a second `close` for a subject is REFUSED, and the refusal NAMES the existing row so a retrying writer learns its first write landed |
+
+**Scope is the SINGLETON events, not a blanket `(event, subject)` uniqueness.** Two `run` rows for
+one subject are lawful — two duty receipts — so a blanket rule would refuse a legitimate row. A
+legitimate RE-CLOSE (after a reopen) declares itself in the row's own `detail` with the `reclose=`
+token; `close` first, stated rather than inferred.
+
+**The upstream half is not optional, and this is where the budget comes from.** The refusal stops
+the duplicate; it does not stop the timeout, and callers keep timing out until the append's own
+budget is a **declared multiple of a measured runtime**. Measured 2026-09-28 on the ops session DB,
+whose `messages` table carries NO index on `created_at` (only the rowid autoindex and
+`idx_messages_session_id`):
+
+| window | runtime | rows scanned |
+|---|---|---|
+| 1 h | 91.8 s | 77,125 |
+| 1 d | 88.2 s | 77,125 |
+| 7 d | 106.1 s | 77,125 |
+
+**The cost is the SCAN, not the window** — a one-hour range costs what a week costs — so narrowing
+the range does not help. The bound is therefore a declared budget,
+`TELEMETRY_QUERY_BUDGET_SEC = 30.0` in `tools/telemetry.py`, which is **0.28x of the 106.1 s worst
+case**, enforced by a SQLite progress handler so a runaway scan is aborted rather than allowed to
+outlive its caller. A cut-off query returns **`None`**, which every call site already renders as the
+STATED ABSENCE `telemetry=unavailable` (`§9.8`, and the `#130` class): a row of zeros would read as
+a measurement of nothing, which is the fabrication the `now - 300` constant was removed for.
+
+**Declared, not derived** — a budget the instrument cannot state is a budget no reader can check,
+which is the same rule the gate budgets carry (`#94`).
+
 ---
 
 ## 10. What this file does not own

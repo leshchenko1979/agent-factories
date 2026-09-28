@@ -19,10 +19,35 @@ import json
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# THE QUERY BUDGET, WITH ITS MEASURED BASIS (#213's upstream half).
+# The windowed aggregate below scans `messages` because `created_at` carries no index
+# (the only indexes are the rowid autoindex and `idx_messages_session_id`). Measured
+# 2026-09-28 on 77,125 rows, same plan throughout:
+#     1 h window -> 91.8 s      1 d -> 88.2 s      7 d -> 106.1 s
+# The cost is the SCAN, not the window: a one-hour range costs what a week costs, so
+# narrowing the range does not help and only a declared budget bounds it.
+#
+# WHY IT MUST BE BOUNDED AT ALL. `close` calls this while holding the ledger append
+# lock, and the CALLER's budget is 120 s (the harness's bash timeout). An unbounded
+# query therefore made the append exceed the caller's budget WHILE COMPLETING
+# SERVER-SIDE, so the caller read the timeout as "the write did not happen" and
+# retried -- writing a duplicate pair each time (measured: n=1502/1504 and
+# n=1509/1511, byte-equivalent, and `verify` returns rc=0 over both because nothing
+# checks uniqueness on (event, subject)).
+#
+# The value is a DECLARED MULTIPLE of the measured worst case: 30 s is 0.28x of the
+# 106.1 s measurement, so on the measured population the query is cut off and the row
+# ships the STATED ABSENCE `telemetry=unavailable` (#130) rather than a row of zeros
+# (which would read as a measurement of nothing) or a caller timeout (which reads as a
+# failed write). Declared, not derived: a budget the instrument cannot state is a
+# budget no reader can check.
+TELEMETRY_QUERY_BUDGET_SEC = 30.0
 
 
 def find_database_path() -> Path | None:
@@ -90,8 +115,26 @@ def extract_window_telemetry(
     if not db_path or not db_path.is_file():
         return default_result
 
+    # DEFINED BEFORE THE TRY: the handler's except branch reads it, and a failure inside
+    # `connect` itself (a vanished file, a stale `-wal`) must not raise NameError from
+    # the handler that exists to make failures legible.
+    _budget_exceeded = False
+
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        # THE BOUND (#213). A progress handler returning non-zero aborts the running
+        # statement; sqlite3 raises OperationalError('interrupted'), which the handler
+        # flag below turns into the STATED ABSENCE rather than a zeros row.
+        _deadline = time.monotonic() + TELEMETRY_QUERY_BUDGET_SEC
+
+        def _budget_check() -> int:
+            nonlocal _budget_exceeded
+            if time.monotonic() > _deadline:
+                _budget_exceeded = True
+                return 1
+            return 0
+
+        conn.set_progress_handler(_budget_check, 10_000)
         cur = conn.cursor()
 
         # Query messages table for assistant turns
@@ -160,6 +203,19 @@ def extract_window_telemetry(
             "start_epoch": start_epoch,
             "end_epoch": end_epoch,
         }
+    except sqlite3.OperationalError as e:
+        # A CUT-OFF QUERY IS A STATED ABSENCE, NEVER A ZEROS ROW (#130). The five keys
+        # in `default_result` are the aggregate over NOTHING, and a consumer that reads
+        # them as a measurement of a window that was actually measured would be reading
+        # a fabrication -- exactly the class `now - 300` was removed for. The flag lets
+        # `extract_task_telemetry` return None, which every call site already renders as
+        # `telemetry=unavailable`.
+        if _budget_exceeded:
+            default_result["budget_exceeded"] = True
+            default_result["db_found"] = True
+            return default_result
+        default_result["error"] = str(e)
+        return default_result
     except Exception as e:
         default_result["error"] = str(e)
         return default_result
@@ -208,11 +264,20 @@ def extract_task_telemetry(
     if start_epoch == 0:
         return None
 
-    return extract_window_telemetry(
+    result = extract_window_telemetry(
         db_path=db_path,
         session_id=session_id,
         start_epoch=start_epoch,
     )
+    # A CUT-OFF QUERY IS THE STATED ABSENCE, NOT A MEASUREMENT (#213, same shape as #130).
+    # `extract_window_telemetry` returns the zeros default when the budget aborts the
+    # scan; passing it up would ship `duration=Ns turns=0 cost_usd=0.0000` -- a row that
+    # reads as a measured window of nothing. Returning None instead makes every call site
+    # render `telemetry=unavailable`, so a reader can distinguish "the window was never
+    # measured" from "it was measured and came back zero".
+    if result.get("budget_exceeded"):
+        return None
+    return result
 
 
 def format_detail_string(telemetry: dict[str, Any] | None, outcome: str = "accepted", gate: str = "all-pass") -> str:
