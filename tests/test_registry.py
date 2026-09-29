@@ -99,9 +99,11 @@ Exit: 0 clean, 1 on any failed check.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import datetime
 import hashlib
+import io
 import json
 import os
 import re
@@ -1662,6 +1664,181 @@ def probe_the_verb_refuses_to_create_a_fragment() -> None:
         finally:
             reg.FRAGMENT_STORE = saved
 
+def _drive_mutate(fragment: dict, payload: dict, *, raw_utf8: bool) -> tuple[int, str, str]:
+    """Drive `mutate` over a fixture and return (rc, stdout, bytes-on-disk-after).
+
+    `raw_utf8` chooses the fixture's serialisation, and that choice IS the probe:
+    with it the file is the author's own bytes (non-ASCII raw), without it the file
+    is already in the store's canonical escape form. Both arms then drive the SAME
+    verb over the SAME mutation, so the only variable is the form on disk.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    path = Path(tmp.name) / f"{fragment['factory']}.json"
+    path.write_text(
+        json.dumps(fragment, indent=2, ensure_ascii=not raw_utf8) + "\n", encoding="utf-8"
+    )
+    with tmp:
+        saved = reg.FRAGMENT_STORE
+        reg.FRAGMENT_STORE = path.parent
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = reg.cmd_mutate(
+                    _mutate_args(factory=fragment["factory"], patch=str(_write_tmp(payload)))
+                )
+            return rc, out.getvalue(), path.read_text(encoding="utf-8")
+        finally:
+            reg.FRAGMENT_STORE = saved
+
+def _utf8_fragment() -> dict:
+    """A fragment whose value carries non-ASCII, so the two serialisations DIFFER.
+
+    A fixture with no non-ASCII character cannot distinguish the escape form from
+    the raw one, so a probe built on one would pass whatever the writer did.
+    """
+    fragment = _fragment_for_mutation()
+    fragment["purpose"] = "a purpose with an em dash \u2014 and a letter: na\u00efve"
+    return fragment
+
+def probe_a_raw_utf8_fragment_is_canonicalised_and_the_note_says_so() -> None:
+    """The declared half of #244: the write-back CANONICALISES, and it says so.
+
+    The escape form is this store's canonical serialisation, so a write-back is
+    ALLOWED to rewrite lines that differ only by it. What it may not do is rewrite
+    them silently — the lane asked for one block and a reviewer saw two, which is
+    the report this gate answers. Both the count and the reason are asserted,
+    because a note carrying only one of them sends the reader to unescape a diff
+    with no statement of why.
+    """
+    fragment = _utf8_fragment()
+    rc, text, after = _drive_mutate(fragment, {"zone": {"owns": ["z"], "does_not_own": ["y"]}},
+                                    raw_utf8=True)
+    check("a raw-UTF-8 fragment is written back through the named writer", rc == 0, f"rc={rc}")
+    check(
+        "...and the file on disk is the canonical ESCAPE form, so the store stays uniform",
+        "\\u2014" in after and "\u2014" not in after,
+        f"raw em dash present={'\u2014' in after} escape present={'\\u2014' in after}",
+    )
+    check(
+        "...and the write-back DECLARES the canonicalisation, with its count and its reason",
+        "canonicalising 1 line(s)" in text and reg.ESCAPE_FORM_NOTE in text,
+        text.strip().splitlines()[-1][:120] if text.strip() else "no output",
+    )
+    check(
+        "...and the note states the count in the same shape a reader diffs, not a vague one",
+        "canonicalising 1 line(s)" in text,
+        text[:200],
+    )
+
+def probe_an_already_canonical_fragment_is_canonicalised_in_silence() -> None:
+    """The other arm, and the reason the note is not printed unconditionally.
+
+    A note on every run is a note nobody reads, and it would also make the two arms
+    indistinguishable — a reader could not tell "nothing was rewritten" from "the
+    declaration is always printed". The fixture here is written in the canonical
+    form already, so the loaded rendering equals the bytes on disk and the drift is
+    a measured ZERO rather than a suppressed one.
+    """
+    fragment = _utf8_fragment()
+    rc, text, after = _drive_mutate(fragment, {"zone": {"owns": ["z"], "does_not_own": ["y"]}},
+                                    raw_utf8=False)
+    check("an already-canonical fragment is written back", rc == 0, f"rc={rc}")
+    check(
+        "...and NOTHING is declared, because nothing was rewritten beyond the mutation",
+        "canonicalising" not in text,
+        text.strip().splitlines()[-1][:120] if text.strip() else "no output",
+    )
+    check(
+        "...and the mutation itself still landed",
+        '"z"' in after and "\\u2014" in after,
+        after[:120].replace("\n", " "),
+    )
+
+def probe_the_reason_is_measured_not_asserted() -> None:
+    """A drift that escaping does not explain must NOT be given the escape reason.
+
+    This repo ships exactly such a fragment (`tests/fixtures/factory-fragment.example.json`:
+    one raw non-ASCII line and hand-collapsed one-element lists), so the arm is
+    driven against a live file rather than a constructed one. The escape reason is
+    the tempting one to print unconditionally, and printing it here would be a
+    REASON THE MEASUREMENT DOES NOT SUPPORT — the same class as a cause read from a
+    fact that cannot carry one.
+    """
+    fixture = reg.FIXTURE_STORE / "factory-fragment.example.json"
+    if not fixture.is_file():
+        check("the shipped fixture exists to drive the layout arm", False, str(fixture))
+        return
+    disk = fixture.read_text(encoding="utf-8")
+    loaded, error = reg.load_fragment(fixture)
+    check("the shipped fixture parses", error is None, str(error))
+    canon = reg.canonical_fragment_text(loaded)
+    drift = reg.serialisation_drift(disk, canon)
+    check(
+        "the shipped fixture is NOT canonical, so the arm has a subject",
+        len(drift) > 0,
+        f"drift={len(drift)}",
+    )
+    check(
+        "...and its drift is LAYOUT, so the escape reason is REFUSED for it",
+        reg.drift_reason(disk, canon, drift) == reg.LAYOUT_FORM_NOTE,
+        reg.drift_reason(disk, canon, drift)[:100],
+    )
+
+    # The escape-only side of the same predicate, on a fixture built to carry ONLY
+    # that difference: same object, raw on disk, escaped canonically. Without this
+    # arm the predicate could return the layout note for everything and pass.
+    fragment = _utf8_fragment()
+    raw = json.dumps(fragment, indent=2, ensure_ascii=False) + "\n"
+    loaded_raw = json.loads(raw)
+    canon_raw = reg.canonical_fragment_text(loaded_raw)
+    drift_raw = reg.serialisation_drift(raw, canon_raw)
+    check(
+        "a raw-UTF-8 fragment's drift is ESCAPE-only, so it gets the escape reason",
+        reg.drift_reason(raw, canon_raw, drift_raw) == reg.ESCAPE_FORM_NOTE,
+        f"drift={len(drift_raw)} reason={reg.drift_reason(raw, canon_raw, drift_raw)[:60]}",
+    )
+
+def probe_the_dry_run_declares_the_same_drift_without_writing() -> None:
+    """`--dry-run` writes nothing, so the note is the ONLY place the drift is visible.
+
+    Without this arm a lane that dry-runs a write-back over a raw fragment would see
+    a clean plan and discover the canonicalisation only after it committed.
+    """
+    fragment = _utf8_fragment()
+    tmp = tempfile.TemporaryDirectory()
+    path = Path(tmp.name) / f"{fragment['factory']}.json"
+    path.write_text(
+        json.dumps(fragment, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    with tmp:
+        original = path.read_bytes()
+        saved = reg.FRAGMENT_STORE
+        reg.FRAGMENT_STORE = path.parent
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = reg.cmd_mutate(
+                    _mutate_args(
+                        factory=fragment["factory"],
+                        patch=str(_write_tmp({"zone": {"owns": ["z"], "does_not_own": ["y"]}})),
+                        dry_run=True,
+                    )
+                )
+            text = out.getvalue()
+            check("a dry run reports success without writing", rc == 0, f"rc={rc}")
+            check(
+                "...writes nothing at all",
+                path.read_bytes() == original,
+                "the file's bytes moved" if path.read_bytes() != original else "",
+            )
+            check(
+                "...and still declares the drift it WOULD canonicalise, in the same words",
+                "would canonicalise 1 line(s)" in text and reg.ESCAPE_FORM_NOTE in text,
+                text.strip().splitlines()[-1][:120] if text.strip() else "no output",
+            )
+        finally:
+            reg.FRAGMENT_STORE = saved
+
 PROBES = (
     probe_a_supersession_chain_is_not_ambiguity,
     probe_a_hand_edit_is_named,
@@ -1685,6 +1862,10 @@ PROBES = (
     probe_a_key_set_change_is_refused_naming_the_lost_keys,
     probe_a_mutation_preserves_every_key_the_fragment_carried,
     probe_the_verb_refuses_to_create_a_fragment,
+    probe_a_raw_utf8_fragment_is_canonicalised_and_the_note_says_so,
+    probe_an_already_canonical_fragment_is_canonicalised_in_silence,
+    probe_the_dry_run_declares_the_same_drift_without_writing,
+    probe_the_reason_is_measured_not_asserted,
 )
 
 def main() -> int:

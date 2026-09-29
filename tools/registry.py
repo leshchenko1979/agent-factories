@@ -33,6 +33,29 @@ Commands
 
 Exit: 0 ok, 1 problem (invalid fragment, bad usage, unreadable store).
 
+The fragment store's ONE serialisation, and why a write-back DECLARES it
+-----------------------------------------------------------------------
+A fragment is written as `json.dumps(obj, indent=2)` with `ensure_ascii` at its
+default, so a non-ASCII character is carried as an ESCAPE (`\u2014`) rather than
+as raw UTF-8. That escape form is the DECLARED canonical serialisation of this
+store, and it is a decision rather than an accident of the writer: every
+committed fragment already carries it, so adopting the raw form would rewrite
+all of them for a serialisation preference — churn with no defect behind it
+(issue #244, ruled 2026-09-29).
+
+A lane that sees a line change from `—` to `\u2014` on a write-back is therefore
+looking at the canonicalisation, not at a defect. It is still a change the lane
+did not ask for, so `mutate` STATES it rather than performing it invisibly: it
+renders the loaded object through this same serialiser BEFORE applying the
+patch, and when that rendering differs from the bytes on disk it prints how many
+lines differ and why. Nothing is refused — the noise is declared. (Origin: the
+ai-antispam HQ lane's write-back, where three of six changed lines carried no
+authorial intent.)
+
+Every fragment write path here goes through `canonical_fragment_text`, so the form
+has one expression rather than one per caller — a second `json.dumps` call site is
+how two writers of the same file start disagreeing.
+
 Why `check` is a NAME and never a command
 -----------------------------------------
 An announcement is written by a member lane and read by every other lane. A gate
@@ -654,6 +677,111 @@ def load_fragment(path: Path) -> tuple[object, str | None]:
         return None, f"{path}: does not parse as JSON — {exc}"
     except OSError as exc:
         return None, f"{path}: cannot read — {exc}"
+
+ESCAPE_FORM_NOTE = (
+    "non-ASCII carried as `\\uXXXX` escapes — this store's canonical form"
+)
+"""The REASON a canonicalisation note gives, as one string with one home.
+
+The module docstring, the note `mutate` prints and the probe that asserts it all
+name the same form, so a reader of any of the three meets the same words. Written
+once here because a reason restated per call site is how two of them start
+disagreeing — the class this whole section exists to close (#244).
+"""
+
+LAYOUT_FORM_NOTE = (
+    "the canonical rendering is `json.dumps(obj, indent=2)` — these lines differ in "
+    "LAYOUT as well as (or instead of) escaping"
+)
+"""The reason for a drift that escaping does not explain.
+
+A fragment can be non-canonical without carrying a single non-ASCII character —
+hand-written one-line lists are the measured case — and a note that named the
+escape form for such a diff would be a REASON THE MEASUREMENT DOES NOT SUPPORT.
+So the reason is chosen by the drift itself (`drift_reason`), never asserted.
+"""
+
+_ESCAPE_RE = re.compile(r"\\u([0-9a-fA-F]{4})")
+
+def _unescaped(text: str) -> str:
+    """`\\uXXXX` sequences rendered back to their characters, everything else intact."""
+    return _ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), text)
+
+def canonical_fragment_text(obj: object) -> str:
+    """The fragment store's ONE serialisation.
+
+    `ensure_ascii` is deliberately left at its default: the escape form is the
+    DECLARED canonical form (see the module docstring), so this is the expression
+    every write path calls rather than a `json.dumps` per caller. A second call
+    site is how two writers of the same file begin to disagree.
+    """
+    return json.dumps(obj, indent=2) + "\n"
+
+def serialisation_drift(disk_text: str, canonical_text: str) -> list[int]:
+    """The 1-based line numbers whose content differs between two renderings.
+
+    Positional, so on a file of the same length this is exactly the count a reader
+    sees in a diff. Its meaning is scoped by its CALLER: it is asked only whether
+    `canonical_fragment_text(loaded)` differs from the bytes on disk, and both
+    sides then render the SAME object — which is what makes "differs only by
+    serialisation" a measurement rather than a guess. Asked of two DIFFERENT
+    objects it would be a plain line diff, and the note built from it would be
+    false.
+    """
+    disk = disk_text.splitlines()
+    canon = canonical_text.splitlines()
+    return [
+        index + 1
+        for index in range(max(len(disk), len(canon)))
+        if (disk[index] if index < len(disk) else None)
+        != (canon[index] if index < len(canon) else None)
+    ]
+
+def drift_reason(disk_text: str, canonical_text: str, drift: list[int]) -> str:
+    """WHY the canonical rendering differs — MEASURED from the drift, never assumed.
+
+    The escape form is this store's canonical form, so the escape explanation is
+    the tempting one to print unconditionally. It is also false for a fragment
+    whose non-canonicality is pure layout, and this repo ships one
+    (`tests/fixtures/factory-fragment.example.json`: one raw non-ASCII line AND
+    hand-collapsed one-element lists, 42 lines of drift). A reason is a claim about
+    the measurement, so it is derived from it: the escape note is returned only
+    when unescaping the canonical line reproduces the disk line for EVERY differing
+    pair, and the layout note otherwise.
+    """
+    disk = disk_text.splitlines()
+    canon = canonical_text.splitlines()
+    escaped = 0
+    for index in drift:
+        if index > len(disk) or index > len(canon):
+            continue
+        if _unescaped(canon[index - 1]) == disk[index - 1]:
+            escaped += 1
+    return ESCAPE_FORM_NOTE if drift and escaped == len(drift) else LAYOUT_FORM_NOTE
+
+def canonicalisation_note(
+    disk_text: str, canonical_text: str, mutation: list[int]
+) -> list[str]:
+    """What `mutate` prints when its own writer rewrote lines nobody asked about.
+
+    EMPTY when there is nothing to declare, so silence from this function means
+    "nothing was rewritten beyond the mutation" and never "the note is missing" —
+    a reader must be able to tell a declared zero from an undeclared one.
+
+    `drift` is measured between the bytes on DISK and the object as LOADED, before
+    the patch: it is therefore the tool's own doing and carries no authorial
+    intent. `mutation` is the same measurement between the loaded and the candidate
+    renderings, so the two numbers separate what the lane asked for from what the
+    writer added.
+    """
+    drift = serialisation_drift(disk_text, canonical_text)
+    if not drift:
+        return []
+    return [
+        f"mutate: canonicalising {len(drift)} line(s) that differ only by "
+        f"serialisation ({drift_reason(disk_text, canonical_text, drift)}); the "
+        f"mutation itself changed {len(mutation)} line(s)"
+    ]
 
 
 def fragment_paths(explicit: list[str]) -> list[Path]:
@@ -1696,7 +1824,7 @@ def cmd_enroll(args: argparse.Namespace) -> int:
         if args.dry_run:
             written.append({**stats, "path": str(path), "dry_run": True})
             continue
-        path.write_text(json.dumps(fragment, indent=2) + "\n", encoding="utf-8")
+        path.write_text(canonical_fragment_text(fragment), encoding="utf-8")
         written.append({**stats, "path": str(path), "dry_run": False})
 
     for stats in written:
@@ -1914,18 +2042,32 @@ def cmd_mutate(args: argparse.Namespace) -> int:
             print(f"mutate: {line}", file=sys.stderr)
         return 1
 
+    # The canonicalisation is DECLARED before it happens, never performed invisibly
+    # (#244): the loaded object is rendered through this store's own serialiser and
+    # compared with the bytes on disk. Both sides render the SAME object, so any
+    # line difference is serialisation and carries no authorial intent — the count
+    # and the reason are printed below rather than left for a reviewer to discover
+    # in a diff that looks twice as large as the change.
+    disk_text = path.read_text(encoding="utf-8")
+    loaded_text = canonical_fragment_text(loaded)
+    mutation = serialisation_drift(loaded_text, canonical_fragment_text(candidate))
+
     if args.dry_run:
         print(
             f"mutate: {path} — dry run, nothing written "
             f"({len(loaded)} key(s) in, {len(candidate)} out)"
         )
+        for line in canonicalisation_note(disk_text, loaded_text, mutation):
+            print(line.replace("canonicalising", "would canonicalise", 1))
         return 0
 
-    path.write_text(json.dumps(candidate, indent=2) + "\n", encoding="utf-8")
+    path.write_text(canonical_fragment_text(candidate), encoding="utf-8")
     print(
         f"mutate: {path} — {len(candidate)} key(s) written "
         f"({'patched' if args.patch is not None else 'replaced'})"
     )
+    for line in canonicalisation_note(disk_text, loaded_text, mutation):
+        print(line)
     return 0
 
 def main(argv: list[str] | None = None) -> int:
