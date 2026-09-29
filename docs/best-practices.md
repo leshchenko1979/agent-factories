@@ -421,6 +421,24 @@ that still requires the operator's hand is listed and counted, and the number fa
 time is the evidence of transferability. A factory that cannot produce the list has not
 measured its independence — it has asserted it.
 
+The acts do not sit in a flat list. Five rungs raise a factory's autonomy, and **the rungs are
+ordered** — each presumes the one before it:
+
+- *Rung 1 — write the whole plan.*
+- *Rung 2 — put it in the plan/checklist tool so it survives compaction* (P33).
+- *Rung 3 — write a skill, and make the harness reload skills across compactions* (P33).
+- *Rung 4 — a ralph loop or goal tool: a detached judge loops until the goal is met* (P27).
+- *Rung 5 — a cron wakes the agent to re-check* (P7 and P28).
+
+**The order is the content, not the list.** Rungs 1-3 externalise the plan so it outlives the
+context boundary; rungs 4 and 5 wake a lane to re-check. A lane woken by rung 4 or 5 with nothing
+externalised has nothing to wake *onto* — it re-derives from a context that has already lost the
+plan. That is why rung 2 is **necessary and not sufficient**: externalising a plan does not by
+itself keep a loop converging, and a wake without an anchor converges on nothing. P33's own
+dataset (778 compactions, >93% retention when guided) is this factory's measurement of that half;
+the external citation the filing carries is recorded in its item and is **not** restated here as a
+measurement of ours.
+
 - *Proven:* this project, 2026-09-11. The template stated lane creation as an operator act
   and rested transferability on a mechanism that needs the operator **per work unit** — so
   the claim and the mechanism contradicted each other in the same document, and nothing
@@ -435,6 +453,23 @@ measured its independence — it has asserted it.
 - *Practice:* at bootstrap, enumerate the acts only the operator can perform. Re-run the
   count on the measurement cadence. An act that gets mechanized leaves the list, and the
   count is the trend.
+- *The unit — prompts submitted per goal achieved:* the count above is an enumeration of act
+  *types*; the ladder's unit is a **rate**. Same subject measured from the other side — what still
+  needs the hand, against what got done. Its derivation is **named, not owed**:
+  `evidence/p26-rate-derivation-<date>.md`, predicate = `messages` rows anchored on the operator's
+  own author prefix (never a bare containment match, which also matches a machine message *quoting*
+  the operator), denominator = the ledger's `close` rows, joined **by window** rather than by
+  session so both operands sit at fleet level. Read the current value from the derivation and re-run
+  it on the measurement cadence; every figure below is a property of the instant it was read and is
+  never restated here as current.
+- *First reading, and its direction is not the one this practice wants:* **2,849 / 207 = 13.76**
+  operator prompts per closed work unit, over `2026-09-12T11:00:15Z -> 2026-09-29T11:57:09Z`, at
+  `2026-09-29T12:23:30Z`. Prior seven days 10.49; last seven days 11.00 — **+4.9%, flat, not
+  falling.** The Practice clause above says the falling number *is* the evidence of transferability,
+  so on this first reading the fleet has **no evidence of transferability yet**. Stated because an
+  unfavourable first reading is the one a derivation is tempted to bury. The rate is a **companion**,
+  not a scored criterion: the count stays primary until the rate has a variance history, and only
+  then may the rubric be asked to prefer one.
 - *Boundary:* an act on the list is not automatically a defect. A deliberate approval gate
   (P14) belongs to the operator **by design** and stays on the list. The defect is an act
   that needs the operator for *mechanical* reasons nobody chose — those are the ones that
