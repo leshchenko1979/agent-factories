@@ -685,6 +685,71 @@ def flag_list(flags, name):
     return value if isinstance(value, list) else [value]
 
 
+def resolve_recommendation(raw, options, where):
+    """#652: resolve --recommended to (index, label), or die 2.
+
+    Accepts EITHER a 0-based index OR an option label, because the alternative
+    is forcing the caller to compute an array index, which fleet-directives.md
+    LLM Ergonomics item 1 forbids outright ("Never force an agent to compute,
+    track, or predict numeric array indices ... Prefer semantic anchors").
+    Measured cost: lane 6630dc9a passed `--recommended 1` meaning "the FIRST
+    option" (its prose said "RECOMMENDED: A"); both questions stored index 1,
+    the SECOND option, so the owner's page pre-checked the radio OPPOSING each
+    question's own prose for 4h26m (q24/q25, amend_count 1 each -- the lane's
+    own correction is the evidence).
+
+    Precedence is deliberate: an all-digit value is an INDEX (so an option
+    literally named "1" stays reachable), then an exact label, then a leading
+    letter. Anything else is REFUSED naming the options -- never silently
+    fallen back to an index, which is how the original wrong-base landed.
+    Returns (index, label) so callers can ECHO what they resolved; the stored
+    value stays the index, so no existing question is reinterpreted.
+    """
+    if raw is None:
+        return None, None
+    if isinstance(raw, bool) or (not isinstance(raw, int)
+                                 and not isinstance(raw, str)):
+        die(2, f"{where}: recommended must be an integer index or an option label")
+    if not options:
+        die(2, f"{where}: recommended is set but the question carries no options "
+               f"-- there is nothing to recommend")
+    if isinstance(raw, int):
+        index = raw
+    elif re.fullmatch(r"[0-9]+", raw.strip()):
+        index = int(raw.strip())
+    else:
+        text = raw.strip()
+        index = None
+        for i, o in enumerate(options):
+            if o == text:
+                index = i
+                break
+        if index is None:
+            # A bare letter is the most natural semantic anchor ("--recommended
+            # Y"). It must be matched against the OPTIONS' OWN leading letters,
+            # NOT the alphabet position: ord('Y')-65 would be 24, which would
+            # refuse options labelled X/Y with a complaint about index 24.
+            m = re.match(r"^([A-Za-z])(?:\s*[).:-]|\s*$)", text)
+            if m:
+                want = m.group(1).upper()
+                hits = [i for i, o in enumerate(options)
+                        if re.match(r"^[A-Za-z](?:\s*[).:-]|\s*$)", o)
+                        and o[0].upper() == want]
+                if len(hits) == 1:
+                    index = hits[0]
+                elif len(hits) > 1:
+                    die(2, f"{where}: recommended letter {want!r} is ambiguous -- "
+                           f"options {hits} all start with it. Pass the full label.")
+        if index is None:
+            die(2, f"{where}: recommended {text!r} matches no option and is not "
+                   f"a 0-based index. Options: "
+                   + "; ".join(f"[{i}] {o!r}" for i, o in enumerate(options)))
+    if not 0 <= index < len(options):
+        die(2, f"{where}: recommended {index} is outside options "
+               f"(0..{len(options) - 1}): "
+               + "; ".join(f"[{i}] {o!r}" for i, o in enumerate(options)))
+    return index, options[index]
+
 def normalise_questions(raw):
     """Validate and normalise the ordered question array. Order is the contract
     (#547: 'questions[] in call order'), so nothing here reorders."""
@@ -715,16 +780,10 @@ def normalise_questions(raw):
         if kind == "multi" and not options:
             die(2, f"question {position}: kind=multi needs options to choose "
                    f"between; it carries none")
-        recommended = item.get("recommended")
-        if recommended is not None:
-            if not isinstance(recommended, int) or isinstance(recommended, bool):
-                die(2, f"question {position}: recommended must be an integer index")
-            if not options:
-                die(2, f"question {position}: recommended is set but the question "
-                       f"carries no options — there is nothing to recommend")
-            if not 0 <= recommended < len(options):
-                die(2, f"question {position}: recommended {recommended} is outside "
-                       f"options (0..{len(options) - 1})")
+        # A label or letter is accepted because a caller must not have to count
+        # array positions; the STORED value stays an index.
+        recommended, _rec_label = resolve_recommendation(
+            item.get("recommended"), options, f"question {position}")
         out.append({
             "qid": f"q{position}",
             "title": title,
@@ -760,7 +819,9 @@ def questions_from_flags(flags):
             "title": flags.get("--title", ""),
             "description": flags.get("--description", ""),
             "options": flag_list(flags, "--option"),
-            "recommended": int(flags["--recommended"]) if "--recommended" in flags else None,
+            "recommended": resolve_recommendation(
+                flags.get("--recommended"), flag_list(flags, "--option"),
+                "question 1")[0],
             "kind": ("multi" if "--multi" in flags
                      else (flags.get("--kind") or "single")),
             "clarify": "--no-clarify" not in flags,
@@ -866,6 +927,14 @@ def cmd_ask(argv):
             if close_when:
                 question.setdefault("close_when", close_when)
         entry["questions"].extend(questions)
+        # ECHO what --recommended RESOLVED, read back from what was STORED
+        # (#652). A caller who typed a label must see which option it became,
+        # and echoing the stored value proves the RECORD rather than restating
+        # the intention -- which is exactly what the silent wrong-base hid.
+        resolved_recs = [(q.get("qid"), q.get("recommended"),
+                          (q.get("options") or [None])[q["recommended"]]
+                          if q.get("recommended") is not None else None)
+                         for q in questions]
         write_register_atomic(data)
 
     oc_log_extra("set", factory)
@@ -886,6 +955,9 @@ def cmd_ask(argv):
         # the surface now; the caller needs the count and the link.
         print(f"registered {len(questions)} question(s) in {factory} "
               f"(lane {lane}, ttl {ttl_days}d)")
+        for _qid, _idx, _label in resolved_recs:
+            if _idx is not None:
+                print(f"  recommended {_qid}: [{_idx}] {_label!r}")
         print(f"{total} open question(s) across {sets} factory set(s)")
         if page:
             print(f"page {page}")
@@ -902,8 +974,15 @@ def cmd_list(argv):
     entries = data["sets"]
     if "--all" not in flags:
         entries = [s for s in entries if s.get("status") == "open"]
-    if flags.get("--session"):
-        entries = [s for s in entries if s.get("session") == flags["--session"]]
+    # --session is the RETURN ADDRESS, so it must select QUESTIONS, not sets
+    # (#632, 2026-09-28). A standing factory set is created once by one lane and
+    # then asked into by MANY, so comparing the SET's session against the caller
+    # compares the CREATOR against the caller and returns zero for every
+    # question's own author. Measured cost: a lane using `list` as its "have I
+    # already asked this?" check saw 0 open, filed a duplicate, and put two
+    # questions for one issue on the owner's page. This mirrors
+    # question_return_address, the per-question rule notify already uses.
+    want_session = (flags.get("--session") or "").strip()
 
     # Group by LANE, not by set (owner order 2026-09-25): one standing factory
     # set holds questions from many lanes, so the SET is not the unit a reader
@@ -911,6 +990,11 @@ def cmd_list(argv):
     lanes = {}
     for entry in entries:
         for question in entry.get("questions", []):
+            if want_session:
+                q_session = (question.get("session")
+                             or entry.get("session") or "").strip()
+                if q_session != want_session:
+                    continue
             lane = question.get("lane") or entry.get("lane") or "unknown"
             lanes.setdefault(lane, []).append((entry, question))
 
@@ -1204,15 +1288,13 @@ def cmd_amend(argv):
             question["options"] = options if isinstance(options, list) else [options]
             changed.append("options")
         if flags.get("--recommended") is not None:
-            try:
-                index = int(flags["--recommended"])
-            except (TypeError, ValueError):
-                die(2, "--recommended must be an integer index")
-            count = len(question.get("options") or [])
-            if not 0 <= index < count:
-                die(2, f"--recommended {index} is outside 0..{max(count - 1, 0)}")
+            index, rec_label = resolve_recommendation(
+                flags["--recommended"], question.get("options") or [],
+                f"{set_id}/{qid}")
             question["recommended"] = index
-            changed.append("recommended")
+            # Echo what it RESOLVED, so a caller who typed a label sees which
+            # option it became rather than having to re-read the register.
+            changed.append(f"recommended={index} ({rec_label})")
 
         # The whole point: the question becomes ANSWERABLE again.
         was = question.get("status")
@@ -2669,6 +2751,87 @@ def selftest():
         ck(len(questions) == 2 and questions[0].get("recommended") == 1
            and questions[1].get("recommended") == 0,
            "per-question recommendations preserved (1 then 0, not shared)")
+
+        # -- 2b. --recommended RESOLUTION (#652, 2026-09-28) ---------------
+        # These arms ASK, so they get their OWN store: the main fixture's set
+        # population is asserted by later arms (an exact set count, and the
+        # recommendation text found in the rendered DOM), so residue here would
+        # silently re-subject THEIR fixtures. Isolation, not tidiness.
+        _rec_store = os.path.join(root, "rec-store")
+        os.makedirs(_rec_store, exist_ok=True)
+        _saved_rec_dir = env["OC_QUESTIONS_DIR"]
+        env["OC_QUESTIONS_DIR"] = _rec_store
+        # A caller must not have to count array positions (fleet-directives.md
+        # LLM Ergonomics item 1). Measured cost of the bare index: lane 6630dc9a
+        # read "1" as "the FIRST option" while its own prose said
+        # "RECOMMENDED: A", so the owner's page pre-checked the radio OPPOSING
+        # the question for 4h26m. The round-trip arm above cannot catch that --
+        # the raw index round-trips correctly, which is the whole problem.
+        # THE RECORDED VALUE STAYS AN INDEX in every form, so no existing
+        # question is reinterpreted; only the INPUT is widened.
+        rc, out, _ = run("ask", "--factory", "f-rec-letter",
+                         "--title", "Letter form", "--description", "d",
+                         "--option", "A", "--option", "B",
+                         "--recommended", "A", "--no-publish")
+        ck(rc == 0, "ask accepts a LABEL/letter for --recommended (rc=%d)" % rc)
+        ck("[0] 'A'" in out,
+           "\u2026and ECHOES what it resolved, read back from the record (%r)"
+           % (out.strip().splitlines()[-2:] if out.strip() else ""))
+        _rl = get_set("f-rec-letter")["questions"][0]
+        ck(_rl.get("recommended") == 0,
+           "\u2026storing the INDEX, so a reader of the register is unchanged "
+           "(%r)" % (_rl.get("recommended"),))
+        # The letter is matched against the OPTIONS' OWN leading letters, not
+        # the alphabet position: ord('Y')-65 = 24 would refuse valid input.
+        rc, out, _ = run("ask", "--factory", "f-rec-y",
+                         "--title", "Y form", "--description", "d",
+                         "--option", "X - first", "--option", "Y - second",
+                         "--recommended", "Y", "--no-publish")
+        ck(rc == 0 and get_set("f-rec-y")["questions"][0].get("recommended") == 1,
+           "a bare letter matches the option's OWN leading letter, not its "
+           "alphabet position (rc=%d, recommended=%r)"
+           % (rc, (get_set("f-rec-y") or {}).get("questions", [{}])[0]
+              .get("recommended")))
+        rc, out, _ = run("ask", "--factory", "f-rec-label",
+                         "--title", "Label form", "--description", "d",
+                         "--option", "X - first", "--option", "Y - second",
+                         "--recommended", "Y - second", "--no-publish")
+        ck(rc == 0 and get_set("f-rec-label")["questions"][0].get("recommended") == 1,
+           "a FULL option label resolves too (rc=%d)" % rc)
+        # An all-digit value stays an INDEX, so an option literally named "1"
+        # remains reachable.
+        rc, out, _ = run("ask", "--factory", "f-rec-digit",
+                         "--title", "digit", "--description", "d",
+                         "--option", "1", "--option", "2",
+                         "--recommended", "1", "--no-publish")
+        ck(rc == 0 and get_set("f-rec-digit")["questions"][0].get("recommended") == 1,
+           "an all-digit value is still an INDEX, so an option named '1' stays "
+           "reachable (rc=%d)" % rc)
+        # REFUSED, naming the options -- never silently fallen back to an
+        # index, which is how the original wrong-base landed.
+        rc, _, err = run("ask", "--factory", "f-rec-bad",
+                         "--title", "bad", "--description", "d",
+                         "--option", "a", "--option", "b",
+                         "--recommended", "zebra", "--no-publish")
+        ck(rc == 2 and "matches no option" in (err or ""),
+           "an unmatched label is REFUSED naming the options (rc=%d, err=%r)"
+           % (rc, (err or "").strip()[:70]))
+        rc, _, err = run("ask", "--factory", "f-rec-range",
+                         "--title", "range", "--description", "d",
+                         "--option", "a", "--option", "b",
+                         "--recommended", "9", "--no-publish")
+        ck(rc == 2 and "outside options" in (err or ""),
+           "an out-of-range index is refused naming the options (rc=%d)" % rc)
+        ck(get_set("f-rec-bad") is None and get_set("f-rec-range") is None,
+           "\u2026and a refused ask registers NOTHING")
+        # The amend leg resolves the same way and echoes the label.
+        rc, out, _ = run("amend", "--set", "f-rec-letter", "--qid", "q1",
+                         "--recommended", "B")
+        ck(rc == 0 and "recommended=1 (B)" in out,
+           "amend resolves and ECHOES the label it stored (rc=%d, out=%r)"
+           % (rc, out.strip()[-60:]))
+        # Close the isolation opened for these arms.
+        env["OC_QUESTIONS_DIR"] = _saved_rec_dir
         ck(set_id == "f-cron-lane",
            "the FACTORY KEY IS the set id (%r)" % set_id)
 
@@ -4105,6 +4268,51 @@ def selftest():
         ck(_fj.get("open_questions") == sum(r["open"] for r in _fj.get("lanes", [])),
            "list --lane --json: open_questions agrees with the lanes it shows "
            "(pre-fix it carried the fleet total beside a filtered lanes[])")
+
+        # --session is the RETURN ADDRESS, so it must select QUESTIONS, not
+        # SETS (#632, 2026-09-28). The fixture above is exactly the case that
+        # broke: ONE standing set, created by session_a, that session_b asked
+        # into. A set-level comparison compares the CREATOR against the caller,
+        # so the second lane sees ZERO of its own questions -- and the first
+        # lane sees the WHOLE set, including questions it never asked. Both
+        # directions are asserted, because either alone passes a wrong filter.
+        # WHO appears is asserted, not merely how many: a count-only arm
+        # measures the fixture rather than the filter.
+        def _pairs(js):
+            """(set, qid) for every question a list --json call returned."""
+            return [(q.get("set"), q.get("qid")) for r in js.get("lanes", [])
+                    for q in r.get("questions", [])]
+        # The DISCRIMINATOR is the cross-lane pair, not a count: the fixture's
+        # set holds q1 (asked by session_a, who CREATED it) and q2 (asked by
+        # session_b into it). Pre-fix the set-level comparison showed the
+        # creator the WHOLE set -- q2 included -- and showed session_b nothing
+        # at all. Either half alone passes a wrong filter, so both are asserted.
+        rc, out, _ = run("list", "--session", session_b, "--json")
+        _jb = json.loads(out)
+        _pb = _pairs(_jb)
+        ck(rc == 0 and (_fac, "q2") in _pb,
+           "list --session returns the question asked BY a lane into a set "
+           "created by ANOTHER (%r)" % (_pb,))
+        ck((_fac, "q1") not in _pb,
+           "\u2026and NOT the creator's question in the same set (%r)" % (_pb,))
+        rc, out, _ = run("list", "--session", session_a, "--json")
+        _ja = json.loads(out)
+        _pa = _pairs(_ja)
+        ck(rc == 0 and (_fac, "q1") in _pa,
+           "\u2026the OTHER direction: the creator sees its OWN question (%r)"
+           % (_pa,))
+        ck((_fac, "q2") not in _pa,
+           "\u2026and NOT the second lane's, so it no longer sees the whole set "
+           "(%r)" % (_pa,))
+        # A lane that asked nothing gets nothing -- the zero that the pre-fix
+        # code returned for EVERYONE, which is why the bug read as an empty
+        # register rather than as a broken filter.
+        rc, out, _ = run("list", "--session", "99999999-8888-7777-6666-555555555555",
+                         "--json")
+        _jz = json.loads(out)
+        ck(rc == 0 and _jz.get("open_questions") == 0 and not _jz.get("lanes"),
+           "list --session for a lane that asked NOTHING returns zero (%r/%r)"
+           % (_jz.get("open_questions"), len(_jz.get("lanes", []))))
 
         # The page: ONE section per LANE, each with a STABLE anchor.
         rc, out, _ = run("publish", "--json")
