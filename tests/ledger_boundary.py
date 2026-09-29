@@ -72,6 +72,7 @@ from ledger_declaration import (  # noqa: E402
     DeclarationUnavailable,
     DeclarationUnreadable,
     boundary_for,
+    load_reconstructions,
     parse_ts,
 )
 
@@ -179,6 +180,93 @@ def declared_boundary(repo: Path, key: str) -> tuple[dt.datetime, str]:
         raise SkipGate(str(exc)) from exc
     except DeclarationUnreadable as exc:
         raise GateError(list(exc.problems)) from exc
+
+def declared_reconstructions(repo: Path, key: str) -> tuple[list[int], dict[int, int], str]:
+    """`(rows, gaps, declared-text)` for one gate, or `SkipGate`/`GateError`.
+
+    THE SECOND FACTORY DECLARATION BESIDE THE BOUNDARY, and it exists for the reason the
+    boundary does (#239): a gate that is PAIRED byte-identically with its TEMPLATE copy
+    ships to every member, so a row number written inside it is read against the MEMBER's
+    ledger — and the member does not have this factory's rows. Measured before the fix:
+    `tests/test_reconstructed_claim_declared.py` carried six of them inline, and its LIVE
+    leg asserts each is present in the tree's own ledger, so every member tree went HARD RED
+    naming a row that is not theirs. The harm is not a false clean; it is a red in
+    a tree the constant does not describe.
+
+    The two arms mirror `declared_boundary`'s POLICY deliberately, so a caller reads both
+    declarations the same way: an ABSENT declaration is a `SkipGate` naming what is missing
+    — the state every bootstrapped factory is in, and the state this factory would be in for
+    any OTHER gate's history — and a MALFORMED one is a `GateError`, because a factory that
+    declared rows and cannot have them read must not be hidden behind the same output as no
+    declaration at all.
+
+    `gaps` is the second half of the same fact and travels with it: the intervals a ruling
+    measured for those rows are as factory-specific as the row numbers, and a gate that
+    calibrated against another factory's intervals would be measuring its own resolution
+    logic against a history it does not have.
+    """
+    try:
+        declared = load_reconstructions(repo)
+    except DeclarationUnavailable as exc:
+        raise SkipGate(str(exc)) from exc
+    except DeclarationUnreadable as exc:
+        raise GateError(list(exc.problems)) from exc
+
+    entry = declared.get(key)
+    if entry is None:
+        raise SkipGate(
+            f"this tree declares no `reconstructions.{key}` entry in {DECLARATION_REL} — "
+            f"the rows are this factory's own history, so a tree that has not declared them "
+            f"skips this calibration rather than borrowing another factory's"
+        )
+    problems: list[str] = []
+    rows_raw = entry.get("rows") if isinstance(entry, dict) else None
+    gaps_raw = entry.get("gaps") if isinstance(entry, dict) else {}
+    if not isinstance(rows_raw, list) or not rows_raw:
+        problems.append(
+            f"{DECLARATION_REL}: `reconstructions.{key}.rows` must be a NON-EMPTY list of "
+            f"row numbers — an empty declaration is the absent one wearing a key"
+        )
+        rows: list[int] = []
+    else:
+        rows = []
+        for value in rows_raw:
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                problems.append(
+                    f"{DECLARATION_REL}: `reconstructions.{key}.rows` carries {value!r}, "
+                    f"which is not a positive integer row number"
+                )
+                continue
+            rows.append(value)
+    gaps: dict[int, int] = {}
+    if gaps_raw is not None and not isinstance(gaps_raw, dict):
+        problems.append(
+            f"{DECLARATION_REL}: `reconstructions.{key}.gaps` must be an object mapping a "
+            f"row number to the interval measured for it"
+        )
+    else:
+        for raw_key, value in (gaps_raw or {}).items():
+            try:
+                number = int(raw_key)
+            except (TypeError, ValueError):
+                problems.append(
+                    f"{DECLARATION_REL}: `reconstructions.{key}.gaps` key {raw_key!r} is "
+                    f"not a row number"
+                )
+                continue
+            if not isinstance(value, int) or isinstance(value, bool):
+                problems.append(
+                    f"{DECLARATION_REL}: `reconstructions.{key}.gaps[{raw_key}]` is "
+                    f"{value!r}, not an integer interval in seconds"
+                )
+                continue
+            gaps[number] = value
+    if problems:
+        raise GateError(problems)
+    return rows, gaps, (
+        f"{DECLARATION_REL} reconstructions.{key}: {len(rows)} row(s) declared, "
+        f"{len(gaps)} with a measured interval"
+    )
 
 def boundary_and_rows(repo: Path, key: str) -> tuple[dt.datetime, str, list[dict]]:
     """`(boundary, declared-text, rows)` for one gate, or `SkipGate`/`GateError`.
