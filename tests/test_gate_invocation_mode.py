@@ -157,11 +157,6 @@ def probe_the_population_is_the_call_sites_and_is_non_empty() -> None:
 
 def probe_every_invoked_gate_declares_the_mode_its_call_site_uses() -> None:
     """The core assertion: declared mode == call-site form, for every invoked gate."""
-    # The declaration is FACTORY DATA and the shipped tree carries none (#199) — the kit ships
-    # the shape, not this box's measurement. Stated rather than crashing.
-    if not MANIFEST.is_file():
-        print("  SKIP  the declaration leg — this tree declares no invocation modes")
-        return
     invoked = invoked_gates()
     declared, note = declared_modes()
     found = problems(invoked, declared)
@@ -202,9 +197,6 @@ def probe_a_dual_SHAPED_file_is_judged_by_its_CALL_SITE() -> None:
     # this guard the probe raised FileNotFoundError inside the tree the kit ships from, which is
     # a crash rather than a verdict; the mode declaration simply does not exist to compare
     # against there, and `main` states that skip separately.
-    if not MANIFEST.is_file():
-        print("  SKIP  the dual-shaped probe — this tree declares no invocation modes")
-        return
     invoked = invoked_gates()
     declared, _ = declared_modes()
     dual = [
@@ -301,18 +293,13 @@ def main() -> int:
 # STATED SKIP: registry/gates.json (factory data)
     if "--emit-modes" in sys.argv[1:]:
         return emit_modes()
-    checks = [value for name, value in sorted(globals().items())
-              if name.startswith("probe_") and callable(value)]
-    failures: list[str] = []
-    for check in checks:
-        try:
-            check()
-            print(f"  PASS  {check.__name__}")
-        except AssertionError as exc:
-            failures.append(f"{check.__name__}: {exc}")
-            print(f"  FAIL  {check.__name__} — {exc}")
+    # The manifest-state discrimination happens ONCE, here, ABOVE the probe loop.
+    # The precondition belongs to the GATE, not to each call site: restated per probe it was
+    # hand-applied twice and missed once (#219), which made the k-th instance a coin flip.
+    # Above the loop it is also what makes the skip REACHABLE — and it removes the false-pass
+    # path, where a probe that printed its own SKIP and returned was then labelled PASS by the
+    # loop below, a pass for a probe that asserted nothing.
     try:
-        invoked = invoked_gates()
         declared, note = declared_modes()
     except FileNotFoundError:
         print(
@@ -324,6 +311,17 @@ def main() -> int:
     except ManifestUnreadable as exc:
         print(f"  FAIL  the declaration exists and cannot be read: {exc}")
         return 1
+    checks = [value for name, value in sorted(globals().items())
+              if name.startswith("probe_") and callable(value)]
+    failures: list[str] = []
+    for check in checks:
+        try:
+            check()
+            print(f"  PASS  {check.__name__}")
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+            print(f"  FAIL  {check.__name__} — {exc}")
+    invoked = invoked_gates()
     print(
         f"  population: {len(invoked)} invoked gate(s) — "
         f"{sum(1 for m in invoked.values() if m == 'script')} script / "
