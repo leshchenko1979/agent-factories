@@ -500,6 +500,37 @@ by a full 40-character sha, still printed on every run, and still admitted only 
 has an EMPTY REPAIR SPACE. Nothing about the marker's move touches what may be excused — it only
 changes *who* names the range.
 
+### 5.3 A gate must not red on a declaration the kit does not ship
+
+Measured 2026-09-29 (`#229`). This instrument's gate drives `#210`'s `release` arms, and
+`release` is **factory data** — declared in `docs/ledger-refs-kinds.json`, whose skeleton alone
+ships (`…example.json`, `"events": []`). So the shipped tree had nothing to drive: the same bytes
+scored **two verdicts** — this factory's tree `rc=0`, the tree the kit hands every member
+`rc=1` with six failing arms — and the difference was a declaration, not a defect.
+
+The rule, and it is `#219`'s applied to a second surface: **a probe whose precondition is factory
+data declares that precondition once, above the arms, and SKIPS with its reason where the data is
+absent.** A missing declaration is not a broken instrument, and a shipped gate that cannot run in
+the tree it ships to is a wall in front of every adopter.
+
+The shape is the one `tests/ledger_boundary.py` already implements, and the three outcomes are
+§5.2's, which is the point — one doctrine, two surfaces:
+
+| state | outcome |
+|---|---|
+| the factory has **declared** the vocabulary | the arms RUN — this factory's own tree, where the declaration is real |
+| the factory has **not** declared it | **SKIP, with the reason stated** — the shipped tree, and every fresh adopter; it examines nothing and says so rather than passing vacuously |
+| the factory declares it but the vocabulary is **unreachable** | a defect in the declaration, not an absence — the reader treats an unreadable declaration as absent *for the core vocabulary's sake*, so this case surfaces as the first two, never as a third silent state |
+
+**How it got through, because the mechanism matters more than the instance.** `c9a8ec6` added the
+event, the declaration carrying it, the write path, the read side and the arms — and regenerated
+the kit. The declaration went to this factory's own file, which is **not a kit entry**; the kit
+gained only the test that drives it. That is the fourth instance today of one shape (`#202`,
+`#211`, `#219`, `#229`): **a change correct in the tree it was written in, in a fleet where the
+shipped tree is a DERIVED VIEW and nothing checks that a new requirement's carrier also ships.**
+The instance is closed here; the shape is not, and it is the reason this section names the
+mechanism rather than only the fix.
+
 ## 6. This instrument's divergence matrix
 
 Measured 2026-09-27T10:28Z. **Predicate:** the manifest's ledger paths, against each registered
