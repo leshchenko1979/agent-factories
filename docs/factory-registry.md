@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-09-29T07:29:05Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-09-29T08:38:35Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-09-29T07:29:05Z` |
+| generated | live reads | resolved `2026-09-29T08:38:35Z` |
 
 ## Announcements
 
@@ -38,7 +38,7 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-25 · declared by: ai-antispam
 - 🟡 **`gatus-config-carries-live-credentials`** — vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.
   - affects: profile · since: 2026-09-23 · review by: 2026-10-07 · declared by: infra-factory
-- 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-28T11:35:19Z: of 63 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous censuses in this notice (2026-09-26T06:20Z: of 57 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) are kept as the steps this one follows, never overwritten.
+- 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-29T08:26Z: of 64 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous censuses in this notice (2026-09-28T11:35:19Z: of 63 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-26T06:20Z: of 57 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) are kept as the steps this one follows, never overwritten.
   - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
 - 🟡 **`cron-result-lost-on-restart`** — A cron job whose run is interrupted by an OpenCrabs daemon restart delivers its result to NO channel: boot revival resumes the turn with no job identity, run id or deliver_to, so the job output reaches nobody. Ship-chain hot-reloads make restarts frequent, so any factory relying on cron delivery is exposed.
   - affects: profile · since: 2026-09-19 · review by: 2026-10-07 · declared by: infra-factory
@@ -150,7 +150,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | Triage | 10781 | triage | `6ca0d547-4a72-4c29-ac10-967daa98af0a` | Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781] | resolved | telegram | 2026-09-25T17:00:07Z | — |
 | HQ | 10782 | hq | `cb06a94a-be02-4e8c-b6c6-c8c9f09922f4` | Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782] | resolved | telegram | 2026-09-28T12:20:22Z | — |
 | ai-antispam Landing lane | 10783 | landing | `99b348f6-a040-4119-8aa8-00736c7fb61d` | ai-antispam Landing lane | resolved | telegram | 2026-09-11T21:55:58Z | — |
-| Bot lane — ai-antispam service (Bot topic) | 10784 | bot | `6d921dca-fb0a-455b-bceb-dfb78dcf1f07` | Bot lane — ai-antispam service (Bot topic) | resolved | telegram | 2026-09-29T07:08:48Z | — |
+| Bot lane — ai-antispam service (Bot topic) | 10784 | bot | `6d921dca-fb0a-455b-bceb-dfb78dcf1f07` | Bot lane — ai-antispam service (Bot topic) | resolved | telegram | 2026-09-29T07:40:03Z | — |
 | MAX domain — lane acceptance & verification | 11156 | _unstated_ | `85425045-2567-4beb-9867-100d6755e2cd` | MAX domain — lane acceptance & verification | resolved | telegram | 2026-09-15T03:45:41Z | — |
 
 **Pacemakers**
@@ -284,7 +284,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 |---|---|---|---|---|---|---|---|---|
 | HQ | 4 | hq | `6a314aac-94db-4b11-974c-f53decc25b9d` | Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4] | resolved | telegram | 2026-09-28T17:48:31Z | — |
 | Gatus alert routing and fleet triage | 5 | triage | `fb67ca75-8735-4c39-80be-06b59bd4365f` | Gatus alert routing and fleet triage | resolved | telegram | 2026-09-26T08:21:48Z | — |
-| Surveys | 7 | surveys | `8daa376e-367c-452d-840f-0c18d66ef60a` | Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7] | resolved | telegram | 2026-09-27T13:55:36Z | — |
+| Surveys | 7 | surveys | `8daa376e-367c-452d-840f-0c18d66ef60a` | Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7] | resolved | telegram | 2026-09-29T07:42:08Z | — |
 | LLM Gateway | 467 | gateway | `8b278a4f-531d-4d7b-8c79-87d30f9257bd` | Telegram: Infra Factory / LLM Gateway [chat:-1004486255170:topic:467] | resolved | telegram | 2026-09-26T14:14:04Z | — |
 | TG Hub | 475 | _unstated_ | `a360e13f-4e34-4fac-8a1d-770644040903` | Telegram: Infra Factory / TG Hub [chat:-1004486255170:topic:475] | resolved | telegram | 2026-09-24T13:28:58Z | — |
 
@@ -306,7 +306,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-28T11:47:47Z |
+| freshness | ✅ attested 2026-09-29T08:29:04Z |
 | purpose | Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy. |
 | profile | `ops` |
 | repo | `/root/agent-factories` |
@@ -314,7 +314,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 | owns | ['the template instrument surface — methodology, development and cross-member deployment (owner-commissioned 2026-09-27)', 'the ASIF template and rulebook (TEMPLATE/ and the derived laws)', 'the fleet registry (registry/)', 'member-factory surveys, scores and the measurement cadence', 'the pacemaker and outer-trigger methodology (P28)', "this factory's own process law (skills/meta-factory/SKILL.md)"] |
 | does not own | ["member factories' products, backlogs, repos and code", "member factories' ontologies and issue boards", 'the OpenCrabs runtime, daemon and core tools - a client-supplier loop, not ownership', 'token provisioning, model routing and inference pricing (InferHub Watch)', 'the tg_* tool surface (fast-mcp-telegram)'] |
 | substrates owned | ['/root/agent-factories', '/root/agent-factories/skills/meta-factory/SKILL.md', '/root/agent-factories/registry/'] |
-| attested at | 2026-09-28T11:47:47Z |
+| attested at | 2026-09-29T08:29:04Z |
 
 **Services**
 
@@ -330,7 +330,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 
 **Announcements reaching this factory**
 
-- 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-28T11:35:19Z: of 63 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous censuses in this notice (2026-09-26T06:20Z: of 57 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) are kept as the steps this one follows, never overwritten.
+- 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass --mode quiet for three jobs, NONE of them meta-factory's: ai-antispam-owner-digest and ai-antispam-triage-sweep (ai-antispam), and oc-triage-owner-digest (opencrabs-dev) — all three enabled. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit --mode turn-end on 2026-09-23 (byte-verified; schedule and next_run_at preserved); five of its six now carry it, and factory-registry-attest carries none because its prompt writes no /tmp redirect at all. Infra-factory's four now read plain --mode turn-end with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING THREE — the cap flag cannot be dropped alone: each carried --mode quiet --quiet-for-secs 20 --max-delay-secs 30, and its prompt documented WHY the cap was there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Read live 2026-09-29T08:26Z: of 64 cron rows, 12 jobs carry --mode — 9 turn-end, 3 quiet. The previous censuses in this notice (2026-09-28T11:35:19Z: of 63 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-26T06:20Z: of 57 cron rows, 12 carry --mode — 9 turn-end, 3 quiet; then 2026-09-23T11:31Z: of 55 cron rows, 13 carry --mode — 10 turn-end, 3 quiet) are kept as the steps this one follows, never overwritten.
   - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
 - 🔵 **`brain-metrics-baseline-measured`** — Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current - run the instrument.
 
@@ -347,18 +347,18 @@ Fresh reading 2026-09-28T11:18:43Z: LEG A, the always-injected Tier 0 triple (SO
 
 | topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|
-| Surveys | 19 | surveys | `5c99ad51-8889-40cb-b589-fa13fd673c06` | Telegram: Factories / Surveys [chat:-1004497192134:topic:19] | resolved | telegram | 2026-09-28T23:41:43Z | — |
-| Agent Factories Triage Lane | 20 | triage | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | Agent Factories Triage Lane | resolved | telegram | 2026-09-28T23:42:04Z | — |
+| Surveys | 19 | surveys | `5c99ad51-8889-40cb-b589-fa13fd673c06` | Telegram: Factories / Surveys [chat:-1004497192134:topic:19] | resolved | telegram | 2026-09-29T07:29:49Z | — |
+| Agent Factories Triage Lane | 20 | triage | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | Agent Factories Triage Lane | resolved | telegram | 2026-09-29T08:31:20Z | — |
 | Meta-Factory HQ: ASIF Architecture & Crons | 21 | hq | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | Meta-Factory HQ: ASIF Architecture & Crons | resolved | telegram | 2026-09-28T21:10:50Z | — |
 | Delegate | 68 | delegate | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | Telegram: Factories / Delegate [chat:-1004497192134:topic:68] | resolved | telegram | 2026-09-28T11:47:14Z | — |
 | Worker | 1271 | worker | `dcd8f7a9-c1e7-48c3-b184-d901dc08eac7` | Telegram: Factories / Worker [chat:-1004497192134:topic:1271] | resolved | telegram | 2026-09-28T23:28:10Z | — |
-| Factories / Ledger | 3981 | ledger | `d0cba805-92c9-4377-8808-a1cf715bce9e` | Telegram: Factories / Ledger [chat:-1004497192134:topic:3981] | resolved | telegram | 2026-09-29T07:28:48Z | — |
-| Factories / Open Question Tool | 4087 | questions | `9f635151-4311-44ab-94f8-d4fd86e9b6c2` | Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087] | resolved | telegram | 2026-09-29T07:24:11Z | — |
+| Factories / Ledger | 3981 | ledger | `d0cba805-92c9-4377-8808-a1cf715bce9e` | Telegram: Factories / Ledger [chat:-1004497192134:topic:3981] | resolved | telegram | 2026-09-29T08:30:32Z | — |
+| Factories / Open Question Tool | 4087 | questions | `9f635151-4311-44ab-94f8-d4fd86e9b6c2` | Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087] | resolved | telegram | 2026-09-29T08:32:35Z | — |
 | Factories / Pacemakers / Crons | 4223 | pacemakers | `ee5cd2f5-6c1b-41bb-b031-1150a3132fb1` | Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223] | resolved | telegram | 2026-09-27T16:45:04Z | — |
-| Factories / Instruments methodology | 4186 | methodology | `4515ea72-eb39-4a3c-9b05-a1dc02b1c977` | Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186] | resolved | telegram | 2026-09-29T07:25:21Z | — |
+| Factories / Instruments methodology | 4186 | methodology | `4515ea72-eb39-4a3c-9b05-a1dc02b1c977` | Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186] | resolved | telegram | 2026-09-29T08:27:42Z | — |
 | Factories / Fleet instruments | 4555 | fleet-instruments | `37e71e03-0022-4d38-9279-1687fec7a823` | Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555] | resolved | telegram | 2026-09-27T22:00:11Z | — |
 | Factories / Review Rotation | 5574 | review-rotation | `d6cfd3f7-0cd7-4e26-b9ff-2b1474be981e` | Telegram: Factories / Review Rotation [chat:-1004497192134:topic:5574] | resolved | telegram | 2026-09-28T18:54:25Z | — |
-| Factories / Insights | 6865 | insights | `95b14002-4541-45a5-b2a6-4294ee1104f8` | Meta-factory insights register — class + status axes | resolved | telegram | 2026-09-29T07:27:57Z | — |
+| Factories / Insights | 6865 | insights | `95b14002-4541-45a5-b2a6-4294ee1104f8` | Meta-factory insights register — class + status axes | resolved | telegram | 2026-09-29T08:29:14Z | — |
 
 **Pacemakers**
 
@@ -425,7 +425,7 @@ Attribution basis: name prefix.
 
 | topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|
-| HQ | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-09-29T07:16:24Z | — |
+| HQ | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-09-29T08:35:34Z | — |
 | Agent runtime | 6 | _unstated_ | `5a5335ee-db68-46fe-b13e-a082b2beadb5` | Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6] | resolved | telegram | 2026-09-29T07:18:48Z | — |
 | Manager | 9 | _unstated_ | `b64ca6ba-9ec0-47f7-8450-0d25b6c1d854` | Telegram: Miidas Factory / Manager [chat:-1003996392908:topic:9] | resolved | telegram | 2026-09-25T16:25:13Z | — |
 | Worker | 56 | worker | `b57efabd-85df-4467-bed7-f5a596285f68` | Telegram: Miidas Factory / Worker — #39 board vs ledger comparison gate [chat:-1003996392908:topic:56] | resolved | telegram | 2026-09-29T07:19:56Z | — |
@@ -492,16 +492,16 @@ Attribution basis: deliver_to -> lane.
 | Core: Loop | 39883 | _unstated_ | `40427d4f-af4a-48ba-993f-f5f0b21916c0` | Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883] | resolved | telegram | 2026-09-27T14:32:52Z | — |
 | Config: Schema | 40011 | _unstated_ | `c2ba4ef2-eac3-406c-98d6-c861c5bebec2` | Telegram: Opencrabs Dev Factory / #83 config-manager-warn [chat:-1003936827469:topic:40011] | resolved | telegram | 2026-09-28T08:12:34Z | — |
 | Config: Typings | 40479 | _unstated_ | `aff7ff41-a3a7-4c53-adc5-80fb7a33ba50` | Telegram: Opencrabs Dev Factory / #87 config-write-types [chat:-1003936827469:topic:40479] | resolved | telegram | 2026-09-27T14:27:27Z | — |
-| Memory: Search | 40524 | _unstated_ | `42a44908-b8f3-42e1-bbd2-f2a672b8056e` | #583 trailer-hook lane · #360 refused (overtaken) | resolved | telegram | 2026-09-27T01:49:15Z | — |
+| Memory: Search | 40524 | _unstated_ | `42a44908-b8f3-42e1-bbd2-f2a672b8056e` | #583 trailer-hook lane · #360 refused (overtaken) | resolved | telegram | 2026-09-29T08:04:15Z | — |
 | Browser: CDP | 40695 | _unstated_ | `aaa8d8ae-a4be-4b89-9f92-01a317075be3` | Telegram: Opencrabs Dev Factory / Harvest rich-host buttons [chat:-1003936827469:topic:40695] | resolved | telegram | 2026-09-27T14:37:22Z | — |
 | Security: Policies | 40696 | _unstated_ | `afe476f8-279b-4d54-b628-c9d7e35873c8` | Telegram: Opencrabs Dev Factory / Harvest retry-429 ladder [chat:-1003936827469:topic:40696] | resolved | telegram | 2026-09-25T16:19:27Z | — |
 | Core: Goal Loop | 42311 | _unstated_ | `9fa7c71a-f009-418a-ac06-d0336efcf491` | Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311] | resolved | telegram | 2026-09-27T10:21:20Z | — |
-| Governance: Roles | 42360 | _unstated_ | `63d775f9-18e2-4097-8696-d9a2ca796f14` | Telegram: Opencrabs Dev Factory / Role split [chat:-1003936827469:topic:42360] | resolved | telegram | 2026-09-29T00:18:40Z | — |
+| Governance: Roles | 42360 | _unstated_ | `63d775f9-18e2-4097-8696-d9a2ca796f14` | Telegram: Opencrabs Dev Factory / Governance: Roles [chat:-1003936827469:topic:42360] | resolved | telegram | 2026-09-29T08:21:46Z | — |
 | Triage | 42487 | triage | `530c29ec-596e-43a4-9c7e-1b6dfc3cd870` | Triage: Issue Portfolio & Harvest Analysis | resolved | telegram | 2026-09-29T00:22:00Z | — |
-| Process: Waits | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-09-29T06:43:36Z | — |
+| Process: Waits | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-09-29T08:26:06Z | — |
 | Telegram: Host Guards | 42940 | _unstated_ | `c78e78e0-099e-455e-8dfb-7e9b8f7d13e5` | Telegram: Opencrabs Dev Factory / #92 demoted-host guard [chat:-1003936827469:topic:42940] | resolved | telegram | 2026-09-27T10:14:30Z | — |
 | Governance: Audits | 43440 | _unstated_ | `30ab6f43-3326-4aad-abe3-eb4a5a98f630` | Telegram: Crabs Kanban Board [chat:-1003936827469:topic:43440] | resolved | telegram | 2026-09-07T05:45:18Z | — |
-| Telegram: Bot API | 43727 | _unstated_ | `95bec69b-0e96-46a9-9d91-dc355e8af18f` | Telegram flow card metrics telemetry bar #232 | resolved | telegram | 2026-09-29T07:01:37Z | — |
+| Telegram: Bot API | 43727 | _unstated_ | `95bec69b-0e96-46a9-9d91-dc355e8af18f` | Telegram flow card metrics telemetry bar #232 | resolved | telegram | 2026-09-29T07:58:48Z | — |
 | Governance: Ontology | 43993 | _unstated_ | `6630dc9a-0eeb-46c2-95b8-bfae43e0766b` | Telegram: Opencrabs Dev Factory / Governance: Ontology & RSI [chat:-1003936827469:topic:43993] | resolved | telegram | 2026-09-28T08:07:23Z | — |
 | Core: Multi-Tool | 44326 | _unstated_ | `a38499fc-76a4-4aff-8953-fa5931ad0e5c` | Telegram: Opencrabs Dev Factory / Multicalls [chat:-1003936827469:topic:44326] | resolved | telegram | 2026-09-28T08:20:54Z | — |
 | Core: Crons | 49607 | _unstated_ | `6cd8175f-fb27-4cf3-a390-971ff2519a47` | Fix #149: Cron Session Isolation | resolved | telegram | 2026-09-28T18:51:49Z | — |
