@@ -1,33 +1,33 @@
 {
- "_note": "THIS factory's sequence exemptions — meta-factory's own, moved here from tools/ledger.py on 2026-09-25. They excuse three closes written before the sequence gate existed (2026-09-12), which is a fact about THIS ledger and about no other. Each entry is a visible debt printed as an `excused:` line on every run. Skeleton and field rules: docs/ledger-exemptions.example.json.",
- "exempt": [
-  {
-   "subject": "#6",
-   "leg": "claim",
-   "granted": "2026-09-12",
-   "reason": "close written before the gate existed; no claim row was ever written",
-   "proof": "the ruling that granted it: ledger n=15, which records the boundary fact"
-  },
-  {
-   "subject": "#8",
-   "leg": "intake",
-   "granted": "2026-09-12",
-   "reason": "close written before the gate existed; no intake row was ever written",
-   "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
-  },
-  {
-   "subject": "#8",
-   "leg": "claim",
-   "granted": "2026-09-12",
-   "reason": "close written before the gate existed; no claim row was ever written",
-   "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
-  },
-  {
-   "subject": "#226",
-   "leg": "dispatch",
-   "granted": "2026-09-28",
-   "reason": "the dispatch at n=1604 was written in the SAME TURN as the filing, before Triage's intake row landed -- two lanes whose wake latencies are independent, which is the derived-race shape the claim leg already accepts (n=602). The subject WAS filed: board issue #226 exists, and Triage's intake row n=1610 records it 3m17s after the dispatch. The leg's own comment states the population's gaps have 'NO SEAM that could separate a same-turn race from a genuine routing-before-filing', so this instance cannot be distinguished from that class by the predicate; it is post-boundary only because it happened after the boundary date. The row's POSITION is immutable, so the repair space for this row is empty and a fresh dispatch cannot retract it.",
-   "proof": "external receipt that the subject was filed rather than routed-before-filing: Triage's intake row n=1610 (`intake triage #226`) plus board issue #226 filed by HQ. Both are outside the dispatch row and independently readable."
-  }
- ]
+  "_note": "THIS factory's sequence exemptions — meta-factory's own, moved here from tools/ledger.py on 2026-09-25. They excuse three closes written before the sequence gate existed (2026-09-12), which is a fact about THIS ledger and about no other. Each entry is a visible debt printed as an `excused:` line on every run. Skeleton and field rules: docs/ledger-exemptions.example.json.",
+  "exempt": [
+    {
+      "subject": "#6",
+      "leg": "claim",
+      "granted": "2026-09-12",
+      "reason": "close written before the gate existed; no claim row was ever written",
+      "proof": "the ruling that granted it: ledger n=15, which records the boundary fact"
+    },
+    {
+      "subject": "#8",
+      "leg": "intake",
+      "granted": "2026-09-12",
+      "reason": "close written before the gate existed; no intake row was ever written",
+      "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
+    },
+    {
+      "subject": "#8",
+      "leg": "claim",
+      "granted": "2026-09-12",
+      "reason": "close written before the gate existed; no claim row was ever written",
+      "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
+    },
+    {
+      "subject": "#226",
+      "leg": "dispatch",
+      "granted": "2026-09-28",
+      "reason": "the dispatch at n=1604 was written in the SAME TURN as the filing, before Triage's intake row landed -- two lanes whose wake latencies are independent, which is the derived-race shape the claim leg already accepts (n=602). The subject WAS filed: board issue #226 exists, and Triage's intake row n=1610 records it 3m17s after the dispatch. The leg's own comment states the population's gaps have 'NO SEAM that could separate a same-turn race from a genuine routing-before-filing', so this instance cannot be distinguished from that class by the predicate; it is post-boundary only because it happened after the boundary date. The row's POSITION is immutable, so the repair space for this row is empty and a fresh dispatch cannot retract it.",
+      "proof": "external receipt that the subject was filed rather than routed-before-filing: Triage's intake row n=1610 (`intake triage #226`) plus board issue #226 filed by HQ. Both are outside the dispatch row and independently readable."
+    }
+  ]
 }
