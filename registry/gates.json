@@ -377,6 +377,7 @@
     "tests/test_ledger_identity.py": "script",
     "tests/test_ledger_index.py": "script",
     "tests/test_ledger_no_shrink.py": "script",
+    "tests/test_ledger_refs_preflight.py": "pytest",
     "tests/test_ledger_schema.py": "script",
     "tests/test_ontology.py": "script",
     "tests/test_patrol_host_state.py": "pytest",

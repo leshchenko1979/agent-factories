@@ -1543,6 +1543,25 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_claim_preflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_claim_preflight.py"])
 
+    # 73. The REF-KIND half of the same pre-flight (#232). `parse_refs` validated a ref's FORM
+    #     at the write path and its KIND only at `verify`, so a lane could invent a kind, the
+    #     row was written, pushed, and only then refused — and a row is immutable once pushed,
+    #     so the only remedy left is to DECLARE the kind after the fact. Same class as #187 one
+    #     field over, which was itself #157's class one field over: the third instance in this
+    #     tool. Measured harm: 1 instance, on a MEMBER factory (ai-antispam `n=118`, ref
+    #     `issue:23` — append rc=0, then `verify` rc=1), cleared by declaring the kind in that
+    #     member's own tree, which is the lawful route and was available all along. The harm
+    #     rate is not the argument; the class is: an undeclared kind travels under a name no
+    #     declaration admits, and a factory that never runs `verify` keeps the row. The check
+    #     sits INSIDE `parse_refs` because that function already holds the predicate — it
+    #     prints `known_ref_kinds()` on a malformed ref — so the two paths cannot disagree
+    #     about what a factory declares, and it runs before the append lock is taken. It
+    #     closes the UNDECLARED half only: whether a `row:` value RESOLVES stays the gate's
+    #     existence leg, and `issue:` / `commit:` values stay opaque by design — the line #187
+    #     drew. Paired and REQUIRED: the population is the ledger every factory has.
+    if (repo_root / "tests/test_ledger_refs_preflight.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_refs_preflight.py"])
+
     # 66. THE SHIPPED TREE'S OWN AUDIT (#199). Nothing in the root audit executed any of the
     #     gates `TEMPLATE/` ships, so a shipped gate that reds or crashes IN THE TREE IT SHIPS
     #     FROM was invisible until someone ran it by hand -- measured: five instances in one

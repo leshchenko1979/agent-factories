@@ -545,6 +545,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # file.
     "test_ledger_index.py",
     "test_ledger_no_shrink.py",
+    # Added with its registration (board #232). REQUIRED is the correct grain: the gate
+    # drives a THROWAWAY ledger AND a THROWAWAY kind declaration under a temp directory
+    # through the `OC_LEDGER_PATH` / `OC_REFS_KINDS_PATH` seams — no live ledger, no fleet
+    # manifest, no box-local fixture — so it passes in a bootstrapped factory exactly as it
+    # does here. It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps
+    # a factory from dropping the runner and keeping the file. The leg it guards is the
+    # REF-KIND half of the pre-flight: an undeclared `--ref` kind was accepted at `append`
+    # and refused only at `verify`, on a row that was already written and pushed.
+    "test_ledger_refs_preflight.py",
     "test_ledger_schema.py",
     "test_ontology.py",
     "test_patrol_host_state.py",

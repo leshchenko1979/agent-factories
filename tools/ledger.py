@@ -225,12 +225,23 @@ def known_ref_kinds() -> tuple[str, ...]:
 
 
 def parse_refs(values: list[str]) -> list[dict]:
-    """Typed pointers, validated for FORM at the write path.
+    """Typed pointers, validated for FORM **and KIND** at the write path.
 
     `KIND:VALUE`, and a malformed ref is refused HERE, at append, naming the lawful
     kinds -- the form is the one thing the tool can settle without knowing a member's
     object. The EXISTENCE check (a `row` ref must resolve) is a separate leg: it needs
     the ledger's own maximum, which only the append lock holds.
+
+    The KIND check is here rather than at the gate (#232) because `verify` refuses an
+    undeclared kind a step LATER, when the row is already written and pushed and can only
+    be cleared by declaring the kind -- never by removing the ref, since a row is immutable
+    once pushed. That is #187's class one field over, and this is the same move: the
+    predicate `known_ref_kinds()` stays single, and the write path and the gate read it.
+
+    A kind that is not lawful is refused by naming BOTH the lawful set and the file that
+    extends it, because the lawful remedy for a genuinely new kind is to DECLARE it, never
+    to drop the ref. A fixture writer is unaffected: the declaration is read from
+    `REFS_KINDS_FILE`, the same `OC_REFS_KINDS_PATH` seam every other reader uses.
     """
     refs: list[dict] = []
     for raw in values:
@@ -240,6 +251,15 @@ def parse_refs(values: list[str]) -> list[dict]:
                 f"ledger append refused: --ref {raw!r} is not KIND:VALUE "
                 f"(e.g. row:1228, subject:#149, commit:be47c443). "
                 f"Kinds: {', '.join(known_ref_kinds())}"
+            )
+        lawful = known_ref_kinds()
+        if kind not in lawful:
+            sys.exit(
+                f"ledger append refused: --ref {raw!r} names the kind {kind!r}, which this "
+                f"factory does not declare. Kinds: {', '.join(lawful)}. A new kind is "
+                f"DECLARED, not invented: add it to the `kinds` list in "
+                f"docs/ledger-refs-kinds.json (a factory's own file; nothing in this module "
+                f"changes)"
             )
         refs.append({kind: value})
     return refs
