@@ -149,7 +149,19 @@ The two classes feed two different consumers, and both are DECLARED:
 
 ---
 
-## 9. Rollout
+## 9. Intake — what happens when an insight arrives
+
+**One arrival, three outputs, in one turn.** An insight posted into the Insights topic — the owner's or a lane's — is handled in the turn it arrives, and that turn owes **all three**. A record without its research and its mapping is an intake that stopped halfway. The owner ordered this shape on 2026-09-28; that it reached no artifact until #227 is the same defect class as #216 — a binding rule whose only carrier was a conversation.
+
+1. **RECORD.** One `append`, carrying its `author` (§4) and its `class` (§5). The owner's insights carry `author: Alexey`. `class` is the authoring lane's call, derived by §5's test — of what the claim requires of its reader — never by the submitter's sense of audience.
+2. **RESEARCH.** Search external best practice on the problem the insight discusses, and present it with **its sources and their dates**, stating of each whether it **agrees with**, **sharpens**, or **contradicts** the insight. `No practice found` is a **declared finding**, never silence: the search is itself evidence, and an empty result is still a result.
+3. **MAP.** State what the insight would change, in **which** factories, and **where it does not apply**. The mapping is a dedupe as much as a translation: an insight the fleet **already codifies** is answered by **pointing at the clause**, and is settled `landed` with that clause as its reason rather than re-filed — the already-codified arm of the sort §8's `implementation` consumer works one item at a time.
+
+**The bound.** Intake is a judgement about content, and it builds **no gate**: no offline predicate reads whether a mapping is honest or a cited practice real. What upholds the workflow is the authoring lane performing it, plus this clause remaining reachable after a compaction — which is what the reload leg exists for.
+
+---
+
+## 10. Rollout
 
 - **Declared executor: meta-factory.** Not a kit member (§2), so nothing is owed to a member and no version bump attends a change here.
 - **A change to this file's meaning owes the three axis gates**, which is why they exist: `test_insights_author.py`, `test_insights_class.py`, `test_insights_status.py`. Each drives the CLI, and the author gate additionally drives **both** instruments (§4) and asserts one string, so the register and the ledger cannot drift apart on a lane's identity again without a red.
