@@ -281,9 +281,43 @@ def _is_git_work_tree(repo: Path) -> bool:
     )
 
 
+def _shallow_depth(repo: Path) -> int | None:
+    """The checkout's reachable history when it is SHALLOW, else `None`. Read ONCE (#224).
+
+    `actions/checkout` defaults to `fetch-depth: 1`, so under CI the object for any
+    non-HEAD revision is genuinely absent. The existence leg would then report every
+    HONEST receipt as unresolvable — a true statement about the CHECKOUT and a false one
+    about the receipt — and the failure text would blame the ledger row for the
+    checkout's depth. That is #102's population shape arriving on the ENVIRONMENT axis.
+
+    The read is from the checkout's own declaration, before the loop, and it never
+    FETCHES: this gate's contract is "Offline — no network, no board", and a fetch inside
+    the predicate would make the mechanical suite network-dependent. The resolution is
+    not to GET the history; it is to SAY what the checkout could not do.
+
+    A read that FAILS is reported as NOT shallow. Excusing on an unreadable declaration
+    would convert a broken environment into a silent pass, which is the vacuous-clean
+    direction this repo forbids everywhere else.
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--is-shallow-repository"],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0 or proc.stdout.strip() != "true":
+        return None
+    count = subprocess.run(
+        ["git", "-C", str(repo), "rev-list", "--count", "HEAD"],
+        capture_output=True, text=True,
+    )
+    try:
+        return int(count.stdout.strip())
+    except (TypeError, ValueError):
+        return -1  # shallow, and the depth itself is unreadable — stated, not guessed
+
+
 def close_row_revision_existence_problems(
     population: list[dict], repo: Path, retired_values: set[str]
-) -> tuple[list[str], int, str | None]:
+) -> tuple[list[str], int, str | None, list[str]]:
     """`(problems, checked, reason)` over an ALREADY-SPLIT post-boundary population.
 
     Every row declaring a shape-valid `head=` in its canonical run must have that value
@@ -309,8 +343,11 @@ def close_row_revision_existence_problems(
             0,
             f"the existence leg could not run: {repo} is not a git work tree, so it "
             f"carries no object database to resolve a declared revision against",
+            [],
         )
+    depth = _shallow_depth(repo)
     problems: list[str] = []
+    unable: list[str] = []
     checked = 0
     for row in population:
         n = row.get("n")
@@ -321,11 +358,23 @@ def close_row_revision_existence_problems(
         if sha in retired_values:
             continue
         if not _resolves(sha, repo):
+            if depth is not None:
+                # The checkout cannot answer, so the leg says so rather than convicting
+                # the row. The text names the DEPTH, because "does not resolve" is true
+                # here and useless: it is the same output a fabricated sha produces.
+                unable.append(
+                    f"n={n} declares {REVISION_KEY}{sha}, which this SHALLOW checkout "
+                    f"cannot resolve (reachable history: "
+                    f"{depth if depth >= 0 else 'unreadable'} commit(s)) — the object is "
+                    f"absent because the checkout carries no history for it, NOT because "
+                    f"the receipt is fabricated"
+                )
+                continue
             problems.append(
                 f"n={n} declares {REVISION_KEY}{sha}, which does not resolve to a commit "
                 f"in this repository — a receipt must name a revision that exists"
             )
-    return problems, checked, None
+    return problems, checked, None, unable
 
 
 def close_row_revision_problems(
@@ -427,7 +476,7 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int, list[str]
     problems = problems + retirement_read_problems + retirement_issues
 
     population = post_boundary_rows(rows, boundary, "close")
-    existence_problems, checked, leg_reason = close_row_revision_existence_problems(
+    existence_problems, checked, leg_reason, unable = close_row_revision_existence_problems(
         population, repo, set(retired_values)
     )
     problems = problems + existence_problems
@@ -444,6 +493,16 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int, list[str]
     # verdict of one that examined the population and found it clean.
     if leg_reason:
         return "skip", leg_reason, [], excused, 0, prints + [f"NOT RUN — {leg_reason}"]
+    if unable:
+        # A leg that judged PART of its population STATES the part it could not (#224).
+        # Returning a bare clean here would print the verdict of a leg that examined the
+        # population and found it clean, which is precisely what it did not do.
+        return "pass", "", [], excused, checked, prints + [
+            f"STATED INABILITY — this checkout is SHALLOW, so {len(unable)} of the "
+            f"{checked} row(s) this leg examined could NOT be resolved here; run the "
+            f"gate against a full clone to judge them",
+            *unable,
+        ]
     return "pass", "", [], excused, checked, prints
 
 def _live_verdict() -> tuple[str, list[str], list[str], int, list[str]]:
@@ -829,7 +888,7 @@ def test_probe_a_fabricated_head_fails_and_a_resolvable_one_passes(tmp_path: Pat
     fabricated = _close(
         1, "2026-09-19T06:00:00Z", f"Closed. head={_absent_sha(REPO)} board=closed"
     )
-    problems, checked, reason = close_row_revision_existence_problems(
+    problems, checked, reason, _unable = close_row_revision_existence_problems(
         [fabricated], REPO, set()
     )
     assert checked == 1 and problems and reason is None, (checked, problems, reason)
@@ -838,12 +897,12 @@ def test_probe_a_fabricated_head_fails_and_a_resolvable_one_passes(tmp_path: Pat
     real = _close(
         2, "2026-09-19T06:00:00Z", f"Closed. head={_resolvable_sha(REPO)} board=closed"
     )
-    problems, checked, reason = close_row_revision_existence_problems([real], REPO, set())
+    problems, checked, reason, _unable = close_row_revision_existence_problems([real], REPO, set())
     assert (problems, checked, reason) == ([], 1, None), (problems, checked, reason)
 
     # And a tree with no object database is a STATED inability to judge, never a clean
     # verdict and never a false RED — every token in such a tree would "not resolve".
-    _, checked, reason = close_row_revision_existence_problems(
+    _, checked, reason, _unable = close_row_revision_existence_problems(
         [fabricated], tmp_path, set()
     )
     assert checked == 0 and reason and "not a git work tree" in reason, (checked, reason)
@@ -864,7 +923,7 @@ def test_probe_the_existence_leg_reads_the_canonical_run_not_the_whole_detail() 
         f"Closed. The fix landed at {present} as described. board=closed head={absent}",
     )
     assert _trailer_revision(row["detail"]) == absent, _trailer_revision(row["detail"])
-    problems, checked, reason = close_row_revision_existence_problems([row], REPO, set())
+    problems, checked, reason, _unable = close_row_revision_existence_problems([row], REPO, set())
     assert checked == 1 and problems and reason is None, (checked, problems, reason)
     assert absent in problems[0], problems
 
@@ -898,7 +957,7 @@ def test_probe_a_declared_retirement_with_its_naming_row_passes_and_prints() -> 
     assert (problems, matched) == ([], [false_value]), (problems, matched)
     assert prints and false_value in prints[0] and "n=619" in prints[0], prints
 
-    problems, checked, reason = close_row_revision_existence_problems(
+    problems, checked, reason, _unable = close_row_revision_existence_problems(
         [target], REPO, set(matched)
     )
     assert (problems, checked, reason) == ([], 1, None), (problems, checked, reason)
@@ -987,6 +1046,126 @@ def test_probe_a_tree_with_no_object_database_skips_with_its_reason(
     assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
     assert "not a git work tree" in reason, reason
     assert any("NOT RUN" in line for line in prints), prints
+
+# --- #224: a SHALLOW checkout is a stated inability, never a false RED ------------
+
+def _git(args: list[str], cwd: Path) -> None:
+    subprocess.run(["git", "-C", str(cwd), *args], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def _repo_with_two_commits(root: Path) -> tuple[Path, str, str]:
+    """`(repo, first_sha, head_sha)` — two commits, so a depth-1 clone loses the first.
+
+    The shas are DERIVED from the fixture, never written down: this file ships to every
+    factory, and a hard-coded sha would resolve only in the tree it was copied from.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    _git(["init", "-q", "-b", "main"], root)
+    _git(["config", "user.email", "probe@example.invalid"], root)
+    _git(["config", "user.name", "probe"], root)
+    (root / "a.txt").write_text("one\n", encoding="utf-8")
+    _git(["add", "-A"], root)
+    _git(["commit", "-q", "-m", "one"], root)
+    first = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                           capture_output=True, text=True, check=True).stdout.strip()
+    (root / "a.txt").write_text("two\n", encoding="utf-8")
+    _git(["add", "-A"], root)
+    _git(["commit", "-q", "-m", "two"], root)
+    head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    return root, first, head
+
+def _clone(src: Path, dst: Path, *, depth: int | None) -> Path:
+    """A real clone. `file://` is REQUIRED for `--depth` to bite: a plain local path
+    clone implies `--local`, which hardlinks the whole object database and ignores
+    the depth — a fixture that would silently not be shallow."""
+    args = ["git", "-c", "protocol.file.allow=always", "clone", "-q"]
+    if depth is not None:
+        args += ["--depth", str(depth)]
+    args += [f"file://{src}", str(dst)]
+    subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return dst
+
+def test_probe_a_SHALLOW_checkout_STATES_what_it_could_not_judge(tmp_path: Path) -> None:
+    """#224 acceptance, the shallow branch. The population and the reason are PRINTED,
+    and the message must NOT read "a receipt must name a revision that exists" — that
+    sentence is true of the CHECKOUT and false of the RECEIPT, and it blames the ledger
+    row for an environment the row cannot control.
+    """
+    src, first, _head = _repo_with_two_commits(tmp_path / "src")
+    shallow = _clone(src, tmp_path / "shallow", depth=1)
+
+    assert _shallow_depth(shallow) is not None, (
+        "the fixture must actually BE shallow, or this probe proves nothing"
+    )
+    assert not _resolves(first, shallow), (
+        "a depth-1 clone must NOT carry the first commit — otherwise the branch is untested"
+    )
+
+    row = _close(1, "2026-09-19T06:00:00Z", f"Closed. head={first} board=closed")
+    problems, checked, reason, unable = close_row_revision_existence_problems(
+        [row], shallow, set()
+    )
+    assert problems == [], f"a shallow checkout must not convict the row: {problems}"
+    assert reason is None, reason
+    assert checked == 1, checked
+    assert len(unable) == 1, unable
+    assert "SHALLOW" in unable[0] and "NOT because the receipt is fabricated" in unable[0], unable
+    assert "a receipt must name a revision that exists" not in unable[0], (
+        "the corrected text must not accuse the record"
+    )
+    assert "reachable history" in unable[0], (
+        f"the inability must name the depth: {unable[0]}"
+    )
+
+def test_probe_a_FULL_checkout_still_REDs_on_an_absent_object(tmp_path: Path) -> None:
+    """The complement, and the half that keeps the leg BITING. A probe that only drove
+    the shallow path could not show the leg still catches a fabricated token where the
+    checkout genuinely could have answered — and this leg is the ONLY thing that does.
+    """
+    src, _first, head = _repo_with_two_commits(tmp_path / "src")
+    full = _clone(src, tmp_path / "full", depth=None)
+    assert _shallow_depth(full) is None, "the control must be a FULL checkout"
+
+    fabricated = head[:20] + ("0" * 20)  # absent in the fixture, derived from it
+    if _resolves(fabricated, full):  # pragma: no cover - impossible, but stated
+        raise AssertionError("the fixture produced a resolvable fabricated sha")
+    row = _close(1, "2026-09-19T06:00:00Z", f"Closed. head={fabricated} board=closed")
+    problems, checked, reason, unable = close_row_revision_existence_problems(
+        [row], full, set()
+    )
+    assert problems and "does not resolve" in problems[0], problems
+    assert unable == [] and reason is None, (unable, reason)
+
+    # And the honest revision in the SAME full checkout resolves — so the leg is
+    # discriminating rather than a blanket red.
+    ok = _close(2, "2026-09-19T06:00:00Z", f"Closed. head={head} board=closed")
+    problems, checked, reason, unable = close_row_revision_existence_problems(
+        [ok], full, set()
+    )
+    assert (problems, unable, reason) == ([], [], None), (problems, unable, reason)
+
+def test_probe_the_run_STATES_the_inability_rather_than_printing_a_bare_clean(
+    tmp_path: Path,
+) -> None:
+    """The verdict-level half: the run must carry the STATED INABILITY and the population
+    it could not examine, so a clean is never the verdict of a leg that examined the
+    population and found it clean. This is the clause that makes the fix visible to a
+    reader who never opens this file.
+    """
+    src, first, _head = _repo_with_two_commits(tmp_path / "src")
+    shallow = _clone(src, tmp_path / "shallow", depth=1)
+    synthetic_tree(
+        shallow,
+        rows=[_close(1, "2026-09-19T06:00:00Z", f"Closed. head={first} board=closed")],
+        invariants={INVARIANT_KEY: "2026-09-19T05:00:00Z"},
+    )
+    status, reason, problems, _excused, checked, prints = evaluate(shallow)
+    assert status == "pass", (status, reason, problems)
+    assert problems == [], problems
+    assert any("STATED INABILITY" in line for line in prints), prints
+    assert any("SHALLOW" in line for line in prints), prints
+    assert any("could NOT be resolved" in line for line in prints), prints
 
 def main() -> int:
     """Script form: the same verdict, with the skip reason on STDOUT rather than in a
