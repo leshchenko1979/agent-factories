@@ -2577,6 +2577,172 @@ def _declared_skip(what: str, reason: str) -> None:
     pytest.skip(reason)
 
 
+# --- #242: attribution by GIT COMMON DIR, and an empty prefix set is NOT RUN ---------
+
+def _git_repo_with_worktree(root: Path) -> tuple[Path, Path]:
+    """`(main_checkout, linked_worktree)` — a real worktree, not a path that looks like one.
+
+    Both are derived from the fixture, so the probe resolves in any factory. A linked
+    worktree is the move this factory PRESCRIBES for a diverged tree, which is why the
+    attribution defect hid behind the remedy rather than behind an exotic state.
+    """
+    main = root / "main"
+    main.mkdir(parents=True)
+    for args in (["init", "-q", "-b", "main"],
+                 ["config", "user.email", "probe@example.invalid"],
+                 ["config", "user.name", "probe"]):
+        subprocess.run(["git", "-C", str(main), *args], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    (main / "a.txt").write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(main), "add", "-A"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", str(main), "commit", "-q", "-m", "one"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    linked = root / "linked"
+    subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", str(linked)],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return main, linked
+
+_SCRATCH_DIRS: list[Path] = []
+
+def _scratch() -> Path:
+    """A fresh scratch directory for a probe (#242).
+
+    The SCRIPT runner in this file calls every `test_*` with NO arguments, so a probe must
+    never take `tmp_path` — pytest supplies it and the script form does not, which is how a
+    probe that passes under pytest raises TypeError under the audit's own invocation. The
+    house style here is to create the directory inside the probe.
+    """
+    d = Path(tempfile.mkdtemp(prefix="patrol-probe-"))
+    _SCRATCH_DIRS.append(d)
+    return d
+
+
+def test_probe_the_common_dir_is_shared_by_a_linked_worktree() -> None:
+    """The mechanism: a worktree and its main checkout resolve to ONE repository identity.
+
+    Keyed on the CHECKOUT they are two paths and neither matches the manifest's declared
+    repo from the other — which is how a lane patrolling from a worktree silently judged
+    nobody.
+    """
+    tmp_path = _scratch()
+    main, linked = _git_repo_with_worktree(tmp_path)
+    a, b = RUNNER.git_common_dir(main), RUNNER.git_common_dir(linked)
+    assert a is not None and b is not None, (a, b)
+    assert a == b, f"the common dir must be shared: main={a} linked={b}"
+    assert a != linked.resolve(), "a worktree's own path is NOT its repository identity"
+
+def test_probe_the_RELATIVE_OUTPUT_TRAP_is_pinned() -> None:
+    """THE TRAP, pinned so a naive edit REDs instead of silently returning [].
+
+    From the MAIN checkout `git rev-parse --git-common-dir` prints the RELATIVE string
+    ".git". So `Path(raw).resolve()` resolves against the CALLER's cwd and yields a path
+    that matches nothing — the SAME empty result the defect produces, wearing the shape of
+    a fix. The repo-relative join is what makes it correct from both ends.
+    """
+    tmp_path = _scratch()
+    main, linked = _git_repo_with_worktree(tmp_path)
+    raw = subprocess.run(["git", "-C", str(main), "rev-parse", "--git-common-dir"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    assert raw == ".git", (
+        f"the premise of this probe is that the main checkout prints a RELATIVE path; it "
+        f"printed {raw!r} — re-derive the trap before trusting the fix"
+    )
+    # The naive form, resolved from a cwd that is NOT the repo — the exact edit a future
+    # reader would make.
+    naive = (tmp_path / raw).resolve()
+    assert naive != RUNNER.git_common_dir(main), (
+        "the naive `Path(raw).resolve()` must NOT accidentally be correct"
+    )
+    # And the repo-relative join IS correct, from both ends.
+    assert (main / raw).resolve() == RUNNER.git_common_dir(main)
+    assert RUNNER.git_common_dir(main) == RUNNER.git_common_dir(linked)
+
+def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
+    """#242 clause 4: prefixes == [] is an UNATTRIBUTABLE population, never a clean box.
+
+    The legs already carry the discriminating counter and `declared_prefixes`' own
+    docstring already obliged the caller; ONE caller with THREE call sites complied with
+    neither. So a lane from a worktree read `ASSERTED ... 0 problems` from a leg that
+    judged nothing — and, in the duty-receipt case, a positive FALSE CONCLUSION.
+    """
+    rows = [{"name": "factory-x-job", "home": "probe-home", "enabled": True,
+             "prompt": "do a thing", "deliver_to": "", "last_run_at": _DUTY_FIRE}]
+    with tempfile.TemporaryDirectory() as tmp:
+        out = io.StringIO()
+        RUNNER.main(
+            [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
+            rows_fn=lambda: [], cron_rows_fn=lambda: (rows, ["probe-home"], []),
+            prefixes_fn=lambda: [],
+            log_dir=Path(tmp) / "logs",
+            kit_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
+                                        members={})[0],
+            fleet_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
+                                          members={})[1],
+            out=lambda *a, **k: print(*a, file=out, **k),
+            err=lambda *a, **k: None,
+            publish_fn=_stub_publish_leg,
+        )
+        text = out.getvalue()
+
+    for name in ("cron-thinness", "notify-receipt", "duty-receipt"):
+        block = text.split(f"LEG {name}")[1].split("LEG ")[0]
+        assert "NOT RUN" in block.split("\n")[0], f"{name} must be NOT RUN: {block!r}"
+        assert "UNATTRIBUTED" in block, f"{name} must name its unattributed population: {block!r}"
+        assert "resolves to no factory" in block, (
+            f"{name} must name the manifest reason: {block!r}"
+        )
+    assert "so no duty owes a receipt on this box" not in text, (
+        "the reason must not assert a fact about the box over an empty population"
+    )
+
+def test_probe_the_duty_reason_NAMES_its_population_and_refuses_the_conclusion() -> None:
+    """#242 clause 5. The old text ended "so no duty owes a receipt on this box" — a
+    POSITIVE claim about the box drawn from an enumeration that can be empty. An empty
+    population supports a statement about the READ, never a conclusion about duties.
+    """
+    rows = [{"name": "factory-x-job", "home": "probe-home", "enabled": True,
+             "prompt": "no receipt declaration here", "deliver_to": "",
+             "last_run_at": _DUTY_FIRE}]
+    leg = RUNNER.duty_receipt_leg(rows, ["probe-home"], [], ["factory-"], [],
+                                  read_at="probe")
+    assert leg["status"] == "NOT RUN", leg["status"]
+    reason = leg["reason"]
+    assert "NONE carries" in reason, reason
+    assert "NO DUTY WAS JUDGED" in reason, reason
+    assert "never a finding" in reason, reason
+    assert "so no duty owes a receipt on this box" not in reason, reason
+    assert "1 enabled row(s) this factory declares" in reason, (
+        f"the reason must name the population it enumerated: {reason}"
+    )
+
+def test_probe_every_probe_is_callable_by_the_SCRIPT_runner() -> None:
+    """This file has TWO runners, and a probe must satisfy both (#242, measured).
+
+    `main()` calls every `test_*` with NO arguments, so a probe that takes `tmp_path`
+    passes under pytest and raises TypeError under the audit's own invocation — a probe
+    that is green in one runner and absent in the other. Measured while landing #242: two
+    of the four new probes took `tmp_path` and the script form died on the first of them
+    while pytest reported 119 passed.
+    """
+    import inspect
+
+    offenders = []
+    for name, value in sorted(globals().items()):
+        if not (name.startswith("test_") and callable(value)):
+            continue
+        required = [
+            p for p in inspect.signature(value).parameters.values()
+            if p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        if required:
+            offenders.append(f"{name} requires {[p.name for p in required]}")
+    assert offenders == [], (
+        "every probe must be callable with no arguments, because main() runs them that "
+        "way: " + "; ".join(offenders)
+    )
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]

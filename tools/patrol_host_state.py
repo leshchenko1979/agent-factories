@@ -710,6 +710,38 @@ def deferred_entry_problems(entries: list[dict], *, repo_root: Path = REPO,
     return problems
 
 
+def git_common_dir(repo: Path = REPO) -> Path | None:
+    """This checkout's GIT COMMON DIR, or None when it cannot be read (#242).
+
+    THE PATH IS THE WRONG IDENTITY, and the remedy this factory prescribes for a diverged
+    tree — "run from a clean worktree at origin/main" — is exactly the move that exposes
+    it. A LINKED WORKTREE resolves to its own path, so an attribution keyed on the checkout
+    matches no record and the patrol silently judges nobody: measured in a worktree at
+    origin e41d934, one call over a real 42-row cron population, `cron-thinness` read
+    "0 attributed of 42, 42 unattributed, 0 problems" and `duty-receipt` concluded "no
+    enabled row this factory declares carries a receipt_subject:" — a FALSE CONCLUSION over
+    an empty population, while the main checkout reported 2 real problems in the same
+    minute. The common dir is the repository's identity and every worktree shares it.
+
+    THE RELATIVE FORM IS THE TRAP, and it is why this is a named function with a probe.
+    From the MAIN checkout, `git rev-parse --git-common-dir` prints the RELATIVE string
+    ".git", so `Path(raw).resolve()` resolves against the CALLER's cwd — measured: from
+    /tmp it yields "/tmp/.git", matching nothing, which is the same empty result the defect
+    produces while looking like a fix. The path must be joined to the repo FIRST:
+    `(repo / raw).resolve()` is correct from both a main checkout and a worktree.
+    (`--path-format=absolute` also works, but needs git >= 2.33; the join is version-safe
+    and costs nothing.)
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+        capture_output=True, text=True,
+    )
+    raw = proc.stdout.strip()
+    if proc.returncode != 0 or not raw:
+        return None
+    return (Path(repo) / raw).resolve()
+
+
 def declared_prefixes(repo: Path = REPO) -> list[str]:
     """This factory's declared `job_prefixes`, read from the fleet manifest.
 
@@ -717,15 +749,63 @@ def declared_prefixes(repo: Path = REPO) -> list[str]:
     in: all twelve ai-antispam rows sit in the OPS home, so a profile-scoped read answers
     a narrower question than the one it names (#102). An empty return is reported by the
     caller as an unattributable population, never read as a clean one.
+
+    THE MATCH IS ON THE REPOSITORY, NOT THE CHECKOUT (#242): the declared repo and this
+    tree are both resolved to their GIT COMMON DIR, so a linked worktree — the very move
+    this factory prescribes for a diverged tree — is this factory rather than nobody.
     """
     registry = load_module("oc_registry", REGISTRY)
     manifest = registry.load_fleet_manifest()
-    want = str(repo.resolve())
+    want = git_common_dir(repo)
     for record in manifest.get("factories", []):
         declared = record.get("repo")
-        if isinstance(declared, str) and str(Path(declared).resolve()) == want:
+        if not isinstance(declared, str):
+            continue
+        if want is not None and git_common_dir(Path(declared)) == want:
+            return [str(p) for p in record.get("job_prefixes", [])]
+        # The common dir is the authority; the plain path is kept as a SECOND chance for a
+        # declared repo that is not a git tree at all (a member not yet cloned, say), where
+        # git_common_dir returns None on both sides and would otherwise match nothing.
+        if want is None and str(Path(declared).resolve()) == str(repo.resolve()):
             return [str(p) for p in record.get("job_prefixes", [])]
     return []
+
+
+def no_prefixes_leg(name: str, *, population: int, unit: str, read_at: str,
+                    read_count: int) -> dict:
+    """A cron-consuming leg this factory cannot attribute ANY row for — NOT RUN (#242).
+
+    This is the second half of the #242 repair and it is not an alternative to the first.
+    The legs already carry the discriminating counter (`rows_unattributed=42`,
+    `logs_unattributed=104`, `jobs_unattributed=42`), and `declared_prefixes`' own
+    docstring already obliges its caller: "An empty return is reported by the caller as an
+    unattributable population, never read as a clean one." One caller, three call sites,
+    zero compliance — so an empty prefix set produced a leg that JUDGED NOTHING and
+    printed `ASSERTED ... 0 problems`, and in the duty-receipt case a positive FALSE
+    CONCLUSION about the box.
+
+    A leg that examined nothing has reported nothing, never a clean HOLD: the status is
+    NOT RUN, the reason names the manifest and the count, and the population travels in
+    the coverage so the unattributed rows are visible rather than absent.
+    """
+    return {
+        "name": name,
+        "status": "NOT RUN",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "reason": (
+                f"this checkout resolves to no factory the fleet manifest declares, so no "
+                f"job can be attributed to it — {population} of {read_count} {unit} read "
+                f"are UNATTRIBUTED and NONE were judged. A clean box is NOT what this "
+                f"means: it means the attribution could not be made (board #242)"
+            ),
+            unit.replace(" ", "_"): read_count,
+            f"unattributed_{unit.split()[0]}": population,
+            "read_at": read_at,
+            "prefixes": [],
+        },
+    }
 
 
 def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
@@ -830,6 +910,9 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
 
     The rows are read live by the caller; the predicate stays pure and is handed a list.
     """
+    if not prefixes:
+        return no_prefixes_leg("cron-thinness", population=len(rows), unit="row(s)",
+                               read_at=read_at, read_count=len(rows))
     predicate = predicate or load_module("cron_thinness_predicate",
                                          CRON_THINNESS_PREDICATE)
     attributed, unattributed = attribute_rows(rows, prefixes)
@@ -1027,6 +1110,10 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     opposite call from the cron-thinness leg, whose population is the rows the factory
     declares and which therefore does fail loudly. Non-vacuity here is carried by the probe.
     """
+    if not prefixes:
+        logs = sorted(p for p in log_dir.glob("*.log")) if log_dir.is_dir() else []
+        return no_prefixes_leg("notify-receipt", population=len(logs), unit="log(s)",
+                               read_at=read_at, read_count=len(logs))
     attributed, _ = attribute_rows(rows, prefixes)
     live = {str(row.get("name") or ""): row for row in attributed}
     # The redirect each ENABLED row's own prompt declares, keyed by the stem its log would
@@ -1368,6 +1455,9 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     reader it is reported to (#126): the rows JUDGED, the declared rows owing no receipt,
     and the rows attributed to nobody.
     """
+    if not prefixes:
+        return no_prefixes_leg("duty-receipt", population=len(rows), unit="row(s)",
+                               read_at=read_at, read_count=len(rows))
     if predicate is None:
         predicate = field_predicate_readers()
 
@@ -1529,9 +1619,17 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     return {
         "name": "duty-receipt",
         "status": "ASSERTED" if declared else "NOT RUN",
+        # The reason NAMES ITS POPULATION and refuses the conclusion (#242 clause 5). The
+        # old text ended "so no duty owes a receipt on this box" — a POSITIVE CLAIM ABOUT
+        # THE BOX drawn from an enumeration that can be empty, which is how a lane
+        # patrolling from a linked worktree was told the box was clean while the main
+        # checkout reported two real problems in the same minute. An empty population
+        # supports no conclusion about duties; it supports a statement about the read.
         "reason": (None if declared else (
-            "no enabled row this factory declares carries a `receipt_subject:` "
-            "declaration, so no duty owes a receipt on this box"
+            f"of the {len(attributed)} enabled row(s) this factory declares, NONE carries "
+            f"a `receipt_subject:` declaration, so NO DUTY WAS JUDGED — that is a statement "
+            f"about the DECLARED population ({len(rows)} row(s) read in all), never a "
+            f"finding that no duty owes a receipt on this box"
         )),
         "problems": problems,
         "excused": excused,
@@ -1955,6 +2053,26 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     for leg in legs:
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
+        if leg["status"] == "NOT RUN" and leg["name"] in (
+            "cron-thinness", "notify-receipt", "duty-receipt"
+        ):
+            # A leg that examined NOTHING must never render as one that examined the
+            # population and found it clean (#242). Its reason is printed, and its
+            # counters travel with it so the unattributed population is visible rather
+            # than absent — the same discipline the kit-drift and publish legs follow.
+            lines.append(f"  NOT RUN: {cov.get('reason') or 'reason not stated'}")
+            for key in ("prefixes",):
+                if key in cov:
+                    lines.append(f"  {key}: {cov[key] or 'none declared'}")
+            for key, value in cov.items():
+                if key in ("reason", "read_at", "prefixes"):
+                    continue
+                lines.append(f"  {key}: {value}")
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+            lines.append(f"  excused: {len(leg['excused'])}")
+            lines.append(f"  problems: {len(leg['problems'])}")
+            lines.append("")
+            continue
         if leg["name"] == "board-close":
             lines.append(
                 f"  close rows (declaring {cov['declaration_token']}, at or after "
