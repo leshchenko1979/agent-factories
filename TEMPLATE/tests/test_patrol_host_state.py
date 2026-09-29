@@ -2832,6 +2832,94 @@ def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
     assert len(without["problems"]) == 1, without["problems"]
     assert "#85 carries a ruling comment" in without["problems"][0], without["problems"]
 
+# --- #245: the ruling predicate's head alternation, and the clause that keeps it honest ---
+
+def test_the_widened_head_ADMITS_the_spellings_the_board_actually_uses() -> None:
+    """#245 done-when 1, the widening arm: `## Amendment` IS a ruling head.
+
+    `#133` is the measured case — its two `## Amendment` comments ARE its ruling, while the
+    strict predicate returned None for them, so the issue read as unruled from the BOARD as
+    well as from the ledger. `#148` is the same spelling with a `ruling` row already stamped.
+    Both arms are driven here: the new spelling is admitted, and the two original forms are
+    NOT displaced by the widening.
+    """
+    for body in ("## RULED — shape (2), settled.\n",
+                 "## RULING — the clause reads as follows.\n",
+                 "## Amendment — done-when 3 resolved, and it is not conditional.\n"):
+        issue = _issue_with_comments(133, "OPEN", body)
+        assert RUNNER.ruling_comment(issue) is not None, f"not admitted: {body!r}"
+        assert RUNNER.unmatched_heading_comments(issue) == [], body
+
+def test_the_ruling_predicate_is_BOUNDARY_checked() -> None:
+    """A prefix match admits an EXTENSION unless the boundary is checked.
+
+    `## RULINGS — the ledger` starts with `## RULING`, so a bare `str.startswith` would read
+    a DIFFERENT heading as this one — the digit-extension class this factory has filed
+    repeatedly. Measured over the live board before the check was written: 0 headings extend
+    an accepted form, so this arm exists so the population cannot move tomorrow, not because
+    it moves today. Both sides are asserted, so the check cannot be satisfied by a predicate
+    that refuses everything.
+    """
+    for head in ("## RULINGS — the ledger", "## RULEDLY", "## Amendment2"):
+        assert not RUNNER._accepted_heading(head), head
+    for head in ("## RULED", "## RULED — shape (2)", "## RULING", "## Amendment",
+                 "## Amendment — x", "## RULED: a colon is a boundary"):
+        assert RUNNER._accepted_heading(head), head
+
+def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
+    """#245 done-when 2: the clause that keeps the widening from reproducing the defect.
+
+    A NOVEL head — one no one has written before — must surface as a printed line with its
+    issue number on the run that first meets it. Without this clause the next spelling is
+    simply not examined, which is indistinguishable from absent. Both halves are driven: the
+    line, and the count beside the verdict.
+    """
+    issues = [
+        _issue_with_comments(7, "OPEN", "## DISPOSITION — a spelling nobody has used yet.\n"),
+        _issue_with_comments(8, "OPEN", "## RULED — an ordinary ruling.\n"),
+    ]
+    rows = _rows(("intake", "#7", 1), ("intake", "#8", 2), ("ruling", "#8", 3))
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
+                                  predicate=RUNNER.load_predicate())
+    cov = leg["coverage"]
+    assert cov["unmatched_heads"] == [{"issue": 7, "head": "## DISPOSITION — a spelling nobody has used yet."}], cov["unmatched_heads"]
+    assert cov["unmatched_heads_examined"] == 1, cov
+    assert cov["canonical_heading"] == "## RULED", cov
+
+    rc, out, _ = _run(issues, rows)
+    assert "## DISPOSITION — a spelling nobody has used yet." in out, out
+    assert "#7" in out, out
+    assert "heading comments the ruling predicate did NOT match: 1 over 1 issue(s)" in out, out
+    assert "the convention names '## RULED'" in out, out
+    assert rc == 0, out
+
+def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> None:
+    """The NON-VACUITY control for the widening, driven through the REAL leg.
+
+    An issue whose ONLY head is `## Amendment` and which has no `ruling` row was invisible
+    before the widening: it was not counted as examined and not reported. The same fixture
+    is driven through the accepted set as it stands and against the NARROWED tuple, so the
+    difference is attributable to the widening and not to the fixture — the shape #243's
+    bridge control used.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [_issue_with_comments(133, "OPEN", "## Amendment — the item is ruled here.\n")]
+    rows = _rows(("intake", "#133", 846), ("dispatch", "#133", 847))
+
+    widened = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    assert widened["coverage"]["ruling_comments_examined"] == 1, widened["coverage"]
+    assert len(widened["problems"]) == 1, widened["problems"]
+    assert "#133 carries a ruling comment" in widened["problems"][0], widened["problems"]
+
+    saved = RUNNER.RULING_HEADINGS
+    RUNNER.RULING_HEADINGS = ("## RULED", "## RULING")
+    try:
+        narrowed = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    finally:
+        RUNNER.RULING_HEADINGS = saved
+    assert narrowed["coverage"]["ruling_comments_examined"] == 0, narrowed["coverage"]
+    assert narrowed["problems"] == [], narrowed["problems"]
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]

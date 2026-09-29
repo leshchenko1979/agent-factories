@@ -621,7 +621,66 @@ def resolve_ruling_issue(ruling: dict, rows: list[dict], predicate) -> tuple[int
 
     return None, "unbridgeable"
 
-RULING_HEADINGS = ("## RULED", "## RULING")
+RULING_HEADINGS = ("## RULED", "## RULING", "## Amendment")
+"""The heads a ruling comment OPENS with — widened to the spellings the board uses (#245).
+
+The tuple was `("## RULED", "## RULING")` and that predicate silently dropped three
+ruling-style comments on two issues: `#133` (x2) and `#148` (x1), every one of them headed
+`## Amendment`. `#133` was the sharp case — it read as unruled from the LEDGER
+(`event="ruling"` returns nothing under any subject) AND from the BOARD (0 strict-headed
+comments), while its two `## Amendment` comments ARE its ruling.
+
+`## Amendment` is a live spelling used deliberately by this factory's own HQ, so the
+widening is to the OBSERVED forms and nothing is backfilled — the three comments are not
+rewritten to the canonical head.
+
+THE BOUND IS A FLOOR, NOT A CEILING, and that is what the clause below answers. The
+candidate set came from a text search for `## Amendment`, so a ruling headed with a
+DIFFERENT word (`## DISPOSITION`, `## DECISION`) was never in it; widening to today's
+spellings carries the same blindness forward one spelling. So the leg also PRINTS every
+heading comment it did NOT match — a fourth spelling surfaces as a finding on the run that
+first meets it, instead of being indistinguishable from absent.
+"""
+
+RULING_CANONICAL_HEADING = "## RULED"
+"""The head the convention NAMES, so a lane writing a ruling converges rather than infers.
+
+Declared rather than enforced: the writer is an agent typing `gh issue comment`, and there
+is no tool on that path, so a rule "use this head" would be unenforceable exactly where it
+matters — the dead-text shape P29 removes. It is stated, and the clause below is what
+catches the spelling that ignores it.
+"""
+
+_RULING_HEADING_LINE = re.compile(r"^(#{1,6})\s+(\S.*)$")
+
+def _accepted_heading(head: str) -> bool:
+    """Whether a heading line is one of the accepted forms, BOUNDARY-CHECKED.
+
+    `str.startswith` on a tuple admits an EXTENSION: `## RULINGS — the ledger` starts with
+    `## RULING`, so a different heading would be read as this one — the digit-extension
+    class this factory has filed repeatedly. The character after the form must therefore
+    not be alphanumeric. Measured over the live board: 0 headings extend an accepted form,
+    so the check moves NO population today and exists so it cannot move one tomorrow.
+    """
+    for form in RULING_HEADINGS:
+        if head.startswith(form):
+            rest = head[len(form):]
+            if not rest or not rest[0].isalnum():
+                return True
+    return False
+
+def comment_heading(comment: dict) -> str | None:
+    """The comment's FIRST LINE when that line is a markdown heading, else None.
+
+    The first line only, after leading whitespace: the heading is the comment's opening,
+    which is the same discriminator the ruling predicate uses. A heading further down is a
+    section inside a comment, not the comment's own declaration.
+    """
+    body = str(comment.get("body") or "").lstrip()
+    if not body:
+        return None
+    first = body.splitlines()[0].strip()
+    return first if _RULING_HEADING_LINE.match(first) else None
 
 def ruling_comment(issue: dict) -> dict | None:
     """The issue's ruling comment, or None when it carries none.
@@ -634,9 +693,33 @@ def ruling_comment(issue: dict) -> dict | None:
     for comment in issue.get("comments") or []:
         if not isinstance(comment, dict):
             continue
-        if str(comment.get("body") or "").lstrip().startswith(RULING_HEADINGS):
+        head = comment_heading(comment)
+        if head is not None and _accepted_heading(head):
             return comment
     return None
+
+def unmatched_heading_comments(issue: dict) -> list[str]:
+    """Every heading the ruling predicate did NOT match — the clause that keeps it honest.
+
+    Widening the alternation alone reproduces the defect one spelling later: a new head
+    arrives, matches nothing, and is NOT EXAMINED, which is indistinguishable from absent.
+    So the leg names what it could not place, per issue, and the count travels beside the
+    verdict. A ruling that used a spelling nobody has seen yet shows up here on the run
+    that first meets it rather than being silently dropped.
+
+    This is the same obligation #223's direction-1 remedy carries and #231's stale basis
+    lacked: a predicate that cannot place an item must SAY SO, never report a smaller
+    population than it examined.
+    """
+    out: list[str] = []
+    for comment in issue.get("comments") or []:
+        if not isinstance(comment, dict):
+            continue
+        head = comment_heading(comment)
+        if head is None or _accepted_heading(head):
+            continue
+        out.append(head)
+    return out
 
 def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
                      predicate=None) -> dict:
@@ -676,10 +759,18 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
 
     problems: list[str] = []
     examined = 0
+    unmatched: list[dict] = []
     for issue in issues:
         number = issue.get("number")
         if not isinstance(number, int):
             continue
+        # The clause that keeps the alternation honest (#245): every heading comment the
+        # predicate did NOT accept is NAMED, per issue. It is collected over the WHOLE
+        # board, not only over the issues that carried an accepted head — a novel spelling
+        # is precisely the case where no accepted head exists, so scoping the collection to
+        # the ruled population would exclude the only population it is for.
+        for head in unmatched_heading_comments(issue):
+            unmatched.append({"issue": number, "head": head})
         if ruling_comment(issue) is None:
             continue
         examined += 1
@@ -702,6 +793,9 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "issues_read": len(issues),
             "board_read_at": read_at,
             "headings": list(RULING_HEADINGS),
+            "canonical_heading": RULING_CANONICAL_HEADING,
+            "unmatched_heads_examined": len(unmatched),
+            "unmatched_heads": unmatched,
             "rulings_read": len(ruled) + len(unbridgeable),
             "rulings_resolved": len(ruled),
             "rulings_unbridgeable": len(unbridgeable),
@@ -2425,6 +2519,20 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"issue(s) read, {len(leg['problems'])} problem(s) — board read at "
                 f"{cov['board_read_at']}"
             )
+            # The clause that keeps the alternation honest (#245). The count is printed
+            # BESIDE the verdict and the lines follow, so a spelling the predicate could not
+            # place is visible on the run that first meets it. The canonical head is named
+            # in the same breath: a reader who meets a novel head here is told what the
+            # convention expects, rather than left to infer it from the tuple above.
+            lines.append(
+                f"  heading comments the ruling predicate did NOT match: "
+                f"{cov['unmatched_heads_examined']} over "
+                f"{len({u['issue'] for u in cov['unmatched_heads']})} issue(s) — "
+                f"the convention names {cov['canonical_heading']!r}; a novel spelling is "
+                f"printed here rather than being indistinguishable from absent"
+            )
+            for entry in cov["unmatched_heads"]:
+                lines.append(f"    ~ #{entry['issue']}: {entry['head']}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
