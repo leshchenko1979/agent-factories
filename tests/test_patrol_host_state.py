@@ -2743,6 +2743,95 @@ def test_probe_every_probe_is_callable_by_the_SCRIPT_runner() -> None:
         "way: " + "; ".join(offenders)
     )
 
+# --- #243: the ruling leg resolves through a leg-local resolver ----------------------
+
+def test_probe_the_strict_arm_still_resolves() -> None:
+    """Arm 1, and the reason the shared predicate is NOT widened: `issue_reference` is
+    strictly numeric by design and its own gate depends on that."""
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 1, "event": "ruling", "subject": "#42", "detail": "ruled"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    assert (issue, arm) == (42, "strict"), (issue, arm)
+
+def test_probe_the_BRIDGE_resolves_a_slug_subject() -> None:
+    """Arm 2 — the shape the ledger really carries, and the one #243 was filed for.
+
+    The ruling is stamped under a SLUG (`foreign-instrument-coupling`) while the issue is
+    filed a row later under `#85`, so the strict form returns None and the row is invisible
+    to `ruled`. The bridge is a row that REFERENCES this ruling's `n` and itself names an
+    issue — which is exactly the real n=545 / n=546 pair.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
+              "detail": "OWNER ORDER: do not use the instruments ..."}
+    dispatch = {"n": 546, "event": "dispatch", "subject": "#85",
+                "detail": "DISPATCH #85 ... Ruling n=545; issue filed at https://x/issues/85"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling, dispatch], pred)
+    assert (issue, arm) == (85, "bridged"), (issue, arm)
+
+    # A bare-number subject is ALSO a real form (n=516 carries subject `77`, which its own
+    # correction row n=518 complains about) — so the bridge must read it too.
+    bare = {"n": 517, "event": "dispatch", "subject": "77", "detail": "see Ruling n=545"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling, bare], pred)
+    assert (issue, arm) == (77, "bridged"), (issue, arm)
+
+def test_probe_the_DECLARED_arm_is_constructible_because_it_has_NO_live_instance() -> None:
+    """Arm 3, driven off a FIXTURE because the token has zero live rows.
+
+    Measured by Triage: `governs=` occurs exactly twice in the whole ledger — inside the
+    ruling that PRESCRIBES it and its dispatch. So the arm is prospective, and a probe that
+    could not construct it would leave the arm unexercised while reading as covered.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 900, "event": "ruling", "subject": "some-concern",
+              "detail": "a ruling that governs a concern rather than an item. governs=1234"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    assert (issue, arm) == (1234, "declared"), (issue, arm)
+
+def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> None:
+    """Clause 2: a resolver that cannot place a row must SAY SO.
+
+    Silence here reports a smaller population than the leg examined — the leg would read
+    as though every ruling resolved, which is the false-clean shape the population clause
+    forbids. The count travels beside the verdict.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 901, "event": "ruling", "subject": "no-issue-anywhere",
+              "detail": "governs nothing identifiable"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    assert (issue, arm) == (None, "unbridgeable"), (issue, arm)
+
+    # ...and the leg's coverage carries them, so the print is not the only reader.
+    issues = [_issue_with_comments(1, "OPEN", "## RULED — a ruling.\n")]
+    rows = [ruling, {"n": 902, "event": "intake", "subject": "#1", "detail": "intake"}]
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    cov = leg["coverage"]
+    assert cov["rulings_unbridgeable"] == 1, cov
+    assert cov["unbridgeable_rows"] == [{"n": 901, "subject": "no-issue-anywhere"}], cov
+    assert cov["rulings_read"] == cov["rulings_resolved"] + cov["rulings_unbridgeable"], cov
+
+def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
+    """The NON-VACUITY control for clause 3.
+
+    Neutering the bridge returns a bridged issue to the problem list. The probe drives the
+    REAL leg twice over one fixture: once with the dispatch present, once without — so the
+    difference is attributable to the bridge and not to the fixture.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [_issue_with_comments(85, "OPEN", "## RULED — settled on the board.\n")]
+    ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
+              "detail": "the clause"}
+    dispatch = {"n": 546, "event": "dispatch", "subject": "#85", "detail": "Ruling n=545"}
+
+    with_bridge = RUNNER.board_ruling_leg(issues, [ruling, dispatch], read_at="probe",
+                                          predicate=pred)
+    assert with_bridge["problems"] == [], with_bridge["problems"]
+
+    # Remove ONLY the bridge row: the same fixture must now report the false-unruled item.
+    without = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred)
+    assert len(without["problems"]) == 1, without["problems"]
+    assert "#85 carries a ruling comment" in without["problems"][0], without["problems"]
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]

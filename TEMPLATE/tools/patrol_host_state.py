@@ -536,6 +536,91 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
 # probed without executing the leg against a live board. Both forms are declared rather than
 # normalised to one: the board carries both, and a normalisation would be a second predicate
 # standing beside this one, which is the drift the tuple exists to prevent.
+# ---- #243: WHICH ISSUE DOES A RULING GOVERN -----------------------------------------
+#
+# The leg built its `ruled` set with the SHARED predicate's `issue_reference`, whose
+# pattern is the strictly numeric `^#(\d+)$`. That predicate answers "does this subject
+# NAME AN ISSUE", and for its own gate a descriptive subject genuinely names none — so
+# widening it would move that gate's population in a direction nobody asked for. This leg
+# asks a DIFFERENT question ("which issue does this ruling GOVERN") and answers it with a
+# resolver of its own over the ledger's real subject vocabulary.
+#
+# MEASURED at origin e249022 from the leg's own resolver: 214 ruling rows, 174 reachable,
+# **40 unreachable (18.8%)** — the resolver could not EXPRESS the case, so `ruled` could
+# hold at most 130 distinct issue numbers. Realized harm on one day's board: a cross-read
+# called eight open issues unruled, FIVE of them (#77 #85 #133 #185 #188) carrying a ruling
+# row the strict form returns None for — every one a re-dispatch of an item that already
+# had its ruling, which is the "duplicate brief to a lane already holding the item" class.
+#
+# THE THREE ARMS, in the ruled order:
+#   1. STRICT — the ruling's own subject is `#<n>`.
+#   2. THE DISPATCH BRIDGE — a ruling is often stamped under a SLUG (`foreign-instrument-
+#      coupling`) while the issue is filed a row later, so the bridge is: another row that
+#      REFERENCES this ruling's `n` and itself names an issue. #85 is reachable ONLY this
+#      way (ruling n=545 <- dispatch n=546, subject `#85`, detail "Ruling n=545"), and #77
+#      through a BARE-number subject (n=516, subject `77`), which the strict form also
+#      misses and which its own correction row n=518 complains about.
+#   3. `governs=<n>` — an explicit token for a ruling that governs a concern rather than an
+#      item, so a lane can declare the attribution instead of relying on a bridge.
+#
+# A ROW THAT RESOLVES TO NO ISSUE IS PRINTED, never silently dropped: a resolver that
+# cannot place a row must say so, or the leg reports a smaller population than it examined.
+RULING_GOVERNS_KEY = "governs="
+_RULING_ISSUE_URL = re.compile(r"/issues/(\d+)\b")
+_RULING_BARE_NUMBER = re.compile(r"^(\d+)$")
+
+
+def issue_from_row(row: dict, predicate) -> int | None:
+    """The issue a row names, leg-locally: `#N` subject, bare `N` subject, or an issue URL.
+
+    DELIBERATELY NOT the shared predicate (#243, shape 1): `issue_reference` is strictly
+    numeric by design and its own gate depends on that. This is the patrol's question, so
+    it is answered here — and a bare number is accepted because the dispatch rows really do
+    carry one (`n=516`, subject `77`), which is the form n=518 was written to correct.
+    """
+    subject = str(row.get("subject") or "").strip()
+    number = predicate.issue_reference(subject)
+    if number is not None:
+        return number
+    bare = _RULING_BARE_NUMBER.match(subject)
+    if bare:
+        return int(bare.group(1))
+    url = _RULING_ISSUE_URL.search(str(row.get("detail") or ""))
+    if url:
+        return int(url.group(1))
+    return None
+
+
+def resolve_ruling_issue(ruling: dict, rows: list[dict], predicate) -> tuple[int | None, str]:
+    """`(issue, arm)` for a ruling row — the arm NAMED so a resolution is auditable.
+
+    `arm` is `"strict"`, `"declared"` (`governs=`), `"bridged"` or `"unbridgeable"`. The
+    tier is reported rather than implied, the same discipline the canonicality ladder uses:
+    a resolution that does not say how it was reached cannot be re-litigated when the
+    vocabulary moves.
+    """
+    own = issue_from_row(ruling, predicate)
+    if own is not None:
+        return own, "strict"
+
+    declared = re.search(rf"{re.escape(RULING_GOVERNS_KEY)}(\d+)", str(ruling.get("detail") or ""))
+    if declared:
+        return int(declared.group(1)), "declared"
+
+    n = ruling.get("n")
+    if n is not None:
+        for other in rows:
+            if other.get("n") == n:
+                continue
+            detail = str(other.get("detail") or "")
+            if not re.search(rf"\bn={n}\b", detail):
+                continue
+            bridged = issue_from_row(other, predicate)
+            if bridged is not None:
+                return bridged, "bridged"
+
+    return None, "unbridgeable"
+
 RULING_HEADINGS = ("## RULED", "## RULING")
 
 def ruling_comment(issue: dict) -> dict | None:
@@ -575,12 +660,19 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     predicate = predicate or load_predicate()
 
     ruled: set[int] = set()
+    arms = {"strict": 0, "declared": 0, "bridged": 0}
+    unbridgeable: list[dict] = []
     for row in rows:
         if row.get("event") != "ruling":
             continue
-        number = predicate.issue_reference(row.get("subject"))
+        number, arm = resolve_ruling_issue(row, rows, predicate)
         if number is not None:
             ruled.add(number)
+            arms[arm] = arms.get(arm, 0) + 1
+        else:
+            # PRINTED, never dropped: a resolver that cannot place a row must say so, or
+            # the leg reports a smaller population than it examined (#243 clause 2).
+            unbridgeable.append({"n": row.get("n"), "subject": str(row.get("subject") or "")})
 
     problems: list[str] = []
     examined = 0
@@ -610,6 +702,11 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "issues_read": len(issues),
             "board_read_at": read_at,
             "headings": list(RULING_HEADINGS),
+            "rulings_read": len(ruled) + len(unbridgeable),
+            "rulings_resolved": len(ruled),
+            "rulings_unbridgeable": len(unbridgeable),
+            "resolution_arms": arms,
+            "unbridgeable_rows": unbridgeable,
         },
     }
 
