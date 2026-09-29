@@ -764,6 +764,10 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "passed": res.returncode == 0,
                 "unknown": False,
                 "duration_sec": round(t_el, 2),
+                # A COMPLETED run's wall-clock is the measurement. Its presence on every
+                # record is what makes its ABSENCE on a kill readable as "this number is not
+                # a measurement" rather than as a missing field (#226).
+                "duration_is_lower_bound": False,
                 "attempts": attempts,
                 "retried": attempts > 1,
                 "stdout": res.stdout.strip(),
@@ -780,6 +784,12 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "passed": False,
                 "unknown": True,
                 "duration_sec": round(t_el, 2),
+                # A KILLED gate's wall-clock is a LOWER BOUND, never a measurement: the gate
+                # ran AT LEAST this long and was stopped at the cap, so the number is the
+                # budget talking. Stated in the record so no reader -- and no future tool
+                # deriving a `measured_sec` from an audit payload -- can promote the cap to a
+                # base and derive the next cap from itself (#226).
+                "duration_is_lower_bound": True,
                 "attempts": attempts,
                 "retried": True,
                 "first_attempt_sec": first_attempt_sec,
@@ -798,6 +808,7 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "passed": False,
                 "unknown": False,
                 "duration_sec": round(t_el, 2),
+                "duration_is_lower_bound": False,
                 "attempts": attempts,
                 "retried": attempts > 1,
                 "stdout": "",
@@ -2303,7 +2314,11 @@ def format_report_markdown(
         # The cause is read through the SAME helper as the stdout report, so the two
         # surfaces cannot disagree about which line states it (one field, one predicate).
         note = (g.get("note") or "").replace("|", "/")
-        lines.append(f"| `{g['cmd']}` | `{status}` | `{g['duration_sec']}s` | {note} |")
+        # `>=` on a killed gate: the rendered number is what a reader copies into a
+        # manifest, and a cap rendered as a measurement is how a lower bound is promoted
+        # to a base (#226).
+        dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
+        lines.append(f"| `{g['cmd']}` | `{status}` | `{dur}s` | {note} |")
 
     lines.extend([
         "",
@@ -2471,7 +2486,8 @@ def main() -> int:
         # a verdict nobody measured. The headline's three-state form is #93's; here
         # the state is at least never silently green.
         mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
-        line = f"  [{mark}] {g['cmd']} ({g['duration_sec']}s of {g.get('budget_sec', 0.0):.2f}s)"
+        dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
+        line = f"  [{mark}] {g['cmd']} ({dur}s of {g.get('budget_sec', 0.0):.2f}s)"
         if mark != "PASS":
             # THE CAUSE, ON THE LINE (#93 ruling n=574 PART 1(c)). A cause visible only
             # via `--json` is a cause the reader does not have, and the reader of this
@@ -2499,6 +2515,22 @@ def main() -> int:
     )
     for g in default_gates:
         print(f"  [DEFAULT] {g.get('gate_key') or '(no file argument resolved)'} — {g['cmd']}")
+
+    # THE LOAD POPULATION, PRINTED (#226). A cap exceeded at load 13 and a cap exceeded on
+    # an idle box are the SAME NUMBER and DIFFERENT FACTS, so a reader meeting a kill can
+    # only tell a busy box from a hung gate where the base states the load it was measured
+    # at. This run's own load is printed beside the declared one, because the comparison IS
+    # the datum -- and where no entry states a load, the line says so rather than leaving
+    # the reader to infer it from a missing field.
+    try:
+        now_load: float | None = os.getloadavg()[0]
+    except OSError:  # pragma: no cover - load average is unavailable on some hosts
+        now_load = None
+    print(f"\n{budgets.load_note}")
+    if now_load is not None:
+        print(f"  this run is at load {now_load:.2f}")
+    for key in budgets.load_declared:
+        print(f"  [LOAD] {key} — measured_sec taken at load {budgets.loads[key]:.2f}")
 
     # THE DECLARED REVISIONS, SWEPT AND PRINTED (#125, ruling n=786). A basis that no
     # longer describes the command it was taken on is INVISIBLE in the caps themselves --

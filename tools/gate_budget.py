@@ -97,6 +97,15 @@ TIMEOUT_EXIT_CODE = 124
 # names. The loader refuses the shape rather than reading a bare number.
 ENTRY_KEYS = ("budget_sec", "measured_sec", "measured_at", "margin_x")
 
+# The load the `measured_sec` was taken AT -- the datum whose absence makes a kill
+# unreadable, because a cap exceeded at load 13 and a cap exceeded on an idle box are the
+# same number and different facts (#226). OPTIONAL, and its ABSENCE IS PRINTED rather than
+# refused: the live manifest holds 48 entries and a load reading exists for 2, so a required
+# key would force 46 invented values -- the very class this module exists to remove, a number
+# travelling without its predicate. Forward-only: a NEW or UPDATED measurement carries the
+# load it was taken at; the rest stay unmeasured and VISIBLE, never silently exempt.
+LOAD_KEY = "load_at_measure"
+
 # How far `budget_sec` may sit from `margin_x x measured_sec` before the entry is
 # refused. MEASURED, not chosen: over the live 44-gate manifest the largest
 # deviation is 0.014 absolute and 0.012% relative, both pure 2-decimal rounding,
@@ -154,6 +163,14 @@ class GateBudgets:
     default_sec: float
     default_source: str
     gates: dict[str, float] = field(default_factory=dict)
+    # WHICH declared entries carry the load their `measured_sec` was taken at, and the
+    # account of the population that does not. The note is the point, on the same reasoning
+    # as `stale_note`: a reader meeting a kill must be able to tell a hung gate from a busy
+    # box, and where no entry states its load that reader has NOTHING to tell them apart --
+    # so the gap is printed beside the verdict instead of being absent from it.
+    load_declared: tuple[str, ...] = ()
+    load_note: str = ""
+    loads: dict[str, float] = field(default_factory=dict)
     # The staleness sweep's findings and its OWN account, so a caller can print the
     # population examined beside the count found. An empty tuple with a note that says
     # why is the honest form of "nothing reported"; an empty tuple alone is not.
@@ -642,6 +659,12 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
     # basis is the defect this manifest exists to remove. A default that states NONE is not
     # refused -- the shipped example carries a bare one on purpose, so a factory inherits the
     # SHAPE without this box's measurement (#208).
+    if LOAD_KEY in default and not _is_positive_number(default[LOAD_KEY]):
+        raise GateBudgetManifestError(
+            f"{target}: default.{LOAD_KEY} must be a positive number, not "
+            f"{default[LOAD_KEY]!r} -- the field states the load the measurement was taken "
+            f"AT, and a value that is not a number states nothing a reader can compare"
+        )
     stated_default_problems = default_basis_problems(default)
     if stated_default_problems:
         raise GateBudgetManifestError(
@@ -664,6 +687,12 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
                     f"{where} has no `{name}` key — a budget with no stated basis is a "
                     f"cap picked by feel, which is the defect this manifest exists to fix"
                 )
+        if LOAD_KEY in entry and not _is_positive_number(entry[LOAD_KEY]):
+            raise GateBudgetManifestError(
+                f"{where}.{LOAD_KEY} must be a positive number, not {entry[LOAD_KEY]!r} -- "
+                f"the field states the load the measurement was taken AT, and a value that is "
+                f"not a number states nothing a reader can compare against a kill"
+            )
         for name in ("budget_sec", "measured_sec", "margin_x"):
             if not _is_positive_number(entry[name]):
                 raise GateBudgetManifestError(
@@ -685,12 +714,40 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
         gates[key] = float(budget)
 
     stale, stale_note = budget_staleness(entries, repo_root)
+    # The load population, printed rather than refused. `default` counts as one declarer of
+    # its own, because a gate that falls through to it inherits that measurement's load.
+    load_declared = tuple(sorted(k for k, e in entries.items() if LOAD_KEY in e))
+    loads = {k: float(e[LOAD_KEY]) for k, e in entries.items() if LOAD_KEY in e}
+    # `default` is a base in its own right: a gate that falls through to it inherits that
+    # measurement, and therefore that measurement's load.
+    total = len(entries)
+    bases = total + 1
+    on_default = LOAD_KEY in default
+    declarers = len(load_declared) + (1 if on_default else 0)
+    if declarers:
+        where = (f"`default` + {len(load_declared)} of {total} declared entries"
+                 if on_default else
+                 f"none on `default`, {len(load_declared)} of {total} declared entries")
+        load_note = (
+            f"{LOAD_KEY}: {declarers} of {bases} declared bases carry it ({where}); the "
+            f"other {bases - declarers} state none, so for those a kill cannot be told from "
+            f"a busy box"
+        )
+    else:
+        load_note = (
+            f"{LOAD_KEY}: 0 of {bases} declared bases carry it (neither `default` nor any of "
+            f"the {total} entries), so a kill on this manifest cannot be told from a busy box "
+            f"on any gate"
+        )
     return GateBudgets(
         default_sec=float(default_sec),
         default_source=f"{target}:default",
         gates=gates,
         stale=stale,
         stale_note=stale_note,
+        load_declared=load_declared,
+        load_note=load_note,
+        loads=loads,
     )
 
 

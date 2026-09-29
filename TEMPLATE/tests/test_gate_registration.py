@@ -1822,6 +1822,221 @@ def probe_the_note_is_attached_once_for_every_surface() -> None:
         repr(roster[2].get("note")),
     )
 
+
+# ---------------------------------------------------------------------------
+# #226 — THE LOAD A MEASUREMENT WAS TAKEN AT, and the lower bound a kill records.
+#
+# The class this closes. `budget_sec = margin_x x measured_sec` is satisfied exactly and is
+# not protective: measured on this box, `tests/test_ledger.py` ran 33.92s / 29.83s / 95s and
+# was KILLED at 126.32s against a declared basis of 31.36s -- both kills landing within
+# 0.13s of their own cap, so the margin law held while the box ran 2-3 concurrent audits,
+# which is its normal state at night. A cap exceeded at load 13 and the same cap exceeded on
+# an idle box are the SAME NUMBER and DIFFERENT FACTS, and the manifest carried no datum
+# that told them apart. So:
+#
+#   * the manifest gains an OPTIONAL `load_at_measure` beside `measured_sec`, and its
+#     ABSENCE IS PRINTED rather than refused -- 48 entries exist and a load reading exists
+#     for 2, so a required key would force 46 invented values, the very class this module
+#     exists to remove (a number travelling without its predicate);
+#   * a KILL is recorded as a LOWER BOUND, never promoted to a measure of the gate. The cap
+#     is the budget talking: the gate ran AT LEAST that long. Without the marker a future
+#     tool deriving a `measured_sec` from an audit payload would derive the next cap from
+#     its own failure.
+#
+# `margin_x` is NOT raised for this (ruled, n=1602): containing 126.32s from a 31.36s base
+# needs margin_x ~ 16.1, and that is the "too high, it hides a hung one" direction n=823
+# refuses. The base VALUES are the process owner's measurement duty; this is the schema and
+# the refusal to promote a bound.
+# ---------------------------------------------------------------------------
+
+def probe_a_killed_gate_is_never_rendered_as_a_measurement(timed_out: dict) -> None:
+    """A kill carries a LOWER BOUND; a completed run carries a measurement.
+
+    Both arms on the SAME instrument: the killed record is the live `run_gate` timeout the
+    #93 probes already drive, and the completed one is a real sub-second run. The record
+    marker and the RENDERED row are asserted together, because the rendered number is what a
+    reader copies into a manifest next.
+    """
+    audit = _audit_module()
+    check(
+        "a KILLED gate records its duration as a LOWER BOUND",
+        timed_out.get("duration_is_lower_bound") is True,
+        f"duration_is_lower_bound={timed_out.get('duration_is_lower_bound')!r}, "
+        f"duration_sec={timed_out['duration_sec']}",
+    )
+    done = audit.run_gate(["/bin/true"], REPO, 60.0)
+    check(
+        "a COMPLETED gate records a measurement, never a bound",
+        done.get("duration_is_lower_bound") is False,
+        f"duration_is_lower_bound={done.get('duration_is_lower_bound')!r}, "
+        f"duration_sec={done['duration_sec']}",
+    )
+    md = audit.format_report_markdown(
+        "2026-09-29", "2026-09-29T00:00:00Z", {}, {}, {}, [timed_out, done]
+    )
+    rows = [ln for ln in md.splitlines() if "| `" in ln and "s` |" in ln]
+    killed_rows = [ln for ln in rows if ">=" in ln]
+    check(
+        "the committed report renders a kill as `>=N`, never as a bare measurement",
+        len(killed_rows) == 1 and ">=%s" % timed_out["duration_sec"] in killed_rows[0],
+        killed_rows[0][:110] if killed_rows else "no `>=` row rendered",
+    )
+    check(
+        "and the completed gate's row carries NO bound marker",
+        all((">=" not in ln) for ln in rows if "| `" in ln and len(ln) > 60 and ln not in killed_rows)
+        or len(rows) == 1,
+        str(len(rows)) + " gate row(s) rendered",
+    )
+
+def probe_the_load_key_is_optional_and_its_absence_is_printed() -> None:
+    """A manifest that states no load still LOADS, and says so in the same breath.
+
+    This is the arm that keeps the field optional: the kit ships `gates.example.json` with a
+    bare default on purpose, and a leg that refused there would red every bootstrapped
+    factory. What it must NOT do is read the absence as a clean sheet -- so the note names
+    the population it examined and the harm the gap causes.
+    """
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = _manifest(
+            root,
+            {"tests/test_same.py": {"budget_sec": 4.0, "measured_sec": 1.0,
+                                    "margin_x": 4.0, "measured_at": "HEAD"}},
+        )
+        raised = ""
+        try:
+            budgets = module.load_gate_budgets(path=path, repo_root=root)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+            budgets = None
+        check(
+            "a manifest with no `load_at_measure` still loads — the field is OPTIONAL",
+            budgets is not None,
+            raised[:130] or "loaded",
+        )
+        if budgets is None:
+            return
+        check(
+            "and the budget it declares is read unchanged",
+            budgets.gates == {"tests/test_same.py": 4.0},
+            str(budgets.gates),
+        )
+        check(
+            "its note states the POPULATION that carries no load",
+            budgets.load_note.startswith(f"{module.LOAD_KEY}: 0 of 2 declared bases carry it"),
+            budgets.load_note[:130],
+        )
+        check(
+            "and names the harm, so the gap is readable rather than silent",
+            "busy box" in budgets.load_note,
+            budgets.load_note[:160],
+        )
+
+def probe_a_declared_load_is_counted_and_named() -> None:
+    """Where a load IS declared, it is carried forward and the account says how many."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = _manifest(
+            root,
+            {"tests/test_same.py": {"budget_sec": 4.0, "measured_sec": 1.0, "margin_x": 4.0,
+                                    "measured_at": "HEAD", "load_at_measure": 0.31},
+             "tests/test_other.py": {"budget_sec": 8.0, "measured_sec": 2.0, "margin_x": 4.0,
+                                     "measured_at": "HEAD"}},
+        )
+        budgets = module.load_gate_budgets(path=path, repo_root=root)
+        check(
+            "the state the load was measured at is carried, by key",
+            budgets.loads == {"tests/test_same.py": 0.31},
+            str(budgets.loads),
+        )
+        check(
+            "the account counts the declarers against the population, entries AND `default`",
+            budgets.load_note.startswith(
+                f"{module.LOAD_KEY}: 1 of 3 declared bases carry it (none on `default`, "
+                f"1 of 2 declared entries)"
+            ),
+            budgets.load_note[:150],
+        )
+        check(
+            "and the note still names the population that declares NONE",
+            "the other 2 state none" in budgets.load_note,
+            budgets.load_note[:170],
+        )
+
+def probe_a_non_numeric_load_is_refused() -> None:
+    """A load that is not a number states nothing a reader can compare against a kill."""
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = _manifest(
+            root,
+            {"tests/test_same.py": {"budget_sec": 4.0, "measured_sec": 1.0, "margin_x": 4.0,
+                                    "measured_at": "HEAD", "load_at_measure": "busy"}},
+        )
+        raised = ""
+        try:
+            module.load_gate_budgets(path=path, repo_root=root)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+        check(
+            "a non-numeric `load_at_measure` on an entry is refused, naming the key",
+            module.LOAD_KEY in raised and "positive number" in raised,
+            raised[:130] or "nothing was raised",
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = _manifest(root, {}, default={"budget_sec": 120.0, "load_at_measure": -1.0})
+        raised = ""
+        try:
+            module.load_gate_budgets(path=path, repo_root=root)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+        check(
+            "and a non-positive one on `default` is refused too",
+            module.LOAD_KEY in raised,
+            raised[:130] or "nothing was raised",
+        )
+
+def probe_the_live_manifest_states_its_load_population() -> None:
+    """On the live manifest: the account is PRINTED, and it is the live population.
+
+    Asserted as an ACCOUNT, never a verdict -- how many entries carry a load is a
+    measurement that moves as the process owner re-measures, so a probe demanding a number
+    would red on correct data. What must hold is that the account exists and states the
+    population it examined.
+    """
+    module = _gate_budget_module()
+    raised = ""
+    try:
+        budgets = module.load_gate_budgets()
+    except module.GateBudgetManifestError as exc:
+        raised = str(exc)
+        budgets = None
+    check(
+        "the live manifest LOADS — a load reading is never a precondition",
+        budgets is not None,
+        raised[:130] or "loaded",
+    )
+    if budgets is None:
+        return
+    if not budgets.gates:
+        print("  live manifest — none declared (the kit's bare default is in use)")
+        return
+    check(
+        "the live manifest prints its load population",
+        budgets.load_note.startswith(module.LOAD_KEY),
+        budgets.load_note[:130],
+    )
+    check(
+        "and every key it names as declaring a load carries one",
+        all(budgets.loads[k] > 0 for k in budgets.load_declared),
+        str({k: budgets.loads[k] for k in budgets.load_declared})[:130],
+    )
+    print(f"  live manifest — {len(budgets.load_declared)} of {len(budgets.gates)} declared "
+          f"entries carry a load reading")
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -1882,6 +2097,7 @@ def main() -> int:
     probe_the_retry_is_bounded_and_recorded(timed_out)
     probe_a_genuine_failure_is_never_retried()
     probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out)
+    probe_a_killed_gate_is_never_rendered_as_a_measurement(timed_out)
     probe_the_three_states_are_distinct_and_a_failure_outranks_unknown()
     probe_a_skipped_suite_is_still_no_verdict()
     probe_the_fail_line_cause_is_read_by_one_predicate()
@@ -1891,6 +2107,12 @@ def main() -> int:
 
     print("  live manifest — the declared revisions, swept")
     probe_the_live_sweep_states_its_own_account()
+
+    print("  synthetic probes — #226: the load a measurement was taken at")
+    probe_the_load_key_is_optional_and_its_absence_is_printed()
+    probe_a_declared_load_is_counted_and_named()
+    probe_a_non_numeric_load_is_refused()
+    probe_the_live_manifest_states_its_load_population()
 
     print("  synthetic probes — #208: the default's stated derivation is upheld")
     probe_a_population_entry_above_the_default_is_refused()
