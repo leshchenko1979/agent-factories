@@ -113,6 +113,19 @@ the working tree and the halves agree there. Only the manifest — which records
 digest — catches it. That is the remedy of RC2 demonstrated working in one gate and blind in the one
 beside it: the same §7.6 shape, in the law that states §7.6.
 
+**The same edit reaches a second pair, and reverts a second lane's landing.** Measured
+2026-09-29T02:12Z, predicate = `git diff` over the four paths, scope = the two pairs, instant above:
+the uncommitted change also strips the scope line in `docs/review-lenses.md` (and its `TEMPLATE/`
+half) that the Review Rotation lane landed at `599ccc0` — *"…and instrument law docs
+(`docs/instruments/*.md`)"*. So **2 of 2 pairs carry the reversion, undoing 2 landed fixes from 2
+different lanes, and both halves match in the working tree so `test_docs_sync` stays green on both.**
+
+Two things follow that a single-file specimen would not show. First, the reversion is not confined to
+one author's file: it takes whatever the working tree holds, so it lands on any lane's work equally.
+Second, it prefers precisely the lines that **widen a scope** — the citation a reader needs in order
+to know *which files the criterion governs*. An edit that narrows a stated population is the one edit
+guaranteed to make the population look complete afterwards, which is RC1 and RC2 arriving together.
+
 **A second live specimen, in two directions — only one of them published.** I ran `git commit --amend`
 intending my own commit, and it amended **a peer's** instead, because HEAD moved between the moment I
 staged my file and the moment the amend executed (a lane committed in that window). That commit,
