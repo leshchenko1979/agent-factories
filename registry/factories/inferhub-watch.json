@@ -4,21 +4,21 @@
   "profile": "ops",
   "repo": "/root/inferhub-watch",
   "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-  "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
+  "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction \u2014 which routes to use, at what measured price and reliability \u2014 and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
   "zone": {
     "owns": [
       "leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law",
-      "Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
-      "Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
-      "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-09-27: exactly THREE rows — id 43 gemini (status 2 = DISABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED by ChannelDisableThreshold=15 at 2026-09-26T14:41:40Z, reason recorded verbatim 'status_code=503, combo has no member with a provider within budget right now'; priority 210). The 09-25T22:33:39Z re-enable of id 43 is NO LONGER UNATTRIBUTED: it was the owner's own admin session (new_api.audit_logs row 1121, auth_method=session, username=root, admin_id=1, role=100, matching other_info.status_time to the second, 14s after a failing test_time) — his own later message to a lane said he had been adjusting the config. It was disabled again 2026-09-26T07:03:33Z (audit row 1127) after measurement showed 43's members are a strict subset of 44's at an identical 0.003 bid while priority 300 made it the first call on every request. Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.",
+      "Grafana dashboard inferhub-watch on grafana.l1979.ru \u2014 its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
+      "Postgres inferhub_logs on apps \u2014 route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
+      "The new_api channels table on apps as an AUTHORED POLICY OBJECT \u2014 the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-09-27: exactly THREE rows \u2014 id 43 gemini (status 2 = DISABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED by ChannelDisableThreshold=15 at 2026-09-26T14:41:40Z, reason recorded verbatim 'status_code=503, combo has no member with a provider within budget right now'; priority 210). The 09-25T22:33:39Z re-enable of id 43 is NO LONGER UNATTRIBUTED: it was the owner's own admin session (new_api.audit_logs row 1121, auth_method=session, username=root, admin_id=1, role=100, matching other_info.status_time to the second, 14s after a failing test_time) \u2014 his own later message to a lane said he had been adjusting the config. It was disabled again 2026-09-26T07:03:33Z (audit row 1127) after measurement showed 43's members are a strict subset of 44's at an identical 0.003 bid while priority 300 made it the first call on every request. Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.",
       "Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)",
       "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
       "This factory's own crons and its daily GitHub Actions sweep"
     ],
     "does_not_own": [
-      "The New-API gateway itself — its container, config and serving behaviour on apps (Infra Factory / LLM Gateway lane). We author the channel policy; they run the gateway.",
+      "The New-API gateway itself \u2014 its container, config and serving behaviour on apps (Infra Factory / LLM Gateway lane). We author the channel policy; they run the gateway.",
       "Grafana deployment and provisioning, and the generic /grafana skill tooling in /root/vds-servers (Infra Factory)",
-      "The upstream provider api.inferhub.dev — external; we measure it and never change it",
+      "The upstream provider api.inferhub.dev \u2014 external; we measure it and never change it",
       "OpenCrabs core source (/root/opencrabs): we may file fork issues for runtime anomalies we observe, but we never open PRs or edit source (external-lane boundary)",
       "Other member factories' repos, lanes and process law",
       "Host and box infrastructure (owner)"
@@ -28,7 +28,7 @@
     {
       "name": "inferhub-usage-logs-sync",
       "audience": "agent",
-      "entry": "cron 2d9112a6-b697-4eeb-b6ac-3e2462e23483, expr 23 */6 * * *, enabled — TAIL-ONLY: its prompt carries --skip-data --skip-scoreboard --skip-switch, so it pages no API and writes no table; the usage_logs data leg belongs to the no-wake host runner /usr/local/bin/inferhub-usage-sync.sh (*/10 — no daemon, no session, no tokens). Do NOT read this cron as the writer of route_metrics or usage_logs",
+      "entry": "cron 2d9112a6-b697-4eeb-b6ac-3e2462e23483, expr 23 */6 * * *, enabled \u2014 TAIL-ONLY: its prompt carries --skip-data --skip-scoreboard --skip-switch, so it pages no API and writes no table; the usage_logs data leg belongs to the no-wake host runner /usr/local/bin/inferhub-usage-sync.sh (*/10 \u2014 no daemon, no session, no tokens). Do NOT read this cron as the writer of route_metrics or usage_logs",
       "cadence": "6h"
     },
     {
@@ -40,7 +40,7 @@
     {
       "name": "inferhub-daily-report",
       "audience": "owner",
-      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b — the HQ lane re-posts it to Telegram thread 2; it does NOT deliver to the thread itself",
+      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b \u2014 the HQ lane re-posts it to Telegram thread 2; it does NOT deliver to the thread itself",
       "cadence": "daily"
     },
     {
@@ -58,21 +58,21 @@
     {
       "name": "watch.yml scheduled sweep",
       "audience": "agent",
-      "entry": "host crontab dispatcher /usr/local/bin/inferhub-sweep-dispatch.sh at 17 2 * * * (declared once in repo scripts/sweep_schedule.py), which calls gh workflow run; the workflow's own on.schedule line is a deduped BACKSTOP — measured over all 27 scheduled runs to 2026-09-22 it fires +0.7 h to +12.2 h late, mean +5.2 h, and the delay tracks the declaration. Do not treat 02:17Z as GitHub-side",
+      "entry": "host crontab dispatcher /usr/local/bin/inferhub-sweep-dispatch.sh at 17 2 * * * (declared once in repo scripts/sweep_schedule.py), which calls gh workflow run; the workflow's own on.schedule line is a deduped BACKSTOP \u2014 measured over all 27 scheduled runs to 2026-09-22 it fires +0.7 h to +12.2 h late, mean +5.2 h, and the delay tracks the declaration. Do not treat 02:17Z as GitHub-side",
       "cadence": "daily 02:17Z (host crontab)"
     }
   ],
   "substrates_owned": [
     "leshchenko1979/inferhub-watch",
-    "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship",
-    "Postgres inferhub_logs on apps — route_metrics, usage_logs, model_rollup",
-    "Grafana dashboard inferhub-watch — panels and queries",
-    "The new_api channels table — priority, auto_ban and model_mapping policy. Live 2026-09-27: three rows, ids 43 (disabled) / 44 (enabled) / 46 (auto-banned); the tier ladder is gone and no automatic writer runs."
+    "skills/inferhub/SKILL.md \u2014 this factory's process law; HQ-only authorship",
+    "Postgres inferhub_logs on apps \u2014 route_metrics, usage_logs, model_rollup",
+    "Grafana dashboard inferhub-watch \u2014 panels and queries",
+    "The new_api channels table \u2014 priority, auto_ban and model_mapping policy. Live 2026-09-27: three rows, ids 43 (disabled) / 44 (enabled) / 46 (auto-banned); the tier ladder is gone and no automatic writer runs."
   ],
   "announcements": [
     {
       "id": "inferhub-autoswitcher-retired",
-      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-09-27: enforcement moved from a flag to an opt-in gate — scripts/sync_usage_logs.py now runs the switcher leg only under an explicit --run-switch, so --skip-switch is a DEPRECATED NO-OP that no longer prevents a switch (#152). A bare run therefore cannot reach it; do not re-arm either path.",
+      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-09-27: enforcement moved from a flag to an opt-in gate \u2014 scripts/sync_usage_logs.py now runs the switcher leg only under an explicit --run-switch, so --skip-switch is a DEPRECATED NO-OP that no longer prevents a switch (#152). A bare run therefore cannot reach it; do not re-arm either path.",
       "severity": "warning",
       "since": "2026-09-18T22:51:42Z",
       "affects": [
@@ -82,7 +82,7 @@
     },
     {
       "id": "ops-fallback-chain-reordered",
-      "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg — 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts — it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
+      "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini \u2014 best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg \u2014 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts \u2014 it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
       "severity": "info",
       "scope": "profile",
       "since": "2026-09-19T12:21:40Z",
@@ -92,7 +92,7 @@
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
-      "text": "LIVE ROOT CREDENTIALS REMAIN COMMITTED in files this factory and infra-factory both touch: /root/inferhub-watch carries the New-API root access token (len 32, sha256_8 de0d7f4c) in scripts/sync_newapi_channels.py and scripts/sync_newapi_pricing.py, and vds-servers' new-api compose carries that token plus INITIAL_ROOT_PASSWORD and SESSION_SECRET. AMENDED 2026-09-27: THE OWNER HAS DECIDED — asked whether to rotate, he answered 'Accept the exposure as dated, no rotation' (register q4). Rotation is therefore NOT owed and NOTHING IS PENDING; do not re-raise it as an open item.",
+      "text": "LIVE ROOT CREDENTIALS REMAIN COMMITTED in files this factory and infra-factory both touch: /root/inferhub-watch carries the New-API root access token (len 32, sha256_8 de0d7f4c) in scripts/sync_newapi_channels.py and scripts/sync_newapi_pricing.py, and vds-servers' new-api compose carries that token plus INITIAL_ROOT_PASSWORD and SESSION_SECRET. AMENDED 2026-09-27: THE OWNER HAS DECIDED \u2014 asked whether to rotate, he answered 'Accept the exposure as dated, no rotation' (register q4). Rotation is therefore NOT owed and NOTHING IS PENDING; do not re-raise it as an open item.",
       "severity": "warning",
       "since": "2026-09-17T01:08:46Z",
       "affects": [
@@ -102,7 +102,7 @@
     },
     {
       "id": "inferhub-auto-route-failure-escalation",
-      "text": "Routing through the ops fallback chain remains unreliable, but the failure CLASS SHIFTED. The 2026-09-27 escalation (2,852 failures / 13.4% over 24h, concentrated on cheap iq-75-plus members) RECEDED — 09-28 22:00Z and 23:00Z each recorded 0 failures at ~1,300 requests. Live since: the gateway's STREAMING path — handshake timeouts ran 14.2% across 09-27 rising to 33.6% across 09-28, flat across every prompt band (30.6% under 50k, 31.4% above 300k) while /health answers sub-second — so it surfaces as latency (retries usually recover it), not loss, and route selection is not the cause. Tracked on #158.",
+      "text": "Routing through the ops fallback chain remains unreliable, but the failure CLASS SHIFTED. The 2026-09-27 escalation (2,852 failures / 13.4% over 24h, concentrated on cheap iq-75-plus members) RECEDED \u2014 09-28 22:00Z and 23:00Z each recorded 0 failures at ~1,300 requests. Live since: the gateway's STREAMING path \u2014 handshake timeouts ran 14.2% across 09-27 rising to 33.6% across 09-28, flat across every prompt band (30.6% under 50k, 31.4% above 300k) while /health answers sub-second \u2014 so it surfaces as latency (retries usually recover it), not loss, and route selection is not the cause. Tracked on #158.",
       "severity": "warning",
       "affects": [
         "profile"
@@ -119,7 +119,7 @@
       "announcements": []
     },
     {
-      "topic": "Worker — HQ cycles",
+      "topic": "Worker \u2014 HQ cycles",
       "thread_id": 32,
       "role": "worker",
       "announcements": []
@@ -153,6 +153,12 @@
       "behind_by": 4,
       "measured_at": "2026-09-28T12:49:43Z",
       "reason": "8 of 15 held, 7 absent (the index pair, the main gate tests/test_ledger.py, the identity gate, the shared closure tests/gate_fixtures.py, the DECLINED commit-citation gate, and docs/instruments/ledger.md); behind_by 4 names the present-but-lagging set tools/ledger.py / tests/ledger_boundary.py / tests/test_ledger_close_preflight.py / tests/test_ledger_schema.py. The schema gate moved again at 10bf86e+e99ddee (behind_by 3 -> 4) and was NOT re-vendored because the seam is a coupled set: the new cases call validate_row_schema(event_types=...), my copy's signature carries no event_types and the tree has zero occurrences of it, so a lone re-vendor would TypeError rather than grade. green false because tests/test_ledger_close_preflight.py is red here. measured_at is the census instant this row was transcribed at; the member's own measurement instant was relayed with a redacted minute and is deliberately not restated."
+    },
+    "open-questions": {
+      "state": "deferred",
+      "behind_by": 4,
+      "measured_at": "2026-09-29T11:11:04Z",
+      "reason": "Committed HEAD 98d4267 holds 0 of the 4 in its own tree and consumes the centralised copy. Deferred because this is the member's OWN recorded position, not an unmeasured absence: it declined the local install at the 2026-09-26 wave on dual-homing grounds (its own #91/#120 -- a second home to keep in step), and that refusal was validated by the install discriminator this round settled, which is that which copy EXECUTES is the predicate and no member's vendored copy is on the answer path. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
     }
   }
 }

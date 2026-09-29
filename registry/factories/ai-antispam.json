@@ -111,7 +111,7 @@
       "name": "ai-antispam-outreach-db-sync",
       "audience": "agent",
       "entry": "cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4",
-      "cadence": "daily 09:00 MSK — ENABLED"
+      "cadence": "daily 09:00 MSK \u2014 ENABLED"
     },
     {
       "name": "ai-antispam-52-close-gate",
@@ -190,13 +190,13 @@
       "announcements": []
     },
     {
-      "topic": "Bot lane — ai-antispam service (Bot topic)",
+      "topic": "Bot lane \u2014 ai-antispam service (Bot topic)",
       "thread_id": 10784,
       "role": "bot",
       "announcements": []
     },
     {
-      "topic": "MAX domain — lane acceptance &amp; verification",
+      "topic": "MAX domain \u2014 lane acceptance &amp; verification",
       "thread_id": 11156,
       "role": null,
       "announcements": []
@@ -218,6 +218,12 @@
       "behind_by": 8,
       "measured_at": "2026-09-28T15:21:11Z",
       "reason": "15/15 present. 2 of 7 gates RED, 1 SKIPs by declaration. test_ledger_commit_cites_no_rows: MARKER '743b543' is the KIT's commit and does not resolve here; its own docstring says a bootstrapped factory re-anchors at birth, but re-anchoring to our first ledger commit cd2a3f8 opens 136 commits of PUSHED history carrying 2 subjects that cite row numbers (5d88cc3, 3cf6c18) - immutable, so the repair space is empty and an exemption surface would be needed. Same gate also FAILs core.hooksPath 'unset' - an owner call, tracked as #61. test_ledger_index: 2 FAILs - not registered in tools/audit.py, and the index path is not gitignored (kit's .gitignore:7 carries .ledger-index.sqlite; ours has no line). test_ledger_identity: rc=0 but SKIPPED - its Worker lane does not resolve here, so it examined nothing. 5 gates GREEN: test_ledger (rc=0 'ledger gate passed'), test_ledger_schema (rc=0, 4 excused, 107 rows), test_ledger_no_shrink (rc=0), test_ledger_close_preflight (7 passed), docs. behind_by 8 = raw byte-identity in sha256 against TEMPLATE HEAD: 7 same, 8 differ, of which 1 (test_ledger_schema) is a DECLARED fork in registry/kit-exemptions.json and 7 are undeclared drift since the 3fa45c2 migration."
+    },
+    "open-questions": {
+      "state": "deferred",
+      "behind_by": 0,
+      "measured_at": "2026-09-29T11:11:04Z",
+      "reason": "HELD COMPLETE, GATE UNKNOWN -- the two axes disagree and this entry names both rather than claiming one. Held: all 4 declared paths byte-identical to canonical at committed HEAD 1ac6129. Gate: NOT green -- its own gate tests/test_questions.py was run at that revision by this lane on 2026-09-29T09:51Z and returned rc=1, \"the selftest exceeded 390 s -- a timeout is UNKNOWN, never a pass\"; no green verdict exists. `adopted` requires green: true (registry validate_disposition, require_green), and the frame is explicit that HELD and GREEN are independent, so adoption is deferred until the gate returns a verdict rather than declared on the axis that happens to read well. `green` is OMITTED, not false: the verdict is UNKNOWN, and false would claim a red that was never measured. behind_by 0 is a byte measurement and says nothing about the gate. What would change this entry: a quiet-box run returning a verdict -- this box carries a measured >=6x runtime variance for this gate (64.8 s quiet against >390 s under contention), and a third concurrent run would make this lane the cause of the timeout it was measuring. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
     }
   }
 }

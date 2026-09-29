@@ -177,6 +177,12 @@
       "behind_by": 0,
       "measured_at": "2026-09-28T15:20Z",
       "reason": "Home factory: the ledger instrument's source tree. Declared set complete (15 of 15 held, no absent, no lag), and every ledger gate green \u2014 re-measured FIRST-HAND by this lane at cd9ca7e rather than transcribed from the relaying lane's e2d9baf reading, which is one revision behind on the kit manifest only. Run as each gate is designed rather than through pytest: test_ledger_schema, test_ledger_close_preflight, test_ledger, test_ledger_identity, test_ledger_no_shrink, test_ledger_index, test_docs_sync and test_template_sync all rc=0, and kit_manifest --check reports agreement. test_ledger_no_shrink is green with ONE declared exemption on origin/main, which the gate prints itself \u2014 a visible debt, not a clean run. behind_by 0: the fragment is in no kit pair, so it has no template half to lag."
+    },
+    "open-questions": {
+      "state": "not-applicable",
+      "behind_by": null,
+      "measured_at": "2026-09-29T11:11:04Z",
+      "reason": "Source repo: this factory IS the instrument's canonical home, so local adoption is not an act it can take, and tools/instrument_census.py reports it as SOURCE and excludes it from adoption counting -- counting the source as its own adopter inflates every wave by one. behind_by is null because the axis does not apply: the declared set IS this tree's own, so there is no template half to lag. Measured note for a reader who runs the member-root predicate anyway: this repo holds 2 of the 4 at those paths (tests/test_questions.py and the law doc) and none of the tool or its render asset, because the source ships them under TEMPLATE/ -- that is a layout artifact, not drift, and it is why a 0 here would invite a comparison the reader would then measure as 2/4. Recorded by the Open Questions instrument lane on the owner's order 2026-09-29. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
     }
   }
 }

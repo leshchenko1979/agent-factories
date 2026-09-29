@@ -303,6 +303,12 @@
       "green": false,
       "measured_at": "2026-09-28T15:25:00Z",
       "reason": "workers-ledger.json is a skill-version ACK dict (which lane has absorbed which skill version), not an ordered event ledger with an n ordinal -- deliberate absence, declared; the measured tree is the product repo, which carries no tools/ by design"
+    },
+    "open-questions": {
+      "state": "deferred",
+      "behind_by": 4,
+      "measured_at": "2026-09-29T11:11:04Z",
+      "reason": "Committed HEAD 888decf7a holds 0 of the 4 in its own tree and consumes the centralised copy. NO disposition for this instrument has been taken by this factory's own lane -- its 2026-09-26 wave row carries no open-questions field, which is an undeclared absence rather than a refusal, and the two are not the same state. Recorded as deferred by the Open Questions instrument lane on the owner's order 2026-09-29 so the state is visible instead of silent, and it remains PENDING the member's own declaration; the member's lane owns the replacement of this entry. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
     }
   }
 }
