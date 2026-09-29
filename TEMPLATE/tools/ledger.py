@@ -142,8 +142,10 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
     declared_keys,
+    declared_reclaim,
     declared_reclose,
     declared_revision,
+    mentions_reclaim,
     mentions_reclose,
     declared_telemetry_provenance,
     declares_field,
@@ -1126,6 +1128,54 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"deliberate re-close (the subject was re-opened) declares itself "
                         f"with `reclose=<one-token>` in its canonical trailer (#213)."
                     )
+            # A SUBJECT CLAIMED TWICE BY THE SAME ACTOR (#246). `close` has carried all
+            # three mechanisms since #213 — a declaration, a write-path refusal and a read
+            # leg — and `claim`, the other end of the same lifecycle, carried none of them.
+            # Measured at origin 4e142dd: 226 claim rows, 8 subjects with more than one,
+            # and `verify` reads rc=0 over every one of them.
+            #
+            # THE ACTOR SCOPE IS MEASURED, NOT CHOSEN. An actor-blind refusal was refused
+            # because it would have blocked the two LAWFUL multi-actor cases in that same
+            # population: `#34` (hq takes it, then worker) and `#234` (surveys claims the
+            # derivation half, worker the law half). A hand-off and a two-half unit are both
+            # correct states, and only a second claim by the SAME actor is the class this
+            # answers.
+            #
+            # RE-ENTRY IS DECLARED, NOT IMPLIED — the idiom this ledger already carries
+            # (`reclose=<one-token>`, `claim=reconstructed`, `head=<sha>`). A deliberate
+            # re-claim states `reclaim=<reason>` in its own canonical trailer, which is why
+            # the token is a FORMALISATION rather than a new burden: three of the eight
+            # multi-claim subjects already declare themselves in prose.
+            #
+            # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the two refusals above
+            # state: this binds the row about to be written, so it can never reach history.
+            if args.event == "claim" and not declared_reclaim(args.detail):
+                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED — the same
+                # message shape `reclose` carries, because a multi-word value terminates
+                # the canonical run and leaves the author believing they declared.
+                if mentions_reclaim(args.detail):
+                    sys.exit(
+                        "ledger append refused: this detail carries `reclaim=` but NOT "
+                        "as a declaration -- its value must be ONE token (no spaces), "
+                        "because a value containing a space TERMINATES the canonical "
+                        "trailing run and the token then sits outside the run every "
+                        "trailer-scoped reader stops at. Write `reclaim=<one-token>` "
+                        "with the explanation in the detail's prose (#246)."
+                    )
+                prior_claims = [r for r in rows
+                                if r.get("event") == "claim"
+                                and r.get("subject") == args.subject
+                                and r.get("actor") == args.actor]
+                if prior_claims:
+                    last = prior_claims[-1]
+                    sys.exit(
+                        f"ledger append refused: {args.subject} is already claimed by "
+                        f"'{args.actor}' at n={last.get('n')} ({last.get('ts')}). IF THIS IS "
+                        f"A RETRY after a timeout, THE FIRST WRITE LANDED -- do not append "
+                        f"again. A deliberate re-claim (the work was re-taken, or the intake "
+                        f"leg landed after the first claim) declares itself with "
+                        f"`reclaim=<one-token>` in its canonical trailer (#246)."
+                    )
             # AND THE ROW MUST DECLARE THE REVISION ITS RECEIPTS DESCRIBE (#187). The
             # invariant is `close_row_revision`, enforced by
             # `tests/test_close_row_revision.py` and — until this refusal existed — by
@@ -1986,6 +2036,78 @@ def cmd_verify(args: argparse.Namespace) -> int:
     print(
         f"  multiple closes examined: {len(close_subjects)} closed subject(s), "
         f"{len(multi_closes)} carrying more than one close"
+    )
+
+    # A SUBJECT CLAIMED MORE THAN ONCE (#246) — the read half of the pair above, and it
+    # prints its POPULATION, not only its hits (#94's law): a finding printed over an
+    # UNSTATED population cannot be told from one printed over a narrowed population, so
+    # the count of subjects examined is stated even when it finds nothing.
+    #
+    # IT SPLITS DECLARED FROM UNDECLARED, which is the whole reading. A pair declaring
+    # `reclaim=` is a recorded re-claim, and a pair declaring nothing is either an
+    # undeclared re-claim or a retried-append duplicate — measured at origin 4e142dd, the
+    # eight subjects with more than one claim split FOUR ways, and only one of the four is
+    # a defect: three declared re-claims (#73, #113, #161), two multi-actor cases that are
+    # LAWFUL and are why the refusal is actor-scoped (#34 hand-off, #234 two halves), one
+    # duplicate-resolution row (#22), one pair of distinct tasks under one subject (#26),
+    # and ONE accidental duplicate (#220, same actor, same wording, 18 minutes apart).
+    #
+    # IT REPORTS AND NEVER GATES: a multi-claim subject is not by itself a defect, so this
+    # leg has no red to give — the same shape the multiple-closes leg has. NO BACKFILL:
+    # the rows it prints are immutable, exactly as #213's own reading states.
+    claim_subjects = sorted({r.get("subject") for r in rows
+                             if r.get("event") == "claim"})
+    multi_claims: list[str] = []
+    for subject in claim_subjects:
+        claims = [r for r in rows
+                  if r.get("event") == "claim" and r.get("subject") == subject]
+        if len(claims) < 2:
+            continue
+        ns = ", ".join(f"n={r.get('n')} ({r.get('actor')})" for r in claims)
+        # THE SPLIT IS THE REFUSAL'S OWN SCOPE, or the reading reports lawful states as
+        # suspects. The refusal admits a second claim by a DIFFERENT actor (#34's hand-off,
+        # #234's two halves), so a pair whose actors all differ is a state the write path
+        # PERMITS — printing it under the duplicate wording would send a reader to repair
+        # something no rule forbids. So the three forms are distinguished, and only the
+        # same-actor undeclared one carries the refusal's sentence.
+        by_actor: dict[str, list[dict]] = {}
+        for row in claims:
+            by_actor.setdefault(str(row.get("actor") or "?"), []).append(row)
+        same_actor_undeclared = [
+            row for group in by_actor.values() if len(group) > 1
+            for row in group[1:]
+            if not declared_reclaim(row.get("detail") or "")
+        ]
+        declared = [r for r in claims[1:]
+                    if declared_reclaim(r.get("detail") or "")]
+        multi_claims.append(subject)
+        if same_actor_undeclared:
+            print(
+                f"  multiple claims: {subject} carries {len(claims)} claim rows "
+                f"({ns}), and {len(same_actor_undeclared)} of them "
+                f"{'carries' if len(same_actor_undeclared) == 1 else 'carry'} no "
+                f"`reclaim=` reason for a SAME-ACTOR second claim — either a deliberate "
+                f"re-claim that did not declare itself, or a DUPLICATE minted by retrying "
+                f"an append that had already completed (#246). A second claim by the same "
+                f"actor declaring no `reclaim=` is now refused at the write path; this "
+                f"reading is of history, whose rows are immutable"
+            )
+        elif declared:
+            print(
+                f"  multiple claims: {subject} carries {len(claims)} claim rows "
+                f"({ns}), each after the first declaring `reclaim=` — declared "
+                f"re-claims, not duplicates"
+            )
+        else:
+            print(
+                f"  multiple claims: {subject} carries {len(claims)} claim rows "
+                f"({ns}), all by DIFFERENT actors — a hand-off or a two-half unit, which "
+                f"the write path admits; no same-actor second claim, so no declaration is "
+                f"owed"
+            )
+    print(
+        f"  multiple claims examined: {len(claim_subjects)} claimed subject(s), "
+        f"{len(multi_claims)} carrying more than one claim"
     )
 
     # THE CLAIM LIFECYCLE (#210, ruling n=1577). A claim terminates one of two ways: a

@@ -1989,6 +1989,123 @@ def main() -> int:
               r.returncode != 0 and "ONE token" in msg, msg[-110:])
 
 
+    # --- #246: the claim's three mechanisms, mirroring #213's five arms ------------
+    # The gap this closes was measured, not inferred: `close` carried a declaration, a
+    # write-path refusal and a read leg, and `claim` — the other end of the same
+    # lifecycle — carried none of the three, so `verify` read rc=0 over a subject claimed
+    # twice by the same lane in 18 minutes.
+    #
+    # THE ACTOR SCOPE IS AN ARM, NOT A COMMENT. An actor-blind refusal would have blocked
+    # the two LAWFUL multi-actor cases in the same measured population (#34's hand-off,
+    # #234's two halves), so arm (h) drives the case the refusal must ADMIT — without it
+    # the scope could silently tighten to actor-blind and every probe here would pass.
+    with tempfile.TemporaryDirectory() as td:
+        mc_ledger = Path(td) / "reclaim.jsonl"
+        subj = "#4343"
+        other = "#4344"
+        run(mc_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        run(mc_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", subj, "--detail", f"intake: {subj}")
+        run(mc_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", other, "--detail", f"intake: {other}")
+        mc_detail = f"claim {subj}: a fixture claim. claim=#4343"
+
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail)
+        check("(f) the first claim is ACCEPTED (the control)",
+              r.returncode == 0, r.stderr.strip()[-90:])
+
+        before = mc_ledger.read_bytes()
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail)
+        msg = (r.stdout + r.stderr).strip()
+        check("(f) a second SAME-ACTOR claim declaring no `reclaim=` is REFUSED",
+              r.returncode != 0, msg[-90:])
+        check("(f) and the refusal NAMES the existing row, not merely refuses",
+              "already claimed" in msg and "n=" in msg, msg[-110:])
+        check("(f) and it names the token that makes the re-claim lawful",
+              "reclaim=" in msg, msg[-110:])
+        check("(g) a refused append wrote NOTHING",
+              mc_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (h) THE ARM THE SCOPE NEEDS. A DIFFERENT actor taking the same subject is a
+        # hand-off, which the measured population shows is a correct state (#34 hq->worker,
+        # #234 surveys+worker). Without this arm the scope could tighten to actor-blind and
+        # every other probe here would still pass.
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "hq",
+                "--subject", subj, "--detail", f"claim {subj}: the derivation half")
+        check("(h) a second claim by a DIFFERENT actor is ACCEPTED (the scope arm)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+
+        # (h2) AND THE READ LEG AGREES WITH THE WRITER. Arm (h) admitted this pair; if the
+        # read leg then printed it under the duplicate wording, a reader would be sent to
+        # repair a state no rule forbids. The split is the refusal's OWN scope.
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(h2) a DIFFERENT-actor pair is reported as ADMITTED, never as a suspect",
+              "all by DIFFERENT actors" in out and "no declaration is owed" in out,
+              out[-400:])
+
+        # (i) THE ESCAPE HATCH IS REACHABLE -- the arm #213's own first cut failed. A
+        # type-testing predicate would refuse every re-claim while the message prescribed
+        # the token, so this asserts the declared form actually satisfies the guard.
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail + " reclaim=work-re-taken")
+        check("(i) a same-actor re-claim DECLARING reclaim=<one-token> is ACCEPTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(i2) and the read leg reports that pair as DECLARED re-claims",
+              "declaring `reclaim=`" in out and "not duplicates" in out, out[-400:])
+
+        # (j) A MALFORMED DECLARATION IS NAMED. A multi-word value terminates the
+        # canonical run, so the row declares nothing while its author believes it did.
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail + " reclaim=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(j) a MULTI-WORD reclaim= is refused AND the malformation is named",
+              r.returncode != 0 and "ONE token" in msg, msg[-110:])
+
+        # (k) THE READ LEG, over the fixture this probe just built. It must print its
+        # POPULATION (a finding over an unstated population cannot be told from one over
+        # a narrowed population), NAME the subject rather than only count it, and NOT
+        # gate — a multi-claim subject is a state, not a failure.
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(k) verify PRINTS the multi-claim population",
+              "multiple claims examined:" in out, out[-300:])
+        check("(k) and NAMES the subject carrying more than one claim",
+              subj in out, out[-300:])
+        check("(k) and reports and never gates — a multi-claim subject is not a failure",
+              r.returncode == 0, f"rc={r.returncode}")
+
+        # (l) THE SUSPECT FORM, over HISTORY the write path can no longer create. This is
+        # the leg's whole purpose: the refusal binds the row about to be written and can
+        # never reach rows already here, so the pair that motivated the item — a same-actor
+        # second claim declaring nothing — must still be PRINTED. Written directly into the
+        # fixture ledger, because the refusal now (correctly) makes it unwritable.
+        # The row numbers CONTINUE the fixture: `verify` carries a no-gaps leg, so a
+        # hand-written row numbered from a guess would red the ledger for a reason that has
+        # nothing to do with this probe — a fixture fault read as a finding.
+        existing = [json.loads(line) for line in
+                    mc_ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        with mc_ledger.open("a", encoding="utf-8") as handle:
+            for offset, actor in enumerate(("worker", "worker"), start=1):
+                handle.write(json.dumps({
+                    "n": len(existing) + offset, "ts": "2026-09-29T00:00:00Z",
+                    "event": "claim", "actor": actor, "subject": other,
+                    "detail": f"claim {other}: a historical same-actor pair",
+                }) + "\n")
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(l) a same-actor undeclared pair from HISTORY carries the refusal's sentence",
+              "SAME-ACTOR second claim" in out, out[-500:])
+        check("(l) and the leg NAMES that subject rather than only counting it",
+              other in out, out[-500:])
+        check("(l) and it still does not gate — history is immutable, and this is a reading",
+              r.returncode == 0, f"rc={r.returncode}")
+
     check_lock_is_repo_scoped()
     check_stale_ref_refused()
     check_fail_open_needs_no_remote()
