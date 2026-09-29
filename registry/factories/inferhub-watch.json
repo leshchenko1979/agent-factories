@@ -82,7 +82,7 @@
     },
     {
       "id": "ops-fallback-chain-reordered",
-      "text": "The ops-profile client fallback chain is now inferhub, openrouter, opencode, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, which put three hops at or below 27.8 percent success ahead of one at 99.1 percent. Any lane running on the ops profile now reaches a provider through this order. The reorder was made live by config hot-reload with no daemon restart.",
+      "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg — 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts — it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
       "severity": "info",
       "scope": "profile",
       "since": "2026-09-19T12:21:40Z",
@@ -102,7 +102,7 @@
     },
     {
       "id": "inferhub-auto-route-failure-escalation",
-      "text": "Routing through the ops fallback chain's first hop (inferhub) is degraded and has NOT recovered: the 24h failure rate stepped 12x on 2026-09-26 (0.95% -> 12.03%), peaked there, and reads 9.32% (30,455 reqs / 2,839 failed) as of 2026-09-28T06:25Z. The dominant class is 499 client-abort (79% of failures) — our own daemon abandoning the request — not gateway or upstream error: gateway-side channel errors are 14 in 24h. Mechanism partly established (leshchenko1979/inferhub-watch#160): prompt-cache hit rate collapsed 86.6% -> 58.5% at approximately 2026-09-26T00:00Z on an UNCHANGED route and channel, and because cache reads bill 10x below uncached prompt tokens that doubled the unit cost ($0.0322 -> $0.0673 per 1M input tokens). The cause of the cache collapse is UPSTREAM and not visible from this box. Tracked as #158; two gemini effort-variant aliases (~76% failure over 7d) were removed from the iq-75-plus combo at 2026-09-27T07:25Z.",
+      "text": "Routing through the ops fallback chain remains unreliable, but the failure CLASS SHIFTED. The 2026-09-27 escalation (2,852 failures / 13.4% over 24h, concentrated on cheap iq-75-plus members) RECEDED — 09-28 22:00Z and 23:00Z each recorded 0 failures at ~1,300 requests. Live since: the gateway's STREAMING path — handshake timeouts ran 14.2% across 09-27 rising to 33.6% across 09-28, flat across every prompt band (30.6% under 50k, 31.4% above 300k) while /health answers sub-second — so it surfaces as latency (retries usually recover it), not loss, and route selection is not the cause. Tracked on #158.",
       "severity": "warning",
       "affects": [
         "profile"

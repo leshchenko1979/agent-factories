@@ -7,9 +7,9 @@
   "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners \u2014 dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
   "zone": {
     "owns": [
-      "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to apps",
+      "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to agents-old (89.125.120.5:52676); the apps copy is retained as the rollback",
       "leshchenko1979/miidas and leshchenko1979/miidas-template",
-      "per-client slot state: pool/slots/miidas-*.env on apps \u2014 apps root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces",
+      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces, which span BOTH hosts during the rollback window",
       "the Miidas Factory Telegram chat (-1003996392908) and its topics",
       "/root/miidas/SKILL.md \u2014 the live skill path is a symlink to it, so the repo file is the single writer",
       "cron miidas-hq-daily-trigger",
@@ -19,7 +19,7 @@
     "does_not_own": [
       "client product surfaces \u2014 the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface",
       "the LLM gateway itself (llm.l1979.ru) \u2014 consumed, not operated; we own only our service user's key lifecycle",
-      "the apps host beyond our own compose stack \u2014 other projects' containers and volumes, host packages, other factories' cron rows",
+      "the agents-old and apps hosts beyond our own compose stack \u2014 other projects' containers and volumes, host packages, other factories' cron rows",
       "other factories' repos, chats and processes",
       "OpenCrabs core and the dev process"
     ]
@@ -67,12 +67,12 @@
     "leshchenko1979/miidas-template",
     "leshchenko1979/miidas-landing",
     "/root/miidas/SKILL.md (live skill path is a symlink to it)",
-    "apps: pool/slots/miidas-*.env at /data/projects/miidas/pool/slots/ and the miidas-* compose stack under /data/projects/miidas/compose/"
+    "agents-old and apps: /data/projects/miidas/ (compose/, pool/slots/miidas-*.env, .master.env) and the miidas-* compose stack; agents-old carries the live set, apps the stopped rollback"
   ],
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace on apps belong to the MIIDAS factory. A peer reclaiming or pruning on apps must match the ^miidas_ prefix and must never match a bare substring: miidas-pixel-data belongs to a different project and is not ours. Live estate read 2026-09-27T11:38Z: 5 running containers - miidas-manager, miidas-trial, miidas-maple-c23a, miidas-ru-proxy, miidas-cdp; 1 volume matching ^miidas_ (miidas_maple-c23a-data); miidas-pixel-data present, unowned and untouched. The second volume this notice carried until 2026-09-24 (miidas_probe-gw-1789692412-data, with its matching orphaned slot lock) was reaped on 2026-09-24 while clearing the manager's duty-scan FAIL.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -120,7 +120,7 @@
         "profile"
       ],
       "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
-      "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 21 carried path(s); 1 factory-class path(s) excluded by class; 16 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
+      "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
     },
     {
       "id": "miidas-slot-volume-git-config-carries-remote-credential",
@@ -131,6 +131,28 @@
       ],
       "text": "Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) \u2014 leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing \u2014 it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.",
       "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply)."
+    },
+    {
+      "id": "miidas-platform-moved-to-agents-old",
+      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.",
+      "severity": "warning",
+      "since": "2026-09-28T23:23:39Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "measured 2026-09-29T06:42Z \u2014 agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:27 APP_HOST default; the deploy-host change is draft leshchenko1979/miidas#82, unreviewed."
+    },
+    {
+      "id": "miidas-platform-recreate-needs-tmp-overlay",
+      "text": "The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml \u2014 the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.",
+      "severity": "critical",
+      "since": "2026-09-28T23:23:39Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "docker inspect miidas-manager: ComposeFile=/data/projects/miidas/compose/docker-compose.yml,/tmp/pg-host.yml; RestartPolicy=unless-stopped, so a REBOOT restarts from the stored spec and is safe \u2014 a RECREATE is what bites; the repo compose carries neither key (md5 245f16c4a7dca59673039b48ea452fe9 on repo, both hosts, and the running container)."
     }
   ],
   "lanes": [
