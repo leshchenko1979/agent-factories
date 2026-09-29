@@ -178,6 +178,11 @@ PAIRS = [
     # every other gate is: the audit ships from TEMPLATE, so a factory that takes the audit
     # must take the gate that pins its verdict's provenance.
     ("tests/test_audit_tree_condition.py", "TEMPLATE/tests/test_audit_tree_condition.py"),
+    # The undefined-name gate (board #235). Paired for the same reason every other gate is:
+    # the audit ships from TEMPLATE, so a factory that takes the audit must take the gate
+    # that pins the audit's own tools to the names they bind. It scans `tools/` in whatever
+    # tree it runs in, so it is clean in a bootstrapped factory rather than skipping there.
+    ("tests/test_audit_undefined_names.py", "TEMPLATE/tests/test_audit_undefined_names.py"),
     ("tests/test_ledger_identity.py", "TEMPLATE/tests/test_ledger_identity.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names

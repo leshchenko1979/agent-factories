@@ -336,6 +336,7 @@
     "tests/test_audit_inflight_guard.py": "script",
     "tests/test_audit_rates.py": "pytest",
     "tests/test_audit_tree_condition.py": "script",
+    "tests/test_audit_undefined_names.py": "script",
     "tests/test_binding_mechanism_exists.py": "pytest",
     "tests/test_board_intake_recorded.py": "pytest",
     "tests/test_brain_metrics.py": "script",

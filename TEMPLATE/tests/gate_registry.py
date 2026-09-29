@@ -615,6 +615,12 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_subject_form.py",
     "test_telemetry_reader_registry.py",
     "test_template_integrity.py",
+    # Added with its registration (board #235). REQUIRED is the correct grain: the gate scans
+    # `tools/*.py`, which every factory has, so it passes in a bootstrapped factory exactly
+    # as it does here, and it reads no live board, fleet manifest or box-local fixture. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the gate and keeping the tool it guards.
+    "test_audit_undefined_names.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

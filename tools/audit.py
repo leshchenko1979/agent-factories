@@ -1576,6 +1576,20 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_shipped_mechanism_law.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_shipped_mechanism_law.py"])
 
+    # 72. NO SHIPPED TOOL REFERENCES A NAME IT NEVER BINDS (#235). On 2026-09-29 the cron's
+    #     own invocation, `python3 tools/audit.py --report`, died with `NameError: name
+    #     'budgets' is not defined` -- three references in `main()`, which binds
+    #     `gate_budgets`. Nothing saw it: the shipped-audit gate drives `--json`, which
+    #     returns BEFORE the text render, and the crash sits ABOVE both the dated artifact
+    #     write and the `internal-self-audit` run row, so the run died before recording
+    #     anything. The class -- an undefined name reachable on a flag no gate exercises --
+    #     had no observer at all. The check is `symtable`-based rather than lexical, so a
+    #     name in a comment or a string is never a hit by construction, and it is stdlib-only
+    #     because the kit ships no dependency list. Paired, and REQUIRED: the population is
+    #     `tools/`, which every factory has, so it is clean where the kit lands.
+    if (repo_root / "tests/test_audit_undefined_names.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_audit_undefined_names.py"])
+
     # 38. Telemetry-reader registry gate: a telemetry field read out of a row's `detail`
     #     must go through the shared predicate in `tools/field_predicate.py`, because a
     #     free-prose `detail` QUOTES trailers as evidence and a private scan takes a
@@ -2600,11 +2614,19 @@ def main() -> int:
         now_load: float | None = os.getloadavg()[0]
     except OSError:  # pragma: no cover - load average is unavailable on some hosts
         now_load = None
-    print(f"\n{budgets.load_note}")
-    if now_load is not None:
-        print(f"  this run is at load {now_load:.2f}")
-    for key in budgets.load_declared:
-        print(f"  [LOAD] {key} — measured_sec taken at load {budgets.loads[key]:.2f}")
+    if gate_budgets is None:
+        print(
+            "\nLoad population: the budget manifest could not be read, so no declared load "
+            "is reported this run"
+        )
+    else:
+        print(f"\n{gate_budgets.load_note}")
+        if now_load is not None:
+            print(f"  this run is at load {now_load:.2f}")
+        for key in gate_budgets.load_declared:
+            print(
+                f"  [LOAD] {key} — measured_sec taken at load {gate_budgets.loads[key]:.2f}"
+            )
 
     # THE DECLARED REVISIONS, SWEPT AND PRINTED (#125, ruling n=786). A basis that no
     # longer describes the command it was taken on is INVISIBLE in the caps themselves --
