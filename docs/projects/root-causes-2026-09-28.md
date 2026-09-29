@@ -98,6 +98,30 @@ Frame §7.3 (*regenerate at the commit*) and §7.5 (*the standard is committed; 
 its axis*) landed today and close this class **for the surfaces that cite them** — the pattern is
 known and not yet fleet-wide.
 
+**Live specimen, present in the shared tree at this instant.** A peer's **uncommitted** edit reverts
+the landed scope citation in `docs/instruments/template-instruments.md`
+(commit `ebd8d6b`, *"criterion 7's Lens A citation carries its scope"*). Measured:
+
+```
+kit_manifest.py --check   rc=1   DRIFTED  TEMPLATE/docs/instruments/template-instruments.md
+                                 DRIFTED  TEMPLATE/docs/review-lenses.md
+test_docs_sync.py         rc=0   (both halves reverted together, so the pair is still identical)
+```
+
+Landed law can be reverted in the working tree with **the pair gate green**, because that gate reads
+the working tree and the halves agree there. Only the manifest — which records the **committed**
+digest — catches it. That is the remedy of RC2 demonstrated working in one gate and blind in the one
+beside it: the same §7.6 shape, in the law that states §7.6.
+
+**A second live specimen, caused while writing this document.** In the same shared tree I ran
+`git commit --amend` on my own commit — and it amended **a peer's** commit instead, because HEAD moved
+between the moment I staged my file and the moment the amend executed (a lane committed in that
+window). The peer's commit was restored exactly from the reflog, nothing was pushed, and no work was
+lost; the incident is recorded here because it is RC2 in its purest form: **an operation whose subject
+is read at one instant and written at another.** `--amend` is not "amend my commit", it is "amend
+HEAD", and in a shared tree HEAD is a moving population. This is the same defect as #222 (a lock that
+is per-worktree) and #221 (a guard that never refreshes its ref), reproduced by hand.
+
 ### RC3 — One fact, two homes (5 of 34)
 
 The topic-name feed is **a copy of the declaration** and render takes no topics input (#196). The
