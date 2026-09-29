@@ -79,11 +79,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GATES_MANIFEST_PATH = REPO_ROOT / "registry" / "gates.json"
 GATES_MANIFEST_ENV = "OC_GATES_MANIFEST"
 
-# The LAST-RESORT cap, used only when no manifest exists at all. It matches the
-# value the template ships (`TEMPLATE/registry/gates.example.json`), so a factory
-# that never measures behaves the same before and after it copies the example. It
-# is deliberately the largest declared budget rather than a round number, so the
-# fallback is never TIGHTER than a gate the factory did measure.
+# The LAST-RESORT cap, reached only when no manifest exists at all: a factory
+# that carries `registry/gates.json` uses that manifest's `default.budget_sec`
+# and never arrives here. It matches the value the template ships
+# (`TEMPLATE/registry/gates.example.json`), so a factory that never measures
+# behaves the same before and after it copies the example.
+#
+# It is a ROUND number, and it is NOT a declared multiple of a measured runtime.
+# This is the one budget the calibration rule cannot supply, because a tree with
+# no measurements has no single runtime to derive from. What upholds it is not its
+# value but its VISIBILITY: the runner prints `[DEFAULT]` for every gate that
+# falls through, so an uncalibrated cap is never silent, and a budget exhausted is
+# UNKNOWN -- never green, never a plain failure. A factory that wants a calibrated
+# cap measures its own box and declares it in its own manifest.
 FALLBACK_DEFAULT_SEC = 120.0
 
 # A timeout gets its OWN exit code -- the one `timeout(1)` uses -- so a killed gate
