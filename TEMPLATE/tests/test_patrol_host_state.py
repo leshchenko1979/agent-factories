@@ -171,9 +171,39 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
+        worktree_fn=_stub_worktree_leg,
     )
     return rc, out.getvalue(), err.getvalue()
 
+
+def _stub_worktree_leg(*, read_at: str, **_kw) -> dict:
+    """A canned worktree leg for every probe that drives `main()`.
+
+    The real leg shells out twice per registered worktree, so stubbing it is the same
+    discipline the publish leg's stub exists for: a probe must not pay for live state it
+    never asserts. The probes that DO assert the leg's behaviour drive `worktree_leg`
+    directly with injected readers, and one drives `main()` with THIS stub replaced by a
+    populated one so the render path is exercised rather than assumed.
+    """
+    return {
+        "name": "worktree",
+        "status": "ASSERTED",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "read_at": read_at,
+            "base_ref": "origin/main",
+            "hazard_classes": ["unreachable-commit", "uncommitted-work"],
+            "removes": False,
+            "worktrees_total": 2,
+            "worktrees_scratch": 1,
+            "missing_directory": [],
+            "unreachable_commits": [{"path": "/probe/scratch", "ahead": 1}],
+            "uncommitted_work": [{"path": "/probe/scratch", "paths": 2}],
+            "instrument": "git worktree list --porcelain / git worktree prune",
+            "population_predicate": "git worktree list --porcelain, main = first record",
+        },
+    }
 
 def test_repo_slug_reads_both_remote_forms() -> None:
     """The slug decides WHICH board is read; a wrong slug reads a wrong board clean."""
@@ -2919,6 +2949,189 @@ def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> Non
         RUNNER.RULING_HEADINGS = saved
     assert narrowed["coverage"]["ruling_comments_examined"] == 0, narrowed["coverage"]
     assert narrowed["problems"] == [], narrowed["problems"]
+
+# --- #220: the worktree leg — the object class the cleanliness instrument excludes ---
+
+def _wt_records(*paths: str) -> list[dict]:
+    return [{"path": p} for p in paths]
+
+def _wt_dirs(count: int) -> tuple[tempfile.TemporaryDirectory, list[str]]:
+    """Real directories for the census fixture.
+
+    The leg classifies a record whose directory is GONE as a missing registration — that
+    is `git worktree prune`'s class and the reason the missing-directory list exists — so a
+    fixture built from invented paths would be measuring that branch instead of the hazard
+    branches under test. Directories are created rather than mocked for that reason.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    paths = []
+    for index in range(count):
+        path = Path(tmp.name) / f"wt{index}"
+        path.mkdir()
+        paths.append(str(path))
+    return tmp, paths
+
+def test_the_worktree_leg_NAMES_both_hazard_classes_with_their_paths() -> None:
+    """#220 clause 3: the two hazard classes, WITH THE PATHS.
+
+    A count without the paths sends the reader to `git worktree list` to find what the leg
+    already knew, which is the shape that makes a report decorative. Both classes are
+    driven here, and the population is asserted too — `scratch` is the complement of the
+    FIRST record, because the first record is the tree the command was run from.
+    """
+    tmp2, dirs = _wt_dirs(4)
+    main, a, b, c = dirs
+    with tmp2:
+        records = _wt_records(main, a, b, c)
+        states = {
+            main: {"dirty": [], "ahead": 0, "problems": []},
+            a: {"dirty": [" M x"], "ahead": 0, "problems": []},
+            b: {"dirty": [], "ahead": 3, "problems": []},
+            c: {"dirty": [], "ahead": 0, "problems": []},
+        }
+        leg = RUNNER.worktree_leg(
+            read_at="probe",
+            records_fn=lambda repo=None: (records, None),
+            state_fn=lambda path, **kw: states[path],
+        )
+        cov = leg["coverage"]
+        assert leg["status"] == "ASSERTED", leg
+        assert cov["worktrees_total"] == 4, cov
+        assert cov["worktrees_scratch"] == 3, cov
+        assert cov["missing_directory"] == [], cov
+        assert cov["unreachable_commits"] == [{"path": b, "ahead": 3}], cov
+        assert cov["uncommitted_work"] == [{"path": a, "paths": 1}], cov
+    assert cov["hazard_classes"] == ["unreachable-commit", "uncommitted-work"], cov
+    assert cov["base_ref"] == "origin/main", cov
+    assert cov["instrument"] == "git worktree list --porcelain / git worktree prune", cov
+
+def test_the_worktree_leg_REPORTS_and_never_removes() -> None:
+    """The refusal, asserted STRUCTURALLY rather than promised in prose.
+
+    The ruling refused widening the cleanliness instrument's glob because hygiene's remedy
+    is REMOVAL, and removal on a worktree holding uncommitted work destroys it. So this leg
+    must hold no mutating path at all — and a promise in a docstring is not a mechanism.
+    The module's own source is scanned for every form that would remove or mutate a
+    worktree, and the leg declares `removes: False` so a reader of the REPORT is told the
+    same thing the code says.
+    """
+    source = (RUNNER.REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    forbidden = ("worktree", "prune"), ("worktree", "remove"), ("shutil.rmtree",),
+    for needle in ("prune", "remove"):
+        assert f'"worktree", "{needle}"' not in source, f"a worktree {needle} call is present"
+    assert "shutil.rmtree" not in source, "an rmtree is present in the runner"
+    del forbidden
+
+    tmp, (main, scratch) = _wt_dirs(2)
+    with tmp:
+        leg = RUNNER.worktree_leg(
+            read_at="probe",
+            records_fn=lambda repo=None: (_wt_records(main, scratch), None),
+            state_fn=lambda path, **kw: {"dirty": [], "ahead": 0, "problems": []},
+        )
+    assert leg["coverage"]["removes"] is False, leg["coverage"]
+
+def test_the_worktree_leg_is_NOT_RUN_when_the_census_cannot_be_read() -> None:
+    """An unreadable census is not an empty one, and an empty one is not a clean one.
+
+    Both arms: the instrument failing (an error from `git worktree list`), and the
+    instrument returning NO records — which a repository can never legitimately do, since
+    it always carries at least its main worktree. Each must state its reason rather than
+    render as a clean verdict.
+    """
+    failed = RUNNER.worktree_leg(
+        read_at="probe",
+        records_fn=lambda repo=None: ([], "`git worktree list` could not run: boom"),
+        state_fn=lambda path, **kw: {"dirty": [], "ahead": 0, "problems": []},
+    )
+    assert failed["status"] == "NOT RUN", failed
+    assert "could not be read" in failed["coverage"]["reason"], failed["coverage"]
+
+    empty = RUNNER.worktree_leg(
+        read_at="probe",
+        records_fn=lambda repo=None: ([], None),
+        state_fn=lambda path, **kw: {"dirty": [], "ahead": 0, "problems": []},
+    )
+    assert empty["status"] == "NOT RUN", empty
+    assert "at least its main worktree" in empty["coverage"]["reason"], empty["coverage"]
+
+def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> None:
+    """The render branch, driven separately: NOT RUN must carry its reason.
+
+    Without this arm a NOT RUN leg could render as an empty block, and an unreadable
+    census would then be indistinguishable from a clean one in the only surface a reader
+    actually meets -- the report.
+    """
+    def _stub(*, read_at: str, **_kw) -> dict:
+        return {
+            "name": "worktree", "status": "NOT RUN", "problems": [], "excused": [],
+            "coverage": {"reason": "the worktree census could not be read — probe",
+                         "read_at": read_at},
+        }
+
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1))
+    out, err = io.StringIO(), io.StringIO()
+    rc = RUNNER.main(
+        [], board_fn=lambda slug: issues, slug_fn=lambda: "owner/repo",
+        rows_fn=lambda: rows, cron_rows_fn=lambda: ([], ["probe-home"], []),
+        prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+        kit_manifest=_probe_kit_pair()[0], fleet_manifest=_probe_kit_pair()[1],
+        out=lambda *a, **k: print(*a, file=out, **k),
+        err=lambda *a, **k: print(*a, file=err, **k),
+        publish_fn=_stub_publish_leg, worktree_fn=_stub,
+    )
+    text = out.getvalue()
+    assert rc == 0, text
+    assert "LEG worktree — NOT RUN" in text, text
+    assert "NOT RUN: the worktree census could not be read — probe" in text, text
+    assert "worktrees: " not in text, text
+
+def test_the_worktree_leg_is_the_thing_that_moves_the_report() -> None:
+    """The NON-VACUITY control: the same fixture with and without a hazard.
+
+    One fixture, driven twice — once with a tree ahead of the base and once with none — so
+    the difference is attributable to the hazard and not to the fixture. Without this arm
+    a leg that always printed empty lists would satisfy every assertion above.
+    """
+    tmp, (main, scratch) = _wt_dirs(2)
+    hazard = {"dirty": [" M x"], "ahead": 2, "problems": []}
+    clean = {"dirty": [], "ahead": 0, "problems": []}
+    with tmp:
+        records = _wt_records(main, scratch)
+        with_hazard = RUNNER.worktree_leg(
+            read_at="probe", records_fn=lambda repo=None: (records, None),
+            state_fn=lambda path, **kw: hazard if path == scratch else clean,
+        )
+        without = RUNNER.worktree_leg(
+            read_at="probe", records_fn=lambda repo=None: (records, None),
+            state_fn=lambda path, **kw: clean,
+        )
+    assert len(with_hazard["coverage"]["unreachable_commits"]) == 1, with_hazard["coverage"]
+    assert len(with_hazard["coverage"]["uncommitted_work"]) == 1, with_hazard["coverage"]
+    assert without["coverage"]["unreachable_commits"] == [], without["coverage"]
+    assert without["coverage"]["uncommitted_work"] == [], without["coverage"]
+
+def test_the_whole_run_PRINTS_the_worktree_population_and_never_a_bare_zero() -> None:
+    """The clause that keeps a clean run from being read as "no residue".
+
+    Driven through the REAL `main()`, so the render path is exercised rather than the leg
+    alone — the leg returning a correct dict and the report dropping it is exactly the
+    half-fix this probes for. The figures are asserted WITH their predicate: the population,
+    both hazard classes, the `removes: no` declaration, and the read instant.
+    """
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1))
+    rc, out, _ = _run(issues, rows)
+    assert "LEG worktree — ASSERTED" in out, out
+    assert "worktrees: 2 total, 1 scratch" in out, out
+    assert "the cleanliness instrument's glob cannot reach" in out, out
+    assert "removes: no" in out, out
+    assert "unreachable-commit (commits not reachable from origin/main): 1 tree(s)" in out, out
+    assert "~ /probe/scratch — 1 commit(s) ahead" in out, out
+    assert "uncommitted-work (paths differing from HEAD): 1 tree(s)" in out, out
+    assert "~ /probe/scratch — 2 path(s)" in out, out
+    assert "read at " in out, out
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

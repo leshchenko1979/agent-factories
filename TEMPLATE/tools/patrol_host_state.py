@@ -74,6 +74,7 @@ import argparse
 import datetime as dt
 import importlib.util
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -2101,6 +2102,235 @@ def kit_drift_leg(
         },
     }
 
+# ---- the worktree leg (issue #220, ruled at ledger n=1567) ---------------------------
+#
+# THE EXCLUDED OBJECT CLASS. `tools/hygiene.py` derives its scratch population from the
+# repository's own directory name (`scratch_patterns_for("agent-factories")` ->
+# `/tmp/agent-factories-*`), while a lane names its worktree whatever it likes
+# (`/tmp/oc-*`, `/tmp/rr-*`, `/tmp/kit*`). So NO worktree path can ever match that glob and
+# the residue is outside the cleanliness instrument's population BY CONSTRUCTION rather than
+# by a cleanliness result — measured at the filing: 38 registered worktrees, 0 matching.
+#
+# THE REMEDY IS NAMED, NOT WIDENED, and the refusal is the load-bearing half. Widening that
+# glob was refused for two measured reasons that are together decisive: hygiene judges
+# staleness by MTIME while 13 of the 37 held live uncommitted work at the filing instant
+# (the widened population would report peers' ACTIVE work as residue), and hygiene's remedy
+# is REMOVAL, which on a worktree holding uncommitted work DESTROYS it. A population
+# containing live work paired with a destructive remedy is the combination this factory's
+# law forbids — so the answer to an excluded class is a leg that NAMES it, never a widened
+# glob over live work.
+#
+# THE INSTRUMENT ALREADY EXISTS: `git worktree list --porcelain` (population and state) and
+# `git worktree prune` (registrations whose directory is gone — measured 0 of the 38 at the
+# filing, so it clears none of this). Nothing is owed here that does not ship (#102/#120);
+# what was missing is that NO factory surface READ them.
+#
+# THIS LEG NEVER REMOVES, and that is a property of its design rather than of its restraint:
+# it holds no unlink, no prune and no git subcommand that mutates a worktree. A lane may
+# remove its OWN tree; this leg's whole output is a report.
+#
+# WHY A LEG AND NOT A PARAGRAPH (P29): `git worktree list` exists and no factory surface
+# read it, so a sentence saying "beware worktrees" would be dead text while a printed leg
+# is not.
+#
+# THE HARM CLAUSE OF THE FILING IS FALSIFIED and the class claim stands: the specimen
+# (`/tmp/oc-fin2`'s ad2ac70) is a DEAD DUPLICATE — patch-identical to 83a2776, which is on
+# origin, 14 seconds later — so this is an OBSERVABILITY gap, never a data-loss incident.
+# The leg's figures therefore REPORT residue and are deliberately NOT problems: a tree
+# holding a peer's unlanded work is the CORRECT state for that tree, and a permanently red
+# leg destroys every other leg's signal. The counts are printed so a `problems: 0` beside
+# them cannot be read as "no residue".
+
+WORKTREE_HAZARD_CLASSES = (
+    "unreachable-commit",   # holds commits not reachable from the base ref
+    "uncommitted-work",     # holds paths that differ from HEAD
+)
+"""The two hazard classes, DECLARED rather than inline at the comparison (#220 clause 3)."""
+
+WORKTREE_BASE_REF = "origin/main"
+"""The base a tree's own commits are judged against — the same ref the ruling used."""
+
+_WORKTREE_FIELD = re.compile(r"^([a-z-]+)(?: (.*))?$")
+
+def worktree_records(repo: Path = REPO) -> tuple[list[dict], str | None]:
+    """`git worktree list --porcelain` parsed into records — or (records, error).
+
+    The population AND its state come from git's own instrument, never from a glob over
+    `/tmp`: a glob cannot tell a registered worktree from an abandoned directory, and this
+    leg's whole subject is the class a glob cannot see. Returns the error rather than
+    raising, so the caller can render a STATED INABILITY instead of a traceback.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return [], f"`git worktree list` could not run: {exc}"
+    if proc.returncode != 0:
+        return [], (proc.stderr or proc.stdout).strip()[:200] or "non-zero exit"
+
+    records: list[dict] = []
+    current: dict = {}
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            if current:
+                records.append(current)
+                current = {}
+            continue
+        match = _WORKTREE_FIELD.match(line)
+        if not match:
+            continue
+        key, value = match.group(1), match.group(2)
+        if key == "worktree":
+            if current:
+                records.append(current)
+            current = {"path": value}
+        elif key in ("HEAD", "branch"):
+            current[key.lower()] = value
+        else:
+            current[key] = value if value is not None else True
+    if current:
+        records.append(current)
+    return records, None
+
+def worktree_state(path: str, *, base: str = WORKTREE_BASE_REF) -> dict:
+    """One tree's state: its uncommitted paths and its commits ahead of `base`.
+
+    `GIT_OPTIONAL_LOCKS=0` is set deliberately: `git status` otherwise REFRESHES the
+    index and takes `index.lock` in a tree that may belong to a peer lane mid-task, so a
+    read-only census would be a writer on someone else's work. The predicate is exactly the
+    ruling's own — `status --porcelain` and `rev-list --count <base>..HEAD` — so the leg's
+    figures are comparable with the census that filed the issue.
+    """
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    out = {"dirty": [], "ahead": 0, "problems": []}
+    try:
+        status = subprocess.run(
+            ["git", "-C", path, "status", "--porcelain"],
+            capture_output=True, text=True, env=env, timeout=120,
+        )
+        if status.returncode == 0:
+            out["dirty"] = [line for line in status.stdout.splitlines() if line.strip()]
+        else:
+            out["problems"].append(
+                f"{path}: `git status` exited {status.returncode} — "
+                f"{(status.stderr or '').strip()[:120]}"
+            )
+        ahead = subprocess.run(
+            ["git", "-C", path, "rev-list", "--count", f"{base}..HEAD"],
+            capture_output=True, text=True, env=env, timeout=120,
+        )
+        if ahead.returncode == 0:
+            out["ahead"] = int(ahead.stdout.strip() or "0")
+        else:
+            out["problems"].append(
+                f"{path}: `git rev-list --count {base}..HEAD` exited {ahead.returncode} — "
+                f"{(ahead.stderr or '').strip()[:120]}"
+            )
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        out["problems"].append(f"{path}: {exc}")
+    return out
+
+def worktree_leg(*, read_at: str, repo: Path = REPO,
+                 records_fn=None, state_fn=None) -> dict:
+    """The worktree residue report — population, and the two hazard classes BY PATH.
+
+    Injected dependencies for the reason every other leg here has them: a probe must drive
+    the classification without a live worktree set, and a leg that can only run against the
+    live box cannot be probed at all when the live box is what is wrong.
+
+    A tree holding a peer's unlanded work is the CORRECT state for that tree, so nothing
+    here is a `problem`; the counts and the paths are the report. NOT RUN with its reason
+    when the instrument cannot answer: an unreadable worktree list is not an empty one, and
+    an empty one is not a clean one.
+    """
+    records_fn = records_fn or worktree_records
+    state_fn = state_fn or worktree_state
+
+    records, error = records_fn(repo)
+    if error:
+        return {
+            "name": "worktree",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": f"the worktree census could not be read — {error}",
+                "read_at": read_at,
+            },
+        }
+    if not records:
+        # A repository ALWAYS has at least its main worktree, so an empty list is an
+        # instrument failure and never a clean box — the population clause's own rule.
+        return {
+            "name": "worktree",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": "`git worktree list --porcelain` returned no record(s); a "
+                          "repository always carries at least its main worktree, so this "
+                          "is an instrument failure and NOT a clean box",
+                "read_at": read_at,
+            },
+        }
+
+    states: list[dict] = []
+    missing_dir: list[str] = []
+    for record in records:
+        path = str(record.get("path") or "")
+        entry = {"path": path, "main": False}
+        if not path or not Path(path).is_dir():
+            # `git worktree prune` clears exactly this class and nothing else; measured 0
+            # of 38 at the filing, so it clears none of the residue this leg reports.
+            entry["main"] = bool(record.get("bare")) or not path
+            missing_dir.append(path or "<no path in the record>")
+            states.append(entry)
+            continue
+        state = state_fn(path)
+        entry.update(state)
+        states.append(entry)
+
+    # The FIRST record is the tree the command was run from — the main worktree for a run
+    # from the repository itself. `scratch` is its complement, which is the population the
+    # cleanliness instrument cannot reach: a lane names its own worktree, so no name can
+    # match that tool's glob.
+    for index, entry in enumerate(states):
+        entry["main"] = index == 0
+    scratch = [e for e in states if not e["main"]]
+
+    unreachable = [e for e in scratch if e.get("ahead", 0) > 0]
+    dirty = [e for e in scratch if e.get("dirty")]
+    problems = [
+        p for entry in states for p in entry.get("problems", [])
+    ]
+
+    return {
+        "name": "worktree",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "read_at": read_at,
+            "base_ref": WORKTREE_BASE_REF,
+            "hazard_classes": list(WORKTREE_HAZARD_CLASSES),
+            "removes": False,
+            "worktrees_total": len(states),
+            "worktrees_scratch": len(scratch),
+            "missing_directory": missing_dir,
+            "unreachable_commits": [
+                {"path": e["path"], "ahead": e.get("ahead", 0)} for e in unreachable
+            ],
+            "uncommitted_work": [
+                {"path": e["path"], "paths": len(e.get("dirty") or [])} for e in dirty
+            ],
+            "instrument": "git worktree list --porcelain / git worktree prune",
+            "population_predicate": "git worktree list --porcelain, main = first record",
+        },
+    }
+
+
 def publish_freshness_leg(
     *,
     repo: Path = REPO,
@@ -2533,6 +2763,46 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             for entry in cov["unmatched_heads"]:
                 lines.append(f"    ~ #{entry['issue']}: {entry['head']}")
+        elif leg["name"] == "worktree":
+            # NOT RUN carries its reason here like the other legs; ASSERTED prints the
+            # population, the two hazard classes WITH THEIR PATHS, and an explicit
+            # "removes: no" so a reader cannot mistake the report for a reaper (#220).
+            if leg["status"] == "NOT RUN":
+                lines.append(f"  NOT RUN: {cov.get('reason') or 'reason not stated'}")
+                lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+                lines.append(f"  excused: {len(leg['excused'])}")
+                lines.append(f"  problems: {len(leg['problems'])}")
+                lines.append("")
+                continue
+            lines.append(
+                f"  worktrees: {cov['worktrees_total']} total, "
+                f"{cov['worktrees_scratch']} scratch (the class the cleanliness "
+                f"instrument's glob cannot reach) — {cov['instrument']}"
+            )
+            lines.append(
+                f"  residue is REPORTED, never removed (removes: "
+                f"{'yes' if cov['removes'] else 'no'}); a lane removes its OWN tree"
+            )
+            lines.append(
+                f"  {cov['hazard_classes'][0]} (commits not reachable from "
+                f"{cov['base_ref']}): {len(cov['unreachable_commits'])} tree(s)"
+            )
+            for entry in cov["unreachable_commits"]:
+                lines.append(f"    ~ {entry['path']} — {entry['ahead']} commit(s) ahead")
+            lines.append(
+                f"  {cov['hazard_classes'][1]} (paths differing from HEAD): "
+                f"{len(cov['uncommitted_work'])} tree(s)"
+            )
+            for entry in cov["uncommitted_work"]:
+                lines.append(f"    ~ {entry['path']} — {entry['paths']} path(s)")
+            if cov["missing_directory"]:
+                lines.append(
+                    f"  registrations whose directory is GONE (what `git worktree prune` "
+                    f"clears): {len(cov['missing_directory'])}"
+                )
+                for path in cov["missing_directory"]:
+                    lines.append(f"    ~ {path}")
+            lines.append(f"  read at {cov['read_at']}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -2603,6 +2873,7 @@ def main(
     fleet_manifest: Path = FLEET_MANIFEST,
     predicate=None,
     publish_fn=None,
+    worktree_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -2616,7 +2887,13 @@ def main(
     hold rather than the leg's behaviour. The publish leg is injected for the fifth and
     the most practical reason of all: it reads the remote, so a probe that did not stub it
     would make a NETWORK call on every run of every probe that drives this function --
-    measured at ~2s each, which is how a 3s gate becomes a 40s one."""
+    measured at ~2s each, which is how a 3s gate becomes a 40s one.
+
+    The worktree leg reads the live box for the sixth time and for the sharpest version of
+    the same reason: it shells out TWICE PER REGISTERED WORKTREE, so a probe that did not
+    stub it would pay that cost on every run of every probe that drives this function --
+    measured at ~10s on a box with 34 worktrees, which is a gate budget spent on state the
+    probe never asserts."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -2650,6 +2927,7 @@ def main(
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
         (publish_fn or publish_freshness_leg)(read_at=read_at),
+        (worktree_fn or worktree_leg)(read_at=read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)
