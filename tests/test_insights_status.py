@@ -441,7 +441,7 @@ def test_a_second_row_for_one_id_must_declare_supersedes(tmp_path, monkeypatch):
     assert register.read_text(encoding="utf-8") == before
 
 def test_supersedes_must_name_an_existing_earlier_row_of_the_same_id(tmp_path, monkeypatch):
-    register = _redirect(tmp_path, monkeypatch)
+    _redirect(tmp_path, monkeypatch)
     _append(slug="probe-insight")
 
     # A row that is not in the register at all.
@@ -462,7 +462,7 @@ def test_supersedes_must_name_an_existing_earlier_row_of_the_same_id(tmp_path, m
         raise AssertionError("a supersedes pointer across two ids was accepted")
 
 def test_one_row_has_one_successor(tmp_path, monkeypatch):
-    register = _redirect(tmp_path, monkeypatch)
+    _redirect(tmp_path, monkeypatch)
     _append(slug="probe-insight")
     _correct(supersedes=1)
 
