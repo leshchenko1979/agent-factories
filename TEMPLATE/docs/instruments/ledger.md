@@ -215,10 +215,12 @@ A declaration **ADDS**; it never removes or redefines a core entry, so a factory
 
 ### A claim is withdrawn by a `release`, never by a `close`
 
-This factory **declares `release`** in `docs/ledger-refs-kinds.json` (#210, ruling n=1577), and
-declares it *here* rather than widening the core tuple: a member that never withdraws a claim carries
-no dead vocabulary, and the transition promotes to the core set when a second factory needs it — the
-owner's promotion law applied to one event.
+The event is declared in the factory's own `docs/ledger-refs-kinds.json` (#210, ruling n=1577),
+never by widening the core tuple: a member that never withdraws a claim carries no dead vocabulary,
+and the transition promotes to the core set when a second factory needs it — the owner's promotion law
+applied to one event. **This factory declares it**; the kit ships only the empty `.example.json`, so a
+tree that has not adopted the vocabulary carries the arms' precondition as a stated SKIP, never a red
+(#229).
 
 **A withdrawal wearing a `close` is refused.** `close` means COMPLETION in this instrument — its
 contract carries the board state observed, `head=<sha>` and a rework disposition — so a withdrawal

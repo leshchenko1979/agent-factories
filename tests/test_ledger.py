@@ -224,6 +224,23 @@ def _lock_path(root: Path) -> str:
     )
     return proc.stdout.strip()
 
+def _vocabulary_size() -> int:
+    """How many events THIS tree resolves -- asked of the TOOL, like `_event_is_known`.
+
+    The SKIP below states its population: a skip that names none is the vacuous-green
+    shape this file forbids elsewhere ("dispatch rows examined:").
+    """
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, 'tools'); import ledger; "
+         "print(len(ledger.known_events()))"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    try:
+        return int(proc.stdout.strip())
+    except ValueError:
+        return 0
+
 def _event_is_known(event: str) -> bool:
     """Whether `event` is in THIS tree's vocabulary -- asked of the TOOL, not derived.
 
@@ -426,7 +443,9 @@ def check_release_vocabulary() -> None:
     if not _event_is_known("release"):
         print(
             "  SKIP  the release arms -- this tree declares no `release` event: "
-            "docs/ledger-refs-kinds.json is absent or silent. A factory that declares "
+            "docs/ledger-refs-kinds.json is absent or silent. "
+            f"Population examined: {_vocabulary_size()} event(s) resolved in "
+            "this tree; 8 release arms declared, 0 driven here. A factory that declares "
             "the vocabulary gets these arms; reding here would report a missing "
             "declaration as a broken instrument (#229)."
         )
