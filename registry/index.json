@@ -1,12 +1,12 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-09-29T08:38:35Z",
+  "resolved_at": "2026-09-29T09:28:06Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 68,
-    "announcements": 24,
+    "announcements": 25,
     "jobs": 65,
     "unattributed_jobs": 5
   },
@@ -25,6 +25,23 @@
       ],
       "origins": [
         "miidas"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "bothelp-relay-load-bearing-on-vpn",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "vpn now serves a critical channel's live webhook: bothelp.l1979.ru/telegram is the investor bot's production Telegram webhook, terminated by Caddy on vpn and forwarded to the relay on 127.0.0.1:8770. The owner made this permanent on 2026-09-29 (it is no longer a pilot). Removing that vhost, or taking vpn down for maintenance without warning, sends Telegram's webhook to a 404 and the channel goes silent. Tell Infra Factory HQ before any vpn Caddy/kernel/reboot/address change; the designed mitigation is one command each way to return the webhook to BotHelp's own address for the window. The relay application and its channel logic are NOT this factory's - hosted here and monitored by Gatus, changed in the redevest-ai repo.",
+      "since": "2026-09-29",
+      "review_by": null,
+      "check": null,
+      "evidence": "Owner ruling 2026-09-29 (via the RedeVest lane). Live verification the same turn: webhook bothelp.l1979.ru/telegram, pending_update_count 0, last_error none; /healthz {ok:true,pending:0,overdue:0,oldest_pending_age_s:0.0}; systemd bothelp-relay-receiver + bothelp-relay-forwarder active on vpn; Gatus endpoint apps_bothelp-relay green.",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "infra-factory"
       ],
       "conflict": []
     },
@@ -83,11 +100,11 @@
       "id": "ops-daemon-dies-at-cgroup-cap",
       "severity": "warning",
       "scope": "profile",
-      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarted 19 times on 2026-09-27: 16 deliberate (ship-chain deploy) and 3 crash recoveries. Every restart opens a boot-drain window that re-pushes parked rows (18 drains re-pushed 144 rows, mean 8.0), so a re-push is the COMMON case and a crash the minority one. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
+      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly: 2026-09-28 saw 12 starts, 10 clean stops and 2 crashes (code=dumped); 2026-09-29 to 11:42 MSK saw 6 starts, 4 stops, 0 crashes. Every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
       "since": "2026-09-27T06:13:19Z",
       "review_by": "2026-10-11",
       "check": null,
-      "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup.",
+      "evidence": "journalctl --user -u opencrabs-ops, per-day counts read 2026-09-29T08:36Z; cgroup read the same turn: MemoryCurrent 1586802688 / MemoryHigh 1610612736 = 98.5% with MemoryPeak 1610887168, i.e. the peak exceeds the declared high-water mark. leshchenko1979/opencrabs#638 for the crash class.",
       "affects": [
         "profile"
       ],
@@ -100,11 +117,11 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "severity": "warning",
       "scope": "profile",
-      "text": "The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.",
+      "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF overnight, not because it sleeps: pmset reports sleep=0 (it never sleeps), and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off. Apple M4 (Mac16,10). Observed power-offs carry it offline for hours at a time, so any browser task through the Mac CDP path fails for the whole window - and no overlay fixes it, because a powered-off host is offline on every transport, Tailscale included.",
       "since": "2026-09-26",
       "review_by": "2026-10-10",
       "check": null,
-      "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493.",
+      "evidence": "pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM) and last reboot/shutdown records, both read 2026-09-29 11:38 MSK; hw.model Mac16,10. Prior evidence (2026-09-26): six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493.",
       "affects": [
         "profile"
       ],
@@ -151,11 +168,11 @@
       "id": "gatus-config-carries-live-credentials",
       "severity": "warning",
       "scope": "profile",
-      "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.",
+      "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe. A third chokepoint is any TOOL whose output path renders the file's content: a diff, a checksum-and-dump, or a guard that prints a drift diff between two key-bearing copies discloses both. Read the output path before you ship the tool, not after.",
       "since": "2026-09-23",
       "review_by": "2026-10-07",
       "check": null,
-      "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file.",
+      "evidence": "9 key blocks confirmed in BOTH the repo copy and the deployed copy today (grep -c \"BEGIN OPENSSH PRIVATE KEY\" = 9 on each). Third re-exposure measured 2026-09-29: the guard added in commit 51c07f57 printed both key blocks on its refuse arm; fixed in aab431f1, proven on synthetic material (9 markers in -> 9 placeholders out, no BEGIN/END, zero base64). Intake n=265/n=267; prior re-exposures n=275 and n=285.",
       "affects": [
         "profile"
       ],
@@ -666,7 +683,7 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-09-28T06:24:41Z",
+      "attested_at": "2026-09-29T07:11:11Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
@@ -774,7 +791,7 @@
           "session_id": "1122b15e-0b26-420f-a7b3-d0719479bbd5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T10:42:29Z",
+          "bound_at": "2026-09-29T09:05:58Z",
           "announcements": []
         }
       ],
@@ -837,7 +854,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-09-28T06:24:04Z",
+      "attested_at": "2026-09-29T08:44:19Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -1007,7 +1024,7 @@
         {
           "id": "gatus-config-carries-live-credentials",
           "severity": "warning",
-          "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.",
+          "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe. A third chokepoint is any TOOL whose output path renders the file's content: a diff, a checksum-and-dump, or a guard that prints a drift diff between two key-bearing copies discloses both. Read the output path before you ship the tool, not after.",
           "scope": "profile",
           "since": "2026-09-23",
           "review_by": "2026-10-07",
@@ -1015,12 +1032,12 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file."
+          "evidence": "9 key blocks confirmed in BOTH the repo copy and the deployed copy today (grep -c \"BEGIN OPENSSH PRIVATE KEY\" = 9 on each). Third re-exposure measured 2026-09-29: the guard added in commit 51c07f57 printed both key blocks on its refuse arm; fixed in aab431f1, proven on synthetic material (9 markers in -> 9 placeholders out, no BEGIN/END, zero base64). Intake n=265/n=267; prior re-exposures n=275 and n=285."
         },
         {
           "id": "mac-cdp-tunnels-flap-on-sleep",
           "severity": "warning",
-          "text": "The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.",
+          "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF overnight, not because it sleeps: pmset reports sleep=0 (it never sleeps), and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off. Apple M4 (Mac16,10). Observed power-offs carry it offline for hours at a time, so any browser task through the Mac CDP path fails for the whole window - and no overlay fixes it, because a powered-off host is offline on every transport, Tailscale included.",
           "scope": "profile",
           "since": "2026-09-26",
           "review_by": "2026-10-10",
@@ -1028,12 +1045,12 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493."
+          "evidence": "pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM) and last reboot/shutdown records, both read 2026-09-29 11:38 MSK; hw.model Mac16,10. Prior evidence (2026-09-26): six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493."
         },
         {
           "id": "ops-daemon-dies-at-cgroup-cap",
           "severity": "warning",
-          "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarted 19 times on 2026-09-27: 16 deliberate (ship-chain deploy) and 3 crash recoveries. Every restart opens a boot-drain window that re-pushes parked rows (18 drains re-pushed 144 rows, mean 8.0), so a re-push is the COMMON case and a crash the minority one. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
+          "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly: 2026-09-28 saw 12 starts, 10 clean stops and 2 crashes (code=dumped); 2026-09-29 to 11:42 MSK saw 6 starts, 4 stops, 0 crashes. Every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
           "scope": "profile",
           "since": "2026-09-27T06:13:19Z",
           "review_by": "2026-10-11",
@@ -1041,7 +1058,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup."
+          "evidence": "journalctl --user -u opencrabs-ops, per-day counts read 2026-09-29T08:36Z; cgroup read the same turn: MemoryCurrent 1586802688 / MemoryHigh 1610612736 = 98.5% with MemoryPeak 1610887168, i.e. the peak exceeds the declared high-water mark. leshchenko1979/opencrabs#638 for the crash class."
         },
         {
           "id": "board-gates-declared-inapplicable",
@@ -1055,6 +1072,19 @@
             "profile"
           ],
           "evidence": "Ledger n=611 (two layers: the requirement origin commit d6c9d55 is absent from this repo, and SKILL.md:29 declares the issue board to be the local ledger). Independently raised as a false regression by two lanes before it was declared."
+        },
+        {
+          "id": "bothelp-relay-load-bearing-on-vpn",
+          "severity": "warning",
+          "text": "vpn now serves a critical channel's live webhook: bothelp.l1979.ru/telegram is the investor bot's production Telegram webhook, terminated by Caddy on vpn and forwarded to the relay on 127.0.0.1:8770. The owner made this permanent on 2026-09-29 (it is no longer a pilot). Removing that vhost, or taking vpn down for maintenance without warning, sends Telegram's webhook to a 404 and the channel goes silent. Tell Infra Factory HQ before any vpn Caddy/kernel/reboot/address change; the designed mitigation is one command each way to return the webhook to BotHelp's own address for the window. The relay application and its channel logic are NOT this factory's - hosted here and monitored by Gatus, changed in the redevest-ai repo.",
+          "scope": "profile",
+          "since": "2026-09-29",
+          "review_by": null,
+          "check": null,
+          "affects": [
+            "profile"
+          ],
+          "evidence": "Owner ruling 2026-09-29 (via the RedeVest lane). Live verification the same turn: webhook bothelp.l1979.ru/telegram, pending_update_count 0, last_error none; /healthz {ok:true,pending:0,overdue:0,oldest_pending_age_s:0.0}; systemd bothelp-relay-receiver + bothelp-relay-forwarder active on vpn; Gatus endpoint apps_bothelp-relay green."
         }
       ]
     },
@@ -1202,7 +1232,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-29T08:32:35Z",
+          "bound_at": "2026-09-29T08:57:19Z",
           "announcements": []
         },
         {
@@ -1289,7 +1319,7 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-28T06:42:00Z",
+      "attested_at": "2026-09-29T06:50:43Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
@@ -1377,7 +1407,7 @@
           "session_id": "5a5335ee-db68-46fe-b13e-a082b2beadb5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-29T07:18:48Z",
+          "bound_at": "2026-09-29T09:01:22Z",
           "announcements": []
         },
         {
@@ -1407,7 +1437,7 @@
           "session_id": "39d2b612-dbfc-4953-ae02-609267c68c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-29T07:17:42Z",
+          "bound_at": "2026-09-29T09:03:05Z",
           "announcements": []
         }
       ],
@@ -1522,7 +1552,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-28T15:24:08Z",
+      "attested_at": "2026-09-29T07:00:28Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -1644,7 +1674,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T20:01:07Z",
+          "bound_at": "2026-09-29T09:21:27Z",
           "announcements": []
         },
         {
@@ -1654,7 +1684,7 @@
           "session_id": "a5b34466-1c14-441f-b2c6-6eaf4f316dde",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-29T06:56:56Z",
+          "bound_at": "2026-09-29T09:25:18Z",
           "announcements": []
         },
         {
@@ -1734,7 +1764,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-28T22:04:36Z",
+          "bound_at": "2026-09-29T09:16:14Z",
           "announcements": []
         },
         {
@@ -1834,7 +1864,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-29T00:22:00Z",
+          "bound_at": "2026-09-29T09:19:10Z",
           "announcements": []
         },
         {
@@ -1844,7 +1874,7 @@
           "session_id": "facd50af-0807-4fee-942b-008bff037f6f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-29T08:26:06Z",
+          "bound_at": "2026-09-29T09:24:38Z",
           "announcements": []
         },
         {
@@ -2230,8 +2260,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-29T09:00:00+00:00",
-      "last_run_at": "2026-09-28T09:00:07Z",
+      "next_run_at": "2026-09-30T09:00:00+00:00",
+      "last_run_at": "2026-09-29T09:00:31Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2534,8 +2564,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-09-29T09:00:00+00:00",
-      "last_run_at": "2026-09-28T09:00:07Z",
+      "next_run_at": "2026-09-30T09:00:00+00:00",
+      "last_run_at": "2026-09-29T09:00:32Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2883,7 +2913,7 @@
       "name": "oc-triage-factory-patrol",
       "cron_expr": "0 */6 * * *",
       "timezone": "UTC",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 1,
       "has_goal_template": true,
       "next_run_at": "2026-09-29T12:00:00+00:00",
@@ -2899,7 +2929,7 @@
       "name": "oc-triage-owner-digest",
       "cron_expr": "30 9 * * *",
       "timezone": "Europe/Moscow",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
       "next_run_at": "2026-09-30T06:30:00+00:00",
