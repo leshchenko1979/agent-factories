@@ -707,7 +707,118 @@ def test_a_pre_invariant_close_row_is_outside_the_population() -> None:
     )
 
 
-# --- #122: the notify-receipt leg — a failed notify SURFACES -----------------------
+# --- #223: the board-ruling leg --------------------------------------------------
+
+def _issue_with_comments(number: int, state: str, *bodies: str) -> dict:
+    """A board issue carrying comments, in the shape `gh issue list --json` returns."""
+    issue = _issue(number, state)
+    issue["comments"] = [
+        {"body": body, "author": {"login": "hq"}, "createdAt": _CLOSE_TS}
+        for body in bodies
+    ]
+    return issue
+
+def test_the_ruling_leg_BITES_on_a_ruling_comment_with_no_row() -> None:
+    """#223 acceptance, the NON-VACUITY probe: the live board is the only clean one.
+
+    The leg's whole population is rulings that were never stamped, so a probe that only
+    read a clean board would prove nothing. This supplies the defect and asserts the leg
+    names it AND fails the run.
+    """
+    issues = [_issue_with_comments(11, "OPEN", "## RULED — shape (2), the patrol leg.\n")]
+    rows = _rows(("intake", "#11", 1))
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"a ruling comment with no row must fail the run, got rc={rc}\n{out}"
+    assert "#11 carries a ruling comment on the board but the ledger holds no" in out, out
+    assert "LEG board-ruling" in out, f"the leg must be reported at all\n{out}"
+
+def test_a_MENTION_inside_a_comment_is_not_an_instance() -> None:
+    """The discrimination that makes the leg mechanical, and the reason for the heading test.
+
+    The loose form (`--search "RULED in:comments"`) returned 118 issues against a true
+    population of 9, because every filing that says the item is NOT ruled yet scored as an
+    instance. So the test is on the OPENING of the body, and this probe pins that: a mention
+    mid-body and a sentence about not having ruled are both refused.
+    """
+    issues = [
+        _issue_with_comments(21, "OPEN", "We have not ruled on this yet."),
+        _issue_with_comments(22, "OPEN", "See the ## RULED section further down."),
+        _issue_with_comments(23, "OPEN", "  \n## RULING — leading whitespace is tolerated."),
+    ]
+    rows = _rows(("intake", "#21", 1), ("intake", "#22", 2), ("intake", "#23", 3))
+    rc, out, _ = _run(issues, rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "examined over" in section, f"the leg must state its population\n{out}"
+    assert "1 examined" in section, (
+        f"EXACTLY ONE of the three must be examined — the heading one and only it: {section!r}"
+    )
+    assert "#21" not in section and "#22" not in section, (
+        f"a mere mention must never be reported as a missing row: {section!r}"
+    )
+
+def test_a_CLOSED_item_is_still_in_the_population() -> None:
+    """The class is NOT state-scoped, and the read must be the board WHOLE.
+
+    `--state open --search` returned a DIFFERENT set from the whole-board read, because four
+    of the eight originally filed had since closed. So a closed item carrying a ruling
+    comment with no row is still a finding — an open-filtered read would drop it silently.
+    """
+    issues = [_issue_with_comments(31, "CLOSED", "## RULED — settled after the fact.\n")]
+    rows = _rows(("intake", "#31", 1), ("close", "#31", 2))
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"a CLOSED item with a ruling comment and no row is still a finding: {out}"
+    assert "#31 carries a ruling comment" in out, out
+
+def test_a_ruling_row_for_the_subject_clears_it() -> None:
+    """The complement: the leg is discriminating, not a blanket red."""
+    issues = [_issue_with_comments(41, "OPEN", "## RULED — stamped in the same turn.\n")]
+    rows = _rows(("intake", "#41", 1), ("ruling", "#41", 2))
+    rc, out, _ = _run(issues, rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "#41" not in section, f"a stamped ruling must not be reported: {section!r}"
+    assert "1 examined" in section and "0 problem(s)" in section, (
+        f"it must be EXAMINED and found clean, never skipped: {section!r}"
+    )
+
+def test_the_leg_states_its_population_and_the_board_read_instant() -> None:
+    """A clean read over an examined population, never a clean read over nothing.
+
+    The clause is two-part: the gate PRINTS the population it examined. A leg that examined
+    zero must not render identically to one that examined the board and found it clean.
+    """
+    issues = [
+        _issue_with_comments(51, "OPEN", "## RULED — one.\n"),
+        _issue_with_comments(52, "OPEN", "## RULING — two.\n"),
+    ]
+    rows = _rows(("intake", "#51", 1), ("ruling", "#51", 2),
+                 ("intake", "#52", 3), ("ruling", "#52", 4))
+    rc, out, _ = _run(issues, rows)
+    assert rc == 0, f"both rulings are stamped, so the run is clean: {out}"
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "2 examined" in section, f"the POPULATION must be printed: {section!r}"
+    assert "board read at" in section, (
+        f"the board is LIVE state — the read instant is owed: {section!r}"
+    )
+    assert "2 issue(s) read" in section, f"the read size must travel: {section!r}"
+
+def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
+    """Both halves of the mechanism are pinned, because either silently kills the leg.
+
+    A read without `comments` makes the leg examine NOTHING and print a clean verdict over
+    it — the exact false-clean the population clause exists to stop. And a heading list
+    inlined at the comparison cannot be probed or changed by a factory whose board differs.
+    """
+    assert isinstance(RUNNER.RULING_HEADINGS, tuple) and RUNNER.RULING_HEADINGS, (
+        "the headings must be a declared module tuple"
+    )
+    assert "## RULED" in RUNNER.RULING_HEADINGS and "## RULING" in RUNNER.RULING_HEADINGS, (
+        f"both headings the board carries must be declared: {RUNNER.RULING_HEADINGS}"
+    )
+    source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    assert '"number,state,title,closedAt,comments"' in source, (
+        "the board read must ask for comments, or the leg examines nothing"
+    )
+
 
 def _log_dir(**files: str) -> Path:
     """A synthetic log surface. The live population is legitimately empty on a quiet day,

@@ -364,7 +364,14 @@ def remote_slug(repo: Path = REPO) -> str:
 
 
 def fetch_board(slug: str) -> list[dict]:
-    """The FULL board: every state, no filter, so the reverse leg is sound."""
+    """The FULL board: every state, no filter, so the reverse leg is sound.
+
+    `comments` travels with it because one leg's population IS the comments (#223): a
+    ruling posted as a board comment is the transition the ledger's `ruling` event
+    declares, and a read that omitted comments could not see one at all — the leg would
+    examine nothing and print the verdict of a leg that examined the population. The
+    field is additive and the other legs ignore it, so the read stays ONE call.
+    """
     proc = subprocess.run(
         [
             "gh",
@@ -377,7 +384,7 @@ def fetch_board(slug: str) -> list[dict]:
             "--limit",
             "1000",
             "--json",
-            "number,state,title,closedAt",
+            "number,state,title,closedAt,comments",
         ],
         capture_output=True,
         text=True,
@@ -499,6 +506,110 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
             "board_read_at": read_at,
             "declaration_token": token,
             "invariant_boundary": boundary,
+        },
+    }
+
+# ---- the board-ruling leg (issue #223, ruled at ledger n=1596) -----------------------
+#
+# A ruling posted as a board comment leaves no `ruling` row, and NOTHING asked for one:
+# `grep` for a reader of `event == "ruling"` across `tools/*.py` returned ZERO hits — the
+# token occurred only at the event tuple and the authorization matrix. So the transition
+# was authorized, written by convention, and skipped indefinitely with no surface noticing,
+# which is §8's field-with-no-reader shape arriving on the WRITE side. Eight of one lane's
+# rulings in a single session had no row; Triage's re-measurement put the class at NINE and
+# corrected the filing's figure, because the population MOVES as lanes start stamping.
+#
+# THE HEADINGS ARE DECLARED HERE BECAUSE THE PREDICATE IS THE WHOLE MECHANISM, and it was
+# MEASURED before it was written rather than chosen (Triage, ledger n=1597 — the numbers
+# below are that measurement, not a guess):
+#
+#   * a comment that IS a ruling OPENS with one of these headings. A comment that merely
+#     MENTIONS the word is not a ruling — and that distinction is the entire leg: the loose
+#     form `--search "RULED in:comments"` returned **118** issues, an order of magnitude
+#     over, because a filing saying "not ruled yet" scores as an instance.
+#   * the class is NOT state-scoped: `--state open --search` returned a DIFFERENT set,
+#     because four of the eight had since closed. So the read is the board WHOLE and the
+#     heading test is the ONLY predicate that finds the population.
+#
+# The tokens are DECLARED, never inline at the comparison, so a factory whose board carries
+# a different ruling heading changes ONE tuple and the leg follows — and so the value can be
+# probed without executing the leg against a live board. Both forms are declared rather than
+# normalised to one: the board carries both, and a normalisation would be a second predicate
+# standing beside this one, which is the drift the tuple exists to prevent.
+RULING_HEADINGS = ("## RULED", "## RULING")
+
+def ruling_comment(issue: dict) -> dict | None:
+    """The issue's ruling comment, or None when it carries none.
+
+    The test is on the OPENING of the body, after leading whitespace, and it is the reason
+    the leg can be mechanical: 118 issues mention the word, and a subset of those are
+    filings that say the item is NOT ruled. Opening-only admits the ruling and refuses the
+    mention, with no second source of truth.
+    """
+    for comment in issue.get("comments") or []:
+        if not isinstance(comment, dict):
+            continue
+        if str(comment.get("body") or "").lstrip().startswith(RULING_HEADINGS):
+            return comment
+    return None
+
+def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
+                     predicate=None) -> dict:
+    """The live board-ruling leg: a ruling comment with no `ruling` row is reported (#223).
+
+    Population: every board issue carrying a ruling comment — derived AT RUN TIME from the
+    board the read returned, never a literal, so the count moves with the board and cannot
+    go stale in the code. Returned as `ruling_comments_examined` and printed beside the
+    verdict, so a clean run reads as "examined N, 0 problems" rather than being
+    indistinguishable from "examined nothing" — the leg that examined nothing has reported
+    nothing, never a clean HOLD.
+
+    The read instant travels with it: the board is LIVE state, so this is a property of the
+    INSTANT and is REPORTED, never folded into the correctness verdict.
+
+    NO BACKFILL, by law rather than by omission: a `ruling` row written after the fact is a
+    falsified record, so a ruling that was never stamped is a FINDING the leg keeps printing,
+    not one it repairs. The population it examines is stated so tonight's instances are
+    visible as instances rather than silently passed over.
+    """
+    predicate = predicate or load_predicate()
+
+    ruled: set[int] = set()
+    for row in rows:
+        if row.get("event") != "ruling":
+            continue
+        number = predicate.issue_reference(row.get("subject"))
+        if number is not None:
+            ruled.add(number)
+
+    problems: list[str] = []
+    examined = 0
+    for issue in issues:
+        number = issue.get("number")
+        if not isinstance(number, int):
+            continue
+        if ruling_comment(issue) is None:
+            continue
+        examined += 1
+        if number in ruled:
+            continue
+        problems.append(
+            f"#{number} carries a ruling comment on the board but the ledger holds no "
+            f"`ruling` row for it (board read at {read_at}) — the ruling's content is on "
+            f"the board, but every other row cites a ruling by `n`, and a ruling with no "
+            f"row has no `n` for a reader to resolve"
+        )
+
+    return {
+        "name": "board-ruling",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "ruling_comments_examined": examined,
+            "issues_read": len(issues),
+            "board_read_at": read_at,
+            "headings": list(RULING_HEADINGS),
         },
     }
 
@@ -2092,6 +2203,13 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     if len(member["absent_files"]) > 6:
                         lines.append(f"      ... and {len(member['absent_files']) - 6} more absent")
             lines.append(f"  read at {cov['read_at'] or 'unstated'}")
+        elif leg["name"] == "board-ruling":
+            lines.append(
+                f"  ruling comments on the board (openings {', '.join(cov['headings'])}): "
+                f"{cov['ruling_comments_examined']} examined over {cov['issues_read']} "
+                f"issue(s) read, {len(leg['problems'])} problem(s) — board read at "
+                f"{cov['board_read_at']}"
+            )
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -2194,6 +2312,7 @@ def main(
     legs = [
         board_intake_leg(issues, rows, predicate=predicate),
         board_close_leg(issues, rows, read_at=read_at),
+        board_ruling_leg(issues, rows, read_at=read_at, predicate=predicate),
         cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
         ),
