@@ -166,6 +166,229 @@ def write_ledger(path: Path, *events: tuple[str, str]) -> None:
         encoding="utf-8",
     )
 
+# ---------------------------------------------------------------------------
+# #221 / #222 -- the single-writer pair. ONE defect with TWO legs: the ref the
+# guard judges against (#221) and the scope of the lock that serializes writers
+# (#222). Neither is complete alone, so both are probed here.
+# ---------------------------------------------------------------------------
+
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-c", "user.email=gate@fixture", "-c", "user.name=gate", *args],
+        cwd=cwd, capture_output=True, text=True,
+    )
+
+def run_in_tree(root: Path, ledger: Path, *args: str) -> subprocess.CompletedProcess:
+    """Run the tool AS STAGED IN `root`.
+
+    `run()` above always executes this repo's tool, which is right for a throwaway
+    ledger but wrong for these probes: both legs key on whether the LEDGER lies in
+    the repository the TOOL resolved, so a probe that ran this repo's tool against a
+    fixture tree would exercise neither. The staged copy is what the fixture owns.
+    """
+    env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
+    env["OC_ACTORS_PATH"] = str(ledger.parent / "no-actors.txt")
+    env["OC_AUTHORIZATIONS_PATH"] = str(ledger.parent / "no-authorizations.json")
+    return subprocess.run(
+        [sys.executable, str(root / "tools" / "ledger.py"), *args],
+        capture_output=True, text=True, env=env, cwd=root,
+    )
+
+def _fixture_repo(root: Path, *, remote: Path | None = None) -> Path:
+    """A minimal repository holding the tool and an empty ledger."""
+    root.mkdir(parents=True, exist_ok=True)
+    stage_tool(TOOL, root / "tools", LOCAL_TOOLS)
+    (root / "evidence").mkdir(exist_ok=True)
+    (root / "evidence" / "ledger.jsonl").write_text("", encoding="utf-8")
+    _git(root, "init", "-q", "-b", "main")
+    if remote is not None:
+        _git(root, "remote", "add", "origin", str(remote))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "init")
+    return root
+
+def _ledger(root: Path) -> Path:
+    return root / "evidence" / "ledger.jsonl"
+
+def _lock_path(root: Path) -> str:
+    """The lock path THE TOOL ITSELF computes.
+
+    Asking the tool, rather than re-deriving the expression here, is the difference
+    between a probe and a paraphrase: a probe that recomputed `git rev-parse` would
+    agree with itself while the tool drifted.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, 'tools'); import ledger; print(ledger.LOCK)"],
+        cwd=root, capture_output=True, text=True,
+    )
+    return proc.stdout.strip()
+
+def check_lock_is_repo_scoped() -> None:
+    """#222 leg 1: two checkouts of ONE repository compute the SAME lock path."""
+    print("single-writer (#222) -- the lock is repository-scoped, not checkout-scoped")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _fixture_repo(Path(tmp) / "root")
+        linked = Path(tmp) / "linked"
+        add = _git(root, "worktree", "add", "--detach", str(linked), "HEAD")
+        check("a linked worktree of the fixture was created", add.returncode == 0,
+              add.stderr.strip()[:140])
+        stage_tool(TOOL, linked / "tools", LOCAL_TOOLS)
+        a, b = _lock_path(root), _lock_path(linked)
+        compared = [p for p in (a, b) if p]
+        print(f"  lock-anchor probe: {len(compared)} worktree(s) compared, "
+              f"{len(set(compared))} distinct lock path(s)")
+        check("the probe compared at least two worktrees (its population)",
+              len(compared) >= 2, f"{len(compared)} compared")
+        check("two worktrees compute the SAME lock path (the property)",
+              bool(a) and a == b, f"main={a!r} linked={b!r}")
+        check("the lock is anchored outside either checkout",
+              a.startswith(str(root / ".git")) and "evidence" not in a, a)
+
+def check_stale_ref_refused() -> None:
+    """#221 Q1: a peer's push inside the fetch window is REFUSED, by name."""
+    print("single-writer (#221) -- a stale lineage is refused and names the sync")
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp) / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        a_dir = _fixture_repo(Path(tmp) / "a", remote=bare)
+        _git(a_dir, "push", "-q", "-u", "origin", "main")
+        b_dir = Path(tmp) / "b"
+        subprocess.run(["git", "clone", "-q", str(bare), str(b_dir)], capture_output=True)
+        stage_tool(TOOL, b_dir / "tools", LOCAL_TOOLS)
+        (b_dir / "evidence").mkdir(exist_ok=True)
+        _ledger(b_dir).write_text("", encoding="utf-8")
+
+        # The peer moves the remote while `b` has not fetched.
+        (a_dir / "peer.txt").write_text("a peer moved the remote on\n", encoding="utf-8")
+        _git(a_dir, "add", "-A")
+        _git(a_dir, "commit", "-qm", "peer commit")
+        _git(a_dir, "push", "-q", "origin", "main")
+
+        stale = run_in_tree(b_dir, _ledger(b_dir), "append", "--event", "genesis",
+                            "--actor", "owner", "--subject", "genesis", "--detail", "genesis")
+        check("(221a) an append against a STALE ref is REFUSED",
+              stale.returncode != 0, f"rc={stale.returncode}")
+        check("(221a) the refusal names the staleness and the sync",
+              "STALE" in stale.stderr and "git fetch origin" in stale.stderr,
+              stale.stderr.strip()[:220])
+
+        # Both-ways control: after the fetch the same append is accepted. Without this
+        # arm the check would pass on a leg that refused everything, everywhere.
+        _git(b_dir, "fetch", "-q", "origin")
+        fresh = run_in_tree(b_dir, _ledger(b_dir), "append", "--event", "genesis",
+                            "--actor", "owner", "--subject", "genesis", "--detail", "genesis")
+        check("(221b) after `git fetch origin` the same append is ACCEPTED",
+              fresh.returncode == 0, fresh.stderr.strip()[:220])
+
+def check_fail_open_needs_no_remote() -> None:
+    """#221 Q3: the fail-open BOUNDARY -- where it stays, and where it is refused."""
+    print("single-writer (#221 Q3) -- the fail-open boundary, both cases")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _fixture_repo(Path(tmp) / "noremote")
+        r = run_in_tree(root, _ledger(root), "append", "--event", "genesis",
+                        "--actor", "owner", "--subject", "genesis", "--detail", "genesis")
+        check("(221c) a repository with NO remote appends normally",
+              r.returncode == 0, r.stderr.strip()[:220])
+    # And the gate's own throwaway ledgers -- outside any repository -- keep working,
+    # which is the regression this predicate's gating exists to prevent.
+    with tempfile.TemporaryDirectory() as tmp:
+        outside = Path(tmp) / "elsewhere.jsonl"
+        r = run(outside, "append", "--event", "genesis", "--actor", "owner",
+                "--subject", "genesis", "--detail", "genesis")
+        check("(221d) a ledger OUTSIDE the repository is not judged by its lineage",
+              r.returncode == 0, r.stderr.strip()[:220])
+
+    # CASE (2), the other half of #221 Q3: a remote EXISTS and the committed
+    # lineage cannot be read. There IS something to compare against and the guard
+    # failed to look, so this is REFUSED. A stderr warning is not a reader -- it was
+    # invisible on every surface this factory reads, which is how the two cases came
+    # to be indistinguishable.
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp) / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+
+        def _corrupt_committed(root: Path) -> Path:
+            """Commit an UNPARSEABLE ledger, then leave a VALID working copy.
+
+            Both halves matter: the refusal must be about the COMMITTED lineage being
+            unreadable, not about the working file being broken -- so the working copy
+            is restored to valid rows before the append is driven.
+            """
+            led = _ledger(root)
+            good = json.dumps({"n": 1, "ts": "2026-01-01T00:00:00Z",
+                               "event": "genesis", "actor": "owner",
+                               "subject": "genesis", "detail": "genesis"}) + "\n"
+            led.write_text(good + "not json at all\n", encoding="utf-8")
+            _git(root, "add", "-A")
+            _git(root, "commit", "-qm", "a committed ledger with an unparseable row")
+            led.write_text(good, encoding="utf-8")
+            return led
+
+        with_remote = _fixture_repo(Path(tmp) / "with_remote", remote=bare)
+        led = _corrupt_committed(with_remote)
+        r = run_in_tree(with_remote, led, "append", "--event", "intake",
+                        "--actor", "triage", "--subject", "#1", "--detail", "intake")
+        check("(221e) remote present + unreadable lineage is REFUSED, not failed open",
+              r.returncode != 0, f"rc={r.returncode} {r.stderr.strip()[:200]}")
+        check("(221e) and the refusal names the sync rather than crashing",
+              "lineage" in r.stderr.lower() and "git fetch origin" in r.stderr,
+              r.stderr.strip()[:260])
+        check("(221e) the refused append wrote nothing",
+              len(rows(led)) == 1, f"{len(rows(led))} row(s)")
+
+        # BOTH-WAYS CONTROL: the same bytes WITHOUT a remote fail open, so the arm
+        # above is measuring the remote and not the malformed committed file.
+        no_remote = _fixture_repo(Path(tmp) / "no_remote")
+        led2 = _corrupt_committed(no_remote)
+        r2 = run_in_tree(no_remote, led2, "append", "--event", "intake",
+                         "--actor", "triage", "--subject", "#1", "--detail", "intake")
+        check("(221e) the control: the same bytes with NO remote fail open",
+              r2.returncode == 0, f"rc={r2.returncode} {r2.stderr.strip()[:200]}")
+
+def check_worktree_fork_refused() -> None:
+    """#222 leg 2 / #221 detection: a second checkout cannot re-mint a published n."""
+    print("single-writer (#222) -- a second checkout is refused the published n")
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp) / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        a_dir = _fixture_repo(Path(tmp) / "a", remote=bare)
+        # The linked checkout is created BEFORE any row exists, so its own ledger file
+        # is empty -- which is the fork's precondition: two checkouts from one base.
+        linked = Path(tmp) / "linked"
+        _git(a_dir, "worktree", "add", "--detach", str(linked), "HEAD")
+        stage_tool(TOOL, linked / "tools", LOCAL_TOOLS)
+
+        # Checkout A takes and PUBLISHES row 1.
+        first = run_in_tree(a_dir, _ledger(a_dir), "append", "--event", "genesis",
+                            "--actor", "owner", "--subject", "genesis", "--detail", "genesis")
+        _git(a_dir, "add", "-A")
+        _git(a_dir, "commit", "-qm", "row 1")
+        _git(a_dir, "push", "-q", "origin", "main")
+        check("(222a) the first checkout landed and published row 1",
+              first.returncode == 0, first.stderr.strip()[:180])
+
+        # The linked checkout's append would mint n=1 a second time. It is REFUSED --
+        # and the refusal is asserted, not the mere absence of a crash.
+        r = run_in_tree(linked, _ledger(linked), "append", "--event", "intake",
+                        "--actor", "triage", "--subject", "#1", "--detail", "second row")
+        print(f"  worktree-fork probe: 2 checkout(s) driven, 1 re-mint attempted, "
+              f"{1 if r.returncode != 0 else 0} refused")
+        check("(222b) the second checkout's append is REFUSED, not silently forked",
+              r.returncode != 0, f"rc={r.returncode} {r.stderr.strip()[:180]}")
+        check("(222b) the refusal is the ledger's own, by name",
+              ("diverges from committed lineage" in r.stderr
+               or "STALE" in r.stderr
+               or "lineage" in r.stderr.lower()),
+              r.stderr.strip()[:220])
+
+        a_lock, b_lock = _lock_path(a_dir), _lock_path(linked)
+        check("(222c) the two checkouts share ONE lock path (leg 1's property)",
+              a_lock == b_lock != "",
+              "TWO lock files means the two checkouts do not serialize, so both can "
+              "mint the same n -- this is the fork, not a style point: "
+              f"{a_lock!r} vs {b_lock!r}")
+
 def check_registered_in_the_audit() -> None:
     """An unregistered gate never runs — assert this one is wired (P29, issue #59)."""
     audit = (REPO / "tools" / "audit.py").read_text(encoding="utf-8")
@@ -1712,6 +1935,11 @@ def main() -> int:
             check("(210h) with no release the SAME claim reads OPEN (the control)",
                   r.returncode == 0 and "0 terminal by release, 1 open" in r.stdout,
                   r.stdout[-420:])
+
+    check_lock_is_repo_scoped()
+    check_stale_ref_refused()
+    check_fail_open_needs_no_remote()
+    check_worktree_fork_refused()
 
     print()
     if failures:

@@ -253,7 +253,60 @@ INVARIANT_FOR_EVENT = {"close": "close_row_revision"}
 # Overridable so the gate can be tested against a throwaway ledger. Tests that
 # write the real state surface are how a probe becomes permanent corruption.
 LEDGER = Path(os.environ.get("OC_LEDGER_PATH", REPO / "evidence" / "ledger.jsonl"))
-LOCK = LEDGER.parent / ".ledger.lock"
+
+def _git_common_dir() -> Path:
+    """The repository's COMMON git dir — the same path from every linked worktree.
+
+    `--path-format=absolute` is load-bearing, not decoration: without it the main
+    checkout answers the RELATIVE `.git` while a linked worktree answers an absolute
+    path, so the two would still not agree on a file. The ledger is a REPOSITORY
+    surface and a checkout is a private view of it, so this — not the checkout — is
+    the boundary a single-writer lock belongs at (#222).
+
+    Any failure falls back to the LEDGER'S OWN DIRECTORY -- never `REPO/.git`,
+    which does not exist in exactly the case that reaches the fallback (a scratch
+    fixture, or a box without git) and made the lock raise FileNotFoundError before
+    the append could fail open. The caller creates that directory immediately before
+    taking the lock, so the anchor always has a home.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO, capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            common = Path(proc.stdout.strip())
+            if common.is_dir():
+                return common
+    except (OSError, subprocess.SubprocessError):
+        pass
+    # A non-git fixture and a box without git both land here. `REPO/.git` is
+    # absent in that case by definition, so the ledger's own directory is the
+    # only anchor that exists. It is per-checkout, which is correct: with no
+    # repository there is no other checkout to serialize against.
+    return LEDGER.parent
+
+# The lock is taken against the COMMON git dir, so two checkouts of one repository
+# serialize on one file -- and against the ledger's own directory when there is no
+# git dir at all, which is the only anchor that exists for a plain-file factory.
+# A per-checkout lock still lets two checkouts mint the same
+# `n` -- measured 2026-09-28, twice inside four minutes (#222). The anchor is NOT
+# sufficient alone: it serializes writers that reach different FILES, so it is the
+# precondition for the freshness leg below rather than a substitute for it.
+LOCK = _git_common_dir() / "opencrabs-ledger.lock"
+
+# The freshness leg (#221). `read_committed_rows` judges the working file against a
+# ref only as fresh as the last fetch, so a peer's push inside that window is
+# INVISIBLE: the guard compares against a lineage that has been superseded and the
+# next append re-issues a committed `n`. One command answers whether the ref we
+# judged against is still the remote's tip, and it has no side effect.
+#
+# A FETCH IS DELIBERATELY NOT USED. A fetch inside the append lock mutates the
+# working tree's refs as a side effect of a write -- a second-writer act in the
+# terms of SKILL.md §State -- and makes an append network-bound on a box where
+# several lanes append within minutes. A refusal costs the caller one fetch and
+# tells it why.
+_GIT_TIMEOUT = 10
 SUBPROCESSES_DIR = Path(os.environ.get("OC_SUBPROCESS_DIR", REPO / "evidence" / "subprocesses"))
 
 # The closed set of event types. An open set is not a schema — it is a diary.
@@ -473,19 +526,90 @@ def _git_show(ref: str, rel_path: str) -> str | None:
         return None
     return proc.stdout
 
-def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
+def _git_out(*args: str) -> str | None:
+    """stdout of `git ...` in REPO, or None when git could not answer at all."""
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=REPO, capture_output=True, text=True, timeout=_GIT_TIMEOUT
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+def _ledger_rel_path(path: Path) -> str | None:
+    """`path` relative to the repository, or None when it lies outside it.
+
+    This is the discriminator both legs below hang on, and getting it wrong is how
+    a guard starts refusing lawful writes: a ledger OUTSIDE the repository has no
+    committed lineage in it -- there is nothing to be stale about and nothing to
+    fail to read -- so both legs are skipped for one. The gate suite drives
+    throwaway ledgers under /tmp, which is exactly that case.
+    """
+    try:
+        return path.resolve().relative_to(REPO).as_posix()
+    except ValueError:
+        return None
+
+def stale_ref_refusal(path: Path) -> str | None:
+    """A refusal when the ref we are about to judge against is not the remote's tip.
+
+    ONE command decides it, and it has no side effect: `git ls-remote` asks the
+    remote, `git rev-parse` asks the local ref, and a difference means the lineage
+    `read_committed_rows` is holding has been superseded by a peer's push.
+
+    It returns None -- never a refusal -- whenever the question cannot be answered:
+    no remote configured, no network, no `origin`. A fresh factory with no remote is
+    the fail-open case, and a refusal there would block exactly the factories this
+    guard cannot help.
+    """
+    if _ledger_rel_path(path) is None:
+        return None
+    remote = _git_out("ls-remote", "origin", "main")
+    if remote is None:
+        return None
+    local = _git_out("rev-parse", "origin/main")
+    if local is None:
+        return None
+    remote_sha = remote.split()[0] if remote.split() else ""
+    if not remote_sha or remote_sha == local.strip():
+        return None
+    return (
+        f"the local 'origin/main' ref ({local.strip()[:12]}) is not the remote's tip "
+        f"({remote_sha[:12]}): the committed lineage just compared is STALE, so a peer's "
+        f"push may already have taken the next n. Run `git fetch origin` and retry. "
+        f"(A refusal and not a fetch on purpose: fetching inside the append lock would "
+        f"rewrite origin/* as a side effect of a write, and would make an append "
+        f"network-bound.)"
+    )
+
+def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None, str | None]:
     """The rows the repository has COMMITTED for `path`, and the ref they came from.
 
-    (None, None) means no committed lineage was readable — a fresh factory with
+    (None, None, None) means no committed lineage was readable — a fresh factory with
     no commits, no remote, or a file that is not tracked. The caller treats that
     as fail-open: the guard makes a revert loud, it never blocks a factory that
     has nothing to compare against.
+
+    (None, None, "unreadable") is the OTHER case: a remote exists, so there IS a
+    lineage to compare against and we failed to read it. The caller REFUSES on that,
+    because a guard that cannot see committed history is not a guard.
     """
-    try:
-        rel_path = path.resolve().relative_to(REPO).as_posix()
-    except ValueError:
-        sys.stderr.write("warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n")
-        return None, None
+    # THE TWO CASES ARE NOT THE SAME FACT, and until now both wrote the same stderr
+    # warning (#221 Q3):
+    #
+    #   (1) no remote, no commits -- a genuinely fresh factory. There is NOTHING to
+    #       compare against, so fail-open is correct and stays.
+    #   (2) a remote EXISTS but the lineage could not be read. There IS something to
+    #       compare against and we did not read it. That is REFUSED, by name.
+    #
+    # A stderr warning is not a reader: it is invisible on every surface this factory
+    # reads, so case (2) was indistinguishable from case (1) to everyone but the caller.
+    rel_path = _ledger_rel_path(path)
+    if rel_path is None:
+        return None, None, None
+    has_remote = _git_out("remote") not in (None, "")
     for ref in ("origin/main", "HEAD"):
         text = _git_show(ref, rel_path)
         if text is None:
@@ -502,10 +626,18 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None]:
                 parsed = False
                 break
         if parsed:
-            return rows, ref
+            return rows, ref, None
         break
+    # Reaching here means no ref yielded the file. The two cases are distinct:
+    #   UNTRACKED -- nothing was ever committed for it, so there is nothing to
+    #                compare against: fail-open, as a fresh factory deserves.
+    #   TRACKED but unreadable while a remote exists -- committed history EXISTS
+    #                and we failed to read it. That is refused.
+    tracked = _git_out("ls-files", "--error-unmatch", rel_path) is not None
+    if has_remote and tracked:
+        return None, None, "unreadable"
     sys.stderr.write("warning: ledger guard: cannot read committed lineage (proceeding fail-open)\n")
-    return None, None
+    return None, None, None
 
 def lineage_divergence(
     rows: list[dict], committed_rows: list[dict], ref_name: str
@@ -787,7 +919,18 @@ def cmd_append(args: argparse.Namespace) -> int:
         # lowers the working file outside the lock, and the next lawful
         # append would re-issue a committed `n`. Compare against the
         # committed lineage first, and refuse before anything is written.
-        committed_rows, ref_name = read_committed_rows(target_ledger)
+        stale = stale_ref_refusal(target_ledger)
+        if stale:
+            sys.exit(f"ledger append refused: {stale}")
+        committed_rows, ref_name, unreadable = read_committed_rows(target_ledger)
+        if unreadable:
+            sys.exit(
+                "ledger append refused: this repository HAS a remote but its committed "
+                "lineage for the ledger could not be read, so the single-writer guard "
+                "cannot see what is already committed. Run `git fetch origin` (and check "
+                "the ledger is tracked) and retry. Fail-open is for a factory with "
+                "nothing to compare against, not for one that failed to look."
+            )
         if committed_rows is not None:
             divergence = lineage_divergence(rows, committed_rows, ref_name)
             if divergence:
@@ -1245,7 +1388,12 @@ def cmd_repair(args: argparse.Namespace) -> int:
     with open(target_lock, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         rows = read_rows(target_ledger)
-        committed_rows, ref_name = read_committed_rows(target_ledger)
+        committed_rows, ref_name, unreadable = read_committed_rows(target_ledger)
+        if unreadable:
+            sys.exit(
+                "ledger repair refused: this repository HAS a remote but its committed "
+                "lineage for the ledger could not be read. Run `git fetch origin` and retry."
+            )
         if committed_rows is not None:
             divergence = lineage_divergence(rows, committed_rows, ref_name)
             if divergence:

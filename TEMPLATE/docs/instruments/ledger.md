@@ -618,6 +618,24 @@ The guarantee is *one append path*, not *tamper-proof*: the ledger is append-onl
 the tool has no rewrite command — but it is still a file, and a file can be edited. That is what
 version control is for: a rewrite shows up as a diff, and the history is the audit.
 
+**Both legs leave a residual, and it is irreducible.** The lock serializes writers that reach the
+same file; the freshness leg refuses a writer whose view of the remote is stale; the divergence leg
+refuses a writer whose working file disagrees with the committed lineage. None of the three can see
+an append that exists only in a WORKING TREE. Two checkouts that each hold an **uncommitted,
+unpublished** row carry no ref the other can read, so both may re-mint the same `n` and neither is
+refused. Closing that hole would require committing on append, which a write path must not do — so
+the remedy is **protocol, not mechanism**:
+
+- **`n` is immutable once PUBLISHED, and free to RE-MINT while UNPUBLISHED.** A row that exists only
+  in a working tree has no identity a peer can observe, so moving it rewrites nothing.
+- **The unpublished sibling re-appends at the next free `n`**, and owes **no** `re-minted-from`
+  declaration: the lost copy was never published, and declaring it would imply a published row moved,
+  which is the one thing §9.6 forbids.
+- **A fork where BOTH sides are PUBLISHED is a different case** and is **not** covered by the rule
+  above: it needs an explicit reconciliation row naming both rows and the disposition. That shape is
+  **undecided**, recorded here rather than silently omitted, so a reader who meets it knows it is an
+  open case and not an oversight.
+
 ### 9.2 The settlement receipt is the TOOL's, never the author's
 
 Settlement is *append the close row, then verify*, so the receipt must cover the row it certifies —
@@ -837,6 +855,27 @@ a measurement of nothing, which is the fabrication the `now - 300` constant was 
 
 **Declared, not derived** — a budget the instrument cannot state is a budget no reader can check,
 which is the same rule the gate budgets carry (`#94`).
+
+### 9.11 The freshness refusal — refuse, never fetch
+
+`append` refuses when the ref it is about to judge against is not the remote's tip: the committed
+lineage it just compared has been superseded, so a peer's push may already have taken the next `n`.
+The refusal names the sync (`git fetch origin`) — a refusal a caller cannot act on is a wall.
+
+Two properties are deliberate, and both are load-bearing:
+
+- **A fetch is NEVER performed inside the append lock.** Fetching rewrites `origin/*` as a side
+  effect of a *write* — a second writer acting on refs — and makes an append network-bound on a box
+  where several lanes append within minutes. The price of not fetching is one caller-side fetch.
+- **There is no force-shaped override.** An escape hatch here would be exercised precisely when the
+  guard is right, which is the only moment it matters.
+
+Fail-open keeps its own boundary, and the boundary is the whole point: a factory with **nothing to
+compare against** — no remote, no commits, an untracked ledger — still writes, because a guard that
+blocks a fresh factory protects nothing. What made this a defect is that the two cases used to be
+**indistinguishable**: both wrote the same stderr warning, and no surface this factory reads ever
+shows one. **A remote that exists but whose committed lineage cannot be read is REFUSED**, because
+there the guard failed to look rather than having had nothing to look at.
 
 ---
 
