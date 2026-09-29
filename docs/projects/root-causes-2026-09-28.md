@@ -113,14 +113,29 @@ the working tree and the halves agree there. Only the manifest — which records
 digest — catches it. That is the remedy of RC2 demonstrated working in one gate and blind in the one
 beside it: the same §7.6 shape, in the law that states §7.6.
 
-**A second live specimen, caused while writing this document.** In the same shared tree I ran
-`git commit --amend` on my own commit — and it amended **a peer's** commit instead, because HEAD moved
-between the moment I staged my file and the moment the amend executed (a lane committed in that
-window). The peer's commit was restored exactly from the reflog, nothing was pushed, and no work was
-lost; the incident is recorded here because it is RC2 in its purest form: **an operation whose subject
-is read at one instant and written at another.** `--amend` is not "amend my commit", it is "amend
-HEAD", and in a shared tree HEAD is a moving population. This is the same defect as #222 (a lock that
-is per-worktree) and #221 (a guard that never refreshes its ref), reproduced by hand.
+**A second live specimen, in two directions — only one of them published.** I ran `git commit --amend`
+intending my own commit, and it amended **a peer's** instead, because HEAD moved between the moment I
+staged my file and the moment the amend executed (a lane committed in that window). That commit,
+`bbf7127` (00:13:49Z, **unpushed** — a fresh clone cannot resolve it), was never published; the peer's
+commit was restored exactly from the reflog and nothing was lost. The same window produced the
+**published** specimen in the opposite direction, and it is the one a reader can check: at 00:09:47Z a
+peer ran `--amend` intending its own commit `44da237` while HEAD had moved to my `b5124b8` ninety
+seconds earlier — and the result, **`958e344` on `origin/main`**, carries my 202-line file at the very
+same blob as my own commit (`5e6b01b9822a0b04`), with `git diff --stat b5124b8 958e344` showing the
+peer's own file and nothing else. My work was published 15 lines short of finished, under a commit
+titled about ledger exemptions and a trailer naming a lane that did not write it. Nothing was lost
+(additive-only), and my own commit supersedes it.
+
+The mechanism is neither of the two first filed, and both halves matter. `--amend` inherits **the
+amended commit's TREE as its base**, so a correctly-scoped pathspec still cannot scope a *base*: the
+pathspec bounds your **change** and never your **base**, and the base is whatever commit HEAD points
+at when the verb runs. Measured here (git 2.43.0): with a peer's file staged beside mine, the pathspec
+**was honoured** — the amended commit excluded it and the peer's version stayed staged — so the hazard
+is the BASE TREE, not the verb, and that is why "name your paths at the commit" (#47), which works for
+`git commit`, cannot protect an amend. The corrective is a same-command check of the subject —
+`MINE=$(git rev-parse HEAD); [ "$MINE" = "$(git rev-parse <expected>)" ] && git commit --amend ...` —
+since the subject is read at one instant and written at another. Same defect as #222 (a lock that is
+per-worktree) and #221 (a guard that never refreshes its ref), reproduced by hand; filed as #228.
 
 ### RC3 — One fact, two homes (5 of 34)
 
