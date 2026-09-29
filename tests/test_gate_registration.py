@@ -1522,6 +1522,65 @@ def probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out: dict) -> None:
     )
 
 
+def probe_the_staleness_join_reaches_the_verdict_line(timed_out: dict) -> None:
+    """A kill under a stale basis NAMES that staleness on its own verdict line (#231).
+
+    NON-VACUITY, both operands REAL. The kill is the live `run_gate` timeout the #93 probes
+    already drive -- a genuine budget exhaustion, not a fixture that never ran -- and the
+    basis is a real `budget_staleness` sweep over a throwaway history in which the gate's
+    bytes moved between `measured_at` and HEAD. The second arm removes the join and the
+    same record then renders as a bare UNKNOWN, which IS the blindness the item was filed
+    for: so the joined assertion below is the one that fails when the join is taken away.
+    """
+    audit = _audit_module()
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        stale, _note = module.budget_staleness({"tests/test_moved.py": _basis(base)}, root)
+        if not stale:
+            check("the synthetic sweep found the moved basis this probe needs", False,
+                  "the sweep reported nothing stale, so the join could not be driven")
+            return
+        killed = dict(timed_out)
+        killed["gate_key"] = "tests/test_moved.py"
+        audit.attach_gate_staleness([killed], stale)
+        line = audit.render_gate_line(killed)
+        check("a KILLED gate under a stale basis names the staleness ON ITS OWN LINE",
+              "[STALE:bytes]" in line and "blob " in line,
+              line[:200])
+        check("the joined line still states the kill it is joined to",
+              "[UNKNOWN]" in line and ">=" in line,
+              line[:120])
+        # THE JOIN REMOVED — the same record with no staleness attached.
+        bare = dict(timed_out)
+        bare["gate_key"] = "tests/test_moved.py"
+        audit.attach_gate_staleness([bare], ())
+        check("removing the join leaves the kill rendering as a bare UNKNOWN",
+              "[STALE:" not in audit.render_gate_line(bare),
+              audit.render_gate_line(bare)[:160])
+        joined = audit.stale_killed_gates([killed])
+        check("the killed/UNKNOWN-under-a-stale-basis population names its members",
+              [g.get("gate_key") for g in joined] == ["tests/test_moved.py"]
+              and audit.stale_killed_gates([bare]) == [],
+              f"joined={[g.get('gate_key') for g in joined]} "
+              f"without_the_join={audit.stale_killed_gates([bare])}")
+        # A PASSING gate under a stale basis is MARKED but is NOT in the killed population:
+        # the mark answers "does the basis describe this test", the population answers
+        # "which KILLS are explained by that". One count, two questions, kept apart.
+        sound = {"cmd": "java -version", "passed": True, "unknown": False,
+                 "duration_sec": 1.0, "gate_key": "tests/test_moved.py"}
+        audit.attach_gate_staleness([sound], stale)
+        check("a PASSING gate under a stale basis is marked yet stays out of the kill count",
+              "[STALE:bytes]" in audit.render_gate_line(sound)
+              and audit.stale_killed_gates([sound]) == [],
+              audit.render_gate_line(sound)[:160])
+
+
 def probe_the_three_states_are_distinct_and_a_failure_outranks_unknown() -> None:
     """PART 2: three states, three DISTINCT renderings -- and a measured FAIL wins."""
     audit = _audit_module()
@@ -2098,6 +2157,7 @@ def main() -> int:
     probe_a_genuine_failure_is_never_retried()
     probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out)
     probe_a_killed_gate_is_never_rendered_as_a_measurement(timed_out)
+    probe_the_staleness_join_reaches_the_verdict_line(timed_out)
     probe_the_three_states_are_distinct_and_a_failure_outranks_unknown()
     probe_a_skipped_suite_is_still_no_verdict()
     probe_the_fail_line_cause_is_read_by_one_predicate()

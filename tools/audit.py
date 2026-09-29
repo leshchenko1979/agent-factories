@@ -901,6 +901,76 @@ def attach_gate_causes(gate_results: list[dict]) -> None:
             continue
         g["note"] = reported_cause(g.get("stdout") or "") or reported_cause(g.get("stderr") or "")
 
+def attach_gate_staleness(gate_results: list[dict], stale) -> None:
+    """Set `stale_basis` on every gate whose declared basis no longer describes it (#231).
+
+    THE JOIN, at the report layer and nowhere else. The staleness sweep and the gate
+    verdicts are computed in the same run but in different scopes, and they are printed
+    eleven lines apart -- so a reader meeting a kill sees ONE word, UNKNOWN, for TWO
+    different questions: "is the cap a valid load bound?" (#226) and "does the basis
+    describe a DIFFERENT test?" (#231). Joining them here is what lets the verdict LINE
+    say which question the kill is evidence for.
+
+    It computes nothing. Both operands already exist, and it touches NO value -- the
+    values are the process owner's, never the implementing lane's (n=574 PART 5). The
+    staleness sweep REPORTS and never gates; so does this join, and for the same reason:
+    a basis whose bytes moved can be LOOSER than reality, so acting on it automatically
+    would tighten a cap that was containing its gate.
+    """
+    by_key = {s.key: s for s in (stale or ())}
+    for g in gate_results:
+        s = by_key.get(g.get("gate_key"))
+        if s is None:
+            g.pop("stale_basis", None)
+            continue
+        g["stale_basis"] = {"legs": list(s.legs), "detail": s.detail}
+
+def format_stale_basis_mark(g: dict) -> str:
+    """The staleness suffix for one gate's line, or "''" where its basis still describes it.
+
+    Both legs are named (`[STALE:bytes]`, `[STALE:bytes+runner]`) and the evidence carries
+    the two blobs, so the reader sees WHICH comparison moved rather than a bare warning.
+    """
+    s = g.get("stale_basis")
+    if not s:
+        return ""
+    legs = "+".join(s.get("legs") or [])
+    detail = (s.get("detail") or "").replace("|", "/")
+    return f" [STALE:{legs}] {detail}" if detail else f" [STALE:{legs}]"
+
+def stale_killed_gates(gate_results: list[dict]) -> list[dict]:
+    """The KILLED/UNKNOWN gates whose declared basis is stale -- the join's own population."""
+    return [g for g in gate_results if g.get("unknown") and g.get("stale_basis")]
+
+def render_gate_line(g: dict) -> str:
+    """One gate's verdict line: the cause and the basis staleness co-located (#231).
+
+    THREE marks, not two (#94 consequence 3): a gate that exhausted its budget is UNKNOWN
+    -- it neither passed nor failed, and printing FAIL would assert a verdict nobody
+    measured. The headline's three-state form is #93's; here the state is at least never
+    silently green.
+
+    THE CAUSE, ON THE LINE (#93 ruling n=574 PART 1(c)). A cause visible only via `--json`
+    is a cause the reader does not have, and the reader of this line is the lane that must
+    decide whether to RE-RUN. stdout first -- a failing pytest gate writes its failure
+    summary there -- then stderr, which is where a KILLED or crashed gate states its reason.
+
+    THE BASIS JOIN, ON THE SAME LINE (#231). A kill under a stale basis and a kill under a
+    sound one are the same UNKNOWN, so the staleness the sweep already computed is printed
+    beside the verdict it bears on -- the line says which question the kill answers.
+    """
+    mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
+    dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
+    line = f"  [{mark}] {g['cmd']} ({dur}s of {g.get('budget_sec', 0.0):.2f}s)"
+    if mark != "PASS":
+        cause = g.get("note") or ""
+        if cause:
+            line += f" — {cause}"
+    line += format_stale_basis_mark(g)
+    if g.get("retried"):
+        line += f" [retried once — {g.get('attempts', 2)} attempt(s)]"
+    return line
+
 @dataclass
 class GateVerdict:
     """The THREE-state verdict over a gate run (#93 ruling n=574 PART 2).
@@ -2314,6 +2384,11 @@ def format_report_markdown(
         # The cause is read through the SAME helper as the stdout report, so the two
         # surfaces cannot disagree about which line states it (one field, one predicate).
         note = (g.get("note") or "").replace("|", "/")
+        # The basis join, on the same row (#231): the committed report carries the same
+        # co-located fact the stdout line does, through the same attached field.
+        stale_mark = format_stale_basis_mark(g).strip()
+        if stale_mark:
+            note = f"{note} {stale_mark}" if note else stale_mark
         # `>=` on a killed gate: the rendered number is what a reader copies into a
         # manifest, and a cap rendered as a measurement is how a lower bound is promoted
         # to a base (#226).
@@ -2447,6 +2522,9 @@ def main() -> int:
     # a failing gate said -- and so the JSON carries the COUNT a script-shaped gate prints
     # FIRST rather than leaving it to be dug out of the full stdout.
     attach_gate_causes(gate_results)
+    # The join is computed ONCE here, before the JSON emit and before both text renders,
+    # so the three surfaces cannot disagree about a gate's basis (#231).
+    attach_gate_staleness(gate_results, gate_budgets.stale if gate_budgets is not None else ())
 
     if args.json:
         payload = {
@@ -2481,25 +2559,21 @@ def main() -> int:
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
-        # THREE marks, not two (#94 consequence 3): a gate that exhausted its budget
-        # is UNKNOWN -- it neither passed nor failed, and printing FAIL would assert
-        # a verdict nobody measured. The headline's three-state form is #93's; here
-        # the state is at least never silently green.
-        mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
-        dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
-        line = f"  [{mark}] {g['cmd']} ({dur}s of {g.get('budget_sec', 0.0):.2f}s)"
-        if mark != "PASS":
-            # THE CAUSE, ON THE LINE (#93 ruling n=574 PART 1(c)). A cause visible only
-            # via `--json` is a cause the reader does not have, and the reader of this
-            # line is the lane that must decide whether to RE-RUN. stdout first -- a
-            # failing pytest gate writes its failure summary there -- then stderr, which
-            # is where a KILLED or crashed gate states its reason.
-            cause = g.get("note") or ""
-            if cause:
-                line += f" — {cause}"
-        if g.get("retried"):
-            line += f" [retried once — {g.get('attempts', 2)} attempt(s)]"
-        print(line)
+        print(render_gate_line(g))
+
+    # THE JOIN'S POPULATION, PRINTED (#231). A kill under a stale basis and a kill under a
+    # sound one read as the same UNKNOWN, so the count is stated -- at zero too, because an
+    # empty population must be visibly empty rather than indistinguishable from a print
+    # that never ran. The sweep's own account rides beside it, so the two questions the
+    # reader must keep apart are answered on one line: whether the cap is a valid LOAD
+    # bound (#226) and whether the basis describes a DIFFERENT test (#231).
+    stale_killed = stale_killed_gates(gate_results)
+    print(
+        f"\nGate basis staleness: {len(stale_killed)} killed/UNKNOWN gate(s) under a stale "
+        f"basis — {gate_budgets.stale_note if gate_budgets is not None else 'the sweep did not run'}"
+    )
+    for g in stale_killed:
+        print(f"  [STALE-KILL] {g.get('gate_key')} —{format_stale_basis_mark(g)}")
 
     # THE DEFAULT POPULATION, PRINTED (#94 consequence 1). A gate with no manifest
     # entry is legitimate -- a factory that has not measured it yet runs on the
