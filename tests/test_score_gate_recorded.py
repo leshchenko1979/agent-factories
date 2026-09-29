@@ -454,31 +454,33 @@ def test_probe_AC1_a_row_QUOTING_a_foreign_sha_fails() -> None:
     )
     assert problems and "head=<sha>" in problems[0], problems
 
-def test_probe_AC2_the_REAL_row_1458_is_caught_by_the_VERDICT_leg() -> None:
-    """AC2 (reverse leg) — driven over the live ledger, asserted on the LEG.
+def test_probe_AC2_a_run_declaring_only_head_is_caught_by_the_VERDICT_leg() -> None:
+    """AC2 (reverse leg) — asserted on the LEG, over a specimen of the row's own shape.
 
-    `n=1458` fails on `head=<sha>` ALONE under the old predicate, so a probe counting FAIL
-    passes while the defect is fully present: the specimen must name WHICH leg caught it.
-    This asserts the VERDICT leg, which is the half the fix moves.
+    The filing named the live row `n=1458`, whose canonical run declared `head=` and no
+    verdict. That row is now REPAIRED: `workspace_gate=blocked-by-unowned` with its blocking
+    paths named, which is the lawful form #201 admits. Driving it live therefore reads a
+    lawful repair as a regression, and it would red again for whatever row next occupies the
+    slot — a probe whose fixture is state the law is DESIGNED to mutate cannot distinguish
+    "the defect is present" from "the defect was repaired" (#225).
+
+    What survives is the requirement the live form existed to carry, and it is the reason this
+    probe is not a duplicate of specimen A: the specimen must name WHICH leg caught it. This
+    row declares `head=` in its canonical run and no verdict, so it fails on the VERDICT leg —
+    and a probe that only counted failures could not see it, because the row is otherwise
+    well-formed and the defect is that the verdict leg never fired.
     """
-    try:
-        _, _, rows = boundary_and_rows(REPO, INVARIANT_KEY)
-    except SkipGate as exc:
-        # A tree with no ledger has no row to drive. That is a STATED inability, not a
-        # failure and not a silent pass: this probe's population is a real row, and the
-        # shipped tree carries none (the ledger is bootstrap-created). The reason NAMES
-        # what is absent, so this skip is never indistinguishable from a clean run.
-        pytest.skip("the AC2 specimen is a live ledger row and this tree carries none: %s" % exc)
-    target = next((r for r in rows if r.get("n") == 1458), None)
-    if target is None:
-        pytest.skip(
-            "n=1458 is not in this ledger — the probe could not reach its population "
-            "(a ledger that has not grown to that row is not a defect)"
-        )
-    problems, _ = score_gate_problems([target], "2020-01-01T00:00:00Z")
-    assert problems, "n=1458 must fail"
+    problems, _ = score_gate_problems(
+        _specimen(
+            "survey-2026-09-28 — the run's own artifact was committed and its own leg passed, "
+            "while the whole-tree walk read rc=1. Recording workspace_gate=rc=0 would forge a "
+            f"verdict the tool did not return, so none was written {_STAMP}"
+        ),
+        _PROBE_BOUNDARY,
+    )
+    assert problems, "a run declaring no verdict must fail"
     assert VERDICT_KEY in problems[0], (
-        "n=1458 must be caught by the VERDICT leg, not only by head= — got: %r" % problems
+        "the specimen must be caught by the VERDICT leg, not only by head= — got: %r" % problems
     )
 
 def test_probe_AC4_a_nameABLE_row_missing_the_paths_fails() -> None:
