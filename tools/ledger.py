@@ -303,7 +303,7 @@ LOCK = _git_common_dir() / "opencrabs-ledger.lock"
 #
 # A FETCH IS DELIBERATELY NOT USED. A fetch inside the append lock mutates the
 # working tree's refs as a side effect of a write -- a second-writer act in the
-# terms of SKILL.md §State -- and makes an append network-bound on a box where
+# terms of SKILL.md §State — every surface has one writer -- and makes an append network-bound on a box where
 # several lanes append within minutes. A refusal costs the caller one fetch and
 # tells it why.
 _GIT_TIMEOUT = 10
