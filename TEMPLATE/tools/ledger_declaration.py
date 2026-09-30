@@ -4,8 +4,9 @@
 Two declarations live here, and for the same reason: two consumers must agree about each,
 and a second copy would drift on exactly the inputs that matter.
 
-* the INVARIANT BOUNDARIES a factory has adopted, read from `docs/ledger-invariants.json`
-  (the rest of this module), and
+* the FACTORY DECLARATIONS read from `docs/ledger-invariants.json` — the invariant
+  BOUNDARIES a factory has adopted, the RECONSTRUCTED-CLAIM rows it holds, and the live
+  CALIBRATION rows its gates judge against (the rest of this module), and
 * the ROLE-TO-EVENT AUTHORIZATION MATRIX (`AUTHORIZED_ACTORS_BY_EVENT`), which the write
   path enforces at append time and the schema gate reports against.
 
@@ -13,6 +14,13 @@ and a second copy would drift on exactly the inputs that matter.
 which it took effect IN THIS FACTORY. It is factory DATA, so it does not ship; the
 skeleton `docs/ledger-invariants.example.json` does — the shape #69 gave
 `docs/products.json`.
+
+TWO FURTHER MAPS sit beside the boundaries, keyed by the same gate name, and they are
+factory data for the same reason: `reconstructions` holds a factory's own pre-boundary
+reconstructed-claim rows, and `calibrations` holds the live rows its gates judge against.
+Both exist because a gate PAIRED byte-identically with its TEMPLATE copy ships to every
+member, so a row number written inside one is read against the member's ledger — and the
+member does not have that row (#239, #248).
 
 Two consumers read it, and they must agree about what it says:
 
@@ -309,6 +317,53 @@ def load_reconstructions(repo: Path) -> dict:
     if not isinstance(declared, dict):
         raise DeclarationUnreadable([
             f"{DECLARATION_REL}: `reconstructions` must be an object keyed by gate name"
+        ])
+    return declared
+
+def load_calibrations(repo: Path) -> dict:
+    """The declared `calibrations` map, or `DeclarationUnavailable`/`DeclarationUnreadable`.
+
+    THE THIRD DECLARATION in the same file, and it is read here rather than in the gate for
+    the reason `load_invariants` and `load_reconstructions` are (#239, #248): a gate paired
+    byte-identically with its TEMPLATE copy ships to every member, so a row number written
+    INSIDE it is judged against the MEMBER's ledger — and the member does not have this
+    factory's rows. A gate whose LIVE calibration rows are literals therefore goes RED on
+    every member tree, naming a history that is not the reader's. The map is keyed by the
+    same gate name as `invariants` and `reconstructions`, so the three halves of one factory
+    fact travel together.
+
+    An ABSENT key raises `DeclarationUnavailable` — the state a bootstrapped factory is in,
+    and a legitimate one. A PRESENT but unreadable map raises `DeclarationUnreadable`,
+    because a factory that declared calibrations and cannot have them read must not be
+    hidden behind the same output as no declaration at all. The two arms are
+    `load_invariants`' own, so a caller reads all three declarations the same way.
+    """
+    path = repo / DECLARATION_REL
+    if not path.is_file():
+        raise DeclarationUnavailable(
+            f"no {DECLARATION_REL} — this factory's own live calibration rows are "
+            f"DECLARED factory data, and this tree has not declared any; the skeleton is "
+            f"{DECLARATION_EXAMPLE_REL}"
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise DeclarationUnreadable([f"{DECLARATION_REL} exists but cannot be read: {exc}"]) from exc
+    except json.JSONDecodeError as exc:
+        raise DeclarationUnreadable([f"{DECLARATION_REL} is not valid JSON: {exc}"]) from exc
+
+    if not isinstance(payload, dict):
+        raise DeclarationUnreadable([f"{DECLARATION_REL} must be a JSON object"])
+    declared = payload.get("calibrations")
+    if declared is None:
+        raise DeclarationUnavailable(
+            f"{DECLARATION_REL} declares no `calibrations` map — this factory has not "
+            f"declared the live rows its gates calibrate against, so there is nothing to "
+            f"calibrate with; the skeleton is {DECLARATION_EXAMPLE_REL}"
+        )
+    if not isinstance(declared, dict):
+        raise DeclarationUnreadable([
+            f"{DECLARATION_REL}: `calibrations` must be an object keyed by gate name"
         ])
     return declared
 

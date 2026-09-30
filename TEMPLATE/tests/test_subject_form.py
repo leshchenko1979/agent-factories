@@ -20,14 +20,19 @@ row's work unit is not reachable under any predicate that keys on the reference.
 
 Three instances, each repaired by hand and none by a gate
 ---------------------------------------------------------
-`n=403` (hq — a descriptive stem where a reference was owed, repaired at `n=417`), `n=516`
-(hq — `77`, repaired at `n=518`), `n=529` (triage — `79`, repaired at `n=533`). Each repair
+`n=403` (hq — a descriptive stem where a reference was owed, repaired at `n=417`), and the
+two rows this gate carries under `calibrations.subject_form.excused` — one hq subject `77`,
+repaired at `n=518`; one triage subject `79`, repaired at `n=533`. Each repair
 was an append-only correction row: the correct remedy for the RECORD, and the whole remedy
 that was applied. It is not a PREVENTION, and the class recurred twice after the first
 correction was written — the second time by a lane that had already read it. By the
 factory's own rule a second instance of a shape is a process defect whose remedy is a
 MECHANISM, and P29 makes a requirement enforceable or dead text: SKILL.md §State — every surface has one writer declared the ledger
 an authoritative surface and said nothing about the form of a subject.
+
+The row numbers themselves are FACTORY DATA, not constants of this gate (#248): this file
+is a declared byte pair and SHIPS, so a number written here would name this factory's
+history in every member tree, and a member's ledger does not carry it.
 
 What fires and what does not
 ----------------------------
@@ -55,7 +60,8 @@ any other non-digit does not. `test_probe_the_calibration_set_does_not_fire` pin
 The number is NOT bound to this factory's board
 -----------------------------------------------
 A gate that read a strict `#N` and asked "does this exist on the agent-factories board?"
-would false-RED on a legitimate row: `n=433` and `n=436` both cite
+would false-RED on a legitimate row: the rows this gate carries under
+`calibrations.subject_form.cross_repo` both cite
 `leshchenko1979/opencrabs` issue 366, stated in their own detail text. The FORM is what is
 codified; the repo is not constrained. So this gate performs NO board lookup, calls no
 `gh` and touches no network — the same constraint `tests/test_board_intake_recorded.py`
@@ -92,6 +98,7 @@ from ledger_boundary import (  # noqa: E402
     GateError,
     SkipGate,
     boundary_and_rows,
+    declared_calibrations,
     parse_ts,
     population_skip_reason,
     post_boundary_rows,
@@ -214,8 +221,41 @@ def _live_rows() -> list[dict]:
         pytest.skip(f"this tree carries no live ledger to judge: {exc}")
     return rows
 
+def _live_calibrations() -> tuple[dict, str]:
+    """The calibration rows THIS tree declares, or a pytest SKIP naming the absent ones.
+
+    The third factory declaration (#248), read through the same seam as the boundary and
+    the reconstructed rows. The eight numbers this gate used to carry inline are THIS
+    factory's history, and this file is a declared byte pair — so it SHIPS, and a member
+    that adopted `subject_form` (which the shipped example instructs) ran those live legs
+    against ITS OWN ledger and went red by name on rows it does not have.
+    A tree that declares no calibrations therefore SKIPS with that reason stated: never a
+    silent pass, never another factory's row numbers.
+    """
+    try:
+        return declared_calibrations(REPO, INVARIANT_KEY)
+    except SkipGate as exc:
+        pytest.skip(f"this tree declares no calibration rows: {exc}")
+    raise AssertionError("unreachable")
+
+
+def _declared_field(facts: dict, field: str, declared: str) -> object:
+    """The declared field, or a pytest SKIP when this factory declares none of it.
+
+    A field the factory has not declared comes back EMPTY from the reader, and iterating an
+    empty declaration asserts NOTHING — a pass over an empty population is the silent pass
+    this seam exists to remove (SKILL.md §8: a predicate that examined nothing has reported
+    nothing, not HOLDS). So the absent field is a stated SKIP, never a quiet pass.
+    """
+    value = facts.get(field)
+    if not value:
+        pytest.skip(f"this tree declares no `calibrations.subject_form.{field}` — {declared}")
+    return value
+
+
 def _live_verdict() -> tuple[str, str, list[str], list[str], int]:
     return evaluate(REPO)
+
 
 def test_live_subjects_carry_the_codified_form() -> None:
     """The live ledger against the boundary this factory declared. A `fail` here is a real
@@ -226,30 +266,32 @@ def test_live_subjects_carry_the_codified_form() -> None:
         assert checked > 0, "a pass over an empty population is a silent pass"
 
 def test_live_the_two_bare_integer_rows_are_excused_and_never_hits() -> None:
-    """n=516 and n=529 PREDATE the boundary (n=538's own note on the boundary value). They
-    must print as `excused:` and never as hits, and they are never backfilled: a run that
-    reports them as defects has mis-set the boundary."""
+    """The rows declared `excused` for this gate PREDATE the boundary. They must print as
+    `excused:` and never as hits, and they are never backfilled: a run that reports them as
+    defects has mis-set the boundary.
+
+    The numbers are the factory's own declaration (#248), not this file's constants — the
+    file is a declared byte pair and SHIPS, so an inline row number is read against a
+    MEMBER's ledger, which does not carry this factory's history."""
+    facts, declared = _live_calibrations()
     status, reason, problems, excused, _ = _live_verdict()
     if status != "pass":
         pytest.skip(f"no live population in this tree: {reason}")
     assert problems == [], problems
     named = " | ".join(excused)
-    assert "n=516" in named and "n=529" in named, excused
+    for n in _declared_field(facts, "excused", declared):
+        assert f"n={n}" in named, (n, excused, declared)
     assert "predates the declared boundary" in named, excused
 
 def test_live_the_four_clause_labels_never_fire() -> None:
     """Criterion 5, read from the LIVE ledger rather than from literals: the calibration
-    rows are located by number and their subjects must not fire at all — not as a hit, and
-    not as an excused row either, since an excused row is still a fired predicate."""
-    calibration = {
-        186: "#332-D5",
-        187: "#332-D6-D1correction",
-        188: "#31-#32-claim-gap",
-        194: "#31-close-receipt",
-    }
+    rows are located by the declaration and their subjects must not fire at all — not as a
+    hit, and not as an excused row either, since an excused row is still a fired predicate."""
+    facts, declared = _live_calibrations()
+    calibration = _declared_field(facts, "labels", declared)
     rows = {row.get("n"): row for row in _live_rows()}
     for n, expected in calibration.items():
-        assert n in rows, f"n={n} is missing from the live ledger"
+        assert n in rows, f"n={n} is missing from the live ledger ({declared})"
         assert rows[n].get("subject") == expected, (n, rows[n].get("subject"))
         assert subject_form_problem(expected) is None, expected
 
@@ -390,7 +432,8 @@ def test_probe_an_empty_population_skips_rather_than_passing(tmp_path: Path) -> 
     assert len(excused) == 1, excused
 
 def test_probe_the_cross_repo_fact_is_accepted_on_form_alone(tmp_path: Path) -> None:
-    """Criterion 8, calibrated on n=433/n=436: both rows cite `leshchenko1979/opencrabs`
+    """Criterion 8, calibrated on the rows this gate carries under
+    `calibrations.subject_form.cross_repo`: both cite `leshchenko1979/opencrabs`
     issue 366, a number that is NOT on this factory's board. The strict form is accepted on
     FORM alone, so the gate must be clean on such a subject — a gate that asked 'does this
     exist here?' would false-RED on a legitimate row. The probe is a TREE, so the verdict is
@@ -402,13 +445,15 @@ def test_probe_the_cross_repo_fact_is_accepted_on_form_alone(tmp_path: Path) -> 
     assert (status, problems, checked) == ("pass", [], 1), (status, reason, problems)
 
 def test_live_the_cross_repo_rows_carry_the_strict_form() -> None:
-    """The live calibration for criterion 8: n=433 and n=436 exist, carry the strict form,
-    and are clean — so the form-only rule is exercised against the real rows that motivated
-    it, not only against a fixture."""
+    """The live calibration for criterion 8: the rows declared `cross_repo` exist, carry the
+    strict form, and are clean — so the form-only rule is exercised against the real rows
+    that motivated it, not only against a fixture. Declared rather than inline (#248): this
+    file ships, and a foreign-issue row number is this factory's history."""
+    facts, declared = _live_calibrations()
     rows = {row.get("n"): row for row in _live_rows()}
-    for n in (433, 436):
-        assert n in rows, f"n={n} is missing from the live ledger"
-        assert rows[n].get("subject") == "#366", (n, rows[n].get("subject"))
+    for n, expected in _declared_field(facts, "cross_repo", declared).items():
+        assert n in rows, f"n={n} is missing from the live ledger ({declared})"
+        assert rows[n].get("subject") == expected, (n, rows[n].get("subject"))
         assert subject_form_problem(rows[n].get("subject")) is None, n
 
 def test_probe_a_defect_is_never_hidden_behind_a_skip(tmp_path: Path) -> None:
@@ -442,6 +487,95 @@ def test_probe_an_unreadable_declared_boundary_fails(tmp_path: Path) -> None:
     status, _, problems, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "not a readable ISO-8601 timestamp" in problems[0], problems
+
+def test_probe_a_tree_declaring_no_calibrations_SKIPS_naming_the_declaration(tmp_path: Path) -> None:
+    """Acceptance 2 of #248: a tree that declares a boundary but NO calibration rows is the
+    MEMBER's normal state — it gets a STATED SKIP naming the absent declaration, never a
+    silent pass and never a red for another factory's history."""
+    tree = synthetic_tree(
+        tmp_path / "no-calibrations",
+        rows=[_row(913, "2026-09-19T14:00:00Z", "#79")],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+    )
+    with pytest.raises(SkipGate) as exc:
+        declared_calibrations(tree, INVARIANT_KEY)
+    assert "declares no `calibrations`" in str(exc.value), exc.value
+    assert "has not declared" in str(exc.value), exc.value
+
+    # And the ENTRY-absent case — a factory that declares calibrations for SOME OTHER gate.
+    other = synthetic_tree(
+        tmp_path / "other-gate",
+        rows=[_row(913, "2026-09-19T14:00:00Z", "#79")],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        calibrations={"some_other_gate": {"excused": [7]}},
+    )
+    with pytest.raises(SkipGate) as exc2:
+        declared_calibrations(other, INVARIANT_KEY)
+    assert "declares no `calibrations.subject_form` entry" in str(exc2.value), exc2.value
+
+def test_probe_the_declared_calibration_rows_are_READ_not_asserted(tmp_path: Path) -> None:
+    """The happy path: the rows arrive as numbers and subjects, so the live legs judge the
+    factory's declaration rather than constants of a shipped file."""
+    tree = synthetic_tree(
+        tmp_path / "declared",
+        rows=[_row(913, "2026-09-19T14:00:00Z", "#79")],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        calibrations={
+            "subject_form": {
+                "excused": [7],
+                "labels": {"8": "#332-D5"},
+                "cross_repo": {"9": "#366"},
+            }
+        },
+    )
+    facts, declared = declared_calibrations(tree, INVARIANT_KEY)
+    assert facts["excused"] == [7], facts
+    assert facts["labels"] == {8: "#332-D5"}, facts
+    assert facts["cross_repo"] == {9: "#366"}, facts
+    assert "1 excused row(s)" in declared and "1 clause-label row(s)" in declared, declared
+
+def test_probe_an_entry_declaring_no_field_is_the_absent_one_wearing_a_key(tmp_path: Path) -> None:
+    """An entry with no fact in it is REFUSED: reading it as "nothing to check" would be the
+    silent pass this declaration exists to remove."""
+    tree = synthetic_tree(
+        tmp_path / "empty-entry",
+        rows=[_row(914, "2026-09-19T14:00:00Z", "#79")],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        calibrations={"subject_form": {}},
+    )
+    with pytest.raises(GateError) as exc:
+        declared_calibrations(tree, INVARIANT_KEY)
+    assert any("declares none of" in p for p in exc.value.problems), exc.value.problems
+
+def test_probe_an_empty_excused_list_fails(tmp_path: Path) -> None:
+    tree = synthetic_tree(
+        tmp_path / "empty-excused",
+        rows=[_row(915, "2026-09-19T14:00:00Z", "#79")],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        calibrations={"subject_form": {"excused": []}},
+    )
+    with pytest.raises(GateError) as exc:
+        declared_calibrations(tree, INVARIANT_KEY)
+    assert any("NON-EMPTY list" in p for p in exc.value.problems), exc.value.problems
+
+def test_probe_a_malformed_calibration_row_number_fails(tmp_path: Path) -> None:
+    tree = synthetic_tree(
+        tmp_path / "bad-row",
+        rows=[_row(916, "2026-09-19T14:00:00Z", "#79")],
+        invariants={INVARIANT_KEY: _PROBE_BOUNDARY},
+        calibrations={"subject_form": {"labels": {"not-a-number": "#332-D5"}}},
+    )
+    with pytest.raises(GateError) as exc:
+        declared_calibrations(tree, INVARIANT_KEY)
+    assert any("is not a row number" in p for p in exc.value.problems), exc.value.problems
+
+def test_probe_an_absent_field_is_a_STATED_SKIP_not_a_quiet_pass() -> None:
+    """A field the factory has not declared comes back EMPTY, and iterating nothing asserts
+    nothing — so the live legs SKIP on it rather than passing vacuously (SKILL.md §8)."""
+    facts: dict = {"excused": [], "labels": {}, "cross_repo": {}}
+    for field in ("excused", "labels", "cross_repo"):
+        with pytest.raises(pytest.skip.Exception):
+            _declared_field(facts, field, "declared-text")
 
 def test_probe_a_corrupt_ledger_line_fails_rather_than_raising(tmp_path: Path) -> None:
     tree = synthetic_tree(tmp_path / "corrupt", invariants={INVARIANT_KEY: _PROBE_BOUNDARY})

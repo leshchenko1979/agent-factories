@@ -72,6 +72,7 @@ from ledger_declaration import (  # noqa: E402
     DeclarationUnavailable,
     DeclarationUnreadable,
     boundary_for,
+    load_calibrations,
     load_reconstructions,
     parse_ts,
 )
@@ -268,6 +269,116 @@ def declared_reconstructions(repo: Path, key: str) -> tuple[list[int], dict[int,
         f"{len(gaps)} with a measured interval"
     )
 
+CALIBRATION_FIELDS = ("excused", "labels", "cross_repo")
+
+def declared_calibrations(repo: Path, key: str) -> tuple[dict, str]:
+    """`(facts, declared-text)` for one gate, or `SkipGate`/`GateError`.
+
+    THE THIRD FACTORY DECLARATION, beside the boundary and the reconstructed rows, and it
+    exists for their reason (#239, #248): a gate PAIRED byte-identically with its TEMPLATE
+    copy ships to every member, so a row number written INSIDE it is read against the
+    MEMBER's ledger — and the member does not have this factory's rows. Measured before the
+    fix: `tests/test_subject_form.py` carried eight of them inline, and its three LIVE legs
+    assert each is present in the tree's own ledger, so every member tree that adopted
+    `subject_form` — which the shipped example explicitly instructs — went RED BY NAME,
+    citing a history it does not have. The harm is not a false clean; it is a red in a tree
+    the constant does not describe.
+
+    The two arms mirror `declared_boundary`'s POLICY deliberately, so a caller reads every
+    declaration the same way: an ABSENT declaration is a `SkipGate` naming what is missing,
+    and a MALFORMED one is a `GateError`, because a factory that declared rows and cannot
+    have them read must not be hidden behind the same output as no declaration at all.
+
+    A FIELD the factory has not declared comes back EMPTY rather than refused, and the
+    caller SKIPS on it: a factory may legitimately carry excused rows and no cross-repo row.
+    An entry that declares NO field at all IS refused — an entry with no fact in it is the
+    absent one wearing a key, and reading it as "nothing to check" would be the silent pass
+    this declaration exists to remove.
+    """
+    try:
+        declared = load_calibrations(repo)
+    except DeclarationUnavailable as exc:
+        raise SkipGate(str(exc)) from exc
+    except DeclarationUnreadable as exc:
+        raise GateError(list(exc.problems)) from exc
+
+    entry = declared.get(key)
+    if entry is None:
+        raise SkipGate(
+            f"this tree declares no `calibrations.{key}` entry in {DECLARATION_REL} — the "
+            f"live calibration rows are this factory's own history, so a tree that has not "
+            f"declared them skips this calibration rather than borrowing another factory's"
+        )
+    if not isinstance(entry, dict):
+        raise GateError([
+            f"{DECLARATION_REL}: `calibrations.{key}` must be an object carrying the live "
+            f"rows this gate calibrates against"
+        ])
+
+    problems: list[str] = []
+    excused: list[int] = []
+    if "excused" in entry:
+        raw = entry["excused"]
+        if not isinstance(raw, list) or not raw:
+            problems.append(
+                f"{DECLARATION_REL}: `calibrations.{key}.excused` must be a NON-EMPTY list "
+                f"of row numbers — an empty declaration is the absent one wearing a key"
+            )
+        else:
+            for value in raw:
+                if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                    problems.append(
+                        f"{DECLARATION_REL}: `calibrations.{key}.excused` carries {value!r}, "
+                        f"which is not a positive integer row number"
+                    )
+                    continue
+                excused.append(value)
+
+    def _subject_map(field: str) -> dict[int, str]:
+        """`{row: subject}` for one field, appending a problem per unreadable entry."""
+        raw = entry[field]
+        if not isinstance(raw, dict) or not raw:
+            problems.append(
+                f"{DECLARATION_REL}: `calibrations.{key}.{field}` must be a NON-EMPTY object "
+                f"mapping a row number to the subject that row carries"
+            )
+            return {}
+        out: dict[int, str] = {}
+        for raw_key, value in raw.items():
+            try:
+                number = int(raw_key)
+            except (TypeError, ValueError):
+                problems.append(
+                    f"{DECLARATION_REL}: `calibrations.{key}.{field}` key {raw_key!r} is not "
+                    f"a row number"
+                )
+                continue
+            if not isinstance(value, str) or not value.strip():
+                problems.append(
+                    f"{DECLARATION_REL}: `calibrations.{key}.{field}[{raw_key}]` is {value!r}, "
+                    f"not a non-empty subject string"
+                )
+                continue
+            out[number] = value
+        return out
+
+    labels = _subject_map("labels") if "labels" in entry else {}
+    cross_repo = _subject_map("cross_repo") if "cross_repo" in entry else {}
+
+    if not any(field in entry for field in CALIBRATION_FIELDS):
+        raise GateError([
+            f"{DECLARATION_REL}: `calibrations.{key}` declares none of "
+            f"{', '.join(CALIBRATION_FIELDS)} — an entry with no fact in it is the absent "
+            f"one wearing a key"
+        ])
+    if problems:
+        raise GateError(problems)
+    return (
+        {"excused": excused, "labels": labels, "cross_repo": cross_repo},
+        f"{DECLARATION_REL} calibrations.{key}: {len(excused)} excused row(s), "
+        f"{len(labels)} clause-label row(s), {len(cross_repo)} cross-repo row(s) declared",
+    )
+
 def boundary_and_rows(repo: Path, key: str) -> tuple[dt.datetime, str, list[dict]]:
     """`(boundary, declared-text, rows)` for one gate, or `SkipGate`/`GateError`.
 
@@ -332,12 +443,17 @@ def synthetic_tree(
     rows: list[dict] | None = None,
     invariants: dict | None = None,
     declaration: object = None,
+    calibrations: dict | None = None,
 ) -> Path:
     """A factory tree carrying exactly what the caller names — the P35 fixture.
 
     `rows=None` writes NO ledger (the bootstrap case); `rows=[]` writes an EMPTY one.
     `invariants=None` writes NO declaration; a mapping writes one under `invariants`.
     `declaration` writes raw text instead, for the malformed case.
+    `calibrations` writes the second declaration map beside `invariants` — its own arm
+    rather than a key the caller passes through `invariants`, because the two maps are read
+    by different seams and a fixture that conflated them could not tell which one moved the
+    gate.
     """
     (root / "evidence").mkdir(parents=True, exist_ok=True)
     (root / "docs").mkdir(parents=True, exist_ok=True)
@@ -349,10 +465,13 @@ def synthetic_tree(
     if declaration is not None:
         text = declaration if isinstance(declaration, str) else json.dumps(declaration)
         (root / DECLARATION_REL).write_text(text + "\n", encoding="utf-8")
-    elif invariants is not None:
-        (root / DECLARATION_REL).write_text(
-            json.dumps({"invariants": invariants}) + "\n", encoding="utf-8"
-        )
+    elif invariants is not None or calibrations is not None:
+        payload: dict = {}
+        if invariants is not None:
+            payload["invariants"] = invariants
+        if calibrations is not None:
+            payload["calibrations"] = calibrations
+        (root / DECLARATION_REL).write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
     return root
 

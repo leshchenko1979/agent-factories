@@ -1,5 +1,5 @@
 {
-  "_note": "The boundary each ledger invariant landed at IN THIS FACTORY, read by tests/ledger_boundary.py on behalf of the gates that assert them. This is the FACTORY's own data, read by the gates — never inline in them, because those gates are paired byte-identically with their TEMPLATE copys and one factory's history must not live in a file that ships to every new factory. The skeleton is TEMPLATE/docs/ledger-invariants.example.json. Each key is the NAME OF THE GATE that asserts the invariant; each value is the ISO-8601 UTC instant at which the rule took effect here. Rows at or after it are governed; rows before it print as 'excused:' on every run and are never backfilled. The value is the instant the invariant landed, which is conventionally the boundary taken in the run that adopted it rather than the landing commit's own timestamp. A key that is absent means this factory has not adopted that invariant, and the gate SKIPS with a stated reason — never a silent pass, and never another factory's date. A key that is present but unreadable is a gate FAILURE, not a skip. A SECOND declaration lives beside `invariants`: `reconstructions`, keyed by the same gate name, holding THIS factory's own pre-boundary reconstructed-claim row numbers and the intervals a ruling measured for them. It is factory data for the same reason the boundaries are — the numbers are a fact about this factory's history, and a gate that shipped them would read a member's ledger against rows the member does not have (#239). Two facts about THIS factory's `reconstructed_claim_declared` rows belong with them rather than in the paired gate, and are recorded here for that reason: `n=647` (#108) is the DECISIVE row — an honest reconstruction that names its basis in prose WITHOUT the canonical marker, which is why the marker is mandated FORWARD ONLY and why every row declared here is excused by the boundary rather than judged; and `n=685`'s interval is deliberately ABSENT from `gaps` because it was measured by a separate lane, so this gate has not recomputed it first-hand and must not assert a figure it did not measure. The declaration keeps its own key order so the file reads in the order the two facts are consumed.",
+  "_note": "The boundary each ledger invariant landed at IN THIS FACTORY, read by tests/ledger_boundary.py on behalf of the gates that assert them. This is the FACTORY's own data, read by the gates — never inline in them, because those gates are paired byte-identically with their TEMPLATE copys and one factory's history must not live in a file that ships to every new factory. The skeleton is TEMPLATE/docs/ledger-invariants.example.json. Each key is the NAME OF THE GATE that asserts the invariant; each value is the ISO-8601 UTC instant at which the rule took effect here. Rows at or after it are governed; rows before it print as 'excused:' on every run and are never backfilled. The value is the instant the invariant landed, which is conventionally the boundary taken in the run that adopted it rather than the landing commit's own timestamp. A key that is absent means this factory has not adopted that invariant, and the gate SKIPS with a stated reason — never a silent pass, and never another factory's date. A key that is present but unreadable is a gate FAILURE, not a skip. A SECOND declaration lives beside `invariants`: `reconstructions`, keyed by the same gate name, holding THIS factory's own pre-boundary reconstructed-claim row numbers and the intervals a ruling measured for them. It is factory data for the same reason the boundaries are — the numbers are a fact about this factory's history, and a gate that shipped them would read a member's ledger against rows the member does not have (#239). Two facts about THIS factory's `reconstructed_claim_declared` rows belong with them rather than in the paired gate, and are recorded here for that reason: `n=647` (#108) is the DECISIVE row — an honest reconstruction that names its basis in prose WITHOUT the canonical marker, which is why the marker is mandated FORWARD ONLY and why every row declared here is excused by the boundary rather than judged; and `n=685`'s interval is deliberately ABSENT from `gaps` because it was measured by a separate lane, so this gate has not recomputed it first-hand and must not assert a figure it did not measure. The declaration keeps its own key order so the file reads in the order the two facts are consumed. A THIRD declaration lives beside them: `calibrations`, keyed by the same gate name, holding the LIVE ROW NUMBERS that a gate calibrates itself against — the rows it reads in its own tree to prove its predicate fires, is excused, or accepts a foreign subject. Same ground as the other two, and a harder instance (#248): `tests/test_subject_form.py` carried eight of these inline, and because that file is a declared byte pair it SHIPS, so every member that adopted `subject_form` — which the shipped example explicitly instructs — ran those three live legs against ITS OWN ledger and went red by name on rows such as `n=186`, citing a history it does not have. Fields per gate: `excused` (rows that predate the boundary and must print as excused, never as hits), `labels` (row -> subject for the calibration rows a clause must NOT fire on), `cross_repo` (row -> subject for the rows that motivate accepting a foreign issue number on form alone). An absent entry skips with its reason named; an entry declaring none of the three fields is a failure, not an empty pass; a field that is present but unreadable is a failure. Nothing is backfilled — a member declares its own rows when it has them, and skips until then.",
   "invariants": {
     "close_row_revision": "2026-09-19T05:05:49Z",
     "close_row_revision_run_read": "2026-09-27T02:16:26Z",
@@ -27,6 +27,24 @@
         "626": 0,
         "647": 347,
         "654": 65
+      }
+    }
+  },
+  "calibrations": {
+    "subject_form": {
+      "excused": [
+        516,
+        529
+      ],
+      "labels": {
+        "186": "#332-D5",
+        "187": "#332-D6-D1correction",
+        "188": "#31-#32-claim-gap",
+        "194": "#31-close-receipt"
+      },
+      "cross_repo": {
+        "433": "#366",
+        "436": "#366"
       }
     }
   }
