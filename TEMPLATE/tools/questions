@@ -481,10 +481,10 @@ CLOSED_STATUSES = ("answered", "withdrawn", "expired")
 # content the asking lane can act on (the 2026-09-25 defect was answer=None
 # behind "CLARIFY REQUESTED"). So the tool authors the click's meaning: a
 # statement of what the lane must do. It is TOOL-AUTHORED text, deliberately
-# not starting with "clarification requested" — the page's clarifyband and the
-# notify body both prepend that phrase themselves, and a duplicated lead would
-# render twice. Wording deliberately names the ACTION owed (restate, widen,
-# re-ask) so the receiving lane can act without guessing.
+# not led by "clarification requested": the STATE is stated once, by the chip on
+# the card's own context line, so this text answers the only question left --
+# what the lane must DO. Wording deliberately names the ACTION owed (restate,
+# widen, re-ask) so the receiving lane can act without guessing.
 CLARIFY_EMPTY_TEXT = (
     "this question is unclear as written — restate it with wider context "
     "and plainer language, then re-ask (owner's Clarify tap, no text "
@@ -685,8 +685,8 @@ def flag_list(flags, name):
     return value if isinstance(value, list) else [value]
 
 
-def resolve_recommendation(raw, options, where):
-    """#652: resolve --recommended to (index, label), or die 2.
+def _resolve_one(raw, options, where):
+    """#652: resolve ONE --recommended value to (index, label), or die 2.
 
     Accepts EITHER a 0-based index OR an option label, because the alternative
     is forcing the caller to compute an array index, which fleet-directives.md
@@ -750,6 +750,87 @@ def resolve_recommendation(raw, options, where):
                + "; ".join(f"[{i}] {o!r}" for i, o in enumerate(options)))
     return index, options[index]
 
+def split_recommended_values(raw):
+    """Split a comma-joined value ONLY when every part is an all-digit index.
+
+    The answer verb already accepts `0,2` for a multi answer, so the ask side
+    mirrors it -- but an option LABEL may legally contain a comma, and splitting
+    one would make that label unreachable. An all-digit value is always an index
+    (never a label), so the split is unambiguous exactly there and nowhere else.
+    """
+    if isinstance(raw, str) and "," in raw:
+        parts = [p.strip() for p in raw.split(",")]
+        if parts and all(re.fullmatch(r"[0-9]+", p or "") for p in parts):
+            return parts
+    return raw
+
+def resolve_recommendation(raw, options, where, kind="single"):
+    """Resolve --recommended to its STORED shape, or die 2.
+
+    The stored shape is `null`, an `int`, or a `list[int]`:
+      * `null` -- nothing recommended;
+      * `int`  -- ONE recommended option. This is the shape every question asked
+                  before multi-select existed already carries, so it stays the
+                  shape of a single recommendation rather than being widened to
+                  a one-element list;
+      * `list` -- SEVERAL recommended options, legal ONLY on kind=multi, because
+                  two pre-checked radios are not a state a browser can render.
+
+    An int is never widened and a list never collapsed, so no existing question
+    is reinterpreted by this shape. A repeated flag arrives as a list from
+    parse_flags; a comma-joined value is split only where that is unambiguous.
+    """
+    raw = split_recommended_values(raw)
+    if raw is None:
+        return None, None
+    items = raw if isinstance(raw, list) else [raw]
+    if not items:
+        return None, None
+    if kind != "multi" and len(items) > 1:
+        die(2, f"{where}: recommended names {len(items)} options but the "
+               f"question is single-select -- only ONE option can be "
+               f"pre-checked. Pass one value, or ask it with kind=multi.")
+    resolved, labels = [], []
+    for item in items:
+        index, label = _resolve_one(item, options, where)
+        if index in resolved:
+            continue
+        resolved.append(index)
+        labels.append(label)
+    ordered = sorted(zip(resolved, labels))
+    resolved = [pair[0] for pair in ordered]
+    labels = [pair[1] for pair in ordered]
+    if len(resolved) == 1:
+        return resolved[0], labels[0]
+    return resolved, labels
+
+def recommended_indices(recommended):
+    """The recommended options as a LIST of indices, for ANY stored shape.
+
+    Every reader wants the same thing -- which boxes are pre-checked -- so the
+    widening from `null | int | list[int]` happens here once, rather than as an
+    ad-hoc branch at each call site (five of them, each of which would have to
+    remember that a list is legal now).
+    """
+    if recommended is None:
+        return []
+    if isinstance(recommended, list):
+        return [i for i in recommended if isinstance(i, int)]
+    if isinstance(recommended, int) and not isinstance(recommended, bool):
+        return [recommended]
+    return []
+
+def recommended_labels(options, recommended):
+    """The recommended options as LABELS, for echo and for `list`.
+
+    A stored index outside the current option range is dropped rather than
+    raising: `--clear-options` or an `--option` rewrite can leave a stale index
+    behind, and a reader that crashed on one would make the register unreadable
+    exactly when a caller needs to see what it holds.
+    """
+    return [options[i] for i in recommended_indices(recommended)
+            if 0 <= i < len(options)]
+
 def normalise_questions(raw):
     """Validate and normalise the ordered question array. Order is the contract
     (#547: 'questions[] in call order'), so nothing here reorders."""
@@ -783,7 +864,7 @@ def normalise_questions(raw):
         # A label or letter is accepted because a caller must not have to count
         # array positions; the STORED value stays an index.
         recommended, _rec_label = resolve_recommendation(
-            item.get("recommended"), options, f"question {position}")
+            item.get("recommended"), options, f"question {position}", kind)
         out.append({
             "qid": f"q{position}",
             "title": title,
@@ -815,15 +896,16 @@ def questions_from_flags(flags):
         except Exception as exc:
             die(2, f"--questions-json is not valid JSON: {exc}")
     if flags.get("--title") or flags.get("--description"):
+        kind = ("multi" if "--multi" in flags
+                else (flags.get("--kind") or "single"))
         return [{
             "title": flags.get("--title", ""),
             "description": flags.get("--description", ""),
             "options": flag_list(flags, "--option"),
             "recommended": resolve_recommendation(
                 flags.get("--recommended"), flag_list(flags, "--option"),
-                "question 1")[0],
-            "kind": ("multi" if "--multi" in flags
-                     else (flags.get("--kind") or "single")),
+                "question 1", kind)[0],
+            "kind": kind,
             "clarify": "--no-clarify" not in flags,
         }]
     die(2, "supply --questions-file, --questions-json, or --title/--description")
@@ -932,8 +1014,8 @@ def cmd_ask(argv):
         # and echoing the stored value proves the RECORD rather than restating
         # the intention -- which is exactly what the silent wrong-base hid.
         resolved_recs = [(q.get("qid"), q.get("recommended"),
-                          (q.get("options") or [None])[q["recommended"]]
-                          if q.get("recommended") is not None else None)
+                          recommended_labels(q.get("options") or [],
+                                             q.get("recommended")))
                          for q in questions]
         write_register_atomic(data)
 
@@ -955,9 +1037,15 @@ def cmd_ask(argv):
         # the surface now; the caller needs the count and the link.
         print(f"registered {len(questions)} question(s) in {factory} "
               f"(lane {lane}, ttl {ttl_days}d)")
-        for _qid, _idx, _label in resolved_recs:
-            if _idx is not None:
-                print(f"  recommended {_qid}: [{_idx}] {_label!r}")
+        for _qid, _idx, _labels in resolved_recs:
+            if _idx is None:
+                continue
+            if isinstance(_idx, list):
+                _shown = ", ".join(f"[{i}] {lab!r}"
+                                   for i, lab in zip(_idx, _labels))
+            else:
+                _shown = "[%s] %r" % (_idx, _labels[0] if _labels else None)
+            print(f"  recommended {_qid}: {_shown}")
         print(f"{total} open question(s) across {sets} factory set(s)")
         if page:
             print(f"page {page}")
@@ -1051,8 +1139,9 @@ def cmd_list(argv):
             if question.get("status") == "open":
                 options = question.get("options") or []
                 recommended = question.get("recommended")
-                if options and recommended is not None and 0 <= recommended < len(options):
-                    detail += f"  (recommended: {options[recommended]})"
+                labels = recommended_labels(options, recommended)
+                if labels:
+                    detail += f"  (recommended: {', '.join(labels)})"
             else:
                 detail += f"  -> {question.get('status')}"
                 if (question.get("kind") or "single") == "multi":
@@ -1290,7 +1379,7 @@ def cmd_amend(argv):
         if flags.get("--recommended") is not None:
             index, rec_label = resolve_recommendation(
                 flags["--recommended"], question.get("options") or [],
-                f"{set_id}/{qid}")
+                f"{set_id}/{qid}", question.get("kind") or "single")
             question["recommended"] = index
             # Echo what it RESOLVED, so a caller who typed a label sees which
             # option it became rather than having to re-read the register.
@@ -1871,6 +1960,7 @@ def build_spec(entries, slug, expires_at, action):
                 base = "%s-%s" % (set_id, qid)
                 options = question.get("options") or []
                 recommended = question.get("recommended")
+                rec_set = set(recommended_indices(recommended))
                 # Absent means SINGLE (owner order 2026-09-28) -- the store's 44
                 # pre-existing questions carry no kind and must keep rendering
                 # radios, so the default lives here as well as in normalise.
@@ -1888,7 +1978,7 @@ def build_spec(entries, slug, expires_at, action):
                     elements[key] = {
                         "type": "Option",
                         "props": {"label": options[index], "value": str(index),
-                                  "recommended": index == recommended,
+                                  "recommended": index in rec_set,
                                   "multi": is_multi},
                         "children": []}
                     children.append(key)
@@ -1909,19 +1999,24 @@ def build_spec(entries, slug, expires_at, action):
                     "type": "Question",
                     "props": {"qid": qid, "title": question["title"],
                               "multi": is_multi,
-                              "recommendation": (options[recommended]
-                                                 if options and recommended is not None
-                                                 and 0 <= recommended < len(options)
-                                                 else None),
+                              "recommendation": (", ".join(
+                                  recommended_labels(options, recommended))
+                                  or None),
                               "token": slug, "set": set_id, "action": action,
                               "status": question.get("status") or "open",
                               "clarifyText": (question.get("answer")
                                               if question.get("status") == "clarifying"
                                               else None),
-                              "footer": "asked %s / lane %s / %s %s"
+                              # Owner order 2026-09-30: the lane and the
+                              # factory are gone from this line. The section
+                              # heading names both, and the selector names the
+                              # factory again, so a card repeating them said it
+                              # twice. What is left is the CARD's own: its age
+                              # and its qid.
+                              "footer": "asked %s / %s"
                                         % (fmt_age(question.get("asked_at")
                                                    or entry.get("asked_at")),
-                                           lane, set_id, qid)},
+                                           qid)},
                     "children": children}
                 question_keys.append(base)
         if not question_keys:
@@ -2170,31 +2265,24 @@ micro-label idiom -- mono, dim, uppercase -- so it reads as context ABOUT the
 lane's questions and never as part of the lane name. Inherits the h2's size so
 the heading stays one line of type. */
 .set h2 .qset{font:inherit;letter-spacing:.13em;color:var(--dim);
-margin-right:.55rem;white-space:nowrap}
+white-space:nowrap}
 .rec{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;border-left:2px solid var(--amber);
 border-radius:0 5px 5px 0;background:var(--amber-soft);font-size:.95rem;line-height:1.5}
-/* No ::before label here any more: the label is the <summary> above, because a
-disclosure control needs real text. A CSS-generated label beside a real one
-would double it, and a dead rule reads as live. */
-/* The band FOLDS (owner order 2026-09-27, the same order as the clarifying
-form below): the label is the summary, the counsel is inside. The amber
-signature stays -- it is the page's, and folding must not erase it. */
-.recbox{margin:.9rem 0 1.15rem}
-.recbox>summary{cursor:pointer;font:.6rem/1.4 var(--mono);letter-spacing:.15em;
-text-transform:uppercase;color:var(--amber);padding:.15rem 0}
-.recbox>summary:hover{color:var(--text)}
-.recbox[open]>summary{margin-bottom:.3rem}
-.recbox .rec{margin:.35rem 0 0}
+/* Owner order 2026-09-30: the band no longer folds, so the label comes back
+as generated content -- the <summary> that carried it is gone, and a bare
+option string in an amber box states nothing. Live again, not the dead rule
+this comment used to warn about. */
+.rec::before{content:'lane recommends';display:block;
+font:.6rem/1.4 var(--mono);letter-spacing:.15em;text-transform:uppercase;
+color:var(--amber);margin-bottom:.28rem}
 /* The clarifying state, made visible (owner report 2026-09-25): a question the
 reader asked to clarify rendered identically to an open one, so the state
-change was invisible and a reload looked like nothing had happened. Teal, not
-amber, so it cannot be mistaken for the recommendation band. */
-.clarifyband{position:relative;margin:.9rem 0 1.15rem;padding:.75rem .95rem;
-border-left:2px solid var(--teal);border-radius:0 5px 5px 0;
-background:var(--teal-soft);font-size:.95rem;line-height:1.5;color:var(--text)}
-.clarifyband::before{content:'clarification requested';display:block;
-font:.6rem/1.4 var(--mono);letter-spacing:.15em;text-transform:uppercase;
-color:var(--teal);margin-bottom:.28rem}
+change was invisible and a reload looked like nothing had happened. Owner
+order 2026-09-30: the BAND is gone -- a chip on the card's own context line
+states it where the reader already looks. Teal, not amber, so it cannot be
+mistaken for the recommendation label. */
+.chip.clarifying{background:var(--teal-soft);color:var(--teal);
+border-color:var(--teal)}
 /* A clarifying question waits on the LANE, not the reader (owner order
 2026-09-27): the lane must amend it back to open. So it no longer takes the
 space of an actionable question -- the card shrinks and its form collapses
@@ -2202,8 +2290,7 @@ behind a native <details>. No JS, no URL state; opening the summary restores
 the full form, so the question stays answerable. */
 .q.clarifying{padding:.85rem 1.05rem;border-left-color:var(--teal)}
 .q.clarifying .qt{font-size:1.05rem}
-.q.clarifying .clarifyband{margin:.55rem 0 .35rem;padding:.55rem .75rem;font-size:.9rem}
-.q.clarifying .recbox{margin:.5rem 0 .3rem}
+.q.clarifying .rec{margin:.55rem 0 .35rem}
 .clarifybox{margin:.4rem 0 0}
 .clarifybox>summary{cursor:pointer;font:.62rem/1.5 var(--mono);letter-spacing:.13em;
 text-transform:uppercase;color:var(--dim);padding:.3rem 0}
@@ -2238,8 +2325,12 @@ button.ghost{color:var(--dim);border-style:dashed}
 border-radius:999px;color:var(--dim)}
 .filterbar button[aria-pressed="true"]{background:var(--teal-soft);border-color:var(--teal);
 color:var(--teal);font-weight:600}
-.age{font:.68rem/1.5 var(--mono);color:var(--dim);margin:1rem 0 0;padding-top:.75rem;
-border-top:1px solid var(--soft)}
+/* Owner order 2026-09-30: this rule was written for a FOOTER -- a top rule
+and top padding separated it from the form above. It OPENS the card now, where
+a rule above it and padding above it draw a line the card already has. So the
+top spacing is gone and the gap moved BELOW, between the context and the title
+it introduces. */
+.age{font:.68rem/1.5 var(--mono);color:var(--dim);margin:0 0 .6rem;padding:0}
 .answered{border-left-color:var(--teal);background:var(--strip)}
 .answered .qt{color:var(--teal)}
 .answered p{margin:.4rem 0}
@@ -3016,10 +3107,16 @@ def selftest():
         rc, out, _ = run("publish", "--json")
         _uidir = json.loads(out)["path"]
         _body = open(os.path.join(_uidir, "index.html"), encoding="utf-8").read()
-        ck("clarifyband" in _body,
+        ck('class="chip clarifying"' in _body,
            "the page RENDERS the clarifying state, so a reload shows the change")
-        ck("Clarification requested" in _body,
-           "\u2026naming the reader's own request in the band")
+        ck(">clarifying<" in _body,
+           "\u2026as a chip on the card's own context line, not a band")
+        # The band carried the reader's own request. Removing it must not put
+        # those words out of reach: the chip carries them as its native tooltip,
+        # so clarifyText stays a READ field rather than a dead write.
+        ck('title="you requested: which option?"' in _body,
+           "\u2026carrying the reader's own request as its tooltip, so the words "
+           "the band used to print stay reachable from the page")
         # Owner order 2026-09-27: a clarifying question waits on the LANE, so
         # it must not occupy the space of an actionable one. It renders compact
         # and its form collapses behind a native <details> -- while staying in
@@ -3043,14 +3140,16 @@ def selftest():
         rc, out, _ = run("publish", "--json")
         _rdir = json.loads(out)["path"]
         _rbody = open(os.path.join(_rdir, "index.html"), encoding="utf-8").read()
-        ck('<details class="recbox">' in _rbody,
-           "the recommendation band renders FOLDED behind a native <details>")
-        ck("Lane recommends" in _rbody,
-           "\u2026under a label naming what is inside")
+        ck('<details class="recbox">' not in _rbody,
+           "the recommendation band does NOT fold (owner order 2026-09-30)")
+        ck('<p class="rec">' in _rbody and ".rec::before" in _rbody,
+           "\u2026and its label is generated content, since the summary that "
+           "carried it is gone")
         _rm = re.search(r'<p class="rec">(.*?)</p>', _rbody, re.S)
         ck(_rm is not None and _rm.group(1).strip() == "a",
-           "\u2026and the counsel is STILL in the DOM, so folding hides it "
-           "visually only (got %r)" % (_rm.group(1).strip() if _rm else None))
+           "\u2026and the counsel renders as the option string itself, under a "
+           "label the stylesheet generates (got %r)"
+           % (_rm.group(1).strip() if _rm else None))
         _uijs = open(os.path.join(_uidir, "questions.js"), encoding="utf-8").read()
         ck("htmx:responseError" in _uijs,
            "the vendored UI surfaces a REFUSED submit -- htmx swaps only 2xx, "
@@ -3605,6 +3704,16 @@ def selftest():
                        for c in _ordered),
                "the card's context line opens the card, above its own title "
                "(%d card(s) checked)" % len(_ordered))
+            # Owner order 2026-09-30: that line carries the CARD's own facts
+            # only -- its age and its qid, one separator. The lane and the
+            # factory moved to the section heading and the selector, so a card
+            # repeating them said the same thing twice. Asserted on the
+            # separator COUNT, because a page-level check cannot tell which
+            # facts a line carries.
+            _ctx = re.findall(r'<p class="age">(.*?)</p>', _oq_body, re.S)
+            ck(bool(_ctx) and all(c.count(" / ") == 1 for c in _ctx),
+               "the context line drops the lane and the factory name "
+               "(%d line(s) checked)" % len(_ctx))
             # Owner order 2026-09-28: the selector names each factory's OPEN
             # COUNT. A lane section can span two sets, so the count is derived
             # from each CARD's own set field -- both halves must ship, or the
@@ -3928,6 +4037,74 @@ def selftest():
         ck(rc == 0 and get_set(c2)["questions"][0].get("answer") == ["P", "Q"],
            "the comma-joined form is the same act as separate positionals "
            "(rc=%d, err=%r)" % (rc, (err or "").strip()[:60]))
+
+        # -- 8c-quater. RECOMMENDATIONS ACCOMMODATE THE CHECKBOXES (owner order
+        # 2026-09-30). A multi question can pre-check SEVERAL boxes, so
+        # `recommended` stores `null | int | list[int]`. The INT shape is what
+        # every pre-multi question already carries and is never widened to a
+        # one-element list, so no existing question is reinterpreted.
+        rc, out, _ = run("ask", "--factory", "f-rec-multi-lane",
+                         "--title", "Several", "--description", "d",
+                         "--option", "A", "--option", "B", "--option", "C",
+                         "--multi", "--recommended", "0", "--recommended", "2",
+                         "--no-publish", "--json")
+        _rm = json.loads(out)["set"]
+        ck(rc == 0 and get_set(_rm)["questions"][0].get("recommended") == [0, 2],
+           "a multi question takes SEVERAL recommendations and stores a list "
+           "(rc=%d, recommended=%r)"
+           % (rc, get_set(_rm)["questions"][0].get("recommended")))
+
+        rc, out, _ = run("ask", "--factory", "f-rec-comma-lane",
+                         "--title", "Several", "--description", "d",
+                         "--option", "A", "--option", "B", "--option", "C",
+                         "--multi", "--recommended", "0,2", "--no-publish", "--json")
+        _rc2 = json.loads(out)["set"]
+        ck(rc == 0 and get_set(_rc2)["questions"][0].get("recommended") == [0, 2],
+           "\u2026and the comma form is the same act as the repeated flag "
+           "(rc=%d, recommended=%r)"
+           % (rc, get_set(_rc2)["questions"][0].get("recommended")))
+
+        # The split is unambiguous ONLY on an all-digit value: an option LABEL
+        # may legally contain a comma, and splitting one would make that label
+        # unreachable. This arm is the control for the arm above.
+        rc, out, _ = run("ask", "--factory", "f-rec-labelcomma-lane",
+                         "--title", "t", "--description", "d",
+                         "--option", "Ship, now", "--option", "Hold",
+                         "--recommended", "Ship, now", "--no-publish", "--json")
+        _rl2 = json.loads(out)["set"]
+        ck(rc == 0 and get_set(_rl2)["questions"][0].get("recommended") == 0,
+           "a comma-bearing LABEL is NOT split, so it stays reachable "
+           "(rc=%d, recommended=%r)"
+           % (rc, get_set(_rl2)["questions"][0].get("recommended")))
+
+        rc, out, _ = run("ask", "--factory", "f-rec-int-lane",
+                         "--title", "t", "--description", "d",
+                         "--option", "A", "--option", "B",
+                         "--recommended", "B", "--no-publish", "--json")
+        _ri = json.loads(out)["set"]
+        ck(get_set(_ri)["questions"][0].get("recommended") == 1,
+           "a single-select recommendation stays an INT, never a one-element "
+           "list (%r)" % (get_set(_ri)["questions"][0].get("recommended"),))
+
+        # Two pre-checked RADIOS are not a state a browser can render, so the
+        # refusal must be at ask time rather than a page that silently drops one.
+        rc, out, err = run("ask", "--factory", "f-rec-single-two-lane",
+                           "--title", "t", "--description", "d",
+                           "--option", "A", "--option", "B",
+                           "--recommended", "0", "--recommended", "1", "--no-publish")
+        ck(rc == 2 and "single-select" in (err or ""),
+           "two recommendations on a SINGLE-select question are REFUSED "
+           "(rc=%d, err=%r)" % (rc, (err or "").strip()[:70]))
+        ck(get_set("f-rec-single-two-lane") is None,
+           "\u2026and the refused ask registered NOTHING")
+
+        # The page is the surface that must actually show both boxes checked.
+        rc, out, _ = run("publish", "--json")
+        _page = os.path.join(env["OC_QUESTIONS_DIR"], "pages", _rm, "index.html")
+        _html = open(_page, encoding="utf-8").read() if os.path.isfile(_page) else ""
+        ck(_html.count('type="checkbox" name="choice" checked') == 2,
+           "\u2026and the page pre-checks BOTH recommended boxes (%d of 2)"
+           % _html.count('type="checkbox" name="choice" checked'))
 
         # -- 8c-ter. The KIND IS FIXED AT ASK TIME, so an answer cannot widen it.
         # Silently taking the first of several would record an answer the reader
@@ -4582,8 +4759,14 @@ USAGE = """questions — the Open Questions register (#547)
 
   ask      --factory <KEY> [--session <id>]
            [--questions-file F | --questions-json J |
-            --title T --description D [--option O]... [--recommended N]]
+            --title T --description D [--option O]... [--recommended N]...]
            [--ttl-days N] [--subject S] [--no-clarify] [--close-when CMD]
+           --recommended takes ONE value on a single-select question and may be
+           repeated (or comma-joined, `0,2`) on a --kind multi one, because a
+           multi question can pre-check SEVERAL boxes. Two values on a single
+           question are REFUSED (rc=2): two pre-checked radios are not a state
+           a browser can render. Each value is a 0-based index or an option
+           label/letter, and what it resolved to is echoed back.
            --subject is CREATION-ONLY: it is recorded when the set is minted,
            and a set names ONE unit. Passing it on an add to an existing set is
            REFUSED (rc=2) rather than silently discarded.
@@ -4608,7 +4791,7 @@ USAGE = """questions — the Open Questions register (#547)
   withdraw --set <id> --qid <qid> [--text REASON] [--no-publish] [--json]
            retracts a question that has become moot; the set stays open
   amend    --set <id> --qid <qid> [--title T] [--description D]
-           [--option O]... [--recommended N] [--clear-options]
+           [--option O]... [--recommended N]... [--clear-options]
            the CLARIFY return leg: edits the question and reopens it
   notify   --set <id> | --lane <NAME> [--qid Q] [--mode turn-end|interrupt|quiet]
            [--dry-run] [--json]        the RETURN PATH: delivers the answer to

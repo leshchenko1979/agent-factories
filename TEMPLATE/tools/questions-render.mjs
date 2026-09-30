@@ -116,7 +116,7 @@ const { registry } = defineRegistry(catalog, {
       // names both. Subtle by idiom -- mono, dim, uppercase, small.
       h('h2', null,
         h('span', { className: 'qset' },
-          props.set_id.split(',').join(' + ')), ' ',
+          props.set_id.split(',').join(' + ')), ' / ',
         props.lane + ' — ' + props.open + ' open'),
       children),
     // The form carries token, set and qid as hidden inputs: the answer backend
@@ -148,31 +148,41 @@ const { registry } = defineRegistry(catalog, {
       // BEFORE the title -- not a chip beside the title, and not a footnote
       // under the form. Moved from the bottom on the owner's order; the class
       // name is unchanged, so the page's existing styling idiom still applies.
-      h('p', { className: 'age' }, props.footer),
+      h('p', { className: 'age' }, props.footer,
+        // Owner order 2026-09-30: the clarifying state rides HERE, on the
+        // card's own context line, instead of in a band below the title. The
+        // band said the same thing twice and took the space of an actionable
+        // question; a chip states it in the place the reader already looks.
+        clarifying
+          ? h('span', { className: 'chip clarifying',
+                        // The reader's own request rides as the chip's native
+                        // tooltip. The band that used to print it is gone, and
+                        // the words they typed on this page must stay reachable
+                        // from it -- no layout, no new element, no second band.
+                        title: props.clarifyText
+                          ? 'you requested: ' + props.clarifyText
+                          : 'you requested clarification' }, 'clarifying')
+          : null),
       // Owner order 2026-09-28: the factory name is NOT repeated here. It
       // moved up into the section heading (see QuestionSet) -- the card already
       // states its own context on the bottom line below, so a chip before the
       // title said it twice. The heading is the question's title and nothing
       // else.
       h('h3', { className: 'qt' }, props.title),
-      // The recommendation band is the page's SIGNATURE: an amber-ruled block
-      // carrying the lane's own counsel. Owner order 2026-09-27: it FOLDS like
-      // the clarifying form -- a compact label, the counsel one tap away -- so
-      // the card opens on the QUESTION rather than on the lane's advice.
-      // The label moved out of CSS content and into the summary: a disclosure
-      // control needs real text, which generated content cannot supply
-      // accessibly. The counsel itself stays in the DOM, so folding is visual.
+      // The recommendation block is the page's SIGNATURE: an amber-ruled block
+      // carrying the lane's own counsel, one line of type under a generated
+      // label. Owner orders 2026-09-27 and 2026-09-30 pulled in opposite
+      // directions here -- the first folded it behind a <summary>, the second
+      // unfolded it again -- so what binds now is the 2026-09-30 order: the
+      // counsel is short and it is the reason the card is worth reading, so it
+      // renders directly and the label comes back as generated content.
       props.recommendation
-        ? h('details', { className: 'recbox' },
-            h('summary', null, 'Lane recommends'),
-            h('p', { className: 'rec' }, props.recommendation))
+        ? h('p', { className: 'rec' }, props.recommendation)
         : null,
-      // A clarifying question must LOOK different from an open one, or the
-      // reader cannot tell their request was recorded.
-      props.status === 'clarifying'
-        ? h('p', { className: 'clarifyband' },
-            'Clarification requested' + (props.clarifyText ? ': ' + props.clarifyText : ''))
-        : null,
+      // Owner order 2026-09-30: the clarifying BAND is gone -- the chip on
+      // the context line above states the state. The reader's own clarify text
+      // still reaches the lane through the notify body, which is where the lane
+      // acts on it; the page does not repeat it.
       // hx-*: the form swaps THIS question's own block in place instead of
       // navigating away (owner question 2026-09-24). The section id below is
       // the swap target. Inert without the vendored htmx, in which case the
