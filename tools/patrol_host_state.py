@@ -516,7 +516,7 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
 # `grep` for a reader of `event == "ruling"` across `tools/*.py` returned ZERO hits — the
 # token occurred only at the event tuple and the authorization matrix. So the transition
 # was authorized, written by convention, and skipped indefinitely with no surface noticing,
-# which is §8's field-with-no-reader shape arriving on the WRITE side. Eight of one lane's
+# which is the field-with-no-reader shape arriving on the WRITE side. Eight of one lane's
 # rulings in a single session had no row; Triage's re-measurement put the class at NINE and
 # corrected the filing's figure, because the population MOVES as lanes start stamping.
 #

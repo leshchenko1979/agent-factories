@@ -229,7 +229,7 @@ def test_the_end_to_end_repair_sequence_verifies_clean(tmp_path: Path) -> None:
     # ...and a re-claim after the repair still stands clean (the #120 n=259 row) — once it
     # DECLARES itself. This probe is the formalisation #246 describes, and it is the
     # sharpest instance of it: the second claim exists precisely BECAUSE the intake landed
-    # late, which is the §4 wake-latency case the ruling measured as already declaring
+    # late, which is the wake-latency case the ruling measured as already declaring
     # itself in prose. Under #246 the same-actor re-claim carries the token, so the bare
     # form is refused and the declared form is the lawful one. Both halves are driven, so
     # the probe still proves the re-claim is ACCEPTED and not merely that something was.

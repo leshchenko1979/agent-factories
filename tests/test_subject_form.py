@@ -244,8 +244,9 @@ def _declared_field(facts: dict, field: str, declared: str) -> object:
 
     A field the factory has not declared comes back EMPTY from the reader, and iterating an
     empty declaration asserts NOTHING — a pass over an empty population is the silent pass
-    this seam exists to remove (SKILL.md §8: a predicate that examined nothing has reported
-    nothing, not HOLDS). So the absent field is a stated SKIP, never a quiet pass.
+    this seam exists to remove (SKILL.md §Verdicts and claims: a predicate that examined
+    nothing has reported nothing, not HOLDS). So the absent field is a stated SKIP, never
+    a quiet pass.
     """
     value = facts.get(field)
     if not value:
@@ -571,7 +572,8 @@ def test_probe_a_malformed_calibration_row_number_fails(tmp_path: Path) -> None:
 
 def test_probe_an_absent_field_is_a_STATED_SKIP_not_a_quiet_pass() -> None:
     """A field the factory has not declared comes back EMPTY, and iterating nothing asserts
-    nothing — so the live legs SKIP on it rather than passing vacuously (SKILL.md §8)."""
+    nothing — so the live legs SKIP on it rather than passing vacuously
+    (SKILL.md §Verdicts and claims)."""
     facts: dict = {"excused": [], "labels": {}, "cross_repo": {}}
     for field in ("excused", "labels", "cross_repo"):
         with pytest.raises(pytest.skip.Exception):
