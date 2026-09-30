@@ -129,6 +129,14 @@ Six rules, each of which has a way of going wrong that this file closes:
 
    The vehicle is the **open questions register** (`docs/instruments/open-questions.md`), one question carrying every refused row with its grounds, defaulting to *uphold* — so the owner marks only what he would overturn rather than voting on each. A refusal that never reaches him is the same defect class as #216 and #227, one surface over: a rule whose only carrier is whoever happened to see it. This is where the owner keeps the last word without becoming the classifier.
 
+   **What a refusal is based on, derived rather than invented.** The funnel's refusals fall into three tests, taken from its own dispositions (miidas Marketing, 2026-09-28: `863b4b4` / `159bb80`, board #80) rather than composed here — a unit is refused when it
+
+   - **reports a design rather than an outcome** — the funnel's own words are *"specifications, not outcomes"*
+   - **restates a finding the register already carries** — *"one builder-only insight appearing in four spellings"*; the first statement is the unit, its restatements are not
+   - **gives the reader nothing they do not already have** — *"the buyer-facing core is already carried by a published post, and the row adds only builder-level mechanism"*
+
+   These are the grounds a refusal **records**, not a gate: no offline predicate reads them, and the decision stays with the owner under this rule. Each refusal names the test it failed in its own `reason`, with a link to the entry or published piece it overlaps, so the grounds are checkable rather than a matter of taste. The derivation is kept here for the same reason §9 keeps its research: a rule whose only carrier is the turn that produced it does not survive a compaction.
+
 ---
 
 ## 7. The writer
