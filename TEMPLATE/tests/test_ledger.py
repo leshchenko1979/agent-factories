@@ -178,21 +178,42 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
         cwd=cwd, capture_output=True, text=True,
     )
 
-def run_in_tree(root: Path, ledger: Path, *args: str) -> subprocess.CompletedProcess:
+def run_in_tree(
+    root: Path, ledger: Path, *args: str, git_unreachable: bool = False
+) -> subprocess.CompletedProcess:
     """Run the tool AS STAGED IN `root`.
 
     `run()` above always executes this repo's tool, which is right for a throwaway
     ledger but wrong for these probes: both legs key on whether the LEDGER lies in
     the repository the TOOL resolved, so a probe that ran this repo's tool against a
     fixture tree would exercise neither. The staged copy is what the fixture owns.
+
+    `git_unreachable` empties PATH for the child, which is how the #237 arm is driven:
+    `sys.executable` is an absolute path so the interpreter still starts, while every
+    `git` the tool shells out to raises OSError and comes back as None. That is the
+    arm in which the freshness leg used to answer "fresh" without having looked.
     """
     env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
     env["OC_ACTORS_PATH"] = str(ledger.parent / "no-actors.txt")
     env["OC_AUTHORIZATIONS_PATH"] = str(ledger.parent / "no-authorizations.json")
+    if git_unreachable:
+        env["PATH"] = ""
     return subprocess.run(
         [sys.executable, str(root / "tools" / "ledger.py"), *args],
         capture_output=True, text=True, env=env, cwd=root,
     )
+
+def _stage_mutant(root: Path, old: str, new: str) -> None:
+    """Mutate the FIXTURE's staged copy, so a probe can be shown to bite.
+
+    A rule that has only seen good input has not been shown to reject bad input, and a
+    probe that cannot be made to fail is not a probe. The real tool is never touched.
+    """
+    staged = root / "tools" / "ledger.py"
+    text = staged.read_text(encoding="utf-8")
+    if text.count(old) != 1:
+        raise AssertionError(f"mutation anchor matched {text.count(old)} times: {old!r}")
+    staged.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 def _fixture_repo(root: Path, *, remote: Path | None = None) -> Path:
     """A minimal repository holding the tool and an empty ledger."""
@@ -376,6 +397,60 @@ def check_fail_open_needs_no_remote() -> None:
                          "--actor", "triage", "--subject", "#1", "--detail", "intake")
         check("(221e) the control: the same bytes with NO remote fail open",
               r2.returncode == 0, f"rc={r2.returncode} {r2.stderr.strip()[:200]}")
+
+def check_unread_ref_is_refused() -> None:
+    """#237: the UNREAD case -- a remote exists and the ref read failed.
+
+    The defect was that "I verified this lineage" and "I could not look" returned the
+    SAME value, so the append minted the next n from a lineage it had not confirmed.
+    The discriminator must NOT be another `git` call: the question is asked precisely
+    when git has already failed, and `git remote get-url origin` answers None exactly
+    like "no remote configured" does -- measured, and that is why the probe reads the
+    config FILE instead.
+    """
+    print("single-writer (#237) -- the UNREAD case is refused, and the carve-out is not")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        bare = tmp / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        a_dir = _fixture_repo(tmp / "a", remote=bare)
+        _git(a_dir, "push", "-q", "-u", "origin", "main")
+        b_dir = _fixture_repo(tmp / "b", remote=bare)
+        _git(b_dir, "fetch", "-q", "origin")
+        led = _ledger(b_dir)
+
+        r = run_in_tree(b_dir, led, "append", "--event", "genesis", "--actor", "owner",
+                        "--subject", "genesis", "--detail", "genesis", git_unreachable=True)
+        check("(237a) git unreachable + a remote configured is REFUSED",
+              r.returncode != 0, f"rc={r.returncode} {r.stderr.strip()[:200]}")
+        check("(237a) the refusal names the UNREAD case and the sync",
+              "UNREAD" in r.stderr and "git fetch origin" in r.stderr,
+              r.stderr.strip()[:280])
+        check("(237a) the refused append wrote nothing",
+              len(rows(led)) == 0, f"{len(rows(led))} row(s)")
+
+        c_dir = _fixture_repo(tmp / "c")
+        led_c = _ledger(c_dir)
+        r2 = run_in_tree(c_dir, led_c, "append", "--event", "genesis", "--actor", "owner",
+                         "--subject", "genesis", "--detail", "genesis", git_unreachable=True)
+        check("(237b) the control: no remote + the same broken git PROCEEDS",
+              r2.returncode == 0, f"rc={r2.returncode} {r2.stderr.strip()[:200]}")
+        check("(237c) the fail-open carve-out announces itself",
+              "freshness NOT checked" in r2.stderr, r2.stderr.strip()[:200])
+
+        r3 = run_in_tree(b_dir, led, "append", "--event", "genesis", "--actor", "owner",
+                         "--subject", "genesis", "--detail", "genesis")
+        check("(237c) the verified branch does NOT announce it",
+              r3.returncode == 0 and "freshness NOT checked" not in r3.stderr,
+              f"rc={r3.returncode} {r3.stderr.strip()[:200]}")
+
+        mut = _fixture_repo(tmp / "mut", remote=bare)
+        _stage_mutant(mut, "    return '[remote \"origin\"]' in text", "    return False")
+        led_m = _ledger(mut)
+        r4 = run_in_tree(mut, led_m, "append", "--event", "genesis", "--actor", "owner",
+                         "--subject", "genesis", "--detail", "genesis", git_unreachable=True)
+        check("(237d) neutering the discriminator lets the unread append THROUGH",
+              r4.returncode == 0, f"rc={r4.returncode} {r4.stderr.strip()[:200]}")
 
 def check_worktree_fork_refused() -> None:
     """#222 leg 2 / #221 detection: a second checkout cannot re-mint a published n."""
@@ -2109,6 +2184,7 @@ def main() -> int:
     check_lock_is_repo_scoped()
     check_stale_ref_refused()
     check_fail_open_needs_no_remote()
+    check_unread_ref_is_refused()
     check_worktree_fork_refused()
     check_release_vocabulary()
 

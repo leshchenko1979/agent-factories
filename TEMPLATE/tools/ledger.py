@@ -574,6 +574,82 @@ def _ledger_rel_path(path: Path) -> str | None:
     except ValueError:
         return None
 
+def _git_config_path() -> Path | None:
+    """The repository's git CONFIG, resolved WITHOUT running git (#237).
+
+    This exists because the question below -- "is a remote configured?" -- is asked
+    precisely when a git read has already failed, so it must not be another git call.
+    Measured: with git unreachable, `git remote get-url origin` returns None exactly
+    like "no remote configured" does, so a probe built on that would answer "proceed"
+    in the one case the refusal exists to catch.
+
+    A plain file read covers every shape: `.git` is a directory in the main checkout,
+    and a FILE in a linked worktree naming the per-worktree gitdir, whose `commondir`
+    names the shared directory the config actually lives in. Measured on all four
+    shapes (main checkout, linked worktree, no-remote repository, non-repository).
+    """
+    dot_git = REPO / ".git"
+    if dot_git.is_dir():
+        return dot_git / "config"
+    if not dot_git.is_file():
+        return None
+    try:
+        text = dot_git.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not text.startswith("gitdir:"):
+        return None
+    gitdir = Path(text.split(":", 1)[1].strip())
+    if not gitdir.is_absolute():
+        gitdir = (REPO / gitdir).resolve()
+    common = gitdir / "commondir"
+    if common.is_file():
+        try:
+            target = Path(common.read_text(encoding="utf-8").strip())
+        except OSError:
+            return None
+        if not target.is_absolute():
+            target = (gitdir / target).resolve()
+        return target / "config"
+    return gitdir / "config"
+
+def _remote_configured() -> bool:
+    """Whether a remote named `origin` is configured, read from the CONFIG FILE.
+
+    The discriminator the freshness leg's two outcomes hang on: no `origin` = there is
+    nothing for this guard to be stale against (proceed); `origin` present = there is,
+    and a failed read is a refusal. It answers even when the binary that would have
+    reported it does not, which is exactly when it is asked (#237).
+
+    Named `origin` and not "any remote", because `origin` is the ref this guard reads:
+    a factory with only `upstream` has no `origin/main` to compare against and would be
+    refused forever by a broader predicate.
+    """
+    config = _git_config_path()
+    if config is None:
+        return False
+    try:
+        text = config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return '[remote "origin"]' in text
+
+def _unread_refusal(what: str) -> str:
+    """The UNREAD refusal: a remote exists and the read failed (#237).
+
+    Distinct from the stale refusal on purpose. "I looked and the ref had moved" and
+    "I could not look" have different remedies, and only the first is about a peer.
+    """
+    return (
+        f"{what}, and a remote IS configured: there is a committed lineage to judge "
+        f"against and this guard could not read it. That is the UNREAD case, not the "
+        f"fresh one -- minting the next n from a lineage it could not confirm is what "
+        f"the single-writer guard exists to prevent. Run `git fetch origin` and retry. "
+        f"(A refusal and not a fetch on purpose: fetching inside the append lock would "
+        f"rewrite origin/* as a side effect of a write, and would make an append "
+        f"network-bound.)"
+    )
+
 def stale_ref_refusal(path: Path) -> str | None:
     """A refusal when the ref we are about to judge against is not the remote's tip.
 
@@ -581,19 +657,43 @@ def stale_ref_refusal(path: Path) -> str | None:
     remote, `git rev-parse` asks the local ref, and a difference means the lineage
     `read_committed_rows` is holding has been superseded by a peer's push.
 
-    It returns None -- never a refusal -- whenever the question cannot be answered:
-    no remote configured, no network, no `origin`. A fresh factory with no remote is
-    the fail-open case, and a refusal there would block exactly the factories this
-    guard cannot help.
+    The UNREAD case is NOT the fail-open case, and telling them apart is the whole fix
+    (#237). "No remote is configured" means there is nothing to compare against, so the
+    append proceeds. "A remote IS configured but the ref read failed" means there is
+    something to compare against and this guard could not read it, so the append is
+    REFUSED. Both used to return the same None, so no caller could tell "I verified this
+    lineage" from "I could not look" -- and on the second the append minted the next n
+    from a lineage it had not confirmed. A fresh factory with no remote keeps its
+    carve-out, and now says so out loud.
     """
     if _ledger_rel_path(path) is None:
         return None
     remote = _git_out("ls-remote", "origin", "main")
     if remote is None:
+        if _remote_configured():
+            return _unread_refusal("the remote's tip could not be read")
+        # THE CARVE-OUT ANNOUNCES ITSELF: a run that did not check freshness must not
+        # be byte-identical to one that did.
+        sys.stderr.write(
+            "warning: ledger guard: no remote configured -- freshness NOT checked "
+            "(fail-open: there is no committed lineage to be stale against)\n"
+        )
+        return None
+    if not remote.strip():
+        # A remote that ANSWERED and carries no `main` yet: a factory's first push.
+        # There is nothing committed there to be stale against, so this is the
+        # carve-out -- and `ls-remote` ANSWERING is what tells it apart from the
+        # unread case above. (Reading this as unread refused every first append in a
+        # factory whose remote exists but is empty: measured, and caught by the
+        # (222a) probe, which is the shape the gate exists to drive.)
         return None
     local = _git_out("rev-parse", "origin/main")
     if local is None:
-        return None
+        # The remote carries a `main` and this checkout has no local ref for it, so
+        # the lineage cannot be judged at all. `git fetch origin` is the remedy, named
+        # rather than run: a fetch inside the lock is network-bound and would rewrite
+        # origin/* as a side effect of a write.
+        return _unread_refusal("the local 'origin/main' ref could not be read")
     remote_sha = remote.split()[0] if remote.split() else ""
     if not remote_sha or remote_sha == local.strip():
         return None
@@ -631,7 +731,11 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None, str 
     rel_path = _ledger_rel_path(path)
     if rel_path is None:
         return None, None, None
-    has_remote = _git_out("remote") not in (None, "")
+    # The SAME discriminator the freshness leg uses (#237): a file read, so it
+    # answers even when git does not. `tracked` below still needs git, and that is a
+    # stated bound rather than a hole -- with git unreachable the freshness leg
+    # refuses first, so this branch is never reached in that arm.
+    has_remote = _remote_configured()
     for ref in ("origin/main", "HEAD"):
         text = _git_show(ref, rel_path)
         if text is None:
