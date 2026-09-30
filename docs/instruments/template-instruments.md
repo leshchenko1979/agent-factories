@@ -565,6 +565,58 @@ cannot tell a deliberate home-factory-only instrument from a promotion that stop
 states the class and its reason **in its own text** — §7.2's declared-state discipline, applied to a
 distribution class rather than to a member's adoption.
 
+### 6.4 Centralised adoption — the instrument's SHAPE is the meta-factory's, not the adopter's
+
+**Adoption is optional; the SHAPE of what is adopted is not the adopter's to decide.** Where an
+instrument's law doc declares an element **centralised**, a member that adopts that instrument takes
+the element **from canonical**, and the adopter's copy stops being the instrument from the moment it
+forks. The owner's order draws the line there: the member keeps a real freedom, the shape does not —
+*"there should be parts of the instrument which are mandatory and which better live on the
+centralized repository than be copied to member factories and then undergo the drift."*
+
+**The shape test — what is centralised, and what stays the member's.** An element is **centralised**
+when **two copies could serve two different behaviours on one path**; everything else is a
+member-local copy, permitted once **declared** (§6.1, §7.2). The test is a property of the behaviour
+on the path, not a taste about a file — the live `exactly-one-or-127` refusal
+(`vpn:/opt/questions/backend.py:50`), generalised. Three tiers, read from it:
+
+| tier | rule | mechanism in force | the member's part |
+|---|---|---|---|
+| **1 — centralised by construction** | exactly ONE copy; 0 or 2+ is a loud refusal, never a pick | `exactly-one-or-127` over `<CLI_ROOT>/*/oc-questions` — the fleet's strongest precedent for this order | reach the one copy |
+| **2 — not transportable** | never copied out, because it is not ours to copy | `DELIVERED_CLASSES = ("standalone", "closure")` — `seed` absent on purpose (`tools/kit_deliver.py:48`) | hold its own law and data |
+| **3 — member-local** | a copy the member may hold; the cost is a **declared** drift surface | §6.1's adoption step and §7.2's declaration | copy it, and declare it |
+
+**A centralised element is DECLARED, and it is REFERENCED rather than delivered.** The instrument's
+law doc **names** the elements it centralises and the reason — §6.3's declared-class discipline and
+§7.2's declared-state discipline, applied to an instrument's internal shape. A centralised element is
+**resolved from canonical**: the transport never writes a member copy of it, and the member **cannot
+fork it** — no fork, no deferral, no local edit. That is why it cannot drift: there is no second copy
+to drift. Where the runtime will not allow a reference — a member needs a local file to run, or to
+survive its own compaction — the law doc says so **at the naming site**, and the element is **tier 3**:
+a copy, **declared**, never a silent local variant.
+
+**The mode centralises the element, not the member.** It touches nothing else that member owns — not
+its declarations, not its actors, not its board, not its own processes. It strengthens the pin duty
+(O3: the member's verdict reads its **own** pin, never the meta-factory's live manifest) and the
+declaration duty (O4: what the member declares is *whether* it can adopt, never *what* it adopts). The
+obligation that binds the member is the HQ-authored **§9** text — O1's migrate-or-declare-or-defer
+disposition, O3's pin, O4's declaration — and this frame **cites it rather than carrying the binding**
+(its own scope, above). A member that cannot adopt an element declares **not-applicable**, with the
+reason, on its own declaration surface; a centralised element is never adopted by forking it.
+
+**"Resolved from canonical" and "a byte-identical copy" are different states, and the gap between
+them is the drift this mode removes.** A byte-identical copy is **two** copies on a transport
+cadence, and it drifts the first time a delivery is skipped — the state §7.2 already carries a
+declaration for. A reference is **one** copy and cannot drift. So the mode is stated as the reference
+wherever the runtime permits, and as the declared tier-3 copy only where it does not.
+
+*Authority:* owner order 2026-09-30T12:03:08Z ("I need a mode that when a member factory decides
+that it will adopt an instrument that the adoption will be centralized and cannot be regulated by the
+adopting member factory. Because the shape of the instrument is better decided by the central meta
+factory. I agree that the member factories should have some freedom, but there should be parts of the
+instrument which are mandatory and which better live on the centralized repository than be copied to
+member factories and then undergo the drift.").
+
 ## 7. The version identifier and the deferred state
 
 **These two are defined here, once, because they are cross-instrument: an owner coining their own
