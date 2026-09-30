@@ -141,6 +141,7 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
+    declared_claim,
     declared_keys,
     declared_reclaim,
     declared_reclose,
@@ -157,7 +158,12 @@ from field_predicate import (
 # self-declaration, on the same bare-neighbour import and for the same reason: two private
 # copies of one predicate drift in silence, and the drift lands on exactly the rows that
 # matter (`n=405` clause 5, `n=599`).
-from reconstruction import interval_line, reconstructed_claims
+from reconstruction import (
+    RECONSTRUCTION_KEY,
+    RECONSTRUCTION_VALUE,
+    interval_line,
+    reconstructed_claims,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -1236,6 +1242,75 @@ def cmd_append(args: argparse.Namespace) -> int:
         # (#137 half 2), so the leg is asked of the claim itself. The predicate
         # phrases the message for the event that triggered it — `claim` stays
         # `claim`.
+        # THE `claim` KEY IS SINGLE-VOCABULARY (#249, ruling `n=1792`). `claim` has exactly
+        # ONE lawful value in this factory — `claim=reconstructed`, the declaration a lane
+        # writes when it stamps a claim row AFTER its first edit and must say so
+        # (`tools/reconstruction.py:31`; the only reader is `declares_token(..., "claim",
+        # "reconstructed")`, and a grep over `tools/*.py` and `tests/*.py` finds NO reader
+        # of any other value). The law has stood since #98, ruled at ledger `n=602`.
+        #
+        # MEASURED, through the shared predicate over all 1794 rows of
+        # `evidence/ledger.jsonl`: THREE rows put something else in it — `n=1754` and
+        # `n=1755` (`claim=#220`), `n=1767` (`claim=#239`) — each an author-typed ECHO of
+        # the row's own `subject`, which every row already carries as a first-class field.
+        # So `claim=#220` is not a second vocabulary in the sense of two readers
+        # disagreeing; it is a NON-DECLARATION SQUATTING ON A DECLARATION KEY. The filing's
+        # own framing — "the repair path cannot reach such a row" — was ruled against on
+        # that measurement: the repair path is CORRECT, and the defect is UPSTREAM of it.
+        #
+        # THE DAMAGE IS THE REPAIR SPACE, and it is why this belongs at the write path
+        # rather than in a reader. `repair --append-detail` refuses to give a key a second
+        # value (#104, ruled at ledger `n=620` PART 4 — one field carrying two values has
+        # no canonical reading, so a consumer taking the first or the last gets a different
+        # answer). So the ONE repair that would make such a row lawful is unreachable from
+        # the moment the squat is written. HQ drove it on a detached copy: `repair --n 1754
+        # --invariant close_row_revision --note probe --append-detail "claim=reconstructed"`
+        # returns rc=1 and leaves the ledger byte-identical. Refusing the squat when it is
+        # TYPED is what stops the trap being created again; it cannot reach a row already
+        # written, and it is not meant to — see the no-backfill clause below.
+        #
+        # THE LAWFUL HOME ALREADY EXISTS: `--ref subject:#N`. `CORE_REF_KINDS` carries
+        # `subject` and `--ref KIND:VALUE` is repeatable, so a row that wants to point at a
+        # subject has a typed, followable edge instead of a hijacked declaration key.
+        #
+        # EVENT-AGNOSTIC, AND THE SCOPE IS STATED RATHER THAN IMPLIED. The ruling's sentence
+        # is "an append whose canonical trailer declares claim=<anything but reconstructed>",
+        # and the hazard is a property of the KEY, not of the event that carries it: a squat
+        # on ANY row empties that row's repair space, and `repair` reaches a sub-ledger as
+        # readily as the main one. The same 1794-row scan finds `claim=` in the canonical
+        # trailer of NO event other than `claim` (28 declaring `reconstructed`, the 3 above),
+        # so the wider scope reaches no history it would have to excuse.
+        #
+        # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state:
+        # this binds the row about to be written, so it can never predate itself. The three
+        # rows stand UNREPAIRED and are NOT backfilled — they are ordinary pre-first-edit
+        # claims, not reconstructions, needing no token, with nothing reading their value —
+        # and a row that already carries the collision re-enters by the designed path
+        # (#246): `reclaim=<reason>` plus a fresh row.
+        #
+        # THE READ IS THE SHARED PREDICATE (`declared_claim`), never a private scan: one
+        # field, one predicate (`n=405` PART 5, `n=599`). It is POSITIONAL — the canonical
+        # trailer — because `detail` is free prose that QUOTES trailers as evidence, and a
+        # whole-detail scan takes a quotation for a declaration. That is not hypothetical in
+        # this file's own history: this lane's #247 close row (`n=1785`) counted eight prose
+        # quotations as eight declarations and put a false population into a durable record,
+        # corrected forward-only at `n=1790` (the #99 class).
+        _unlawful_claims = [value for value in declared_claim(args.detail)
+                            if value != RECONSTRUCTION_VALUE]
+        if _unlawful_claims:
+            sys.exit(
+                f"ledger append refused: this detail's canonical trailer declares "
+                f"`{RECONSTRUCTION_KEY}` with a value outside its single lawful "
+                f"vocabulary ({', '.join(repr(v) for v in _unlawful_claims)}). "
+                f"`{RECONSTRUCTION_KEY}` has exactly ONE lawful value, "
+                f"`{RECONSTRUCTION_KEY}={RECONSTRUCTION_VALUE}` — the declaration a claim "
+                f"row writes when it is stamped AFTER its first edit (#98, ruled at ledger "
+                f"n=602) — and any other value OCCUPIES the key, which empties the row's "
+                f"repair space: `repair --append-detail` refuses to give a key a second "
+                f"value (#104). A SUBJECT POINTER IS NOT A CLAIM: it belongs in "
+                f"`--ref subject:#N`, a typed edge that is first-class on every row and "
+                f"repeatable, and the row's own `subject` field already carries it (#249)."
+            )
         if args.event in ("close", "claim") and target_ledger == LEDGER:
             problems = sequence_problems(
                 index_by_subject(rows), args.subject, len(rows), args.event)

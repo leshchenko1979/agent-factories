@@ -634,3 +634,36 @@ def mentions_reclose(detail: str) -> bool:
     """
     return any(keyed_value(token, RECLOSE_KEY) is not None
                for token in str(detail).split())
+
+CLAIM_KEY = "claim"
+
+def declared_claim(detail: str) -> list[str]:
+    """Every `claim` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE positional read of this field, imported by the append path that refuses a
+    `claim` value outside the reconstruction vocabulary (#249) — a private
+    `token.split("=")` there would be the class ruled at `n=405` PART 5: one field, one
+    predicate.
+
+    IT MIRRORS `declared_reclaim` AND `declared_reclose` DELIBERATELY, and the mirroring
+    is the point: `claim` is the third of the three declarations on the claim/close
+    lifecycle, so a reader who has learned the other two meets this one in the same shape.
+
+    WHY NOT `declares_token`, WHICH THE GATE USES, and the defect that makes the
+    difference load-bearing: `declares_token` asks whether ONE named value is present, so
+    it answers True for a row declaring `reconstructed` and False for EVERY other value —
+    and a refusal built on it would have read `claim=#220` as "nothing declared here",
+    which is precisely the state it exists to refuse. The refusal must SEE the value, not
+    match it, so the read is positional and returns what is there.
+
+    The run is POSITIONAL (`trailer_tokens`), matching every other declared field: section
+    11 puts a declaration in the canonical trailer, so a value quoted mid-sentence is
+    prose — the `#99` class, where a private whitespace scan over the whole `detail` took
+    eight prose QUOTATIONS for eight declarations and put a false population into a close
+    row (`n=1785`, corrected at `n=1790`).
+
+    A LIST, for `declared_reclaim`'s reason: a row carries one token (a field with two
+    values has no canonical reading, SKILL.md section 8), and the caller must be able to
+    SEE a second rather than read the first silently.
+    """
+    return _declared_values(detail, CLAIM_KEY)

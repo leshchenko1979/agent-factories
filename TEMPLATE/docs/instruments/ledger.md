@@ -956,6 +956,63 @@ blocks a fresh factory protects nothing. What made this a defect is that the two
 shows one. **A remote that exists but whose committed lineage cannot be read is REFUSED**, because
 there the guard failed to look rather than having had nothing to look at.
 
+### 9.12 One key, one vocabulary — a declaration key cannot also carry a pointer
+
+**A field with ONE lawful value is a DECLARATION, and a second value put into it is not a second
+vocabulary — it is a NON-DECLARATION SQUATTING ON A DECLARATION KEY.** The distinction is not
+pedantic, because the two fail differently: two vocabularies would mean two readers disagreeing,
+which is a reading defect, while a squat means the key is **occupied**, which is a WRITE defect with
+a repair cost.
+
+`claim` carries exactly one lawful value in this factory — `claim=reconstructed`, the declaration a
+`claim` row writes when it is stamped **after** its first edit (`§9.4`; `tools/reconstruction.py:31`,
+`RECONSTRUCTION_KEY`/`RECONSTRUCTION_VALUE`). The only reader is an exact-token test,
+`declares_token(detail, "claim", "reconstructed")`, and a grep over `tools/*.py` and `tests/*.py`
+finds **no reader of any other value**. Measured 2026-09-30 over all 1794 rows: **three** rows put
+the row's own SUBJECT in it — `n=1754`/`n=1755` (`#220`), `n=1767` (`#239`) — against **28**
+declaring `reconstructed` in their canonical run.
+
+**The damage is the REPAIR SPACE, and it is why this belongs at the write path rather than in a
+reader.** `repair --append-detail` refuses to give a key a second value (`§9.8`'s field-twice clause,
+`#104`, ruled at ledger `n=620` PART 4). So the ONE repair that would make such a row lawful is
+unreachable from the instant the squat is written, while the squat itself is still admitted: driven
+on a copy of origin at 1790 rows, `append --event claim --subject '#N' --detail '… claim=#N'`
+returned **rc=0** and minted a row, and the repair that would have corrected it returned **rc=1**
+with the ledger byte-identical.
+
+**A subject pointer is not a claim, and its lawful home already exists.** `--ref subject:#N` is a
+typed, followable edge, first-class on every row and repeatable (`CORE_REF_KINDS` carries
+`subject`), and the row's own `subject` field already carries the same value — so the squat adds
+nothing and takes the key.
+
+| leg | rule |
+|---|---|
+| **refuse** | the append path: an append whose canonical trailer declares `claim=<anything but reconstructed>` exits non-zero, writing nothing, naming `--ref subject:#N` |
+| **no repair of the legacy rows** | the three rows stand exactly as they are, not backfilled — they are ordinary pre-first-edit claims that are not reconstructions, need no token, and nothing reads their value |
+| **re-entry** | a row that already carries the collision re-enters by the designed path (`§9.10`): `reclaim=<one-token>` plus a **fresh** row |
+
+**The scope is the KEY, not the event that carries it.** A squat empties *that row's* repair space
+whichever event it sits on, and `repair` reaches a sub-ledger as readily as the main one, so the
+refusal is event-agnostic and sits ahead of the sequence leg. The same 1794-row scan finds `claim=`
+in the canonical trailer of **no event other than `claim`**, so the wider scope reaches no history
+it would have to excuse.
+
+**The read is the SHARED positional predicate, never a private scan** (`§9.8`, `n=405` PART 5,
+`n=599`): `declared_claim` in `tools/field_predicate.py`, mirroring `declared_reclaim` and
+`declared_reclose`. It is POSITIONAL — the canonical trailer — because a `detail` is free prose that
+**quotes** trailers as evidence, and a whole-detail substring read takes a quotation for a
+declaration. That is not hypothetical here: this factory's own `#247` close row (`n=1785`) counted
+eight prose quotations as eight declarations and put a false population into a durable record,
+corrected forward-only at `n=1790` (the `#99` class). **A refusal built on `declares_token` would
+have been wrong in the same direction**: it answers whether ONE named value is present, so it reads
+`claim=#220` as "nothing declared here" — precisely the state the refusal exists to catch — which
+is why the guard SEES the value rather than matching it.
+
+**No boundary and no exemption surface**, for the reason the sibling refusals state: this binds the
+row about to be written, so it can never predate itself. Upheld by the arms in
+`tests/test_ledger.py` — refuse the squat, admit the one lawful value on the SAME text, admit a
+prose MENTION, show the scope is the key rather than the event, and prove `#104` is untouched.
+
 ---
 
 ## 10. What this file does not own

@@ -2084,7 +2084,15 @@ def main() -> int:
             "--subject", subj, "--detail", f"intake: {subj}")
         run(mc_ledger, "append", "--event", "intake", "--actor", "triage",
             "--subject", other, "--detail", f"intake: {other}")
-        mc_detail = f"claim {subj}: a fixture claim. claim=#4343"
+        # NO SUBJECT ECHO IN THE TRAILER. This fixture once read `... claim=#4343` — the
+        # exact SQUAT form #249 now refuses at the write path: a subject echo sitting on
+        # a declaration key. The row's own `subject` field already carries it, and this
+        # block's arms are about `reclaim=`, so the token was decoration that the refusal
+        # correctly bites. It was not decoration when it was written — it is a measured
+        # instance of the habit #249 exists to break, and the refusal finding it in the
+        # suite's OWN fixture is the sharpest evidence the defect was being propagated by
+        # imitation. The squat form has its own arms under #249 below.
+        mc_detail = f"claim {subj}: a fixture claim"
 
         r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
                 "--subject", subj, "--detail", mc_detail)
@@ -2278,6 +2286,119 @@ def main() -> int:
         msg = (r.stdout + r.stderr).strip()
         check("(q2) and a malformed one is refused WITH the malformation note",
               r.returncode != 0 and "ALSO carries a bare" in msg, msg[-200:])
+
+    # --- #249: THE `claim` KEY IS SINGLE-VOCABULARY AT THE WRITE PATH --------------
+    # `claim` has exactly ONE lawful value in this factory — `claim=reconstructed`, the
+    # declaration a claim row writes when it is stamped AFTER its first edit
+    # (`tools/reconstruction.py:31`; law since #98, ruled at ledger `n=602`). Three rows
+    # put the row's OWN SUBJECT in it instead (`n=1754`/`n=1755` = #220, `n=1767` = #239),
+    # which is not a second vocabulary but a NON-DECLARATION SQUATTING ON A DECLARATION
+    # KEY: the key is then occupied, and `repair --append-detail` refuses to give a key a
+    # second value (#104), so the one repair that would make such a row lawful is
+    # unreachable. The refusal below closes the ACT that creates the trap.
+    #
+    # THE ARMS ARE ORDERED TO SHOW THE READ IS POSITIONAL, because that is the property
+    # separating this refusal from a whole-detail substring scan: (a) refuses the squat,
+    # (b) admits the one lawful value on the SAME text, (c) admits a PROSE quotation of
+    # the squat — the `#99` class that put a false population into this lane's own #247
+    # close row (`n=1785`, corrected at `n=1790`) — and (d) shows the scope is the KEY,
+    # not the event that carries it. (e) proves #104 is untouched: a row already carrying
+    # the collision still refuses the repair, exactly as it did before this landed.
+    with tempfile.TemporaryDirectory() as td:
+        cv_ledger = Path(td) / "claimvocab.jsonl"
+        run(cv_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        cv_subj = "#4501"
+        run(cv_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", cv_subj, "--detail", f"intake: {cv_subj}")
+
+        # (a) THE SQUAT IS REFUSED — the row's own subject echoed into `claim`, the
+        # exact form of the three legacy rows.
+        before = cv_ledger.read_bytes()
+        r = run(cv_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", cv_subj,
+                "--detail", f"claim {cv_subj}: stamped, see {cv_subj} claim={cv_subj}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(a) a `claim=<subject>` in the canonical trailer is REFUSED",
+              r.returncode != 0, msg[-110:])
+        check("(a) and the refusal NAMES `--ref subject:#N` as the lawful home",
+              "--ref subject:" in msg, msg[-300:])
+        check("(a) and it names the VALUE it read, not merely the key",
+              cv_subj in msg, msg[-300:])
+        check("(a2) a refused squat wrote NOTHING",
+              cv_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (b) THE SAME ROW WITH THE ONE LAWFUL VALUE IS ADMITTED. Identical text and the
+        # same subject — only the value differs — so the refusal is caused by the VALUE,
+        # not by the key's presence or by the surrounding text.
+        r = run(cv_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", cv_subj,
+                "--detail", f"claim {cv_subj}: stamped after the first edit, "
+                            f"claim=reconstructed BASIS: probe fixture")
+        check("(b) the SAME row with `claim=reconstructed` is ADMITTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-150:])
+
+        # (c) A PROSE QUOTATION IS NOT A DECLARATION. The read is POSITIONAL — the
+        # canonical trailer — so a mention mid-sentence must pass. Without this arm the
+        # refusal could be "fixed" into a whole-detail substring scan, which is #88's
+        # class one layer up and the exact defect that corrupted the #247 close row.
+        cv_subj2 = "#4502"
+        run(cv_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", cv_subj2, "--detail", f"intake: {cv_subj2}")
+        r = run(cv_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", cv_subj2,
+                "--detail", f"claim {cv_subj2}: this row DOCUMENTS the old claim=#220 "
+                            f"form here in prose")
+        check("(c) a prose MENTION of `claim=<subject>` is ADMITTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-150:])
+
+        # (d) EVENT-AGNOSTIC: the hazard is the KEY, not the event carrying it. A `close`
+        # row whose trailer squats the key is refused too — a squat empties THAT row's
+        # repair space whichever event it is.
+        cv_subj3 = "#4503"
+        run(cv_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", cv_subj3, "--detail", f"intake: {cv_subj3}")
+        run(cv_ledger, "append", "--event", "claim", "--actor", "worker",
+            "--subject", cv_subj3, "--detail", f"claim: {cv_subj3}")
+        before = cv_ledger.read_bytes()
+        r = run(cv_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", cv_subj3,
+                "--detail", f"close {cv_subj3}: done. rework=none board=closed "
+                            f"head={'d' * 40} claim={cv_subj3}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(d) a `close` row squatting the key is REFUSED too (event-agnostic)",
+              r.returncode != 0, msg[-110:])
+        check("(d2) and it wrote NOTHING",
+              cv_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (e) #104 IS UNTOUCHED. A row that ALREADY declares `claim` still refuses the
+        # repair that would give the key a second value. SEEDED BY HAND, because the
+        # write path now refuses to MINT such a row — the three legacy rows exist the
+        # same way, written before this refusal landed. The invariant is named explicitly
+        # because a `claim` row maps to none (`INVARIANT_FOR_EVENT` carries only `close`),
+        # and without it the repair would be refused for "no declared invariant" instead
+        # — an arm that passes for the WRONG reason.
+        seeded = rows(cv_ledger)
+        squat_n = len(seeded) + 1
+        squat_row = {"n": squat_n, "ts": "2026-09-30T00:00:00Z", "event": "claim",
+                     "actor": "worker", "subject": cv_subj3,
+                     "detail": f"claim {cv_subj3}: a legacy squat. claim={cv_subj3}"}
+        cv_ledger.write_text(
+            "\n".join(json.dumps(x) for x in seeded + [squat_row]) + "\n",
+            encoding="utf-8")
+        digest_before = hashlib.md5(cv_ledger.read_bytes()).hexdigest()
+        r = run(cv_ledger, "repair", "--actor", "worker", "--n", str(squat_n),
+                "--invariant", "close_row_revision",
+                "--append-detail", "claim=reconstructed",
+                "--note", "probe: repair must stay exactly as narrow as it was")
+        msg = (r.stdout + r.stderr).strip()
+        check("(e) repair still REFUSES a second `claim=` on a row that declares one",
+              r.returncode != 0, msg[-150:])
+        check("(e) and the refusal names the key it would re-declare",
+              "'claim'" in msg or "claim" in msg, msg[-220:])
+        check("(e) and the refused repair left the ledger BYTE-IDENTICAL",
+              hashlib.md5(cv_ledger.read_bytes()).hexdigest() == digest_before,
+              digest_before)
 
     check_lock_is_repo_scoped()
     check_stale_ref_refused()
