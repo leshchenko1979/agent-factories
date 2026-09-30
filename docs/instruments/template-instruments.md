@@ -331,6 +331,16 @@ A promotion lands the instrument with its **full set** (§2), its **class** (§3
 (§7) and its promotion record. **The contributing member becomes the evidence, not automatically the
 upstream** — unless criterion 5 says the template's copy should be replaced outright.
 
+**The donor is NOTIFIED, and ownership is stated.** The promoting lane tells the donor's owning lane
+in the same round as the landing: what was promoted, where the canonical copy now lives, and what the
+donor owes under §9 O1 (migrate / declare the fork / defer). **The canonical copy is the
+meta-factory's; the donor's copy becomes a vendored instance** — the donor keeps its own tree, and it
+no longer owns the instrument's definition. Without this leg the migration duty has **no trigger**:
+§5.1 criterion 4 names *who* must change, and naming is not telling. Measured: a dispatch round
+produced **0 ports** from five replies, because *reporting is not enforcement*. Part 9's **feedback
+channel** is this clause — it is the return path by which a donor's divergence reaches the promoting
+lane, and the notify leg is what opens it.
+
 ### 5.4 A promotion is verified against the donor's DATA, not only its code
 
 The two reviews (§5.2) read the code and the law; neither reads the donor's records, and a donor's
