@@ -252,7 +252,7 @@ def append_insight(
         raise ValueError("status must not be blank — omit it to open at 'pending'")
     if status not in ALLOWED_STATUSES:
         raise ValueError(f"status must be one of {ALLOWED_STATUSES}, got '{status}'")
-    # Law §6 rule 4, at the one place the row can still be refused. Checked HERE rather
+    # insights.md §6 rule 4, at the one place the row can still be refused. Checked HERE rather
     # than left to `verify` because a store-level check can only report a bad row, while
     # this one stops it existing — and `dropped` is the status whose whole content is the
     # decision behind it, so a bare verdict is a record with its reason missing.
@@ -416,7 +416,7 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                 for name in optional:
                     if name in updates[slug]:
                         row = _with_field(row, name, updates[slug][name])
-                # Law §6 rule 4, checked on the row AS IT WOULD BE WRITTEN rather than on
+                # insights.md §6 rule 4, checked on the row AS IT WOULD BE WRITTEN rather than on
                 # the mapping alone: a row moved `dropped` here is the same defect as one
                 # appended that way, and a rule enforced on one write path and not the
                 # other is the shape this factory files against. Raised before any byte
@@ -424,7 +424,7 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                 if (row.get("status") == "dropped"
                         and not str(row.get("reason") or "").strip()):
                     raise ValueError(
-                        f"'{slug}' would be left 'dropped' with no reason — law §6 rule 4 "
+                        f"'{slug}' would be left 'dropped' with no reason — insights.md §6 rule 4 "
                         f"requires one, so name it in the same mapping")
                 changes.append((slug, before))
                 out_rows.append(row)
@@ -463,7 +463,7 @@ def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]
 
     A value may be the status alone or `{"status": …, "reason": …}`, because a row moved
     to `dropped` owes a reason and one transaction should carry both — the alternative is
-    a window in which a dropped row has no reason, which is the state §6 rule 4 forbids.
+    a window in which a dropped row has no reason, which is the state insights.md §6 rule 4 forbids.
     """
     stamp = now_iso()
     updates: dict[str, dict] = {}
@@ -600,12 +600,12 @@ def verify_insights() -> tuple[bool, list[str]]:
             elif not data.get("status_at"):
                 errors.append(f"line {idx}: status '{data['status']}' carries no status_at")
 
-        # Law §6 rule 4 — `dropped` requires a stated reason — is enforced at the write
+        # insights.md §6 rule 4 — `dropped` requires a stated reason — is enforced at the write
         # path, and REPORTED here. Both are owed: the write path stops the row existing,
         # and this leg catches one that reached the store by another route, which is the
         # difference between a rule and a rule that holds.
         if data.get("status") == "dropped" and not str(data.get("reason") or "").strip():
-            errors.append(f"line {idx}: status 'dropped' carries no reason — §6 rule 4 "
+            errors.append(f"line {idx}: status 'dropped' carries no reason — insights.md §6 rule 4 "
                           f"requires one (a refusal and a silence are different records)")
         # A `reason` on a row that is NOT dropped is the field's other lie: it reads as a
         # decision's grounds while the status says no decision was taken.
@@ -861,7 +861,7 @@ def main() -> int:
 
         # A value may be the status alone, or an object naming the reason too — a row
         # moved to `dropped` owes one, and both must travel in ONE transaction or the
-        # register passes through a state §6 rule 4 forbids.
+        # register passes through a state insights.md §6 rule 4 forbids.
         normalized: dict[str, object] = {}
         for k, v in mapping.items():
             if isinstance(v, dict):

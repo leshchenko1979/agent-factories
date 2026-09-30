@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Workspace hygiene tool — upholds the Cleanliness & Garbage Collection Law (P20).
+"""Workspace hygiene tool — upholds Process 4 (Workspace Hygiene Sweep).
 
 Prevents host resource exhaustion and recovery failures by auditing and reaping
 stale scratch scripts, temporary run artifacts, untracked repository clutter,

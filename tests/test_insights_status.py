@@ -26,7 +26,7 @@ the field can LIE rather than merely be absent:
    is left untouched, because a half-applied move reads exactly like a complete one.
 6. **The two axes are ORTHOGONAL.** Setting a status must not disturb the class, and
    re-routing a row must not disturb any other row.
-7. **`dropped` carries its reason, and the rule holds on BOTH write paths.** Law §6 rule 4
+7. **`dropped` carries its reason, and the rule holds on BOTH write paths.** insights.md §6 rule 4
    states the requirement; the append and the status move are the two ways a row can END UP
    dropped, so a check on one and not the other is the half-rule this factory files against.
    `verify` reports what the write paths refuse, because a rule that only holds on the happy
@@ -122,7 +122,7 @@ def test_append_opens_at_pending_and_stamps_it(tmp_path, monkeypatch):
 def test_append_accepts_each_allowed_status(tmp_path, monkeypatch):
     register = _redirect(tmp_path, monkeypatch)
     for value in insights.ALLOWED_STATUSES:
-        # `dropped` is the one status that owes a second field (§6 rule 4), so it carries
+        # `dropped` is the one status that owes a second field (insights.md §6 rule 4), so it carries
         # its reason here — the vocabulary test is about the LABEL being accepted, and a
         # rule that is real must be honoured by the probe that exercises the vocabulary.
         extra = {"reason": "probe"} if value == "dropped" else {}
@@ -336,7 +336,7 @@ def test_class_and_status_share_one_backfill_and_neither_accepts_the_others_fiel
         raise AssertionError("a CLASS value was accepted as a status")
     assert "status" not in register.read_text(encoding="utf-8")
 
-# --- §6 rule 4: a dropped row carries its REASON, on both write paths -----------------
+# --- insights.md §6 rule 4: a dropped row carries its REASON, on both write paths -----------------
 
 def test_append_refuses_dropped_with_no_reason(tmp_path, monkeypatch):
     """`dropped` says a unit was not acted on; the reason says why, and the append owes it."""

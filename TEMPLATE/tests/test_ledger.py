@@ -178,21 +178,42 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
         cwd=cwd, capture_output=True, text=True,
     )
 
-def run_in_tree(root: Path, ledger: Path, *args: str) -> subprocess.CompletedProcess:
+def run_in_tree(
+    root: Path, ledger: Path, *args: str, git_unreachable: bool = False
+) -> subprocess.CompletedProcess:
     """Run the tool AS STAGED IN `root`.
 
     `run()` above always executes this repo's tool, which is right for a throwaway
     ledger but wrong for these probes: both legs key on whether the LEDGER lies in
     the repository the TOOL resolved, so a probe that ran this repo's tool against a
     fixture tree would exercise neither. The staged copy is what the fixture owns.
+
+    `git_unreachable` empties PATH for the child, which is how the #237 arm is driven:
+    `sys.executable` is an absolute path so the interpreter still starts, while every
+    `git` the tool shells out to raises OSError and comes back as None. That is the
+    arm in which the freshness leg used to answer "fresh" without having looked.
     """
     env = {**os.environ, "OC_LEDGER_PATH": str(ledger)}
     env["OC_ACTORS_PATH"] = str(ledger.parent / "no-actors.txt")
     env["OC_AUTHORIZATIONS_PATH"] = str(ledger.parent / "no-authorizations.json")
+    if git_unreachable:
+        env["PATH"] = ""
     return subprocess.run(
         [sys.executable, str(root / "tools" / "ledger.py"), *args],
         capture_output=True, text=True, env=env, cwd=root,
     )
+
+def _stage_mutant(root: Path, old: str, new: str) -> None:
+    """Mutate the FIXTURE's staged copy, so a probe can be shown to bite.
+
+    A rule that has only seen good input has not been shown to reject bad input, and a
+    probe that cannot be made to fail is not a probe. The real tool is never touched.
+    """
+    staged = root / "tools" / "ledger.py"
+    text = staged.read_text(encoding="utf-8")
+    if text.count(old) != 1:
+        raise AssertionError(f"mutation anchor matched {text.count(old)} times: {old!r}")
+    staged.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 def _fixture_repo(root: Path, *, remote: Path | None = None) -> Path:
     """A minimal repository holding the tool and an empty ledger."""
@@ -223,6 +244,23 @@ def _lock_path(root: Path) -> str:
         cwd=root, capture_output=True, text=True,
     )
     return proc.stdout.strip()
+
+def _vocabulary_size() -> int:
+    """How many events THIS tree resolves -- asked of the TOOL, like `_event_is_known`.
+
+    The SKIP below states its population: a skip that names none is the vacuous-green
+    shape this file forbids elsewhere ("dispatch rows examined:").
+    """
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, 'tools'); import ledger; "
+         "print(len(ledger.known_events()))"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    try:
+        return int(proc.stdout.strip())
+    except ValueError:
+        return 0
 
 def _event_is_known(event: str) -> bool:
     """Whether `event` is in THIS tree's vocabulary -- asked of the TOOL, not derived.
@@ -360,6 +398,60 @@ def check_fail_open_needs_no_remote() -> None:
         check("(221e) the control: the same bytes with NO remote fail open",
               r2.returncode == 0, f"rc={r2.returncode} {r2.stderr.strip()[:200]}")
 
+def check_unread_ref_is_refused() -> None:
+    """#237: the UNREAD case -- a remote exists and the ref read failed.
+
+    The defect was that "I verified this lineage" and "I could not look" returned the
+    SAME value, so the append minted the next n from a lineage it had not confirmed.
+    The discriminator must NOT be another `git` call: the question is asked precisely
+    when git has already failed, and `git remote get-url origin` answers None exactly
+    like "no remote configured" does -- measured, and that is why the probe reads the
+    config FILE instead.
+    """
+    print("single-writer (#237) -- the UNREAD case is refused, and the carve-out is not")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        bare = tmp / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], capture_output=True)
+        a_dir = _fixture_repo(tmp / "a", remote=bare)
+        _git(a_dir, "push", "-q", "-u", "origin", "main")
+        b_dir = _fixture_repo(tmp / "b", remote=bare)
+        _git(b_dir, "fetch", "-q", "origin")
+        led = _ledger(b_dir)
+
+        r = run_in_tree(b_dir, led, "append", "--event", "genesis", "--actor", "owner",
+                        "--subject", "genesis", "--detail", "genesis", git_unreachable=True)
+        check("(237a) git unreachable + a remote configured is REFUSED",
+              r.returncode != 0, f"rc={r.returncode} {r.stderr.strip()[:200]}")
+        check("(237a) the refusal names the UNREAD case and the sync",
+              "UNREAD" in r.stderr and "git fetch origin" in r.stderr,
+              r.stderr.strip()[:280])
+        check("(237a) the refused append wrote nothing",
+              len(rows(led)) == 0, f"{len(rows(led))} row(s)")
+
+        c_dir = _fixture_repo(tmp / "c")
+        led_c = _ledger(c_dir)
+        r2 = run_in_tree(c_dir, led_c, "append", "--event", "genesis", "--actor", "owner",
+                         "--subject", "genesis", "--detail", "genesis", git_unreachable=True)
+        check("(237b) the control: no remote + the same broken git PROCEEDS",
+              r2.returncode == 0, f"rc={r2.returncode} {r2.stderr.strip()[:200]}")
+        check("(237c) the fail-open carve-out announces itself",
+              "freshness NOT checked" in r2.stderr, r2.stderr.strip()[:200])
+
+        r3 = run_in_tree(b_dir, led, "append", "--event", "genesis", "--actor", "owner",
+                         "--subject", "genesis", "--detail", "genesis")
+        check("(237c) the verified branch does NOT announce it",
+              r3.returncode == 0 and "freshness NOT checked" not in r3.stderr,
+              f"rc={r3.returncode} {r3.stderr.strip()[:200]}")
+
+        mut = _fixture_repo(tmp / "mut", remote=bare)
+        _stage_mutant(mut, "    return '[remote \"origin\"]' in text", "    return False")
+        led_m = _ledger(mut)
+        r4 = run_in_tree(mut, led_m, "append", "--event", "genesis", "--actor", "owner",
+                         "--subject", "genesis", "--detail", "genesis", git_unreachable=True)
+        check("(237d) neutering the discriminator lets the unread append THROUGH",
+              r4.returncode == 0, f"rc={r4.returncode} {r4.stderr.strip()[:200]}")
+
 def check_worktree_fork_refused() -> None:
     """#222 leg 2 / #221 detection: a second checkout cannot re-mint a published n."""
     print("single-writer (#222) -- a second checkout is refused the published n")
@@ -426,7 +518,9 @@ def check_release_vocabulary() -> None:
     if not _event_is_known("release"):
         print(
             "  SKIP  the release arms -- this tree declares no `release` event: "
-            "docs/ledger-refs-kinds.json is absent or silent. A factory that declares "
+            "docs/ledger-refs-kinds.json is absent or silent. "
+            f"Population examined: {_vocabulary_size()} event(s) resolved in "
+            "this tree; 8 release arms declared, 0 driven here. A factory that declares "
             "the vocabulary gets these arms; reding here would report a missing "
             "declaration as a broken instrument (#229)."
         )
@@ -1970,9 +2064,225 @@ def main() -> int:
               r.returncode != 0 and "ONE token" in msg, msg[-110:])
 
 
+    # --- #246: the claim's three mechanisms, mirroring #213's five arms ------------
+    # The gap this closes was measured, not inferred: `close` carried a declaration, a
+    # write-path refusal and a read leg, and `claim` — the other end of the same
+    # lifecycle — carried none of the three, so `verify` read rc=0 over a subject claimed
+    # twice by the same lane in 18 minutes.
+    #
+    # THE ACTOR SCOPE IS AN ARM, NOT A COMMENT. An actor-blind refusal would have blocked
+    # the two LAWFUL multi-actor cases in the same measured population (#34's hand-off,
+    # #234's two halves), so arm (h) drives the case the refusal must ADMIT — without it
+    # the scope could silently tighten to actor-blind and every probe here would pass.
+    with tempfile.TemporaryDirectory() as td:
+        mc_ledger = Path(td) / "reclaim.jsonl"
+        subj = "#4343"
+        other = "#4344"
+        run(mc_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        run(mc_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", subj, "--detail", f"intake: {subj}")
+        run(mc_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", other, "--detail", f"intake: {other}")
+        mc_detail = f"claim {subj}: a fixture claim. claim=#4343"
+
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail)
+        check("(f) the first claim is ACCEPTED (the control)",
+              r.returncode == 0, r.stderr.strip()[-90:])
+
+        before = mc_ledger.read_bytes()
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail)
+        msg = (r.stdout + r.stderr).strip()
+        check("(f) a second SAME-ACTOR claim declaring no `reclaim=` is REFUSED",
+              r.returncode != 0, msg[-90:])
+        check("(f) and the refusal NAMES the existing row, not merely refuses",
+              "already claimed" in msg and "n=" in msg, msg[-110:])
+        check("(f) and it names the token that makes the re-claim lawful",
+              "reclaim=" in msg, msg[-110:])
+        check("(g) a refused append wrote NOTHING",
+              mc_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (h) THE ARM THE SCOPE NEEDS. A DIFFERENT actor taking the same subject is a
+        # hand-off, which the measured population shows is a correct state (#34 hq->worker,
+        # #234 surveys+worker). Without this arm the scope could tighten to actor-blind and
+        # every other probe here would still pass.
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "hq",
+                "--subject", subj, "--detail", f"claim {subj}: the derivation half")
+        check("(h) a second claim by a DIFFERENT actor is ACCEPTED (the scope arm)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+
+        # (h2) AND THE READ LEG AGREES WITH THE WRITER. Arm (h) admitted this pair; if the
+        # read leg then printed it under the duplicate wording, a reader would be sent to
+        # repair a state no rule forbids. The split is the refusal's OWN scope.
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(h2) a DIFFERENT-actor pair is reported as ADMITTED, never as a suspect",
+              "all by DIFFERENT actors" in out and "no declaration is owed" in out,
+              out[-400:])
+
+        # (i) THE ESCAPE HATCH IS REACHABLE -- the arm #213's own first cut failed. A
+        # type-testing predicate would refuse every re-claim while the message prescribed
+        # the token, so this asserts the declared form actually satisfies the guard.
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail + " reclaim=work-re-taken")
+        check("(i) a same-actor re-claim DECLARING reclaim=<one-token> is ACCEPTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(i2) and the read leg reports that pair as DECLARED re-claims",
+              "declaring `reclaim=`" in out and "not duplicates" in out, out[-400:])
+
+        # (j) A MALFORMED DECLARATION IS NAMED. A multi-word value terminates the
+        # canonical run, so the row declares nothing while its author believes it did.
+        r = run(mc_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subj, "--detail", mc_detail + " reclaim=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(j) a MULTI-WORD reclaim= is refused AND the malformation is named",
+              r.returncode != 0 and "ONE token" in msg, msg[-110:])
+
+        # (k) THE READ LEG, over the fixture this probe just built. It must print its
+        # POPULATION (a finding over an unstated population cannot be told from one over
+        # a narrowed population), NAME the subject rather than only count it, and NOT
+        # gate — a multi-claim subject is a state, not a failure.
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(k) verify PRINTS the multi-claim population",
+              "multiple claims examined:" in out, out[-300:])
+        check("(k) and NAMES the subject carrying more than one claim",
+              subj in out, out[-300:])
+        check("(k) and reports and never gates — a multi-claim subject is not a failure",
+              r.returncode == 0, f"rc={r.returncode}")
+
+        # (l) THE SUSPECT FORM, over HISTORY the write path can no longer create. This is
+        # the leg's whole purpose: the refusal binds the row about to be written and can
+        # never reach rows already here, so the pair that motivated the item — a same-actor
+        # second claim declaring nothing — must still be PRINTED. Written directly into the
+        # fixture ledger, because the refusal now (correctly) makes it unwritable.
+        # The row numbers CONTINUE the fixture: `verify` carries a no-gaps leg, so a
+        # hand-written row numbered from a guess would red the ledger for a reason that has
+        # nothing to do with this probe — a fixture fault read as a finding.
+        existing = [json.loads(line) for line in
+                    mc_ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        with mc_ledger.open("a", encoding="utf-8") as handle:
+            for offset, actor in enumerate(("worker", "worker"), start=1):
+                handle.write(json.dumps({
+                    "n": len(existing) + offset, "ts": "2026-09-29T00:00:00Z",
+                    "event": "claim", "actor": actor, "subject": other,
+                    "detail": f"claim {other}: a historical same-actor pair",
+                }) + "\n")
+        r = run(mc_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(l) a same-actor undeclared pair from HISTORY carries the refusal's sentence",
+              "SAME-ACTOR second claim" in out, out[-500:])
+        check("(l) and the leg NAMES that subject rather than only counting it",
+              other in out, out[-500:])
+        check("(l) and it still does not gate — history is immutable, and this is a reading",
+              r.returncode == 0, f"rc={r.returncode}")
+
+    # --- #247: THE LEXICAL BRANCH IS A NOTE, NOT A REFUSAL, ON BOTH ENDS -----------
+    # The branch asks a LEXICAL question ("does any whitespace-separated token start with
+    # the key") and was given ENFORCEMENT powers it never needed. Because it fires BEFORE
+    # the prior-row leg, it refused a FIRST row that merely DOCUMENTED or QUOTED the
+    # convention — a row with nothing to refuse. Its own purpose statement is a message,
+    # not a gate: "a malformed declaration is NAMED, never silently ignored".
+    #
+    # THE PROTECTION IS PROVEN STRUCTURALLY, and the arms below are ordered to show it
+    # rather than assert it: (m) admits a first row that quotes the token, (n) still
+    # refuses the second same-actor row that declares nothing, and (o) shows the refusal
+    # carrying the malformation note when the detail is BOTH. Arms (m) and (n) are the
+    # non-vacuity pair — neutering the demotion reds (m), neutering the prior-row leg
+    # reds (n) — so neither can pass while the other's mechanism is absent.
+    #
+    # A FOURTH ARM IS NOT OWED FOR THE "ESCAPE HATCH": arms (d) and (i) above already
+    # drive the declared form being ACCEPTED, and the demotion only widens what reaches
+    # those legs.
+    with tempfile.TemporaryDirectory() as td:
+        lex_ledger = Path(td) / "lexical.jsonl"
+        run(lex_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        # A subject whose FIRST close quotes the convention bare in prose — the row the
+        # old refusal rejected with nothing to refuse.
+        q_subj = "#4401"
+        run(lex_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", q_subj, "--detail", f"intake: {q_subj}")
+        run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+            "--subject", q_subj, "--detail", f"claim: {q_subj}")
+        # THE MENTION SITS IN PROSE AND THE CANONICAL TRAILER STAYS TERMINAL. Both
+        # halves are load-bearing: `close_row_revision` (#187) reads `head=` from the
+        # trailing run, so a token written AFTER the run empties it and the close is
+        # refused for declaring no revision — which is what the first cut of this
+        # fixture measured, and it failed for THAT reason, not for the demotion. The
+        # `reclose=<one-token>` token is a MENTION (its value is not the one-token
+        # form `declares_field` accepts), so the lexical branch fires and the demotion
+        # is what lets the row through.
+        plain_close = (f"close {q_subj}: a fixture close. rework=none board=closed "
+                       f"head={'c' * 40}")
+        quoting = (f"close {q_subj}: a fixture close; it quotes reclose=<one-token> "
+                   f"here in prose. rework=none board=closed head={'c' * 40}")
+        r = run(lex_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", q_subj, "--detail", quoting)
+        check("(m) a FIRST close QUOTING the token bare is ADMITTED (nothing to refuse)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+        check("(m) and the malformation is still NAMED, as a note and not a refusal",
+              "ledger append note" in r.stderr, r.stderr.strip()[-140:])
+        check("(m) and the note states BOTH lawful responses, not just the one",
+              "NOTHING IS OWED" in r.stderr and "one-token" in r.stderr,
+              r.stderr.strip()[-200:])
+
+        # (n) THE PROTECTION, on the same subject: a SECOND close declaring nothing is
+        # still refused by the prior-close leg — which runs AFTER the demoted branch.
+        before = lex_ledger.read_bytes()
+        r = run(lex_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", q_subj, "--detail", plain_close)
+        msg = (r.stdout + r.stderr).strip()
+        check("(n) a SECOND close declaring nothing is STILL REFUSED",
+              r.returncode != 0, msg[-90:])
+        check("(n) and it NAMES the existing row, not merely refuses",
+              "already carries a close" in msg and "n=" in msg, msg[-120:])
+        check("(n2) a refused append wrote NOTHING",
+              lex_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (o) BOTH FACTS AT ONCE: the detail quotes the token AND is a second close. The
+        # refusal must carry the malformation note too, because the note above it is on
+        # STDERR and an author reading only the refusal would be told to declare a token
+        # they already wrote.
+        r = run(lex_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", q_subj, "--detail", plain_close + " reclose=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(o) a second close whose detail is ALSO malformed is refused",
+              r.returncode != 0, msg[-90:])
+        check("(o) and the refusal CARRIES the malformation note",
+              "ALSO carries a bare" in msg and "ONE token" in msg, msg[-200:])
+
+        # ...and the CLAIM end, driven separately because the two ends are separate code
+        # paths that could drift apart — which is exactly what #213/#246 measured.
+        k_subj = "#4402"
+        run(lex_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", k_subj, "--detail", f"intake: {k_subj}")
+        r = run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", k_subj,
+                "--detail", f"claim {k_subj}: quoting reclaim=<one-token> in prose")
+        check("(p) a FIRST claim QUOTING the token bare is ADMITTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+        check("(p) and the claim end NAMES the malformation too",
+              "ledger append note" in r.stderr, r.stderr.strip()[-140:])
+        r = run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", k_subj, "--detail", f"claim {k_subj}: the second attempt")
+        check("(q) a second SAME-ACTOR claim declaring nothing is STILL REFUSED",
+              r.returncode != 0, (r.stdout + r.stderr).strip()[-90:])
+        r = run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", k_subj,
+                "--detail", f"claim {k_subj}: a third attempt reclaim=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(q2) and a malformed one is refused WITH the malformation note",
+              r.returncode != 0 and "ALSO carries a bare" in msg, msg[-200:])
+
     check_lock_is_repo_scoped()
     check_stale_ref_refused()
     check_fail_open_needs_no_remote()
+    check_unread_ref_is_refused()
     check_worktree_fork_refused()
     check_release_vocabulary()
 

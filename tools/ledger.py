@@ -142,8 +142,10 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
     declared_keys,
+    declared_reclaim,
     declared_reclose,
     declared_revision,
+    mentions_reclaim,
     mentions_reclose,
     declared_telemetry_provenance,
     declares_field,
@@ -225,12 +227,23 @@ def known_ref_kinds() -> tuple[str, ...]:
 
 
 def parse_refs(values: list[str]) -> list[dict]:
-    """Typed pointers, validated for FORM at the write path.
+    """Typed pointers, validated for FORM **and KIND** at the write path.
 
     `KIND:VALUE`, and a malformed ref is refused HERE, at append, naming the lawful
     kinds -- the form is the one thing the tool can settle without knowing a member's
     object. The EXISTENCE check (a `row` ref must resolve) is a separate leg: it needs
     the ledger's own maximum, which only the append lock holds.
+
+    The KIND check is here rather than at the gate (#232) because `verify` refuses an
+    undeclared kind a step LATER, when the row is already written and pushed and can only
+    be cleared by declaring the kind -- never by removing the ref, since a row is immutable
+    once pushed. That is #187's class one field over, and this is the same move: the
+    predicate `known_ref_kinds()` stays single, and the write path and the gate read it.
+
+    A kind that is not lawful is refused by naming BOTH the lawful set and the file that
+    extends it, because the lawful remedy for a genuinely new kind is to DECLARE it, never
+    to drop the ref. A fixture writer is unaffected: the declaration is read from
+    `REFS_KINDS_FILE`, the same `OC_REFS_KINDS_PATH` seam every other reader uses.
     """
     refs: list[dict] = []
     for raw in values:
@@ -240,6 +253,15 @@ def parse_refs(values: list[str]) -> list[dict]:
                 f"ledger append refused: --ref {raw!r} is not KIND:VALUE "
                 f"(e.g. row:1228, subject:#149, commit:be47c443). "
                 f"Kinds: {', '.join(known_ref_kinds())}"
+            )
+        lawful = known_ref_kinds()
+        if kind not in lawful:
+            sys.exit(
+                f"ledger append refused: --ref {raw!r} names the kind {kind!r}, which this "
+                f"factory does not declare. Kinds: {', '.join(lawful)}. A new kind is "
+                f"DECLARED, not invented: add it to the `kinds` list in "
+                f"docs/ledger-refs-kinds.json (a factory's own file; nothing in this module "
+                f"changes)"
             )
         refs.append({kind: value})
     return refs
@@ -303,7 +325,7 @@ LOCK = _git_common_dir() / "opencrabs-ledger.lock"
 #
 # A FETCH IS DELIBERATELY NOT USED. A fetch inside the append lock mutates the
 # working tree's refs as a side effect of a write -- a second-writer act in the
-# terms of SKILL.md §State -- and makes an append network-bound on a box where
+# terms of SKILL.md §State — every surface has one writer -- and makes an append network-bound on a box where
 # several lanes append within minutes. A refusal costs the caller one fetch and
 # tells it why.
 _GIT_TIMEOUT = 10
@@ -552,6 +574,82 @@ def _ledger_rel_path(path: Path) -> str | None:
     except ValueError:
         return None
 
+def _git_config_path() -> Path | None:
+    """The repository's git CONFIG, resolved WITHOUT running git (#237).
+
+    This exists because the question below -- "is a remote configured?" -- is asked
+    precisely when a git read has already failed, so it must not be another git call.
+    Measured: with git unreachable, `git remote get-url origin` returns None exactly
+    like "no remote configured" does, so a probe built on that would answer "proceed"
+    in the one case the refusal exists to catch.
+
+    A plain file read covers every shape: `.git` is a directory in the main checkout,
+    and a FILE in a linked worktree naming the per-worktree gitdir, whose `commondir`
+    names the shared directory the config actually lives in. Measured on all four
+    shapes (main checkout, linked worktree, no-remote repository, non-repository).
+    """
+    dot_git = REPO / ".git"
+    if dot_git.is_dir():
+        return dot_git / "config"
+    if not dot_git.is_file():
+        return None
+    try:
+        text = dot_git.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not text.startswith("gitdir:"):
+        return None
+    gitdir = Path(text.split(":", 1)[1].strip())
+    if not gitdir.is_absolute():
+        gitdir = (REPO / gitdir).resolve()
+    common = gitdir / "commondir"
+    if common.is_file():
+        try:
+            target = Path(common.read_text(encoding="utf-8").strip())
+        except OSError:
+            return None
+        if not target.is_absolute():
+            target = (gitdir / target).resolve()
+        return target / "config"
+    return gitdir / "config"
+
+def _remote_configured() -> bool:
+    """Whether a remote named `origin` is configured, read from the CONFIG FILE.
+
+    The discriminator the freshness leg's two outcomes hang on: no `origin` = there is
+    nothing for this guard to be stale against (proceed); `origin` present = there is,
+    and a failed read is a refusal. It answers even when the binary that would have
+    reported it does not, which is exactly when it is asked (#237).
+
+    Named `origin` and not "any remote", because `origin` is the ref this guard reads:
+    a factory with only `upstream` has no `origin/main` to compare against and would be
+    refused forever by a broader predicate.
+    """
+    config = _git_config_path()
+    if config is None:
+        return False
+    try:
+        text = config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return '[remote "origin"]' in text
+
+def _unread_refusal(what: str) -> str:
+    """The UNREAD refusal: a remote exists and the read failed (#237).
+
+    Distinct from the stale refusal on purpose. "I looked and the ref had moved" and
+    "I could not look" have different remedies, and only the first is about a peer.
+    """
+    return (
+        f"{what}, and a remote IS configured: there is a committed lineage to judge "
+        f"against and this guard could not read it. That is the UNREAD case, not the "
+        f"fresh one -- minting the next n from a lineage it could not confirm is what "
+        f"the single-writer guard exists to prevent. Run `git fetch origin` and retry. "
+        f"(A refusal and not a fetch on purpose: fetching inside the append lock would "
+        f"rewrite origin/* as a side effect of a write, and would make an append "
+        f"network-bound.)"
+    )
+
 def stale_ref_refusal(path: Path) -> str | None:
     """A refusal when the ref we are about to judge against is not the remote's tip.
 
@@ -559,19 +657,43 @@ def stale_ref_refusal(path: Path) -> str | None:
     remote, `git rev-parse` asks the local ref, and a difference means the lineage
     `read_committed_rows` is holding has been superseded by a peer's push.
 
-    It returns None -- never a refusal -- whenever the question cannot be answered:
-    no remote configured, no network, no `origin`. A fresh factory with no remote is
-    the fail-open case, and a refusal there would block exactly the factories this
-    guard cannot help.
+    The UNREAD case is NOT the fail-open case, and telling them apart is the whole fix
+    (#237). "No remote is configured" means there is nothing to compare against, so the
+    append proceeds. "A remote IS configured but the ref read failed" means there is
+    something to compare against and this guard could not read it, so the append is
+    REFUSED. Both used to return the same None, so no caller could tell "I verified this
+    lineage" from "I could not look" -- and on the second the append minted the next n
+    from a lineage it had not confirmed. A fresh factory with no remote keeps its
+    carve-out, and now says so out loud.
     """
     if _ledger_rel_path(path) is None:
         return None
     remote = _git_out("ls-remote", "origin", "main")
     if remote is None:
+        if _remote_configured():
+            return _unread_refusal("the remote's tip could not be read")
+        # THE CARVE-OUT ANNOUNCES ITSELF: a run that did not check freshness must not
+        # be byte-identical to one that did.
+        sys.stderr.write(
+            "warning: ledger guard: no remote configured -- freshness NOT checked "
+            "(fail-open: there is no committed lineage to be stale against)\n"
+        )
+        return None
+    if not remote.strip():
+        # A remote that ANSWERED and carries no `main` yet: a factory's first push.
+        # There is nothing committed there to be stale against, so this is the
+        # carve-out -- and `ls-remote` ANSWERING is what tells it apart from the
+        # unread case above. (Reading this as unread refused every first append in a
+        # factory whose remote exists but is empty: measured, and caught by the
+        # (222a) probe, which is the shape the gate exists to drive.)
         return None
     local = _git_out("rev-parse", "origin/main")
     if local is None:
-        return None
+        # The remote carries a `main` and this checkout has no local ref for it, so
+        # the lineage cannot be judged at all. `git fetch origin` is the remedy, named
+        # rather than run: a fetch inside the lock is network-bound and would rewrite
+        # origin/* as a side effect of a write.
+        return _unread_refusal("the local 'origin/main' ref could not be read")
     remote_sha = remote.split()[0] if remote.split() else ""
     if not remote_sha or remote_sha == local.strip():
         return None
@@ -609,7 +731,11 @@ def read_committed_rows(path: Path) -> tuple[list[dict] | None, str | None, str 
     rel_path = _ledger_rel_path(path)
     if rel_path is None:
         return None, None, None
-    has_remote = _git_out("remote") not in (None, "")
+    # The SAME discriminator the freshness leg uses (#237): a file read, so it
+    # answers even when git does not. `tracked` below still needs git, and that is a
+    # stated bound rather than a hole -- with git unreachable the freshness leg
+    # refuses first, so this branch is never reached in that arm.
+    has_remote = _remote_configured()
     for ref in ("origin/main", "HEAD"):
         text = _git_show(ref, rel_path)
         if text is None:
@@ -846,6 +972,72 @@ def dispatch_problems(
     return problems, malformed, excused
 
 
+# THE LEXICAL BRANCH OF A DECLARATION GUARD IS A NOTE, NEVER A REFUSAL (#247).
+#
+# Both declaration guards below (`reclose` on `close`, `reclaim` on `claim`) ask two
+# questions: does this detail DECLARE the token, and does it merely MENTION it? The
+# second is lexical by construction — `mentions_*` asks whether any whitespace-separated
+# token starts with the key — and it was given ENFORCEMENT powers it never needed. Its
+# own purpose statement is a MESSAGE ("a malformed declaration is NAMED, never silently
+# ignored"), and enforcement is what made it refuse a row that duplicates nothing: a
+# FIRST row that merely documents or quotes the convention, with no prior row to answer,
+# was refused and then told to write the token it was already discussing.
+#
+# THE PROTECTION IS STRUCTURAL, NOT ARGUED. `prior_closes` / `prior_claims` sit inside
+# the SAME `if` and run AFTER the lexical branch, and a re-entry declaration is only
+# meaningful against a prior row. So demoting the branch loses no refusal: a first row
+# quoting the token is ADMITTED, and a second same-actor row declaring nothing is still
+# refused by the prior-row leg — whose message now carries the malformation note too, so
+# an author who DID mean to declare still learns why their token did not take.
+#
+# THIS IS THE INVERSE OF #215, and the pair names a clause that was unwritten. #215: a
+# lexical test let a row that REFUSES the token PASS — a false clean. This: a lexical
+# test REFUSES a row that merely QUOTES the token — a false refusal. Both are a lexical
+# test used as a semantic predicate, and only one direction was stated ("prose must not
+# SATISFY a field"); its mirror is "prose must not VIOLATE a field".
+#
+# THE NOTE STATES BOTH LAWFUL RESPONSES, because the old message prescribed one for a
+# situation with two: declaring the token in ONE TOKEN, or leaving the prose alone when
+# this is not a second row for the same actor. It is printed to STDERR so it never
+# pollutes the row line a caller parses from STDOUT.
+_RECLOSE_NOTE = (
+    "ledger append note: this detail carries a bare `reclose=` token that is NOT a "
+    "declaration — a value containing a space TERMINATES the canonical trailing run, so "
+    "the token sits outside the run every trailer-scoped reader stops at. TWO lawful "
+    "responses, and only the author knows which applies: (a) if this IS a second close "
+    "of a re-opened subject, write `reclose=<one-token>` and keep the explanation in the "
+    "detail's prose; (b) if it is NOT — the detail merely documents or quotes the "
+    "convention — the prose is fine and NOTHING IS OWED. This row is admitted unless the "
+    "prior-close leg below refuses it (#247)."
+)
+
+_RECLAIM_NOTE = (
+    "ledger append note: this detail carries a bare `reclaim=` token that is NOT a "
+    "declaration — a value containing a space TERMINATES the canonical trailing run, so "
+    "the token sits outside the run every trailer-scoped reader stops at. TWO lawful "
+    "responses, and only the author knows which applies: (a) if this IS a second claim "
+    "of the same subject by the same actor, write `reclaim=<one-token>` and keep the "
+    "explanation in the detail's prose; (b) if it is NOT — the detail merely documents or "
+    "quotes the convention — the prose is fine and NOTHING IS OWED. This row is admitted "
+    "unless the prior-claim leg below refuses it (#247)."
+)
+
+def _malformation_sentence(key: str) -> str:
+    """The note a PRIOR-ROW REFUSAL carries when the same detail was also malformed.
+
+    The two branches are now separated, so the refusal must restate the malformation
+    rather than assume the reader saw the note above it: a detail can carry a bare
+    `reclaim=` token AND be a second same-actor claim, and then BOTH facts are true and
+    the author needs both. Kept as one function so the two ends cannot drift.
+    """
+    return (
+        f" NOTE: this detail ALSO carries a bare `{key}=` token that is NOT a "
+        f"declaration — its value must be ONE token (no spaces), because a value "
+        f"containing a space TERMINATES the canonical trailing run and the token then "
+        f"sits outside the run every trailer-scoped reader stops at. Write "
+        f"`{key}=<one-token>` if you meant to declare."
+    )
+
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in known_events():
         sys.exit(
@@ -1076,35 +1268,84 @@ def cmd_append(args: argparse.Namespace) -> int:
             # above state: this binds the row about to be written, so it can never
             # reach history. EXEMPTIONS govern `verify`'s reading of history only.
             if args.event == "close" and not declared_reclose(args.detail):
-                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED. A
-                # `reclose` value containing a SPACE terminates the canonical
-                # trailing run, so the row declares nothing even though its author
-                # wrote the token -- measured 2026-09-28: the guard prescribed a
-                # declaration, `declares_field` could never accept it (it type-tests
-                # the value), and once that was fixed a multi-word reason turned out
-                # to break the run itself. Two stacked defects reached the shipped
-                # tool because the leg had NO behavioural probe, so the message below
-                # states the VALUE FORM as well as the key.
+                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED -- and
+                # NAMING it is all this branch does (#247). A `reclose` value
+                # containing a SPACE terminates the canonical trailing run, so the
+                # row declares nothing even though its author wrote the token --
+                # measured 2026-09-28: the guard prescribed a declaration,
+                # `declares_field` could never accept it (it type-tests the value),
+                # and once that was fixed a multi-word reason turned out to break
+                # the run itself. Two stacked defects reached the shipped tool
+                # because the leg had NO behavioural probe.
+                #
+                # WHAT IT MUST NOT DO IS REFUSE. It fires BEFORE the prior-close leg
+                # below and asks a LEXICAL question -- "does any token start with
+                # `reclose=`" -- so it refused a FIRST close that merely quoted the
+                # convention, with nothing to refuse. The note states the VALUE FORM,
+                # the reason, and BOTH lawful responses; the refusal below carries the
+                # same fact again for the author who really was declaring (#247).
                 if mentions_reclose(args.detail):
-                    sys.exit(
-                        "ledger append refused: this detail carries `reclose=` but NOT "
-                        "as a declaration -- its value must be ONE token (no spaces), "
-                        "because a value containing a space TERMINATES the canonical "
-                        "trailing run and the token then sits outside the run every "
-                        "trailer-scoped reader stops at. Write `reclose=<one-token>` "
-                        "with the explanation in the detail's prose (#213)."
-                    )
+                    print(_RECLOSE_NOTE, file=sys.stderr)
                 prior_closes = [r for r in rows
                                 if r.get("event") == "close"
                                 and r.get("subject") == args.subject]
                 if prior_closes:
                     last = prior_closes[-1]
+                    malformed = (_malformation_sentence("reclose")
+                                 if mentions_reclose(args.detail) else "")
                     sys.exit(
                         f"ledger append refused: {args.subject} already carries a close at "
                         f"n={last.get('n')} ({last.get('ts')}). IF THIS IS A RETRY after a "
                         f"timeout, THE FIRST WRITE LANDED -- do not append again. A "
                         f"deliberate re-close (the subject was re-opened) declares itself "
                         f"with `reclose=<one-token>` in its canonical trailer (#213)."
+                        f"{malformed}"
+                    )
+            # A SUBJECT CLAIMED TWICE BY THE SAME ACTOR (#246). `close` has carried all
+            # three mechanisms since #213 — a declaration, a write-path refusal and a read
+            # leg — and `claim`, the other end of the same lifecycle, carried none of them.
+            # Measured at origin 4e142dd: 226 claim rows, 8 subjects with more than one,
+            # and `verify` reads rc=0 over every one of them.
+            #
+            # THE ACTOR SCOPE IS MEASURED, NOT CHOSEN. An actor-blind refusal was refused
+            # because it would have blocked the two LAWFUL multi-actor cases in that same
+            # population: `#34` (hq takes it, then worker) and `#234` (surveys claims the
+            # derivation half, worker the law half). A hand-off and a two-half unit are both
+            # correct states, and only a second claim by the SAME actor is the class this
+            # answers.
+            #
+            # RE-ENTRY IS DECLARED, NOT IMPLIED — the idiom this ledger already carries
+            # (`reclose=<one-token>`, `claim=reconstructed`, `head=<sha>`). A deliberate
+            # re-claim states `reclaim=<reason>` in its own canonical trailer, which is why
+            # the token is a FORMALISATION rather than a new burden: three of the eight
+            # multi-claim subjects already declare themselves in prose.
+            #
+            # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the two refusals above
+            # state: this binds the row about to be written, so it can never reach history.
+            if args.event == "claim" and not declared_reclaim(args.detail):
+                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED — and NAMING
+                # it is all this branch does (#247), for the reason its `reclose` twin
+                # states at length: the lexical question it asks is not the semantic one
+                # the refusal below asks, and answering it with a refusal refused a FIRST
+                # claim that merely quoted the convention.
+                if mentions_reclaim(args.detail):
+                    print(_RECLAIM_NOTE, file=sys.stderr)
+                prior_claims = [r for r in rows
+                                if r.get("event") == "claim"
+                                and r.get("subject") == args.subject
+                                and r.get("actor") == args.actor]
+                if prior_claims:
+                    last = prior_claims[-1]
+                    malformed = (_malformation_sentence("reclaim")
+                                 if mentions_reclaim(args.detail) else "")
+                    sys.exit(
+                        f"ledger append refused: {args.subject} is already claimed by "
+                        f"'{args.actor}' at n={last.get('n')} ({last.get('ts')}). IF THIS IS "
+                        f"A RETRY after a timeout, THE FIRST WRITE LANDED -- do not append "
+                        f"again. A deliberate re-claim (the work was re-taken, or the intake "
+                        f"leg landed after the first claim) declares itself with "
+                        f"`reclaim=<one-token>` in its canonical trailer (#246)."
+                        f"{malformed}"
                     )
             # AND THE ROW MUST DECLARE THE REVISION ITS RECEIPTS DESCRIBE (#187). The
             # invariant is `close_row_revision`, enforced by
@@ -1966,6 +2207,78 @@ def cmd_verify(args: argparse.Namespace) -> int:
     print(
         f"  multiple closes examined: {len(close_subjects)} closed subject(s), "
         f"{len(multi_closes)} carrying more than one close"
+    )
+
+    # A SUBJECT CLAIMED MORE THAN ONCE (#246) — the read half of the pair above, and it
+    # prints its POPULATION, not only its hits (#94's law): a finding printed over an
+    # UNSTATED population cannot be told from one printed over a narrowed population, so
+    # the count of subjects examined is stated even when it finds nothing.
+    #
+    # IT SPLITS DECLARED FROM UNDECLARED, which is the whole reading. A pair declaring
+    # `reclaim=` is a recorded re-claim, and a pair declaring nothing is either an
+    # undeclared re-claim or a retried-append duplicate — measured at origin 4e142dd, the
+    # eight subjects with more than one claim split FOUR ways, and only one of the four is
+    # a defect: three declared re-claims (#73, #113, #161), two multi-actor cases that are
+    # LAWFUL and are why the refusal is actor-scoped (#34 hand-off, #234 two halves), one
+    # duplicate-resolution row (#22), one pair of distinct tasks under one subject (#26),
+    # and ONE accidental duplicate (#220, same actor, same wording, 18 minutes apart).
+    #
+    # IT REPORTS AND NEVER GATES: a multi-claim subject is not by itself a defect, so this
+    # leg has no red to give — the same shape the multiple-closes leg has. NO BACKFILL:
+    # the rows it prints are immutable, exactly as #213's own reading states.
+    claim_subjects = sorted({r.get("subject") for r in rows
+                             if r.get("event") == "claim"})
+    multi_claims: list[str] = []
+    for subject in claim_subjects:
+        claims = [r for r in rows
+                  if r.get("event") == "claim" and r.get("subject") == subject]
+        if len(claims) < 2:
+            continue
+        ns = ", ".join(f"n={r.get('n')} ({r.get('actor')})" for r in claims)
+        # THE SPLIT IS THE REFUSAL'S OWN SCOPE, or the reading reports lawful states as
+        # suspects. The refusal admits a second claim by a DIFFERENT actor (#34's hand-off,
+        # #234's two halves), so a pair whose actors all differ is a state the write path
+        # PERMITS — printing it under the duplicate wording would send a reader to repair
+        # something no rule forbids. So the three forms are distinguished, and only the
+        # same-actor undeclared one carries the refusal's sentence.
+        by_actor: dict[str, list[dict]] = {}
+        for row in claims:
+            by_actor.setdefault(str(row.get("actor") or "?"), []).append(row)
+        same_actor_undeclared = [
+            row for group in by_actor.values() if len(group) > 1
+            for row in group[1:]
+            if not declared_reclaim(row.get("detail") or "")
+        ]
+        declared = [r for r in claims[1:]
+                    if declared_reclaim(r.get("detail") or "")]
+        multi_claims.append(subject)
+        if same_actor_undeclared:
+            print(
+                f"  multiple claims: {subject} carries {len(claims)} claim rows "
+                f"({ns}), and {len(same_actor_undeclared)} of them "
+                f"{'carries' if len(same_actor_undeclared) == 1 else 'carry'} no "
+                f"`reclaim=` reason for a SAME-ACTOR second claim — either a deliberate "
+                f"re-claim that did not declare itself, or a DUPLICATE minted by retrying "
+                f"an append that had already completed (#246). A second claim by the same "
+                f"actor declaring no `reclaim=` is now refused at the write path; this "
+                f"reading is of history, whose rows are immutable"
+            )
+        elif declared:
+            print(
+                f"  multiple claims: {subject} carries {len(claims)} claim rows "
+                f"({ns}), each after the first declaring `reclaim=` — declared "
+                f"re-claims, not duplicates"
+            )
+        else:
+            print(
+                f"  multiple claims: {subject} carries {len(claims)} claim rows "
+                f"({ns}), all by DIFFERENT actors — a hand-off or a two-half unit, which "
+                f"the write path admits; no same-actor second claim, so no declaration is "
+                f"owed"
+            )
+    print(
+        f"  multiple claims examined: {len(claim_subjects)} claimed subject(s), "
+        f"{len(multi_claims)} carrying more than one claim"
     )
 
     # THE CLAIM LIFECYCLE (#210, ruling n=1577). A claim terminates one of two ways: a

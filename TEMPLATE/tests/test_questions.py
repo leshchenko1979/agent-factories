@@ -43,12 +43,26 @@ CANDIDATES = (
     REPO / "TEMPLATE" / "tools" / "questions",
 )
 
-# The selftest measured 101.44 s standalone (2026-09-27). The cap is a DECLARED MULTIPLE of
-# that measurement, never a round number (#94, ruling n=744): 4 x 101.44 + 0.75 = 406.5 s is
-# the audit's own budget for this gate, and the internal cap sits just below it so a slow run
-# is reported HERE, with its reason, rather than killed by the harness that would then read it
-# as an unknown. A timeout is UNKNOWN, never a pass.
-SELFTEST_TIMEOUT_SEC = 390
+# The cap is a DECLARED MULTIPLE of a MEASURED runtime, never a round number (#94, ruling
+# n=744), and the runtime is the WORST COMPLETED SAMPLE, not the quietest one (#226 ruling 2:
+# `measured_sec` is "a MEASURED runtime", never "a quiet-window runtime", so the base is the
+# slow tail the budget must contain). This cap was first derived from a 101.44 s quiet sample
+# (2026-09-27), and that sample went stale by 6.27x in two days while the string naming it
+# stayed constant -- the "a stated basis nothing re-derives" shape #208 and #230 both found
+# one layer down.
+#
+# RE-DERIVED 2026-09-29 (#230, #226). The measured quantity is this gate's WHOLE COMMAND,
+# which is what the audit times (`python3 tests/test_questions.py`, per the registration in
+# tools/audit.py), not the selftest it spawns. Completed samples: 635.7 s at load 15.34->19.66
+# for the whole command, and 595.58 s at load 10.19->13.80 for the child selftest it spawns.
+# Censored runs (390.34 s killed by this cap, and 280.28 s killed by the manifest default) are
+# LOWER BOUNDS and are never promoted to a base (#226 ruling 3). The base is therefore the
+# worst completed sample, 635.7 s, and 4 x 635.7 + 0.75 = 2543.55 s is this gate's declared
+# budget in registry/gates.json. The internal cap sits just below that budget (int(2543.55) =
+# 2543, i.e. 0.55 s under it) so a HUNG run is reported HERE, with its reason, rather than
+# killed by the harness that would then read it as an unknown -- while a healthy run keeps the
+# full 4x headroom above its own worst measurement. A timeout is UNKNOWN, never a pass.
+SELFTEST_TIMEOUT_SEC = 2543
 
 # NON-VACUITY FLOOR. The selftest reported 237 checks on 2026-09-27; the floor is well below
 # it, so a run that STOPPED EARLY is caught without pinning a count that moves every time a

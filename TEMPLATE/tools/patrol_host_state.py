@@ -74,6 +74,7 @@ import argparse
 import datetime as dt
 import importlib.util
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -364,7 +365,14 @@ def remote_slug(repo: Path = REPO) -> str:
 
 
 def fetch_board(slug: str) -> list[dict]:
-    """The FULL board: every state, no filter, so the reverse leg is sound."""
+    """The FULL board: every state, no filter, so the reverse leg is sound.
+
+    `comments` travels with it because one leg's population IS the comments (#223): a
+    ruling posted as a board comment is the transition the ledger's `ruling` event
+    declares, and a read that omitted comments could not see one at all — the leg would
+    examine nothing and print the verdict of a leg that examined the population. The
+    field is additive and the other legs ignore it, so the read stays ONE call.
+    """
     proc = subprocess.run(
         [
             "gh",
@@ -377,7 +385,7 @@ def fetch_board(slug: str) -> list[dict]:
             "--limit",
             "1000",
             "--json",
-            "number,state,title,closedAt",
+            "number,state,title,closedAt,comments",
         ],
         capture_output=True,
         text=True,
@@ -502,6 +510,301 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
         },
     }
 
+# ---- the board-ruling leg (issue #223, ruled at ledger n=1596) -----------------------
+#
+# A ruling posted as a board comment leaves no `ruling` row, and NOTHING asked for one:
+# `grep` for a reader of `event == "ruling"` across `tools/*.py` returned ZERO hits — the
+# token occurred only at the event tuple and the authorization matrix. So the transition
+# was authorized, written by convention, and skipped indefinitely with no surface noticing,
+# which is §8's field-with-no-reader shape arriving on the WRITE side. Eight of one lane's
+# rulings in a single session had no row; Triage's re-measurement put the class at NINE and
+# corrected the filing's figure, because the population MOVES as lanes start stamping.
+#
+# THE HEADINGS ARE DECLARED HERE BECAUSE THE PREDICATE IS THE WHOLE MECHANISM, and it was
+# MEASURED before it was written rather than chosen (Triage, ledger n=1597 — the numbers
+# below are that measurement, not a guess):
+#
+#   * a comment that IS a ruling OPENS with one of these headings. A comment that merely
+#     MENTIONS the word is not a ruling — and that distinction is the entire leg: the loose
+#     form `--search "RULED in:comments"` returned **118** issues, an order of magnitude
+#     over, because a filing saying "not ruled yet" scores as an instance.
+#   * the class is NOT state-scoped: `--state open --search` returned a DIFFERENT set,
+#     because four of the eight had since closed. So the read is the board WHOLE and the
+#     heading test is the ONLY predicate that finds the population.
+#
+# The tokens are DECLARED, never inline at the comparison, so a factory whose board carries
+# a different ruling heading changes ONE tuple and the leg follows — and so the value can be
+# probed without executing the leg against a live board. Both forms are declared rather than
+# normalised to one: the board carries both, and a normalisation would be a second predicate
+# standing beside this one, which is the drift the tuple exists to prevent.
+# ---- #243: WHICH ISSUE DOES A RULING GOVERN -----------------------------------------
+#
+# The leg built its `ruled` set with the SHARED predicate's `issue_reference`, whose
+# pattern is the strictly numeric `^#(\d+)$`. That predicate answers "does this subject
+# NAME AN ISSUE", and for its own gate a descriptive subject genuinely names none — so
+# widening it would move that gate's population in a direction nobody asked for. This leg
+# asks a DIFFERENT question ("which issue does this ruling GOVERN") and answers it with a
+# resolver of its own over the ledger's real subject vocabulary.
+#
+# MEASURED at origin e249022 from the leg's own resolver: 214 ruling rows, 174 reachable,
+# **40 unreachable (18.8%)** — the resolver could not EXPRESS the case, so `ruled` could
+# hold at most 130 distinct issue numbers. Realized harm on one day's board: a cross-read
+# called eight open issues unruled, FIVE of them (#77 #85 #133 #185 #188) carrying a ruling
+# row the strict form returns None for — every one a re-dispatch of an item that already
+# had its ruling, which is the "duplicate brief to a lane already holding the item" class.
+#
+# THE THREE ARMS, in the ruled order:
+#   1. STRICT — the ruling's own subject is `#<n>`.
+#   2. THE DISPATCH BRIDGE — a ruling is often stamped under a SLUG (`foreign-instrument-
+#      coupling`) while the issue is filed a row later, so the bridge is: another row that
+#      REFERENCES this ruling's `n` and itself names an issue. #85 is reachable ONLY this
+#      way (ruling n=545 <- dispatch n=546, subject `#85`, detail "Ruling n=545"), and #77
+#      through a BARE-number subject (n=516, subject `77`), which the strict form also
+#      misses and which its own correction row n=518 complains about.
+#   3. `governs=<n>` — an explicit token for a ruling that governs a concern rather than an
+#      item, so a lane can declare the attribution instead of relying on a bridge.
+#
+# A ROW THAT RESOLVES TO NO ISSUE IS PRINTED, never silently dropped: a resolver that
+# cannot place a row must say so, or the leg reports a smaller population than it examined.
+RULING_GOVERNS_KEY = "governs="
+_RULING_ISSUE_URL = re.compile(r"/issues/(\d+)\b")
+_RULING_BARE_NUMBER = re.compile(r"^(\d+)$")
+
+
+def issue_from_row(row: dict, predicate) -> int | None:
+    """The issue a row names, leg-locally: `#N` subject, bare `N` subject, or an issue URL.
+
+    DELIBERATELY NOT the shared predicate (#243, shape 1): `issue_reference` is strictly
+    numeric by design and its own gate depends on that. This is the patrol's question, so
+    it is answered here — and a bare number is accepted because the dispatch rows really do
+    carry one (`n=516`, subject `77`), which is the form n=518 was written to correct.
+    """
+    subject = str(row.get("subject") or "").strip()
+    number = predicate.issue_reference(subject)
+    if number is not None:
+        return number
+    bare = _RULING_BARE_NUMBER.match(subject)
+    if bare:
+        return int(bare.group(1))
+    url = _RULING_ISSUE_URL.search(str(row.get("detail") or ""))
+    if url:
+        return int(url.group(1))
+    return None
+
+
+def resolve_ruling_issue(ruling: dict, rows: list[dict], predicate) -> tuple[int | None, str]:
+    """`(issue, arm)` for a ruling row — the arm NAMED so a resolution is auditable.
+
+    `arm` is `"strict"`, `"declared"` (`governs=`), `"bridged"` or `"unbridgeable"`. The
+    tier is reported rather than implied, the same discipline the canonicality ladder uses:
+    a resolution that does not say how it was reached cannot be re-litigated when the
+    vocabulary moves.
+    """
+    own = issue_from_row(ruling, predicate)
+    if own is not None:
+        return own, "strict"
+
+    declared = re.search(rf"{re.escape(RULING_GOVERNS_KEY)}(\d+)", str(ruling.get("detail") or ""))
+    if declared:
+        return int(declared.group(1)), "declared"
+
+    n = ruling.get("n")
+    if n is not None:
+        for other in rows:
+            if other.get("n") == n:
+                continue
+            detail = str(other.get("detail") or "")
+            if not re.search(rf"\bn={n}\b", detail):
+                continue
+            bridged = issue_from_row(other, predicate)
+            if bridged is not None:
+                return bridged, "bridged"
+
+    return None, "unbridgeable"
+
+RULING_HEADINGS = ("## RULED", "## RULING", "## Amendment")
+"""The heads a ruling comment OPENS with — widened to the spellings the board uses (#245).
+
+The tuple was `("## RULED", "## RULING")` and that predicate silently dropped three
+ruling-style comments on two issues: `#133` (x2) and `#148` (x1), every one of them headed
+`## Amendment`. `#133` was the sharp case — it read as unruled from the LEDGER
+(`event="ruling"` returns nothing under any subject) AND from the BOARD (0 strict-headed
+comments), while its two `## Amendment` comments ARE its ruling.
+
+`## Amendment` is a live spelling used deliberately by this factory's own HQ, so the
+widening is to the OBSERVED forms and nothing is backfilled — the three comments are not
+rewritten to the canonical head.
+
+THE BOUND IS A FLOOR, NOT A CEILING, and that is what the clause below answers. The
+candidate set came from a text search for `## Amendment`, so a ruling headed with a
+DIFFERENT word (`## DISPOSITION`, `## DECISION`) was never in it; widening to today's
+spellings carries the same blindness forward one spelling. So the leg also PRINTS every
+heading comment it did NOT match — a fourth spelling surfaces as a finding on the run that
+first meets it, instead of being indistinguishable from absent.
+"""
+
+RULING_CANONICAL_HEADING = "## RULED"
+"""The head the convention NAMES, so a lane writing a ruling converges rather than infers.
+
+Declared rather than enforced: the writer is an agent typing `gh issue comment`, and there
+is no tool on that path, so a rule "use this head" would be unenforceable exactly where it
+matters — the dead-text shape P29 removes. It is stated, and the clause below is what
+catches the spelling that ignores it.
+"""
+
+_RULING_HEADING_LINE = re.compile(r"^(#{1,6})\s+(\S.*)$")
+
+def _accepted_heading(head: str) -> bool:
+    """Whether a heading line is one of the accepted forms, BOUNDARY-CHECKED.
+
+    `str.startswith` on a tuple admits an EXTENSION: `## RULINGS — the ledger` starts with
+    `## RULING`, so a different heading would be read as this one — the digit-extension
+    class this factory has filed repeatedly. The character after the form must therefore
+    not be alphanumeric. Measured over the live board: 0 headings extend an accepted form,
+    so the check moves NO population today and exists so it cannot move one tomorrow.
+    """
+    for form in RULING_HEADINGS:
+        if head.startswith(form):
+            rest = head[len(form):]
+            if not rest or not rest[0].isalnum():
+                return True
+    return False
+
+def comment_heading(comment: dict) -> str | None:
+    """The comment's FIRST LINE when that line is a markdown heading, else None.
+
+    The first line only, after leading whitespace: the heading is the comment's opening,
+    which is the same discriminator the ruling predicate uses. A heading further down is a
+    section inside a comment, not the comment's own declaration.
+    """
+    body = str(comment.get("body") or "").lstrip()
+    if not body:
+        return None
+    first = body.splitlines()[0].strip()
+    return first if _RULING_HEADING_LINE.match(first) else None
+
+def ruling_comment(issue: dict) -> dict | None:
+    """The issue's ruling comment, or None when it carries none.
+
+    The test is on the OPENING of the body, after leading whitespace, and it is the reason
+    the leg can be mechanical: 118 issues mention the word, and a subset of those are
+    filings that say the item is NOT ruled. Opening-only admits the ruling and refuses the
+    mention, with no second source of truth.
+    """
+    for comment in issue.get("comments") or []:
+        if not isinstance(comment, dict):
+            continue
+        head = comment_heading(comment)
+        if head is not None and _accepted_heading(head):
+            return comment
+    return None
+
+def unmatched_heading_comments(issue: dict) -> list[str]:
+    """Every heading the ruling predicate did NOT match — the clause that keeps it honest.
+
+    Widening the alternation alone reproduces the defect one spelling later: a new head
+    arrives, matches nothing, and is NOT EXAMINED, which is indistinguishable from absent.
+    So the leg names what it could not place, per issue, and the count travels beside the
+    verdict. A ruling that used a spelling nobody has seen yet shows up here on the run
+    that first meets it rather than being silently dropped.
+
+    This is the same obligation #223's direction-1 remedy carries and #231's stale basis
+    lacked: a predicate that cannot place an item must SAY SO, never report a smaller
+    population than it examined.
+    """
+    out: list[str] = []
+    for comment in issue.get("comments") or []:
+        if not isinstance(comment, dict):
+            continue
+        head = comment_heading(comment)
+        if head is None or _accepted_heading(head):
+            continue
+        out.append(head)
+    return out
+
+def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
+                     predicate=None) -> dict:
+    """The live board-ruling leg: a ruling comment with no `ruling` row is reported (#223).
+
+    Population: every board issue carrying a ruling comment — derived AT RUN TIME from the
+    board the read returned, never a literal, so the count moves with the board and cannot
+    go stale in the code. Returned as `ruling_comments_examined` and printed beside the
+    verdict, so a clean run reads as "examined N, 0 problems" rather than being
+    indistinguishable from "examined nothing" — the leg that examined nothing has reported
+    nothing, never a clean HOLD.
+
+    The read instant travels with it: the board is LIVE state, so this is a property of the
+    INSTANT and is REPORTED, never folded into the correctness verdict.
+
+    NO BACKFILL, by law rather than by omission: a `ruling` row written after the fact is a
+    falsified record, so a ruling that was never stamped is a FINDING the leg keeps printing,
+    not one it repairs. The population it examines is stated so tonight's instances are
+    visible as instances rather than silently passed over.
+    """
+    predicate = predicate or load_predicate()
+
+    ruled: set[int] = set()
+    arms = {"strict": 0, "declared": 0, "bridged": 0}
+    unbridgeable: list[dict] = []
+    for row in rows:
+        if row.get("event") != "ruling":
+            continue
+        number, arm = resolve_ruling_issue(row, rows, predicate)
+        if number is not None:
+            ruled.add(number)
+            arms[arm] = arms.get(arm, 0) + 1
+        else:
+            # PRINTED, never dropped: a resolver that cannot place a row must say so, or
+            # the leg reports a smaller population than it examined (#243 clause 2).
+            unbridgeable.append({"n": row.get("n"), "subject": str(row.get("subject") or "")})
+
+    problems: list[str] = []
+    examined = 0
+    unmatched: list[dict] = []
+    for issue in issues:
+        number = issue.get("number")
+        if not isinstance(number, int):
+            continue
+        # The clause that keeps the alternation honest (#245): every heading comment the
+        # predicate did NOT accept is NAMED, per issue. It is collected over the WHOLE
+        # board, not only over the issues that carried an accepted head — a novel spelling
+        # is precisely the case where no accepted head exists, so scoping the collection to
+        # the ruled population would exclude the only population it is for.
+        for head in unmatched_heading_comments(issue):
+            unmatched.append({"issue": number, "head": head})
+        if ruling_comment(issue) is None:
+            continue
+        examined += 1
+        if number in ruled:
+            continue
+        problems.append(
+            f"#{number} carries a ruling comment on the board but the ledger holds no "
+            f"`ruling` row for it (board read at {read_at}) — the ruling's content is on "
+            f"the board, but every other row cites a ruling by `n`, and a ruling with no "
+            f"row has no `n` for a reader to resolve"
+        )
+
+    return {
+        "name": "board-ruling",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "ruling_comments_examined": examined,
+            "issues_read": len(issues),
+            "board_read_at": read_at,
+            "headings": list(RULING_HEADINGS),
+            "canonical_heading": RULING_CANONICAL_HEADING,
+            "unmatched_heads_examined": len(unmatched),
+            "unmatched_heads": unmatched,
+            "rulings_read": len(ruled) + len(unbridgeable),
+            "rulings_resolved": len(ruled),
+            "rulings_unbridgeable": len(unbridgeable),
+            "resolution_arms": arms,
+            "unbridgeable_rows": unbridgeable,
+        },
+    }
+
 
 def load_module(name: str, path: Path):
     """Load a module by path, so no import path is assumed."""
@@ -599,6 +902,38 @@ def deferred_entry_problems(entries: list[dict], *, repo_root: Path = REPO,
     return problems
 
 
+def git_common_dir(repo: Path = REPO) -> Path | None:
+    """This checkout's GIT COMMON DIR, or None when it cannot be read (#242).
+
+    THE PATH IS THE WRONG IDENTITY, and the remedy this factory prescribes for a diverged
+    tree — "run from a clean worktree at origin/main" — is exactly the move that exposes
+    it. A LINKED WORKTREE resolves to its own path, so an attribution keyed on the checkout
+    matches no record and the patrol silently judges nobody: measured in a worktree at
+    origin e41d934, one call over a real 42-row cron population, `cron-thinness` read
+    "0 attributed of 42, 42 unattributed, 0 problems" and `duty-receipt` concluded "no
+    enabled row this factory declares carries a receipt_subject:" — a FALSE CONCLUSION over
+    an empty population, while the main checkout reported 2 real problems in the same
+    minute. The common dir is the repository's identity and every worktree shares it.
+
+    THE RELATIVE FORM IS THE TRAP, and it is why this is a named function with a probe.
+    From the MAIN checkout, `git rev-parse --git-common-dir` prints the RELATIVE string
+    ".git", so `Path(raw).resolve()` resolves against the CALLER's cwd — measured: from
+    /tmp it yields "/tmp/.git", matching nothing, which is the same empty result the defect
+    produces while looking like a fix. The path must be joined to the repo FIRST:
+    `(repo / raw).resolve()` is correct from both a main checkout and a worktree.
+    (`--path-format=absolute` also works, but needs git >= 2.33; the join is version-safe
+    and costs nothing.)
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+        capture_output=True, text=True,
+    )
+    raw = proc.stdout.strip()
+    if proc.returncode != 0 or not raw:
+        return None
+    return (Path(repo) / raw).resolve()
+
+
 def declared_prefixes(repo: Path = REPO) -> list[str]:
     """This factory's declared `job_prefixes`, read from the fleet manifest.
 
@@ -606,15 +941,63 @@ def declared_prefixes(repo: Path = REPO) -> list[str]:
     in: all twelve ai-antispam rows sit in the OPS home, so a profile-scoped read answers
     a narrower question than the one it names (#102). An empty return is reported by the
     caller as an unattributable population, never read as a clean one.
+
+    THE MATCH IS ON THE REPOSITORY, NOT THE CHECKOUT (#242): the declared repo and this
+    tree are both resolved to their GIT COMMON DIR, so a linked worktree — the very move
+    this factory prescribes for a diverged tree — is this factory rather than nobody.
     """
     registry = load_module("oc_registry", REGISTRY)
     manifest = registry.load_fleet_manifest()
-    want = str(repo.resolve())
+    want = git_common_dir(repo)
     for record in manifest.get("factories", []):
         declared = record.get("repo")
-        if isinstance(declared, str) and str(Path(declared).resolve()) == want:
+        if not isinstance(declared, str):
+            continue
+        if want is not None and git_common_dir(Path(declared)) == want:
+            return [str(p) for p in record.get("job_prefixes", [])]
+        # The common dir is the authority; the plain path is kept as a SECOND chance for a
+        # declared repo that is not a git tree at all (a member not yet cloned, say), where
+        # git_common_dir returns None on both sides and would otherwise match nothing.
+        if want is None and str(Path(declared).resolve()) == str(repo.resolve()):
             return [str(p) for p in record.get("job_prefixes", [])]
     return []
+
+
+def no_prefixes_leg(name: str, *, population: int, unit: str, read_at: str,
+                    read_count: int) -> dict:
+    """A cron-consuming leg this factory cannot attribute ANY row for — NOT RUN (#242).
+
+    This is the second half of the #242 repair and it is not an alternative to the first.
+    The legs already carry the discriminating counter (`rows_unattributed=42`,
+    `logs_unattributed=104`, `jobs_unattributed=42`), and `declared_prefixes`' own
+    docstring already obliges its caller: "An empty return is reported by the caller as an
+    unattributable population, never read as a clean one." One caller, three call sites,
+    zero compliance — so an empty prefix set produced a leg that JUDGED NOTHING and
+    printed `ASSERTED ... 0 problems`, and in the duty-receipt case a positive FALSE
+    CONCLUSION about the box.
+
+    A leg that examined nothing has reported nothing, never a clean HOLD: the status is
+    NOT RUN, the reason names the manifest and the count, and the population travels in
+    the coverage so the unattributed rows are visible rather than absent.
+    """
+    return {
+        "name": name,
+        "status": "NOT RUN",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "reason": (
+                f"this checkout resolves to no factory the fleet manifest declares, so no "
+                f"job can be attributed to it — {population} of {read_count} {unit} read "
+                f"are UNATTRIBUTED and NONE were judged. A clean box is NOT what this "
+                f"means: it means the attribution could not be made (board #242)"
+            ),
+            unit.replace(" ", "_"): read_count,
+            f"unattributed_{unit.split()[0]}": population,
+            "read_at": read_at,
+            "prefixes": [],
+        },
+    }
 
 
 def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
@@ -719,6 +1102,9 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
 
     The rows are read live by the caller; the predicate stays pure and is handed a list.
     """
+    if not prefixes:
+        return no_prefixes_leg("cron-thinness", population=len(rows), unit="row(s)",
+                               read_at=read_at, read_count=len(rows))
     predicate = predicate or load_module("cron_thinness_predicate",
                                          CRON_THINNESS_PREDICATE)
     attributed, unattributed = attribute_rows(rows, prefixes)
@@ -916,6 +1302,10 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     opposite call from the cron-thinness leg, whose population is the rows the factory
     declares and which therefore does fail loudly. Non-vacuity here is carried by the probe.
     """
+    if not prefixes:
+        logs = sorted(p for p in log_dir.glob("*.log")) if log_dir.is_dir() else []
+        return no_prefixes_leg("notify-receipt", population=len(logs), unit="log(s)",
+                               read_at=read_at, read_count=len(logs))
     attributed, _ = attribute_rows(rows, prefixes)
     live = {str(row.get("name") or ""): row for row in attributed}
     # The redirect each ENABLED row's own prompt declares, keyed by the stem its log would
@@ -1257,6 +1647,9 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     reader it is reported to (#126): the rows JUDGED, the declared rows owing no receipt,
     and the rows attributed to nobody.
     """
+    if not prefixes:
+        return no_prefixes_leg("duty-receipt", population=len(rows), unit="row(s)",
+                               read_at=read_at, read_count=len(rows))
     if predicate is None:
         predicate = field_predicate_readers()
 
@@ -1418,9 +1811,17 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     return {
         "name": "duty-receipt",
         "status": "ASSERTED" if declared else "NOT RUN",
+        # The reason NAMES ITS POPULATION and refuses the conclusion (#242 clause 5). The
+        # old text ended "so no duty owes a receipt on this box" — a POSITIVE CLAIM ABOUT
+        # THE BOX drawn from an enumeration that can be empty, which is how a lane
+        # patrolling from a linked worktree was told the box was clean while the main
+        # checkout reported two real problems in the same minute. An empty population
+        # supports no conclusion about duties; it supports a statement about the read.
         "reason": (None if declared else (
-            "no enabled row this factory declares carries a `receipt_subject:` "
-            "declaration, so no duty owes a receipt on this box"
+            f"of the {len(attributed)} enabled row(s) this factory declares, NONE carries "
+            f"a `receipt_subject:` declaration, so NO DUTY WAS JUDGED — that is a statement "
+            f"about the DECLARED population ({len(rows)} row(s) read in all), never a "
+            f"finding that no duty owes a receipt on this box"
         )),
         "problems": problems,
         "excused": excused,
@@ -1701,6 +2102,235 @@ def kit_drift_leg(
         },
     }
 
+# ---- the worktree leg (issue #220, ruled at ledger n=1567) ---------------------------
+#
+# THE EXCLUDED OBJECT CLASS. `tools/hygiene.py` derives its scratch population from the
+# repository's own directory name (`scratch_patterns_for("agent-factories")` ->
+# `/tmp/agent-factories-*`), while a lane names its worktree whatever it likes
+# (`/tmp/oc-*`, `/tmp/rr-*`, `/tmp/kit*`). So NO worktree path can ever match that glob and
+# the residue is outside the cleanliness instrument's population BY CONSTRUCTION rather than
+# by a cleanliness result — measured at the filing: 38 registered worktrees, 0 matching.
+#
+# THE REMEDY IS NAMED, NOT WIDENED, and the refusal is the load-bearing half. Widening that
+# glob was refused for two measured reasons that are together decisive: hygiene judges
+# staleness by MTIME while 13 of the 37 held live uncommitted work at the filing instant
+# (the widened population would report peers' ACTIVE work as residue), and hygiene's remedy
+# is REMOVAL, which on a worktree holding uncommitted work DESTROYS it. A population
+# containing live work paired with a destructive remedy is the combination this factory's
+# law forbids — so the answer to an excluded class is a leg that NAMES it, never a widened
+# glob over live work.
+#
+# THE INSTRUMENT ALREADY EXISTS: `git worktree list --porcelain` (population and state) and
+# `git worktree prune` (registrations whose directory is gone — measured 0 of the 38 at the
+# filing, so it clears none of this). Nothing is owed here that does not ship (#102/#120);
+# what was missing is that NO factory surface READ them.
+#
+# THIS LEG NEVER REMOVES, and that is a property of its design rather than of its restraint:
+# it holds no unlink, no prune and no git subcommand that mutates a worktree. A lane may
+# remove its OWN tree; this leg's whole output is a report.
+#
+# WHY A LEG AND NOT A PARAGRAPH (P29): `git worktree list` exists and no factory surface
+# read it, so a sentence saying "beware worktrees" would be dead text while a printed leg
+# is not.
+#
+# THE HARM CLAUSE OF THE FILING IS FALSIFIED and the class claim stands: the specimen
+# (`/tmp/oc-fin2`'s ad2ac70) is a DEAD DUPLICATE — patch-identical to 83a2776, which is on
+# origin, 14 seconds later — so this is an OBSERVABILITY gap, never a data-loss incident.
+# The leg's figures therefore REPORT residue and are deliberately NOT problems: a tree
+# holding a peer's unlanded work is the CORRECT state for that tree, and a permanently red
+# leg destroys every other leg's signal. The counts are printed so a `problems: 0` beside
+# them cannot be read as "no residue".
+
+WORKTREE_HAZARD_CLASSES = (
+    "unreachable-commit",   # holds commits not reachable from the base ref
+    "uncommitted-work",     # holds paths that differ from HEAD
+)
+"""The two hazard classes, DECLARED rather than inline at the comparison (#220 clause 3)."""
+
+WORKTREE_BASE_REF = "origin/main"
+"""The base a tree's own commits are judged against — the same ref the ruling used."""
+
+_WORKTREE_FIELD = re.compile(r"^([a-z-]+)(?: (.*))?$")
+
+def worktree_records(repo: Path = REPO) -> tuple[list[dict], str | None]:
+    """`git worktree list --porcelain` parsed into records — or (records, error).
+
+    The population AND its state come from git's own instrument, never from a glob over
+    `/tmp`: a glob cannot tell a registered worktree from an abandoned directory, and this
+    leg's whole subject is the class a glob cannot see. Returns the error rather than
+    raising, so the caller can render a STATED INABILITY instead of a traceback.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return [], f"`git worktree list` could not run: {exc}"
+    if proc.returncode != 0:
+        return [], (proc.stderr or proc.stdout).strip()[:200] or "non-zero exit"
+
+    records: list[dict] = []
+    current: dict = {}
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            if current:
+                records.append(current)
+                current = {}
+            continue
+        match = _WORKTREE_FIELD.match(line)
+        if not match:
+            continue
+        key, value = match.group(1), match.group(2)
+        if key == "worktree":
+            if current:
+                records.append(current)
+            current = {"path": value}
+        elif key in ("HEAD", "branch"):
+            current[key.lower()] = value
+        else:
+            current[key] = value if value is not None else True
+    if current:
+        records.append(current)
+    return records, None
+
+def worktree_state(path: str, *, base: str = WORKTREE_BASE_REF) -> dict:
+    """One tree's state: its uncommitted paths and its commits ahead of `base`.
+
+    `GIT_OPTIONAL_LOCKS=0` is set deliberately: `git status` otherwise REFRESHES the
+    index and takes `index.lock` in a tree that may belong to a peer lane mid-task, so a
+    read-only census would be a writer on someone else's work. The predicate is exactly the
+    ruling's own — `status --porcelain` and `rev-list --count <base>..HEAD` — so the leg's
+    figures are comparable with the census that filed the issue.
+    """
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    out = {"dirty": [], "ahead": 0, "problems": []}
+    try:
+        status = subprocess.run(
+            ["git", "-C", path, "status", "--porcelain"],
+            capture_output=True, text=True, env=env, timeout=120,
+        )
+        if status.returncode == 0:
+            out["dirty"] = [line for line in status.stdout.splitlines() if line.strip()]
+        else:
+            out["problems"].append(
+                f"{path}: `git status` exited {status.returncode} — "
+                f"{(status.stderr or '').strip()[:120]}"
+            )
+        ahead = subprocess.run(
+            ["git", "-C", path, "rev-list", "--count", f"{base}..HEAD"],
+            capture_output=True, text=True, env=env, timeout=120,
+        )
+        if ahead.returncode == 0:
+            out["ahead"] = int(ahead.stdout.strip() or "0")
+        else:
+            out["problems"].append(
+                f"{path}: `git rev-list --count {base}..HEAD` exited {ahead.returncode} — "
+                f"{(ahead.stderr or '').strip()[:120]}"
+            )
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        out["problems"].append(f"{path}: {exc}")
+    return out
+
+def worktree_leg(*, read_at: str, repo: Path = REPO,
+                 records_fn=None, state_fn=None) -> dict:
+    """The worktree residue report — population, and the two hazard classes BY PATH.
+
+    Injected dependencies for the reason every other leg here has them: a probe must drive
+    the classification without a live worktree set, and a leg that can only run against the
+    live box cannot be probed at all when the live box is what is wrong.
+
+    A tree holding a peer's unlanded work is the CORRECT state for that tree, so nothing
+    here is a `problem`; the counts and the paths are the report. NOT RUN with its reason
+    when the instrument cannot answer: an unreadable worktree list is not an empty one, and
+    an empty one is not a clean one.
+    """
+    records_fn = records_fn or worktree_records
+    state_fn = state_fn or worktree_state
+
+    records, error = records_fn(repo)
+    if error:
+        return {
+            "name": "worktree",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": f"the worktree census could not be read — {error}",
+                "read_at": read_at,
+            },
+        }
+    if not records:
+        # A repository ALWAYS has at least its main worktree, so an empty list is an
+        # instrument failure and never a clean box — the population clause's own rule.
+        return {
+            "name": "worktree",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": "`git worktree list --porcelain` returned no record(s); a "
+                          "repository always carries at least its main worktree, so this "
+                          "is an instrument failure and NOT a clean box",
+                "read_at": read_at,
+            },
+        }
+
+    states: list[dict] = []
+    missing_dir: list[str] = []
+    for record in records:
+        path = str(record.get("path") or "")
+        entry = {"path": path, "main": False}
+        if not path or not Path(path).is_dir():
+            # `git worktree prune` clears exactly this class and nothing else; measured 0
+            # of 38 at the filing, so it clears none of the residue this leg reports.
+            entry["main"] = bool(record.get("bare")) or not path
+            missing_dir.append(path or "<no path in the record>")
+            states.append(entry)
+            continue
+        state = state_fn(path)
+        entry.update(state)
+        states.append(entry)
+
+    # The FIRST record is the tree the command was run from — the main worktree for a run
+    # from the repository itself. `scratch` is its complement, which is the population the
+    # cleanliness instrument cannot reach: a lane names its own worktree, so no name can
+    # match that tool's glob.
+    for index, entry in enumerate(states):
+        entry["main"] = index == 0
+    scratch = [e for e in states if not e["main"]]
+
+    unreachable = [e for e in scratch if e.get("ahead", 0) > 0]
+    dirty = [e for e in scratch if e.get("dirty")]
+    problems = [
+        p for entry in states for p in entry.get("problems", [])
+    ]
+
+    return {
+        "name": "worktree",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "read_at": read_at,
+            "base_ref": WORKTREE_BASE_REF,
+            "hazard_classes": list(WORKTREE_HAZARD_CLASSES),
+            "removes": False,
+            "worktrees_total": len(states),
+            "worktrees_scratch": len(scratch),
+            "missing_directory": missing_dir,
+            "unreachable_commits": [
+                {"path": e["path"], "ahead": e.get("ahead", 0)} for e in unreachable
+            ],
+            "uncommitted_work": [
+                {"path": e["path"], "paths": len(e.get("dirty") or [])} for e in dirty
+            ],
+            "instrument": "git worktree list --porcelain / git worktree prune",
+            "population_predicate": "git worktree list --porcelain, main = first record",
+        },
+    }
+
+
 def publish_freshness_leg(
     *,
     repo: Path = REPO,
@@ -1844,6 +2474,26 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     for leg in legs:
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
+        if leg["status"] == "NOT RUN" and leg["name"] in (
+            "cron-thinness", "notify-receipt", "duty-receipt"
+        ):
+            # A leg that examined NOTHING must never render as one that examined the
+            # population and found it clean (#242). Its reason is printed, and its
+            # counters travel with it so the unattributed population is visible rather
+            # than absent — the same discipline the kit-drift and publish legs follow.
+            lines.append(f"  NOT RUN: {cov.get('reason') or 'reason not stated'}")
+            for key in ("prefixes",):
+                if key in cov:
+                    lines.append(f"  {key}: {cov[key] or 'none declared'}")
+            for key, value in cov.items():
+                if key in ("reason", "read_at", "prefixes"):
+                    continue
+                lines.append(f"  {key}: {value}")
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+            lines.append(f"  excused: {len(leg['excused'])}")
+            lines.append(f"  problems: {len(leg['problems'])}")
+            lines.append("")
+            continue
         if leg["name"] == "board-close":
             lines.append(
                 f"  close rows (declaring {cov['declaration_token']}, at or after "
@@ -2092,6 +2742,67 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     if len(member["absent_files"]) > 6:
                         lines.append(f"      ... and {len(member['absent_files']) - 6} more absent")
             lines.append(f"  read at {cov['read_at'] or 'unstated'}")
+        elif leg["name"] == "board-ruling":
+            lines.append(
+                f"  ruling comments on the board (openings {', '.join(cov['headings'])}): "
+                f"{cov['ruling_comments_examined']} examined over {cov['issues_read']} "
+                f"issue(s) read, {len(leg['problems'])} problem(s) — board read at "
+                f"{cov['board_read_at']}"
+            )
+            # The clause that keeps the alternation honest (#245). The count is printed
+            # BESIDE the verdict and the lines follow, so a spelling the predicate could not
+            # place is visible on the run that first meets it. The canonical head is named
+            # in the same breath: a reader who meets a novel head here is told what the
+            # convention expects, rather than left to infer it from the tuple above.
+            lines.append(
+                f"  heading comments the ruling predicate did NOT match: "
+                f"{cov['unmatched_heads_examined']} over "
+                f"{len({u['issue'] for u in cov['unmatched_heads']})} issue(s) — "
+                f"the convention names {cov['canonical_heading']!r}; a novel spelling is "
+                f"printed here rather than being indistinguishable from absent"
+            )
+            for entry in cov["unmatched_heads"]:
+                lines.append(f"    ~ #{entry['issue']}: {entry['head']}")
+        elif leg["name"] == "worktree":
+            # NOT RUN carries its reason here like the other legs; ASSERTED prints the
+            # population, the two hazard classes WITH THEIR PATHS, and an explicit
+            # "removes: no" so a reader cannot mistake the report for a reaper (#220).
+            if leg["status"] == "NOT RUN":
+                lines.append(f"  NOT RUN: {cov.get('reason') or 'reason not stated'}")
+                lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+                lines.append(f"  excused: {len(leg['excused'])}")
+                lines.append(f"  problems: {len(leg['problems'])}")
+                lines.append("")
+                continue
+            lines.append(
+                f"  worktrees: {cov['worktrees_total']} total, "
+                f"{cov['worktrees_scratch']} scratch (the class the cleanliness "
+                f"instrument's glob cannot reach) — {cov['instrument']}"
+            )
+            lines.append(
+                f"  residue is REPORTED, never removed (removes: "
+                f"{'yes' if cov['removes'] else 'no'}); a lane removes its OWN tree"
+            )
+            lines.append(
+                f"  {cov['hazard_classes'][0]} (commits not reachable from "
+                f"{cov['base_ref']}): {len(cov['unreachable_commits'])} tree(s)"
+            )
+            for entry in cov["unreachable_commits"]:
+                lines.append(f"    ~ {entry['path']} — {entry['ahead']} commit(s) ahead")
+            lines.append(
+                f"  {cov['hazard_classes'][1]} (paths differing from HEAD): "
+                f"{len(cov['uncommitted_work'])} tree(s)"
+            )
+            for entry in cov["uncommitted_work"]:
+                lines.append(f"    ~ {entry['path']} — {entry['paths']} path(s)")
+            if cov["missing_directory"]:
+                lines.append(
+                    f"  registrations whose directory is GONE (what `git worktree prune` "
+                    f"clears): {len(cov['missing_directory'])}"
+                )
+                for path in cov["missing_directory"]:
+                    lines.append(f"    ~ {path}")
+            lines.append(f"  read at {cov['read_at']}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -2162,6 +2873,7 @@ def main(
     fleet_manifest: Path = FLEET_MANIFEST,
     predicate=None,
     publish_fn=None,
+    worktree_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -2175,7 +2887,13 @@ def main(
     hold rather than the leg's behaviour. The publish leg is injected for the fifth and
     the most practical reason of all: it reads the remote, so a probe that did not stub it
     would make a NETWORK call on every run of every probe that drives this function --
-    measured at ~2s each, which is how a 3s gate becomes a 40s one."""
+    measured at ~2s each, which is how a 3s gate becomes a 40s one.
+
+    The worktree leg reads the live box for the sixth time and for the sharpest version of
+    the same reason: it shells out TWICE PER REGISTERED WORKTREE, so a probe that did not
+    stub it would pay that cost on every run of every probe that drives this function --
+    measured at ~10s on a box with 34 worktrees, which is a gate budget spent on state the
+    probe never asserts."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -2194,6 +2912,7 @@ def main(
     legs = [
         board_intake_leg(issues, rows, predicate=predicate),
         board_close_leg(issues, rows, read_at=read_at),
+        board_ruling_leg(issues, rows, read_at=read_at, predicate=predicate),
         cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
         ),
@@ -2208,6 +2927,7 @@ def main(
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
         (publish_fn or publish_freshness_leg)(read_at=read_at),
+        (worktree_fn or worktree_leg)(read_at=read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)

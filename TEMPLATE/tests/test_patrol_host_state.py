@@ -171,9 +171,39 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
+        worktree_fn=_stub_worktree_leg,
     )
     return rc, out.getvalue(), err.getvalue()
 
+
+def _stub_worktree_leg(*, read_at: str, **_kw) -> dict:
+    """A canned worktree leg for every probe that drives `main()`.
+
+    The real leg shells out twice per registered worktree, so stubbing it is the same
+    discipline the publish leg's stub exists for: a probe must not pay for live state it
+    never asserts. The probes that DO assert the leg's behaviour drive `worktree_leg`
+    directly with injected readers, and one drives `main()` with THIS stub replaced by a
+    populated one so the render path is exercised rather than assumed.
+    """
+    return {
+        "name": "worktree",
+        "status": "ASSERTED",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "read_at": read_at,
+            "base_ref": "origin/main",
+            "hazard_classes": ["unreachable-commit", "uncommitted-work"],
+            "removes": False,
+            "worktrees_total": 2,
+            "worktrees_scratch": 1,
+            "missing_directory": [],
+            "unreachable_commits": [{"path": "/probe/scratch", "ahead": 1}],
+            "uncommitted_work": [{"path": "/probe/scratch", "paths": 2}],
+            "instrument": "git worktree list --porcelain / git worktree prune",
+            "population_predicate": "git worktree list --porcelain, main = first record",
+        },
+    }
 
 def test_repo_slug_reads_both_remote_forms() -> None:
     """The slug decides WHICH board is read; a wrong slug reads a wrong board clean."""
@@ -707,7 +737,118 @@ def test_a_pre_invariant_close_row_is_outside_the_population() -> None:
     )
 
 
-# --- #122: the notify-receipt leg — a failed notify SURFACES -----------------------
+# --- #223: the board-ruling leg --------------------------------------------------
+
+def _issue_with_comments(number: int, state: str, *bodies: str) -> dict:
+    """A board issue carrying comments, in the shape `gh issue list --json` returns."""
+    issue = _issue(number, state)
+    issue["comments"] = [
+        {"body": body, "author": {"login": "hq"}, "createdAt": _CLOSE_TS}
+        for body in bodies
+    ]
+    return issue
+
+def test_the_ruling_leg_BITES_on_a_ruling_comment_with_no_row() -> None:
+    """#223 acceptance, the NON-VACUITY probe: the live board is the only clean one.
+
+    The leg's whole population is rulings that were never stamped, so a probe that only
+    read a clean board would prove nothing. This supplies the defect and asserts the leg
+    names it AND fails the run.
+    """
+    issues = [_issue_with_comments(11, "OPEN", "## RULED — shape (2), the patrol leg.\n")]
+    rows = _rows(("intake", "#11", 1))
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"a ruling comment with no row must fail the run, got rc={rc}\n{out}"
+    assert "#11 carries a ruling comment on the board but the ledger holds no" in out, out
+    assert "LEG board-ruling" in out, f"the leg must be reported at all\n{out}"
+
+def test_a_MENTION_inside_a_comment_is_not_an_instance() -> None:
+    """The discrimination that makes the leg mechanical, and the reason for the heading test.
+
+    The loose form (`--search "RULED in:comments"`) returned 118 issues against a true
+    population of 9, because every filing that says the item is NOT ruled yet scored as an
+    instance. So the test is on the OPENING of the body, and this probe pins that: a mention
+    mid-body and a sentence about not having ruled are both refused.
+    """
+    issues = [
+        _issue_with_comments(21, "OPEN", "We have not ruled on this yet."),
+        _issue_with_comments(22, "OPEN", "See the ## RULED section further down."),
+        _issue_with_comments(23, "OPEN", "  \n## RULING — leading whitespace is tolerated."),
+    ]
+    rows = _rows(("intake", "#21", 1), ("intake", "#22", 2), ("intake", "#23", 3))
+    rc, out, _ = _run(issues, rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "examined over" in section, f"the leg must state its population\n{out}"
+    assert "1 examined" in section, (
+        f"EXACTLY ONE of the three must be examined — the heading one and only it: {section!r}"
+    )
+    assert "#21" not in section and "#22" not in section, (
+        f"a mere mention must never be reported as a missing row: {section!r}"
+    )
+
+def test_a_CLOSED_item_is_still_in_the_population() -> None:
+    """The class is NOT state-scoped, and the read must be the board WHOLE.
+
+    `--state open --search` returned a DIFFERENT set from the whole-board read, because four
+    of the eight originally filed had since closed. So a closed item carrying a ruling
+    comment with no row is still a finding — an open-filtered read would drop it silently.
+    """
+    issues = [_issue_with_comments(31, "CLOSED", "## RULED — settled after the fact.\n")]
+    rows = _rows(("intake", "#31", 1), ("close", "#31", 2))
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"a CLOSED item with a ruling comment and no row is still a finding: {out}"
+    assert "#31 carries a ruling comment" in out, out
+
+def test_a_ruling_row_for_the_subject_clears_it() -> None:
+    """The complement: the leg is discriminating, not a blanket red."""
+    issues = [_issue_with_comments(41, "OPEN", "## RULED — stamped in the same turn.\n")]
+    rows = _rows(("intake", "#41", 1), ("ruling", "#41", 2))
+    rc, out, _ = _run(issues, rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "#41" not in section, f"a stamped ruling must not be reported: {section!r}"
+    assert "1 examined" in section and "0 problem(s)" in section, (
+        f"it must be EXAMINED and found clean, never skipped: {section!r}"
+    )
+
+def test_the_leg_states_its_population_and_the_board_read_instant() -> None:
+    """A clean read over an examined population, never a clean read over nothing.
+
+    The clause is two-part: the gate PRINTS the population it examined. A leg that examined
+    zero must not render identically to one that examined the board and found it clean.
+    """
+    issues = [
+        _issue_with_comments(51, "OPEN", "## RULED — one.\n"),
+        _issue_with_comments(52, "OPEN", "## RULING — two.\n"),
+    ]
+    rows = _rows(("intake", "#51", 1), ("ruling", "#51", 2),
+                 ("intake", "#52", 3), ("ruling", "#52", 4))
+    rc, out, _ = _run(issues, rows)
+    assert rc == 0, f"both rulings are stamped, so the run is clean: {out}"
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "2 examined" in section, f"the POPULATION must be printed: {section!r}"
+    assert "board read at" in section, (
+        f"the board is LIVE state — the read instant is owed: {section!r}"
+    )
+    assert "2 issue(s) read" in section, f"the read size must travel: {section!r}"
+
+def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
+    """Both halves of the mechanism are pinned, because either silently kills the leg.
+
+    A read without `comments` makes the leg examine NOTHING and print a clean verdict over
+    it — the exact false-clean the population clause exists to stop. And a heading list
+    inlined at the comparison cannot be probed or changed by a factory whose board differs.
+    """
+    assert isinstance(RUNNER.RULING_HEADINGS, tuple) and RUNNER.RULING_HEADINGS, (
+        "the headings must be a declared module tuple"
+    )
+    assert "## RULED" in RUNNER.RULING_HEADINGS and "## RULING" in RUNNER.RULING_HEADINGS, (
+        f"both headings the board carries must be declared: {RUNNER.RULING_HEADINGS}"
+    )
+    source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    assert '"number,state,title,closedAt,comments"' in source, (
+        "the board read must ask for comments, or the leg examines nothing"
+    )
+
 
 def _log_dir(**files: str) -> Path:
     """A synthetic log surface. The live population is legitimately empty on a quiet day,
@@ -2465,6 +2606,532 @@ def _declared_skip(what: str, reason: str) -> None:
     print(f"  SKIP  {line}")
     pytest.skip(reason)
 
+
+# --- #242: attribution by GIT COMMON DIR, and an empty prefix set is NOT RUN ---------
+
+def _git_repo_with_worktree(root: Path) -> tuple[Path, Path]:
+    """`(main_checkout, linked_worktree)` — a real worktree, not a path that looks like one.
+
+    Both are derived from the fixture, so the probe resolves in any factory. A linked
+    worktree is the move this factory PRESCRIBES for a diverged tree, which is why the
+    attribution defect hid behind the remedy rather than behind an exotic state.
+    """
+    main = root / "main"
+    main.mkdir(parents=True)
+    for args in (["init", "-q", "-b", "main"],
+                 ["config", "user.email", "probe@example.invalid"],
+                 ["config", "user.name", "probe"]):
+        subprocess.run(["git", "-C", str(main), *args], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    (main / "a.txt").write_text("one\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(main), "add", "-A"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", str(main), "commit", "-q", "-m", "one"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    linked = root / "linked"
+    subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", str(linked)],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return main, linked
+
+_SCRATCH_DIRS: list[Path] = []
+
+def _scratch() -> Path:
+    """A fresh scratch directory for a probe (#242).
+
+    The SCRIPT runner in this file calls every `test_*` with NO arguments, so a probe must
+    never take `tmp_path` — pytest supplies it and the script form does not, which is how a
+    probe that passes under pytest raises TypeError under the audit's own invocation. The
+    house style here is to create the directory inside the probe.
+    """
+    d = Path(tempfile.mkdtemp(prefix="patrol-probe-"))
+    _SCRATCH_DIRS.append(d)
+    return d
+
+
+def test_probe_the_common_dir_is_shared_by_a_linked_worktree() -> None:
+    """The mechanism: a worktree and its main checkout resolve to ONE repository identity.
+
+    Keyed on the CHECKOUT they are two paths and neither matches the manifest's declared
+    repo from the other — which is how a lane patrolling from a worktree silently judged
+    nobody.
+    """
+    tmp_path = _scratch()
+    main, linked = _git_repo_with_worktree(tmp_path)
+    a, b = RUNNER.git_common_dir(main), RUNNER.git_common_dir(linked)
+    assert a is not None and b is not None, (a, b)
+    assert a == b, f"the common dir must be shared: main={a} linked={b}"
+    assert a != linked.resolve(), "a worktree's own path is NOT its repository identity"
+
+def test_probe_the_RELATIVE_OUTPUT_TRAP_is_pinned() -> None:
+    """THE TRAP, pinned so a naive edit REDs instead of silently returning [].
+
+    From the MAIN checkout `git rev-parse --git-common-dir` prints the RELATIVE string
+    ".git". So `Path(raw).resolve()` resolves against the CALLER's cwd and yields a path
+    that matches nothing — the SAME empty result the defect produces, wearing the shape of
+    a fix. The repo-relative join is what makes it correct from both ends.
+    """
+    tmp_path = _scratch()
+    main, linked = _git_repo_with_worktree(tmp_path)
+    raw = subprocess.run(["git", "-C", str(main), "rev-parse", "--git-common-dir"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    assert raw == ".git", (
+        f"the premise of this probe is that the main checkout prints a RELATIVE path; it "
+        f"printed {raw!r} — re-derive the trap before trusting the fix"
+    )
+    # The naive form, resolved from a cwd that is NOT the repo — the exact edit a future
+    # reader would make.
+    naive = (tmp_path / raw).resolve()
+    assert naive != RUNNER.git_common_dir(main), (
+        "the naive `Path(raw).resolve()` must NOT accidentally be correct"
+    )
+    # And the repo-relative join IS correct, from both ends.
+    assert (main / raw).resolve() == RUNNER.git_common_dir(main)
+    assert RUNNER.git_common_dir(main) == RUNNER.git_common_dir(linked)
+
+def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
+    """#242 clause 4: prefixes == [] is an UNATTRIBUTABLE population, never a clean box.
+
+    The legs already carry the discriminating counter and `declared_prefixes`' own
+    docstring already obliged the caller; ONE caller with THREE call sites complied with
+    neither. So a lane from a worktree read `ASSERTED ... 0 problems` from a leg that
+    judged nothing — and, in the duty-receipt case, a positive FALSE CONCLUSION.
+    """
+    rows = [{"name": "factory-x-job", "home": "probe-home", "enabled": True,
+             "prompt": "do a thing", "deliver_to": "", "last_run_at": _DUTY_FIRE}]
+    with tempfile.TemporaryDirectory() as tmp:
+        out = io.StringIO()
+        RUNNER.main(
+            [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
+            rows_fn=lambda: [], cron_rows_fn=lambda: (rows, ["probe-home"], []),
+            prefixes_fn=lambda: [],
+            log_dir=Path(tmp) / "logs",
+            kit_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
+                                        members={})[0],
+            fleet_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
+                                          members={})[1],
+            out=lambda *a, **k: print(*a, file=out, **k),
+            err=lambda *a, **k: None,
+            publish_fn=_stub_publish_leg,
+        )
+        text = out.getvalue()
+
+    for name in ("cron-thinness", "notify-receipt", "duty-receipt"):
+        block = text.split(f"LEG {name}")[1].split("LEG ")[0]
+        assert "NOT RUN" in block.split("\n")[0], f"{name} must be NOT RUN: {block!r}"
+        assert "UNATTRIBUTED" in block, f"{name} must name its unattributed population: {block!r}"
+        assert "resolves to no factory" in block, (
+            f"{name} must name the manifest reason: {block!r}"
+        )
+    assert "so no duty owes a receipt on this box" not in text, (
+        "the reason must not assert a fact about the box over an empty population"
+    )
+
+def test_probe_the_duty_reason_NAMES_its_population_and_refuses_the_conclusion() -> None:
+    """#242 clause 5. The old text ended "so no duty owes a receipt on this box" — a
+    POSITIVE claim about the box drawn from an enumeration that can be empty. An empty
+    population supports a statement about the READ, never a conclusion about duties.
+    """
+    rows = [{"name": "factory-x-job", "home": "probe-home", "enabled": True,
+             "prompt": "no receipt declaration here", "deliver_to": "",
+             "last_run_at": _DUTY_FIRE}]
+    leg = RUNNER.duty_receipt_leg(rows, ["probe-home"], [], ["factory-"], [],
+                                  read_at="probe")
+    assert leg["status"] == "NOT RUN", leg["status"]
+    reason = leg["reason"]
+    assert "NONE carries" in reason, reason
+    assert "NO DUTY WAS JUDGED" in reason, reason
+    assert "never a finding" in reason, reason
+    assert "so no duty owes a receipt on this box" not in reason, reason
+    assert "1 enabled row(s) this factory declares" in reason, (
+        f"the reason must name the population it enumerated: {reason}"
+    )
+
+def test_probe_every_probe_is_callable_by_the_SCRIPT_runner() -> None:
+    """This file has TWO runners, and a probe must satisfy both (#242, measured).
+
+    `main()` calls every `test_*` with NO arguments, so a probe that takes `tmp_path`
+    passes under pytest and raises TypeError under the audit's own invocation — a probe
+    that is green in one runner and absent in the other. Measured while landing #242: two
+    of the four new probes took `tmp_path` and the script form died on the first of them
+    while pytest reported 119 passed.
+    """
+    import inspect
+
+    offenders = []
+    for name, value in sorted(globals().items()):
+        if not (name.startswith("test_") and callable(value)):
+            continue
+        required = [
+            p for p in inspect.signature(value).parameters.values()
+            if p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        if required:
+            offenders.append(f"{name} requires {[p.name for p in required]}")
+    assert offenders == [], (
+        "every probe must be callable with no arguments, because main() runs them that "
+        "way: " + "; ".join(offenders)
+    )
+
+# --- #243: the ruling leg resolves through a leg-local resolver ----------------------
+
+def test_probe_the_strict_arm_still_resolves() -> None:
+    """Arm 1, and the reason the shared predicate is NOT widened: `issue_reference` is
+    strictly numeric by design and its own gate depends on that."""
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 1, "event": "ruling", "subject": "#42", "detail": "ruled"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    assert (issue, arm) == (42, "strict"), (issue, arm)
+
+def test_probe_the_BRIDGE_resolves_a_slug_subject() -> None:
+    """Arm 2 — the shape the ledger really carries, and the one #243 was filed for.
+
+    The ruling is stamped under a SLUG (`foreign-instrument-coupling`) while the issue is
+    filed a row later under `#85`, so the strict form returns None and the row is invisible
+    to `ruled`. The bridge is a row that REFERENCES this ruling's `n` and itself names an
+    issue — which is exactly the real n=545 / n=546 pair.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
+              "detail": "OWNER ORDER: do not use the instruments ..."}
+    dispatch = {"n": 546, "event": "dispatch", "subject": "#85",
+                "detail": "DISPATCH #85 ... Ruling n=545; issue filed at https://x/issues/85"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling, dispatch], pred)
+    assert (issue, arm) == (85, "bridged"), (issue, arm)
+
+    # A bare-number subject is ALSO a real form (n=516 carries subject `77`, which its own
+    # correction row n=518 complains about) — so the bridge must read it too.
+    bare = {"n": 517, "event": "dispatch", "subject": "77", "detail": "see Ruling n=545"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling, bare], pred)
+    assert (issue, arm) == (77, "bridged"), (issue, arm)
+
+def test_probe_the_DECLARED_arm_is_constructible_because_it_has_NO_live_instance() -> None:
+    """Arm 3, driven off a FIXTURE because the token has zero live rows.
+
+    Measured by Triage: `governs=` occurs exactly twice in the whole ledger — inside the
+    ruling that PRESCRIBES it and its dispatch. So the arm is prospective, and a probe that
+    could not construct it would leave the arm unexercised while reading as covered.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 900, "event": "ruling", "subject": "some-concern",
+              "detail": "a ruling that governs a concern rather than an item. governs=1234"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    assert (issue, arm) == (1234, "declared"), (issue, arm)
+
+def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> None:
+    """Clause 2: a resolver that cannot place a row must SAY SO.
+
+    Silence here reports a smaller population than the leg examined — the leg would read
+    as though every ruling resolved, which is the false-clean shape the population clause
+    forbids. The count travels beside the verdict.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 901, "event": "ruling", "subject": "no-issue-anywhere",
+              "detail": "governs nothing identifiable"}
+    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    assert (issue, arm) == (None, "unbridgeable"), (issue, arm)
+
+    # ...and the leg's coverage carries them, so the print is not the only reader.
+    issues = [_issue_with_comments(1, "OPEN", "## RULED — a ruling.\n")]
+    rows = [ruling, {"n": 902, "event": "intake", "subject": "#1", "detail": "intake"}]
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    cov = leg["coverage"]
+    assert cov["rulings_unbridgeable"] == 1, cov
+    assert cov["unbridgeable_rows"] == [{"n": 901, "subject": "no-issue-anywhere"}], cov
+    assert cov["rulings_read"] == cov["rulings_resolved"] + cov["rulings_unbridgeable"], cov
+
+def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
+    """The NON-VACUITY control for clause 3.
+
+    Neutering the bridge returns a bridged issue to the problem list. The probe drives the
+    REAL leg twice over one fixture: once with the dispatch present, once without — so the
+    difference is attributable to the bridge and not to the fixture.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [_issue_with_comments(85, "OPEN", "## RULED — settled on the board.\n")]
+    ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
+              "detail": "the clause"}
+    dispatch = {"n": 546, "event": "dispatch", "subject": "#85", "detail": "Ruling n=545"}
+
+    with_bridge = RUNNER.board_ruling_leg(issues, [ruling, dispatch], read_at="probe",
+                                          predicate=pred)
+    assert with_bridge["problems"] == [], with_bridge["problems"]
+
+    # Remove ONLY the bridge row: the same fixture must now report the false-unruled item.
+    without = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred)
+    assert len(without["problems"]) == 1, without["problems"]
+    assert "#85 carries a ruling comment" in without["problems"][0], without["problems"]
+
+# --- #245: the ruling predicate's head alternation, and the clause that keeps it honest ---
+
+def test_the_widened_head_ADMITS_the_spellings_the_board_actually_uses() -> None:
+    """#245 done-when 1, the widening arm: `## Amendment` IS a ruling head.
+
+    `#133` is the measured case — its two `## Amendment` comments ARE its ruling, while the
+    strict predicate returned None for them, so the issue read as unruled from the BOARD as
+    well as from the ledger. `#148` is the same spelling with a `ruling` row already stamped.
+    Both arms are driven here: the new spelling is admitted, and the two original forms are
+    NOT displaced by the widening.
+    """
+    for body in ("## RULED — shape (2), settled.\n",
+                 "## RULING — the clause reads as follows.\n",
+                 "## Amendment — done-when 3 resolved, and it is not conditional.\n"):
+        issue = _issue_with_comments(133, "OPEN", body)
+        assert RUNNER.ruling_comment(issue) is not None, f"not admitted: {body!r}"
+        assert RUNNER.unmatched_heading_comments(issue) == [], body
+
+def test_the_ruling_predicate_is_BOUNDARY_checked() -> None:
+    """A prefix match admits an EXTENSION unless the boundary is checked.
+
+    `## RULINGS — the ledger` starts with `## RULING`, so a bare `str.startswith` would read
+    a DIFFERENT heading as this one — the digit-extension class this factory has filed
+    repeatedly. Measured over the live board before the check was written: 0 headings extend
+    an accepted form, so this arm exists so the population cannot move tomorrow, not because
+    it moves today. Both sides are asserted, so the check cannot be satisfied by a predicate
+    that refuses everything.
+    """
+    for head in ("## RULINGS — the ledger", "## RULEDLY", "## Amendment2"):
+        assert not RUNNER._accepted_heading(head), head
+    for head in ("## RULED", "## RULED — shape (2)", "## RULING", "## Amendment",
+                 "## Amendment — x", "## RULED: a colon is a boundary"):
+        assert RUNNER._accepted_heading(head), head
+
+def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
+    """#245 done-when 2: the clause that keeps the widening from reproducing the defect.
+
+    A NOVEL head — one no one has written before — must surface as a printed line with its
+    issue number on the run that first meets it. Without this clause the next spelling is
+    simply not examined, which is indistinguishable from absent. Both halves are driven: the
+    line, and the count beside the verdict.
+    """
+    issues = [
+        _issue_with_comments(7, "OPEN", "## DISPOSITION — a spelling nobody has used yet.\n"),
+        _issue_with_comments(8, "OPEN", "## RULED — an ordinary ruling.\n"),
+    ]
+    rows = _rows(("intake", "#7", 1), ("intake", "#8", 2), ("ruling", "#8", 3))
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
+                                  predicate=RUNNER.load_predicate())
+    cov = leg["coverage"]
+    assert cov["unmatched_heads"] == [{"issue": 7, "head": "## DISPOSITION — a spelling nobody has used yet."}], cov["unmatched_heads"]
+    assert cov["unmatched_heads_examined"] == 1, cov
+    assert cov["canonical_heading"] == "## RULED", cov
+
+    rc, out, _ = _run(issues, rows)
+    assert "## DISPOSITION — a spelling nobody has used yet." in out, out
+    assert "#7" in out, out
+    assert "heading comments the ruling predicate did NOT match: 1 over 1 issue(s)" in out, out
+    assert "the convention names '## RULED'" in out, out
+    assert rc == 0, out
+
+def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> None:
+    """The NON-VACUITY control for the widening, driven through the REAL leg.
+
+    An issue whose ONLY head is `## Amendment` and which has no `ruling` row was invisible
+    before the widening: it was not counted as examined and not reported. The same fixture
+    is driven through the accepted set as it stands and against the NARROWED tuple, so the
+    difference is attributable to the widening and not to the fixture — the shape #243's
+    bridge control used.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [_issue_with_comments(133, "OPEN", "## Amendment — the item is ruled here.\n")]
+    rows = _rows(("intake", "#133", 846), ("dispatch", "#133", 847))
+
+    widened = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    assert widened["coverage"]["ruling_comments_examined"] == 1, widened["coverage"]
+    assert len(widened["problems"]) == 1, widened["problems"]
+    assert "#133 carries a ruling comment" in widened["problems"][0], widened["problems"]
+
+    saved = RUNNER.RULING_HEADINGS
+    RUNNER.RULING_HEADINGS = ("## RULED", "## RULING")
+    try:
+        narrowed = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    finally:
+        RUNNER.RULING_HEADINGS = saved
+    assert narrowed["coverage"]["ruling_comments_examined"] == 0, narrowed["coverage"]
+    assert narrowed["problems"] == [], narrowed["problems"]
+
+# --- #220: the worktree leg — the object class the cleanliness instrument excludes ---
+
+def _wt_records(*paths: str) -> list[dict]:
+    return [{"path": p} for p in paths]
+
+def _wt_dirs(count: int) -> tuple[tempfile.TemporaryDirectory, list[str]]:
+    """Real directories for the census fixture.
+
+    The leg classifies a record whose directory is GONE as a missing registration — that
+    is `git worktree prune`'s class and the reason the missing-directory list exists — so a
+    fixture built from invented paths would be measuring that branch instead of the hazard
+    branches under test. Directories are created rather than mocked for that reason.
+    """
+    tmp = tempfile.TemporaryDirectory()
+    paths = []
+    for index in range(count):
+        path = Path(tmp.name) / f"wt{index}"
+        path.mkdir()
+        paths.append(str(path))
+    return tmp, paths
+
+def test_the_worktree_leg_NAMES_both_hazard_classes_with_their_paths() -> None:
+    """#220 clause 3: the two hazard classes, WITH THE PATHS.
+
+    A count without the paths sends the reader to `git worktree list` to find what the leg
+    already knew, which is the shape that makes a report decorative. Both classes are
+    driven here, and the population is asserted too — `scratch` is the complement of the
+    FIRST record, because the first record is the tree the command was run from.
+    """
+    tmp2, dirs = _wt_dirs(4)
+    main, a, b, c = dirs
+    with tmp2:
+        records = _wt_records(main, a, b, c)
+        states = {
+            main: {"dirty": [], "ahead": 0, "problems": []},
+            a: {"dirty": [" M x"], "ahead": 0, "problems": []},
+            b: {"dirty": [], "ahead": 3, "problems": []},
+            c: {"dirty": [], "ahead": 0, "problems": []},
+        }
+        leg = RUNNER.worktree_leg(
+            read_at="probe",
+            records_fn=lambda repo=None: (records, None),
+            state_fn=lambda path, **kw: states[path],
+        )
+        cov = leg["coverage"]
+        assert leg["status"] == "ASSERTED", leg
+        assert cov["worktrees_total"] == 4, cov
+        assert cov["worktrees_scratch"] == 3, cov
+        assert cov["missing_directory"] == [], cov
+        assert cov["unreachable_commits"] == [{"path": b, "ahead": 3}], cov
+        assert cov["uncommitted_work"] == [{"path": a, "paths": 1}], cov
+    assert cov["hazard_classes"] == ["unreachable-commit", "uncommitted-work"], cov
+    assert cov["base_ref"] == "origin/main", cov
+    assert cov["instrument"] == "git worktree list --porcelain / git worktree prune", cov
+
+def test_the_worktree_leg_REPORTS_and_never_removes() -> None:
+    """The refusal, asserted STRUCTURALLY rather than promised in prose.
+
+    The ruling refused widening the cleanliness instrument's glob because hygiene's remedy
+    is REMOVAL, and removal on a worktree holding uncommitted work destroys it. So this leg
+    must hold no mutating path at all — and a promise in a docstring is not a mechanism.
+    The module's own source is scanned for every form that would remove or mutate a
+    worktree, and the leg declares `removes: False` so a reader of the REPORT is told the
+    same thing the code says.
+    """
+    source = (RUNNER.REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    forbidden = ("worktree", "prune"), ("worktree", "remove"), ("shutil.rmtree",),
+    for needle in ("prune", "remove"):
+        assert f'"worktree", "{needle}"' not in source, f"a worktree {needle} call is present"
+    assert "shutil.rmtree" not in source, "an rmtree is present in the runner"
+    del forbidden
+
+    tmp, (main, scratch) = _wt_dirs(2)
+    with tmp:
+        leg = RUNNER.worktree_leg(
+            read_at="probe",
+            records_fn=lambda repo=None: (_wt_records(main, scratch), None),
+            state_fn=lambda path, **kw: {"dirty": [], "ahead": 0, "problems": []},
+        )
+    assert leg["coverage"]["removes"] is False, leg["coverage"]
+
+def test_the_worktree_leg_is_NOT_RUN_when_the_census_cannot_be_read() -> None:
+    """An unreadable census is not an empty one, and an empty one is not a clean one.
+
+    Both arms: the instrument failing (an error from `git worktree list`), and the
+    instrument returning NO records — which a repository can never legitimately do, since
+    it always carries at least its main worktree. Each must state its reason rather than
+    render as a clean verdict.
+    """
+    failed = RUNNER.worktree_leg(
+        read_at="probe",
+        records_fn=lambda repo=None: ([], "`git worktree list` could not run: boom"),
+        state_fn=lambda path, **kw: {"dirty": [], "ahead": 0, "problems": []},
+    )
+    assert failed["status"] == "NOT RUN", failed
+    assert "could not be read" in failed["coverage"]["reason"], failed["coverage"]
+
+    empty = RUNNER.worktree_leg(
+        read_at="probe",
+        records_fn=lambda repo=None: ([], None),
+        state_fn=lambda path, **kw: {"dirty": [], "ahead": 0, "problems": []},
+    )
+    assert empty["status"] == "NOT RUN", empty
+    assert "at least its main worktree" in empty["coverage"]["reason"], empty["coverage"]
+
+def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> None:
+    """The render branch, driven separately: NOT RUN must carry its reason.
+
+    Without this arm a NOT RUN leg could render as an empty block, and an unreadable
+    census would then be indistinguishable from a clean one in the only surface a reader
+    actually meets -- the report.
+    """
+    def _stub(*, read_at: str, **_kw) -> dict:
+        return {
+            "name": "worktree", "status": "NOT RUN", "problems": [], "excused": [],
+            "coverage": {"reason": "the worktree census could not be read — probe",
+                         "read_at": read_at},
+        }
+
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1))
+    out, err = io.StringIO(), io.StringIO()
+    rc = RUNNER.main(
+        [], board_fn=lambda slug: issues, slug_fn=lambda: "owner/repo",
+        rows_fn=lambda: rows, cron_rows_fn=lambda: ([], ["probe-home"], []),
+        prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+        kit_manifest=_probe_kit_pair()[0], fleet_manifest=_probe_kit_pair()[1],
+        out=lambda *a, **k: print(*a, file=out, **k),
+        err=lambda *a, **k: print(*a, file=err, **k),
+        publish_fn=_stub_publish_leg, worktree_fn=_stub,
+    )
+    text = out.getvalue()
+    assert rc == 0, text
+    assert "LEG worktree — NOT RUN" in text, text
+    assert "NOT RUN: the worktree census could not be read — probe" in text, text
+    assert "worktrees: " not in text, text
+
+def test_the_worktree_leg_is_the_thing_that_moves_the_report() -> None:
+    """The NON-VACUITY control: the same fixture with and without a hazard.
+
+    One fixture, driven twice — once with a tree ahead of the base and once with none — so
+    the difference is attributable to the hazard and not to the fixture. Without this arm
+    a leg that always printed empty lists would satisfy every assertion above.
+    """
+    tmp, (main, scratch) = _wt_dirs(2)
+    hazard = {"dirty": [" M x"], "ahead": 2, "problems": []}
+    clean = {"dirty": [], "ahead": 0, "problems": []}
+    with tmp:
+        records = _wt_records(main, scratch)
+        with_hazard = RUNNER.worktree_leg(
+            read_at="probe", records_fn=lambda repo=None: (records, None),
+            state_fn=lambda path, **kw: hazard if path == scratch else clean,
+        )
+        without = RUNNER.worktree_leg(
+            read_at="probe", records_fn=lambda repo=None: (records, None),
+            state_fn=lambda path, **kw: clean,
+        )
+    assert len(with_hazard["coverage"]["unreachable_commits"]) == 1, with_hazard["coverage"]
+    assert len(with_hazard["coverage"]["uncommitted_work"]) == 1, with_hazard["coverage"]
+    assert without["coverage"]["unreachable_commits"] == [], without["coverage"]
+    assert without["coverage"]["uncommitted_work"] == [], without["coverage"]
+
+def test_the_whole_run_PRINTS_the_worktree_population_and_never_a_bare_zero() -> None:
+    """The clause that keeps a clean run from being read as "no residue".
+
+    Driven through the REAL `main()`, so the render path is exercised rather than the leg
+    alone — the leg returning a correct dict and the report dropping it is exactly the
+    half-fix this probes for. The figures are asserted WITH their predicate: the population,
+    both hazard classes, the `removes: no` declaration, and the read instant.
+    """
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1))
+    rc, out, _ = _run(issues, rows)
+    assert "LEG worktree — ASSERTED" in out, out
+    assert "worktrees: 2 total, 1 scratch" in out, out
+    assert "the cleanliness instrument's glob cannot reach" in out, out
+    assert "removes: no" in out, out
+    assert "unreachable-commit (commits not reachable from origin/main): 1 tree(s)" in out, out
+    assert "~ /probe/scratch — 1 commit(s) ahead" in out, out
+    assert "uncommitted-work (paths differing from HEAD): 1 tree(s)" in out, out
+    assert "~ /probe/scratch — 2 path(s)" in out, out
+    assert "read at " in out, out
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

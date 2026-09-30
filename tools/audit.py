@@ -764,6 +764,10 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "passed": res.returncode == 0,
                 "unknown": False,
                 "duration_sec": round(t_el, 2),
+                # A COMPLETED run's wall-clock is the measurement. Its presence on every
+                # record is what makes its ABSENCE on a kill readable as "this number is not
+                # a measurement" rather than as a missing field (#226).
+                "duration_is_lower_bound": False,
                 "attempts": attempts,
                 "retried": attempts > 1,
                 "stdout": res.stdout.strip(),
@@ -780,6 +784,12 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "passed": False,
                 "unknown": True,
                 "duration_sec": round(t_el, 2),
+                # A KILLED gate's wall-clock is a LOWER BOUND, never a measurement: the gate
+                # ran AT LEAST this long and was stopped at the cap, so the number is the
+                # budget talking. Stated in the record so no reader -- and no future tool
+                # deriving a `measured_sec` from an audit payload -- can promote the cap to a
+                # base and derive the next cap from itself (#226).
+                "duration_is_lower_bound": True,
                 "attempts": attempts,
                 "retried": True,
                 "first_attempt_sec": first_attempt_sec,
@@ -798,6 +808,7 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "passed": False,
                 "unknown": False,
                 "duration_sec": round(t_el, 2),
+                "duration_is_lower_bound": False,
                 "attempts": attempts,
                 "retried": attempts > 1,
                 "stdout": "",
@@ -889,6 +900,76 @@ def attach_gate_causes(gate_results: list[dict]) -> None:
             g.pop("note", None)
             continue
         g["note"] = reported_cause(g.get("stdout") or "") or reported_cause(g.get("stderr") or "")
+
+def attach_gate_staleness(gate_results: list[dict], stale) -> None:
+    """Set `stale_basis` on every gate whose declared basis no longer describes it (#231).
+
+    THE JOIN, at the report layer and nowhere else. The staleness sweep and the gate
+    verdicts are computed in the same run but in different scopes, and they are printed
+    eleven lines apart -- so a reader meeting a kill sees ONE word, UNKNOWN, for TWO
+    different questions: "is the cap a valid load bound?" (#226) and "does the basis
+    describe a DIFFERENT test?" (#231). Joining them here is what lets the verdict LINE
+    say which question the kill is evidence for.
+
+    It computes nothing. Both operands already exist, and it touches NO value -- the
+    values are the process owner's, never the implementing lane's (n=574 PART 5). The
+    staleness sweep REPORTS and never gates; so does this join, and for the same reason:
+    a basis whose bytes moved can be LOOSER than reality, so acting on it automatically
+    would tighten a cap that was containing its gate.
+    """
+    by_key = {s.key: s for s in (stale or ())}
+    for g in gate_results:
+        s = by_key.get(g.get("gate_key"))
+        if s is None:
+            g.pop("stale_basis", None)
+            continue
+        g["stale_basis"] = {"legs": list(s.legs), "detail": s.detail}
+
+def format_stale_basis_mark(g: dict) -> str:
+    """The staleness suffix for one gate's line, or "''" where its basis still describes it.
+
+    Both legs are named (`[STALE:bytes]`, `[STALE:bytes+runner]`) and the evidence carries
+    the two blobs, so the reader sees WHICH comparison moved rather than a bare warning.
+    """
+    s = g.get("stale_basis")
+    if not s:
+        return ""
+    legs = "+".join(s.get("legs") or [])
+    detail = (s.get("detail") or "").replace("|", "/")
+    return f" [STALE:{legs}] {detail}" if detail else f" [STALE:{legs}]"
+
+def stale_killed_gates(gate_results: list[dict]) -> list[dict]:
+    """The KILLED/UNKNOWN gates whose declared basis is stale -- the join's own population."""
+    return [g for g in gate_results if g.get("unknown") and g.get("stale_basis")]
+
+def render_gate_line(g: dict) -> str:
+    """One gate's verdict line: the cause and the basis staleness co-located (#231).
+
+    THREE marks, not two (#94 consequence 3): a gate that exhausted its budget is UNKNOWN
+    -- it neither passed nor failed, and printing FAIL would assert a verdict nobody
+    measured. The headline's three-state form is #93's; here the state is at least never
+    silently green.
+
+    THE CAUSE, ON THE LINE (#93 ruling n=574 PART 1(c)). A cause visible only via `--json`
+    is a cause the reader does not have, and the reader of this line is the lane that must
+    decide whether to RE-RUN. stdout first -- a failing pytest gate writes its failure
+    summary there -- then stderr, which is where a KILLED or crashed gate states its reason.
+
+    THE BASIS JOIN, ON THE SAME LINE (#231). A kill under a stale basis and a kill under a
+    sound one are the same UNKNOWN, so the staleness the sweep already computed is printed
+    beside the verdict it bears on -- the line says which question the kill answers.
+    """
+    mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
+    dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
+    line = f"  [{mark}] {g['cmd']} ({dur}s of {g.get('budget_sec', 0.0):.2f}s)"
+    if mark != "PASS":
+        cause = g.get("note") or ""
+        if cause:
+            line += f" — {cause}"
+    line += format_stale_basis_mark(g)
+    if g.get("retried"):
+        line += f" [retried once — {g.get('attempts', 2)} attempt(s)]"
+    return line
 
 @dataclass
 class GateVerdict:
@@ -1462,6 +1543,25 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_claim_preflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_claim_preflight.py"])
 
+    # 73. The REF-KIND half of the same pre-flight (#232). `parse_refs` validated a ref's FORM
+    #     at the write path and its KIND only at `verify`, so a lane could invent a kind, the
+    #     row was written, pushed, and only then refused — and a row is immutable once pushed,
+    #     so the only remedy left is to DECLARE the kind after the fact. Same class as #187 one
+    #     field over, which was itself #157's class one field over: the third instance in this
+    #     tool. Measured harm: 1 instance, on a MEMBER factory (ai-antispam `n=118`, ref
+    #     `issue:23` — append rc=0, then `verify` rc=1), cleared by declaring the kind in that
+    #     member's own tree, which is the lawful route and was available all along. The harm
+    #     rate is not the argument; the class is: an undeclared kind travels under a name no
+    #     declaration admits, and a factory that never runs `verify` keeps the row. The check
+    #     sits INSIDE `parse_refs` because that function already holds the predicate — it
+    #     prints `known_ref_kinds()` on a malformed ref — so the two paths cannot disagree
+    #     about what a factory declares, and it runs before the append lock is taken. It
+    #     closes the UNDECLARED half only: whether a `row:` value RESOLVES stays the gate's
+    #     existence leg, and `issue:` / `commit:` values stay opaque by design — the line #187
+    #     drew. Paired and REQUIRED: the population is the ledger every factory has.
+    if (repo_root / "tests/test_ledger_refs_preflight.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_refs_preflight.py"])
+
     # 66. THE SHIPPED TREE'S OWN AUDIT (#199). Nothing in the root audit executed any of the
     #     gates `TEMPLATE/` ships, so a shipped gate that reds or crashes IN THE TREE IT SHIPS
     #     FROM was invisible until someone ran it by hand -- measured: five instances in one
@@ -1494,6 +1594,20 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     bootstrapped factory that has none.
     if (repo_root / "tests/test_shipped_mechanism_law.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_shipped_mechanism_law.py"])
+
+    # 72. NO SHIPPED TOOL REFERENCES A NAME IT NEVER BINDS (#235). On 2026-09-29 the cron's
+    #     own invocation, `python3 tools/audit.py --report`, died with `NameError: name
+    #     'budgets' is not defined` -- three references in `main()`, which binds
+    #     `gate_budgets`. Nothing saw it: the shipped-audit gate drives `--json`, which
+    #     returns BEFORE the text render, and the crash sits ABOVE both the dated artifact
+    #     write and the `internal-self-audit` run row, so the run died before recording
+    #     anything. The class -- an undefined name reachable on a flag no gate exercises --
+    #     had no observer at all. The check is `symtable`-based rather than lexical, so a
+    #     name in a comment or a string is never a hit by construction, and it is stdlib-only
+    #     because the kit ships no dependency list. Paired, and REQUIRED: the population is
+    #     `tools/`, which every factory has, so it is clean where the kit lands.
+    if (repo_root / "tests/test_audit_undefined_names.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_audit_undefined_names.py"])
 
     # 38. Telemetry-reader registry gate: a telemetry field read out of a row's `detail`
     #     must go through the shared predicate in `tools/field_predicate.py`, because a
@@ -2303,7 +2417,16 @@ def format_report_markdown(
         # The cause is read through the SAME helper as the stdout report, so the two
         # surfaces cannot disagree about which line states it (one field, one predicate).
         note = (g.get("note") or "").replace("|", "/")
-        lines.append(f"| `{g['cmd']}` | `{status}` | `{g['duration_sec']}s` | {note} |")
+        # The basis join, on the same row (#231): the committed report carries the same
+        # co-located fact the stdout line does, through the same attached field.
+        stale_mark = format_stale_basis_mark(g).strip()
+        if stale_mark:
+            note = f"{note} {stale_mark}" if note else stale_mark
+        # `>=` on a killed gate: the rendered number is what a reader copies into a
+        # manifest, and a cap rendered as a measurement is how a lower bound is promoted
+        # to a base (#226).
+        dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
+        lines.append(f"| `{g['cmd']}` | `{status}` | `{dur}s` | {note} |")
 
     lines.extend([
         "",
@@ -2432,6 +2555,9 @@ def main() -> int:
     # a failing gate said -- and so the JSON carries the COUNT a script-shaped gate prints
     # FIRST rather than leaving it to be dug out of the full stdout.
     attach_gate_causes(gate_results)
+    # The join is computed ONCE here, before the JSON emit and before both text renders,
+    # so the three surfaces cannot disagree about a gate's basis (#231).
+    attach_gate_staleness(gate_results, gate_budgets.stale if gate_budgets is not None else ())
 
     if args.json:
         payload = {
@@ -2466,24 +2592,21 @@ def main() -> int:
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
-        # THREE marks, not two (#94 consequence 3): a gate that exhausted its budget
-        # is UNKNOWN -- it neither passed nor failed, and printing FAIL would assert
-        # a verdict nobody measured. The headline's three-state form is #93's; here
-        # the state is at least never silently green.
-        mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
-        line = f"  [{mark}] {g['cmd']} ({g['duration_sec']}s of {g.get('budget_sec', 0.0):.2f}s)"
-        if mark != "PASS":
-            # THE CAUSE, ON THE LINE (#93 ruling n=574 PART 1(c)). A cause visible only
-            # via `--json` is a cause the reader does not have, and the reader of this
-            # line is the lane that must decide whether to RE-RUN. stdout first -- a
-            # failing pytest gate writes its failure summary there -- then stderr, which
-            # is where a KILLED or crashed gate states its reason.
-            cause = g.get("note") or ""
-            if cause:
-                line += f" — {cause}"
-        if g.get("retried"):
-            line += f" [retried once — {g.get('attempts', 2)} attempt(s)]"
-        print(line)
+        print(render_gate_line(g))
+
+    # THE JOIN'S POPULATION, PRINTED (#231). A kill under a stale basis and a kill under a
+    # sound one read as the same UNKNOWN, so the count is stated -- at zero too, because an
+    # empty population must be visibly empty rather than indistinguishable from a print
+    # that never ran. The sweep's own account rides beside it, so the two questions the
+    # reader must keep apart are answered on one line: whether the cap is a valid LOAD
+    # bound (#226) and whether the basis describes a DIFFERENT test (#231).
+    stale_killed = stale_killed_gates(gate_results)
+    print(
+        f"\nGate basis staleness: {len(stale_killed)} killed/UNKNOWN gate(s) under a stale "
+        f"basis — {gate_budgets.stale_note if gate_budgets is not None else 'the sweep did not run'}"
+    )
+    for g in stale_killed:
+        print(f"  [STALE-KILL] {g.get('gate_key')} —{format_stale_basis_mark(g)}")
 
     # THE DEFAULT POPULATION, PRINTED (#94 consequence 1). A gate with no manifest
     # entry is legitimate -- a factory that has not measured it yet runs on the
@@ -2499,6 +2622,30 @@ def main() -> int:
     )
     for g in default_gates:
         print(f"  [DEFAULT] {g.get('gate_key') or '(no file argument resolved)'} — {g['cmd']}")
+
+    # THE LOAD POPULATION, PRINTED (#226). A cap exceeded at load 13 and a cap exceeded on
+    # an idle box are the SAME NUMBER and DIFFERENT FACTS, so a reader meeting a kill can
+    # only tell a busy box from a hung gate where the base states the load it was measured
+    # at. This run's own load is printed beside the declared one, because the comparison IS
+    # the datum -- and where no entry states a load, the line says so rather than leaving
+    # the reader to infer it from a missing field.
+    try:
+        now_load: float | None = os.getloadavg()[0]
+    except OSError:  # pragma: no cover - load average is unavailable on some hosts
+        now_load = None
+    if gate_budgets is None:
+        print(
+            "\nLoad population: the budget manifest could not be read, so no declared load "
+            "is reported this run"
+        )
+    else:
+        print(f"\n{gate_budgets.load_note}")
+        if now_load is not None:
+            print(f"  this run is at load {now_load:.2f}")
+        for key in gate_budgets.load_declared:
+            print(
+                f"  [LOAD] {key} — measured_sec taken at load {gate_budgets.loads[key]:.2f}"
+            )
 
     # THE DECLARED REVISIONS, SWEPT AND PRINTED (#125, ruling n=786). A basis that no
     # longer describes the command it was taken on is INVISIBLE in the caps themselves --

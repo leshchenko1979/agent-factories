@@ -114,35 +114,35 @@
       "id": "gatus-config-carries-live-credentials",
       "scope": "profile",
       "severity": "warning",
-      "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe.",
+      "text": "vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe. A third chokepoint is any TOOL whose output path renders the file's content: a diff, a checksum-and-dump, or a guard that prints a drift diff between two key-bearing copies discloses both. Read the output path before you ship the tool, not after.",
       "affects": [
         "profile"
       ],
       "since": "2026-09-23",
       "review_by": "2026-10-07",
-      "evidence": "Intake n=265/n=267: the file carries nine copies of one fleet-root key, committed and pushed, and byte-identical to the file the live gatus container mounts. Three re-exposures in 48 h by two lanes while working on that file: n=275 (grep -A8) and n=285 (json.dumps of a parsed endpoint dict). Remedy pending and owner-gated: render the config at deploy time so no key lives in a readable file."
+      "evidence": "9 key blocks confirmed in BOTH the repo copy and the deployed copy today (grep -c \"BEGIN OPENSSH PRIVATE KEY\" = 9 on each). Third re-exposure measured 2026-09-29: the guard added in commit 51c07f57 printed both key blocks on its refuse arm; fixed in aab431f1, proven on synthetic material (9 markers in -> 9 placeholders out, no BEGIN/END, zero base64). Intake n=265/n=267; prior re-exposures n=275 and n=285."
     },
     {
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "scope": "profile",
       "severity": "warning",
-      "text": "The Mac's CDP and SSH tunnels flap because the Mac sleeps: it drops each SSH connection after roughly 2 minutes, and vpn's sshd then kills it 90s later (clientaliveinterval 30 x clientalivecountmax 3). The listener on vpn:4444 disappears while the Mac sleeps, so any browser task through the Mac CDP path fails intermittently - and no overlay fixes it, because a sleeping host is offline on every transport, Tailscale included.",
+      "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF overnight, not because it sleeps: pmset reports sleep=0 (it never sleeps), and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off. Apple M4 (Mac16,10). Observed power-offs carry it offline for hours at a time, so any browser task through the Mac CDP path fails for the whole window - and no overlay fixes it, because a powered-off host is offline on every transport, Tailscale included.",
       "affects": [
         "profile"
       ],
       "since": "2026-09-26",
       "review_by": "2026-10-10",
-      "evidence": "Measured on vpn auth.log: six consecutive Mac connections with lifetimes 2m00s to 2m44s, and 290 accepts / 79 timeouts from the Mac's address in one day. Tailscale independently reports mac-mini Online=false with a LastHandshake only minutes old. Root cause is the Mac's power policy (pmset), which no factory owns. Ledger n=493."
+      "evidence": "pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM) and last reboot/shutdown records, both read 2026-09-29 11:38 MSK; hw.model Mac16,10. Prior evidence (2026-09-26): six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493."
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarted 19 times on 2026-09-27: 16 deliberate (ship-chain deploy) and 3 crash recoveries. Every restart opens a boot-drain window that re-pushes parked rows (18 drains re-pushed 144 rows, mean 8.0), so a re-push is the COMMON case and a crash the minority one. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
+      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly: 2026-09-28 saw 12 starts, 10 clean stops and 2 crashes (code=dumped); 2026-09-29 to 11:42 MSK saw 6 starts, 4 stops, 0 crashes. Every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault.",
       "severity": "warning",
       "affects": [
         "profile"
       ],
       "scope": "profile",
-      "evidence": "leshchenko1979/opencrabs#638 (the crash class, filed by another lane) plus the three stop records in `systemctl --user status opencrabs-ops` for 2026-09-27 and memory.current/memory.peak read from the unit's cgroup.",
+      "evidence": "journalctl --user -u opencrabs-ops, per-day counts read 2026-09-29T08:36Z; cgroup read the same turn: MemoryCurrent 1586802688 / MemoryHigh 1610612736 = 98.5% with MemoryPeak 1610887168, i.e. the peak exceeds the declared high-water mark. leshchenko1979/opencrabs#638 for the crash class.",
       "review_by": "2026-10-11",
       "since": "2026-09-27T06:13:19Z"
     },
@@ -157,6 +157,17 @@
       "since": "2026-09-27",
       "evidence": "Ledger n=611 (two layers: the requirement origin commit d6c9d55 is absent from this repo, and SKILL.md:29 declares the issue board to be the local ledger). Independently raised as a false regression by two lanes before it was declared.",
       "review_by": "2026-10-12"
+    },
+    {
+      "id": "bothelp-relay-load-bearing-on-vpn",
+      "text": "vpn now serves a critical channel's live webhook: bothelp.l1979.ru/telegram is the investor bot's production Telegram webhook, terminated by Caddy on vpn and forwarded to the relay on 127.0.0.1:8770. The owner made this permanent on 2026-09-29 (it is no longer a pilot). Removing that vhost, or taking vpn down for maintenance without warning, sends Telegram's webhook to a 404 and the channel goes silent. Tell Infra Factory HQ before any vpn Caddy/kernel/reboot/address change; the designed mitigation is one command each way to return the webhook to BotHelp's own address for the window. The relay application and its channel logic are NOT this factory's - hosted here and monitored by Gatus, changed in the redevest-ai repo.",
+      "severity": "warning",
+      "since": "2026-09-29",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "Owner ruling 2026-09-29 (via the RedeVest lane). Live verification the same turn: webhook bothelp.l1979.ru/telegram, pending_update_count 0, last_error none; /healthz {ok:true,pending:0,overdue:0,oldest_pending_age_s:0.0}; systemd bothelp-relay-receiver + bothelp-relay-forwarder active on vpn; Gatus endpoint apps_bothelp-relay green."
     }
   ],
   "lanes": [
@@ -192,13 +203,13 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-28T06:24:04Z",
+  "attested_at": "2026-09-29T08:44:19Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
       "green": true,
       "behind_by": 0,
-      "reason": "behind_by 0 counts UNDECLARED lag only. Basis: the ELEVEN declared paths of docs/instruments/pacemaker.md section 2, measured on BOTH predicates (on-disk, and against my own HEAD) at 2026-09-27T22:12Z — 11 byte-identical to TEMPLATE HEAD, 0 differing. A TWELFTH path, tests/gate_registry.py, belongs to the ADOPTION's closure rather than section 2 (the doc states this at section 8 step 5) and DOES differ: it is a DECLARED FORK, not a lag. The template revision (3809561e2a22) registers two gates as REQUIRED that this tree cannot run — test_audit_tree_condition.py imports `from audit import render_tree_line, tree_condition`, and tools/audit.py here carries 0 of both symbols; test_gate_invocation_mode.py resolves `<cwd>/tools/audit.py`, which from this repo is /root/tools/audit.py, absent. Adopting the registry would register two REQUIRED gates that fail by construction, and gate_registry.py's own law at :671 states each absent declared gate FAILS naming it. Porting the two gate files does not fix it, because their dependencies are absent here.",
+      "reason": "behind_by 0 counts UNDECLARED lag only. Basis: the ELEVEN declared paths of docs/instruments/pacemaker.md section 2, measured on BOTH predicates (on-disk, and against my own HEAD) at 2026-09-27T22:12Z \u2014 11 byte-identical to TEMPLATE HEAD, 0 differing. A TWELFTH path, tests/gate_registry.py, belongs to the ADOPTION's closure rather than section 2 (the doc states this at section 8 step 5) and DOES differ: it is a DECLARED FORK, not a lag. The template revision (3809561e2a22) registers two gates as REQUIRED that this tree cannot run \u2014 test_audit_tree_condition.py imports `from audit import render_tree_line, tree_condition`, and tools/audit.py here carries 0 of both symbols; test_gate_invocation_mode.py resolves `<cwd>/tools/audit.py`, which from this repo is /root/tools/audit.py, absent. Adopting the registry would register two REQUIRED gates that fail by construction, and gate_registry.py's own law at :671 states each absent declared gate FAILS naming it. Porting the two gate files does not fix it, because their dependencies are absent here.",
       "measured_at": "2026-09-27T22:12Z"
     },
     "ledger": {
@@ -207,6 +218,12 @@
       "behind_by": 13,
       "reason": "Declared fork, DELIBERATE and stdlib-only: tools/ledger.py is 387 lines against the template's 1722, single-file with no import closure, so the factory's own write path ports anywhere with no dependency tree. behind_by 13 is stated on THE BRIEF'S OWN POPULATION (the instrument's 15 declared paths): 9 absent + 4 differing. MY OWN re-derivation disagrees, and both are stated because the POPULATION MOVED: against registry/kit.json at my pin b0bb09cb288f the manifest ships FOURTEEN ledger paths and I hold 4, 0 byte-identical (behind_by 14); the instrument's own law (docs/instruments/ledger.md section 6) says 2 of 18 at 2026-09-27T10:28Z, which is now STALE in one cell I can correct first-hand - tools/ledger_declaration.py is NO LONGER ABSENT, I adopted it 2026-09-27 with the pacemaker closure. Three published figures for this one member (2/18, 6/15, 4/14) are three predicates, not three errors, and the instability is the finding. RE-ENTRY CONDITION: adopt when the enforcement seam is usable without the closure, or when a planned migration lands. Migration cost is MEASURED, not assumed: the template's row schema carries a session key my 684 live rows do not, so migration is a data migration on an append-only surface, not a file swap.",
       "measured_at": "2026-09-28T11:07Z"
+    },
+    "open-questions": {
+      "state": "partial",
+      "behind_by": 4,
+      "measured_at": "2026-09-29T11:11:04Z",
+      "reason": "Committed HEAD 29a97de9 holds 0 of the 4: tools/questions absent; tools/questions-render.mjs absent; tests/test_questions.py absent; docs/instruments/open-questions.md 4413ac03 (18,423 B) against canonical c81dd258 (42,775 B). It holds no tool copy by its own decision -- it removed its vendored copy on 2026-09-27 after measuring first-hand that the copy never executed (the answer backend resolves the CLI under the skill's tools root, exactly-one-or-127), and it reaches the centralised copy instead. The law doc being behind is therefore the only real gap here, and it arrived by kit delivery rather than by a port. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
     }
   }
 }

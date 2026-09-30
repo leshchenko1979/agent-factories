@@ -41,6 +41,7 @@ import ast
 import contextlib
 import io
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -157,11 +158,6 @@ def probe_the_population_is_the_call_sites_and_is_non_empty() -> None:
 
 def probe_every_invoked_gate_declares_the_mode_its_call_site_uses() -> None:
     """The core assertion: declared mode == call-site form, for every invoked gate."""
-    # The declaration is FACTORY DATA and the shipped tree carries none (#199) — the kit ships
-    # the shape, not this box's measurement. Stated rather than crashing.
-    if not MANIFEST.is_file():
-        print("  SKIP  the declaration leg — this tree declares no invocation modes")
-        return
     invoked = invoked_gates()
     declared, note = declared_modes()
     found = problems(invoked, declared)
@@ -196,15 +192,6 @@ def probe_a_dual_SHAPED_file_is_judged_by_its_CALL_SITE() -> None:
     the audit invokes it as a SCRIPT. Judging by the file's shape would declare it
     `pytest` and be wrong; the declaration must come from the call site.
     """
-    # THE DECLARATION IS FACTORY DATA (#199). The shipped tree carries no
-    # `registry/gates.json` — the kit ships the SHAPE, `registry/gates.example.json`, because a
-    # bootstrapped factory must measure its own runtimes and cannot inherit this box's. Without
-    # this guard the probe raised FileNotFoundError inside the tree the kit ships from, which is
-    # a crash rather than a verdict; the mode declaration simply does not exist to compare
-    # against there, and `main` states that skip separately.
-    if not MANIFEST.is_file():
-        print("  SKIP  the dual-shaped probe — this tree declares no invocation modes")
-        return
     invoked = invoked_gates()
     declared, _ = declared_modes()
     dual = [
@@ -297,22 +284,62 @@ def probe_the_EMITTER_refuses_an_empty_map() -> None:
             "empty map, which is the failure this refusal exists to prevent"
         )
 
+def probe_the_ABSENT_manifest_is_a_stated_skip_and_never_a_PASS() -> None:
+    """#219 -- the two shapes of the defect, both driven.
+
+    The skip was written and UNREACHABLE: `declared_modes()` was hand-checked at each call
+    site, applied twice and missed once, so the third instance raised `FileNotFoundError` out
+    of a probe and the tree the kit ships from got a CRASH instead of the verdict the module
+    docstring already specified. And the two guards that did exist paid a FALSE PASS: the loop
+    labels a probe `PASS` after it has printed its own SKIP, so a green recorded no judgement.
+
+    Arm 1 (reachability) drives the gate in a tree with no `registry/gates.json` and requires
+    rc=0 with the skip PRINTED. Arm 2 (non-vacuity) requires that tree to carry NO `PASS` line
+    at all -- an exit-0-only probe would satisfy arm 1 and miss the whole second defect.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = Path(tmp) / "member"
+        (tree / "tests").mkdir(parents=True)
+        (tree / "tools").mkdir()
+        # the gate AS IT SHIPS, beside a tree that has not adopted the declaration
+        (tree / "tests" / "test_gate_invocation_mode.py").write_text(
+            Path(__file__).read_text(encoding="utf-8"), encoding="utf-8")
+        (tree / "tools" / "audit.py").write_text(
+            AUDIT.read_text(encoding="utf-8"), encoding="utf-8")
+        assert not (tree / "registry" / "gates.json").exists(), (
+            "the fixture is not a no-manifest tree -- the arm would prove nothing")
+        proc = subprocess.run(
+            [sys.executable, "tests/test_gate_invocation_mode.py"],
+            cwd=tree, capture_output=True, text=True, timeout=120,
+        )
+        out = proc.stdout + proc.stderr
+        assert proc.returncode == 0, (
+            f"(219a) the absent-manifest tree must EXIT 0, not crash: rc={proc.returncode}; "
+            f"{out.strip()[:300]}"
+        )
+        assert "SKIP" in out and "no registry/gates.json" in out, (
+            f"(219a) the skip must be PRINTED with its reason: {out.strip()[:300]}"
+        )
+        assert "  PASS  " not in out, (
+            "(219b) a probe was labelled PASS in a tree where nothing could be asserted -- "
+            "the loop labels a probe PASS after it prints its own SKIP, so a green there "
+            f"records no judgement: {out.strip()[:300]}"
+        )
+        assert "Traceback" not in out, (
+            f"(219a) a traceback reached the caller instead of a verdict: {out.strip()[:300]}"
+        )
+
 def main() -> int:
 # STATED SKIP: registry/gates.json (factory data)
     if "--emit-modes" in sys.argv[1:]:
         return emit_modes()
-    checks = [value for name, value in sorted(globals().items())
-              if name.startswith("probe_") and callable(value)]
-    failures: list[str] = []
-    for check in checks:
-        try:
-            check()
-            print(f"  PASS  {check.__name__}")
-        except AssertionError as exc:
-            failures.append(f"{check.__name__}: {exc}")
-            print(f"  FAIL  {check.__name__} — {exc}")
+    # The manifest-state discrimination happens ONCE, here, ABOVE the probe loop.
+    # The precondition belongs to the GATE, not to each call site: restated per probe it was
+    # hand-applied twice and missed once (#219), which made the k-th instance a coin flip.
+    # Above the loop it is also what makes the skip REACHABLE — and it removes the false-pass
+    # path, where a probe that printed its own SKIP and returned was then labelled PASS by the
+    # loop below, a pass for a probe that asserted nothing.
     try:
-        invoked = invoked_gates()
         declared, note = declared_modes()
     except FileNotFoundError:
         print(
@@ -324,6 +351,17 @@ def main() -> int:
     except ManifestUnreadable as exc:
         print(f"  FAIL  the declaration exists and cannot be read: {exc}")
         return 1
+    checks = [value for name, value in sorted(globals().items())
+              if name.startswith("probe_") and callable(value)]
+    failures: list[str] = []
+    for check in checks:
+        try:
+            check()
+            print(f"  PASS  {check.__name__}")
+        except AssertionError as exc:
+            failures.append(f"{check.__name__}: {exc}")
+            print(f"  FAIL  {check.__name__} — {exc}")
+    invoked = invoked_gates()
     print(
         f"  population: {len(invoked)} invoked gate(s) — "
         f"{sum(1 for m in invoked.values() if m == 'script')} script / "

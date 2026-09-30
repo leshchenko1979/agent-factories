@@ -188,7 +188,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-28T06:42:00Z",
+  "attested_at": "2026-09-29T06:50:43Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
@@ -196,6 +196,12 @@
       "behind_by": 6,
       "measured_at": "2026-09-28T16:33:57Z",
       "reason": "6 of the instrument's 15 declared paths held, 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to TEMPLATE HEAD b074b95a7705, so behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated, as infra-factory's row does, because this fleet encodes two. green true is their own run, not a transcription: tests/test_ledger.py rc=0, tests/test_ledger_schema.py rc=0 (182 rows audited), tests/test_ledger_no_shrink.py rc=0 (131 commits on origin/main), tests/test_ledger_close_preflight.py rc=0 (10 cases), tests/test_ledger_commit_cites_no_rows.py rc=0 (14 commits after cda23fe), tools/ledger.py verify rc=0 (182 rows, monotonic) - held and green are independent axes, so an incomplete SET declared green is the reading, not a contradiction. RE-ENTRY CONDITION: this is a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
+    },
+    "open-questions": {
+      "state": "partial",
+      "behind_by": 3,
+      "measured_at": "2026-09-29T11:11:04Z",
+      "reason": "Committed HEAD 6be2112 holds 1 of the 4 declared paths at canonical: tools/questions 89fdee5d (185,758 B) against canonical b9bd1aaf (242,000 B); tools/questions-render.mjs 78401d59 (11,326 B) against canonical 66ed6e59 (14,860 B); tests/test_questions.py 40d821e4 (4,432 B) == canonical; docs/instruments/open-questions.md absent. Consequence, measured not inferred: this factory's own gate resolves local-first (REPO/tools/questions, then TEMPLATE/tools/questions), so it tests a revision the factory no longer ships, and both copies still declare VERSION 2.0.0 across the gap -- the version field cannot reveal it, which is the ai-antispam argument of 2026-09-27 reproduced on a second axis. Its kit pin cannot see it either: the manifest hashes TEMPLATE paths, not the member's own copy. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
     }
   }
 }

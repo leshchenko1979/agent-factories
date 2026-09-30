@@ -565,6 +565,56 @@ def declared_reclose(detail: str) -> list[str]:
     return _declared_values(detail, RECLOSE_KEY)
 
 
+RECLAIM_KEY = "reclaim"
+
+def declared_reclaim(detail: str) -> list[str]:
+    """Every `reclaim` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE read of this field, imported by the append path that refuses a SECOND
+    `claim` for a subject by the same actor (#246) — a private `token.split("=")` there
+    would be the class ruled at `n=405` PART 5: one field, one predicate.
+
+    IT MIRRORS `declared_reclose` DELIBERATELY, and the mirroring is the point: a claim
+    and a close are the two ends of one lifecycle, so a reader that learns the close's
+    declaration form should meet the claim's in the same shape. The measured population
+    is what makes the token a FORMALISATION rather than a new burden: three of the eight
+    multi-claim subjects already declare themselves in prose (`RE-CLAIM by the Worker
+    lane … after Triage's intake at n=480`, `CLAIM #113 (fresh) — a SECOND acceptance`,
+    `Re-claiming #161 after the intake leg landed`) — the convention existed and only
+    lacked a token.
+
+    WHY NOT `declares_field`: it serves a NUMERIC key and TYPE-TESTS the value it finds,
+    while `reclaim` carries a free-text REASON — the defect `declared_reclose`'s own
+    docstring records at length, where the escape hatch the refusal prescribed was
+    UNREACHABLE for every value it could hold.
+
+    The run is POSITIONAL (`trailer_tokens`), matching every other declared field:
+    section 11 puts a declaration in the canonical trailer, so a value quoted
+    mid-sentence is prose. Values are read VERBATIM.
+
+    A LIST, for the same reason: a row carries one token (a field with two values has no
+    canonical reading, SKILL.md section 8), and the caller must be able to SEE a second
+    rather than read the first silently.
+    """
+    return _declared_values(detail, RECLAIM_KEY)
+
+def mentions_reclaim(detail: str) -> bool:
+    """True when `detail` carries the `reclaim` KEY anywhere, trailer or prose.
+
+    The LEXICAL half of the pair above, for the ONE job `mentions_reclose` exists for: to
+    let the append path NAME a malformed declaration instead of silently not seeing it. A
+    `reclaim` value containing a SPACE terminates the canonical trailing run, so the row
+    declares nothing at all while its author is told to write the token they believe they
+    wrote.
+
+    Deliberately NOT the guard's predicate: a LEXICAL test lets a row that merely
+    DISCUSSES a re-claim satisfy its own guard, which is the #88 / `n=405` clause 5 damage
+    ("prose must not SATISFY a field"). The guard reads the positional form; this answers
+    only "did the author write the token somewhere I can point at?"
+    """
+    return any(keyed_value(token, RECLAIM_KEY) is not None
+               for token in str(detail).split())
+
 def mentions_reclose(detail: str) -> bool:
     """True when `detail` carries the `reclose` KEY anywhere, trailer or prose.
 

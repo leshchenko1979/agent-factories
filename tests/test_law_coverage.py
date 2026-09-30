@@ -52,7 +52,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     # bootstrapped factory that has no such table (#68's failure). The PROCESS half is the
     # measurement run: it verifies the pacemaker crons are thin and the RESULT is a
     # required artifact section, which tests/test_score_artifact_sections.py asserts. It
-    # mapped to tools/hygiene.py before — a file that declares its own scope as P20 and
+    # mapped to tools/hygiene.py before — a file that declares its own scope as Process 4 and
     # never reads a cron row, which passed because the only check here is that the target
     # EXISTS. A file that exists and implements nothing satisfied it completely (#69, #54).
     "P7": ["tests/test_cron_thinness.py", "tests/test_score_artifact_sections.py", "docs/measurement-procedure.md"],
@@ -78,7 +78,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     "P27": ["tools/audit.py", "TEMPLATE/roles/triage.md"],  # Automated task assignment & monitoring
     # P28 describes the SAME OBJECT as P7 — a periodic process driven by a thin nudging
     # cron — and carried the same defect one level worse: BOTH of its mapped targets were
-    # files that never read a cron row. tools/hygiene.py declares its own scope as P20, and
+    # files that never read a cron row. tools/hygiene.py declares its own scope as Process 4, and
     # `grep -c 'cron\|deliver_to\|set_goal' tools/audit.py` returned 0. It now shares P7's
     # pair: the pure predicate for the wake route, and the measurement run for the live
     # check. A mapping to a file that implements nothing is dead text (P29, #54).

@@ -65,12 +65,19 @@ read over the whole detail, and the head/trailer question cannot arise for it.
 
 THE MARKER IS MANDATED FORWARD ONLY
 -----------------------------------
-Measured before this gate was written: `n=647` (#108) is an honest reconstruction that names
-its basis in prose WITHOUT the marker, and five of the six historical reconstructions carry
-it. So a retroactive marker gate would have fired on an honest row — the same defect class
-this factory recorded in rework entry 157. The boundary is declared at the instant the rule
-lands, so **all six existing reconstructions are OUTSIDE the population** and print as
-`excused:`. NOTHING IS BACKFILLED (`n=687`, BOUND).
+Measured before this gate was written: ONE of the pre-boundary reconstructions is an honest
+row that names its basis in prose WITHOUT the marker, while the rest carry it. So a
+retroactive marker gate would have fired on an honest row — the same defect class this
+factory recorded in rework entry 157. The boundary is declared at the instant the rule
+lands, so **every existing reconstruction is OUTSIDE the population** and prints as
+`excused:`. NOTHING IS BACKFILLED.
+
+WHICH rows those are, and which one is the decisive prose-only case, is FACTORY DATA: it is
+declared under `reconstructions` in `docs/ledger-invariants.json`, never written as a
+literal here. This file is paired byte-identically with its TEMPLATE copy, so a row number
+typed here ships to every member and is judged against a ledger that does not carry it
+(#239) — the declaration is what lets a member read its OWN history, or read none and skip
+with the reason stated.
 
 THE CLOSE ROW IS RESOLVED BY SUBJECT, NEVER BY ADJACENCY
 --------------------------------------------------------
@@ -109,6 +116,7 @@ from ledger_boundary import (  # noqa: E402
     GateError,
     SkipGate,
     boundary_and_rows,
+    declared_reconstructions,
     parse_ts,
     synthetic_tree,
 )
@@ -265,6 +273,32 @@ def _live_rows() -> list[dict]:
     return rows
 
 
+def _declared() -> tuple[list[int], dict[int, int]]:
+    """`(rows, gaps)` as THIS factory declared them, or a stated SKIP.
+
+    The skip is the point of the whole change (#239): a tree that declares no reconstructed
+    rows has none to calibrate against, and it says so with the reason rather than judging
+    another factory's rows against its own ledger. `pytest.skip` is the gate's own idiom for
+    it, and the reason travels, so the output reads "nothing to judge, and here is why"
+    rather than passing silently.
+    """
+    try:
+        rows, gaps, text = declared_reconstructions(REPO, INVARIANT_KEY)
+    except SkipGate as exc:
+        pytest.skip(f"no declared reconstruction history in this tree: {exc}")
+    except GateError as exc:
+        raise AssertionError(f"the declaration is unreadable: {exc}") from exc
+    return rows, gaps
+
+
+def _declared_rows() -> list[int]:
+    return _declared()[0]
+
+
+def _declared_gaps() -> dict[int, int]:
+    return _declared()[1]
+
+
 def _live_verdict() -> tuple[str, str, list[str], list[str], int, list[str]]:
     return evaluate(REPO)
 
@@ -275,15 +309,24 @@ _PROBE_BOUNDARY = "2026-09-19T13:07:51Z"
 
 # The SIX reconstructions the ledger carried when this gate was amended under #115. Named
 # here as the LIVE calibration: the population is empty today, so a gate proven only on
-# synthetic rows has never been pointed at the shape it was written for. `n=647` (#108) is
-# the decisive one — it names its basis in prose WITHOUT the marker, which is why the marker
-# is mandated forward only and why every row here is excused rather than judged.
-_HISTORICAL_RECONSTRUCTIONS = (606, 617, 626, 647, 654, 685)
-
-# The five intervals #112 measured (ruling `n=657` PART 1), recomputed from each claim's own
-# `ts` to its close row's. n=685 is omitted: it was measured separately by the #71 lane, and
-# a figure this gate has not recomputed first-hand is not one it should assert.
-_HISTORICAL_GAPS = {606: 0, 617: 2, 626: 0, 647: 347, 654: 65}
+# synthetic rows has never been pointed at the shape it was written for. One of the DECLARED
+# rows is the decisive one — it names its basis in prose WITHOUT the marker, which is why the
+# marker is mandated forward only and why every row here is excused rather than judged. WHICH
+# row that is lives in the declaration, not here (#239).
+# THE ROWS AND THEIR INTERVALS ARE **NOT HERE** (#239). They are THIS factory's history —
+# six row numbers and five measured intervals that describe this ledger and no other — and
+# this file is PAIRED byte-identically with its TEMPLATE copy, so a constant written here
+# ships to every member. Measured before the fix: the live leg below asserts each row is
+# present in the TREE'S OWN ledger, so every member tree went HARD RED naming a row that is
+# not theirs. The harm was a red in a tree the constant does not describe, not a false
+# clean.
+#
+# They now live in `docs/ledger-invariants.json` under `reconstructions`, beside the
+# boundary, read through `ledger_boundary.declared_reconstructions` — the same seam, the
+# same two arms: an ABSENT declaration SKIPS with its reason (the state every bootstrapped
+# factory is in, and the state this factory would be in for any other gate's history), and a
+# MALFORMED one FAILS, because a factory that declared rows and cannot have them read must
+# not be hidden behind the same output as no declaration at all.
 
 
 def _row(n: int, ts: str, subject: str, event: str = "dispatch", detail: str = "x") -> dict:
@@ -335,13 +378,18 @@ def test_live_the_ledger_carries_no_unbackfilled_reconstruction() -> None:
 
 
 def test_live_the_historical_reconstructions_are_outside_the_population() -> None:
-    """The boundary is REAL, not decorative: the six rows the ruling measured ARE
+    """The boundary is REAL, not decorative: the rows THIS FACTORY DECLARED are
     reconstructions — the token scan finds them on live rows — and every one of them is
     excused rather than judged. A gate whose boundary excluded nothing would pass this file
-    while governing the very rows the ruling put out of scope."""
+    while governing the very rows the ruling put out of scope.
+
+    The population is the DECLARATION's, never a constant in this file (#239): a member tree
+    declares its own rows or declares none, and this leg reads whatever it declared.
+    """
+    historical = _declared_rows()
     rows = _live_rows()
     found = {row["n"] for row in reconstructed_claims(rows)}
-    for n in _HISTORICAL_RECONSTRUCTIONS:
+    for n in historical:
         assert n in found, f"n={n} is a reconstructed claim and the scan missed it"
     _, _, problems, excused, checked, intervals = _live_verdict()
     # #124 DEFECT B. This leg asserted `checked == 0` — a COUNT of a MUTABLE population —
@@ -352,7 +400,7 @@ def test_live_the_historical_reconstructions_are_outside_the_population() -> Non
     # still PRINTED, never asserted — a leg that examined nothing must never be mistaken
     # for one that examined the population and found it clean.
     assert problems == [], problems
-    for n in _HISTORICAL_RECONSTRUCTIONS:
+    for n in historical:
         assert any(f"n={n} " in line for line in excused), (n, excused)
         assert not any(f"n={n} " in line for line in intervals), (
             f"n={n} is a PRE-BOUNDARY reconstruction and must not be governed"
@@ -373,9 +421,10 @@ def test_live_the_historical_gaps_recompute_to_the_measured_intervals() -> None:
     own ts" would have fired on three honest rows. A gate whose resolution drifted would
     still pass every synthetic probe, because the probes encode the same drift.
     """
+    gaps = _declared_gaps()
     rows = _live_rows()
     by_n = {row["n"]: row for row in rows if isinstance(row.get("n"), int)}
-    for claim_n, measured in _HISTORICAL_GAPS.items():
+    for claim_n, measured in gaps.items():
         claim = by_n.get(claim_n)
         assert claim is not None, f"n={claim_n} is not in the live ledger"
         assert claim.get("event") == "claim", (claim_n, claim.get("event"))
@@ -398,7 +447,7 @@ def test_live_the_recomputed_interval_is_printed_beside_the_row() -> None:
     """
     rows = _live_rows()
     by_n = {row["n"]: row for row in rows if isinstance(row.get("n"), int)}
-    for claim_n, measured in _HISTORICAL_GAPS.items():
+    for claim_n, measured in _declared_gaps().items():
         line = interval_line(by_n[claim_n], rows)
         assert f"n={claim_n} " in line, (claim_n, line)
         assert f"interval={measured}s" in line, (claim_n, line)
@@ -446,13 +495,13 @@ def test_probe_the_same_tree_with_the_basis_stated_is_clean(tmp_path: Path) -> N
 
 
 def test_probe_a_prose_basis_without_the_marker_still_fires(tmp_path: Path) -> None:
-    """`n=647`'s exact shape: the row says it rests on something, in words, WITHOUT the
-    canonical marker.
+    """The decisive DECLARED row's exact shape: the row says it rests on something, in words,
+    WITHOUT the canonical marker.
 
-    This probe is the reason the marker is mandated FORWARD ONLY. The live `n=647` is
-    excused by the boundary rather than judged; a row written after the rule must carry the
-    marker, and this probe fixes what the rule actually asks for — the marker, not the word
-    "basis" appearing anywhere in the prose.
+    This probe is the reason the marker is mandated FORWARD ONLY. The live row of that shape
+    is excused by the boundary rather than judged; a row written after the rule must carry
+    the marker, and this probe fixes what the rule actually asks for — the marker, not the
+    word "basis" appearing anywhere in the prose.
     """
     tree = _probe_tree(
         tmp_path / "prose",
@@ -602,7 +651,8 @@ def test_probe_a_quoted_token_outside_event_claim_is_out_of_the_population(tmp_p
 
 def test_probe_a_pre_boundary_reconstruction_is_excused_not_judged(tmp_path: Path) -> None:
     """Forward-only: a reconstruction written before the boundary prints as `excused:` and
-    is never judged — even one that names no basis, which is exactly the `n=647` shape."""
+    is never judged — even one that names no basis, which is exactly the declared
+    prose-only shape."""
     tree = _probe_tree(
         tmp_path / "early",
         [

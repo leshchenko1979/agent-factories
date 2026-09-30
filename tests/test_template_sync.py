@@ -178,6 +178,11 @@ PAIRS = [
     # every other gate is: the audit ships from TEMPLATE, so a factory that takes the audit
     # must take the gate that pins its verdict's provenance.
     ("tests/test_audit_tree_condition.py", "TEMPLATE/tests/test_audit_tree_condition.py"),
+    # The undefined-name gate (board #235). Paired for the same reason every other gate is:
+    # the audit ships from TEMPLATE, so a factory that takes the audit must take the gate
+    # that pins the audit's own tools to the names they bind. It scans `tools/` in whatever
+    # tree it runs in, so it is clean in a bootstrapped factory rather than skipping there.
+    ("tests/test_audit_undefined_names.py", "TEMPLATE/tests/test_audit_undefined_names.py"),
     ("tests/test_ledger_identity.py", "TEMPLATE/tests/test_ledger_identity.py"),
     ("tools/hooks/commit-msg", "TEMPLATE/tools/hooks/commit-msg"),
     # The commit-time index check (#92). The hook refuses a staged set that names
@@ -224,6 +229,11 @@ PAIRS = [
     # half does: a factory that ports the ledger must be able to check the sequence rule it
     # was given, and the leg's own law lives in the file it pins.
     ("tests/test_ledger_claim_preflight.py", "TEMPLATE/tests/test_ledger_claim_preflight.py"),
+    # The ref-kind half of the pre-flight (#232). It ships for the same reason its two
+    # siblings do: a factory that ports the ledger must be able to check the ref-kind rule
+    # it was given, and the declaration file the refusal names is the member's OWN — so the
+    # gate that proves the seam works has to travel with the tool that reads it.
+    ("tests/test_ledger_refs_preflight.py", "TEMPLATE/tests/test_ledger_refs_preflight.py"),
     # The telemetry-reader registry gate (#99). It classifies the tools the template
     # SHIPS, so its allow-list is structural and must travel byte-identically with the
     # code it describes — a factory that adds its own writer edits its own copy.

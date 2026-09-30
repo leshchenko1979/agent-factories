@@ -215,10 +215,12 @@ A declaration **ADDS**; it never removes or redefines a core entry, so a factory
 
 ### A claim is withdrawn by a `release`, never by a `close`
 
-This factory **declares `release`** in `docs/ledger-refs-kinds.json` (#210, ruling n=1577), and
-declares it *here* rather than widening the core tuple: a member that never withdraws a claim carries
-no dead vocabulary, and the transition promotes to the core set when a second factory needs it — the
-owner's promotion law applied to one event.
+The event is declared in the factory's own `docs/ledger-refs-kinds.json` (#210, ruling n=1577),
+never by widening the core tuple: a member that never withdraws a claim carries no dead vocabulary,
+and the transition promotes to the core set when a second factory needs it — the owner's promotion law
+applied to one event. **This factory declares it**; the kit ships only the empty `.example.json`, so a
+tree that has not adopted the vocabulary carries the arms' precondition as a stated SKIP, never a red
+(#229).
 
 **A withdrawal wearing a `close` is refused.** `close` means COMPLETION in this instrument — its
 contract carries the board state observed, `head=<sha>` and a rework disposition — so a withdrawal
@@ -860,8 +862,54 @@ whether it FUNCTIONS. Fixing the predicate exposed the second defect, the disapp
 Hence the pair of readers — `declared_reclose` reads the canonical run and IS the guard's
 predicate, while `mentions_reclose` reads the whole detail and never may be (a lexical test lets a
 row that merely DISCUSSES a re-close satisfy its own guard, the `#88` / `n=405` clause 5 damage).
-The lexical half exists for one job: so the refusal can NAME a malformed declaration rather than
-silently not seeing it, since otherwise an author is told to declare the token they already wrote.
+The lexical half exists for one job, and it is a MESSAGE rather than a gate: so a malformed
+declaration is NAMED rather than silently not seen, since otherwise an author is told to declare the
+token they already wrote. It asks a LEXICAL question — does any whitespace-separated token start with
+the key — and it sits BEFORE the prior-row leg, so giving it enforcement made it refuse a FIRST row
+that merely quoted the convention, with nothing to refuse (#247). It is therefore a NOTE on BOTH
+ends, on stderr, and it states the TWO lawful responses: declare the token in ONE token, or leave the
+prose alone when this is not a second row for the same actor. The protection is structural rather
+than argued: `prior_closes` / `prior_claims` sit inside the SAME `if` and run AFTER the lexical
+branch, so a second same-actor row declaring nothing is still refused — and that refusal carries the
+malformation sentence too, for the author who did mean to declare.
+
+**#215 and #247 are the two directions of ONE defect, and only one of them was written down.** #215:
+a lexical test let a row that REFUSES the token SATISFY its own guard — *prose must not SATISFY a
+field*. #247: a lexical test REFUSED a row that merely QUOTES the token — *prose must not VIOLATE a
+field*. Both are a lexical test used as a semantic predicate, and the pair is why the rule is stated
+in both directions: a lexical predicate may NAME what it did not match, and may never decide a
+semantic question in either direction.
+
+**The CLAIM is the other end of the same lifecycle, and it carried none of the three mechanisms
+until #246.** `close` had a declaration, a write-path refusal and a read leg; `claim` had none, so
+`verify` returned `rc=0` over a subject claimed twice by the same lane eighteen minutes apart, and no
+surface distinguished that from a genuine two-stage claim. The repair mirrors `#213` exactly, and the
+mirroring is the point: a reader who learns one end's form should meet the other's in the same shape.
+
+| mechanism | form |
+|---|---|
+| declaration | `reclaim=<one-token>` in the canonical trailer — a deliberate re-claim declares itself |
+| write-path refusal | a second `claim` for a subject **by the same actor** declaring no `reclaim=` is refused, non-zero, naming the first claim's `n` |
+| read leg | `verify` prints `multiple claims examined: N claimed subject(s), M carrying more than one claim` |
+
+**The actor scope is MEASURED, not chosen.** An actor-blind refusal was refused because it would have
+blocked the two lawful multi-actor cases in the same population — `#34` (hq takes it, then worker) and
+`#234` (surveys claims the derivation half, worker the law half). A hand-off and a two-half unit are
+both correct states, and only a second claim by the SAME actor is the class the refusal answers. So
+the read leg splits three ways and prints which applies: a **same-actor undeclared** pair carries the
+refusal's sentence, a pair whose later rows all declare `reclaim=` reads as declared re-claims, and a
+pair whose actors all differ reads as **admitted, with no declaration owed** — printing that last form
+under the duplicate wording would send a reader to repair a state no rule forbids.
+
+**The token is a FORMALISATION rather than a new burden**, which the measured population shows: three
+of the eight multi-claim subjects already declared themselves in prose before the token existed
+(`RE-CLAIM by the Worker lane … after Triage's intake at n=480`, `CLAIM #113 (fresh) — a SECOND
+acceptance`, `Re-claiming #161 after the intake leg landed`). The convention existed and only lacked a
+token.
+
+**Nothing is backfilled**, for the reason the multiple-closes leg states: the eight are printed as the
+leg's examined population, and a row written after the fact to declare what the original omitted is a
+falsified record rather than a repair.
 
 **The upstream half is not optional, and this is where the budget comes from.** The refusal stops
 the duplicate; it does not stop the timeout, and callers keep timing out until the append's own
