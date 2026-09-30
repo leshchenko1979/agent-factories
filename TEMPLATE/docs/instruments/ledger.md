@@ -862,8 +862,23 @@ whether it FUNCTIONS. Fixing the predicate exposed the second defect, the disapp
 Hence the pair of readers — `declared_reclose` reads the canonical run and IS the guard's
 predicate, while `mentions_reclose` reads the whole detail and never may be (a lexical test lets a
 row that merely DISCUSSES a re-close satisfy its own guard, the `#88` / `n=405` clause 5 damage).
-The lexical half exists for one job: so the refusal can NAME a malformed declaration rather than
-silently not seeing it, since otherwise an author is told to declare the token they already wrote.
+The lexical half exists for one job, and it is a MESSAGE rather than a gate: so a malformed
+declaration is NAMED rather than silently not seen, since otherwise an author is told to declare the
+token they already wrote. It asks a LEXICAL question — does any whitespace-separated token start with
+the key — and it sits BEFORE the prior-row leg, so giving it enforcement made it refuse a FIRST row
+that merely quoted the convention, with nothing to refuse (#247). It is therefore a NOTE on BOTH
+ends, on stderr, and it states the TWO lawful responses: declare the token in ONE token, or leave the
+prose alone when this is not a second row for the same actor. The protection is structural rather
+than argued: `prior_closes` / `prior_claims` sit inside the SAME `if` and run AFTER the lexical
+branch, so a second same-actor row declaring nothing is still refused — and that refusal carries the
+malformation sentence too, for the author who did mean to declare.
+
+**#215 and #247 are the two directions of ONE defect, and only one of them was written down.** #215:
+a lexical test let a row that REFUSES the token SATISFY its own guard — *prose must not SATISFY a
+field*. #247: a lexical test REFUSED a row that merely QUOTES the token — *prose must not VIOLATE a
+field*. Both are a lexical test used as a semantic predicate, and the pair is why the rule is stated
+in both directions: a lexical predicate may NAME what it did not match, and may never decide a
+semantic question in either direction.
 
 **The CLAIM is the other end of the same lifecycle, and it carried none of the three mechanisms
 until #246.** `close` had a declaration, a write-path refusal and a read leg; `claim` had none, so

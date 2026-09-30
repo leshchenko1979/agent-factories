@@ -2181,6 +2181,104 @@ def main() -> int:
         check("(l) and it still does not gate — history is immutable, and this is a reading",
               r.returncode == 0, f"rc={r.returncode}")
 
+    # --- #247: THE LEXICAL BRANCH IS A NOTE, NOT A REFUSAL, ON BOTH ENDS -----------
+    # The branch asks a LEXICAL question ("does any whitespace-separated token start with
+    # the key") and was given ENFORCEMENT powers it never needed. Because it fires BEFORE
+    # the prior-row leg, it refused a FIRST row that merely DOCUMENTED or QUOTED the
+    # convention — a row with nothing to refuse. Its own purpose statement is a message,
+    # not a gate: "a malformed declaration is NAMED, never silently ignored".
+    #
+    # THE PROTECTION IS PROVEN STRUCTURALLY, and the arms below are ordered to show it
+    # rather than assert it: (m) admits a first row that quotes the token, (n) still
+    # refuses the second same-actor row that declares nothing, and (o) shows the refusal
+    # carrying the malformation note when the detail is BOTH. Arms (m) and (n) are the
+    # non-vacuity pair — neutering the demotion reds (m), neutering the prior-row leg
+    # reds (n) — so neither can pass while the other's mechanism is absent.
+    #
+    # A FOURTH ARM IS NOT OWED FOR THE "ESCAPE HATCH": arms (d) and (i) above already
+    # drive the declared form being ACCEPTED, and the demotion only widens what reaches
+    # those legs.
+    with tempfile.TemporaryDirectory() as td:
+        lex_ledger = Path(td) / "lexical.jsonl"
+        run(lex_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        # A subject whose FIRST close quotes the convention bare in prose — the row the
+        # old refusal rejected with nothing to refuse.
+        q_subj = "#4401"
+        run(lex_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", q_subj, "--detail", f"intake: {q_subj}")
+        run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+            "--subject", q_subj, "--detail", f"claim: {q_subj}")
+        # THE MENTION SITS IN PROSE AND THE CANONICAL TRAILER STAYS TERMINAL. Both
+        # halves are load-bearing: `close_row_revision` (#187) reads `head=` from the
+        # trailing run, so a token written AFTER the run empties it and the close is
+        # refused for declaring no revision — which is what the first cut of this
+        # fixture measured, and it failed for THAT reason, not for the demotion. The
+        # `reclose=<one-token>` token is a MENTION (its value is not the one-token
+        # form `declares_field` accepts), so the lexical branch fires and the demotion
+        # is what lets the row through.
+        plain_close = (f"close {q_subj}: a fixture close. rework=none board=closed "
+                       f"head={'c' * 40}")
+        quoting = (f"close {q_subj}: a fixture close; it quotes reclose=<one-token> "
+                   f"here in prose. rework=none board=closed head={'c' * 40}")
+        r = run(lex_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", q_subj, "--detail", quoting)
+        check("(m) a FIRST close QUOTING the token bare is ADMITTED (nothing to refuse)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+        check("(m) and the malformation is still NAMED, as a note and not a refusal",
+              "ledger append note" in r.stderr, r.stderr.strip()[-140:])
+        check("(m) and the note states BOTH lawful responses, not just the one",
+              "NOTHING IS OWED" in r.stderr and "one-token" in r.stderr,
+              r.stderr.strip()[-200:])
+
+        # (n) THE PROTECTION, on the same subject: a SECOND close declaring nothing is
+        # still refused by the prior-close leg — which runs AFTER the demoted branch.
+        before = lex_ledger.read_bytes()
+        r = run(lex_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", q_subj, "--detail", plain_close)
+        msg = (r.stdout + r.stderr).strip()
+        check("(n) a SECOND close declaring nothing is STILL REFUSED",
+              r.returncode != 0, msg[-90:])
+        check("(n) and it NAMES the existing row, not merely refuses",
+              "already carries a close" in msg and "n=" in msg, msg[-120:])
+        check("(n2) a refused append wrote NOTHING",
+              lex_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (o) BOTH FACTS AT ONCE: the detail quotes the token AND is a second close. The
+        # refusal must carry the malformation note too, because the note above it is on
+        # STDERR and an author reading only the refusal would be told to declare a token
+        # they already wrote.
+        r = run(lex_ledger, "append", "--event", "close", "--actor", "worker",
+                "--subject", q_subj, "--detail", plain_close + " reclose=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(o) a second close whose detail is ALSO malformed is refused",
+              r.returncode != 0, msg[-90:])
+        check("(o) and the refusal CARRIES the malformation note",
+              "ALSO carries a bare" in msg and "ONE token" in msg, msg[-200:])
+
+        # ...and the CLAIM end, driven separately because the two ends are separate code
+        # paths that could drift apart — which is exactly what #213/#246 measured.
+        k_subj = "#4402"
+        run(lex_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", k_subj, "--detail", f"intake: {k_subj}")
+        r = run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", k_subj,
+                "--detail", f"claim {k_subj}: quoting reclaim=<one-token> in prose")
+        check("(p) a FIRST claim QUOTING the token bare is ADMITTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-120:])
+        check("(p) and the claim end NAMES the malformation too",
+              "ledger append note" in r.stderr, r.stderr.strip()[-140:])
+        r = run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", k_subj, "--detail", f"claim {k_subj}: the second attempt")
+        check("(q) a second SAME-ACTOR claim declaring nothing is STILL REFUSED",
+              r.returncode != 0, (r.stdout + r.stderr).strip()[-90:])
+        r = run(lex_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", k_subj,
+                "--detail", f"claim {k_subj}: a third attempt reclaim=two words here")
+        msg = (r.stdout + r.stderr).strip()
+        check("(q2) and a malformed one is refused WITH the malformation note",
+              r.returncode != 0 and "ALSO carries a bare" in msg, msg[-200:])
+
     check_lock_is_repo_scoped()
     check_stale_ref_refused()
     check_fail_open_needs_no_remote()

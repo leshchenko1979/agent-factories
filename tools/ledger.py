@@ -972,6 +972,72 @@ def dispatch_problems(
     return problems, malformed, excused
 
 
+# THE LEXICAL BRANCH OF A DECLARATION GUARD IS A NOTE, NEVER A REFUSAL (#247).
+#
+# Both declaration guards below (`reclose` on `close`, `reclaim` on `claim`) ask two
+# questions: does this detail DECLARE the token, and does it merely MENTION it? The
+# second is lexical by construction — `mentions_*` asks whether any whitespace-separated
+# token starts with the key — and it was given ENFORCEMENT powers it never needed. Its
+# own purpose statement is a MESSAGE ("a malformed declaration is NAMED, never silently
+# ignored"), and enforcement is what made it refuse a row that duplicates nothing: a
+# FIRST row that merely documents or quotes the convention, with no prior row to answer,
+# was refused and then told to write the token it was already discussing.
+#
+# THE PROTECTION IS STRUCTURAL, NOT ARGUED. `prior_closes` / `prior_claims` sit inside
+# the SAME `if` and run AFTER the lexical branch, and a re-entry declaration is only
+# meaningful against a prior row. So demoting the branch loses no refusal: a first row
+# quoting the token is ADMITTED, and a second same-actor row declaring nothing is still
+# refused by the prior-row leg — whose message now carries the malformation note too, so
+# an author who DID mean to declare still learns why their token did not take.
+#
+# THIS IS THE INVERSE OF #215, and the pair names a clause that was unwritten. #215: a
+# lexical test let a row that REFUSES the token PASS — a false clean. This: a lexical
+# test REFUSES a row that merely QUOTES the token — a false refusal. Both are a lexical
+# test used as a semantic predicate, and only one direction was stated ("prose must not
+# SATISFY a field"); its mirror is "prose must not VIOLATE a field".
+#
+# THE NOTE STATES BOTH LAWFUL RESPONSES, because the old message prescribed one for a
+# situation with two: declaring the token in ONE TOKEN, or leaving the prose alone when
+# this is not a second row for the same actor. It is printed to STDERR so it never
+# pollutes the row line a caller parses from STDOUT.
+_RECLOSE_NOTE = (
+    "ledger append note: this detail carries a bare `reclose=` token that is NOT a "
+    "declaration — a value containing a space TERMINATES the canonical trailing run, so "
+    "the token sits outside the run every trailer-scoped reader stops at. TWO lawful "
+    "responses, and only the author knows which applies: (a) if this IS a second close "
+    "of a re-opened subject, write `reclose=<one-token>` and keep the explanation in the "
+    "detail's prose; (b) if it is NOT — the detail merely documents or quotes the "
+    "convention — the prose is fine and NOTHING IS OWED. This row is admitted unless the "
+    "prior-close leg below refuses it (#247)."
+)
+
+_RECLAIM_NOTE = (
+    "ledger append note: this detail carries a bare `reclaim=` token that is NOT a "
+    "declaration — a value containing a space TERMINATES the canonical trailing run, so "
+    "the token sits outside the run every trailer-scoped reader stops at. TWO lawful "
+    "responses, and only the author knows which applies: (a) if this IS a second claim "
+    "of the same subject by the same actor, write `reclaim=<one-token>` and keep the "
+    "explanation in the detail's prose; (b) if it is NOT — the detail merely documents or "
+    "quotes the convention — the prose is fine and NOTHING IS OWED. This row is admitted "
+    "unless the prior-claim leg below refuses it (#247)."
+)
+
+def _malformation_sentence(key: str) -> str:
+    """The note a PRIOR-ROW REFUSAL carries when the same detail was also malformed.
+
+    The two branches are now separated, so the refusal must restate the malformation
+    rather than assume the reader saw the note above it: a detail can carry a bare
+    `reclaim=` token AND be a second same-actor claim, and then BOTH facts are true and
+    the author needs both. Kept as one function so the two ends cannot drift.
+    """
+    return (
+        f" NOTE: this detail ALSO carries a bare `{key}=` token that is NOT a "
+        f"declaration — its value must be ONE token (no spaces), because a value "
+        f"containing a space TERMINATES the canonical trailing run and the token then "
+        f"sits outside the run every trailer-scoped reader stops at. Write "
+        f"`{key}=<one-token>` if you meant to declare."
+    )
+
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in known_events():
         sys.exit(
@@ -1202,35 +1268,38 @@ def cmd_append(args: argparse.Namespace) -> int:
             # above state: this binds the row about to be written, so it can never
             # reach history. EXEMPTIONS govern `verify`'s reading of history only.
             if args.event == "close" and not declared_reclose(args.detail):
-                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED. A
-                # `reclose` value containing a SPACE terminates the canonical
-                # trailing run, so the row declares nothing even though its author
-                # wrote the token -- measured 2026-09-28: the guard prescribed a
-                # declaration, `declares_field` could never accept it (it type-tests
-                # the value), and once that was fixed a multi-word reason turned out
-                # to break the run itself. Two stacked defects reached the shipped
-                # tool because the leg had NO behavioural probe, so the message below
-                # states the VALUE FORM as well as the key.
+                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED -- and
+                # NAMING it is all this branch does (#247). A `reclose` value
+                # containing a SPACE terminates the canonical trailing run, so the
+                # row declares nothing even though its author wrote the token --
+                # measured 2026-09-28: the guard prescribed a declaration,
+                # `declares_field` could never accept it (it type-tests the value),
+                # and once that was fixed a multi-word reason turned out to break
+                # the run itself. Two stacked defects reached the shipped tool
+                # because the leg had NO behavioural probe.
+                #
+                # WHAT IT MUST NOT DO IS REFUSE. It fires BEFORE the prior-close leg
+                # below and asks a LEXICAL question -- "does any token start with
+                # `reclose=`" -- so it refused a FIRST close that merely quoted the
+                # convention, with nothing to refuse. The note states the VALUE FORM,
+                # the reason, and BOTH lawful responses; the refusal below carries the
+                # same fact again for the author who really was declaring (#247).
                 if mentions_reclose(args.detail):
-                    sys.exit(
-                        "ledger append refused: this detail carries `reclose=` but NOT "
-                        "as a declaration -- its value must be ONE token (no spaces), "
-                        "because a value containing a space TERMINATES the canonical "
-                        "trailing run and the token then sits outside the run every "
-                        "trailer-scoped reader stops at. Write `reclose=<one-token>` "
-                        "with the explanation in the detail's prose (#213)."
-                    )
+                    print(_RECLOSE_NOTE, file=sys.stderr)
                 prior_closes = [r for r in rows
                                 if r.get("event") == "close"
                                 and r.get("subject") == args.subject]
                 if prior_closes:
                     last = prior_closes[-1]
+                    malformed = (_malformation_sentence("reclose")
+                                 if mentions_reclose(args.detail) else "")
                     sys.exit(
                         f"ledger append refused: {args.subject} already carries a close at "
                         f"n={last.get('n')} ({last.get('ts')}). IF THIS IS A RETRY after a "
                         f"timeout, THE FIRST WRITE LANDED -- do not append again. A "
                         f"deliberate re-close (the subject was re-opened) declares itself "
                         f"with `reclose=<one-token>` in its canonical trailer (#213)."
+                        f"{malformed}"
                     )
             # A SUBJECT CLAIMED TWICE BY THE SAME ACTOR (#246). `close` has carried all
             # three mechanisms since #213 — a declaration, a write-path refusal and a read
@@ -1254,24 +1323,21 @@ def cmd_append(args: argparse.Namespace) -> int:
             # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the two refusals above
             # state: this binds the row about to be written, so it can never reach history.
             if args.event == "claim" and not declared_reclaim(args.detail):
-                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED — the same
-                # message shape `reclose` carries, because a multi-word value terminates
-                # the canonical run and leaves the author believing they declared.
+                # A MALFORMED DECLARATION IS NAMED, NEVER SILENTLY IGNORED — and NAMING
+                # it is all this branch does (#247), for the reason its `reclose` twin
+                # states at length: the lexical question it asks is not the semantic one
+                # the refusal below asks, and answering it with a refusal refused a FIRST
+                # claim that merely quoted the convention.
                 if mentions_reclaim(args.detail):
-                    sys.exit(
-                        "ledger append refused: this detail carries `reclaim=` but NOT "
-                        "as a declaration -- its value must be ONE token (no spaces), "
-                        "because a value containing a space TERMINATES the canonical "
-                        "trailing run and the token then sits outside the run every "
-                        "trailer-scoped reader stops at. Write `reclaim=<one-token>` "
-                        "with the explanation in the detail's prose (#246)."
-                    )
+                    print(_RECLAIM_NOTE, file=sys.stderr)
                 prior_claims = [r for r in rows
                                 if r.get("event") == "claim"
                                 and r.get("subject") == args.subject
                                 and r.get("actor") == args.actor]
                 if prior_claims:
                     last = prior_claims[-1]
+                    malformed = (_malformation_sentence("reclaim")
+                                 if mentions_reclaim(args.detail) else "")
                     sys.exit(
                         f"ledger append refused: {args.subject} is already claimed by "
                         f"'{args.actor}' at n={last.get('n')} ({last.get('ts')}). IF THIS IS "
@@ -1279,6 +1345,7 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"again. A deliberate re-claim (the work was re-taken, or the intake "
                         f"leg landed after the first claim) declares itself with "
                         f"`reclaim=<one-token>` in its canonical trailer (#246)."
+                        f"{malformed}"
                     )
             # AND THE ROW MUST DECLARE THE REVISION ITS RECEIPTS DESCRIBE (#187). The
             # invariant is `close_row_revision`, enforced by
