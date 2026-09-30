@@ -28,20 +28,24 @@ be actionable:
   hq          earmarked for HQ, as an internal process amendment
   published   terminal: the public unit went out
   landed      terminal: HQ acted and a process changed
+  refused     NON-terminal: a CONSUMER refused it, and the OWNER now gates it
   dropped     terminal: deliberately not acted on
 
-Unlike `--class`, status is NOT demanded at the append. Class is a property of the
-CLAIM, which the author is the one who knows; status is a property of the WORKFLOW,
-whose destination is the owner's routing call. A new entry therefore OPENS at
-`pending` — an assertion about the row's own state, never a guess at someone else's
-decision.
+`refused` is not a synonym for `dropped`, and the difference is who decided. A consumer
+refusing a unit is not the owner declining it, so recording the one as the other would
+assert a decision nobody took. A refused row therefore WAITS — it is put in front of
+the owner for gating, with the refusal's grounds, and it leaves the state by his answer
+rather than by anyone's judgement.
 
-A DROPPED row carries a REASON, and this is the one status that demands a second
-field. `dropped` says a unit was deliberately not acted on; the reason says why, and
-without it the record cannot be checked later or reused. Law section 6 rule 4 has
-stated that requirement since the axis landed; here it stops being prose and becomes a
-check — the write path REFUSES a row left `dropped` with no reason, and `verify`
-REPORTS one that reached the store anyway.
+A REFUSED or DROPPED row carries a REASON, and these are the statuses that demand a
+second field. The status says a unit was not acted on; the reason says why, and
+without it the record cannot be checked later or reused. Law section 6 rules 4 and 6
+have stated that requirement since the axis landed; here it stops being prose and
+becomes a check — the write path REFUSES such a row with no reason, and `verify`
+REPORTS one that reached the store anyway. The requirement travels with the status:
+when the owner OVERTURNS a refusal the grounds are cleared in the same act, because a
+reason on a row that is no longer refused would be grounds for a decision the status
+says was never taken.
 
 A CORRECTION is a SUPERSEDING ROW, never an edit. The claims are append-only, so
 fixing a stored figure is a NEW row that names the row it corrects (`--supersedes N`)
@@ -86,7 +90,21 @@ ALLOWED_CLASSES = ["general", "implementation"]
 # (what has been DONE about it). The values name the two destinations and the terminals
 # they can reach, because a routing register that cannot tell "queued for publishing"
 # from "published" is a register of intentions rather than of state.
-ALLOWED_STATUSES = ["pending", "publishing", "hq", "published", "landed", "dropped"]
+#
+# `refused` is deliberately NON-terminal, and that is the whole reason it exists: a
+# CONSUMER (the content funnel) refused the unit, and the refusal is now in front of the
+# OWNER for gating — so it is a state that is waiting, not one that is settled. Recording
+# a consumer's refusal as `dropped` would say the owner decided against it, which is a
+# decision nobody took (insights.md §6 rule 6). `dropped` then means only what it says:
+# the owner, or the author acting on the owner's word, decided against it.
+ALLOWED_STATUSES = ["pending", "publishing", "hq", "published", "landed", "refused", "dropped"]
+
+# The statuses whose whole content is the decision behind them, so a bare verdict is a
+# record with its reason missing. ONE home: the append path, the backfill path and
+# `verify` all read this set, so what counts as "owes a reason" cannot drift between the
+# three — a rule enforced on one write path and not another is the shape this factory
+# files against.
+REASON_REQUIRED_STATUSES = frozenset({"refused", "dropped"})
 
 # The owner is an AUTHOR no session can stand for, so this literal is accepted
 # as a first-class value and is NEVER derived.
@@ -124,6 +142,19 @@ def _with_field(row: dict, key: str, value) -> dict:
     if not placed:
         out[key] = value
     return out
+
+
+def _without_field(row: dict, key: str) -> dict:
+    """`row` with `key` REMOVED, every other key keeping its place.
+
+    The ONE non-additive edit this writer makes, and it is deliberate rather than a
+    loophole in the additive promise: `reason` is a refusal's grounds, so it is true
+    only while the status is one that owes one. A row whose refusal was overturned
+    carries grounds that are no longer true of it — and `verify` refuses exactly that —
+    so leaving the key would make the owner's own correction unwritable. Every other
+    key keeps its position, so the diff shows one deleted label and no reshaped row.
+    """
+    return {k: v for k, v in row.items() if k != key}
 
 # A binding title is written by the daemon and ends with the channel reference,
 # e.g. `Telegram: Factories / Insights [chat:-100…:topic:6865]`.
@@ -252,13 +283,24 @@ def append_insight(
         raise ValueError("status must not be blank — omit it to open at 'pending'")
     if status not in ALLOWED_STATUSES:
         raise ValueError(f"status must be one of {ALLOWED_STATUSES}, got '{status}'")
-    # insights.md §6 rule 4, at the one place the row can still be refused. Checked HERE rather
-    # than left to `verify` because a store-level check can only report a bad row, while
-    # this one stops it existing — and `dropped` is the status whose whole content is the
-    # decision behind it, so a bare verdict is a record with its reason missing.
-    if status == "dropped" and not str(reason or "").strip():
-        raise ValueError("status 'dropped' requires a --reason — a refusal and a silence "
-                         "are different records, and only one is checkable later")
+    # insights.md §6 rule 4 and rule 6, at the one place the row can still be refused. Checked
+    # HERE rather than left to `verify` because a store-level check can only report a bad
+    # row, while this one stops it existing — and `refused`/`dropped` are the statuses
+    # whose whole content is the decision behind them, so a bare verdict is a record with
+    # its reason missing.
+    if status in REASON_REQUIRED_STATUSES and not str(reason or "").strip():
+        raise ValueError(f"status '{status}' requires a --reason — a refusal and a silence "
+                         f"are different records, and only one is checkable later")
+    # The field's other lie, refused at the same place and from the same one home: a reason
+    # states why a unit was refused or dropped, so one supplied on a live status is grounds
+    # for a decision that the status says was never taken. `verify` and the backfill both
+    # refuse this; leaving it to them would let the store accept a row its own reader
+    # reports, which is the write-path/reader gap this file keeps closing.
+    if str(reason or "").strip() and status not in REASON_REQUIRED_STATUSES:
+        raise ValueError(
+            f"status '{status}' does not carry a reason — a reason states why a unit was "
+            f"refused or dropped ({'/'.join(sorted(REASON_REQUIRED_STATUSES))}), and "
+            f"'{status}' is neither")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -403,6 +445,7 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                 raise ValueError(f"unknown id(s), nothing written: {', '.join(unknown)}")
 
             changes: list[tuple[str, dict]] = []
+            cleared: list[str] = []
             out_rows: list[dict] = []
             for entry in entries:
                 slug = entry.get("id")
@@ -416,16 +459,53 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                 for name in optional:
                     if name in updates[slug]:
                         row = _with_field(row, name, updates[slug][name])
-                # insights.md §6 rule 4, checked on the row AS IT WOULD BE WRITTEN rather than on
-                # the mapping alone: a row moved `dropped` here is the same defect as one
-                # appended that way, and a rule enforced on one write path and not the
-                # other is the shape this factory files against. Raised before any byte
-                # is written, so a mapping that would strand a row writes nothing.
-                if (row.get("status") == "dropped"
+                # A reason RE-SUPPLIED by the mapping is a different act from the row's own
+                # stale grounds, and it is refused rather than quietly absorbed: the caller
+                # is asserting reasons for a status that does not take one. Checked BEFORE
+                # the clear below, because the clear would otherwise swallow the input and
+                # report success on a mapping it discarded — a silent drop, not a refusal.
+                if ("reason" in updates[slug]
+                        and str(updates[slug]["reason"] or "").strip()
+                        and updates[slug].get("status", row.get("status"))
+                        not in REASON_REQUIRED_STATUSES):
+                    raise ValueError(
+                        f"'{slug}' names a reason on status "
+                        f"'{updates[slug].get('status', row.get('status'))}' — a reason "
+                        f"states why a unit was refused or dropped, so it belongs to "
+                        f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
+                # The reason is the REFUSAL's grounds, so it is true only while the row sits
+                # in a status that owes one. Moving a row OUT of that set — the owner
+                # overturning a refusal, which is the whole point of the gate — would
+                # otherwise leave grounds that are no longer true of it, and `verify`
+                # refuses exactly that, so the owner's own answer could not land. The
+                # key is REMOVED here rather than left to strand the correction, and the
+                # removal is PRINTED: a deleted label announced is reviewable, one that
+                # disappears silently is the class this register files against.
+                if ("status" in updates[slug]
+                        and updates[slug]["status"] not in REASON_REQUIRED_STATUSES
+                        and "reason" in row):
+                    row = _without_field(row, "reason")
+                    cleared.append(slug)
+                # insights.md §6 rule 4 and rule 6, checked on the row AS IT WOULD BE WRITTEN
+                # rather than on the mapping alone: a row left in a reason-owing status
+                # without one is the same defect as one appended that way, and a rule
+                # enforced on one write path and not the other is the shape this factory
+                # files against. Raised before any byte is written, so a mapping that
+                # would strand a row writes nothing.
+                if (row.get("status") in REASON_REQUIRED_STATUSES
                         and not str(row.get("reason") or "").strip()):
                     raise ValueError(
-                        f"'{slug}' would be left 'dropped' with no reason — insights.md §6 rule 4 "
-                        f"requires one, so name it in the same mapping")
+                        f"'{slug}' would be left '{row.get('status')}' with no reason — "
+                        f"insights.md §6 rule 4 requires one, so name it in the same mapping")
+                # The field's other lie, and the reason the clear above is needed: a reason
+                # on a row whose status does not owe one reads as grounds for a decision
+                # the status says was never taken.
+                if (str(row.get("reason") or "").strip()
+                        and row.get("status") not in REASON_REQUIRED_STATUSES):
+                    raise ValueError(
+                        f"'{slug}' would carry a reason on status '{row.get('status')}' — a "
+                        f"reason states why a unit was refused or dropped, so it belongs to "
+                        f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
                 changes.append((slug, before))
                 out_rows.append(row)
 
@@ -438,6 +518,11 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp, INSIGHTS_PATH)
+            if cleared:
+                # Never silent: the register's own law forbids a change that a reader
+                # cannot see, and this one DELETES a label rather than adding one.
+                print(f"cleared the reason on {len(cleared)} row(s) whose status no longer "
+                      f"owes one: {', '.join(cleared)}")
             return changes
         finally:
             fcntl.flock(lock_f, fcntl.LOCK_UN)
@@ -462,24 +547,57 @@ def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]
     `class` kept their legacy rows distinguishable from empty ones.
 
     A value may be the status alone or `{"status": …, "reason": …}`, because a row moved
-    to `dropped` owes a reason and one transaction should carry both — the alternative is
-    a window in which a dropped row has no reason, which is the state insights.md §6 rule 4 forbids.
+    to `refused` or `dropped` owes a reason and one transaction should carry both — the
+    alternative is a window in which such a row has no reason, which is the state
+    insights.md §6 rule 4 forbids.
+
+    Moving a row OUT of those statuses CLEARS its reason in the same transaction. That is
+    not a convenience: it is what makes the owner's override landable, since a reason on a
+    row that is no longer refused would be grounds for a decision the status says was
+    never taken, and `verify` refuses exactly that.
+
+    `{"status_at": …}` is accepted for ONE case and is refused everywhere else: a backfill
+    that corrects a stored LABEL rather than recording a transition. The instant is then
+    the transition the row ALREADY carries — when a consumer's refusal was recorded, say —
+    and re-stamping it with `now()` would date that event to the day the label was fixed.
+    An instant is READ, never composed, so the door is deliberately narrow: the value must
+    equal the instant the row already holds, which makes it carry-forward only. It cannot
+    be used to invent a date, which is the only thing that could go wrong with it.
     """
     stamp = now_iso()
     updates: dict[str, dict] = {}
     for k, v in mapping.items():
         if isinstance(v, dict):
-            names = sorted(set(v) - {"status", "reason"})
+            names = sorted(set(v) - {"status", "reason", "status_at"})
             if names:
                 raise ValueError(f"status for '{k}' carries unsettable field(s): "
                                  f"{', '.join(names)}")
             if "status" not in v:
                 raise ValueError(f"status for '{k}' names no 'status'")
-            updates[k] = {"status": v["status"], "status_at": stamp}
+            updates[k] = {"status": v["status"],
+                          "status_at": v.get("status_at") or stamp}
             if "reason" in v:
                 updates[k]["reason"] = v["reason"]
         else:
             updates[k] = {"status": v, "status_at": stamp}
+
+    # The preserve-only door, checked against the rows BEFORE the transaction: a caller
+    # may carry an instant forward, never mint one. Read here rather than inside
+    # `_backfill` because it needs the row's PRIOR value, which the backfill deliberately
+    # does not consult for the values it writes.
+    carried = {k: v["status_at"] for k, v in updates.items()
+               if isinstance(mapping.get(k), dict) and mapping[k].get("status_at")}
+    if carried:
+        prior = {r.get("id"): r.get("status_at") for r in _read_entries()}
+        for slug, instant in carried.items():
+            if slug not in prior:
+                raise ValueError(f"status_at for '{slug}' names an unknown id")
+            if prior[slug] != instant:
+                raise ValueError(
+                    f"status_at for '{slug}' is '{instant}', which the row does not carry "
+                    f"(it holds '{prior[slug]}') — this door carries an existing instant "
+                    f"forward and never mints one")
+
     changes = _backfill(updates, ["status", "status_at"], "statuses",
                         optional_fields=["reason"])
     return [(slug, before["status"] or None, updates[slug]["status"])
@@ -600,22 +718,25 @@ def verify_insights() -> tuple[bool, list[str]]:
             elif not data.get("status_at"):
                 errors.append(f"line {idx}: status '{data['status']}' carries no status_at")
 
-        # insights.md §6 rule 4 — `dropped` requires a stated reason — is enforced at the write
-        # path, and REPORTED here. Both are owed: the write path stops the row existing,
-        # and this leg catches one that reached the store by another route, which is the
-        # difference between a rule and a rule that holds.
-        if data.get("status") == "dropped" and not str(data.get("reason") or "").strip():
-            errors.append(f"line {idx}: status 'dropped' carries no reason — insights.md §6 rule 4 "
-                          f"requires one (a refusal and a silence are different records)")
-        # A `reason` on a row that is NOT dropped is the field's other lie: it reads as a
-        # decision's grounds while the status says no decision was taken.
+        # insights.md §6 rule 4 and rule 6 — a status that owes a reason must carry one — is
+        # enforced at the write path, and REPORTED here. Both are owed: the write path
+        # stops the row existing, and this leg catches one that reached the store by
+        # another route, which is the difference between a rule and a rule that holds.
+        if (data.get("status") in REASON_REQUIRED_STATUSES
+                and not str(data.get("reason") or "").strip()):
+            errors.append(f"line {idx}: status '{data.get('status')}' carries no reason — "
+                          f"insights.md §6 rule 4 requires one (a refusal and a silence are "
+                          f"different records)")
+        # A `reason` on a row whose status does not owe one is the field's other lie: it
+        # reads as a decision's grounds while the status says no such decision was taken.
         if "reason" in data:
             if not str(data.get("reason") or "").strip():
                 errors.append(f"line {idx}: empty reason")
-            elif data.get("status") != "dropped":
+            elif data.get("status") not in REASON_REQUIRED_STATUSES:
                 errors.append(f"line {idx}: reason recorded on status "
                               f"'{data.get('status')}' — a reason states why a unit was "
-                              f"NOT acted on, so it belongs to 'dropped'")
+                              f"refused or dropped, so it belongs to "
+                              f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
 
     # Half 2 — supersession. A correction is a NEW row naming the row it corrects, and
     # the reader takes the NEWEST. Two ways that reading breaks, both checked here: a
@@ -679,7 +800,8 @@ def main() -> int:
     p_append.add_argument("--ru", default="", help="Russian summary for Miidas/Ru-speaking audience")
     p_append.add_argument("--reason", default="",
                           help="why the entry was not acted on. REQUIRED when --status is "
-                               "'dropped' (law section 6 rule 4) and refused when empty")
+                               "'refused' or 'dropped' (law section 6 rules 4 and 6) and "
+                               "refused when empty")
     p_append.add_argument("--supersedes", type=int, default=None, metavar="N",
                           help="the n of the row this one CORRECTS. Required when the id "
                                "already exists: a second row for one id is a revision, and "
@@ -697,15 +819,19 @@ def main() -> int:
                           help="Move existing entries to a new workflow status")
     p_st.add_argument("--file", required=True, metavar="MAPPING.json",
                       help="JSON object {id: status}, or {id: {\"status\": …, \"reason\": …}} "
-                           "when a row moves to 'dropped' and owes its reason in the same "
-                           "transaction. Applied in ONE transaction")
+                           "when a row moves to 'refused' or 'dropped' and owes its reason "
+                           "in the same transaction. A move OUT of those statuses CLEARS "
+                           "the reason, which is how the owner's override lands. Applied "
+                           "in ONE transaction")
 
     p_rs = sub.add_parser("reason",
                           help="Set the reason on entries that already exist")
     p_rs.add_argument("--file", required=True, metavar="MAPPING.json",
                       help="JSON object {id: reason}. Sets the reason and NOTHING else — "
                            "re-stating the status would move status_at, and the instant is "
-                           "the field's whole value")
+                           "the field's whole value. Lawful only on a 'refused' or "
+                           "'dropped' row: a reason on a live row is grounds for a "
+                           "decision the status says was never taken")
 
     p_fmt = sub.add_parser("format", help="Format insight for publishing")
     p_fmt.add_argument("id", help="Insight slug")

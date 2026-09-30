@@ -110,17 +110,24 @@ Both bullets answer *what the claim requires of its reader*. Neither answers *wh
 | `pending` | recorded, destination not yet ruled on — **the append default** |
 | `publishing` | earmarked for the content funnel (§8) |
 | `hq` | earmarked for HQ as an internal amendment (§8) |
+| `refused` | **waiting** — a consumer refused it, the refusal's grounds are in `reason`, and the insight now waits on the OWNER (§6 rule 6) |
 | `published` | **terminal** — the unit went out |
 | `landed` | **terminal** — HQ changed a process |
 | `dropped` | **terminal** — deliberately not acted on, with the reason in `reason` |
 
-Five rules, each of which has a way of going wrong that this file closes:
+Six rules, each of which has a way of going wrong that this file closes:
 
 1. **A fresh row opens `pending`, and `status` is NOT required at the append.** A destination is a *routing* decision, not a property of the claim, so a new row asserts only its own state rather than guessing someone else's decision. If the two axes were coupled at the append, the register would record an intent nobody formed.
 2. **`status_at` travels with `status`.** Without the instant, *"what has been sitting in `hq` for a fortnight?"* — the question the field exists to answer — is unanswerable.
 3. **Terminal states are recorded when they happen, never forecast.** `published` and `landed` are outcomes; a row that asserted one on expectation would be a prediction wearing a record's clothes.
-4. **`dropped` requires a stated reason — and the rule is MECHANICALLY ENFORCED.** Silence and refusal are different records, and only one of them is checkable later — so the requirement is not left to the law's own reader. The **write path REFUSES** a row left `dropped` with no `reason` (the append and every backfill that sets the status), and `verify` **REPORTS** a stored row that carries none. A law whose only enforcer is whoever reads it is the shape this rule was written to close: the clause and its check land together, or the clause is decoration. Setting the status and setting the reason are one act — `status {"<id>": {"status": "dropped", "reason": "…"}}` — so there is no window in which a dropped row exists without one.
-5. **`reason` is prose, not a vocabulary.** It is a **settable field** (`classify` · `status` · `reason`) and never a `FIELD_VOCAB` member, because the vocabulary is closed and a reason's whole value is saying the specific thing that was decided. A `reason` on a row that is **not** dropped is the field's other lie — it reads as a refusal where none was recorded — and `verify` refuses it.
+4. **A status that owes a reason requires one, and the rule is MECHANICALLY ENFORCED.** Silence and refusal are different records, and only one of them is checkable later — so the requirement is not left to the law's own reader. Two statuses owe a reason — **`refused` and `dropped`** — and they are held in ONE place (`REASON_REQUIRED_STATUSES`), read by all four enforcement points, so the write path and the reader cannot drift apart on which statuses owe one. The **write path REFUSES** a row left reason-owing with no `reason` (the append, and every backfill that sets the status), and `verify` **REPORTS** a stored row that carries none. A law whose only enforcer is whoever reads it is the shape this rule was written to close: the clause and its check land together, or the clause is decoration. Setting the status and setting the reason are one act — `status {"<id>": {"status": "refused", "reason": "…"}}` — so there is no window in which such a row exists without one. **Both directions are refused**: a reason on a row in neither state is the field's other lie.
+5. **`reason` is prose, not a vocabulary.** It is a **settable field** (`classify` · `status` · `reason`) and never a `FIELD_VOCAB` member, because the vocabulary is closed and a reason's whole value is saying the specific thing that was decided. A `reason` on a row that owes none is the field's other lie — it reads as a refusal where none was recorded — and `verify` refuses it. **The overturn clears it**: when the owner overturns a refusal, the status moves and the reason is *removed*, because a reason left standing beside a non-owing status is a reader trap — it says the row was refused while the status says it is moving. This is the one non-additive edit a backfill may make, it is **declared** rather than silent, and it is reported by name.
+6. **A refusal is NOT terminal: it directs the insight to the OWNER for gating.** `refused` means a *consumer* — for a `general` claim, the content funnel — declined the unit, and recorded its grounds. It is emphatically **not** `dropped`: `dropped` records a decision the owner made, and a consumer's refusal recorded as the owner's decision puts a judgement in his mouth that he never formed. So the refusal **waits on the owner**, who settles it one way or the other:
+
+   - **uphold the refusal** → `dropped`, with the refusal's grounds kept as the reason (the consumer's words, not a re-typed paraphrase)
+   - **overturn** → the row returns to the workflow (`publishing` for a `general` claim) and its `reason` is cleared by §6 rule 5
+
+   The vehicle is the **open questions register** (`docs/instruments/open-questions.md`), one question carrying every refused row with its grounds, defaulting to *uphold* — so the owner marks only what he would overturn rather than voting on each. A refusal that never reaches him is the same defect class as #216 and #227, one surface over: a rule whose only carrier is whoever happened to see it. This is where the owner keeps the last word without becoming the classifier.
 
 ---
 
@@ -136,7 +143,7 @@ Five rules, each of which has a way of going wrong that this file closes:
 
 ## 8. `verify`, and what each axis feeds
 
-`verify` is the store's own precondition: it rejects a stored **blank** or **unknown** value on any axis, while **accepting an absent key** on a legacy row — the distinction between *unrecorded* and *recorded as empty* is the whole point. `list` and `format` print `[legacy]` for a row that predates a field, so "not recorded" can never be read as a category. Three further refusal classes ride the same reader, each one a rule §3 or §6 states and this section enforces: a row left `dropped` with no `reason` (§6 rule 4), a `reason` recorded on a row that is **not** dropped (§6 rule 5), and a broken **supersession** chain — a marker naming a later, missing, differently-`id`d or already-superseded row (§3).
+`verify` is the store's own precondition: it rejects a stored **blank** or **unknown** value on any axis, while **accepting an absent key** on a legacy row — the distinction between *unrecorded* and *recorded as empty* is the whole point. `list` and `format` print `[legacy]` for a row that predates a field, so "not recorded" can never be read as a category. Three further refusal classes ride the same reader, each one a rule §3 or §6 states and this section enforces: a row left reason-owing (`refused` or `dropped`) with no `reason` (§6 rule 4), a `reason` recorded on a row that owes none (§6 rule 5), and a broken **supersession** chain — a marker naming a later, missing, differently-`id`d or already-superseded row (§3).
 
 The two classes feed two different consumers, and both are DECLARED:
 

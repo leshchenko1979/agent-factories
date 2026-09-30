@@ -26,12 +26,12 @@ the field can LIE rather than merely be absent:
    is left untouched, because a half-applied move reads exactly like a complete one.
 6. **The two axes are ORTHOGONAL.** Setting a status must not disturb the class, and
    re-routing a row must not disturb any other row.
-7. **`dropped` carries its reason, and the rule holds on BOTH write paths.** insights.md §6 rule 4
+7. **A reason-owing status carries its reason, and the rule holds on BOTH write paths.** insights.md §6 rule 4
    states the requirement; the append and the status move are the two ways a row can END UP
-   dropped, so a check on one and not the other is the half-rule this factory files against.
+   reason-owing, so a check on one and not the other is the half-rule this factory files against.
    `verify` reports what the write paths refuse, because a rule that only holds on the happy
-   path is not a rule. The field's other lie is checked too: a `reason` on a row that is NOT
-   dropped reads as a decision's grounds while the status says no decision was taken.
+   path is not a rule. The field's other lie is checked too: a `reason` on a row that owes none
+   reads as a decision's grounds while the status says no decision was taken.
 8. **A correction is a SUPERSEDING ROW, and the reader takes the NEWEST.** The claims are
    append-only, so a second row for one id is a REVISION — it must name the row it corrects,
    and one row has ONE successor or "the newest governs" stops being decidable. The
@@ -122,10 +122,13 @@ def test_append_opens_at_pending_and_stamps_it(tmp_path, monkeypatch):
 def test_append_accepts_each_allowed_status(tmp_path, monkeypatch):
     register = _redirect(tmp_path, monkeypatch)
     for value in insights.ALLOWED_STATUSES:
-        # `dropped` is the one status that owes a second field (insights.md §6 rule 4), so it carries
-        # its reason here — the vocabulary test is about the LABEL being accepted, and a
-        # rule that is real must be honoured by the probe that exercises the vocabulary.
-        extra = {"reason": "probe"} if value == "dropped" else {}
+        # The statuses whose whole content is the decision behind them owe a second field
+        # (insights.md §6 rules 4 and 6), so they carry their reason here — the vocabulary
+        # test is about the LABEL being accepted, and a rule that is real must be honoured
+        # by the probe that exercises the vocabulary. Read from the writer's OWN set rather
+        # than a second list: a probe that hardcodes which statuses owe a reason is a
+        # second home for the rule, and the two would drift.
+        extra = {"reason": "probe"} if value in insights.REASON_REQUIRED_STATUSES else {}
         entry = _append(slug=f"probe-{value}", status=value, **extra)
         assert entry["status"] == value
     assert [r["status"] for r in _rows(register)] == insights.ALLOWED_STATUSES
@@ -158,7 +161,24 @@ def test_append_refuses_an_unknown_status(tmp_path, monkeypatch):
 def test_the_status_vocabulary_is_the_whole_set():
     """Two destinations and the terminals they reach — no second taxonomy hiding here."""
     assert insights.ALLOWED_STATUSES == [
-        "pending", "publishing", "hq", "published", "landed", "dropped"]
+        "pending", "publishing", "hq", "published", "landed", "refused", "dropped"]
+
+def test_refused_is_a_waiting_state_and_dropped_is_a_settled_one():
+    """The two are NOT synonyms, and the difference is WHO decided.
+
+    A consumer refusing a unit is not the owner declining it. `refused` therefore has to
+    be a state that WAITS — it is in front of the owner for gating — while `dropped` is
+    where a unit lands once that gate has been answered against it. Both owe a reason,
+    because both are a verdict whose grounds are the record's whole content.
+    """
+    assert "refused" in insights.ALLOWED_STATUSES
+    assert "refused" in insights.REASON_REQUIRED_STATUSES, (
+        "a refusal with no grounds is a bare verdict — the same defect as a reasonless drop")
+    assert "dropped" in insights.REASON_REQUIRED_STATUSES
+    # The live statuses, which are the ones a row can WAIT in: `refused` belongs with them
+    # rather than with the terminals, which is the whole reason it exists.
+    assert "refused" not in ("published", "landed"), "refused is not terminal"
+    assert "refused" != "dropped", "the two name different decisions"
 
 
 # --- verify --------------------------------------------------------------------------
@@ -417,6 +437,111 @@ def test_set_reasons_backfills_without_moving_the_status_instant(tmp_path, monke
     row = _rows(register)[0]
     assert row["reason"] == "duplicate"
     assert row["status_at"] == stamped, "the status instant must NOT move with the reason"
+    assert insights.verify_insights()[0]
+
+# --- the refused axis: a consumer's refusal WAITS for the owner -------------------------
+
+def test_append_refuses_refused_with_no_reason(tmp_path, monkeypatch):
+    """A refusal with no grounds is a bare verdict — the same defect as a reasonless drop."""
+    register = _redirect(tmp_path, monkeypatch)
+    for missing in ("", "   "):
+        try:
+            _append(slug="probe-refused", status="refused", reason=missing)
+        except ValueError as exc:
+            assert "reason" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"a reasonless 'refused' append {missing!r} was accepted")
+    assert not register.exists(), "a refused append must write nothing"
+
+def test_a_status_move_that_would_strand_a_refused_row_is_refused(tmp_path, monkeypatch):
+    """Both write paths, one rule: a move to `refused` needs its grounds in the SAME mapping."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1)])
+    try:
+        insights.set_statuses({"row-1": "refused"})
+    except ValueError as exc:
+        assert "reason" in str(exc), str(exc)
+    else:
+        raise AssertionError("a move that stranded a refused row was accepted")
+    assert "refused" not in register.read_text(encoding="utf-8"), (
+        "a refused move must write nothing at all")
+
+def test_verify_reports_a_reasonless_refused_row(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "refused", "status_at": "2026-09-14T09:00:00Z"})])
+    ok, errors = insights.verify_insights()
+    assert not ok, "a refused row with no reason must be reported"
+    assert any("refused" in e and "reason" in e for e in errors), errors
+
+def test_the_owners_override_CLEARS_the_reason_and_lands(tmp_path, monkeypatch):
+    """The gate is only real if its answer is writable.
+
+    A refusal carries its grounds, and grounds are true only while the row IS refused. So
+    overturning one has to clear them in the same act — otherwise the owner's own answer
+    leaves a reason on a live row, `verify` refuses exactly that, and the gate cannot be
+    answered at all. That was the state before this axis existed, and this probe is what
+    stops it coming back.
+    """
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "refused", "status_at": "2026-09-14T09:00:00Z",
+                                          "reason": "not-an-outcome: a specification"})])
+    assert insights.verify_insights()[0]
+
+    insights.set_statuses({"row-1": "publishing"})
+
+    row = _rows(register)[0]
+    assert row["status"] == "publishing"
+    assert "reason" not in row, "the refusal's grounds must not survive the override"
+    assert row["status_at"] != "2026-09-14T09:00:00Z", "a real transition is stamped NOW"
+    assert insights.verify_insights()[0], "the owner's answer must leave a compliant register"
+
+def test_a_reason_on_a_status_that_does_not_owe_one_is_refused_on_both_paths(tmp_path, monkeypatch):
+    """The field's other lie: grounds for a decision the status says was never taken."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "refused", "status_at": "2026-09-14T09:00:00Z",
+                                          "reason": "duplicate"})])
+    # The append path.
+    try:
+        _append(slug="probe-live", status="hq", reason="grounds for nothing")
+    except ValueError as exc:
+        assert "reason" in str(exc), str(exc)
+    else:
+        raise AssertionError("a reason was accepted on a status that does not owe one")
+    # And the move path: carrying the stale reason FORWARD into a live status is refused
+    # rather than silently written — the clear above is for the row's OWN reason, and a
+    # mapping that re-supplies one on a live status is a different act.
+    try:
+        insights.set_statuses({"row-1": {"status": "hq", "reason": "still here"}})
+    except ValueError as exc:
+        assert "reason" in str(exc), str(exc)
+    else:
+        raise AssertionError("a reason was carried into a status that does not owe one")
+    assert _rows(register)[0]["status"] == "refused", "a refused move must write nothing"
+
+def test_a_label_correction_can_carry_the_instant_forward_but_never_mint_one(tmp_path, monkeypatch):
+    """An instant is READ, never composed — so the door is carry-forward only.
+
+    Correcting a stored LABEL (a consumer's refusal recorded as `dropped`) must not date
+    the refusal to the day the label was fixed. The value is therefore accepted only when
+    it equals the instant the row already holds, which makes inventing a date impossible.
+    """
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "dropped", "status_at": "2026-09-28T18:23:33Z",
+                                          "reason": "duplicate"})])
+    try:
+        insights.set_statuses({"row-1": {"status": "refused", "status_at": "2020-01-01T00:00:00Z"}})
+    except ValueError as exc:
+        assert "status_at" in str(exc), str(exc)
+    else:
+        raise AssertionError("a minted instant was accepted")
+    assert _rows(register)[0]["status"] == "dropped", "a refused correction must write nothing"
+
+    insights.set_statuses({"row-1": {"status": "refused", "status_at": "2026-09-28T18:23:33Z"}})
+
+    row = _rows(register)[0]
+    assert row["status"] == "refused"
+    assert row["status_at"] == "2026-09-28T18:23:33Z", "the refusal's own instant is preserved"
+    assert row["reason"] == "duplicate", "the grounds travel with the corrected label"
     assert insights.verify_insights()[0]
 
 # --- half 2: a correction is a SUPERSEDING ROW ----------------------------------------
