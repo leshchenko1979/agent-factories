@@ -1,0 +1,45 @@
+{
+  "_note": "THIS factory's recorded debt for tests/test_law_no_raw_session_uuid.py — the law files that legitimately name a session by a raw uuid. Keyed by `path` + `uuid`, never by a line number, because a line number rots on the first insertion above it while the identity does not. An entry that MATCHES is printed as an `excused:` line on EVERY gate run, so it is a visible debt rather than forgiveness; an entry that matches NOTHING in the law-file population is a gate ERROR, so a retired debt cannot sit here looking live; a malformed or duplicated entry is an ERROR rather than a silent pass; absent-or-empty means no exemptions, never a failure. The file is FACTORY DATA and lives here rather than in the gate because the gate is byte-paired into TEMPLATE/tests/ and one factory's debt must not ship to every new factory. Skeleton and field rules: TEMPLATE/docs/law-uuid-exemptions.example.json. WHY THIS DEBT EXISTS: section 3 of skills/meta-factory/SKILL.md is this factory's own lane roster, whose ids were read back from `session_bindings`; the #254 ruling ordered the section 5 substrate-routing table converted to topic/role names and did NOT order the roster changed, so the roster's ids are declared here and printed on every run. Section 11's rule is that a lane is addressed by the session id resolved live at dispatch, which is why the ROUTING table carries no uuid: a raw uuid there is followed by a reader instead of resolved by the dispatcher, and it rots the moment the topic is re-opened.",
+  "exempt": [
+    {
+      "path": "skills/meta-factory/SKILL.md",
+      "uuid": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
+      "lane": "HQ",
+      "granted": "2026-09-30",
+      "reason": "section 3's lane roster, read back from `session_bindings` on 2026-09-18 12:20Z. This is this factory's OWN roster of its OWN lanes, not a routing instruction a reader follows to reach another factory; the #254 ruling (ledger n=1810) ordered the section 5 substrate-routing table converted to topic/role and did not order this table changed, so it is declared rather than silently widened.",
+      "proof": "the #254 close row names this population; the ruling comment on board issue 254 names the two section 5 ids and no others"
+    },
+    {
+      "path": "skills/meta-factory/SKILL.md",
+      "uuid": "dcd8f7a9-c1e7-48c3-b184-d901dc08eac7",
+      "lane": "Worker",
+      "granted": "2026-09-30",
+      "reason": "section 3's lane roster — this lane's own id, read back from `session_bindings`. Same basis as the HQ entry above.",
+      "proof": "the #254 close row names this population"
+    },
+    {
+      "path": "skills/meta-factory/SKILL.md",
+      "uuid": "23549292-77ff-40d1-97e3-5aa0bdd19d74",
+      "lane": "Delegate",
+      "granted": "2026-09-30",
+      "reason": "section 3's lane roster — the Delegate lane's id, read back from `session_bindings`. Same basis as the HQ entry above.",
+      "proof": "the #254 close row names this population"
+    },
+    {
+      "path": "skills/meta-factory/SKILL.md",
+      "uuid": "f4c192c9-a8e9-4268-9026-ee3e4970cc8a",
+      "lane": "Triage",
+      "granted": "2026-09-30",
+      "reason": "section 3's lane roster — the Triage lane's id, read back from `session_bindings`. Same basis as the HQ entry above.",
+      "proof": "the #254 close row names this population"
+    },
+    {
+      "path": "skills/meta-factory/SKILL.md",
+      "uuid": "5c99ad51-8889-40cb-b589-fa13fd673c06",
+      "lane": "Surveys",
+      "granted": "2026-09-30",
+      "reason": "section 3's lane roster — the Surveys lane's id, read back from `session_bindings`. Same basis as the HQ entry above.",
+      "proof": "the #254 close row names this population"
+    }
+  ]
+}

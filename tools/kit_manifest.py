@@ -203,6 +203,16 @@ SEEDS = frozenset({
     "TEMPLATE/docs/ledger-commit-exemptions.example.json",
     "TEMPLATE/docs/ledger-exemptions.example.json",
     "TEMPLATE/docs/ledger-invariants.example.json",
+    "TEMPLATE/docs/law-uuid-exemptions.example.json",  # board #254: the raw-uuid gate's
+                                             # exemption table. A seed for the same reason
+                                             # its ledger-commit sibling is one: the gate's
+                                             # LOGIC is universal and its PARAMETERS are the
+                                             # factory's own declared debt, so the example
+                                             # ships an EMPTY table and a factory fills its
+                                             # own. Classed `standalone` it would make every
+                                             # adopter red against a file that is theirs to
+                                             # write, which is the false-red direction the
+                                             # ledger-commit entry above already measured.
     "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
     "TEMPLATE/docs/ledger-retirements.example.json",
     "TEMPLATE/docs/ledger-schema-exemptions.example.json",

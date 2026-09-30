@@ -134,6 +134,14 @@ PAIRS = [
     ("tools/review.py", "TEMPLATE/tools/review.py"),
     ("tests/test_review.py", "TEMPLATE/tests/test_review.py"),
     ("tests/test_law_structure.py", "TEMPLATE/tests/test_law_structure.py"),
+    # Added with its registration (board #254, ruling n=1810). It pairs for the same reason
+    # the exemption-carrying gates beside it do: the gate's LOGIC is universal law, and its
+    # PARAMETERS are factory data (`docs/law-uuid-exemptions.json`), so a member that took
+    # the file without its table would red on its own law's declared debt, and one that took
+    # the table without the runner would carry a declaration nothing reads. The TEMPLATE
+    # half ships the `.example.json` skeleton and no live table, so a bootstrapped factory
+    # starts with zero exemptions -- a clean file, not an excused one.
+    ("tests/test_law_no_raw_session_uuid.py", "TEMPLATE/tests/test_law_no_raw_session_uuid.py"),
     ("tests/test_hygiene_namespace.py", "TEMPLATE/tests/test_hygiene_namespace.py"),
     ("tests/test_docs_sync.py", "TEMPLATE/tests/test_docs_sync.py"),
     ("tests/test_audit_rates.py", "TEMPLATE/tests/test_audit_rates.py"),

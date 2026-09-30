@@ -2299,6 +2299,31 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_insights_status.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_status.py"])
 
+    # 74. Law-file raw session uuid gate (board #254, ruling n=1810). A law file that
+    #     reaches a peer lane by RAW SESSION UUID hands the reader a value to FOLLOW
+    #     instead of one to RESOLVE, and it rots the moment the topic is re-opened: the
+    #     measured instance named `d72bd52d-...` for OpenCrabs HQ, an id that carried ZERO
+    #     bindings while its topic lived on under `0117dd29-...`. It read exactly like the
+    #     live id beside it, which is why it survived -- a stale pointer and a fresh one
+    #     are the same characters to a reader. The section 11 rule already says a lane is
+    #     addressed by the session id resolved LIVE at dispatch, so the shape the law must
+    #     carry is the topic/role, never the uuid.
+    #     DECLARED DEBT, NOT FORGIVENESS: the predicate is a shape test over law files, and
+    #     an occurrence that is genuinely not a routing instruction is excused only from
+    #     the FACTORY DATA file `docs/law-uuid-exemptions.json`, keyed path+uuid, with the
+    #     reason and proof stated. Every excused occurrence PRINTS on every run, an
+    #     exemption that matches nothing is an ERROR rather than a pass, and the set the
+    #     gate does NOT cover is declared and printed with its reason -- so a clean verdict
+    #     is never the same output as a silent one (#112, ruling n=657 item 8).
+    #     REQUIRED, not OPTIONAL: the predicate is PURE over the tree -- it reads law files
+    #     and its own exemption table, no live board, no fleet manifest, no box-local
+    #     fixture -- so it passes in a bootstrapped factory exactly as it does here. It is
+    #     byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory
+    #     from dropping the runner and keeping the file. Its MODE is declared in
+    #     registry/gates.json in the SAME landing -- the omission #204 had to repair.
+    if (repo_root / "tests/test_law_no_raw_session_uuid.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_law_no_raw_session_uuid.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

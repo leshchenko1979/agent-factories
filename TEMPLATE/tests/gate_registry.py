@@ -516,6 +516,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # factory would have been reported as diverging on its own README. Both were fixed in the
     # change that shipped this gate.
     "test_kit_pin.py",
+    # Added with its registration (board #254, ruling n=1810). REQUIRED is the correct grain
+    # and OPTIONAL is not: the predicate is PURE over the tree -- it reads law files and its
+    # own exemption table, with no live board, no fleet manifest and no box-local fixture --
+    # so it passes in a bootstrapped factory exactly as it does here. It is byte-paired with
+    # a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
+    # runner and keeping the file. Its PARAMETERS are factory data in
+    # `docs/law-uuid-exemptions.json`, never inline, precisely because the file is paired:
+    # a factory's declared debt must not ship to every other factory.
+    "test_law_no_raw_session_uuid.py",
     "test_law_structure.py",
     "test_ledger.py",
     "test_ledger_close_preflight.py",

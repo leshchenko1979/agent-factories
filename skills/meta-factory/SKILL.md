@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.36
+version: 0.1.37
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -212,11 +212,18 @@ feature requests and instrument specifications.
 
 | Substrate | Owner |
 |---|---|
-| OpenCrabs instruments (daemon, core tools, brain/skill loading) | **OpenCrabs Kanban Board HQ** — session `d72bd52d-42aa-4dbd-ac99-5b5300770019`; fork issues on `leshchenko1979/opencrabs` |
-| Token provisioning, model routing, inference pricing & endpoints | **InferHub Watch HQ** — session `359fe71b-c7a1-420b-b856-acfb49939a7b`; issues on `leshchenko1979/inferhub-watch` |
+| OpenCrabs instruments (daemon, core tools, brain/skill loading) | **OpenCrabs Kanban Board HQ** — lane `opencrabs-dev` / `hq`, topic `OC DEV HQ` (thread 30220), resolved live at dispatch; fork issues on `leshchenko1979/opencrabs` |
+| Token provisioning, model routing, inference pricing & endpoints | **InferHub Watch HQ** — lane `inferhub-watch` / `hq`, topic `InferHub Watch: Fallback Publisher Diversity & Predictors` (thread 2), resolved live at dispatch; issues on `leshchenko1979/inferhub-watch` |
 | `tg_*` tools (`tg_get_chat_info`, `tg_mtproto`) | `leshchenko1979/fast-mcp-telegram` |
 | `telegram_send` | **OpenCrabs core** (`src/brain/tools/telegram_send.rs`) — not fast-mcp-telegram |
 | The template / skill law text in this repo | this factory's HQ |
+
+**These rows name a LANE, never a session.** The session that owns a topic is the newest
+binding within its own profile, so the session is resolved live at dispatch — `python3
+tools/registry.py resolve` — and a raw uuid written here would be a value that rots the moment
+the topic is re-opened, leaving a reader who follows it reaching nobody (#254, ledger n=1810).
+`tests/test_law_no_raw_session_uuid.py` holds the shape: no raw uuid in a law file, except
+where the debt is declared in `docs/law-uuid-exemptions.json` and printed on every run.
 
 **A defect noted in a report is a defect unfiled.** Documenting a gap is not filing it.
 
