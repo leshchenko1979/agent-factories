@@ -446,10 +446,13 @@ HOLDS the whole set with no declaration behind it, and no member is refused for 
 
 **A RE-RUN PUBLISHES INTO A TRACKED FILE, and that is the trade the artifact makes.** The census
 writes to a committed path on purpose — a figure that lives only in a scrollback cannot be
-re-read, diffed or cited, which is the whole reason it exists. The consequence is that re-running
-it in a SHARED tree leaves the file dirty by the two lines that always move (the instant), so a
-runner must either **commit the new reading or revert the file**, never leave it modified for the
-next lane to trip over. To measure without publishing, pass `--out` to a scratch path.
+re-read, diffed or cited, which is the whole reason it exists. The path is DATED BY INSTANT
+(`evidence/instrument-census-<slug>-<YYYY-MM-DD>.md`), so a re-run strands in one of TWO shapes,
+not one: a SAME-DAY re-run overwrites today's path, leaving a TRACKED file dirty by the two lines
+that always move (`read_at`), while a LATER-DAY re-run writes a NEW path that nothing commits, so
+it strands UNTRACKED. Either way the runner **commits the reading or removes the file**, never
+leaves it for the next lane to trip over. The only non-publishing route is `--out <scratch path>` —
+`--stdout` is NOT one: its own help reads "also print the artifact", so it publishes as well.
 
 **How a member reaches ADOPTED, stated once so the table is readable:** the declared set COMPLETE *and*
 `instruments.review-rotation` declaring `adopted` with `green: true`. Anything less keeps the state it
