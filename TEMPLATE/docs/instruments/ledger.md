@@ -167,6 +167,25 @@ entry**: identity is present on every row from a live lane, while `refs` is a sp
 author chooses to make. Both keys are **additive** — a six-key row stays valid — so the four forked
 member copies are not broken on day one.
 
+The write path emits it at **all three row-build sites** — the main append, the settlement receipt
+the tool writes when a `close` lands, and the repair `run` row — read **verbatim** from
+`OPENCRABS_SESSION_ID` and deliberately never resolved, which is the opposite of `actor`:
+resolution is the lossy step, and a session the registry cannot place still **wrote** the row, so
+dropping it is exactly how that row becomes untraceable. Two writes carry none, and both are
+deliberate rather than absent:
+
+- a **fixture** write (a redirected `OC_LEDGER_PATH`), because a fixture is not a lane, and
+  stamping the runner's session into one would make a fixture's bytes depend on **who ran the
+  suite**; and
+- a write made with the variable **unset** — the honest answer for a write made outside a lane. The
+  key is then **omitted, never fabricated**: a fabricated identity is worse than a missing one,
+  because only the missing one is visibly missing.
+
+A law key that nothing emits is indistinguishable from a key nothing needs, and the schema's
+`OPTIONAL_FIELDS` widening could not tell the two apart: it declared the key optional, and every
+gate stayed green over a key **no row carried** (#256). `tests/test_ledger_identity.py` arm 11 pins
+the write in both directions, with a non-vacuity probe over its own predicate.
+
 ---
 
 ## 3. The extension surface — how a row points, and how a factory speaks

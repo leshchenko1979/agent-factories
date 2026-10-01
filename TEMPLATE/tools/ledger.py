@@ -432,6 +432,28 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
     return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s)"
 
 
+def writing_session_id() -> str | None:
+    """The writing lane's session id, VERBATIM from `OPENCRABS_SESSION_ID`.
+
+    §2 declares `session` a ROW KEY — "the row carries both" — because a role is the
+    CAPACITY a write was made in and two lanes can share a capacity, so a role alone
+    cannot trace a row to the lane that wrote it. The fleet paid for that twice: 246 of
+    1322 meta rows paste a uuid into free-text `detail`, and one inferhub row put a
+    uuid in the `actor` field itself, which is why the matrix cannot bind that row.
+
+    It is read VERBATIM and never resolved — deliberately the opposite of
+    `session_to_role` above. Resolution is the lossy step: a session the registry
+    cannot place still WROTE the row, and dropping it is exactly how that row becomes
+    untraceable.
+
+    Returns None when the variable is unset, which is the honest answer for a write
+    made outside a lane. The caller then OMITS the key rather than inventing one: a
+    fabricated identity is worse than a missing one, because only the missing one is
+    visibly missing.
+    """
+    return (os.environ.get("OPENCRABS_SESSION_ID") or "").strip() or None
+
+
 def resolve_actor(
     declared: str | None, fixture: bool, bootstrap: bool = False
 ) -> tuple[str | None, str, str]:
@@ -1083,6 +1105,19 @@ def cmd_append(args: argparse.Namespace) -> int:
     args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
+
+    # §2's SECOND identity key, and the one the role cannot carry. A role is the
+    # CAPACITY a write was made in, and two lanes can share a capacity, so a role alone
+    # cannot trace a row to the lane that wrote it. Read VERBATIM and never resolved:
+    # resolution is the lossy step, and a session the registry cannot place still WROTE
+    # the row.
+    #
+    # FIXTURE writes carry none. A fixture is not a live lane, and stamping the test
+    # runner's session into a fixture row would make that row's identity depend on WHO
+    # RAN THE SUITE — the same suite would produce different bytes for different runners.
+    # A live write omits it too when the variable is unset, which is the honest answer
+    # for a write made outside a lane.
+    session_id = None if fixture else writing_session_id()
     # THE MATRIX BINDS A LANE, NOT A FIXTURE. It answers "is this ROLE allowed to
     # write this EVENT", and a fixture-declared actor has no row in it because a
     # fixture is not a lane — the pinned vocabulary in `probe_actors_path` is the
@@ -1577,6 +1612,11 @@ def cmd_append(args: argparse.Namespace) -> int:
         # broken on day one. The key appears only when there is something to point at.
         if refs:
             row["refs"] = refs
+        # ADDITIVE on the same rule: a row written outside a lane carries no `session`
+        # and stays valid. §2 declares the key OPTIONAL precisely so the forked member
+        # copies are not broken on day one.
+        if session_id:
+            row["session"] = session_id
         with open(target_ledger, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             fh.flush()
@@ -1637,6 +1677,11 @@ def cmd_append(args: argparse.Namespace) -> int:
                     f"row(s) of {args.subject}, and found no problem"
                 ),
             }
+            # The receipt is a ROW, and §2 makes the key intrinsic to a write rather
+            # than conditional on the event: a close written by a lane and receipted by
+            # the tool would otherwise lose the lane on exactly the row that settles it.
+            if session_id:
+                receipt["session"] = session_id
             with open(target_ledger, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(receipt, ensure_ascii=False) + "\n")
                 fh.flush()
@@ -1676,6 +1721,9 @@ def cmd_repair(args: argparse.Namespace) -> int:
     args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
+    # §2's second identity key, on the append path's own rule: a redirected (fixture)
+    # target carries none, and an unset variable is omitted rather than invented.
+    session_id = None if os.environ.get("OC_LEDGER_PATH") else writing_session_id()
     if not (args.note or "").strip():
         sys.exit(
             "ledger repair refused: --note is required — it records WHY the correction "
@@ -1833,6 +1881,8 @@ def cmd_repair(args: argparse.Namespace) -> int:
             "subject": original.get("subject"),
             "detail": note,
         }
+        if session_id:
+            run_row["session"] = session_id
 
         # Replace-then-append, and the replace is ATOMIC. A rewrite that dies halfway
         # truncates the ledger — the one outcome worse than the incomplete row this

@@ -75,6 +75,17 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     if not ok:
         _failures.append(name)
 
+
+def _carries_verbatim_session(row: object, sid: str) -> bool:
+    """Whether a row carries §2's `session` key, byte-equal to the writing lane's id.
+
+    A named predicate so arm 11 can exercise it directly, including on the rows that
+    must FAIL it -- a check whose only evidence is that it passed over one good row has
+    not been shown to bite.
+    """
+    return isinstance(row, dict) and row.get("session") == sid
+
+
 class ResolverBroken(Exception):
     """The tree carries a lane resolver, and it will not load. A BROKEN INPUT.
 
@@ -545,6 +556,73 @@ def main() -> int:
         check("arm6 a redirected ledger may declare its own actor (the seam is intended)",
               r.returncode == 0 and len(rows(fixture_led)) == 1,
               f"rc={r.returncode} rows={len(rows(fixture_led))}")
+
+        # ARM 11 — §2's SECOND IDENTITY KEY, which the write path never wrote (#256).
+        #
+        # The law declared it and nothing emitted it: `actor` is the CAPACITY a write was
+        # made in, two lanes can share a capacity, and §2's own motivation is that 246 of
+        # 1322 meta rows pasted a session uuid into free-text `detail` because no field
+        # held it. The key sat in the schema's OPTIONAL_FIELDS -- and its own comment said
+        # the widening landed "in the SAME change as the write path that emits it", which
+        # is the half that never happened -- so every gate stayed green over a law key
+        # that 0 of 1828 rows carried. These arms pin the WRITE.
+        #
+        # The live row is the one ARM 4's accepted append left on `led`; it is read back
+        # off the BYTES rather than trusted as an object, because a key this reader could
+        # add is not evidence that the tool wrote it.
+        _raw_lines = [ln for ln in led.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        live_row = rows(led)[0] if rows(led) else {}
+        check("arm11 the accepted live row carries the §2 `session` key",
+              live_row.get("session") == worker,
+              f"session={live_row.get('session')!r}; expected the resolved lane {worker[:8]}…")
+        check("arm11 the key is the session, not the resolved role echoed back",
+              live_row.get("session") not in (None, live_row.get("actor")),
+              f"session={live_row.get('session')!r} actor={live_row.get('actor')!r}")
+        check("arm11 the key is present in the bytes the tool wrote",
+              bool(_raw_lines) and json.loads(_raw_lines[0]).get("session") == worker,
+              f"{len(_raw_lines)} line(s) parsed from {led.name}")
+
+        # A FIXTURE is not a lane, so a redirected write carries none: a fixture's bytes
+        # must not depend on WHO RAN THE SUITE.
+        _fixture_row = rows(fixture_led)[0] if rows(fixture_led) else {}
+        check("arm11 a fixture write carries NO session key",
+              "session" not in _fixture_row, f"keys={sorted(_fixture_row)}")
+
+        # The predicate in BOTH directions. The CLI cannot reach the unset case on the
+        # live path -- an unset variable refuses the append before a row exists -- so the
+        # omission is pinned where it is decided, on the staged tool's own function.
+        def _session_id_probe():
+            import importlib.util as _ilu
+            _spec = _ilu.spec_from_file_location("_probe_ledger_sid", root / "tools" / "ledger.py")
+            _mod = _ilu.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            return _mod.writing_session_id()
+
+        _saved_sid = os.environ.get(SESSION_ENV)
+        try:
+            os.environ[SESSION_ENV] = "probe-verbatim-9f3a"
+            check("arm11 writing_session_id() returns the variable VERBATIM",
+                  _session_id_probe() == "probe-verbatim-9f3a",
+                  f"got {_session_id_probe()!r}")
+            os.environ.pop(SESSION_ENV, None)
+            check("arm11 writing_session_id() returns None when the variable is unset",
+                  _session_id_probe() is None, f"got {_session_id_probe()!r}")
+        finally:
+            if _saved_sid is None:
+                os.environ.pop(SESSION_ENV, None)
+            else:
+                os.environ[SESSION_ENV] = _saved_sid
+
+        # NON-VACUITY: the check must BITE. A row with the key absent, and a row whose key
+        # names a different session, must BOTH fail the predicate -- otherwise the arms
+        # above would pass over any row at all and prove nothing about the write.
+        check("arm11 NON-VACUITY: the predicate rejects a row with no `session` key",
+              not _carries_verbatim_session(
+                  {k: v for k, v in live_row.items() if k != "session"}, worker),
+              "an absent key must not read as a present one")
+        check("arm11 NON-VACUITY: the predicate rejects a row naming another session",
+              not _carries_verbatim_session(dict(live_row, session=UNRESOLVABLE), worker),
+              "a different session must not read as verbatim")
 
     # ARM 8 — THE FRAGMENT FILTER (issue #186). The predecessor accepted a fragment only
     # when its `factory` equalled the ORIGIN slug, so a destination factory's own fragment
