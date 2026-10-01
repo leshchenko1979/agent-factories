@@ -175,6 +175,7 @@ A new factory operates in **Stage 0 or 1** mode initially, but inherits the guar
 > **Evaluation Rubric:** Quality Criteria **v0.5** (19 criteria across 6 families, max 76).
 > **Not differenced against §4:** that census was scored under **v0.4** (17 criteria, max 68), superseded by v0.5 — the two rubrics are not comparable, so this run reports the v0.5 census and leaves §4 as its own dated reading.
 > **Telemetry Source:** `evidence/scores/2026-09-28.md` (the newest run — see the gap note), live `evidence/ledger.jsonl` via `tools/audit.py --no-gates`, `registry/index.json`, and the ops cron table.
+> **SUPERSEDED IN PART — see the same-day update at the end of this section:** the measurement gap disclosed below closed at **2026-10-01T07:10:49Z**, and **two factories crossed a band**. The two affected claims are named and corrected there, not rewritten here.
 
 ### The telemetry gap this run must disclose
 
@@ -227,3 +228,28 @@ Read from `tools/audit.py --json --no-gates`; the gate verdict fields read `null
 - **The measurement gap is the finding of this round.** A daily measurement job whose round can vanish in an outage leaves the growth map reading a stale survey; the map's own §5 is now a dated reading with a named gap rather than a silent one.
 - **Infra Factory's ledger `behind_by=13`** is the fleet's largest kit lag, and its cadence row reads `MISSED`.
 - **Six cron rows carry no attributable prefix** in the registry render (67 jobs, 6 unattributed), and `tamara_accounting_sync` sits in a profile home outside this factory's — reported, not touched.
+
+### Same-day update — the gap closed, and two band crossings (2026-10-01T07:10:49Z)
+
+The gap this section disclosed closed **the same day**. At **2026-10-01T07:10:49Z** the `factory-measurement-daily` round landed its artifact — `evidence/scores/2026-10-01.md` (commit `9b94c23`; ledger `n=1841` score, `n=1842` duty receipt, `duty=completed`). It covers the **same three-day window** (`09-28 → 10-01`), so the two readings are directly comparable.
+
+**Fleet 351 / 456 = 77.0%** (was 356 on 09-28, **−5**):
+
+| Factory | 09-28 | 10-01 | Band (10-01) |
+|---|:---:|:---:|:---:|
+| Meta-factory | 71 | **69** | Optimizing |
+| OpenCrabs dev | 62 | **62** | Optimizing |
+| Miidas | 59 | **57** | Scalable — left Optimizing |
+| InferHub Watch | 58 | **55** | Scalable — left Optimizing |
+| Infra Factory | 55 | **56** | Scalable |
+| AI AntiSpam | 51 | **52** | Scalable |
+| **Fleet** | **356** | **351** | — |
+
+**Two claims in the block above are corrected here, and they are NAMED rather than rewritten** — the block stands as the dated reading it was, at its own 06:15Z instant:
+
+1. **"`evidence/scores/` holds no run for … 2026-10-01"** — no longer true; a 2026-10-01 run exists as of 07:10:49Z.
+2. **"No factory crossed a band in this interval"** — **FALSE** as of the 10-01 reading. **Two band crossings**: **InferHub Watch** (58→55) and **Miidas** (59→57) both left *Optimizing* for *Scalable*. On this section's own band↔stage convention (Optimizing ↔ Stage 3, Scalable ↔ Stage 2 — a mapping, not an identity: §4 itself shows a Scalable-band factory at Stage 1), the **Stage-3 population falls 4 → 2** (Meta-factory, OpenCrabs dev) and **Stage 2 rises to 3** (Miidas, InferHub Watch, Infra Factory).
+
+Both crossings trace to a **live execution failure, not a documentation one** — precisely the `2 → 3` trigger in §2's transition matrix ("Rework share exceeds 30% or tasks stall silently"). InferHub Watch's own committed self-audit reads `Cadence MISSED — last run 48.1h ago` (Stability 3→2 **and** Cadence autonomy 4→2); Miidas reads `34 PASS / 1 FAIL / 0 UNKNOWN of 35` with 2 dirty paths (Verification depth 4→3 **and** Recoverability 4→3).
+
+One cell of the fleet's −5 is **self-inflicted on this factory**: Meta-factory **Documentation consistency 4→3**, because `tests/test_citation_clause_titles.py` is **RED at the tip** — 18 bare `§<number>` citations naming no document, introduced by **`7b0b5c5`** (this factory's own `#256` ledger fix; the gate was green at `23568bc7`, and `tools/ledger.py`'s bare-`§N` count went 0 → 5 in that commit). Filed by Surveys as **`#258`**, dispatched to the Ledger lane; the gate's own rc at the tip is **1**.
