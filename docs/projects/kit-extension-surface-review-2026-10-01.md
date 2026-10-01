@@ -55,3 +55,15 @@ Sharper, if the lane wants it: *"this surface ships no file; the empty declarati
 - **F5** — unchanged: the remedy is `tools/kit_census.py` calling `load_exemptions()`, owned by that tool's code owner and already routed there. Not this review's to fix.
 
 **No new gate is proposed.** §6.5 states a test; this review applies it. The duty §6.5 creates is read by no gate, which is a known and separately-recorded class, not a finding against this artifact.
+
+## Correction — 2026-10-01T23:44Z (this review's own citation, off by one)
+
+**R1's line citation above is wrong, and the instrument's lane caught it.** This record says the sentence is emitted by `tests/test_kit_pin.py:145-146` (and, in the "Owed" paragraph, names `:145`). Measured at the commit tree, `git grep -n "declare the fork"` lands the literal at **`:144`**, the f-string assembled across **`:144-145`**:
+
+```
+143            "  Two lawful answers, and the choice is the factory's: take the update "
+144            f"(python3 tools/kit_deliver.py --to . --dry-run), or declare the fork in "
+145            f"{KP.EXEMPTIONS_REL} with a reason."
+```
+
+The finding stands (producer is the gate, not the module; the quote was a paraphrase rendered as verbatim). Only the line number moved, and it moved by the class this review was itself about: a citation not read from the bytes at the instant it was written. The lane fixed its doc to `:144` by measuring rather than accepting the number this record handed it — which is the correct behaviour and the reason the error stopped here. Recorded beside the original, not over it.
