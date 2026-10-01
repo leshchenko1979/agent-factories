@@ -510,6 +510,111 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
         },
     }
 
+# ---- the board-closed leg (issue #75, ruled at ledger n=496) -------------------------
+#
+# DIRECTION (3) OF THE STATE LAW: a CLOSED board item carrying NO close row is drift.
+# NEITHER existing board leg can see it, and both are blind BY CONSTRUCTION rather than
+# by accident: the intake leg's forward arm reads `open_issue_numbers` (state == "open"
+# ONLY), so a closed item is never a candidate; the close leg iterates ROWS whose event is
+# `close`, so a subject carrying no close row is never a candidate. The population must
+# therefore come from the BOARD — a ledger walk cannot enumerate an item the ledger never
+# mentions, and that asymmetry is the whole defect. Measured at ledger n=1876: 233 closed
+# board items, 3 post-boundary and carrying no close row (#143, #172, #227).
+#
+# THE BOUNDARY IS READ, NEVER RE-TYPED. It is the close-board gate's own INVARIANT_LANDED,
+# loaded from that gate — a second copy of an instant is a copy that goes stale silently,
+# and a guard that re-types the value it guards has already stopped guarding.
+#
+# WHAT THIS LEG DOES NOT DO. It does not decide whether the missing row is a DEFECT or a
+# QUESTION, because for direction (3) that question does not arise: ruling n=496 clause
+# (5) settles it — "a board close with no close row IS the drift the law names, whoever
+# closed it, and the REPAIR IS A CLOSE ROW -- not an exemption." The complete/incomplete
+# split of clause (2) governs the OTHER direction (a landed subject the board still reads
+# OPEN), which is not this dispatch's goal and is not silently claimed here.
+#
+# NOT RUN, NOT SILENT: an unreadable board never reaches this leg — `main` exits 2 before
+# any leg is built — so the leg cannot report a clean sweep over a board it never read.
+def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
+                     read_at: str, predicate=None) -> dict:
+    """The live board-closed leg: a post-boundary CLOSED item with NO close row (#75).
+
+    Population: board items whose state is `closed` AND whose `closedAt` is at or after
+    the close-board gate's own boundary (read from that gate, never re-typed) AND whose
+    number no `close` row names. That is direction (3).
+
+    The count travels as `closed_items_examined` and is printed on the leg's OWN line, so
+    a green reads as "examined N, 0 problems" rather than being indistinguishable from
+    "examined nothing" — and the items excluded as PRE-BOUNDARY are counted and printed
+    too, because an exclusion that is not printed is indistinguishable from a miss. The
+    read instant and the boundary the population was taken against travel with it: a count
+    is meaningless without the predicate and the instant that produced it.
+    """
+    gate = gate or load_close_board_gate()
+    predicate = predicate or load_predicate()
+    token, boundary = gate.BOARD_TOKEN, gate.INVARIANT_LANDED
+    try:
+        bound = gate._parse_ts(boundary)
+    except (ValueError, TypeError):
+        bound = None
+
+    # The close-row namespace, resolved the way `board_close_leg` resolves it -- the same
+    # strict `#N` reference, so the two legs cannot disagree about which subject a row
+    # names. A close row whose subject is not an issue reference is not a close row FOR an
+    # issue, and this leg asserts only over issue references.
+    closed_subjects: set[int] = set()
+    for row in rows:
+        if row.get("event") != "close":
+            continue
+        number = predicate.issue_reference(row.get("subject"))
+        if number is not None:
+            closed_subjects.add(number)
+
+    problems: list[str] = []
+    examined = 0
+    pre_boundary = 0
+    missing: list[int] = []
+    for item in issues:
+        if str(item.get("state", "")).strip().lower() != "closed":
+            continue
+        number = item.get("number")
+        if not isinstance(number, int):
+            continue
+        try:
+            closed_at = gate._parse_ts(item.get("closedAt"))
+        except (ValueError, TypeError):
+            closed_at = None
+        if closed_at is None or bound is None or closed_at < bound:
+            # A close that PREDATES the invariant is outside this population: the law
+            # cannot require a row for an obligation that did not yet exist, and the
+            # offline gate excuses those rows the same way. Counted, never dropped.
+            pre_boundary += 1
+            continue
+        examined += 1
+        if number in closed_subjects:
+            continue
+        missing.append(number)
+        problems.append(
+            f"#{number} is CLOSED on the board (closed {item.get('closedAt')}) with NO "
+            f"close row naming it — a board close with no close row IS the drift the law "
+            f"names, whoever closed it, and the repair is a close row (board read at "
+            f"{read_at}, boundary {boundary})"
+        )
+
+    return {
+        "name": "board-closed",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "closed_items_examined": examined,
+            "pre_boundary_closed_items": pre_boundary,
+            "board_read_at": read_at,
+            "declaration_token": token,
+            "invariant_boundary": boundary,
+            "items_without_close_row": missing,
+        },
+    }
+
 # ---- the board-ruling leg (issue #223, ruled at ledger n=1596) -----------------------
 #
 # A ruling posted as a board comment leaves no `ruling` row, and NOTHING asked for one:
@@ -2500,6 +2605,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['invariant_boundary']}): {cov['close_rows_examined']} examined, "
                 f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
             )
+        elif leg["name"] == "board-closed":
+            # Direction (3). The population is the BOARD's, so the line names the board
+            # read instant and the boundary it was taken against; the PRE-BOUNDARY count
+            # is printed too, because an exclusion that is not printed cannot be told
+            # from a miss. A closed item with no close row is DRIFT by ruling n=496
+            # clause (5) — this leg asks no completeness question of its population.
+            lines.append(
+                f"  closed items (at or after {cov['invariant_boundary']}, "
+                f"{cov['pre_boundary_closed_items']} earlier close(s) excluded as "
+                f"pre-invariant): {cov['closed_items_examined']} examined, "
+                f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
+            )
         elif leg["name"] == "cron-thinness":
             lines.append(
                 f"  rows: {cov['rows_read']} enabled read across {cov['homes_read']} "
@@ -2845,6 +2962,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     closes = sum(
         int(leg["coverage"].get("close_rows_examined", 0)) for leg in legs
     )
+    closed_items = sum(
+        int(leg["coverage"].get("closed_items_examined", 0)) for leg in legs
+    )
     cron = sum(
         int(leg["coverage"].get("rows_attributed", 0)) for leg in legs
     )
@@ -2853,7 +2973,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     )
     lines.append(
         f"verdict: {total} problem(s) over {forward} open issue(s) examined, "
-        f"{closes} close row(s) checked against the board, and {cron} cron row(s) "
+        f"{closes} close row(s) checked against the board, "
+        f"{closed_items} closed item(s) checked for a close row, and {cron} cron row(s) "
         f"attributed to this factory and judged, and {notify} notify log(s) judged "
         f"for a receipt"
     )
@@ -2904,14 +3025,25 @@ def main(
         issues = board_fn(slug)
         rows = rows_fn()
     except BoardReadError as exc:
-        # A board that could not be read is NOT a board with nothing on it.
+        # A board that could not be read is NOT a board with nothing on it. The run
+        # aborts BEFORE any leg is built, so every leg is declared NOT RUN by NAME with
+        # the reason — a leg that could not read its input must never render as one that
+        # examined nothing and passed (#242), and NO verdict is printed at all, because a
+        # verdict over zero issues reads as a clean patrol.
         err(f"patrol host-state read: FAILED at {read_at} — {exc}")
+        err(
+            "NOT RUN: every leg (board-intake, board-close, board-closed, board-ruling, "
+            "cron-thinness, notify-receipt, duty-receipt, canonicality-tier, kit-drift, "
+            f"publish-freshness, worktree) — the run aborted at the board read at "
+            f"{read_at}, so no leg was built"
+        )
         return 2
 
     cron_rows, homes_read, unreached = cron_rows_fn()
     legs = [
         board_intake_leg(issues, rows, predicate=predicate),
         board_close_leg(issues, rows, read_at=read_at),
+        board_closed_leg(issues, rows, read_at=read_at, predicate=predicate),
         board_ruling_leg(issues, rows, read_at=read_at, predicate=predicate),
         cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
