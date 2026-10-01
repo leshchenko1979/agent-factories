@@ -82,13 +82,14 @@
     },
     {
       "id": "ops-fallback-chain-reordered",
-      "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini \u2014 best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg \u2014 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts \u2014 it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
-      "severity": "info",
+      "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** \u2014 `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT \u2014 the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
+      "severity": "warning",
       "scope": "profile",
       "since": "2026-09-19T12:21:40Z",
       "affects": [
         "profile"
-      ]
+      ],
+      "evidence": "`providers/ops/config.toml` `[providers.fallback] providers = [\"inferhub\"]`; `/root/.opencrabs/config.toml:203` and `profiles/family/config.toml:136` same; ops daemon `ps lstart` = `Thu Oct 1 02:57:00 2026`"
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
@@ -138,7 +139,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-29T07:11:11Z",
+  "attested_at": "2026-10-01T06:09:36Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

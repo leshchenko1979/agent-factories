@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-01T07:11:31Z",
+  "resolved_at": "2026-10-01T07:22:22Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -161,6 +161,23 @@
       ],
       "origins": [
         "infra-factory"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "ops-fallback-chain-reordered",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
+      "since": "2026-09-19T12:21:40Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "`providers/ops/config.toml` `[providers.fallback] providers = [\"inferhub\"]`; `/root/.opencrabs/config.toml:203` and `profiles/family/config.toml:136` same; ops daemon `ps lstart` = `Thu Oct 1 02:57:00 2026`",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "inferhub-watch"
       ],
       "conflict": []
     },
@@ -348,23 +365,6 @@
       ],
       "origins": [
         "infra-factory"
-      ],
-      "conflict": []
-    },
-    {
-      "id": "ops-fallback-chain-reordered",
-      "severity": "info",
-      "scope": "profile",
-      "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg — 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts — it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
-      "since": "2026-09-19T12:21:40Z",
-      "review_by": null,
-      "check": null,
-      "evidence": null,
-      "affects": [
-        "profile"
-      ],
-      "origins": [
-        "inferhub-watch"
       ],
       "conflict": []
     },
@@ -672,7 +672,7 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-09-29T07:11:11Z",
+      "attested_at": "2026-10-01T06:09:36Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
@@ -800,8 +800,8 @@
         },
         {
           "id": "ops-fallback-chain-reordered",
-          "severity": "info",
-          "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg — 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts — it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
+          "severity": "warning",
+          "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
           "scope": "profile",
           "since": "2026-09-19T12:21:40Z",
           "review_by": null,
@@ -809,7 +809,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": null
+          "evidence": "`providers/ops/config.toml` `[providers.fallback] providers = [\"inferhub\"]`; `/root/.opencrabs/config.toml:203` and `profiles/family/config.toml:136` same; ops daemon `ps lstart` = `Thu Oct 1 02:57:00 2026`"
         },
         {
           "id": "inferhub-root-credential-in-shared-compose",
@@ -1730,7 +1730,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T06:55:30Z",
+          "bound_at": "2026-10-01T07:22:09Z",
           "announcements": []
         },
         {
@@ -1740,7 +1740,7 @@
           "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T00:51:18Z",
+          "bound_at": "2026-10-01T07:15:22Z",
           "announcements": []
         },
         {
@@ -1770,7 +1770,7 @@
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T06:53:14Z",
+          "bound_at": "2026-10-01T07:14:22Z",
           "announcements": []
         },
         {
@@ -1790,7 +1790,7 @@
           "session_id": "42a44908-b8f3-42e1-bbd2-f2a672b8056e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T07:07:32Z",
+          "bound_at": "2026-10-01T07:21:27Z",
           "announcements": []
         },
         {

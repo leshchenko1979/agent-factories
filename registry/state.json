@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-01T07:11:31Z",
+  "resolved_at": "2026-10-01T07:22:22Z",
   "fragments": [
     {
       "path": "/tmp/oc-wt-r3/registry/factories/ai-antispam.json",
@@ -326,13 +326,14 @@
           },
           {
             "id": "ops-fallback-chain-reordered",
-            "text": "The ops-profile client fallback chain is inferhub, openrouter, gemini — best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub, then inferhub, openrouter, opencode, gemini. AMENDED 2026-09-29: `opencode` was REMOVED as a dead leg — 396 retries in one day of 'An active OpenCode Go subscription is required to use Go models' (HTTP 403) against 0 successes in 82 walks, while it sat BEFORE gemini and burned a doomed hop on every walk that reached it. Two caveats a peer needs: (a) the change is INERT IN THE RUNNING DAEMON until `opencrabs -p ops` restarts — it started 2026-09-29T02:09:58Z, before the 05:16:42Z write, and 32 opencode walks were measured after the 05:17:35Z reload; (b) the root default config and the `family` profile config still declare opencode in their own chains.",
-            "severity": "info",
+            "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
+            "severity": "warning",
             "scope": "profile",
             "since": "2026-09-19T12:21:40Z",
             "affects": [
               "profile"
-            ]
+            ],
+            "evidence": "`providers/ops/config.toml` `[providers.fallback] providers = [\"inferhub\"]`; `/root/.opencrabs/config.toml:203` and `profiles/family/config.toml:136` same; ops daemon `ps lstart` = `Thu Oct 1 02:57:00 2026`"
           },
           {
             "id": "inferhub-root-credential-in-shared-compose",
@@ -382,7 +383,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-29T07:11:11Z",
+        "attested_at": "2026-10-01T06:09:36Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -2385,7 +2386,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790838136,
+      "session_updated_at": 1790839268,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2567,7 +2568,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1790838474,
+      "session_updated_at": 1790839286,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2918,46 +2919,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1790838473,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39218,
-      "updated_at": 1790815878,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Harvesting upstream PRs into OpenCrabs",
-      "session_updated_at": 1790822793,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 40011,
-      "updated_at": 1790837594,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Config: Schema [chat:-1003936827469:topic:40011]",
-      "session_updated_at": 1790838136,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39171,
-      "updated_at": 1790837730,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790838398,
+      "session_updated_at": 1790839255,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2970,7 +2932,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790838570,
+      "session_updated_at": 1790839317,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2983,7 +2945,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744]",
-      "session_updated_at": 1790838294,
+      "session_updated_at": 1790838887,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2996,7 +2958,33 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Telegram: Throttling [chat:-1003936827469:topic:30679]",
-      "session_updated_at": 1790838381,
+      "session_updated_at": 1790839179,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 40011,
+      "updated_at": 1790838862,
+      "last_origin": "callback",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / Config: Schema [chat:-1003936827469:topic:40011]",
+      "session_updated_at": 1790839279,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "4b0990b7-aff8-4744-8de5-e38e54de7693",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39218,
+      "updated_at": 1790838922,
+      "last_origin": "callback",
+      "turn_open_at": 1790838922,
+      "session_title": "Harvesting upstream PRs into OpenCrabs",
+      "session_updated_at": 1790838934,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3005,11 +2993,24 @@
       "channel": "telegram",
       "chat_id": "-1003936827469",
       "thread_id": 40524,
-      "updated_at": 1790838452,
+      "updated_at": 1790839287,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "#465 Telegram outbound video path",
-      "session_updated_at": 1790838458,
+      "session_updated_at": 1790839317,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39171,
+      "updated_at": 1790839329,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
+      "session_updated_at": 1790838398,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
