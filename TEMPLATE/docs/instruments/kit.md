@@ -231,10 +231,44 @@ owns each one.
 | `registry/fleet.json` | `TEMPLATE/registry/fleet.example.json` | the **factory** | the fleet POPULATION the naming and census instruments read. Never installed from the template — a member copies the example and declares its own |
 | `registry/factories/*.json` | the adopter writes its own | the **factory** | the member manifests `kit_census` counts |
 | `registry/gates.json` | `TEMPLATE/registry/gates.example.json` | the **factory** | the declared-gate inventory the registry leg reads |
+| `registry/kit-exemptions.json` | **nothing** — absence IS the empty state | the **factory** | a member's own declared forks, and this instrument's **extension surface** (§6.1). The reader's absence-default is *"nothing is declared exempt"* and absence is **GREEN**, so there is no shipped copy for an update to overwrite, and none for a member to carry unused |
 
 **A surface absent from this table is absent by measurement, not by omission.** The one tracked
 `TEMPLATE/` path deliberately outside these tables — and outside the manifest — is the pin vehicle,
 and §5 states its reason.
+
+### 6.1 The extension surface — a member's fork is a DECLARATION, and this is its contract
+
+**This instrument HAS an extension surface: `registry/kit-exemptions.json`.** That is the statement
+frame §6.5 requires at this naming site, and the alternative it offers — *"no extension surface:
+member subject matter lives outside it"* — would be false of a file this instrument's own reader
+consumes. §6.4's fork test and this section read one predicate from opposite sides: a member's own
+subject matter (its own event set, its own actors, its own box's measurements) lands here **as a
+declaration**, while the member's divergent bytes stay in the member's own tree.
+
+**Its shipped half is CODE, not data — and that is the one place this instrument departs from the
+specimen's shape.** `ledger`'s surface ships as an empty `.example.json`; kit ships **no file at
+all**, because the reader's own absence-default *is* the empty declaration — `load_exemptions()`
+(`tools/kit_pin.py:201`) returns *"no `registry/kit-exemptions.json` in {root} — nothing is declared
+exempt"* and the pin stays **GREEN**. Contract part 1's substance therefore holds — *an adopter that
+declares nothing carries no dead vocabulary* — by a different mechanism than the specimen's, and the
+consequence is stated rather than smoothed: **a member learns this path from the pin's own failure
+text** (*"Declare it in `registry/kit-exemptions.json` with a reason"*) **or from this doc, never
+from a shipped file.**
+
+**The contract, four parts, measured against the specimen** (`ledger.md` §3):
+
+| # | part | measured on this instrument |
+|---|---|---|
+| **1** | shipped EMPTY | **met in SUBSTANCE, not in FORM** — the empty state is the reader's absence-default, and the shipped half is `tools/kit_pin.py` (paired with `TEMPLATE/tools/kit_pin.py`), never a `.example.json` |
+| **2** | a declaration **ADDS**; it never removes or redefines a core entry | **holds.** An entry declares a path the member **carries** whose bytes differ from its **own** pin. It cannot drop a path from the manifest, and it cannot move a path's class: `undeclared_divergence()` reads the class from the **pin** (`:246`), never from the entry — so the `class` field an entry carries is **documentation**, and a member can neither exempt a `seed` path into judgement (`:263` skips that class regardless) nor redefine what a `standalone` path means |
+| **3** | **ONE reader** serves the instrument's paths, so its writer and its verifier cannot disagree | **VIOLATED, measured — F5.** `load_exemptions()` is the judgement path, but `tools/kit_census.py:290` opens the same file independently and reports `len(exempt)` (`:300`). An entry the pin **ignores** is still **counted** by the census: for `{"exempt": [{"nopath": 1}, {"path": "tools/ledger.py"}]}` the census reports **2 declared** while the pin's declared set holds **1** — so a member reads a declaration the judge does not honour, and its pin then reds on divergence it believed it had declared. That is §6.5's own failure mode: *lawful at the write path, unknown at `verify`* |
+| **4** | an addition a SECOND factory needs **PROMOTES to the core** | **holds, and the route is declared IN THE DATA**: an entry's `disposition` names it — `(b)` declare-the-fork, `(c)` promote-the-member-half, the semantics `miidas`'s own `_note` records for the 2026-09-27 migration round. **The field is documentation, not a machine gate** — `grep -c disposition tools/kit_pin.py` → **0**, so the promotion itself is frame §5's process, not something this reader performs. `miidas`'s `_note` states the purpose the frame gives this channel: *"Each entry names the capability it carries so the instrument owner can decide whether to absorb it"* — the fleet's R&D channel, with the member's half as the arrival evidence frame §5.1 criterion 1 wants |
+
+**The member's duty is CITED here, never authored** (frame §6.5's own scope): O1's
+migrate-or-declare-or-defer disposition for a copy it already holds, and O4's duty to declare what
+its instrument accepts — or to state why it has none. This section declares the **instrument's**
+surface; §9's O-series carries what the **member** owes.
 
 ## 7. Self-probe and non-vacuity — part 8
 
@@ -487,6 +521,7 @@ meets a decision instead of an unknown.
 | **F2** | the census returns **FAIL — 2 tool(s) carry an undeclared gap** | `python3 tools/kit_surfaces.py` → `ledger-index` missing S1,S2; `subject_anchor` missing S2 | the two tools' owners; `subject_anchor` is the one the survey named, and `ledger-index` has drifted in since |
 | **F3** | `tools/kit_deliver.py` writes a pin **without checking the pin is current**, so a deliver run behind TEMPLATE's own HEAD writes a pin that is **stale on arrival** — and nothing reds, because the member's gate judges it against the pin it was **handed**, not against the kit that **exists** | `grep -cE 'stale\|current\|newer\|ahead\|behind' tools/kit_deliver.py` → **0**, rc=1; the tool reads `kit_version` (`:54`, `:59`, `:98`) and writes it (`:166`), and never compares it against the source repo's HEAD-computed version | the tool's code owner; a deliver-side guard that refuses or warns when `source_state()['kit_version']` differs from the HEAD-computed one |
 | **F4** | `tools/kit_deliver.py` **AUTHORS the member's pin** — it writes `registry/kit.json` (`:166`) even into a tree that already carries a deliberately authored, committed pin, so a transport rewrites a declaration that is the member's by frame §8 | `sed -n '160,170p' tools/kit_deliver.py` → `pin["kit_version"] = kit` then `planned["pin_path"].write_text(...)`; measured on two trees: `inferhub-watch` HEAD `db6aa904a8a1` / 118 → `6f10a14dcb5f` / 131, `vds-servers` HEAD `b0bb09cb288f` / 118 → `6f10a14dcb5f` / 131 | the tool's code owner; **refuse to write `registry/kit.json` into a tree that already carries one**, unless that member asked for the refresh |
+| **F5** | **a SECOND reader of the extension surface**, which frame §6.5's contract part 3 forbids: `tools/kit_census.py` counts `registry/kit-exemptions.json`'s `exempt` list itself (`:290`, `:300`) instead of calling `load_exemptions()`, so an entry the **pin ignores** is still reported as a declaration | write `{"exempt": [{"nopath": 1}, {"path": "tools/ledger.py"}]}` as `registry/kit-exemptions.json` and read both legs: the census reports **2 declared**, the pin's `declared` set holds **1** (`kit_pin.py:246-271` admits only entries carrying a `path`). A member then reads a declaration its own gate does not honour — measured on the worktree that authored §6.1 | the tool's code owner; the census should call `load_exemptions()` rather than re-deriving the count, so ONE reader serves both the report and the judgement |
 
 **F2's count moved while this file was being written, and that is the point of stating a predicate
 rather than a figure.** The survey measured **1** undeclared gap; the same command this turn returns
