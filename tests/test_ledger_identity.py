@@ -77,7 +77,7 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def _carries_verbatim_session(row: object, sid: str) -> bool:
-    """Whether a row carries §2's `session` key, byte-equal to the writing lane's id.
+    """Whether a row carries docs/instruments/ledger.md §2's `session` key, byte-equal to the writing lane's id.
 
     A named predicate so arm 11 can exercise it directly, including on the rows that
     must FAIL it -- a check whose only evidence is that it passed over one good row has
@@ -557,10 +557,10 @@ def main() -> int:
               r.returncode == 0 and len(rows(fixture_led)) == 1,
               f"rc={r.returncode} rows={len(rows(fixture_led))}")
 
-        # ARM 11 — §2's SECOND IDENTITY KEY, which the write path never wrote (#256).
+        # ARM 11 — docs/instruments/ledger.md §2's SECOND IDENTITY KEY, which the write path never wrote (#256).
         #
         # The law declared it and nothing emitted it: `actor` is the CAPACITY a write was
-        # made in, two lanes can share a capacity, and §2's own motivation is that 246 of
+        # made in, two lanes can share a capacity, and docs/instruments/ledger.md §2's own motivation is that 246 of
         # 1322 meta rows pasted a session uuid into free-text `detail` because no field
         # held it. The key sat in the schema's OPTIONAL_FIELDS -- and its own comment said
         # the widening landed "in the SAME change as the write path that emits it", which
@@ -572,7 +572,7 @@ def main() -> int:
         # add is not evidence that the tool wrote it.
         _raw_lines = [ln for ln in led.read_text(encoding="utf-8").splitlines() if ln.strip()]
         live_row = rows(led)[0] if rows(led) else {}
-        check("arm11 the accepted live row carries the §2 `session` key",
+        check("arm11 the accepted live row carries the docs/instruments/ledger.md §2 `session` key",
               live_row.get("session") == worker,
               f"session={live_row.get('session')!r}; expected the resolved lane {worker[:8]}…")
         check("arm11 the key is the session, not the resolved role echoed back",

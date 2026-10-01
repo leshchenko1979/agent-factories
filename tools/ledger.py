@@ -435,7 +435,7 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
 def writing_session_id() -> str | None:
     """The writing lane's session id, VERBATIM from `OPENCRABS_SESSION_ID`.
 
-    §2 declares `session` a ROW KEY — "the row carries both" — because a role is the
+    docs/instruments/ledger.md §2 declares `session` a ROW KEY — "the row carries both" — because a role is the
     CAPACITY a write was made in and two lanes can share a capacity, so a role alone
     cannot trace a row to the lane that wrote it. The fleet paid for that twice: 246 of
     1322 meta rows paste a uuid into free-text `detail`, and one inferhub row put a
@@ -1106,7 +1106,7 @@ def cmd_append(args: argparse.Namespace) -> int:
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
 
-    # §2's SECOND identity key, and the one the role cannot carry. A role is the
+    # docs/instruments/ledger.md §2's SECOND identity key, and the one the role cannot carry. A role is the
     # CAPACITY a write was made in, and two lanes can share a capacity, so a role alone
     # cannot trace a row to the lane that wrote it. Read VERBATIM and never resolved:
     # resolution is the lossy step, and a session the registry cannot place still WROTE
@@ -1613,7 +1613,7 @@ def cmd_append(args: argparse.Namespace) -> int:
         if refs:
             row["refs"] = refs
         # ADDITIVE on the same rule: a row written outside a lane carries no `session`
-        # and stays valid. §2 declares the key OPTIONAL precisely so the forked member
+        # and stays valid. docs/instruments/ledger.md §2 declares the key OPTIONAL precisely so the forked member
         # copies are not broken on day one.
         if session_id:
             row["session"] = session_id
@@ -1677,7 +1677,7 @@ def cmd_append(args: argparse.Namespace) -> int:
                     f"row(s) of {args.subject}, and found no problem"
                 ),
             }
-            # The receipt is a ROW, and §2 makes the key intrinsic to a write rather
+            # The receipt is a ROW, and docs/instruments/ledger.md §2 makes the key intrinsic to a write rather
             # than conditional on the event: a close written by a lane and receipted by
             # the tool would otherwise lose the lane on exactly the row that settles it.
             if session_id:
@@ -1721,7 +1721,7 @@ def cmd_repair(args: argparse.Namespace) -> int:
     args.actor = actor
     if args.actor not in known_actors():
         sys.exit(f"unknown actor '{args.actor}' — one of: {', '.join(known_actors())}")
-    # §2's second identity key, on the append path's own rule: a redirected (fixture)
+    # docs/instruments/ledger.md §2's second identity key, on the append path's own rule: a redirected (fixture)
     # target carries none, and an unset variable is omitted rather than invented.
     session_id = None if os.environ.get("OC_LEDGER_PATH") else writing_session_id()
     if not (args.note or "").strip():
