@@ -38,10 +38,24 @@ asserts that pairing (direction 4).
 
 It is byte-paired into `TEMPLATE/`, so the manifest grain is what keeps a factory from
 dropping the runner and keeping the file (issue #107, ruling n=639).
+
+TWO MORE SURFACES, added for #259 (ruling n=1848):
+
+  * **the brief names the route it expects the answer on.** The closing line used to read
+    "Reply on this session." — which each lane read as ITS OWN, because the notify
+    arrived in that lane's session. Four of six did exactly that on the 2026-10-01 round
+    and delivered nothing to the collector. The arm below pins the route by a predicate
+    over the RENDERED brief, and a MUTATION CONTROL proves the predicate bites: a brief
+    with the route line removed must FAIL it, or the arm is re-reading text it wrote.
+  * **the collection leg declares its population.** `classify_answers` is pure over
+    (targets, observed, recovered), so it is driven here with synthetic rows; the split is
+    asserted, and an unaccounted target must be reported rather than folded into silence.
 """
 
 from __future__ import annotations
 
+import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -244,3 +258,203 @@ def test_no_placeholder_survives_the_format():
     text = ra.BRIEF.format(slug="alpha-factory", stamp="2026-09-25T00:00Z")
     leftover = re.findall(r"\{[a-z_]+\}", text)
     assert leftover == [], leftover
+
+# --------------------------------------------------------------------------------------
+# #259 (ruling n=1848), clause 1 — the brief NAMES the route it expects the answer on.
+# --------------------------------------------------------------------------------------
+
+UUID_LITERAL = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+def _rendered_brief() -> str:
+    return ra.BRIEF.format(slug="alpha-factory", stamp="2026-09-25T00:00Z")
+
+def _brief_names_the_route(text: str) -> bool:
+    """Clause 1's predicate, over a RENDERED brief.
+
+    All four conditions are required, and each one is a distinct way the defect could
+    return:
+
+      * the lane-to-lane route is NAMED (`session_notify`) — without it the brief gives no
+        route at all, which is where "reply on this session" left the reader;
+      * the SENDER ID's location is named (the `from` header) — the route without a
+        destination is still unfollowable, and this is the clause that keeps a literal id
+        out of the text, since the header already carries it and can never go stale;
+      * the OLD wording is gone — "reply on this session" is not ambiguous, it is
+        unfollowable: a lane cannot write into the collector's own session;
+      * NO literal session uuid — a baked-in id is stale the moment a topic is rebound,
+        which is the exact hazard the brief's own forbidden-fields list names.
+
+    Kept in the GATE rather than the tool on purpose: it is an assertion about the shipped
+    text, and the mutation arm below is what proves it discriminates.
+    """
+    lowered = text.lower()
+    if "session_notify" not in lowered:
+        return False
+    if "`from`" not in lowered:
+        return False
+    if "reply on this session" in lowered:
+        return False
+    if UUID_LITERAL.search(lowered):
+        return False
+    return True
+
+def test_the_brief_names_the_notify_route_and_points_at_the_header():
+    """The product of #259: the closing line says HOW to answer and WHERE to send it."""
+    text = _rendered_brief()
+    assert _brief_names_the_route(text) is True, text[-700:]
+    assert "Reply on this session." not in text, text[-700:]
+    assert "session_notify" in text, text[-700:]
+
+def test_a_brief_with_the_route_line_removed_fails_the_same_predicate():
+    """MUTATION CONTROL — the predicate must BITE, or the arm above proves nothing.
+
+    A gate that formats the string it just asserted on re-reads its own text: it would
+    pass just as happily against a brief that had lost the route. So the same predicate is
+    run against a NEUTERED copy — the route line struck out — and must return False.
+    """
+    text = _rendered_brief()
+    neutered = "\n".join(
+        line for line in text.splitlines() if "session_notify" not in line
+    )
+    assert "session_notify" not in neutered, neutered[-400:]
+    assert _brief_names_the_route(neutered) is False, neutered[-700:]
+
+def test_the_predicate_rejects_the_pre_fix_wording():
+    """The predicate is only worth having if it rejects the text that CAUSED #259.
+
+    Re-introducing the old closing sentence into the shipped brief — leaving the route
+    line in place, so the ONLY thing that changed is the old wording coming back — must
+    fail it. This is the arm that would have caught the original defect.
+    """
+    text = _rendered_brief()
+    regressed = text + "\nReply on this session.\n"
+    assert _brief_names_the_route(regressed) is False, regressed[-700:]
+
+def test_the_predicate_rejects_a_brief_carrying_a_literal_session_id():
+    """Clause 2 — no id is baked in. A brief with one must fail the same predicate."""
+    text = _rendered_brief()
+    baked = text.replace("`from`", "`from` (collector 23549292-77ff-40d1-97e3-5aa0bdd19d74)")
+    assert baked != text, "the substitution did not apply — this arm would test nothing"
+    assert _brief_names_the_route(baked) is False, baked[-700:]
+
+# --------------------------------------------------------------------------------------
+# #259, clause 3 — the collection leg DECLARES its population.
+# --------------------------------------------------------------------------------------
+
+def _target(slug: str, session: str) -> dict:
+    return {
+        "slug": slug,
+        "session_id": session,
+        "thread_id": 1,
+        "topic": "HQ",
+        "status": "resolved",
+    }
+
+def _collect_args(**over: object) -> argparse.Namespace:
+    base = {
+        "collect": True,
+        "since": "2026-10-01T05:00:00Z",
+        "until": "2026-10-01T08:00:00Z",
+        "collector": "collector-session",
+        "recovered": None,
+        "only": None,
+    }
+    base.update(over)
+    return argparse.Namespace(**base)
+
+ALPHA = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
+BRAVO = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
+CHARLIE = "cccccccc-3333-4333-8333-cccccccccccc"
+
+def test_classify_answers_splits_by_notify_recovered_and_unaccounted():
+    """Pure over its inputs, so the split is asserted without a store or a clock."""
+    targets = [
+        _target("alpha-factory", ALPHA),
+        _target("bravo-factory", BRAVO),
+        _target("charlie-factory", CHARLIE),
+    ]
+    by_notify, recovered, unaccounted = ra.classify_answers(targets, {ALPHA}, ["bravo-factory"])
+    assert by_notify == ["alpha-factory"], by_notify
+    assert recovered == ["bravo-factory"], recovered
+    assert unaccounted == ["charlie-factory"], unaccounted
+
+def test_classify_answers_matches_the_eight_char_short_form_the_store_also_carries():
+    """The store carries BOTH header shapes; a reader that knows one reports the other as
+    silence. The 2026-10-01 collector's own store held one of each."""
+    targets = [_target("alpha-factory", ALPHA), _target("bravo-factory", BRAVO)]
+    by_notify, recovered, unaccounted = ra.classify_answers(targets, {ALPHA[:8]}, [])
+    assert by_notify == ["alpha-factory"], by_notify
+    assert unaccounted == ["bravo-factory"], unaccounted
+
+def test_an_unaccounted_target_is_never_folded_into_silence(monkeypatch, capsys):
+    """The failure mode #259 exists to close: a lane that ignored the instruction must be
+    VISIBLE, not lost. It is named on stderr and the run fails."""
+    targets = [_target("alpha-factory", ALPHA), _target("bravo-factory", BRAVO)]
+    monkeypatch.setattr(ra, "notified_senders", lambda sid, since, until: ({ALPHA}, 7, []))
+    rc = ra.cmd_collect(targets, [], _collect_args())
+    captured = capsys.readouterr()
+    assert rc == 1, captured.out
+    assert "UNACCOUNTED" in captured.err, captured.err
+    assert "bravo-factory" in captured.err, captured.err
+
+def test_collect_declares_the_population_it_measured_and_names_every_recovery(monkeypatch, capsys):
+    """The round reports how many of N answered, split by route, and names each recovery."""
+    targets = [
+        _target("alpha-factory", ALPHA),
+        _target("bravo-factory", BRAVO),
+        _target("charlie-factory", CHARLIE),
+    ]
+    monkeypatch.setattr(
+        ra, "notified_senders", lambda sid, since, until: ({ALPHA, BRAVO}, 42, [])
+    )
+    rc = ra.cmd_collect(targets, [], _collect_args(recovered="charlie-factory"))
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "2 by notify" in out, out
+    assert "1 recovered by session read" in out, out
+    assert "charlie-factory" in out, out
+    assert "examined   42 session row(s)" in out, out
+
+def test_collect_prints_the_window_it_actually_used(monkeypatch, capsys):
+    """A window that is not stated is not a scope. The effective bounds are printed."""
+    monkeypatch.setattr(ra, "notified_senders", lambda sid, since, until: ({ALPHA}, 3, []))
+    ra.cmd_collect([_target("alpha-factory", ALPHA)], [], _collect_args())
+    out = capsys.readouterr().out
+    assert "2026-10-01T05:00:00Z..2026-10-01T08:00:00Z" in out, out
+
+def test_collect_refuses_a_population_of_zero(monkeypatch, capsys):
+    """NON-VACUITY: a predicate that examined nothing has reported nothing — a run over
+    zero targets is a broken instrument, not a clean round, and must fail loudly."""
+    monkeypatch.setattr(ra, "notified_senders", lambda sid, since, until: (set(), 0, []))
+    rc = ra.cmd_collect([], [], _collect_args())
+    captured = capsys.readouterr()
+    assert rc == 1, captured.out
+    assert "population of zero" in captured.err, captured.err
+
+def test_collect_refuses_a_recovered_slug_that_resolves_to_no_target(monkeypatch, capsys):
+    """A typo in `--recovered` must not silently shrink the recovered set."""
+    monkeypatch.setattr(ra, "notified_senders", lambda sid, since, until: ({ALPHA}, 5, []))
+    rc = ra.cmd_collect([_target("alpha-factory", ALPHA)], [], _collect_args(recovered="nope-factory"))
+    captured = capsys.readouterr()
+    assert rc == 1, captured.out
+    assert "nope-factory" in captured.err, captured.err
+
+def test_collect_refuses_without_a_collector_identity(monkeypatch, capsys):
+    """The collector id is DERIVED from the environment, never declared — so an absent
+    one is a refusal, not a default."""
+    monkeypatch.delenv("OPENCRABS_SESSION_ID", raising=False)
+    monkeypatch.setattr(ra, "notified_senders", lambda sid, since, until: ({ALPHA}, 5, []))
+    rc = ra.cmd_collect([_target("alpha-factory", ALPHA)], [], _collect_args(collector=None))
+    captured = capsys.readouterr()
+    assert rc == 1, captured.out
+    assert "OPENCRABS_SESSION_ID" in captured.err, captured.err
+
+def test_a_reader_that_scanned_nothing_says_so_rather_than_reporting_silence(monkeypatch, capsys):
+    """A reader that examined no rows has reported NOTHING — not "nobody answered". The
+    count is printed so the difference is visible in the run's own output."""
+    monkeypatch.setattr(ra, "notified_senders", lambda sid, since, until: (set(), 0, []))
+    rc = ra.cmd_collect([_target("alpha-factory", ALPHA)], [], _collect_args(recovered="alpha-factory"))
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "examined   0 session row(s)" in out, out
+    assert "0 by notify" in out, out

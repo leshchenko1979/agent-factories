@@ -31,10 +31,29 @@ and the rest of the fleet is still dispatched: one factory's missing lane must n
 the others' attestation. The failure is loud in this run's output, which is what
 the pacemaker's own report carries.
 
+**The brief names the route it expects the answer on.** A lane reads "reply on this
+session" as ITS OWN, because the notify arrived in that lane's session — so on the
+2026-10-01 round four of six lanes answered there and delivered nothing to the
+collector, which recovered them only by reading each lane's store. The closing line
+therefore names `session_notify` and points at the notify's own `from` header. No id is
+written into the text: the header is the live source, so nothing in the brief can go
+stale, and the tool's own rule against a declared session id still holds.
+
+**And the collection leg DECLARES its population** (`--collect`). A round is not
+complete because M lanes answered; it is complete when the count of M is accounted for
+against the N targets, split into answers that arrived BY NOTIFY and answers RECOVERED
+by reading a lane's own session, with every recovery named. The split is measured, not
+asserted: `by notify` is read out of the collector's OWN session store, where an
+inbound notify lands as a user row whose header names the sender. The rest must be
+declared, and a target in neither set is UNACCOUNTED and fails the run. That is the
+difference between a gap that is a finding and a gap that is a loss.
+
 Run:  python3 tools/registry_attest.py --check          # resolve and print targets
       python3 tools/registry_attest.py --dry-run        # print the brief, send nothing
       python3 tools/registry_attest.py --dispatch       # send to every resolved HQ
-Exit: 0 every target dispatched (or resolved, for --check); 1 if any HQ failed to resolve.
+      python3 tools/registry_attest.py --collect [--since ISO] [--recovered SLUG,...]
+Exit: 0 every target dispatched (or resolved, for --check; or accounted for, for
+      --collect); 1 if any HQ failed to resolve, or any target is unaccounted.
 """
 
 from __future__ import annotations
@@ -42,6 +61,9 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
+import re
+import sqlite3
 import subprocess
 import sys
 import time
@@ -55,6 +77,15 @@ OPENCRABS = "/usr/local/bin/opencrabs"
 PROFILE = reg.FACTORY_PROFILE
 SENDER = "Meta-Factory Delegate"
 BRIEF_TITLE = "Registry re-attestation"
+
+# The two shapes an inbound notify leaves in the RECEIVING session's own store: the full
+# uuid in the `session-notify` header, the 8-char short form in the delivery line. BOTH
+# are read, because a reader that knows one shape reports the other as silence — and the
+# 2026-10-01 round carried one of each. Measured on the collector's store, verbatim:
+#   `[session-notify from=6a314aac-94db-4b11-974c-f53decc25b9d]  [infra-factory HQ -> …`
+#   `📨 notify from 2646d31a: [HQ 2646d31a → Delegate] FOLLOW-UP to the meta-factory …`
+NOTIFY_FROM_FULL = re.compile(r"\[session-notify from=([0-9a-fA-F-]{36})\]")
+NOTIFY_FROM_SHORT = re.compile(r"notify from ([0-9a-fA-F]{8}):")
 
 BRIEF = """Registry re-attestation — {slug} ({stamp})
 
@@ -132,9 +163,15 @@ QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. Confirm the prefix, report wh
         cannot attribute instead of touching it. Name the job, the profile home you read it
         from, and what you saw. "None seen" is a complete answer.
 
-Reply on this session. The registry is a collected document: this lane writes your
-declared fields back verbatim, and re-renders. You author the field; you do not need
-to edit the file, though you may.
+ANSWER BY session_notify TO THE COLLECTOR — not in your own session. This brief
+arrived as a notify, so the sender's session id is already in that notify's own `from`
+header; send your answer there, to that id. The collector cannot read your session, so
+an answer left in it is only recovered later by a sweep — a gap in the round rather
+than an answer to it.
+
+The registry is a collected document: the collector writes your declared fields back
+verbatim, and re-renders. You author the field; you do not need to edit the file,
+though you may.
 
 Nothing else in this message is work. If every answer is "unchanged", reply
 CONFIRMED and that is a complete answer.
@@ -239,19 +276,250 @@ def dispatch(target: dict, stamp: str, dry_run: bool) -> tuple[bool, str]:
         return True, f"{line[:80] or 'ok'} ({elapsed:.1f}s)"
 
 
+def _instant(value: str) -> int | None:
+    """Parse a window bound as a bare epoch integer or an ISO-8601 stamp. None if unparseable."""
+    text = (value or "").strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    try:
+        parsed = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return int(parsed.timestamp())
+
+def _utc_day_start(now: int) -> int:
+    """Midnight UTC of the day `now` falls in — the default collection window's floor."""
+    moment = datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
+    return int(moment.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+def notified_senders(session_id: str, since: int, until: int) -> tuple[set[str], int, list[str]]:
+    """Sender ids observed delivering a notify INTO `session_id` inside the window.
+
+    Returns `(senders, rows_examined, problems)`. An inbound notify lands in the
+    RECEIVING session as a user-role row whose header names the SENDER, in either the
+    full-uuid shape or the 8-char short one, so both are read.
+
+    The collector's OWN id is excluded. A lane's outbound send echoes back into its own
+    session, so leaving it in would let a collector count itself among the targets that
+    answered — measured on the 2026-10-01 collector's store, where its own id appeared
+    among the observed senders.
+
+    `rows_examined` is RETURNED rather than kept internal, because a reader that scanned
+    nothing has reported nothing — it has not reported "nobody answered" — and the caller
+    prints it. An unreadable profile DB is a problem, never an empty result: "no profile
+    was readable" must not render as "no lane replied".
+    """
+    senders: set[str] = set()
+    examined = 0
+    problems: list[str] = []
+    wanted = session_id.strip().lower()
+    try:
+        dbs = reg.profile_dbs()
+    except Exception as exc:  # noqa: BLE001 — a manifest error is a problem, not a crash
+        return senders, examined, [f"profile DBs unreadable: {type(exc).__name__}: {exc}"]
+    for db in dbs:
+        try:
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error as exc:
+            problems.append(f"{db}: {exc}")
+            continue
+        try:
+            tables = {
+                row[0]
+                for row in conn.execute("select name from sqlite_master where type='table'")
+            }
+            if "messages" not in tables:
+                continue
+            for role, content in conn.execute(
+                "select role, content from messages "
+                "where session_id = ? and created_at between ? and ?",
+                (session_id.strip(), since, until),
+            ):
+                examined += 1
+                if role != "user" or not content:
+                    continue
+                for found in NOTIFY_FROM_FULL.findall(content):
+                    if found.strip().lower() != wanted:
+                        senders.add(found.strip().lower())
+                for found in NOTIFY_FROM_SHORT.findall(content):
+                    if not wanted.startswith(found.strip().lower()):
+                        senders.add(found.strip().lower())
+        except sqlite3.Error as exc:
+            problems.append(f"{db}: {exc}")
+        finally:
+            conn.close()
+    return senders, examined, problems
+
+def classify_answers(
+    targets: list[dict], observed: set[str], recovered: list[str]
+) -> tuple[list[str], list[str], list[str]]:
+    """Split the targets into by-notify / recovered / UNACCOUNTED. Pure over its inputs.
+
+    No store and no clock, so a gate drives it with synthetic rows. `observed` is what
+    the collector's own store actually saw; `recovered` is what an operator read out of
+    the lanes' own sessions. A target in NEITHER set comes back as unaccounted rather
+    than being folded into "no answer": that silence is exactly what let the 2026-10-01
+    gap open, and the leg exists so that a gap DECLARED is a finding while a gap omitted
+    is a loss.
+
+    Matching is on the full id first and the 8-char short form second, because the store
+    carries both shapes; `recovered` is matched by slug.
+    """
+    declared = {slug.strip() for slug in recovered if slug.strip()}
+    by_notify: list[str] = []
+    recovered_rows: list[str] = []
+    unaccounted: list[str] = []
+    for target in targets:
+        slug = str(target["slug"])
+        session_id = str(target["session_id"]).strip().lower()
+        if session_id in observed or session_id[:8] in observed:
+            by_notify.append(slug)
+        elif slug in declared:
+            recovered_rows.append(slug)
+        else:
+            unaccounted.append(slug)
+    return by_notify, recovered_rows, unaccounted
+
+def cmd_collect(targets: list[dict], problems: list[str], args: argparse.Namespace) -> int:
+    """Declare the round's population: how many of N targets answered, and by which route."""
+    collector = (args.collector or os.environ.get("OPENCRABS_SESSION_ID") or "").strip()
+    if not collector:
+        print(
+            "registry-attest --collect: no collector session — pass --collector or set "
+            "OPENCRABS_SESSION_ID (the identity is DERIVED, never declared)",
+            file=sys.stderr,
+        )
+        return 1
+
+    now = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    since = _instant(args.since) if args.since else _utc_day_start(now)
+    until = _instant(args.until) if args.until else now
+    if since is None or until is None or since > until:
+        print(
+            f"registry-attest --collect: bad window — since={args.since!r} until={args.until!r}",
+            file=sys.stderr,
+        )
+        return 1
+
+    declared = [slug.strip() for slug in (args.recovered or "").split(",") if slug.strip()]
+    resolved_slugs = {str(target["slug"]) for target in targets}
+    unknown = [slug for slug in declared if slug not in resolved_slugs]
+    if unknown:
+        print(
+            f"registry-attest --collect: --recovered names no resolved target: "
+            f"{', '.join(unknown)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    observed, examined, read_problems = notified_senders(collector, since, until)
+    problems = list(problems) + read_problems
+    by_notify, recovered_rows, unaccounted = classify_answers(targets, observed, declared)
+
+    window = (
+        f"{datetime.datetime.fromtimestamp(since, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        f"..{datetime.datetime.fromtimestamp(until, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+    print(f"registry-attest --collect — window {window}")
+    print(f"  collector  {collector}")
+    print(f"  examined   {examined} session row(s); {len(observed)} distinct sender(s) seen")
+    print(f"  targets    {len(targets)} resolved, {len(problems)} unresolved")
+
+    by_notify_set = set(by_notify)
+    for target in targets:
+        slug = str(target["slug"])
+        if slug in by_notify_set:
+            print(f"  {slug:<16} BY NOTIFY")
+        elif slug in recovered_rows:
+            print(f"  {slug:<16} RECOVERED  read from its own session (declared)")
+        else:
+            print(f"  {slug:<16} UNACCOUNTED")
+    for problem in problems:
+        print(f"  UNRESOLVED  {problem}")
+
+    print(
+        f"population: {len(by_notify) + len(recovered_rows)} of {len(targets)} accounted — "
+        f"{len(by_notify)} by notify, {len(recovered_rows)} recovered by session read"
+    )
+    print(f"  by notify : {', '.join(by_notify) or '(none)'}")
+    print(f"  recovered : {', '.join(recovered_rows) or '(none)'}")
+
+    if not targets:
+        print(
+            "registry-attest --collect: 0 targets resolved — a population of zero is a "
+            "broken instrument, not a clean round",
+            file=sys.stderr,
+        )
+        return 1
+    if unaccounted:
+        print(
+            f"registry-attest --collect: UNACCOUNTED {len(unaccounted)} of {len(targets)}: "
+            f"{', '.join(unaccounted)} — neither delivered a notify into the collector nor "
+            f"declared recovered. A silent fallback is what opened the 2026-10-01 gap; "
+            f"declare it with --recovered or chase it.",
+            file=sys.stderr,
+        )
+    return 1 if (problems or unaccounted) else 0
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="resolve and print targets, send nothing")
     group.add_argument("--dry-run", action="store_true", help="print the brief, send nothing")
     group.add_argument("--dispatch", action="store_true", help="send to every resolved HQ")
+    group.add_argument(
+        "--collect",
+        action="store_true",
+        help=(
+            "declare the round's collection population: how many of N targets answered, "
+            "split into answers that arrived BY NOTIFY (measured from the collector's own "
+            "session store) and answers RECOVERED by reading a lane's own session "
+            "(declared with --recovered). An unaccounted target fails the run."
+        ),
+    )
+    parser.add_argument(
+        "--since",
+        metavar="ISO-OR-EPOCH",
+        help=(
+            "with --collect: the floor of the collection window (ISO-8601 or a bare epoch). "
+            "Defaults to midnight UTC of today, and the EFFECTIVE window is always printed — "
+            "a window that is not stated is not a scope."
+        ),
+    )
+    parser.add_argument(
+        "--until",
+        metavar="ISO-OR-EPOCH",
+        help="with --collect: the ceiling of the collection window. Defaults to now.",
+    )
+    parser.add_argument(
+        "--collector",
+        metavar="SESSION_ID",
+        help=(
+            "with --collect: the session that ran the round and received the answers. "
+            "Defaults to OPENCRABS_SESSION_ID, because the identity is DERIVED and never "
+            "declared — a remembered id is a dispatch into the void."
+        ),
+    )
+    parser.add_argument(
+        "--recovered",
+        metavar="SLUG[,SLUG...]",
+        help=(
+            "with --collect: the targets whose answer was recovered by READING the lane's "
+            "own session, because it did not deliver a notify. Every one is NAMED in the "
+            "report; a slug that resolves to no target is refused rather than swallowed."
+        ),
+    )
     parser.add_argument(
         "--only",
         metavar="SLUG[,SLUG...]",
         help=(
-            "restrict to these factory slugs (with --dispatch). A run can be cut short — "
-            "six sequential CLI invocations outlive a foreground shell's patience — and the "
-            "targets that already answered must not be woken a second time to reach the ones "
+            "restrict to these factory slugs (with --dispatch or --collect). A run can be cut "
+            "short — six sequential CLI invocations outlive a foreground shell's patience — and "
+            "the targets that already answered must not be woken a second time to reach the ones "
             "that did not. A slug that resolves to no HQ is refused rather than skipped, so a "
             "typo cannot silently send nothing."
         ),
@@ -272,6 +540,9 @@ def main() -> int:
             )
             return 1
         targets = [target for target in targets if target["slug"] in wanted]
+
+    if args.collect:
+        return cmd_collect(targets, problems, args)
 
     print(f"registry-attest {stamp} — {len(targets)} HQ target(s) resolved", flush=True)
     for target in targets:
