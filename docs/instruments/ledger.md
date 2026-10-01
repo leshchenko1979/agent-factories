@@ -630,6 +630,38 @@ reproduced by one build from the ledgers alone; one writer, the patrol round.
 - **git refs/blobs** — right primitive, wrong object: the ledger's contract is a dense ordinal plus
   wall-clock arrival order, and a content-addressed store gives neither.
 
+### 8.1 The index must never be committable — and its carrier is the local exclude
+
+The index is a binary blob **2.92× the text** it derives from, so committing it is the one thing it
+must not be. The requirement is therefore enforced rather than remembered: `build` ensures its own
+artifact is ignored *before* it writes it.
+
+The carrier is the repository-**local** exclude (`<git-common-dir>/info/exclude`), never a shipped
+`.gitignore`. Measured: **0 of 136 kit paths is a `.gitignore`** — the kit ships none, by design. A
+member's `.gitignore` is a hand-edited shared file, and a delivery that overwrote it would be the
+destructive-write class (#211). The local exclude is untracked, per-clone, honoured by git, shared
+by every linked worktree through the common dir, and self-heals on the first build in every clone.
+
+**Measured basis for the requirement:** at the 2026-09-30 audit, all **four** adopting members
+(ai-antispam, inferhub-watch, infra-factory, miidas) carried no ignore line, and this gate's own
+check was the sole red keeping the closest adopter — ai-antispam, held 15/15, `behind_by` 1 — from
+green. A requirement with no carrier is not a rule, it is a hope: the class of #229.
+
+The tool adds a line only where **nothing** carries the requirement: a path already ignored by any
+mechanism — a member's own `.gitignore` line included — is left alone and reported as such, and an
+index outside the repository has nothing to ignore and is SKIPPED by name rather than silently.
+
+**The gate is keyed on the index's existence, not on the requirement alone.** An index that has never
+been built has nothing committable, so the arm SKIPS and names the remedy
+(`python3 tools/ledger-index.py build`) rather than failing: a red on a clean tree is not a defect,
+and a gate that reds clean trees teaches lanes to ignore red gates. A **present** index must be
+ignored — that is the arm that protects, and it is the only state in which the requirement has
+anything to bite. Measured 2026-10-01: the unconditional form red all **three** real adopters
+(ai-antispam, inferhub-watch, miidas) on trees where the index was **absent** and `git check-ignore`
+returned **rc=1** — three FAILs on a state where nothing was committable. The predicate's teeth are
+kept by an arm that runs in *both* states: the same check must FAIL on a path nothing ignores.
+
+
 ---
 
 ## 9. The write discipline — one writer, one receipt, nothing removed

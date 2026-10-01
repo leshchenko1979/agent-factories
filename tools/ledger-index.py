@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -123,6 +124,71 @@ def population() -> tuple[list[tuple[str, Path, list[dict]]], list[str]]:
     return found, absent
 
 
+def _git_common_dir() -> Path | None:
+    """The common git directory, shared by every linked worktree of this repository.
+
+    `--git-common-dir` (not `--git-dir`) is load-bearing: a linked worktree has its own
+    `--git-dir` but shares the common one, so a lock or an exclude written against the
+    former would exist once per worktree. None means "not a git repository at all" — a
+    fixture — and the caller skips rather than inventing a directory.
+    """
+    try:
+        r = subprocess.run(["git", "rev-parse", "--git-common-dir"],
+                           capture_output=True, text=True, cwd=REPO)
+    except OSError:
+        return None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    d = Path(r.stdout.strip())
+    if not d.is_absolute():
+        d = (REPO / d).resolve()
+    return d if d.is_dir() else None
+
+
+def ensure_ignored(index: Path) -> None:
+    """The index is derived and disposable, so it must never be COMMITTABLE.
+
+    The kit ships no `.gitignore`: a member's is a hand-edited shared file, and shipping
+    one would overwrite whatever else it carries — the destructive-write class. So the
+    tool ensures its own artifact is ignored in the repository-LOCAL exclude, which is
+    untracked, per-clone, honoured by git, and shared by every worktree through the
+    common dir. It runs on every build, so every clone self-heals on first use.
+
+    An index OUTSIDE the repository needs no ignore — there is nothing to commit — and
+    is skipped by name rather than silently. A path already ignored by ANY mechanism
+    (a member's own `.gitignore` line included) is left alone: this adds a carrier only
+    where nothing carries the requirement.
+    """
+    try:
+        rel = index.resolve().relative_to(REPO.resolve())
+    except ValueError:
+        print(f"  ignore: {index} is outside the repository — nothing to ignore")
+        return
+    line = rel.as_posix()
+    if subprocess.run(["git", "check-ignore", "-q", line],
+                      capture_output=True, cwd=REPO).returncode == 0:
+        print(f"  ignore: {line} is already ignored — no line added")
+        return
+    common = _git_common_dir()
+    if common is None:
+        print("  ignore: not a git repository — no exclude file to write")
+        return
+    exclude = common / "info" / "exclude"
+    try:
+        current = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    except OSError:
+        current = ""
+    if line in [ln.strip() for ln in current.splitlines()]:
+        print(f"  ignore: {line} is already in {exclude}")
+        return
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a", encoding="utf-8") as fh:
+        if current and not current.endswith("\n"):
+            fh.write("\n")
+        fh.write(line + "\n")
+    print(f"  ignore: {line} was NOT ignored — added it to {exclude}")
+
+
 def build() -> int:
     started = time.perf_counter()
     found, absent = population()
@@ -132,6 +198,7 @@ def build() -> int:
             print(f"  absent: {name}")
         return 1
 
+    ensure_ignored(INDEX)
     INDEX.parent.mkdir(parents=True, exist_ok=True)
     if INDEX.exists():
         INDEX.unlink()
@@ -272,6 +339,9 @@ def main() -> int:
     cmd = argv[0] if argv else "build"
     if cmd == "build":
         return build()
+    if cmd == "path":
+        print(INDEX)
+        return 0
     if cmd == "find" and len(argv) > 1:
         return find(" ".join(argv[1:]))
     if cmd == "subject" and len(argv) > 1:
