@@ -6,7 +6,7 @@
 > (rule 10) — this is the thinking artifact the owner asked for, not the instrument's law.
 > **Readings:** every count below is a reading taken at **2026-09-30T11:04:14Z**, HEAD `c325fc1`
 > (`registry/kit.json` 138 files / `f582a2e92bb5`; `registry/gates.json` 49 declared gates;
-> `docs/*.json` 25 files over 15 families; instrument law docs shipped: 6).
+> `docs/*.json` 25 files over 15 declaration families; instrument law docs shipped: 6).
 
 ---
 
@@ -90,7 +90,7 @@ So the hierarchy below is ordered by **what an act can prevent**, not by how muc
 | Surface | Clean means | Upheld today by | Gap |
 |---|---|---|---|
 | **Ledger** | append-only; nothing removed; a retirement NAMES a row; no shrink; monotonic sequence; one writer | `tools/ledger.py` (write path refuses removal and stale refs), `test_ledger_no_shrink`, `test_ledger_schema`, `test_single_writer`, `test_ledger_index`, `test_ledger.py`; Lens H | The most heavily gated object in the factory. Its exemption surfaces are the weak side (next row). |
-| **Exemption / declaration surfaces** (25 JSON files over 15 families; 15 of them `ledger-*`) | an entry whose target is gone is a **stale debt**, reported | **partially**: each surface's own tool reads its own file | **G2.** No cross-sweep. `tools/hygiene.py`'s docstring names the class exactly — "the exemption surfaces, where an unmatched entry is a stale debt" — and then checks only its own declaration, and only for readability (its entries are deliberately a prevention surface, where unmatched is legal). |
+| **Exemption / declaration surfaces** (25 JSON files over 15 declaration families; 15 of the 25 files are `ledger-*`) | an entry whose target is gone is a **stale debt**, reported | **partially**: each surface's own tool reads its own file | **G2.** No cross-sweep. `tools/hygiene.py`'s docstring names the class exactly — "the exemption surfaces, where an unmatched entry is a stale debt" — and then checks only its own declaration, and only for readability (its entries are deliberately a prevention surface, where unmatched is legal). |
 | **Board (issues)** | board and ledger agree; every open issue has an intake row; every close row's observation is TRUE of the live board | `tests/test_board_intake_recorded.py`, `test_close_board_recorded.py` (predicates), `tools/patrol_host_state.py` (feeds them LIVE host state — "a green predicate with no live input is a gate that has never been asked a question") | WIP stagnation is a Lens M finding, not a gate. |
 | **Pacemakers (cron)** | every periodic process has a live job (P28); prompts thin; namespaced per factory; no dead-text schedule | `test_cron_thinness`; `pacemaker.md`; namespacing law in `AGENTS.md` §Cron | A job whose target session is gone, or whose declared cadence and actual runs diverge, is a report today — no gate. |
 | **Open questions** | no stranded question; `asked_at` age does the re-surfacing; no field written and never read | `docs/instruments/open-questions.md` §5.3 (stranded question, #189), §5.6 (ontology collapse) | — |
@@ -123,7 +123,7 @@ So the hierarchy below is ordered by **what an act can prevent**, not by how muc
 | # | Gap | Class | Why it ranks here |
 |---|---|---|---|
 | **G1** | **The hygiene instrument is indeclared** — no `docs/instruments/hygiene.md` | D | Structural: it blocks the member leg entirely. Every other kit instrument has a law doc; this one ships code, two gates and an example, and a member cannot tell complete from partial. It is also the only gap whose fix is *entirely ours*. |
-| **G2** | **No cross-sweep of exemption / declaration surfaces** | C | The class is already NAMED in shipped law (`hygiene.py`'s own docstring: "an unmatched entry is a stale debt") and nothing acts on it. 25 JSON files over 15 families, each read only by its own tool. Dead debt accumulates silently and every surface looks green. |
+| **G2** | **No cross-sweep of exemption / declaration surfaces** | C | The class is already NAMED in shipped law (`hygiene.py`'s own docstring: "an unmatched entry is a stale debt") and nothing acts on it. 25 JSON files over 15 declaration families, each read only by its own tool. Dead debt accumulates silently and every surface looks green. |
 | **G3** | **Build residue is invisible to every sweep** | B | Verified mechanism: pytest and ruff write an inner `.gitignore` with `*`, so the directories are self-ignoring — absent from `git status`, excluded from the kit manifest, and outside hygiene's `/tmp` glob. Multiplied by 30+ worktrees. |
 | **G4** | **The shared profile brain has no mechanical gate** | A | Highest blast radius per byte: one line there binds every lane on the box, and it lives in no repository, so no repo gate can read it. Its only defences are a periodic lens and a size reading. |
 | **G5** | **No predicate for placement / naming-vs-content** | B | The owner's own bullet ("files grouped/regrouped in folders, proper naming consistent with the contents"). Partially lawed in `ONTOLOGY.md` (patterns) but gated only for vocabulary. |
