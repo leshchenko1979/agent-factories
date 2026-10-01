@@ -617,6 +617,49 @@ factory. I agree that the member factories should have some freedom, but there s
 instrument which are mandatory and which better live on the centralized repository than be copied to
 member factories and then undergo the drift.").
 
+### 6.5 Extension — member subject matter at a declared point, never a fork
+
+**§6.4 says what an adopter may NOT fork; this is its complement — how a member's OWN subject
+matter becomes lawful without one.** The two read the same predicate from opposite sides, so
+neither is a judgement call at the instrument:
+
+- an addition is an **EXTENSION** when it lands at a point the instrument's **own reader accepts**;
+- it is a **FORK** when it changes the shape on a path — §6.4's test, and the tier that refuses.
+
+**The instrument owes ONE of two statements at its naming site, and silence is the defect**
+(§6.3's declared-class discipline and §7.2's declared-state discipline, applied to an instrument's
+own internal shape): *"this is my extension surface, and here is its contract"* — or *"this
+instrument has no extension surface: member subject matter lives outside it."* An instrument that
+says neither leaves every adopter to coin a private mechanism, which is §6.4's drift arriving by
+the other door.
+
+**The contract, four parts, read from the live specimen** — `ledger.md` §3, whose shipped half is
+the data surface `docs/ledger-refs-kinds.example.json` (§2 part 7) and whose factory-owned half is
+`docs/ledger-refs-kinds.json`, which the manifest does not track:
+
+1. **Shipped EMPTY.** The template's copy declares nothing (`{"kinds": [], "events": []}`), so an
+   adopter that declares nothing carries no dead vocabulary, and the field ships before any
+   factory has used it.
+2. **A declaration ADDS; it never removes or redefines a core entry.** A factory cannot shadow a
+   core name and so escape the law that name carries.
+3. **ONE reader serves the instrument's paths**, so its writer and its verifier cannot disagree.
+   The instrument's own module folds the declaration in at the one seam every path uses; a second
+   reader is how a declared row reads lawful at the write path and *unknown* at `verify`.
+4. **An addition a SECOND factory needs PROMOTES to the core**, by §5. The extension surface is
+   the fleet's R&D channel: a member's private vocabulary is the arrival evidence §5.1 criterion 1
+   wants, and the donor's copy then becomes the vendored instance §5.3 describes.
+
+**The member's duty is CITED here, not authored** (this frame's scope, above): O1's
+migrate-or-declare-or-defer disposition for a copy it already holds, and O4's duty to declare what
+its instrument accepts — its ref kinds, its actors, its event set — or to state why it has none. An
+instrument whose subject matter carries its own discipline states that in its own doc and in §9,
+as ledger does at O5.
+
+*Authority:* owner order 2026-10-01T00:16:33Z ("What about expanding an instrument with member
+factory subject matter specifics?"), read against the live specimen: `ledger.md` §3, "the
+extension surface — how a row points, and how a factory speaks", whose own sub-heading is the
+rule — "a member's own event is a DECLARATION, not a fork".
+
 ## 7. The version identifier and the deferred state
 
 **These two are defined here, once, because they are cross-instrument: an owner coining their own
