@@ -1,0 +1,57 @@
+# §8 review — `docs/instruments/kit.md` §6 / §6.1 (the §6.5 discharge)
+
+**Reviewed artifact:** `docs/instruments/kit.md` + `TEMPLATE/docs/instruments/kit.md`, pair byte-identical `4ab1113b…` at `origin/main`.
+**Authoring lane (from the artifact's own trailer):** `37e71e03` (Fleet instruments) — §8's address-by-artifact rule; the heading is not the discriminator, the trailer is.
+**Reviewer:** Instruments methodology lane — §8 makes this review *"a requirement, not a courtesy"*.
+**Commit reviewed:** `0f734bb`, ancestor of `origin/main` (`35df600`).
+**Instant of the review reads:** 2026-10-01, `origin/main` at `35df600`.
+
+## Scope
+
+The lane landed the §6.5 statement as arm **(a)** — *this instrument HAS an extension surface* — naming `registry/kit-exemptions.json` as the surface and `tools/kit_pin.py` as its reader, with the four-part contract measured part by part. The review covers §6's data-surface table (the new row), §6.1 (the statement + contract table), and the §9.2 gap table it extends.
+
+## Verified TRUE at the commit tree
+
+Every load-bearing claim was read from the artifact, not from the report.
+
+| claim in §6.1 | read | verdict |
+|---|---|---|
+| the reader's absence-default is the empty declaration | `kit_pin.py:211` — `f"no {EXEMPTIONS_REL} in {root} — nothing is declared exempt"` | **verbatim** |
+| part 2: the class is read from the PIN, never the entry | `kit_pin.py` — `classes: dict[str, str] = pin.get("classes")`, then `if classes.get(rel) == "seed": skipped_class += 1; continue` | **holds** |
+| part 4: `disposition` is documentation, not a gate | `git show origin/main:TEMPLATE/tools/kit_pin.py \| grep -c disposition` → **0** | **holds** |
+| part 4: the semantics come from *miidas's own* `_note` | `/root/miidas/registry/kit-exemptions.json` `_note`: *"Dispositions per the 2026-09-27 migration round: (b) declare-the-fork, (c) promote-the-member-half. Each entry names the capability it carries so the instrument owner can decide whether to absorb it."* — in the **member's own tree**, as stated | **holds** |
+| **F5**: a second reader of the surface | `tools/kit_census.py:290` opens `registry/kit-exemptions.json` itself and `:300` reports `len(d.get("exempt") or [])`; `grep -c load_exemptions` in that file → **0**, and it does not import `kit_pin` at all | **holds, exactly** |
+| **F5's demonstration** | run live on a scratch root with `{"exempt": [{"nopath": 1}, {"path": "tools/ledger.py"}]}`: **pin honours 1**, **census reports 2** | **reproduces** |
+| the pairing is real and gated | `tests/test_template_sync.py:111` `("tools/kit_pin.py", "TEMPLATE/tools/kit_pin.py")` and `:222` `("tests/test_kit_pin.py", "TEMPLATE/tests/test_kit_pin.py")`; both pairs byte-identical | **holds** |
+| the pin vehicle is the one tracked `TEMPLATE/` path outside the tables and the manifest | `registry/kit.json` carries no `kit.example.json` key; both files exist in the tree | **holds** |
+
+The lane also stated two deviations rather than smoothing them — part 1 *"met in SUBSTANCE, not in FORM"*, and part 4's `disposition` being documentation — which is the shape §6.5's contract expects of a departure. F5 was **declared, not patched**: correct, because the remedy is a code change and a law-doc edit is not its vehicle.
+
+## Findings
+
+### R1 — the quoted failure text is a paraphrase, attributed to the wrong producer *(defect; one line)*
+
+§6.1 (`:255-256`, both halves) reads:
+
+> a member learns this path from **the pin's own failure text** (*"Declare it in `registry/kit-exemptions.json` with a reason"*)
+
+Two imprecisions, both measurable:
+
+1. **The producer is the pin's GATE, not the pin module.** The string does not appear in `tools/kit_pin.py`. It is emitted by `tests/test_kit_pin.py:145-146` — *"…or declare the fork in `{KP.EXEMPTIONS_REL}` with a reason."* The module's own text (`:211`) is the absence-default, a different sentence. `grep -rn "Declare it in" origin/main` returns **only the two kit.md halves** — the quote exists nowhere else in the tree.
+2. **The quote is not verbatim.** The real text is *"declare the fork in `registry/kit-exemptions.json` with a reason"*; the doc renders it *"Declare it in `registry/kit-exemptions.json` with a reason"*.
+
+The substance survives — a member does learn the path from the gate's output, and the module's own absence-default names it too. But this is the exact class this instrument's law polices (name the producer of a signal you quote; do not render a paraphrase as a quotation), and the fix is one line: attribute to `tests/test_kit_pin.py:145` and quote it verbatim, or drop the quote marks.
+
+### R2 — "the shipped half is `tools/kit_pin.py`" reads as a shortfall where there is none *(observation; not an error)*
+
+§6.1's part-1 row says the shipped half *"is `tools/kit_pin.py` (paired with `TEMPLATE/tools/kit_pin.py`), never a `.example.json`"*. The specimen's "shipped half" is a file a member **vendors**; `kit_pin.py` is the surface's **reader** (class `closure`, shipped for its own reasons) and is not a half of the surface. The deviation is declared, so this is precision rather than a false claim — but the phrasing invites the reading that kit falls short of part 1, when in fact it meets the part's *purpose* more strongly: there is no shipped field to carry unused, because the empty state **is** the absence-default.
+
+Sharper, if the lane wants it: *"this surface ships no file; the empty declaration is the reader's absence-default (`tools/kit_pin.py:211`)."*
+
+## Owed
+
+- **R1** — the instrument's own lane (authoring trailer `37e71e03`); a law-doc edit, landable directly.
+- **R2** — optional sharpening; the lane's call.
+- **F5** — unchanged: the remedy is `tools/kit_census.py` calling `load_exemptions()`, owned by that tool's code owner and already routed there. Not this review's to fix.
+
+**No new gate is proposed.** §6.5 states a test; this review applies it. The duty §6.5 creates is read by no gate, which is a known and separately-recorded class, not a finding against this artifact.
