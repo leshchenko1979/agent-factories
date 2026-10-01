@@ -72,7 +72,7 @@
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -105,7 +105,7 @@
       "id": "miidas-platform-compose-is-repo-written",
       "scope": "profile",
       "severity": "warning",
-      "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable \u2014 use the sanctioned scripts, or pass --env-file ../.master.env.",
+      "text": "The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable \u2014 use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.",
       "affects": [
         "profile"
       ],
@@ -119,7 +119,7 @@
       "affects": [
         "profile"
       ],
-      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
       "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
     },
     {
@@ -134,7 +134,7 @@
     },
     {
       "id": "miidas-platform-moved-to-agents-old",
-      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.",
+      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps \u2014 it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.",
       "severity": "warning",
       "since": "2026-09-28T23:23:39Z",
       "affects": [
@@ -142,17 +142,6 @@
       ],
       "scope": "profile",
       "evidence": "measured 2026-09-29T06:42Z \u2014 agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:27 APP_HOST default; the deploy-host change is draft leshchenko1979/miidas#82, unreviewed."
-    },
-    {
-      "id": "miidas-platform-recreate-needs-tmp-overlay",
-      "text": "The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml \u2014 the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.",
-      "severity": "critical",
-      "since": "2026-09-28T23:23:39Z",
-      "affects": [
-        "profile"
-      ],
-      "scope": "profile",
-      "evidence": "docker inspect miidas-manager: ComposeFile=/data/projects/miidas/compose/docker-compose.yml,/tmp/pg-host.yml; RestartPolicy=unless-stopped, so a REBOOT restarts from the stored spec and is safe \u2014 a RECREATE is what bites; the repo compose carries neither key (md5 245f16c4a7dca59673039b48ea452fe9 on repo, both hosts, and the running container)."
     }
   ],
   "lanes": [
@@ -188,20 +177,20 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-29T06:50:43Z",
+  "attested_at": "2026-10-01T06:06:09Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
       "green": true,
       "behind_by": 6,
-      "measured_at": "2026-09-28T16:33:57Z",
-      "reason": "6 of the instrument's 15 declared paths held, 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to TEMPLATE HEAD b074b95a7705, so behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated, as infra-factory's row does, because this fleet encodes two. green true is their own run, not a transcription: tests/test_ledger.py rc=0, tests/test_ledger_schema.py rc=0 (182 rows audited), tests/test_ledger_no_shrink.py rc=0 (131 commits on origin/main), tests/test_ledger_close_preflight.py rc=0 (10 cases), tests/test_ledger_commit_cites_no_rows.py rc=0 (14 commits after cda23fe), tools/ledger.py verify rc=0 (182 rows, monotonic) - held and green are independent axes, so an incomplete SET declared green is the reading, not a contradiction. RE-ENTRY CONDITION: this is a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
+      "measured_at": "2026-10-01T06:12:15Z",
+      "reason": "6 of the instrument's 15 declared paths held (tools/ledger.py, tests/test_ledger.py, tests/test_ledger_schema.py, tests/test_ledger_no_shrink.py, tests/test_ledger_close_preflight.py, tests/test_ledger_commit_cites_no_rows.py); 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to canonical. behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated. green true is this factory's own run, not a transcription: tests/test_ledger.py + tests/test_ledger_schema.py rc=0 (35 passed), tests/test_ledger_schema.py + tests/test_ledger_no_shrink.py + tests/test_ledger_close_preflight.py + tests/test_ledger_commit_cites_no_rows.py rc=0 (43 passed), tools/ledger.py verify rc=0 (225 rows, monotonic, sequences complete). Predicate: sha256 of each path in this tree against the canonical file at agent-factories origin/main 78fa86b; instant: measured_at. RE-ENTRY CONDITION unchanged: this is a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
     },
     "open-questions": {
       "state": "partial",
       "behind_by": 3,
-      "measured_at": "2026-09-29T11:11:04Z",
-      "reason": "Committed HEAD 6be2112 holds 1 of the 4 declared paths at canonical: tools/questions 89fdee5d (185,758 B) against canonical b9bd1aaf (242,000 B); tools/questions-render.mjs 78401d59 (11,326 B) against canonical 66ed6e59 (14,860 B); tests/test_questions.py 40d821e4 (4,432 B) == canonical; docs/instruments/open-questions.md absent. Consequence, measured not inferred: this factory's own gate resolves local-first (REPO/tools/questions, then TEMPLATE/tools/questions), so it tests a revision the factory no longer ships, and both copies still declare VERSION 2.0.0 across the gap -- the version field cannot reveal it, which is the ai-antispam argument of 2026-09-27 reproduced on a second axis. Its kit pin cannot see it either: the manifest hashes TEMPLATE paths, not the member's own copy. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
+      "measured_at": "2026-10-01T06:12:25Z",
+      "reason": "Committed HEAD 057b219 holds 3 of the 4 declared paths; docs/instruments/open-questions.md absent. The canonical count MOVED this round, and it moved the wrong way: at the previous measurement (2026-09-29T11:11:04Z) tests/test_questions.py was canonical (md5 40d821e4, 4432 B, both sides); it is now 99671139 (8796 B) here - changed by 0b6f3ab (#89) - against canonical 9480e513, and it is the 18th declared fork in registry/kit-exemptions.json (class standalone, disposition c, since 2026-09-29), so gate 23 reads it as declared rather than as undeclared divergence. tools/questions 89fdee5d (185758 B) vs canonical 17f7d75f; tools/questions-render.mjs 78401d59 (11326 B) vs canonical 20d924c0. behind_by is 3 on the held-but-lagging predicate (3 held, 0 canonical) and 4 on the adoption-lag predicate (1 absent + 3 differing) - BOTH stated. The forked gate runs green here: python3 tests/test_questions.py rc=0, 241 checks examined, cap 1788.25s (manifest 1798.25s - 10.0s overhead). Predicate: md5 of each path in this tree against the canonical file at agent-factories origin/main 78fa86b; instant: measured_at."
     }
   }
 }

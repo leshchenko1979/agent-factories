@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs:206 returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:172. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha (verified rc=0 against deployed.sha 532e66397cf426d3a20d8e3a4df607da9511e9e6)."
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" (read verbatim 2026-10-01T06:16Z) and resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at that same file, :29 \u2014 NOT notify.rs:172, where it no longer lives (the file moved). Code leg 07b6372c4 (2026-09-20T22:20:22Z) re-verified rc=0 as an ancestor of the now-deployed sha 1eca6c93a894dc01c4a48b6913f2d64c28170be8, superseding the cited 532e66397\u2026, which is no longer deployed."
     }
   ],
   "lanes": [
@@ -296,7 +296,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-29T07:00:28Z",
+  "attested_at": "2026-10-01T06:09:07Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",
@@ -305,10 +305,11 @@
       "reason": "workers-ledger.json is a skill-version ACK dict (which lane has absorbed which skill version), not an ordered event ledger with an n ordinal -- deliberate absence, declared; the measured tree is the product repo, which carries no tools/ by design"
     },
     "open-questions": {
-      "state": "deferred",
-      "behind_by": 4,
-      "measured_at": "2026-09-29T11:11:04Z",
-      "reason": "Committed HEAD 888decf7a holds 0 of the 4 in its own tree and consumes the centralised copy. NO disposition for this instrument has been taken by this factory's own lane -- its 2026-09-26 wave row carries no open-questions field, which is an undeclared absence rather than a refusal, and the two are not the same state. Recorded as deferred by the Open Questions instrument lane on the owner's order 2026-09-29 so the state is visible instead of silent, and it remains PENDING the member's own declaration; the member's lane owns the replacement of this entry. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
+      "state": "adopted",
+      "behind_by": 0,
+      "measured_at": "2026-10-01T06:16:56Z",
+      "reason": "ADOPTED, SHARED-COPY SHAPE \u2014 declared by this factory's own lane, replacing the 'deferred / PENDING the member's own declaration' entry of 2026-09-29. This factory carries NO copy of the instrument in its skill tree: 0 of the 4 declared paths, and no docs/ directory at all at committed HEAD c00947eb. It reaches the canonical instead \u2014 /root/agent-factories/docs/instruments/open-questions.md \u2014 through the reload leg the pointer names: the symlink skills/meta-factory/open-questions.md -> ../../TEMPLATE/docs/instruments/open-questions.md, verified present. The register is live and in use, not pending: this profile's questions/open.json carries q40 and q41 open. Per the canonical doc S5 \u2014 'Absent from its own tree is NOT unusable. Reaching a shared copy is a legitimate adoption shape ... never imply a gap where a decision was taken' \u2014 behind_by is 0, because nothing is owed when no in-tree copy is owed. If the writer's vocabulary reserves 'adopted' for the in-tree shape, map this to whatever value it uses for shared-copy reach; the fact to record is the shape, not the label.",
+      "green": true
     }
   }
 }

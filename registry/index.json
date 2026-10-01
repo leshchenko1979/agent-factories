@@ -1,33 +1,16 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-01T06:39:37Z",
+  "resolved_at": "2026-10-01T07:11:31Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 68,
-    "announcements": 25,
+    "announcements": 24,
     "jobs": 67,
     "unattributed_jobs": 6
   },
   "announcements": [
-    {
-      "id": "miidas-platform-recreate-needs-tmp-overlay",
-      "severity": "critical",
-      "scope": "profile",
-      "text": "The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml — the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.",
-      "since": "2026-09-28T23:23:39Z",
-      "review_by": null,
-      "check": null,
-      "evidence": "docker inspect miidas-manager: ComposeFile=/data/projects/miidas/compose/docker-compose.yml,/tmp/pg-host.yml; RestartPolicy=unless-stopped, so a REBOOT restarts from the stored spec and is safe — a RECREATE is what bites; the repo compose carries neither key (md5 245f16c4a7dca59673039b48ea452fe9 on repo, both hosts, and the running container).",
-      "affects": [
-        "profile"
-      ],
-      "origins": [
-        "miidas"
-      ],
-      "conflict": []
-    },
     {
       "id": "bothelp-relay-load-bearing-on-vpn",
       "severity": "warning",
@@ -49,7 +32,7 @@
       "id": "miidas-platform-moved-to-agents-old",
       "severity": "warning",
       "scope": "profile",
-      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.",
+      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps — it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.",
       "since": "2026-09-28T23:23:39Z",
       "review_by": null,
       "check": null,
@@ -134,7 +117,7 @@
       "id": "miidas-platform-compose-is-repo-written",
       "severity": "warning",
       "scope": "profile",
-      "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+      "text": "The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.",
       "since": "2026-09-26",
       "review_by": null,
       "check": null,
@@ -223,7 +206,7 @@
       "since": "2026-09-19",
       "review_by": "2026-12-19",
       "check": null,
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs:206 returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:172. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha (verified rc=0 against deployed.sha 532e66397cf426d3a20d8e3a4df607da9511e9e6).",
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" (read verbatim 2026-10-01T06:16Z) and resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at that same file, :29 — NOT notify.rs:172, where it no longer lives (the file moved). Code leg 07b6372c4 (2026-09-20T22:20:22Z) re-verified rc=0 as an ancestor of the now-deployed sha 1eca6c93a894dc01c4a48b6913f2d64c28170be8, superseding the cited 532e66397…, which is no longer deployed.",
       "affects": [
         "profile"
       ],
@@ -287,7 +270,7 @@
       "id": "miidas-volume-namespace-on-apps",
       "severity": "warning",
       "scope": "profile",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.",
       "since": "2026-09-13T09:56:00Z",
       "review_by": null,
       "check": null,
@@ -338,7 +321,7 @@
       "id": "miidas-kit-forks-declared",
       "severity": "info",
       "scope": null,
-      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py — a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red — that refusal is deliberate, not drift.",
       "since": "2026-09-27T05:24:07Z",
       "review_by": null,
       "check": null,
@@ -442,7 +425,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-09-28T06:47:00Z",
+      "attested_at": "2026-10-01T06:07:50Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -454,7 +437,7 @@
           "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
           "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
           "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-          "this factory's own chat (-1003993000918), its topics and its 18 cron rows (16 enabled, 2 disabled one-shots parked for 2027)"
+          "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: two one-shots parked for 2027, and ai-antispam-62-close-gate disabled 2026-10-01T03:27:48Z)"
         ],
         "does_not_own": [
           "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -572,7 +555,13 @@
           "name": "ai-antispam-62-close-gate",
           "audience": "agent",
           "entry": "cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open",
-          "cadence": "daily 03:15 UTC"
+          "cadence": "daily 03:15 UTC - DISABLED 2026-10-01T03:27:48Z"
+        },
+        {
+          "name": "ai-antispam-loss-watch",
+          "audience": "agent",
+          "entry": "cron 65b4457f-2b33-4326-8970-f1973bf77ab1",
+          "cadence": "every 30 min, deliver session:6d921dca (Bot lane)"
         }
       ],
       "lanes": [
@@ -1319,7 +1308,7 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-09-29T06:50:43Z",
+      "attested_at": "2026-10-01T06:06:09Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
@@ -1445,7 +1434,7 @@
         {
           "id": "miidas-volume-namespace-on-apps",
           "severity": "warning",
-          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.",
+          "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.",
           "scope": "profile",
           "since": "2026-09-13T09:56:00Z",
           "review_by": null,
@@ -1484,7 +1473,7 @@
         {
           "id": "miidas-platform-compose-is-repo-written",
           "severity": "warning",
-          "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+          "text": "The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.",
           "scope": "profile",
           "since": "2026-09-26",
           "review_by": null,
@@ -1497,7 +1486,7 @@
         {
           "id": "miidas-kit-forks-declared",
           "severity": "info",
-          "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+          "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py — a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red — that refusal is deliberate, not drift.",
           "scope": null,
           "since": "2026-09-27T05:24:07Z",
           "review_by": null,
@@ -1523,7 +1512,7 @@
         {
           "id": "miidas-platform-moved-to-agents-old",
           "severity": "warning",
-          "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.",
+          "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps — it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.",
           "scope": "profile",
           "since": "2026-09-28T23:23:39Z",
           "review_by": null,
@@ -1532,19 +1521,6 @@
             "profile"
           ],
           "evidence": "measured 2026-09-29T06:42Z — agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:27 APP_HOST default; the deploy-host change is draft leshchenko1979/miidas#82, unreviewed."
-        },
-        {
-          "id": "miidas-platform-recreate-needs-tmp-overlay",
-          "severity": "critical",
-          "text": "The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml — the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.",
-          "scope": "profile",
-          "since": "2026-09-28T23:23:39Z",
-          "review_by": null,
-          "check": null,
-          "affects": [
-            "profile"
-          ],
-          "evidence": "docker inspect miidas-manager: ComposeFile=/data/projects/miidas/compose/docker-compose.yml,/tmp/pg-host.yml; RestartPolicy=unless-stopped, so a REBOOT restarts from the stored spec and is safe — a RECREATE is what bites; the repo compose carries neither key (md5 245f16c4a7dca59673039b48ea452fe9 on repo, both hosts, and the running container)."
         }
       ]
     },
@@ -1552,7 +1528,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-09-29T07:00:28Z",
+      "attested_at": "2026-10-01T06:09:07Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -1674,7 +1650,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T01:13:52Z",
+          "bound_at": "2026-10-01T07:03:41Z",
           "announcements": []
         },
         {
@@ -1694,7 +1670,7 @@
           "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-30T23:26:15Z",
+          "bound_at": "2026-10-01T07:06:07Z",
           "announcements": []
         },
         {
@@ -1754,7 +1730,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T00:49:57Z",
+          "bound_at": "2026-10-01T06:55:30Z",
           "announcements": []
         },
         {
@@ -1794,7 +1770,7 @@
           "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-30T23:34:13Z",
+          "bound_at": "2026-10-01T06:53:14Z",
           "announcements": []
         },
         {
@@ -1814,7 +1790,7 @@
           "session_id": "42a44908-b8f3-42e1-bbd2-f2a672b8056e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-30T12:15:50Z",
+          "bound_at": "2026-10-01T07:07:32Z",
           "announcements": []
         },
         {
@@ -1874,7 +1850,7 @@
           "session_id": "facd50af-0807-4fee-942b-008bff037f6f",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-09-30T22:35:41Z",
+          "bound_at": "2026-10-01T07:04:46Z",
           "announcements": []
         },
         {
@@ -1990,7 +1966,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs:206 returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:172. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha (verified rc=0 against deployed.sha 532e66397cf426d3a20d8e3a4df607da9511e9e6)."
+          "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" (read verbatim 2026-10-01T06:16Z) and resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at that same file, :29 — NOT notify.rs:172, where it no longer lives (the file moved). Code leg 07b6372c4 (2026-09-20T22:20:22Z) re-verified rc=0 as an ancestor of the now-deployed sha 1eca6c93a894dc01c4a48b6913f2d64c28170be8, superseding the cited 532e66397…, which is no longer deployed."
         }
       ]
     }
@@ -2084,8 +2060,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-01T07:00:00+00:00",
-      "last_run_at": "2026-10-01T06:30:22Z",
+      "next_run_at": "2026-10-01T07:30:00+00:00",
+      "last_run_at": "2026-10-01T07:00:23Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "profile": "ops",
@@ -2100,8 +2076,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-01T07:00:00+00:00",
-      "last_run_at": "2026-09-30T07:09:13Z",
+      "next_run_at": "2026-10-02T07:00:00+00:00",
+      "last_run_at": "2026-10-01T07:00:23Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2212,8 +2188,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-01T06:40:00+00:00",
-      "last_run_at": "2026-10-01T00:40:15Z",
+      "next_run_at": "2026-10-01T12:40:00+00:00",
+      "last_run_at": "2026-10-01T06:40:22Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -2993,11 +2969,11 @@
       "name": "reminder-answer-adolfo",
       "cron_expr": "0 10 1 10 *",
       "timezone": "Europe/Moscow",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-01T07:00:00+00:00",
-      "last_run_at": null,
+      "next_run_at": "2027-10-01T07:00:00+00:00",
+      "last_run_at": "2026-10-01T07:00:02Z",
       "deliver_to": "telegram:133526395",
       "trigger_cmd": null,
       "profile": "family",

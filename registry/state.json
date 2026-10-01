@@ -1,9 +1,9 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-01T06:39:37Z",
+  "resolved_at": "2026-10-01T07:11:31Z",
   "fragments": [
     {
-      "path": "/tmp/oc-wt-r2/registry/factories/ai-antispam.json",
+      "path": "/tmp/oc-wt-r3/registry/factories/ai-antispam.json",
       "data": {
         "factory": "ai-antispam",
         "display_name": "ai-antispam",
@@ -17,7 +17,7 @@
             "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
             "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
             "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-            "this factory's own chat (-1003993000918), its topics and its 18 cron rows (16 enabled, 2 disabled one-shots parked for 2027)"
+            "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: two one-shots parked for 2027, and ai-antispam-62-close-gate disabled 2026-10-01T03:27:48Z)"
           ],
           "does_not_own": [
             "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -129,7 +129,13 @@
             "name": "ai-antispam-62-close-gate",
             "audience": "agent",
             "entry": "cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open",
-            "cadence": "daily 03:15 UTC"
+            "cadence": "daily 03:15 UTC - DISABLED 2026-10-01T03:27:48Z"
+          },
+          {
+            "name": "ai-antispam-loss-watch",
+            "audience": "agent",
+            "entry": "cron 65b4457f-2b33-4326-8970-f1973bf77ab1",
+            "cadence": "every 30 min, deliver session:6d921dca (Bot lane)"
           }
         ],
         "substrates_owned": [
@@ -209,7 +215,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-28T06:47:00Z",
+        "attested_at": "2026-10-01T06:07:50Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -235,7 +241,7 @@
       }
     },
     {
-      "path": "/tmp/oc-wt-r2/registry/factories/inferhub-watch.json",
+      "path": "/tmp/oc-wt-r3/registry/factories/inferhub-watch.json",
       "data": {
         "factory": "inferhub-watch",
         "display_name": "Inferhub watch",
@@ -402,7 +408,7 @@
       }
     },
     {
-      "path": "/tmp/oc-wt-r2/registry/factories/infra-factory.json",
+      "path": "/tmp/oc-wt-r3/registry/factories/infra-factory.json",
       "data": {
         "factory": "infra-factory",
         "display_name": "Infra Factory",
@@ -634,7 +640,7 @@
       }
     },
     {
-      "path": "/tmp/oc-wt-r2/registry/factories/meta-factory.json",
+      "path": "/tmp/oc-wt-r3/registry/factories/meta-factory.json",
       "data": {
         "factory": "meta-factory",
         "display_name": "Factories",
@@ -825,7 +831,7 @@
       }
     },
     {
-      "path": "/tmp/oc-wt-r2/registry/factories/miidas.json",
+      "path": "/tmp/oc-wt-r3/registry/factories/miidas.json",
       "data": {
         "factory": "miidas",
         "display_name": "Miidas Factory",
@@ -900,7 +906,7 @@
         "announcements": [
           {
             "id": "miidas-volume-namespace-on-apps",
-            "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.",
+            "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.",
             "severity": "warning",
             "since": "2026-09-13T09:56:00Z",
             "affects": [
@@ -933,7 +939,7 @@
             "id": "miidas-platform-compose-is-repo-written",
             "scope": "profile",
             "severity": "warning",
-            "text": "The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.",
+            "text": "The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.",
             "affects": [
               "profile"
             ],
@@ -947,7 +953,7 @@
             "affects": [
               "profile"
             ],
-            "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.",
+            "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py — a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red — that refusal is deliberate, not drift.",
             "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
           },
           {
@@ -962,7 +968,7 @@
           },
           {
             "id": "miidas-platform-moved-to-agents-old",
-            "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.",
+            "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps — it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.",
             "severity": "warning",
             "since": "2026-09-28T23:23:39Z",
             "affects": [
@@ -970,17 +976,6 @@
             ],
             "scope": "profile",
             "evidence": "measured 2026-09-29T06:42Z — agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:27 APP_HOST default; the deploy-host change is draft leshchenko1979/miidas#82, unreviewed."
-          },
-          {
-            "id": "miidas-platform-recreate-needs-tmp-overlay",
-            "text": "The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml — the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.",
-            "severity": "critical",
-            "since": "2026-09-28T23:23:39Z",
-            "affects": [
-              "profile"
-            ],
-            "scope": "profile",
-            "evidence": "docker inspect miidas-manager: ComposeFile=/data/projects/miidas/compose/docker-compose.yml,/tmp/pg-host.yml; RestartPolicy=unless-stopped, so a REBOOT restarts from the stored spec and is safe — a RECREATE is what bites; the repo compose carries neither key (md5 245f16c4a7dca59673039b48ea452fe9 on repo, both hosts, and the running container)."
           }
         ],
         "lanes": [
@@ -1016,26 +1011,26 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-29T06:50:43Z",
+        "attested_at": "2026-10-01T06:06:09Z",
         "instruments": {
           "ledger": {
             "state": "deferred",
             "green": true,
             "behind_by": 6,
-            "measured_at": "2026-09-28T16:33:57Z",
-            "reason": "6 of the instrument's 15 declared paths held, 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to TEMPLATE HEAD b074b95a7705, so behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated, as infra-factory's row does, because this fleet encodes two. green true is their own run, not a transcription: tests/test_ledger.py rc=0, tests/test_ledger_schema.py rc=0 (182 rows audited), tests/test_ledger_no_shrink.py rc=0 (131 commits on origin/main), tests/test_ledger_close_preflight.py rc=0 (10 cases), tests/test_ledger_commit_cites_no_rows.py rc=0 (14 commits after cda23fe), tools/ledger.py verify rc=0 (182 rows, monotonic) - held and green are independent axes, so an incomplete SET declared green is the reading, not a contradiction. RE-ENTRY CONDITION: this is a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
+            "measured_at": "2026-10-01T06:12:15Z",
+            "reason": "6 of the instrument's 15 declared paths held (tools/ledger.py, tests/test_ledger.py, tests/test_ledger_schema.py, tests/test_ledger_no_shrink.py, tests/test_ledger_close_preflight.py, tests/test_ledger_commit_cites_no_rows.py); 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to canonical. behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated. green true is this factory's own run, not a transcription: tests/test_ledger.py + tests/test_ledger_schema.py rc=0 (35 passed), tests/test_ledger_schema.py + tests/test_ledger_no_shrink.py + tests/test_ledger_close_preflight.py + tests/test_ledger_commit_cites_no_rows.py rc=0 (43 passed), tools/ledger.py verify rc=0 (225 rows, monotonic, sequences complete). Predicate: sha256 of each path in this tree against the canonical file at agent-factories origin/main 78fa86b; instant: measured_at. RE-ENTRY CONDITION unchanged: this is a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
           },
           "open-questions": {
             "state": "partial",
             "behind_by": 3,
-            "measured_at": "2026-09-29T11:11:04Z",
-            "reason": "Committed HEAD 6be2112 holds 1 of the 4 declared paths at canonical: tools/questions 89fdee5d (185,758 B) against canonical b9bd1aaf (242,000 B); tools/questions-render.mjs 78401d59 (11,326 B) against canonical 66ed6e59 (14,860 B); tests/test_questions.py 40d821e4 (4,432 B) == canonical; docs/instruments/open-questions.md absent. Consequence, measured not inferred: this factory's own gate resolves local-first (REPO/tools/questions, then TEMPLATE/tools/questions), so it tests a revision the factory no longer ships, and both copies still declare VERSION 2.0.0 across the gap -- the version field cannot reveal it, which is the ai-antispam argument of 2026-09-27 reproduced on a second axis. Its kit pin cannot see it either: the manifest hashes TEMPLATE paths, not the member's own copy. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
+            "measured_at": "2026-10-01T06:12:25Z",
+            "reason": "Committed HEAD 057b219 holds 3 of the 4 declared paths; docs/instruments/open-questions.md absent. The canonical count MOVED this round, and it moved the wrong way: at the previous measurement (2026-09-29T11:11:04Z) tests/test_questions.py was canonical (md5 40d821e4, 4432 B, both sides); it is now 99671139 (8796 B) here - changed by 0b6f3ab (#89) - against canonical 9480e513, and it is the 18th declared fork in registry/kit-exemptions.json (class standalone, disposition c, since 2026-09-29), so gate 23 reads it as declared rather than as undeclared divergence. tools/questions 89fdee5d (185758 B) vs canonical 17f7d75f; tools/questions-render.mjs 78401d59 (11326 B) vs canonical 20d924c0. behind_by is 3 on the held-but-lagging predicate (3 held, 0 canonical) and 4 on the adoption-lag predicate (1 absent + 3 differing) - BOTH stated. The forked gate runs green here: python3 tests/test_questions.py rc=0, 241 checks examined, cap 1788.25s (manifest 1798.25s - 10.0s overhead). Predicate: md5 of each path in this tree against the canonical file at agent-factories origin/main 78fa86b; instant: measured_at."
           }
         }
       }
     },
     {
-      "path": "/tmp/oc-wt-r2/registry/factories/opencrabs-dev.json",
+      "path": "/tmp/oc-wt-r3/registry/factories/opencrabs-dev.json",
       "data": {
         "factory": "opencrabs-dev",
         "display_name": "Opencrabs Dev Factory",
@@ -1112,7 +1107,7 @@
             ],
             "since": "2026-09-19",
             "review_by": "2026-12-19",
-            "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); notify_policy.rs:206 returns Err for mode=now and resolves interrupt=true to DeliveryMode::Interrupt; the delivery.mode enum is exactly [turn-end, interrupt, quiet] at notify.rs:172. Code leg 07b6372c4, 2026-09-20T22:20:22Z, ancestor of the deployed sha (verified rc=0 against deployed.sha 532e66397cf426d3a20d8e3a4df607da9511e9e6)."
+            "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" (read verbatim 2026-10-01T06:16Z) and resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at that same file, :29 — NOT notify.rs:172, where it no longer lives (the file moved). Code leg 07b6372c4 (2026-09-20T22:20:22Z) re-verified rc=0 as an ancestor of the now-deployed sha 1eca6c93a894dc01c4a48b6913f2d64c28170be8, superseding the cited 532e66397…, which is no longer deployed."
           }
         ],
         "lanes": [
@@ -1334,7 +1329,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-09-29T07:00:28Z",
+        "attested_at": "2026-10-01T06:09:07Z",
         "instruments": {
           "ledger": {
             "state": "not-applicable",
@@ -1343,10 +1338,11 @@
             "reason": "workers-ledger.json is a skill-version ACK dict (which lane has absorbed which skill version), not an ordered event ledger with an n ordinal -- deliberate absence, declared; the measured tree is the product repo, which carries no tools/ by design"
           },
           "open-questions": {
-            "state": "deferred",
-            "behind_by": 4,
-            "measured_at": "2026-09-29T11:11:04Z",
-            "reason": "Committed HEAD 888decf7a holds 0 of the 4 in its own tree and consumes the centralised copy. NO disposition for this instrument has been taken by this factory's own lane -- its 2026-09-26 wave row carries no open-questions field, which is an undeclared absence rather than a refusal, and the two are not the same state. Recorded as deferred by the Open Questions instrument lane on the owner's order 2026-09-29 so the state is visible instead of silent, and it remains PENDING the member's own declaration; the member's lane owns the replacement of this entry. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
+            "state": "adopted",
+            "behind_by": 0,
+            "measured_at": "2026-10-01T06:16:56Z",
+            "reason": "ADOPTED, SHARED-COPY SHAPE — declared by this factory's own lane, replacing the 'deferred / PENDING the member's own declaration' entry of 2026-09-29. This factory carries NO copy of the instrument in its skill tree: 0 of the 4 declared paths, and no docs/ directory at all at committed HEAD c00947eb. It reaches the canonical instead — /root/agent-factories/docs/instruments/open-questions.md — through the reload leg the pointer names: the symlink skills/meta-factory/open-questions.md -> ../../TEMPLATE/docs/instruments/open-questions.md, verified present. The register is live and in use, not pending: this profile's questions/open.json carries q40 and q41 open. Per the canonical doc S5 — 'Absent from its own tree is NOT unusable. Reaching a shared copy is a legitimate adoption shape ... never imply a gap where a decision was taken' — behind_by is 0, because nothing is owed when no in-tree copy is owed. If the writer's vocabulary reserves 'adopted' for the in-tree shape, map this to whatever value it uses for shared-copy reach; the fact to record is the shape, not the label.",
+            "green": true
           }
         }
       }
@@ -1934,7 +1930,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1790836279,
+      "session_updated_at": 1790837693,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2389,7 +2385,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1790836542,
+      "session_updated_at": 1790838136,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2571,7 +2567,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1790836159,
+      "session_updated_at": 1790838474,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2610,7 +2606,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Ledger [chat:-1004497192134:topic:3981]",
-      "session_updated_at": 1790836502,
+      "session_updated_at": 1790838489,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2675,7 +2671,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "worker: inferhub-watch-lane",
-      "session_updated_at": 1790836035,
+      "session_updated_at": 1790837204,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2719,19 +2715,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "42a44908-b8f3-42e1-bbd2-f2a672b8056e",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 40524,
-      "updated_at": 1790770550,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "#465 Telegram outbound video path",
-      "session_updated_at": 1790823797,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "c6b1a539-6225-40ea-a514-67d21a446cd5",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -2753,7 +2736,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1790836697,
+      "session_updated_at": 1790838514,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2831,7 +2814,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1790836528,
+      "session_updated_at": 1790837343,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2849,19 +2832,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "facd50af-0807-4fee-942b-008bff037f6f",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 42744,
-      "updated_at": 1790807741,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744]",
-      "session_updated_at": 1790818507,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "63d775f9-18e2-4097-8696-d9a2ca796f14",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -2871,32 +2841,6 @@
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Role split [chat:-1003936827469:topic:42360]",
       "session_updated_at": 1790808323,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 30679,
-      "updated_at": 1790810775,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679]",
-      "session_updated_at": 1790821423,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 40011,
-      "updated_at": 1790811253,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / #83 config-manager-warn [chat:-1003936827469:topic:40011]",
-      "session_updated_at": 1790815210,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2974,20 +2918,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1790836550,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39171,
-      "updated_at": 1790815797,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1790820999,
+      "session_updated_at": 1790838473,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3005,15 +2936,80 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
+      "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 40011,
+      "updated_at": 1790837594,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / Config: Schema [chat:-1003936827469:topic:40011]",
+      "session_updated_at": 1790838136,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39171,
+      "updated_at": 1790837730,
+      "last_origin": "callback",
+      "turn_open_at": null,
+      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
+      "session_updated_at": 1790838398,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
       "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
       "channel": "telegram",
       "chat_id": "-1003936827469",
       "thread_id": 30220,
-      "updated_at": 1790817232,
+      "updated_at": 1790838221,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1790835455,
+      "session_updated_at": 1790838570,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "facd50af-0807-4fee-942b-008bff037f6f",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 42744,
+      "updated_at": 1790838286,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744]",
+      "session_updated_at": 1790838294,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "61161247-5b1d-4efe-979b-bf46ffc85c48",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 30679,
+      "updated_at": 1790838367,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / Telegram: Throttling [chat:-1003936827469:topic:30679]",
+      "session_updated_at": 1790838381,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "42a44908-b8f3-42e1-bbd2-f2a672b8056e",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 40524,
+      "updated_at": 1790838452,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "#465 Telegram outbound video path",
+      "session_updated_at": 1790838458,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3034,11 +3030,11 @@
       "timezone": "Europe/Moscow",
       "prompt": "Напомни сэру (Алексею) ответить Adolfo (adolfodev) на голосовое сообщение от 30.09.2026 (msg 966543), на которое он ответил «I will answer this tomorrow» (msg 966557). Короткое вежливое напоминание в стиле дворецкого: суть голосового — Adolfo говорит, что обсуждал с Даниэлем бюджет на большой фреймворк, рассчитывает на Алексея и Даниэля, называет Алексея для себя лидером, но подчёркивает, что лидером остаётся он сам, и просит это уважать и не конфликтовать; напоминает про «большую картину» и интересы всего сообщества. Предложи набросать ответ.",
       "deliver_to": "telegram:133526395",
-      "enabled": 1,
+      "enabled": 0,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-01T07:00:00+00:00",
-      "last_run_at": null,
+      "next_run_at": "2027-10-01T07:00:00+00:00",
+      "last_run_at": "2026-10-01T07:00:02Z",
       "trigger_cmd": null,
       "_profile": "family"
     },
@@ -3157,8 +3153,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-01T07:00:00+00:00",
-      "last_run_at": "2026-10-01T06:30:22Z",
+      "next_run_at": "2026-10-01T07:30:00+00:00",
+      "last_run_at": "2026-10-01T07:00:23Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
@@ -3172,8 +3168,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-01T07:00:00+00:00",
-      "last_run_at": "2026-09-30T07:09:13Z",
+      "next_run_at": "2026-10-02T07:00:00+00:00",
+      "last_run_at": "2026-10-01T07:00:23Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3277,8 +3273,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-01T06:40:00+00:00",
-      "last_run_at": "2026-10-01T00:40:15Z",
+      "next_run_at": "2026-10-01T12:40:00+00:00",
+      "last_run_at": "2026-10-01T06:40:22Z",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "_profile": "ops"
     },

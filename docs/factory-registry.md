@@ -2,29 +2,24 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-01T06:39:37Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-01T07:11:31Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-01T06:39:37Z` |
+| generated | live reads | resolved `2026-10-01T07:11:31Z` |
 
 ## Announcements
 
 Deduplicated by `id` across every fragment: several lanes noticing one fact is one statement with several declarers. An entry naming a `check` is mechanically verified; the rest rest on `review_by` alone.
 
-### 🔴 critical (1)
-
-- 🔴 **`miidas-platform-recreate-needs-tmp-overlay`** — The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml — the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.
-  - affects: profile · since: 2026-09-28T23:23:39Z · declared by: miidas
-
 ### 🟡 warning (17)
 
 - 🟡 **`bothelp-relay-load-bearing-on-vpn`** — vpn now serves a critical channel's live webhook: bothelp.l1979.ru/telegram is the investor bot's production Telegram webhook, terminated by Caddy on vpn and forwarded to the relay on 127.0.0.1:8770. The owner made this permanent on 2026-09-29 (it is no longer a pilot). Removing that vhost, or taking vpn down for maintenance without warning, sends Telegram's webhook to a 404 and the channel goes silent. Tell Infra Factory HQ before any vpn Caddy/kernel/reboot/address change; the designed mitigation is one command each way to return the webhook to BotHelp's own address for the window. The relay application and its channel logic are NOT this factory's - hosted here and monitored by Gatus, changed in the redevest-ai repo.
   - affects: profile · since: 2026-09-29 · declared by: infra-factory
-- 🟡 **`miidas-platform-moved-to-agents-old`** — The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.
+- 🟡 **`miidas-platform-moved-to-agents-old`** — The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps — it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.
   - affects: profile · since: 2026-09-28T23:23:39Z · declared by: miidas
 - 🟡 **`miidas-slot-volume-git-config-carries-remote-credential`** — Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) — leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing — it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.
   - affects: profile · since: 2026-09-27T11:39:51Z · declared by: miidas
@@ -34,7 +29,7 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-27T06:13:19Z · review by: 2026-10-11 · declared by: infra-factory
 - 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF overnight, not because it sleeps: pmset reports sleep=0 (it never sleeps), and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off. Apple M4 (Mac16,10). Observed power-offs carry it offline for hours at a time, so any browser task through the Mac CDP path fails for the whole window - and no overlay fixes it, because a powered-off host is offline on every transport, Tailscale included.
   - affects: profile · since: 2026-09-26 · review by: 2026-10-10 · declared by: infra-factory
-- 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.
+- 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.
   - affects: profile · since: 2026-09-26 · declared by: miidas
 - 🟡 **`bot-repo-canonical-account-and-deploy-home`** — leshchenko1979 is the CANONICAL GitHub account for this factory (owner ruling 2026-09-25), and leshchenko1979/ai-antispam is the canonical repo: it hosts the production landing page ai-antispam.ru, publishes the image (ghcr.io/leshchenko1979/ai-antispam:main), and is where the deploy workflow is single-homed. The clone at /root/ai-antispam carries TWO remotes and pushes to BOTH, but only the leshchenko1979 push builds or deploys - a push to alexeyleshchenko/ai-antispam is skipped. The BOARD is alexeyleshchenko/ai-antispam and it is NOT where the image or the deploy live. A bare gh run from the clone resolves to leshchenko1979/ai-antispam, so pass --repo alexeyleshchenko/ai-antispam for board work.
   - affects: profile · since: 2026-09-25 · declared by: ai-antispam
@@ -52,7 +47,7 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: infra-factory · since: 2026-09-17T01:08:46Z · declared by: inferhub-watch
 - 🟡 **`two-files-named-skill-md`** — Two different files are named SKILL.md for this factory and they are not copies: /root/ai-antispam/SKILL.md (repo-backed, versioned with the code) and the profile router /root/.opencrabs/profiles/ops/skills/ai-antispam/SKILL.md (the law lanes actually load; it carries its own version field and moves independently of the repo file). Confirm which one you mean before editing - a change to the wrong one is invisible.
   - affects: ai-antispam · since: 2026-09-17 · declared by: ai-antispam
-- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 - 🟡 **`gh-pages-origin-ahead-not-diverged`** — The two gh-pages refs are NOT diverged - origin/gh-pages is a strict FAST-FORWARD ahead of alexey/gh-pages (0 ahead / 1 behind): the extra commit is 02d743b 'Delete CNAME' (2026-09-11). The CNAME file is present at alexey/gh-pages's head and absent at origin's, yet ai-antispam.ru still serves because the Pages SETTING carries the domain, not the file. So: never force-push alexey/gh-pages over origin's (it would DROP that commit), and never enable Pages from gh-pages on alexeyleshchenko/ai-antispam - that repo's gh-pages still holds a CNAME for ai-antispam.ru, so two repos would claim one domain. Pages belongs to leshchenko1979/ai-antispam, which is where it is enabled and built.
   - affects: ai-antispam · since: 2026-09-11 · declared by: ai-antispam
@@ -69,7 +64,7 @@ TWO CORRECTIONS worth keeping from the earlier text, both category errors: (a) t
 
 Fresh reading 2026-10-01T06:08:14Z: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; in no repository, so a leg-A reading has an INSTANT for its identity and no revision) 186 lines / 33598 B / ~9599 tok (proxy) = 4.80% of a 200000-token window. LEG B, skills/*/SKILL.md (depth 1): 841 lines / 84589 B / ~24168 tok (proxy) = 12.08%. COMBINED = ~33767 tok (proxy) = 16.88% of a 200000-token window, against ~29897 tok = 14.95% at 2026-09-19 — a delta of +1.94 points. LEG C as above. The combined figure FELL 42.95% (2026-09-26) to 33.17% (2026-09-28) to 16.88% now, because the always-injected files shrank (AGENTS.md 458 lines / 144957 B to 186 lines / 33598 B); the floor is not monotonically rising.
   - affects: profile · since: 2026-09-28T12:19:23Z · declared by: meta-factory
-- 🔵 **`miidas-kit-forks-declared`** — miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.
+- 🔵 **`miidas-kit-forks-declared`** — miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py — a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red — that refusal is deliberate, not drift.
   - affects: profile · since: 2026-09-27T05:24:07Z · declared by: miidas
   - evidence: Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused.
 - 🔵 **`board-gates-declared-inapplicable`** — Two gates in this factory suite are RED BY DESIGN and must not be reported as a regression: tests/test_board_intake_recorded.py and tests/test_close_board_recorded.py assert a board/ledger close agreement, and this factory issue board IS its ledger - ONE surface - so the two-surface predicate is INAPPLICABLE rather than failed. Declared at ledger n=611 and carried in instruments.pacemaker.reason.
@@ -103,15 +98,15 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-28T06:47:00Z |
+| freshness | ✅ attested 2026-10-01T06:07:50Z |
 | purpose | Run the ai-antispam AI spam-blocker bot service (Telegram + MAX) and the outreach campaign that recruits channel owners to install it. |
 | profile | `ops` |
 | repo | `/root/ai-antispam` |
 | law | `/root/ai-antispam/SKILL.md` — revision 0.1.0 |
-| owns | ['the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)', 'the outreach campaign repo /root/ai-antispam-outreach and its Postgres state', 'Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)', 'the MAX domain - API surface, webhook ingress, subscription, moderation port', "this factory's own chat (-1003993000918), its topics and its 18 cron rows (16 enabled, 2 disabled one-shots parked for 2027)"] |
+| owns | ['the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)', 'the outreach campaign repo /root/ai-antispam-outreach and its Postgres state', 'Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)', 'the MAX domain - API surface, webhook ingress, subscription, moderation port', "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: two one-shots parked for 2027, and ai-antispam-62-close-gate disabled 2026-10-01T03:27:48Z)"] |
 | does not own | ['the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory', 'VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory', 'token provisioning, model routing, inference pricing - inferhub-watch', 'the factory template and meta-factory law - meta-factory', 'Miidas accounting - miidas', 'tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)'] |
 | substrates owned | ['/root/ai-antispam - public repo alexeyleshchenko/ai-antispam (git via SSH alias github.com-alexey)', '/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach', 'Postgres ai_spam_bot on apps - single writer outreach/lib/db.py', 'the bot container and MAX webhook route on apps'] |
-| attested at | 2026-09-28T06:47:00Z |
+| attested at | 2026-10-01T06:07:50Z |
 
 **Services**
 
@@ -133,7 +128,8 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | ai-antispam-outreach-stream-joins | agent | cron ai-antispam-outreach-stream-joins | daily 00:00 UTC |
 | ai-antispam-outreach-db-sync | agent | cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4 | daily 09:00 MSK — ENABLED |
 | ai-antispam-52-close-gate | agent | cron 30 11 * * * UTC, trigger-gated on date>=2026-09-28 AND #52 open | daily 11:30 UTC |
-| ai-antispam-62-close-gate | agent | cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open | daily 03:15 UTC |
+| ai-antispam-62-close-gate | agent | cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open | daily 03:15 UTC - DISABLED 2026-10-01T03:27:48Z |
+| ai-antispam-loss-watch | agent | cron 65b4457f-2b33-4326-8970-f1973bf77ab1 | every 30 min, deliver session:6d921dca (Bot lane) |
 
 **Announcements reaching this factory**
 
@@ -164,15 +160,15 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | `ai-antispam-62-close-gate` | ops | `15 3 * * *` | UTC | **no** | 0 | **absent** | 2026-10-02T03:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 62 --repo alexeyleshchenko/ai-a… |
 | `ai-antispam-bot-service-health` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T06:00:00+00:00 | telegram:-1003993000918:10784 | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
-| `ai-antispam-loss-watch` | ops | `*/30 * * * *` | UTC | yes | 0 | **absent** | 2026-10-01T07:00:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
-| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-01T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-loss-watch` | ops | `*/30 * * * *` | UTC | yes | 0 | **absent** | 2026-10-01T07:30:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
+| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-db-sync` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-mining-tranche` | ops | `0 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-02T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T00:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-01T12:07:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T06:30:00+00:00 | — | — |
 | `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T05:50:00+00:00 | session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 | — |
-| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-01T06:40:00+00:00 | telegram:-1003993000918:10780 | timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/strea… |
+| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-01T12:40:00+00:00 | telegram:-1003993000918:10780 | timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/strea… |
 | `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-01T12:00:00+00:00 | telegram:-1003993000918:10784 | CT=$(ssh apps "docker ps --filter name=ai-antispam --format '{{.Names}}… |
 | `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-01T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
 | `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
@@ -385,7 +381,7 @@ Attribution basis: name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-29T06:50:43Z |
+| freshness | ✅ attested 2026-10-01T06:06:09Z |
 | purpose | MIIDAS is an ecosystem of applied business AI for Russian SMB owners — dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them. |
 | profile | `ops` |
 | repo | `/root/miidas` |
@@ -393,7 +389,7 @@ Attribution basis: name prefix.
 | owns | ['/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to agents-old (89.125.120.5:52676); the apps copy is retained as the rollback', 'leshchenko1979/miidas and leshchenko1979/miidas-template', 'per-client slot state: pool/slots/miidas-*.env on agents-old — platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ — plus the miidas-* container and miidas_* volume namespaces, which span BOTH hosts during the rollback window', 'the Miidas Factory Telegram chat (-1003996392908) and its topics', '/root/miidas/SKILL.md — the live skill path is a symlink to it, so the repo file is the single writer', 'cron miidas-hq-daily-trigger', 'the miidas LLM-gateway service user and manager/llm_keys.py key lifecycle', 'leshchenko1979/miidas-landing — the public landing, recipe hub and course surface (miidas.ru) at /root/miidas-landing'] |
 | does not own | ['client product surfaces — the per-client groups, the onboarding funnel, the client-facing forum. Those are the product, never the factory surface', "the LLM gateway itself (llm.l1979.ru) — consumed, not operated; we own only our service user's key lifecycle", "the agents-old and apps hosts beyond our own compose stack — other projects' containers and volumes, host packages, other factories' cron rows", "other factories' repos, chats and processes", 'OpenCrabs core and the dev process'] |
 | substrates owned | ['leshchenko1979/miidas', 'leshchenko1979/miidas-template', 'leshchenko1979/miidas-landing', '/root/miidas/SKILL.md (live skill path is a symlink to it)', 'agents-old and apps: /data/projects/miidas/ (compose/, pool/slots/miidas-*.env, .master.env) and the miidas-* compose stack; agents-old carries the live set, apps the stopped rollback'] |
-| attested at | 2026-09-29T06:50:43Z |
+| attested at | 2026-10-01T06:06:09Z |
 
 **Services**
 
@@ -408,22 +404,20 @@ Attribution basis: name prefix.
 
 **Announcements reaching this factory**
 
-- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate now spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 2 such volumes, the rollback copies. Read 2026-09-29T06:42Z.
+- 🟡 **`miidas-volume-namespace-on-apps`** — The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.
   - affects: profile · since: 2026-09-13T09:56:00Z · declared by: miidas
 - 🔵 **`llm-gateway-per-service-user`** — The LLM gateway (llm.l1979.ru) carries a dedicated NON-root service user per consumer rather than one shared fleet credential: miidas (id 5, role 1, management credential NEWAPI_MIIDAS_TOKEN, quota 500000000000 units), alongside peer service users avito-bot and opencrabs-fleet. A factory provisioning LLM keys for its own clients should ask the gateway owner for its own service user rather than reuse the fleet root credential.
   - affects: profile · since: 2026-09-18T01:53:06Z · declared by: miidas
 - 🔵 **`miidas-hq-daily-trigger-is-ours`** — cron miidas-hq-daily-trigger (0 9 * * *, enabled, delivers to session e4f96a33-45ac-412e-8788-1b678cf2addb, the HQ topic) is the MIIDAS factory's own pacemaker. Peers must not disable, repace or repoint it.
   - affects: profile · since: 2026-09-11T00:00:00Z · declared by: miidas
-- 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on apps (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env.
+- 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.
   - affects: profile · since: 2026-09-26 · declared by: miidas
-- 🔵 **`miidas-kit-forks-declared`** — miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 17 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py) reds on any UNDECLARED divergence and passes clean today: 24 carried paths judged, 1 factory-class path excluded by class, 17 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red - that refusal is deliberate, not drift.
+- 🔵 **`miidas-kit-forks-declared`** — miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py — a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red — that refusal is deliberate, not drift.
   - affects: profile · since: 2026-09-27T05:24:07Z · declared by: miidas
   - evidence: Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused.
 - 🟡 **`miidas-slot-volume-git-config-carries-remote-credential`** — Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) — leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing — it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.
   - affects: profile · since: 2026-09-27T11:39:51Z · declared by: miidas
-- 🟡 **`miidas-platform-moved-to-agents-old`** — The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds stopped rollbacks. deploy_lib.sh:27 still defaults APP_HOST=apps, so a repo deploy with no override writes compose and slot state to the host that is now only a rollback. The claim forward is miidas-claim-forward.service ON apps (Restart=always), tunnelling 172.18.0.1:8765 to agents-old. Do not start the stopped apps containers.
-  - affects: profile · since: 2026-09-28T23:23:39Z · declared by: miidas
-- 🔴 **`miidas-platform-recreate-needs-tmp-overlay`** — The running miidas-manager on agents-old was created from the repo compose PLUS a 107-byte overlay at /tmp/pg-host.yml — the only place supplying PG_HOST=163.5.41.61 and the 127.0.0.1:8765:8765 publish. A recreate from the repo file alone drops both: the claim funnel has no target and the manager falls back to the unresolvable hostname postgres. /tmp is erased on boot and by systemd-tmpfiles. Supply the overlay, or fix the repo. Recorded as leshchenko1979/miidas#83.
+- 🟡 **`miidas-platform-moved-to-agents-old`** — The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps — it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.
   - affects: profile · since: 2026-09-28T23:23:39Z · declared by: miidas
 
 **Lanes**
@@ -448,7 +442,7 @@ Attribution basis: deliver_to -> lane.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-09-29T07:00:28Z |
+| freshness | ✅ attested 2026-10-01T06:09:07Z |
 | purpose | Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what. |
 | profile | `ops` |
 | repo | `/root/opencrabs` |
@@ -456,7 +450,7 @@ Attribution basis: deliver_to -> lane.
 | owns | ['the OpenCrabs source fork leshchenko1979/opencrabs and its carrier build and swap pipeline', "the opencrabs-dev skill set: SKILL.md, the five role files (editor, hq, triage, toolsmith, harvest), fleet-directives.md and the runbooks -- NARROWED BY FIVE OWNER-APPROVED CARVE-OUTS: the Toolsmith lane owns tools/ CODE; the Triage lane owns AFFINITY_KEYWORDS and lane repurposing; Duty-4/6 finding remediation ships without the design gate; harvesting needs no design gate; and per-instrument law files under /root/agent-factories/docs/instruments/ are authored by each instrument's own owner, with the superseded fleet-directives.md copy reduced to a [LANE] pointer", 'the workers-ledger and skill-version consensus', 'the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory', 'the fork issue board on leshchenko1979/opencrabs'] |
 | does not own | ['the fast-mcp-telegram substrate and its tg_* tool family', 'the meta-factory registry, its surveys and its scoring surface', 'the live daemon configuration on this box: config.toml, keys.toml and the running units', "member factories' own process law, repos and backlogs", 'upstream adolfousier/opencrabs, which receives PRs only and never issues'] |
 | substrates owned | ['the OpenCrabs source fork and its carrier build pipeline', 'the opencrabs-dev skill set and the workers-ledger'] |
-| attested at | 2026-09-29T07:00:28Z |
+| attested at | 2026-10-01T06:09:07Z |
 
 **Services**
 
@@ -483,27 +477,27 @@ Attribution basis: deliver_to -> lane.
 | Providers: Routing | 30045 | _unstated_ | `127429e6-08de-439c-9162-2c8b0a9f73d9` | Gemini Reasoning and Flow Message Analysis | resolved | telegram | 2026-09-29T06:47:55Z | — |
 | Telegram: Push | 30090 | editor | `d18ce16a-75a0-447c-90c7-ab7dabce4411` | Editor lane: #17/#19 channel-ownership PRs | resolved | telegram | 2026-09-24T11:58:12Z | — |
 | Telegram: Options | 30134 | _unstated_ | `1a63f103-b899-4ad2-a5b3-c89f2902bf97` | Deploy #235 Option Collision Guard | resolved | telegram | 2026-09-28T08:13:31Z | — |
-| OC DEV HQ | 30220 | hq | `0117dd29-5f4b-4184-9bf4-d19dc74ac266` | Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220] | resolved | telegram | 2026-10-01T01:13:52Z | — |
+| OC DEV HQ | 30220 | hq | `0117dd29-5f4b-4184-9bf4-d19dc74ac266` | Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220] | resolved | telegram | 2026-10-01T07:03:41Z | — |
 | Core: Subagents | 30517 | _unstated_ | `a5b34466-1c14-441f-b2c6-6eaf4f316dde` | Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517] | resolved | telegram | 2026-09-29T09:25:18Z | — |
-| Telegram: Throttling | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-09-30T23:26:15Z | — |
+| Telegram: Throttling | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Telegram: Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-10-01T07:06:07Z | — |
 | Lifecycle: Restarts | 31683 | _unstated_ | `7e1ebbb6-68b3-478b-abc2-b697e70c2f37` | Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683] | resolved | telegram | 2026-09-29T06:44:05Z | — |
 | Core: Plan & Tasks | 31789 | _unstated_ | `462181e9-ad99-4163-bd3d-c983c48049a8` | Telegram: Opencrabs Dev Factory / Core: Plan & Tasks [chat:-1003936827469:topic:31789] | resolved | telegram | 2026-09-28T14:56:57Z | — |
 | Telegram: Rich Text | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Issue #234: Review Implementation Button | resolved | telegram | 2026-09-28T17:42:56Z | — |
 | Memory: Compaction | 34653 | _unstated_ | `cbdfde4a-b3fe-457a-817b-5113b938f12d` | Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-09-27T14:33:47Z | — |
 | Memory: Vectors | 36841 | _unstated_ | `212b3c83-6659-49c8-9984-0cf849f769c1` | Telegram: Opencrabs Dev Factory / Vector memory [chat:-1003936827469:topic:36841] | resolved | telegram | 2026-09-28T19:33:58Z | — |
-| OC DEV TOOLSMITH | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-10-01T00:49:57Z | — |
+| OC DEV TOOLSMITH | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-10-01T06:55:30Z | — |
 | Upstream: Harvest | 39218 | _unstated_ | `4b0990b7-aff8-4744-8de5-e38e54de7693` | Harvesting upstream PRs into OpenCrabs | resolved | telegram | 2026-10-01T00:51:18Z | — |
 | Lifecycle: Boot | 39862 | _unstated_ | `c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1` | Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862] | resolved | telegram | 2026-09-28T13:58:17Z | — |
 | Core: Loop | 39883 | _unstated_ | `40427d4f-af4a-48ba-993f-f5f0b21916c0` | Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883] | resolved | telegram | 2026-09-27T14:32:52Z | — |
-| Config: Schema | 40011 | _unstated_ | `c2ba4ef2-eac3-406c-98d6-c861c5bebec2` | Telegram: Opencrabs Dev Factory / #83 config-manager-warn [chat:-1003936827469:topic:40011] | resolved | telegram | 2026-09-30T23:34:13Z | — |
+| Config: Schema | 40011 | _unstated_ | `c2ba4ef2-eac3-406c-98d6-c861c5bebec2` | Telegram: Opencrabs Dev Factory / Config: Schema [chat:-1003936827469:topic:40011] | resolved | telegram | 2026-10-01T06:53:14Z | — |
 | Config: Typings | 40479 | _unstated_ | `aff7ff41-a3a7-4c53-adc5-80fb7a33ba50` | Telegram: Opencrabs Dev Factory / #87 config-write-types [chat:-1003936827469:topic:40479] | resolved | telegram | 2026-09-27T14:27:27Z | — |
-| Memory: Search | 40524 | _unstated_ | `42a44908-b8f3-42e1-bbd2-f2a672b8056e` | #465 Telegram outbound video path | resolved | telegram | 2026-09-30T12:15:50Z | — |
+| Memory: Search | 40524 | _unstated_ | `42a44908-b8f3-42e1-bbd2-f2a672b8056e` | #465 Telegram outbound video path | resolved | telegram | 2026-10-01T07:07:32Z | — |
 | Browser: CDP | 40695 | _unstated_ | `aaa8d8ae-a4be-4b89-9f92-01a317075be3` | Telegram: Opencrabs Dev Factory / Harvest rich-host buttons [chat:-1003936827469:topic:40695] | resolved | telegram | 2026-09-27T14:37:22Z | — |
 | Security: Policies | 40696 | _unstated_ | `afe476f8-279b-4d54-b628-c9d7e35873c8` | Telegram: Opencrabs Dev Factory / Harvest retry-429 ladder [chat:-1003936827469:topic:40696] | resolved | telegram | 2026-09-25T16:19:27Z | — |
 | Core: Goal Loop | 42311 | _unstated_ | `9fa7c71a-f009-418a-ac06-d0336efcf491` | Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311] | resolved | telegram | 2026-09-27T10:21:20Z | — |
 | Governance: Roles | 42360 | _unstated_ | `63d775f9-18e2-4097-8696-d9a2ca796f14` | Telegram: Opencrabs Dev Factory / Role split [chat:-1003936827469:topic:42360] | resolved | telegram | 2026-09-30T22:41:33Z | — |
 | Triage | 42487 | triage | `530c29ec-596e-43a4-9c7e-1b6dfc3cd870` | Triage: Issue Portfolio & Harvest Analysis | resolved | telegram | 2026-09-30T23:53:15Z | — |
-| Process: Waits | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-09-30T22:35:41Z | — |
+| Process: Waits | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-10-01T07:04:46Z | — |
 | Telegram: Host Guards | 42940 | _unstated_ | `c78e78e0-099e-455e-8dfb-7e9b8f7d13e5` | Telegram: Opencrabs Dev Factory / #92 demoted-host guard [chat:-1003936827469:topic:42940] | resolved | telegram | 2026-09-27T10:14:30Z | — |
 | Governance: Audits | 43440 | _unstated_ | `30ab6f43-3326-4aad-abe3-eb4a5a98f630` | Telegram: Crabs Kanban Board [chat:-1003936827469:topic:43440] | resolved | telegram | 2026-09-07T05:45:18Z | — |
 | Telegram: Bot API | 43727 | _unstated_ | `95bec69b-0e96-46a9-9d91-dc355e8af18f` | Telegram flow card metrics telemetry bar #232 | resolved | telegram | 2026-09-29T07:58:48Z | — |
@@ -556,7 +550,7 @@ These rows name no known factory in their `deliver_to` and match no naming prefi
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `reminder-answer-adolfo` | family | `0 10 1 10 *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-01T07:00:00+00:00 | telegram:133526395 | — |
+| `reminder-answer-adolfo` | family | `0 10 1 10 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-10-01T07:00:00+00:00 | telegram:133526395 | — |
 | `tamara_accounting_sync` | family | `0 21 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-01T18:00:00+00:00 | telegram:-1004286036984 | python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_… |
 | `oc626-resolve-probe` | ops | `0 4 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T04:00:00+00:00 | — | true |
 | `tmp-nulltrigger-probe` | ops | `4 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:04:00+00:00 | — | — |

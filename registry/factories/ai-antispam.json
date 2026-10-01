@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 18 cron rows (16 enabled, 2 disabled one-shots parked for 2027)"
+      "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: two one-shots parked for 2027, and ai-antispam-62-close-gate disabled 2026-10-01T03:27:48Z)"
     ],
     "does_not_own": [
       "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -123,7 +123,13 @@
       "name": "ai-antispam-62-close-gate",
       "audience": "agent",
       "entry": "cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open",
-      "cadence": "daily 03:15 UTC"
+      "cadence": "daily 03:15 UTC - DISABLED 2026-10-01T03:27:48Z"
+    },
+    {
+      "name": "ai-antispam-loss-watch",
+      "audience": "agent",
+      "entry": "cron 65b4457f-2b33-4326-8970-f1973bf77ab1",
+      "cadence": "every 30 min, deliver session:6d921dca (Bot lane)"
     }
   ],
   "substrates_owned": [
@@ -203,7 +209,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-09-28T06:47:00Z",
+  "attested_at": "2026-10-01T06:07:50Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
