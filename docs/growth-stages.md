@@ -165,3 +165,65 @@ A new factory operates in **Stage 0 or 1** mode initially, but inherits the guar
    - Meta-factory reports substrate friction directly to OpenCrabs (e.g. Issue #170 forum topic auto-binding) and inference telemetry to InferHub.
    - OpenCrabs dev operates as the upstream engine supplying the runtime binary.
    - Next milestone: value-weighted task routing and cross-factory token economics.
+
+---
+
+## 5. Bi-Weekly Fleet Calibration & Maturity Verification (2026-10-01)
+
+> **Pacemaker Cadence:** Bi-Weekly (1st & 15th) · `factory-growth-map-biweekly` (cron `e51a80de-c58b-44f3-ac73-fa5472ab07ea`, `0 9 1,15 * *`)
+> **Read instant:** 2026-10-01T06:15Z UTC · meta-factory HEAD `78fa86b`
+> **Evaluation Rubric:** Quality Criteria **v0.5** (19 criteria across 6 families, max 76).
+> **Not differenced against §4:** that census was scored under **v0.4** (17 criteria, max 68), superseded by v0.5 — the two rubrics are not comparable, so this run reports the v0.5 census and leaves §4 as its own dated reading.
+> **Telemetry Source:** `evidence/scores/2026-09-28.md` (the newest run — see the gap note), live `evidence/ledger.jsonl` via `tools/audit.py --no-gates`, `registry/index.json`, and the ops cron table.
+
+### The telemetry gap this run must disclose
+
+`evidence/scores/` holds **no run for 2026-09-29, 2026-09-30 or 2026-10-01**; the newest is **2026-09-28** (its own read instant 2026-09-28T07:10Z). So this calibration reads a **three-day-old** fleet survey and says so, rather than presenting it as current. The gap coincides with the **2026-09-30 daemon outage** Triage's grid reported: the `factory-measurement-daily` round for 2026-09-30 was receipted `duty=skipped`, its trigger never having fired. A calibration that silently read a stale survey would be indistinguishable from one that read a fresh one.
+
+### Fleet Maturity Census (rubric v0.5, read 2026-09-28)
+
+| Factory | Score (v0.5/76) | Band | Active Stage | Health metric at that read |
+|---|:---:|:---:|:---:|---|
+| **Meta-factory** | **71** (93.4%) | Optimizing | Stage 3 | 1,455 ledger rows / 173 close; rework share 45.43%; 70 of 71 gates PASS |
+| **OpenCrabs dev** | **62** (81.6%) | Optimizing | Stage 3 | 11,830 state-ledger events; 4-leg smoke rubric; 2 ahead / 0 behind |
+| **Miidas** | **59** (77.6%) | Optimizing | Stage 3 | 8 green audit gates + `rework.md`; live re-run 24/24 PASS |
+| **InferHub Watch** | **58** (76.3%) | Optimizing | Stage 3 | 642 rows / 81 close; rework rate 2.5%; first-pass yield 99.4% |
+| **Infra Factory** | **55** (72.4%) | Scalable | Stage 2 | Cadence `MISSED` (32.1h); live re-run `DEGRADED`, 17 PASS / 3 FAIL |
+| **AI AntiSpam** | **51** (67.1%) | Scalable | Stage 1 → 2 | `#156` exemption surface landed; audit `HEALTHY`, 15 gates, 0 FAIL |
+| **Fleet** | **356 / 456 (78.1%)** | — | — | — |
+
+**The stage distribution is UNCHANGED from §4** — four factories at Stage 3, one at Stage 2, one at Stage 1. No factory crossed a band in this interval. AI AntiSpam remains the only Stage-1 factory and is still porting the Stage-2 concurrency mechanisms (its ledger instrument reads `partial`, one revision behind).
+
+### Stage-by-Stage Verification Summary
+
+1. **Stage 0 (Interactive Prototype): 0 / 6 active.** No factory relies on prompt-by-prompt operator guidance; all six intake from persistent surfaces.
+
+2. **Stage 1 (Autonomous Intake & the Pacemaker Law): 6 / 6 conformance.** All six factories are enrolled in the fleet registry (`registry/fleet.json`) with a declared `job_prefixes` entry, and every cron row on this box attributes to exactly one of them by prefix. Live census: the ops cron table holds **65 rows**, of which **12 carry an explicit `--mode`** (9 turn-end, 3 quiet) — and the three `--mode quiet` rows belong to **ai-antispam and opencrabs-dev, none to meta-factory**.
+
+3. **Stage 2 (Single-Writer & Concurrency Locking): NOT fleet-wide, and the mechanical signal is narrower than §4's prose.** §4 read this as 5/6 "active" on a structural basis. The signal this run can read mechanically is the registry fragment's own `instruments.ledger.state`, and it is **1 of 6 `adopted`** (meta-factory). The rest are `partial` (ai-antispam `behind_by=1`, red; inferhub-watch `behind_by=4`, red), `deferred` (infra-factory `behind_by=13`; miidas `behind_by=6`), or `not-applicable` (opencrabs-dev). **Adoption is a different predicate from "has an append-only ledger"** — the two are named apart here so a reader does not read one as the other.
+
+4. **Stage 3 (Self-Auditing Quality Loops): 4 / 6 active, 1 piloting, 1 initial.** Meta-factory runs the full loop live at this read: `tools/audit.py` cadence held (`last_run_ts 2026-10-01T02:43:52Z`), **1,833 ledger rows** (intake 258 / claim 238 / close 232 / dispatch 286 / ruling 225 / run 574), and a rework instrument with **190 entries**, 21 unprevented. InferHub Watch, Miidas and Infra Factory carry their own self-audits; Infra Factory's reads `FAILED` on 8 named gate failures.
+
+5. **Stage 4 (Fleet Ecosystem & Value Optimization): 2 / 6 pioneering.** Meta-factory and OpenCrabs dev hold active supplier-client loops. Unchanged from §4; value-weighted routing remains the open milestone.
+
+### Live self-metrics (2026-10-01T06:15:32Z, HEAD `78fa86b`)
+
+Read from `tools/audit.py --json --no-gates`; the gate verdict fields read `null` because the gate suite was deliberately skipped, never as a green.
+
+| Metric | Value | Denominator / bound |
+|---|---|---|
+| Ledger events | **1,833** | — |
+| Closed subjects | **226** | 232 close rows |
+| Rework share | **45.67%** | 190 entries ÷ 226 closed subjects |
+| Rework per close | **84.07%** | — |
+| Change-fail rate | **68.14%** | 154 ÷ 226 |
+| Rework subject coverage | **90.0%** | 171 ÷ 190 |
+| First-pass yield | **1.0** | over **25 of 574** run rows — 4.4% of the population, stated with its denominator |
+| Avg lead time | **64,817.3 s** | — |
+| Cost per successful task | **$165.09** | — |
+
+### What to watch
+
+- **The measurement gap is the finding of this round.** A daily measurement job whose round can vanish in an outage leaves the growth map reading a stale survey; the map's own §5 is now a dated reading with a named gap rather than a silent one.
+- **Infra Factory's ledger `behind_by=13`** is the fleet's largest kit lag, and its cadence row reads `MISSED`.
+- **Six cron rows carry no attributable prefix** in the registry render (67 jobs, 6 unattributed), and `tamara_accounting_sync` sits in a profile home outside this factory's — reported, not touched.
