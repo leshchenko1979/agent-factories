@@ -246,21 +246,24 @@ consumes. §6.4's fork test and this section read one predicate from opposite si
 subject matter (its own event set, its own actors, its own box's measurements) lands here **as a
 declaration**, while the member's divergent bytes stay in the member's own tree.
 
-**Its shipped half is CODE, not data — and that is the one place this instrument departs from the
-specimen's shape.** `ledger`'s surface ships as an empty `.example.json`; kit ships **no file at
-all**, because the reader's own absence-default *is* the empty declaration — `load_exemptions()`
+**This surface ships no file: its empty state IS its reader's absence-default — and that is the one
+place this instrument departs from the specimen's shape.** `ledger`'s surface ships as an empty
+`.example.json`; kit ships **no file at all**, because the reader's own absence-default *is* the
+empty declaration — `load_exemptions()`
 (`tools/kit_pin.py:201`) returns *"no `registry/kit-exemptions.json` in {root} — nothing is declared
 exempt"* and the pin stays **GREEN**. Contract part 1's substance therefore holds — *an adopter that
 declares nothing carries no dead vocabulary* — by a different mechanism than the specimen's, and the
-consequence is stated rather than smoothed: **a member learns this path from the pin's own failure
-text** (*"Declare it in `registry/kit-exemptions.json` with a reason"*) **or from this doc, never
-from a shipped file.**
+consequence is stated rather than smoothed: **a member learns this path from the pin GATE's own
+failure text** — `tests/test_kit_pin.py:144`, paired byte-identically with its `TEMPLATE/` twin,
+prints *"…or declare the fork in `registry/kit-exemptions.json` with a reason."* The sentence is
+emitted by the **gate**, never by the pin module, whose own text is the absence-default above — so
+the path reaches a member **from that gate or from this doc, never from a shipped file.**
 
 **The contract, four parts, measured against the specimen** (`ledger.md` §3):
 
 | # | part | measured on this instrument |
 |---|---|---|
-| **1** | shipped EMPTY | **met in SUBSTANCE, not in FORM** — the empty state is the reader's absence-default, and the shipped half is `tools/kit_pin.py` (paired with `TEMPLATE/tools/kit_pin.py`), never a `.example.json` |
+| **1** | shipped EMPTY | **met in SUBSTANCE, not in FORM** — this surface ships **no file at all**: the empty declaration IS the reader's absence-default (`tools/kit_pin.py:211`), where the specimen ships an empty `.example.json`. The reader is the surface's **judge**, not a half of it, and it is closure-paired with `TEMPLATE/tools/kit_pin.py` |
 | **2** | a declaration **ADDS**; it never removes or redefines a core entry | **holds.** An entry declares a path the member **carries** whose bytes differ from its **own** pin. It cannot drop a path from the manifest, and it cannot move a path's class: `undeclared_divergence()` reads the class from the **pin** (`:246`), never from the entry — so the `class` field an entry carries is **documentation**, and a member can neither exempt a `seed` path into judgement (`:263` skips that class regardless) nor redefine what a `standalone` path means |
 | **3** | **ONE reader** serves the instrument's paths, so its writer and its verifier cannot disagree | **VIOLATED, measured — F5.** `load_exemptions()` is the judgement path, but `tools/kit_census.py:290` opens the same file independently and reports `len(exempt)` (`:300`). An entry the pin **ignores** is still **counted** by the census: for `{"exempt": [{"nopath": 1}, {"path": "tools/ledger.py"}]}` the census reports **2 declared** while the pin's declared set holds **1** — so a member reads a declaration the judge does not honour, and its pin then reds on divergence it believed it had declared. That is §6.5's own failure mode: *lawful at the write path, unknown at `verify`* |
 | **4** | an addition a SECOND factory needs **PROMOTES to the core** | **holds, and the route is declared IN THE DATA**: an entry's `disposition` names it — `(b)` declare-the-fork, `(c)` promote-the-member-half, the semantics `miidas`'s own `_note` records for the 2026-09-27 migration round. **The field is documentation, not a machine gate** — `grep -c disposition tools/kit_pin.py` → **0**, so the promotion itself is frame §5's process, not something this reader performs. `miidas`'s `_note` states the purpose the frame gives this channel: *"Each entry names the capability it carries so the instrument owner can decide whether to absorb it"* — the fleet's R&D channel, with the member's half as the arrival evidence frame §5.1 criterion 1 wants |
