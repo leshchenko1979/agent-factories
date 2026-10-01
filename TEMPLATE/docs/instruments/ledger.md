@@ -720,6 +720,41 @@ the remedy is **protocol, not mechanism**:
   **undecided**, recorded here rather than silently omitted, so a reader who meets it knows it is an
   open case and not an oversight.
 
+**The residual was RULED, and the ruling is what makes this clause an ACCEPTANCE rather than an
+omission.** HQ ruling n=1584 states it in terms — *"even with both legs, two checkouts each holding
+an uncommitted unpushed append can still fork, since no ref carries either row; irreducible without
+commit-on-append, and the remedy is the protocol"* — and orders it written here; n=1583 rules the
+re-mint protocol and closes with *"a fork where BOTH sides are published is not decided here"*. This
+clause is the delivery of that order, and it landed at `bccbda1` on 2026-09-29T01:31Z.
+
+**"Protocol, not mechanism" governs the REMEDY; it does not leave the acceptance unupheld.** P29
+still owes the rule an active process or a deterministic gate, and this one has four, none of which
+this clause invents.
+
+| layer | what it settles | where |
+|---|---|---|
+| git's non-fast-forward refusal | a fork cannot be PUSHED silently — the losing side is stopped and told | `git push` |
+| the pusher's divergence report | a diverged branch is NAMED and the run stops rather than resolving it | `tools/publish.py` |
+| the write path's divergence leg | a working file disagreeing with the committed lineage is refused BEFORE an `n` is minted | `tools/ledger.py` |
+| `verify`'s monotonic-`n` loop | the residue a WRONG remedy leaves — two rows carrying one `n` — is caught on the committed file | `tools/ledger.py verify` |
+
+The last layer answers the obvious objection — *what if a lane resolves the rejection with a MERGE
+instead of a re-mint?* — and it is MEASURED rather than argued: driven on 2026-10-01 against a
+fixture carrying two rows numbered `n=3`, `verify` returned rc=1 and named both offending lines. The
+protocol's failure mode therefore leaves a mark on a surface that is read.
+
+**The clause's first measured instance is #257 (2026-10-01T06:16:56Z), and it is the COVERED case.**
+Two checkouts each minted `n=1834`: HQ's, published as `fc4cec7`, and Triage's, unpublished. The
+published sibling KEPT its number; the unpublished one re-appended at the next free `n` as `n=1835`,
+owing no declaration — bullet 2 above, executed by a lane that had not read this clause.
+
+**That last fact is the finding, and it is the half a reader would not predict.** The protocol was
+followed correctly by a lane that had not read it, so what carried the behaviour was the refusal, not
+the clause: it was re-derived from first principles two days after it landed, by a lane that read
+`tools/ledger.py` line by line and still did not meet it — because the pointer telling a reader what
+§9 holds omitted it. **A clause whose own pointer omits it is a clause that will be re-derived**, and
+that repair belongs in the pointer, not here.
+
 ### 9.2 The settlement receipt is the TOOL's, never the author's
 
 Settlement is *append the close row, then verify*, so the receipt must cover the row it certifies —
