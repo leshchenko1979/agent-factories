@@ -136,13 +136,13 @@
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly: 2026-10-01 saw 4 starts and 0 crashes by 06:11Z, and 2026-09-28 saw 12 starts, 10 clean stops and 2 crashes (code=dumped). Every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Check journalctl --user -u opencrabs-ops for a Stopping/Stopped pair (deliberate) versus Main process exited code=dumped (crash) before concluding indiscipline or a fault. THE CAP THIS NOTICE FIRST CITED HAS MOVED, so re-read it from the unit and never carry it: at 2026-10-01T06:11Z the unit reads MemoryHigh == MemoryMax = 2048 MiB and MemorySwapMax = 2560 MiB (drop-ins 10-oompolicy, 20-memory, 30-cores), against the 1536 MiB in force when the notice was written.",
+      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Check `journalctl --user -u opencrabs-ops` for a Stopping/Stopped pair (deliberate) versus `Main process exited code=dumped` (crash) before concluding indiscipline or a fault.",
       "severity": "warning",
       "affects": [
         "profile"
       ],
       "scope": "profile",
-      "evidence": "journalctl --user -u opencrabs-ops, 2026-10-01 00:00Z-06:11Z: 4 Started events, 0 code=dumped. Caps read the same turn: systemctl --user show opencrabs-ops -p MemoryHigh -p MemoryMax -p MemorySwapMax -p DropInPaths = 2147483648 / 2147483648 / 2684354560. Crash class: leshchenko1979/opencrabs#638. The 1536 MiB figure this entry originally carried is superseded by an owner-set drop-in raise; the earliest read of the new value I hold is 2026-10-01, so I will not date the change earlier than I can evidence.",
+      "evidence": "journalctl --user -u opencrabs-ops, 2026-10-01 00:00Z-06:11Z: 4 Started events, 0 code=dumped. Caps read 2026-10-01T06:34Z: MemoryHigh=MemoryMax=2147483648, MemorySwapMax=2684354560 (drop-ins 10-oompolicy, 20-memory, 30-cores). The 1536 MiB pair this entry originally carried sat below the daemon's real footprint and was raised on 2026-09-30/10-01 (ledger n=855/856), after four kills 19:25:11Z / 20:27:42Z / 20:50:09Z / 21:28:14Z. Crash class: leshchenko1979/opencrabs#638. The earliest read of the new value I hold is 2026-10-01, so the change is not dated earlier than that.",
       "review_by": "2026-10-11",
       "since": "2026-09-27T06:13:19Z"
     },
@@ -203,7 +203,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-01T06:11:47Z",
+  "attested_at": "2026-10-01T06:35:42Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
