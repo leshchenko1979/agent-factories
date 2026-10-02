@@ -137,6 +137,13 @@ times in either. Adding one is a clause about the process *about* an instrument,
 authority, not this lane's** (frame §8) — so it is recorded here as a declared gap and routed, never
 coined in this file.
 
+**Scope, as ruled (q13, answered 2026-09-30).** Hygiene owns the **whole inventory** — all five surface
+classes (A language, B filesystem, C work state, D kit, E runtime) — and it owns the **declaration** of
+"clean" for each: the predicate and the population. It **builds a gate only where none exists**; where a
+surface already has one, this law doc **cites** it, because a second predicate over the same population
+is the defect this factory files against. The surface inventory, the gap table and each gap's
+disposition live in `docs/projects/hygiene-surfaces.md` §6.
+
 ## 5. The version identifier — part 4
 
 **This instrument's version is DERIVED from the manifest, never hand-typed, and the executable carries
