@@ -125,16 +125,17 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tests/test_hygiene_inflight.py` | `pytest` | 26.67 | 4.116× | 6.48 | `d36ce91cae0ef3f1d07c43c389bf58e8384c00a7` |
 | `tests/test_hygiene_namespace.py` | `pytest` | 35.95 | 4.085× | 8.8 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
 | `tests/test_hygiene_build_residue.py` | `pytest` | 63.87 | 4.048× | 15.781 | `049a93cc73c4f02be4c8e47f1028924936644d03` |
-| `tests/test_hygiene_declaration_sweep.py` | `pytest` | — | — | — | — |
+| `tests/test_hygiene_declaration_sweep.py` | `pytest` | 51.2 | 4.059× | 12.615 | `0eb39c7915699688a4f42b8f0887de893eac2a83` |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
-that ceiling. The build-residue row's measurement was taken at load **10.39**, so it is a conservative
-upper bound on a quiet-tree runtime rather than a tight one. The declaration-sweep row's basis is
-declared in the **basis commit that follows the registration**, and deliberately not in the
-registration itself: a budget base may never name the commit that introduces it, because the
-staleness leg compares the gate file at `measured_at` against the same file at HEAD — a base pointing
-at its own commit would compare the file with itself and could never report drift.
+that ceiling. Both of the last two rows were measured on a loaded box — build residue at load **10.39**,
+the declaration sweep at load **4.14** — so each is a conservative upper bound on a quiet-tree runtime
+rather than a tight one. The declaration-sweep row's basis landed in the **commit that follows its
+registration**, deliberately and not in the registration itself: a budget base may never name the
+commit that introduces it, because the staleness leg compares the gate file at `measured_at` against
+the same file at HEAD, so a base pointing at its own commit would compare the file with itself and
+could never report drift.
 
 **The declaration surfaces are CROSS-SWEPT, report-only (G2; q13, ruled 2026-09-30).** The `docs/*.json`
 declaration files are the factory's own debt register: an exemption, a skip or an authorization is a
