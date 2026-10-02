@@ -2886,11 +2886,25 @@ def publish_page(action=None, prune=False, quiet=False):
         # `sets` is THIS page's own sets, never the register's: the answer
         # backend validates a posted set against the page's own meta, so a card
         # is answerable exactly when its set is listed HERE.
+        # `echo` carries the two values the answer backend shows back on its
+        # confirmation page -- the SET's lane and each question's title -- so the
+        # public host names them without any copy of the register (S1, 2026-10-02).
+        # Exactly those two fields, and NEVER a session id: the mirrored register
+        # this replaces was the only reason a destination uuid left the agent
+        # host. Keyed by set id and drawn from THIS page's entries, so a set is
+        # echoable exactly when the page lists it (the answerability property).
+        echo = {}
+        for e in entries:
+            echo[e["id"]] = {
+                "lane": e.get("lane") or "",
+                "questions": {str(q["qid"]): str(q.get("title") or "")
+                              for q in (e.get("questions") or []) if q.get("qid")}}
         meta = {"slug": slug,
                 "expires_at": None,
                 "action": action or "/answer", "sets": [e["id"] for e in entries],
                 "url": page_url(slug),
-                "questions": open_question_count(entries)}
+                "questions": open_question_count(entries),
+                "echo": echo}
         with open(os.path.join(directory, "meta.json"), "w", encoding="utf-8") as fh:
             json.dump(meta, fh, indent=2)
         metas[slug] = meta
@@ -3689,6 +3703,35 @@ def selftest():
            "\u2026and every set a page RENDERS is listed in that page's own "
            "meta.sets, so no card is rendered unanswerable (slug, rendered-vs-"
            "meta, posted-vs-meta: %r)" % (_unanswerable,))
+
+        # The ECHO the answer backend reads (S1, 2026-10-02). The confirmation
+        # page's lane + question title used to come from a mirror of the whole
+        # register on the public host; they now come from the page's OWN meta, so
+        # every set a page lists must carry its echo and every value must be a
+        # plain string. The reader lives OUTSIDE this repo (the vpn backend), so
+        # this assertion is the declared consumer's proxy -- a page without an
+        # echo would name every lane "the asking lane" and print the qid as the
+        # title, silently. A session id must never appear here.
+        _echo_bad = []
+        for _slug in ["all"] + [p["slug"] for p in _factory_pages]:
+            _m = json.load(open(os.path.join(env["OC_QUESTIONS_DIR"], "pages",
+                                             _slug, "meta.json"), encoding="utf-8"))
+            _e = _m.get("echo")
+            if not isinstance(_e, dict) or sorted(_e) != sorted(_m["sets"]):
+                _echo_bad.append((_slug, "sets", sorted(_m["sets"]),
+                                  sorted(_e or {})))
+                continue
+            for _sid, _info in _e.items():
+                if (not isinstance(_info, dict)
+                        or not isinstance(_info.get("lane"), str)
+                        or not isinstance(_info.get("questions"), dict)
+                        or not all(isinstance(k, str) and isinstance(v, str)
+                                   for k, v in _info["questions"].items())):
+                    _echo_bad.append((_slug, "shape", _sid, _info))
+        ck(not _echo_bad,
+           "\u2026and every set a page lists carries its ECHO -- lane + per-qid "
+           "title, keyed by set id, strings only -- so the answer backend names "
+           "the lane without any mirrored register (%r)" % (_echo_bad,))
 
         # The address outlives the set: f-leaky-lane was archived by
         # `gc --archive-closed` and is no longer a target, yet its page dir --
