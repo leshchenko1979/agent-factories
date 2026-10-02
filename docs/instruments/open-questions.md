@@ -280,7 +280,15 @@ The register carried fields no consumer reads, and one of them produced a false 
 
 **An answer with no stamp reads as NOT RECORDED, and that absence is PRINTED rather than omitted.** Every answer recorded before this duty existed, and every answer a lane recorded without notifying, is in exactly that state; suppressing it would restore the ambiguity the stamp exists to remove.
 
-**`answer` does NOT notify, and must not grow the duty.** Two distinct failures would then ride one verb, and every caller that already notifies would deliver twice. This is the same separation the ledger's write path keeps, and for the same reason.
+**`answer` does NOT notify BY DEFAULT, and the default must not grow the duty.** Two distinct failures would then ride one verb, and every caller that already notifies would deliver twice. This is the same separation the ledger's write path keeps, and for the same reason.
+
+**The one sanctioned fold is OPT-IN: `answer --notify` (S2, 2026-10-02).** The clause above is a rule about the DEFAULT, not a ban on ever combining the two acts for a caller that genuinely needs them together. The answer backend is one ssh call that records an answer and must tell the asking lane in the same breath, and it cannot run two verbs without a second round trip. So `answer` grew a `--notify` flag that calls `deliver_answer` **after the register lock has been released** — a nested acquire dies at 10 s — and merges the outcome into `--json` as `delivery` / `http` / `delivered`. Three properties keep the separation intact, and each is load-bearing:
+
+- **The flag is ABSENT by default.** A caller that already runs `notify` passes nothing, so nothing is delivered twice. The default path is byte-for-byte what it was.
+- **The delivery is stamped by the SAME duty as `notify`.** `deliver_answer` is the single delivery path, so the recorded fact — the attempt, its outcome and its instant — is unchanged whichever verb reached it.
+- **The exit code stays the MUTATION's.** A failed delivery is DATA in the payload, never an rc; the backend's two-branch confirmation reads the fact rather than a crash. Early exits (`rc=3` already answered, `rc=2` bad choice, `rc=1` not found) deliver nothing, exactly as the backend's rc branches already assume.
+
+What the default clause forbids — a verb that silently acquires the duty for every caller — is what the default still refuses.
 
 **Bound: the stamp covers the LIVE register.** A set that has been archived carries its questions in the archive, which is history and is not rewritten to record a delivery — rewriting history to close a gap is worse than the gap. A question in the archive therefore still reads without a delivery record, and that is a stated bound, not an oversight.
 
