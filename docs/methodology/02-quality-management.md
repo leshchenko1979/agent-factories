@@ -58,7 +58,9 @@ flowchart TD
 > forms above divide the *same* numerator — every rework entry — by a denominator they each
 > name. The change fail rate divides a **different** numerator: only those closes whose
 > change actually failed, read from the `Subject` column of `evidence/rework.md`. A defect
-> caught before any change landed carries `none` — a rework entry, but not a failed change.
+> that is not attributable to a closed work unit — caught before any change landed, or
+> sitting in landed work that is not itself a work unit — carries `none`: a rework entry,
+> but not a failed change.
 > An entry written before the column existed carries `not recorded (pre-column)` and cannot
 > be attributed either way, so it is an absence of evidence and never evidence of no
 > failure. A `#<n>` naming a work unit that never closed is likewise not a failed change.

@@ -133,7 +133,9 @@ REQUIRED_FAIL_FIELDS = (
 )
 
 # This file's own copy of the Subject column's vocabulary — see rule 6. `none` is a
-# defined answer (the defect was caught before any change landed), not a placeholder.
+# defined answer (the defect is not attributable to a closed work unit — caught before
+# any change landed, or sitting in landed work that is not itself a work unit), not a
+# placeholder.
 SUBJECT_NONE = "none"
 SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
 

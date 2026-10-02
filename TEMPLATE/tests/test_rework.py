@@ -114,8 +114,10 @@ COLUMNS = ["Date", "Source", "Defect", "Root cause", "Resolution", "Prevented by
 PLACEHOLDERS = {"tbd", "todo", "n/a", "-", "?", "unknown", "none"}
 
 # `Subject` is the one column where `none` is a *defined answer* rather than a
-# dodge: it means the defect was caught before any change landed. So the column
-# is exempt from PLACEHOLDERS and carries its own vocabulary instead — and that
+# dodge: it means the defect is NOT ATTRIBUTABLE TO A CLOSED WORK UNIT — caught
+# before any change landed, or sitting in landed work that is not itself a work
+# unit. So the column is exempt from PLACEHOLDERS and carries its own vocabulary
+# instead — and that
 # vocabulary is BOUND from `tools/audit.py` rather than retyped here, because
 # that module reads the same column to derive the change fail rate numerator: two
 # hand-written patterns is how the gate and the reader come to disagree about
@@ -310,7 +312,7 @@ def check_text(text: str) -> tuple[list[str], int]:
                     problems.append(
                         f"row {n} ({date}): 'Subject' is {value!r} — expected "
                         "'#<n>' (the work unit whose change failed), 'none' "
-                        "(caught before any change landed), or "
+                        "(not attributable to a closed work unit), or "
                         f"{SUBJECT_LEGACY!r}"
                     )
             elif value.strip("`").strip().lower() in PLACEHOLDERS:
@@ -459,7 +461,7 @@ def main() -> int:
         False, failures,
     )
     probe(
-        "a Subject of 'none' passes — caught before a change landed",
+        "a Subject of 'none' passes — not attributable to a closed work unit",
         dated_rates() + entries + f"{good_row(1, 'none')}\n",
         False, failures,
     )

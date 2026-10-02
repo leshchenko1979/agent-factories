@@ -437,7 +437,7 @@ names the work unit it belongs to, and it is the one the reader keys on:
 | **Root cause** | The mechanism, not the symptom. "Careless" is not a root cause |
 | **Resolution** | The commit or action that fixed it |
 | **Prevented by** | The rule, test or gate that stops recurrence. `nothing yet` is a valid answer — and an important one |
-| **Subject** | The work unit this entry belongs to — `#<n>` for a board issue, or the literal `none` when the defect was caught before any change landed. It is how a reader resolves an entry against the ledger, and the gate binds its vocabulary to `tools/audit.py` rather than re-typing it |
+| **Subject** | The work unit this entry belongs to — `#<n>` for a board issue, or the literal `none` when the defect is not attributable to a closed work unit (caught before any change landed, or sitting in landed work that is not itself a work unit). Where the defect IS attributable to a closed work unit, the Subject MUST name it. It is how a reader resolves an entry against the ledger, and the gate binds its vocabulary to `tools/audit.py` rather than re-typing it |
 
 **A `## Rates` section is mandatory, and it is where the log becomes measurable.**
 Every rate it states must carry **its date** and **its predicate** — the window it
@@ -453,7 +453,8 @@ invented-value failure this kit forbids everywhere else.
 
 **Placeholders are rejected.** `tbd`, `todo`, `n/a`, `-`, `?`, `unknown` and
 `none` are refused in the six defect columns — and `none` in the `Subject` column
-means something specific (*caught before any change landed*), not "I did not
+means something specific (*not attributable to a closed work unit* — caught before
+any change landed, or sitting in landed work that is not itself a work unit), not "I did not
 fill this in". A bootstrap that has recorded no defect at all is either perfect,
 which is not credible, or is not recording.
 

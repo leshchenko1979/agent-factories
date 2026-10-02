@@ -691,7 +691,7 @@ def parse_rework(rework_path: Path, closed_subject_set: set[str]) -> dict[str, A
                         if subject_col in closed_subject_set:
                             change_failures += 1
                     elif subject_col == SUBJECT_NONE:
-                        # Caught before any change landed: determinate, not a failure.
+                        # Not attributable to a closed work unit: determinate, not a failure.
                         determinate += 1
 
     rework_share = (entries / (closed_subjects + entries)) if (closed_subjects + entries) > 0 else 0.0
