@@ -281,6 +281,24 @@ declared at runtime; the only shipped artifacts are the executable, its gate, it
 A member therefore cannot "adopt the example and keep the runner" here — there is no example to
 adopt, which is why §4's manifest grain carries the whole weight.
 
+**This instrument has NO extension surface: member subject matter lives outside it** (frame §6.5).
+Nothing a member declares here ADDS to the instrument's shape, and that is measured rather than
+asserted. The lens catalogue is a module constant (`CATALOG_LENSES`, 14 lenses over 6 families) with
+**no file read for lenses at all**: `brief`, `record` and `waive` each refuse a lens outside it, and
+`verify` is bounded by the same constant because it takes no lens argument and iterates the
+catalogue. The state schema is CLOSED and emitted from one authoring home (§3, above); the lens
+states are a fixed three-value enum. What a member declares into this instrument is a **channel, not
+a vocabulary** — `intake.json` names where its input lands and `proposals/` carries it — and both are
+read as the review's **subject**, never folded into how the instrument reads.
+
+A member's own domain rules therefore live where they already do: in its own repo skill, which is
+this instrument's own instruction to its own lens (*"Check that member-specific domain rules live
+only in their dedicated repo skills"*, `tools/review.py` lens S). A member that needs an addition to
+the instrument ITSELF — a new lens, a new family — has one path and it is not a private one: §5's
+promotion, the same route that promoted this instrument. §9's **O1** and **O4** carry the member's
+own duties (dispose of a copy it already holds; declare what its instrument accepts, or state why it
+has none); neither is coined here.
+
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This

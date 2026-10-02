@@ -244,6 +244,43 @@ which is the one thing `job_prefixes` exists to state.
 
 **A surface absent from this table is absent by measurement, not by omission.**
 
+### 6.1 Extension surface — this instrument has none
+
+**The frame's §6.5 owes this instrument ONE of two statements at its naming site, and this is the
+second of the two it allows: this instrument has no extension surface — member subject matter lives
+outside it.**
+
+The claim is measured, not asserted. Against §6.5's own four-part contract — read from the live
+specimen, `ledger.md` §3 — neither of the two surfaces §6 names as member-writable qualifies:
+
+| §6.5 contract part | `registry/fleet.json` | `docs/ledger-invariants.json` |
+|---|---|---|
+| **1. shipped EMPTY** — the template's copy declares nothing | **fails** — it ships a populated specimen (`example-factory`) | holds — it ships `{"invariants": {}}` |
+| **2. a declaration ADDS; it never removes or redefines a core entry** | not the discriminator — a prefix list is additive by construction, and there is no core-entry vocabulary here to shadow | not the discriminator — same |
+| **3. ONE reader serves the instrument's paths** | holds — `load_fleet_manifest` | holds — `tests/ledger_boundary.py` |
+| **4. an addition a SECOND factory needs PROMOTES to the core** | **fails** — a `job_prefix` is per-factory identity and can never promote | **fails** — an `invariants` key is keyed on the tree's OWN gates, never on a name a member chose |
+
+Both are manifest class **`seed`** — configuration a member instantiates under its own name, which is
+exactly how §6 names them. Part 1 fails for one and part 4 for both, so a "contract" that would hold
+on two of four parts is not an extension surface; claiming one here would be the over-claim §6.5
+exists to prevent.
+
+**This instrument's own vocabulary is CLOSED, and it lives in shipped code.** The runner's one
+closed-vocabulary declaration is `deferred_legs()` — an entry must declare an integer `tracker` and
+`claims` that are checked against HEAD on every run — and it sits INSIDE
+`tools/patrol_host_state.py`, a manifest-class `standalone` file. An entry added there edits a shipped
+file, which is a **FORK** by §6.4's test, not an extension by §6.5's. The rest of the declared set is
+`standalone` in the same way (the law doc, the runner, its two gates), so a member's content enters
+this instrument only as **data**, at the two seed surfaces §6 names.
+
+**What a member's subject matter is, and where it therefore lives.** Which factories exist, which cron
+rows are theirs, and when their ledger invariants landed are declarations a member makes in its own
+tree — in those two seeds, and in its own `registry/factories/<slug>.json` fragment (§8 step 5). None
+of them adds a NAME the instrument's core did not already know, and that is the whole difference
+between a declaration and an extension. The member's duty here is **cited, never authored** (frame
+§6.5, and that frame's own scope): O1's migrate-or-declare-or-defer disposition for a copy it already
+holds, and O4's duty to declare what its instrument accepts — or to state why it has none.
+
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This

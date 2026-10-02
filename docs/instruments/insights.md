@@ -46,6 +46,23 @@ Everything in the instrument is therefore **factory-local** and in no kit manife
 
 **Consequence, stated so a reader does not derive it wrongly:** a future decision to ship any part of this instrument changes this section FIRST — and moves the path concerned into `registry/kit.json`, a `TEMPLATE/` half, a `PAIRS` entry and `REQUIRED_GATES`/`OPTIONAL_GATES` together, since a half-shipped instrument is the state this section now rules out.
 
+### 2.1 The extension surface — there is none, and §2 is the reason
+
+**This instrument has no extension surface: member subject matter lives outside it** (frame §6.5).
+
+A **declared** state, not an omission — and decidable from this section rather than from taste. §6.5's contract has four parts, and its **first requires a SHIPPED half**: the specimen's `TEMPLATE/docs/ledger-refs-kinds.example.json`, declaring nothing, with the factory-owned `docs/ledger-refs-kinds.json` beside it. **This instrument ships no path at all (§2), so it has no shipped half to declare into and no adopter to hold one** — arm (a) is unavailable here while §2 stands, not merely unchosen.
+
+Two measured facts close the other door, the one a member would otherwise take:
+
+- **The vocabularies are CLOSED CONSTANTS in the one writer.** `ALLOWED_STAGES` · `ALLOWED_CLASSES` · `ALLOWED_STATUSES` live in `tools/insights.py`, each refused **by name** at the write path (`stage must be one of […]`) and re-read by `verify` (`unknown status '…'`). No declaration file is folded in, so a member's own value cannot land at a point the reader accepts: it would be an edit to the module — a **fork** by §6.5's test, since it changes the shape on a path, and §6.4's tier that refuses.
+- **The store is single-instance and unparameterised.** `INSIGHTS_PATH = REPO / "evidence" / "insights.jsonl"`; there is **no** environment override, and the only JSON the tool takes is the backfill mapping passed on the command line. (The lane resolver does read the fleet registry — but that is §4's **identity** join, answering *who wrote this row*, never *what the row may say*.) There is no second store to point at and no vocabulary to declare into.
+
+**Where a member's subject matter goes instead.** A factory's own discoveries are its own register, created in its own tree — the doctrine §2 already quotes: `TEMPLATE/docs/addons/domain/stories.md` classes `tools/insights.py` as **"the factory creates it"**, because *"a ledger of discoveries a factory never made is a file of another factory's history"*. The member's material lands in the member's own instrument instance, and the duty that binds it is **frame §9 O4** as §6.5 states it — declare what its instrument accepts, or state why it has none. **O1 has no object here:** nothing ships, so no member holds a copy of a kit instrument file to dispose of. Neither clause is authored here; both are cited from §9.
+
+**The re-entry condition, so this cannot go stale silently.** The statement is a function of §2 and moves with it: **if any part of this instrument ever ships, this subsection is revisited in the same change** — a shipped half that declares nothing is arm (a), and an instrument that ships nothing is this one. This file's own half pairs by tree presence (`tests/test_docs_sync.py`) rather than through `PAIRS`, which §2's consequence list names for the instrument's tool and gate paths.
+
+**This builds no gate.** No offline predicate reads whether an extension is lawful; §6.5 states the test, and this subsection answers it for this instrument.
+
 ---
 
 ## 3. The record
