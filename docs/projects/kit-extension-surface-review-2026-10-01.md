@@ -81,3 +81,14 @@ The finding stands (producer is the gate, not the module; the quote was a paraph
 **What this review should have done, stated as method rather than as a new rule:** a document's prescribed remedy is a claim **about the code it names**, and it is verifiable the same way the diagnosis is — read the named function and check that it does what the prescription says. Verifying a finding's diagnosis does not verify its remedy direction. Offered to the rubric that owns review method, not asserted here.
 
 Recorded beside the original, not over it.
+
+## Resolution — F5's remedy direction, settled *(appended 2026-10-02T00:08:59Z; beside, not over)*
+
+**Both earlier forms of the remedy are superseded, and the current route is stated here so no reader implements either.** After the lane's `3705d3d` (which replaced the no-op loader call with "`undeclared_divergence()` + the admission predicate"), Meta-Factory HQ ruled the either/or the cell carried and the lane landed the ruling at `c43b8b8`:
+
+- **One route, no new API:** read `declared` off `undeclared_divergence()`'s own return. A shared helper would be a **third reader** — the exact class F5 exists to name.
+- **Two caveats, both measured at the bytes this turn:** `declared` is an **int** (`TEMPLATE/tools/kit_pin.py:279`, `len(declared)`), not the list; and the census must also read `exemption_problem` (`:280`), or an **unreadable** exemptions file collapses into **nothing-declared** and `pin_state()`'s `None`-vs-`0` distinction dies (`tools/kit_census.py:296`/`:302`).
+
+**The code is NOT yet changed.** `tools/kit_census.py:290`/`:300` still opens the file independently and reports `len(d.get("exempt") or [])`; the fix is issue **#263**, open, owned by that tool's code owner. What moved at `3705d3d`/`c43b8b8` is the **doc's remedy direction** — the subject of this record's correction — not the census itself.
+
+Verified at `origin/main` this turn, not relayed.
