@@ -151,10 +151,11 @@
       "measured_sec": 6.96
     },
     "tests/test_ledger.py": {
-      "budget_sec": 126.19,
-      "margin_x": 4.024,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 31.36
+      "budget_sec": 732.59,
+      "load_at_measure": 3.95,
+      "margin_x": 4.004,
+      "measured_at": "f78497c17c596ffe1ac55ddfa2c6aed5eff23a9e",
+      "measured_sec": 182.96
     },
     "tests/test_ledger_close_preflight.py": {
       "budget_sec": 43.55,
@@ -187,10 +188,11 @@
       "measured_sec": 1.08
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 56.87,
-      "margin_x": 4.053,
-      "measured_at": "e09aa74138ce294668571a3e1396410a5c1b1539",
-      "measured_sec": 14.03
+      "budget_sec": 179.31,
+      "load_at_measure": 7.25,
+      "margin_x": 4.017,
+      "measured_at": "f78497c17c596ffe1ac55ddfa2c6aed5eff23a9e",
+      "measured_sec": 44.64
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 17.67,
