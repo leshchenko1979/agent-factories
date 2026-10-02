@@ -319,6 +319,23 @@ false fix or a silent drop. What a promotion review inherits is the **dispositio
 finding carries a class, and a non-fix names which one. **Authority:** owner ruling on the
 open-questions register, set `meta-factory`, **q10**, answered 2026-09-28.
 
+**A landed FIX is verified by its REMEDY's referent, not by the defect's diagnosis — the two are
+independent claims and they fail independently.** Reading a defect to the byte says nothing about
+whether the prescribed fix points the right way, and the remedy is the half that lands in law. Three
+specimens from one cycle, each with a sound diagnosis and a remedy that named the wrong thing:
+**F5** (`967a5c3`) — the second reader at `tools/kit_census.py:290`/`:300` was named exactly, while the
+recorded remedy (*"`kit_census.py` calling `load_exemptions()`"*) was a **no-op**: that function loads
+the **raw** list and admits nothing, so `len(exempt)` reproduces the over-count the finding exists to
+name (census **2**, the pin's `declared` **1**); the working direction reads `declared` off
+`undeclared_divergence()`'s own return. **R1** (`96cc3c9`) — the misattributed quote was real, and the
+remedy's producer named the pin **module** where the string is emitted by the pin's **gate**,
+`tests/test_kit_pin.py:144`. **R3** (`50217a6`) — the dangling referent was correctly found, and the
+remedy cited *"frame §8's citation law"*: frame §8 is *Ownership and scope*, and the frame carries
+**0 hits** for `resolver` / `file::` / `symbol`. So a review that lands a fix reads the remedy's
+**referent** at the commit tree — the clause, symbol or file the remedy names — before the finding is
+called landed: **a remedy naming an artifact that does not exist, or that does not do what the remedy
+claims, is itself a finding**, never a completion. **Authority:** owner order, 2026-10-02.
+
 **The ontology-quality requirement binds the FILE, not only the review:** a per-instrument law file
 states, for every term it uses, either the canonical `ONTOLOGY.md` row it resolves to or the row it
 earns — and an **ambiguous term is reported as a defect in the ontology** rather than tolerated. A
