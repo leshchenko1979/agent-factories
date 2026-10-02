@@ -37,7 +37,7 @@ VERSION = "2.0.0"
 # The verb set, named once so the selftest can assert a DELETED verb stays
 # deleted rather than merely unrouted (#547 C3).
 _VERBS = ("ask", "answer", "amend", "withdraw", "list", "publish", "lint",
-          "gc", "notify")
+          "gc", "notify", "redeliver")
 
 DEFAULT_TTL_DAYS = 7
 
@@ -1675,16 +1675,18 @@ def stamp_delivery(set_id, qids, outcome, http, mode):
     stamped, or None when the set is not in the live register.
 
     A consequence is not a receipt: "answered" says the register closed the
-    question, not that the lane ever saw the answer. Only `notify` knows, so
-    only `notify` can record it.
+    question, not that the lane ever saw the answer. Only a delivery knows, so
+    only a delivery can record it.
+
+    ATTEMPTS is cumulative, and its default for a PRE-EXISTING stamp is 1: a
+    stamp that carries no counter was written before this key existed, and it
+    records one attempt. A missing `delivery` object is 0 -- nothing was tried.
 
     BOUND: this stamps the LIVE register. A set that has been archived carries
     its questions in archive.jsonl, which this does not rewrite -- an archive is
     history, and rewriting history to record a delivery would be worse than the
     gap it closes.
     """
-    stamp = {"attempted_at": now_iso(), "outcome": outcome,
-             "http": http, "mode": mode}
     with RegisterLock():
         data = read_register()
         live = next((s for s in data["sets"] if s.get("id") == set_id), None)
@@ -1693,7 +1695,13 @@ def stamp_delivery(set_id, qids, outcome, http, mode):
         targets = answerable_questions(live) if qids is None else [
             q for q in (live.get("questions") or []) if q.get("qid") in qids]
         for question in targets:
-            question["delivery"] = dict(stamp)
+            prior = question.get("delivery") or {}
+            prior_attempts = prior.get("attempts")
+            if prior_attempts is None:
+                prior_attempts = 1 if prior else 0
+            question["delivery"] = {"attempted_at": now_iso(), "outcome": outcome,
+                                    "http": http, "mode": mode,
+                                    "attempts": prior_attempts + 1}
         write_register_atomic(data)
         return len(targets)
 
@@ -1725,6 +1733,65 @@ def a2a_deliver(session, body, mode="turn-end"):
     except Exception as exc:  # noqa: BLE001
         return 0, "transport error: %s" % (exc,)
 
+def deliver_answer(set_id, qid=None, mode="turn-end", dry_run=False, entry=None):
+    """Resolve -> compose -> deliver -> stamp, for ONE question (qid given) or a
+    batch (qid None). THE single delivery path: `notify` formats one result for
+    a caller, `redeliver` calls it in a loop over the pending population.
+
+    Returns a dict. Per-question failures come back as {"error","rc"} rather
+    than raising, because a sweep must not die on one bad address -- but the
+    CALLER decides how loud that is. `notify` dies on the first error exactly as
+    it always did; `redeliver` records it and carries on.
+    """
+    if entry is None:
+        entry = find_set_anywhere(set_id)
+        if entry is None:
+            return {"error": "no question set %s in the register or the archive"
+                             % (set_id,), "rc": 1}
+    if qid:
+        session, lane_name, why = question_return_address(entry, qid)
+        if why:
+            return {"error": why, "rc": 1}
+    else:
+        # No --qid: the destination must be the session every answered question
+        # shares, never the set's own by default (#612).
+        session, why = batch_return_address(entry)
+        if why:
+            return {"error": why, "rc": 1}
+        lane_name = entry.get("lane") or "unknown"
+    if not UUID_RE.fullmatch(session):
+        # Refuse rather than guess: a wrong destination leaks an answer to an
+        # unrelated lane, and the register is the only authority for it.
+        return {"error": "set %s records no usable calling session for qid %s — "
+                         "refusing to guess a destination"
+                         % (entry.get("id"), qid), "rc": 3}
+    body = compose_answer_body(entry, qid)
+    if body is None:
+        return {"error": "no answer recorded yet for set %s" % (entry.get("id"),),
+                "rc": 1}
+
+    result = {"set": entry.get("id"), "qid": qid, "session": session,
+              "lane": lane_name, "mode": mode, "body": body, "rc": 0}
+    if dry_run:
+        result["dry_run"] = True
+        return result
+
+    status, response = a2a_deliver(session, body, mode)
+    result["http"] = status
+    result["response"] = response
+    result["delivery"] = delivery_outcome(status)
+
+    # Stamp the ATTEMPT on the questions the body carried. A delivery the exit
+    # code reports and the register forgets leaves a lane blocked while every
+    # surface it can read says the question is closed.
+    result["stamped"] = stamp_delivery(
+        entry.get("id"),
+        [q.get("qid") for q in answerable_questions(entry, qid)],
+        result["delivery"], status, mode)
+
+    result["rc"] = 4 if status == 0 else (3 if status >= 400 else 0)
+    return result
+
 def cmd_notify(argv):
     positional, flags = parse_flags(
         argv,
@@ -1748,64 +1815,210 @@ def cmd_notify(argv):
         die(1, "no question set %s in the register or the archive"
             % (set_id or lane,))
 
-    if flags.get("--qid"):
-        session, lane_name, why = question_return_address(entry, flags.get("--qid"))
-        if why:
-            die(1, why)
-    else:
-        # No --qid: the destination must be the session every answered question
-        # shares, never the set's own by default (#612).
-        session, why = batch_return_address(entry)
-        if why:
-            die(1, why)
-        lane_name = entry.get("lane") or "unknown"
-    if not UUID_RE.fullmatch(session):
-        # Refuse rather than guess: a wrong destination leaks an answer to an
-        # unrelated lane, and the register is the only authority for it.
-        die(3, "set %s records no usable calling session for qid %s — refusing "
-               "to guess a destination"
-               % (entry.get("id"), flags.get("--qid")))
-    body = compose_answer_body(entry, flags.get("--qid"))
-    if body is None:
-        die(1, "no answer recorded yet for set %s" % (entry.get("id"),))
+    result = deliver_answer(entry.get("id"), flags.get("--qid"), mode,
+                            bool(flags.get("--dry-run")), entry=entry)
+    if result.get("error"):
+        die(result["rc"], result["error"])
 
     if flags.get("--dry-run"):
         if flags.get("--json"):
-            print(json.dumps({"set": entry.get("id"), "session": session,
-                              "mode": mode, "body": body},
+            print(json.dumps({"set": result["set"], "session": result["session"],
+                              "mode": result["mode"], "body": result["body"]},
                              indent=2, ensure_ascii=False))
         else:
             print("would notify %s (set %s, %s):\n\n%s"
-                  % (lane_name, entry.get("id"), mode, body))
+                  % (result["lane"], result["set"], result["mode"],
+                     result["body"]))
         return 0
 
-    status, response = a2a_deliver(session, body, mode)
-
-    # Stamp the ATTEMPT on the questions the body carried. A delivery the exit
-    # code reports and the register forgets leaves a lane blocked while every
-    # surface it can read says the question is closed.
-    stamped = stamp_delivery(entry.get("id"),
-                             [q.get("qid") for q in answerable_questions(
-                                 entry, flags.get("--qid"))],
-                             delivery_outcome(status), status, mode)
-
     if flags.get("--json"):
-        print(json.dumps({"set": entry.get("id"), "session": session,
-                          "mode": mode, "http": status, "response": response,
-                          "delivery": delivery_outcome(status),
-                          "stamped": stamped},
+        print(json.dumps({"set": result["set"], "session": result["session"],
+                          "mode": result["mode"], "http": result["http"],
+                          "response": result["response"],
+                          "delivery": result["delivery"],
+                          "stamped": result["stamped"]},
                          indent=2, ensure_ascii=False))
     else:
         note = ("stamped %d question(s) as %s"
-                % (stamped, delivery_outcome(status))) if stamped else \
-               "not stamped: the set is not in the live register"
+                % (result["stamped"], result["delivery"])) if result["stamped"] \
+               else "not stamped: the set is not in the live register"
         print("notified %s (set %s) — http %s (%s)"
-              % (lane_name, entry.get("id"), status, note))
-    if status == 0:
-        return 4
-    if status >= 400:
-        return 3
-    return 0
+              % (result["lane"], result["set"], result["http"], note))
+    return result["rc"]
+
+# =============================================================================
+# redeliver — retry the deliveries the register RECORDS as failed
+# =============================================================================
+# The delivery stamp landed in e109b44 (2026-09-28T22:35:34+00:00). Before that
+# instant a question could be answered and notified with nothing written down,
+# so a question answered BEFORE it and carrying no stamp is not evidence of a
+# failed delivery -- it is evidence of a register that had nowhere to write.
+# 50 such questions sit in the live register. This boundary is a fact about the
+# CODE, not about the data, which is why it is a constant and not a flag.
+DELIVERY_STAMP_EPOCH = "2026-09-28T22:35:34+00:00"
+DEFAULT_MAX_ATTEMPTS = 3
+
+def _answered_at(question):
+    return question.get("answered_at") or question.get("asked_at") or ""
+
+def pending_deliveries():
+    """The questions a redelivery sweep should retry, as
+    (pending, skipped) where pending is [{set, qid, why, attempts}] and skipped
+    is the count of questions the predicate deliberately did NOT pick up.
+
+    TWO classes qualify, and the difference between them is the whole design:
+
+      unreachable -- a delivery was ATTEMPTED and the transport failed. The
+                     register recorded that failure, so retrying it reads back a
+                     fact instead of guessing at one.
+      unattempted -- no delivery object at all on a question answered AFTER the
+                     stamp existed. A live set is stamped on EVERY attempt, so
+                     the record can only be silent for a question nothing was
+                     ever attempted for. Absence before the epoch is NOT this
+                     class (see DELIVERY_STAMP_EPOCH).
+
+    `delivered` and `refused` are NEVER retried, and that is the idempotency
+    guard #251 asks for: the stamp is written on every attempt and READ here, so
+    a sweep cannot re-deliver what already landed. `refused` means an HTTP
+    answer arrived -- the transport worked and the address is what is wrong, so
+    a retry would repeat the same refusal.
+
+    `skipped` exists so the sweep can SAY what it did not do. A silent filter
+    and an empty population print the same thing, and only one of them is a
+    finding.
+    """
+    out, skipped = [], 0
+    for entry in read_register()["sets"]:
+        for question in answerable_questions(entry):
+            delivery = question.get("delivery") or {}
+            outcome = delivery.get("outcome")
+            if outcome in ("delivered", "refused"):
+                continue
+            if outcome == "unreachable":
+                why = "unreachable"
+            elif not delivery and _answered_at(question) >= DELIVERY_STAMP_EPOCH:
+                why = "unattempted"
+            elif not delivery:
+                # Answered before the stamp existed: the register had nowhere to
+                # write. Absence here is not evidence of a failure, so it is
+                # counted and named rather than retried.
+                skipped += 1
+                continue
+            else:
+                continue
+            prior = delivery.get("attempts")
+            if prior is None:
+                prior = 1 if delivery else 0
+            out.append({"set": entry.get("id"), "qid": question.get("qid"),
+                        "why": why, "attempts": prior})
+    return out, skipped
+
+def cmd_redeliver(argv):
+    positional, flags = parse_flags(
+        argv,
+        valued=["--max-attempts", "--mode"],
+        boolean=["--pending", "--json", "--dry-run"],
+    )
+    if positional:
+        die(2, "redeliver takes no positional argument; the selector is "
+               "--pending")
+    raw_max = flags.get("--max-attempts")
+    if raw_max is not None:
+        try:
+            max_attempts = int(raw_max)
+        except ValueError:
+            die(2, "--max-attempts must be an integer, got %r" % (raw_max,))
+    else:
+        max_attempts = DEFAULT_MAX_ATTEMPTS
+    if max_attempts < 1:
+        die(2, "--max-attempts must be at least 1")
+    mode = flags.get("--mode") or "turn-end"
+    if mode not in ("turn-end", "interrupt", "quiet"):
+        die(2, "--mode must be turn-end, interrupt or quiet")
+    dry_run = bool(flags.get("--dry-run"))
+
+    pending, skipped = pending_deliveries()
+    ready = [p for p in pending if p["attempts"] < max_attempts]
+    # EXHAUSTED is a REPORTED state, never a silent drop: a sweep that stops
+    # trying without saying so turns a live blockage into a quiet one.
+    exhausted = [p for p in pending if p["attempts"] >= max_attempts]
+
+    if dry_run:
+        if flags.get("--json"):
+            print(json.dumps({"pending": len(pending), "ready": ready,
+                              "exhausted": exhausted, "max_attempts": max_attempts,
+                              "not_retried_pre_epoch": skipped,
+                              "mode": mode, "dry_run": True},
+                             indent=2, ensure_ascii=False))
+        else:
+            print("would redeliver %d question(s) (max-attempts %d, %s):"
+                  % (len(ready), max_attempts, mode))
+            for item in ready:
+                print("  %s %s (%s, attempts=%d)"
+                      % (item["set"], item["qid"], item["why"], item["attempts"]))
+            for item in exhausted:
+                print("  EXHAUSTED %s %s (attempts=%d)"
+                      % (item["set"], item["qid"], item["attempts"]))
+            if skipped:
+                print("  NOT retried: %d question(s) answered before the "
+                      "delivery stamp existed — absence there is not evidence "
+                      "of a failed delivery" % (skipped,))
+        return 1 if exhausted else 0
+
+    results = []
+    for item in ready:
+        result = deliver_answer(item["set"], item["qid"], mode, False,
+                                entry=find_set_anywhere(item["set"]))
+        result["why"] = item["why"]
+        results.append(result)
+
+    delivered = [r for r in results if r.get("delivery") == "delivered"]
+    unreachable = [r for r in results if r.get("delivery") == "unreachable"]
+    refused = [r for r in results
+               if r.get("delivery") == "refused" or r.get("rc") == 3]
+
+    if exhausted:
+        rc = 1
+    elif refused:
+        rc = 3
+    elif unreachable:
+        rc = 4
+    else:
+        rc = 0
+
+    if flags.get("--json"):
+        print(json.dumps({"pending": len(pending), "attempted": len(results),
+                          "delivered": len(delivered),
+                          "unreachable": len(unreachable),
+                          "refused": len(refused),
+                          "exhausted": exhausted,
+                          "not_retried_pre_epoch": skipped,
+                          "results": results, "rc": rc},
+                         indent=2, ensure_ascii=False))
+        return rc
+    if not pending:
+        print("redeliver: nothing pending — no delivery is recorded as failed")
+        if skipped:
+            print("redeliver: %d question(s) NOT retried — answered before the "
+                  "delivery stamp existed, so their silence is not a finding"
+                  % (skipped,))
+        return 0
+    print("redeliver: %d pending, %d attempted — %d delivered, %d still "
+          "unreachable, %d refused, %d exhausted (max-attempts %d)"
+          % (len(pending), len(results), len(delivered), len(unreachable),
+             len(refused), len(exhausted), max_attempts))
+    if skipped:
+        print("redeliver: %d question(s) NOT retried — answered before the "
+              "delivery stamp existed, so their silence is not a finding"
+              % (skipped,))
+    for item in exhausted:
+        print("  EXHAUSTED %s %s after %d attempt(s) — needs a human"
+              % (item["set"], item["qid"], item["attempts"]))
+    for result in results:
+        if result.get("error"):
+            print("  FAILED %s %s: %s" % (result["set"], result["qid"],
+                                          result["error"]))
+    return rc
 
 # =============================================================================
 # publish — static HTML into a fresh unguessable token directory (7-day TTL)
@@ -4747,6 +4960,195 @@ def selftest():
            "\u2026and an undelivered question carries no object, so a machine "
            "reader sees the gap too")
 
+        # -- 13. REDELIVER -------------------------------------------------
+        # The RETRY leg, and its whole risk is #251: the notify path is NOT
+        # idempotent, so a sweep built on the OBVIOUS predicate ("absent or
+        # unreachable") re-delivers answers that already landed -- 56
+        # notifications against the live register instead of 6, and one answer
+        # body already reached its lane 8x that way. These arms pin the
+        # predicate to the MEASURED classes and pin the guard that reads the
+        # stamp back before firing.
+        rd_dir = os.path.join(root, "rd-store")
+        os.makedirs(rd_dir, exist_ok=True)
+        rd_reg = os.path.join(rd_dir, "open.json")
+        rd_env = dict(env)
+        rd_env["OC_QUESTIONS_DIR"] = rd_dir
+        _RL = "Redeliver Lane"
+
+        def _rd_plant(questions):
+            with open(rd_reg, "w", encoding="utf-8") as fh:
+                json.dump({"sets": [{"id": "rdfac", "session": session_a,
+                                     "lane": _RL, "ttl_days": 7,
+                                     "status": "open",
+                                     "questions": questions}]}, fh)
+
+        def _rd_read():
+            with open(rd_reg, encoding="utf-8") as fh:
+                return {q["qid"]: q for q in json.load(fh)["sets"][0]["questions"]}
+
+        _STAMP = {"attempted_at": "2026-09-30T00:00:00+00:00", "http": 0,
+                  "mode": "turn-end"}
+        # One question per class the predicate must discriminate, so an arm that
+        # widens or narrows the population reddens against a named row.
+        _rd_plant([
+            dict(qid="q1", title="unreachable", status="answered", answer="a1",
+                 session=session_a, lane=_RL,
+                 delivery=dict(_STAMP, outcome="unreachable")),
+            dict(qid="q2", title="delivered", status="answered", answer="a2",
+                 session=session_a, lane=_RL,
+                 delivery=dict(_STAMP, outcome="delivered", http=200)),
+            dict(qid="q3", title="refused", status="answered", answer="a3",
+                 session=session_a, lane=_RL,
+                 delivery=dict(_STAMP, outcome="refused", http=400)),
+            dict(qid="q4", title="post-epoch unattempted", status="answered",
+                 answer="a4", session=session_a, lane=_RL,
+                 answered_at="2026-09-29T09:29:01+00:00"),
+            dict(qid="q5", title="pre-epoch unstamped", status="answered",
+                 answer="a5", session=session_a, lane=_RL,
+                 answered_at="2026-09-01T00:00:00+00:00"),
+        ])
+        proc = subprocess.run([tool, "redeliver", "--pending", "--dry-run",
+                               "--json"], env=rd_env, capture_output=True,
+                              text=True, timeout=90)
+        try:
+            _rep = json.loads(proc.stdout)
+        except Exception:
+            _rep = {}
+        _ready = sorted(i["qid"] for i in (_rep.get("ready") or []))
+        ck(proc.returncode == 0 and _ready == ["q1", "q4"],
+           "redeliver selects exactly the unreachable + post-epoch unattempted "
+           "questions (%r, rc=%d)" % (_ready, proc.returncode))
+        ck(_rep.get("not_retried_pre_epoch") == 1,
+           "\u2026and NAMES the pre-epoch unstamped it did not retry (%r) -- a "
+           "silent filter and an empty population print the same thing"
+           % (_rep.get("not_retried_pre_epoch"),))
+
+        # A dry run must stamp nothing: a stamp written without a delivery makes
+        # the register claim something nobody did.
+        with open(rd_reg, "rb") as fh:
+            _rd_before = fh.read()
+        subprocess.run([tool, "redeliver", "--pending", "--dry-run"], env=rd_env,
+                       capture_output=True, text=True, timeout=90)
+        with open(rd_reg, "rb") as fh:
+            _rd_after = fh.read()
+        ck(_rd_before == _rd_after,
+           "a redeliver DRY RUN stamps nothing (register byte-identical)")
+
+        _hits = []
+
+        class _RdOk(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                _hits.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"jsonrpc":"2.0","id":"1","result":{}}')
+
+            def log_message(self, *args):
+                pass
+
+        _rdsrv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _RdOk)
+        threading.Thread(target=_rdsrv.serve_forever, daemon=True).start()
+        rd_ok = dict(rd_env)
+        rd_ok["OC_QUESTIONS_A2A"] = ("http://127.0.0.1:%d/a2a/v1"
+                                     % _rdsrv.server_address[1])
+        try:
+            proc = subprocess.run([tool, "redeliver", "--pending"], env=rd_ok,
+                                  capture_output=True, text=True, timeout=90)
+            ck(proc.returncode == 0,
+               "redeliver against a reachable endpoint is rc=0 (rc=%d)"
+               % proc.returncode)
+            ck(len(_hits) == 2,
+               "\u2026and POSTs EXACTLY the pending population, once each "
+               "(%d POSTs)" % len(_hits))
+            # MUTATION KILL: drop the `outcome in ("delivered","refused")`
+            # filter from pending_deliveries and the second sweep re-fires q1.
+            proc = subprocess.run([tool, "redeliver", "--pending"], env=rd_ok,
+                                  capture_output=True, text=True, timeout=90)
+            ck(proc.returncode == 0 and len(_hits) == 2,
+               "a DELIVERED question is NEVER re-delivered (#251): the second "
+               "sweep POSTs nothing (%d POSTs total)" % len(_hits))
+        finally:
+            _rdsrv.shutdown()
+            _rdsrv.server_close()
+        _qs = _rd_read()
+        ck((_qs["q1"].get("delivery") or {}).get("outcome") == "delivered",
+           "a retried question is stamped delivered (%r)"
+           % ((_qs["q1"].get("delivery") or {}).get("outcome"),))
+        ck((_qs["q1"].get("delivery") or {}).get("attempts") == 2,
+           "\u2026and its attempt counter advanced past the counterless stamp "
+           "(%r)" % ((_qs["q1"].get("delivery") or {}).get("attempts"),))
+        ck((_qs["q4"].get("delivery") or {}).get("attempts") == 1,
+           "\u2026while a first attempt counts 1 (%r)"
+           % ((_qs["q4"].get("delivery") or {}).get("attempts"),))
+        ck(_qs["q5"].get("delivery") is None,
+           "the pre-epoch question is never touched (delivery=%r)"
+           % (_qs["q5"].get("delivery"),))
+
+        # The BOUND. A sweep that stops trying without saying so turns a live
+        # blockage into a quiet one, so exhaustion is a reported state.
+        _rd_plant([dict(qid="q1", title="exhausted", status="answered",
+                        answer="a1", session=session_a, lane=_RL,
+                        delivery=dict(_STAMP, outcome="unreachable", attempts=3))])
+        proc = subprocess.run([tool, "redeliver", "--pending", "--dry-run",
+                               "--json"], env=rd_env, capture_output=True,
+                              text=True, timeout=90)
+        try:
+            _rep = json.loads(proc.stdout)
+        except Exception:
+            _rep = {}
+        ck(proc.returncode == 1 and not (_rep.get("ready") or [])
+           and len(_rep.get("exhausted") or []) == 1,
+           "a question at --max-attempts is reported EXHAUSTED, never retried "
+           "(rc=%d, ready=%r)" % (proc.returncode, _rep.get("ready")))
+
+        # rc semantics, each against the transport that produces it.
+        _rd_plant([dict(qid="q1", title="u", status="answered", answer="a1",
+                        session=session_a, lane=_RL,
+                        delivery=dict(_STAMP, outcome="unreachable"))])
+        _dead = dict(rd_env)
+        _dead["OC_QUESTIONS_A2A"] = "http://127.0.0.1:1/a2a/v1"
+        proc = subprocess.run([tool, "redeliver", "--pending"], env=_dead,
+                              capture_output=True, text=True, timeout=90)
+        ck(proc.returncode == 4,
+           "a sweep that reaches nothing is rc=4 (rc=%d)" % proc.returncode)
+
+        class _RdDown(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(length)
+                self.send_response(503)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        _dnsrv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _RdDown)
+        threading.Thread(target=_dnsrv.serve_forever, daemon=True).start()
+        _rd_down = dict(rd_env)
+        _rd_down["OC_QUESTIONS_A2A"] = ("http://127.0.0.1:%d/a2a/v1"
+                                        % _dnsrv.server_address[1])
+        try:
+            _rd_plant([dict(qid="q1", title="u", status="answered", answer="a1",
+                            session=session_a, lane=_RL,
+                            delivery=dict(_STAMP, outcome="unreachable"))])
+            proc = subprocess.run([tool, "redeliver", "--pending"], env=_rd_down,
+                                  capture_output=True, text=True, timeout=90)
+            ck(proc.returncode == 3,
+               "an endpoint that ANSWERS and refuses is rc=3, distinct from an "
+               "unreachable one (rc=%d)" % proc.returncode)
+        finally:
+            _dnsrv.shutdown()
+            _dnsrv.server_close()
+
+        proc = subprocess.run([tool, "redeliver", "--max-attempts", "zero"],
+                              env=rd_env, capture_output=True, text=True,
+                              timeout=90)
+        ck(proc.returncode == 2,
+           "--max-attempts refuses a non-integer (rc=%d)" % proc.returncode)
+
         if fails:
             print("  %d FAILED" % len(fails))
             return 1
@@ -4803,6 +5205,26 @@ USAGE = """questions — the Open Questions register (#547)
                                        destination. A factory set records its
                                        CREATOR's session; each question carries
                                        its own, and that is what routes.
+                                       Every attempt stamps `attempts` beside
+                                       the outcome; that counter is what bounds
+                                       `redeliver`.
+  redeliver [--pending] [--max-attempts N] [--mode M] [--dry-run] [--json]
+           RETRY leg: re-notifies the deliveries the register RECORDS as
+           failed, and NOTHING else. Two classes qualify:
+             unreachable  an attempt was made and the transport failed
+             unattempted  no stamp at all on a question answered AFTER the
+                          stamp existed (2026-09-28T22:35:34+00:00)
+           A question answered BEFORE that instant with no stamp is NOT
+           retried: the register had nowhere to write, so absence there is not
+           evidence of a failure. `delivered` and `refused` are never retried
+           (#251) -- the stamp is read, so a sweep cannot re-deliver what
+           landed. A question at --max-attempts (default 3) is reported
+           EXHAUSTED, never silently dropped.
+           rc: 0 all-clear / 1 something exhausted / 3 refused-or-unroutable /
+               4 still unreachable.
+           THIS IS THE WHOLE LEG: one verb, two callers (a human, and a cron).
+           There is deliberately no run-on-boot leg -- a sweep that fires while
+           the daemon is still migrating only records another failure.
   list     [--lane NAME] [--session id] [--all] [--json] [--quiet]
   publish  [--action URL] [--prune] [--json]
            re-renders the one shared page at its constant slug
@@ -4827,7 +5249,8 @@ def main(argv):
     handlers = {"ask": cmd_ask, "answer": cmd_answer, "amend": cmd_amend,
                 "withdraw": cmd_withdraw, "list": cmd_list,
                 "publish": cmd_publish, "lint": cmd_lint,
-                "gc": cmd_gc, "notify": cmd_notify}
+                "gc": cmd_gc, "notify": cmd_notify,
+                "redeliver": cmd_redeliver}
     if set(handlers) != set(_VERBS):
         sys.stderr.write("%s: verb set drifted from _VERBS\n" % PROG)
         return 2
