@@ -988,7 +988,7 @@ def test_the_row_and_the_report_state_the_SAME_yield():
     )
     # The ROW's arm, driven through the row's own builder. Pre-fix this rendered `28%`
     # (`int(28.57)`), so this assertion is what the defect fails.
-    row = audit_reader.format_run_row_detail(stats, "accepted", "all-pass")
+    row = audit_reader.format_run_row_detail(stats, "accepted", "all-pass", 7.0)
     assert "yield=28.6%" in row, (
         f"the run row must state the same number as the report beside it, got {row!r} — "
         f"pre-fix it truncated this ratio to 28%"
@@ -1002,6 +1002,49 @@ def test_the_row_and_the_report_state_the_SAME_yield():
         "an unstated yield must not render as 0%"
     )
 
+def test_the_run_row_duration_comes_from_the_argument_not_a_literal():
+    """#276: `duration=` is a TELEMETRY key, so its value must be one the caller measured.
+
+    Origin: `format_run_row_detail` rendered a hardcoded `duration=4s`, so every
+    `internal-self-audit` row declared the same four seconds while a real audit of that
+    tree ran 771 s — and a lane read `n=1980`'s `duration=4s` as "a 4-second audit". That
+    is the #130 class (a hand-typed value in a measured field) one population over: #130
+    swept close rows, and run rows carry no provenance token at all.
+
+    TWO-SIDED, because a constant can satisfy a one-sided check: the same call with two
+    different elapsed values must produce two different trailers, and each must carry the
+    value it was GIVEN. The probe therefore fails on the pre-fix signature (it takes no
+    elapsed argument) AND on any fix that keeps rendering a literal.
+    """
+    stats = {"first_pass_yield": 1.0}
+    fast = audit_reader.format_run_row_detail(stats, "accepted", "all-pass", 3.0)
+    slow = audit_reader.format_run_row_detail(stats, "accepted", "all-pass", 771.55)
+    assert "duration=3s" in fast, f"the row must carry the elapsed value it was GIVEN: {fast!r}"
+    assert "duration=771s" in slow, (
+        f"a second call with another elapsed value must render that value — a trailer that "
+        f"does not vary with its argument is the hardcoded literal returning: {slow!r}"
+    )
+    assert fast != slow, (
+        "two runs of different length must not render identical trailers; equality here IS "
+        "the fabricated-measurement defect"
+    )
+    # The structural arm: the literal must not be reachable in the source at all.
+    src = AUDIT.read_text(encoding="utf-8")
+    assert "duration=4s" not in src, (
+        "the hardcoded duration is the defect; it must not return in any form"
+    )
+    # `turns=0` is honest and the key is NOT dropped — the sibling run rows carry varied,
+    # measured values, so the fix conforms the outlier rather than deleting the field.
+    assert "turns=0" in fast, "turns=0 is a true statement about a mechanical run and stays"
+    # The renderer's own unit arm, driven directly: sub-second runs are a measurement, not
+    # a floor, and the value is integer seconds matching every sibling row's form.
+    assert audit_reader.format_elapsed_seconds(0.4) == "0s", (
+        "a sub-second run renders 0s — a fact about the run, not a default"
+    )
+    assert audit_reader.format_elapsed_seconds(59.9) == "59s", (
+        "the renderer truncates to integer seconds, matching the sibling rows' form"
+    )
+
 def test_no_SECOND_arithmetic_site_renders_the_yield():
     """#143's structural half: the row must not do its own percentage arithmetic.
 
@@ -1011,8 +1054,9 @@ def test_no_SECOND_arithmetic_site_renders_the_yield():
     and this one fails if that expression returns in any form.
     """
     src = AUDIT.read_text(encoding="utf-8")
-    assert "format_run_row_detail(ledger_stats, outcome, gate_summary)" in src, (
-        "the run row must render its yield through the one rounding site"
+    assert "format_run_row_detail(ledger_stats, outcome, gate_summary, elapsed_secs)" in src, (
+        "the run row must render its yield through the one rounding site — and its duration "
+        "from the run's own measured clock (#276)"
     )
     assert "yield_pct" not in src, (
         "no local percentage variable in the row: it IS the second arithmetic site"
