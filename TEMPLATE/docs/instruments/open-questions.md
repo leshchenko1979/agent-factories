@@ -41,6 +41,56 @@ enumerating imports**, which is what frame §1 requires of a declaration. The me
 (`skills/<skill dir>/open-questions.md`) is deliberately **not** in this set: it is the member's own
 act under frame §6.1, and the transport creates no links.
 
+### 2.1 The extension surface — there is none, and §2 is the reason
+
+**This instrument has no extension surface: member subject matter lives outside it** (frame §6.5).
+
+A **declared** state, not an omission, and decidable from this file rather than from taste. §6.5's
+contract has four parts, and its **first requires a SHIPPED half** — the specimen's
+`TEMPLATE/docs/ledger-refs-kinds.example.json`, declaring nothing, with the factory-owned
+`docs/ledger-refs-kinds.json` beside it. **This instrument ships no declaration path at all:** §2's
+set is the executable, its render asset, its gate and this file. So there is no shipped half to
+declare into and no adopter to hold one, and arm (a) is unavailable here while §2 stands — not
+merely unchosen.
+
+Three measured facts close the doors a member would otherwise take:
+
+- **The vocabularies are CLOSED CONSTANTS in the one writer.** A question's `kind` is `single` or
+  `multi` and nothing else: the write path refuses any other value **by name**, and those same two
+  values are re-read by every consumer that cares — `list` counts a multi question's answers, the
+  renderer picks checkbox against radio, `amend` re-resolves a recommendation against it. `--via`
+  (`card` · `page` · `cli`) and `--mode` (`turn-end` · `interrupt` · `quiet`) are closed the same
+  way. **No declaration file is folded into any of them**, so a member's own value cannot land at a
+  point the reader accepts: it would be an edit to the executable — a **fork** by §6.5's test, since
+  it changes the shape on a path, and §6.4's tier that refuses.
+- **A member's subject matter lands as the SUBJECT, never as a vocabulary.** The instrument is
+  domain-agnostic by construction: a question is a title, a Markdown description (tables and Mermaid
+  supported) and an optional option list, so a factory's own subject matter needs **no** shape change
+  in order to be asked. What a member supplies is *what a question is about*, and none of it is
+  folded into how the instrument reads.
+- **The one place a member's own LOGIC is needed is already a CORE field, not a declaration.** A
+  member that needs its own closure condition passes it to `close_when`, which the instrument's
+  single closure reader runs. That field takes a VALUE — a predicate — and names nothing the
+  instrument then accepts: it can be neither promoted nor shadowed, which is why it is a core field
+  and not an extension surface under §6.5's four-part contract.
+
+**Where a member's subject matter goes instead.** Nowhere new: into the register as its own questions,
+read identically for every factory that asks. A member that needs an addition to the instrument
+ITSELF — a third question kind, a different answer control — has one path and it is not a private
+one: frame §5's promotion, the same route that promoted this instrument.
+
+**A parameterised PATH declares no vocabulary.** `OC_QUESTIONS_DIR` and its siblings point the
+instrument at another store, another render asset or another gateway; that changes *which* questions
+it holds and *where* the page is written, never what a question may say. Aiming the instrument at a
+file is not a way to declare into it.
+
+**The member's duty is CITED here, not authored** (frame §9). **O1 has an object here** — this
+instrument ships four paths, so a member holding a divergent copy owes a disposition
+(migrate / declare / defer), declared on its own fragment, `registry/factories/<slug>.json`, on this
+instrument's axis `instruments.open-questions`; §5.4 governs the member leg. **O4** applies as §6.5
+states it — declare what its instrument accepts, or state why it has none — and for this instrument
+the answer is the paragraph above, because there is no vocabulary to declare.
+
 ---
 
 ## 3. The lane-side contract
