@@ -2131,7 +2131,7 @@ def probe_the_rederivation_leg_prints_and_bites() -> None:
         # gate that reds on it would be a tax on adoption. Same shape and same reason as the
         # missing-manifest skip in `probe_the_live_rederivation_leg_is_non_vacuous` below.
         print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
-              "is this factory's standing duty (§5.2), not yet part of the shipped kit")
+              "is this factory's standing duty, not yet part of the shipped kit")
         return
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
