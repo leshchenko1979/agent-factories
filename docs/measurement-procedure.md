@@ -183,6 +183,11 @@ flowchart TD
      evidence. This does **not** mean auditing HEAD instead of the working tree, and does
      not mean refusing to run on a dirty tree — it means the verdict *says which tree it
      was read on*. Upheld by `tests/test_audit_tree_condition.py`.
+   - **The gate-budget re-derivation leg (§5.2) — a standing duty of THIS round.** When the
+     audit reports a gate whose declared basis no longer describes it (leg A bytes / leg B
+     runner), or one that exhausted its budget, the run re-derives that basis from its own
+     fresh measurement and writes `registry/gates.json`. Trigger, predicate and writer are
+     stated in §5.2; a basis that still describes its command is never re-based.
 
 2. **Tier 2 — Meta-Audit of Member Factories (By Surveys Lane):**
    For each surveyed member factory:
@@ -495,6 +500,63 @@ The gate's bound, stated so it is not oversold: it asserts that the verdict and 
 `workspace_gate=rc=0` over a red gate would still pass — the token records the run's own
 act, and no structural read can falsify it. The live half of that property is the operator's
 review of the artifact, which is exactly why the sha travels with the verdict.
+
+---
+
+### 5.2 The Gate-Budget Re-Derivation Leg — the standing duty that clears the staleness class
+
+`registry/gates.json` declares, per gate, a time budget as a multiple of a measured runtime
+(`budget_sec = margin_x × measured_sec`). A declared basis goes STALE whenever the command it
+names changes, so staleness is a **standing property of the manifest**, not a one-off backlog:
+the 2026-10-02 survey reported **17 of 49** declared bases stale (10-01: 15 of 49), and `#141` —
+the one-off batch that first cleared the class — is CLOSED while its class RECURS (#269).
+
+**The duty is a leg of THIS round, and the round already carries every input it needs.** No new
+instrument and no separate job: the run's own `tools/audit.py` pass computes both operands — the
+per-gate `stale_basis` (the legs below) and the whole-command `duration_sec` — and prints the
+join. A separate job would split the ONE writer of `registry/gates.json` and re-run gates the
+round has already run.
+
+**THE TRIGGER IS A CONTAINMENT EVENT, NEVER A FRESH SAMPLE.** A basis is re-derived when, and
+only when:
+
+- **leg A — the gate's FILE moved.** Its blob at `measured_at` differs from its blob at HEAD, so
+  the basis describes a DIFFERENT test.
+- **leg B — the registered RUNNER FORM moved.** The `gates_to_run.append(...)` argv for the
+  target changed while the file stayed byte-identical, so the basis describes a different
+  COMMAND (#125; the two legs barely overlap, so a bytes-only read misses leg B entirely).
+- **a measured sample EXHAUSTED the budget** and the audit reported **UNKNOWN**.
+
+A fresh sample that stays INSIDE the cap is **not** a trigger: `margin_x` exists to absorb
+measurement variation, and re-basing on every new maximum would ratchet the cap toward the
+"too high hides a hung gate" direction (#128, ruling n=823 — where a basis was HELD against a
+sample 5.7 % above it).
+
+**THE MECHANISM.** For each gate in the containment population: take the **worst COMPLETED**
+whole-command sample as `measured_sec`; derive `margin_x = 4.0 + 0.75 / measured_sec`; set
+`budget_sec` to the product rounded to 2 dp; record `measured_at` as the ABSOLUTE revision the
+sample was taken at; and state `load_at_measure`. The predicate is whole-command wall-clock
+seconds — interpreter startup, import and collection INCLUDED — never pytest's own summary line,
+which times only the test bodies (a 17× gap on one gate, and a budget derived from it killed a
+healthy gate).
+
+**THE WRITER, AND THE RULE THAT IS NOT THE LANE'S TO CHOOSE.** The writer is the **measurement
+duty (`Surveys`)** — §11 of the skill names it. The derivation RULE is not the lane's: the budget
+values are the process owner's, never the implementing lane's (n=574 PART 5), so a re-derivation
+APPLIES the manifest's stated law to a fresh measurement — it never picks a number by feel.
+`tools/gate_budget.py` **REFUSES** a stated derivation its own numbers contradict. The **DEFAULT's
+VALUE** — what the suite does with a gate nobody has measured — is a policy choice and is
+**HQ's**, never this leg's; a moved undeclared population is REPORTED, never silently re-valued.
+
+**THE POPULATION IS PRINTED, ALWAYS.** The run states which bases it re-derived and which it
+held, and an empty population is stated as EMPTY — never silence, so a leg that ran over nothing
+stays distinguishable from one that never ran.
+
+**PRECEDENT — this leg DECLARES a practice that already ran.** Commit `ee5d885` (2026-10-02,
+Surveys) re-derived the two bases killed in that day's round on exactly the two named triggers
+(leg A + budget exhaustion), using the manifest's own margin law and stating `load_at_measure`.
+What was missing was not the mechanism but the DECLARATION: the procedure, the cron table and the
+board each carried no re-derivation step, which is what let the class recur un-cleared (#269).
 
 ---
 
