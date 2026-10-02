@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.38
+version: 0.1.40
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -157,7 +157,9 @@ Work goes **sender → owner of the resource**, directly. No relay hops.
 **The intake leg is dispatched at FILING time, never last.** Filing a board item is a sequence
 with four legs — the board issue, the ledger intake row, the claim, and the dispatch to the lane
 that implements it. Intake is **Triage's** row, so filing a board item owes Triage a dispatch in
-the **same turn** as the filing. Filed last, the intake row lands after the claim, and
+the **same turn** as the filing. **The row is stamped by the FILER, in the same turn as the
+filing; Triage owns the leg's ORDERING and receives the dispatch.** Filed last, the intake row
+lands after the claim, and
 `tests/test_board_intake_recorded.py` **fails on a numeric subject carrying a `claim` or a
 `close` with no intake row of its own**.
 
@@ -574,7 +576,7 @@ outside it, the issue board. Every other path to it is read-only.
 
 **The receipt's SUBJECT is canonical, and the reader's key is deliberately NOT widened to meet a deviation.** A receipt's subject is `<stem>-<round>`: `<stem>` is the job's own declared `receipt_subject`, and `<round>` is its own `last_run_at` UTC date. The key is a **boundary-checked prefix** — the subject must start with `<stem>-<round>`, and the character after it must not be a digit, so a different date whose subject merely extends this one's digits (`...-2026-09-250`) cannot match. That tolerance exists for **round-key variants**: an hour-bearing subject (`patrol-verify-2026-09-25T06`) names the same round, and so does a trailing word. It is never licence to decorate: a subject that puts words BETWEEN the stem and the round (`registry-attest-writeback-2026-09-25`) does not name the round at all and is **not a receipt**, and the leg reads MISSING — loud, and true. **Do not widen the key to a fuzzy token match.** A false MISSING costs one look; a false CLEAN is silent, and this leg exists precisely because silence is the failure it cannot see (#160). The writer is upstream of the reader: fix the convention, never the key.
 
-**A subject match is not a receipt — the row must DECLARE its completion.** A receipt carries `duty=completed`, `failed` or `skipped`, read through the shared positional reader (`tools/field_predicate.py::declared_duty`) against the domain declared beside it (`DUTY_DOMAIN`). A row whose subject matches the round and declares nothing is **not** a receipt: the leg's first version accepted any subject match, so a DISPATCH record written before the round completed certified it, and a round with no receipt at all read clean. Absent is not a value, an out-of-domain value is an ERROR, and `failed`/`skipped` are both findings. **The key is a distinct field, never `outcome=`:** a duty receipt is selection-biased — written by a lane that completed a duty — so folding it into the first-pass yield's population makes that metric structurally optimistic, one real lane failure diluting it roughly twofold. One number answering two questions is the #143 class.
+**A subject match is not a receipt — the row must DECLARE its completion.** A receipt carries `duty=completed`, `failed` or `skipped`, read through the shared positional reader (`tools/field_predicate.py::declared_duty`) against the domain declared beside it (`DUTY_DOMAIN`). A row whose subject matches the round and declares nothing is **not** a receipt: the leg's first version accepted any subject match, so a DISPATCH record written before the round completed certified it, and a round with no receipt at all read clean. Absent is not a value, an out-of-domain value is an ERROR, and `failed`/`skipped` are both findings. **The key is a distinct field, never `outcome=`:** a duty receipt is selection-biased — written by a lane that completed a duty — so folding it into the first-pass yield's population makes that metric structurally optimistic, one real lane failure diluting it roughly twofold. One number answering two questions is the #143 class. **The requirement binds the WRITER, and the reader's positionality is only what makes it a requirement: the `duty=` token must sit INSIDE the row's canonical terminal run — the maximal run of `=`-carrying tokens at the end of `detail` — so no token without `=` may follow it, and the value is written VERBATIM, so `duty=completed` declares `completed` while `duty=completed.` declares `completed.`, which is outside `DUTY_DOMAIN` and therefore an ERROR rather than a silent pass.**
 
 **A pacemaker's redirect log is named after ITS OWN JOB, and the leg's precondition is
 stated rather than assumed (2026-09-25, #163).** The notify-receipt leg attributes a
