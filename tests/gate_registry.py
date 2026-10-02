@@ -653,6 +653,11 @@ REQUIRED_GATES: tuple[str, ...] = (
     # without this gate a factory would carry that declaration with nothing measuring it,
     # which is the dead text P29 names.
     "test_hygiene_build_residue.py",
+    # G2 (q13, 2026-10-02): the declaration cross-sweep. The `docs/*.json` files are the
+    # factory's debt register, and a stale exemption reads as a live grant while granting
+    # nothing -- so an entry whose target no longer exists must be REPORTED. Report-only
+    # (`removes: no`), asserted structurally; each surface's own tool keeps its write path.
+    "test_hygiene_declaration_sweep.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

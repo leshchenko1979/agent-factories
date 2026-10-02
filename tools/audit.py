@@ -2344,6 +2344,29 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_hygiene_build_residue.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_build_residue.py"])
 
+    # 76. hygiene declaration cross-sweep (G2, q13) -- origin 2026-10-02, the owner's ruling
+    #     that hygiene owns the WHOLE inventory and builds a gate for every ungated surface.
+    #     THE MECHANISM IT GUARDS: the `docs/*.json` declaration files are the factory's own
+    #     debt register -- an exemption, a skip or an authorization is a promise that some
+    #     named target exists and deserves it -- and NOTHING checked that promise. A target
+    #     renamed, moved or deleted leaves the entry behind, and a stale exemption is worse
+    #     than none: it reads as a live grant while granting nothing, so the next reader
+    #     honours a debt already paid and the surface it protected is silently unguarded.
+    #     This gate holds the sweep to its own declarations: every family on disk is DECLARED
+    #     in the leg's map, a planted missing target is REPORTED (with its live counterpart
+    #     as the positive control), an unanswerable commit probe is a THIRD state and never a
+    #     clean zero, an absent file is `absent` and not `clean`, and every unswept family
+    #     states its reason. It also scans the leg's own source for a removal call, because
+    #     the leg is REPORT-ONLY (`removes: no`) and each surface's own tool keeps its write
+    #     path -- a second predicate over an owned population is the defect this factory
+    #     files against. REQUIRED, not OPTIONAL: it reads only the tree it ships in and
+    #     plants its fixtures under a temp root, so it passes in a bootstrapped factory
+    #     exactly as it does here. It is byte-paired with a TEMPLATE copy. Its MODE is
+    #     declared in `registry/gates.json` in the SAME landing; its BUDGET lands in the
+    #     basis commit that follows, because a base may never name its own commit.
+    if (repo_root / "tests/test_hygiene_declaration_sweep.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_declaration_sweep.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

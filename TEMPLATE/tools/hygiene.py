@@ -372,6 +372,238 @@ def render_build_residue(coverage: dict) -> str:
         f"(declared out, q15; removes: no)"
     )
 
+# --- Declaration surfaces: an entry whose target is gone is a STALE DEBT (G2) ---------
+#
+# The class this file's OWN docstring names and nothing acted on: "the exemption
+# surfaces, where an unmatched entry is a stale debt" (`load_declaration` above). Each
+# surface's own tool reads its own file and checks it for READABILITY; not one of them
+# asks whether the thing an entry POINTS AT still exists. So an exemption left behind by a
+# rename or a deletion sits here looking live, and every surface still reads green.
+#
+# REPORT-ONLY, and it holds no write path: each surface's own tool owns its own file, and
+# a second writer over one population is the defect this factory files against. The leg's
+# job is to make the debt VISIBLE on every run, so "we checked" and "nobody looked" stop
+# rendering as the same output.
+#
+# TWO TARGET KINDS, and the choice is stated rather than implied. An entry is swept where
+# its target is a PATH in this tree or a COMMIT in this history: both are LOCAL, both are
+# decidable without the network, and both go stale in exactly the way this gap describes.
+# Every family whose entries name something ELSE is DECLARED below with its reason, so the
+# population is all fifteen and a zero on any line is a verdict rather than a silence.
+DECL_PATH = "path"
+DECL_COMMIT = "commit"
+
+# (family, live file, probes, note). A probe is (container, field, kind): `container` None
+# means the file's TOP LEVEL, and `field` None means the container's own KEYS are the
+# targets. `note` is REQUIRED on a family with no probes -- it is what makes an unswept
+# family a declaration rather than an omission.
+DECLARATION_SURFACES: tuple[
+    tuple[str, str, tuple[tuple[str | None, str | None, str], ...], str], ...
+] = (
+    ("hygiene-protected", "docs/hygiene-protected.json", (),
+     "a PREVENTION surface by its own docstring -- an unmatched entry is legal, not a "
+     "debt -- and its targets are absolute /tmp paths, not tree paths"),
+    ("law-uuid-exemptions", "docs/law-uuid-exemptions.json",
+     (("exempt", "path", DECL_PATH),), ""),
+    ("ledger-authorizations", "docs/ledger-authorizations.json", (),
+     "entries name LANES (actors and by_event values), not a path or a commit"),
+    ("ledger-commit-exemptions", "docs/ledger-commit-exemptions.json",
+     (("exemptions", "sha", DECL_COMMIT),), ""),
+    ("ledger-exemptions", "docs/ledger-exemptions.json", (),
+     "entries name a BOARD ISSUE (`subject`), which this leg cannot read offline"),
+    ("ledger-invariants", "docs/ledger-invariants.json", (),
+     "entries are dates and ledger row numbers, neither of which a rename can strand"),
+    ("ledger-no-shrink-exemptions", "docs/ledger-no-shrink-exemptions.json",
+     (("exemptions", "sha", DECL_COMMIT),), ""),
+    ("ledger-refs-kinds", "docs/ledger-refs-kinds.json", (),
+     "entries are ledger VOCABULARY names (kinds and events), not a target object"),
+    ("ledger-retirements", "docs/ledger-retirements.json", (),
+     "entries name LEDGER ROWS, and the ledger is append-only -- a row cannot be stranded"),
+    ("ledger-schema-exemptions", "docs/ledger-schema-exemptions.json", (),
+     "entries are keyed by ledger row `n`; the same append-only reason as above"),
+    ("products", "docs/products.json", (),
+     "entries are product records, whose `id` is an internal label and not a tree object"),
+    ("rework-relative-revision-exemptions",
+     "docs/rework-relative-revision-exemptions.json", (),
+     "entries name a BOARD ISSUE (`subject`), which this leg cannot read offline"),
+    ("shipped-audit-skips", "docs/shipped-audit-skips.json",
+     (("skips", None, DECL_PATH),), ""),
+    ("shipped-mechanism-law", "docs/shipped-mechanism-law.json",
+     ((None, "law", DECL_PATH), ("required_clauses", "mechanism", DECL_PATH)), ""),
+    ("skill-version-exemptions", "docs/skill-version-exemptions.json",
+     (("exempt", "path", DECL_PATH), ("exempt", "sha", DECL_COMMIT)), ""),
+)
+
+def declaration_families_on_disk(root: Path | None = None) -> list[str]:
+    """The live declaration families THIS tree carries.
+
+    A family is the stem of a `docs/*.json` that is neither an `.example` skeleton nor a
+    schema. This is the population the sweep must COVER, and it is read from the tree
+    rather than from `DECLARATION_SURFACES` on purpose: a map that is its own population
+    cannot notice a sixteenth family appearing beside it, which is the drift this
+    function exists to make visible.
+    """
+    root = root or repo_root()
+    families = set()
+    for path in (root / "docs").glob("*.json"):
+        name = path.name
+        if name.endswith(".example.json") or name.endswith(".schema.json"):
+            continue
+        families.add(name[: -len(".json")])
+    return sorted(families)
+
+def _declaration_probe_targets(data, container: str | None, field: str | None) -> list[str]:
+    """The target strings one probe names, or [] where its coordinate is absent.
+
+    An absent container is NOT an error: a family may legitimately omit a section, and
+    the population this leg reads is whatever the file declares.
+    """
+    node = data if container is None else data.get(container)
+    if node is None:
+        return []
+    if field is None:
+        return [key for key in node if isinstance(key, str)] if isinstance(node, dict) else []
+    if not isinstance(node, list):
+        return []
+    return [
+        entry[field] for entry in node
+        if isinstance(entry, dict) and isinstance(entry.get(field), str)
+    ]
+
+def _path_exists(root: Path, target: str) -> bool:
+    return (root / target).exists()
+
+def _commit_exists(root: Path, target: str) -> bool | None:
+    """True/False, or None where the instrument could not answer at all.
+
+    None is a THIRD state on purpose: a missing `git` is not a missing commit, and
+    collapsing the two would let a broken instrument report every exemption as dead debt.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "cat-file", "-e", f"{target}^{{commit}}"],
+            cwd=str(root), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return None
+    return proc.returncode == 0
+
+def declaration_sweep_leg(
+    root: Path | None = None,
+    path_fn=_path_exists,
+    commit_fn=_commit_exists,
+) -> dict:
+    """The cross-sweep: every declaration family, its targets, and the ones now unmatched.
+
+    REPORT-ONLY and `removes: False`: this leg reads and prints, and the surface's own
+    tool keeps its write path. Both checkers are injected so a probe can drive the leg
+    over a throwaway tree rather than the live one.
+    """
+    root = root or repo_root()
+    families: list[dict] = []
+    for family, rel, probes, note in DECLARATION_SURFACES:
+        path = root / rel
+        record: dict = {"family": family, "file": rel, "note": note, "probes": len(probes)}
+        if not path.is_file():
+            record.update(present=False, targets=0, unmatched=[], status="absent")
+            families.append(record)
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            record.update(
+                present=True, targets=0, unmatched=[], status="NOT RUN",
+                reason=f"{rel} exists but cannot be read: {exc}",
+            )
+            families.append(record)
+            continue
+        if not isinstance(data, dict):
+            record.update(
+                present=True, targets=0, unmatched=[], status="NOT RUN",
+                reason=f"{rel} is not a JSON object",
+            )
+            families.append(record)
+            continue
+
+        targets: list[tuple[str, str]] = []
+        for container, field, kind in probes:
+            targets += [
+                (target, kind)
+                for target in _declaration_probe_targets(data, container, field)
+            ]
+        unmatched: list[str] = []
+        unanswerable = False
+        for target, kind in targets:
+            if kind == DECL_PATH:
+                alive: bool | None = path_fn(root, target)
+            else:
+                alive = commit_fn(root, target)
+            if alive is None:
+                unanswerable = True
+            elif not alive:
+                unmatched.append(f"{kind}:{target}")
+        if unanswerable:
+            record.update(
+                present=True, targets=len(targets), unmatched=unmatched, status="NOT RUN",
+                reason="the commit instrument could not answer (git unavailable here)",
+            )
+        else:
+            record.update(
+                present=True, targets=len(targets), unmatched=unmatched, status="swept"
+            )
+        families.append(record)
+
+    undeclared = sorted(set(declaration_families_on_disk(root)) - {f for f, *_ in DECLARATION_SURFACES})
+    return {
+        "class": "declaration / exemption surfaces",
+        "predicate": (
+            "for every declared family: each entry whose target is a tree PATH or a "
+            "COMMIT, checked against the live tree; an unmatched target is a stale debt"
+        ),
+        "removes": False,
+        "root": str(root),
+        "families": families,
+        "undeclared": undeclared,
+        "live_files": sum(1 for f in families if f["present"]),
+        "targets": sum(f["targets"] for f in families),
+        "unmatched": sum(len(f["unmatched"]) for f in families),
+    }
+
+def render_declaration_sweep(leg: dict) -> str:
+    """One line per family, plus the summary that makes the population readable.
+
+    A family that could not be READ is `NOT RUN` with its reason, never a clean zero, and
+    a family with no path/commit target says so rather than printing a zero that would
+    read as agreement.
+    """
+    families = leg["families"]
+    lines = [
+        f"hygiene declaration sweep: {len(families)} family(ies) over "
+        f"{leg['live_files']} live file(s) — {leg['targets']} target(s), "
+        f"{leg['unmatched']} unmatched (removes: no)"
+    ]
+    width = max((len(f["family"]) for f in families), default=0)
+    for record in families:
+        name = record["family"].ljust(width)
+        if record["status"] == "absent":
+            verdict = "absent (no live file)"
+        elif record["status"] == "NOT RUN":
+            verdict = f"NOT RUN — {record['reason']}"
+        elif record["note"]:
+            verdict = f"not swept — {record['note']}"
+        else:
+            verdict = f"{record['targets']} target(s), {len(record['unmatched'])} unmatched"
+            if record["unmatched"]:
+                verdict += " — " + ", ".join(record["unmatched"])
+        lines.append(f"  {name}  {verdict}")
+    if leg["undeclared"]:
+        lines.append(
+            "  UNDECLARED  " + ", ".join(leg["undeclared"])
+            + " — a family this tree carries that DECLARATION_SURFACES does not name, so "
+              "nothing sweeps it"
+        )
+    return "\n".join(lines)
+
 def _split_status_line(line: str) -> tuple[str, str]:
     """Return (status code, path) from one `git status --porcelain` line.
 
@@ -551,6 +783,10 @@ def main() -> int:
     # the class no other leg can see -- self-ignoring caches -- so its whole remedy is that
     # a reader meets its size here rather than inferring "none" from silence.
     print(render_build_residue(build_residue_leg()))
+    # The declaration cross-sweep, PRINTED on every run (G2). Each surface's own tool reads
+    # its own file for readability; nothing asked whether the thing an entry points at still
+    # exists, so a debt left by a rename read as a live exemption on every one of them.
+    print(render_declaration_sweep(declaration_sweep_leg()))
     patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
     count, items = reap_stale_scratch(
         dry_run=dry_run, patterns=patterns, protected=protected

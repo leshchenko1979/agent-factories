@@ -116,7 +116,7 @@ available here**. A member that adopts the declared set and nothing else has a r
 
 ## 4. The gate set and its registry entries
 
-**All four rows are registered in `registry/gates.json`**, which is what makes them run rather than
+**All five rows are registered in `registry/gates.json`**, which is what makes them run rather than
 merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
@@ -125,11 +125,36 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tests/test_hygiene_inflight.py` | `pytest` | 26.67 | 4.116× | 6.48 | `d36ce91cae0ef3f1d07c43c389bf58e8384c00a7` |
 | `tests/test_hygiene_namespace.py` | `pytest` | 35.95 | 4.085× | 8.8 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
 | `tests/test_hygiene_build_residue.py` | `pytest` | 63.87 | 4.048× | 15.781 | `049a93cc73c4f02be4c8e47f1028924936644d03` |
+| `tests/test_hygiene_declaration_sweep.py` | `pytest` | — | — | — | — |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
-that ceiling. The last row's measurement was taken at load **10.39**, so it is a conservative upper
-bound on a quiet-tree runtime rather than a tight one.
+that ceiling. The build-residue row's measurement was taken at load **10.39**, so it is a conservative
+upper bound on a quiet-tree runtime rather than a tight one. The declaration-sweep row's basis is
+declared in the **basis commit that follows the registration**, and deliberately not in the
+registration itself: a budget base may never name the commit that introduces it, because the
+staleness leg compares the gate file at `measured_at` against the same file at HEAD — a base pointing
+at its own commit would compare the file with itself and could never report drift.
+
+**The declaration surfaces are CROSS-SWEPT, report-only (G2; q13, ruled 2026-09-30).** The `docs/*.json`
+declaration files are the factory's own debt register: an exemption, a skip or an authorization is a
+promise that some named target exists and deserves the exemption. Nothing checked that promise. A
+target that is renamed, moved or deleted leaves the entry behind, and a stale exemption is **worse
+than none** — it reads as a live grant while granting nothing, so the next reader honours a debt that
+has already been paid off, and the surface it was protecting is silently unguarded. `tools/hygiene.py`
+therefore sweeps all **15 declaration families** over the live `docs/*.json` files and prints one line per family
+with its unmatched count —
+`hygiene declaration sweep: N family(ies) over M live file(s) — T target(s), U unmatched (removes: no)`.
+It is **report-only**: `removes: no`, and each surface's own tool keeps its write path, because a
+second predicate over a population that already has an owner is the defect this factory files against.
+Three properties are load-bearing. **A family this leg cannot sweep is declared with its reason, never
+silently skipped** — five families name board issues, lanes, ledger rows, dates or vocabulary, none of
+which a rename can strand, and each says so on its own line. **An unanswerable check is a third
+state, not a false clean** — a commit probe that cannot run reports `NOT RUN` with its reason rather
+than zero, because zero is a verdict only from a working instrument. And **a family with no live file
+is `absent`, not clean** — the distinction the G3 leg draws for an unreadable census, for the same
+reason. The `removes: no` half is asserted **structurally**, by scanning the leg's own source for a
+removal call, the shape established for the worktree leg by `leshchenko1979/agent-factories#220`.
 
 **Build residue is DECLARED OUT, and its population is PRINTED (G3; q15, ruled 2026-09-30).** The four
 residue names — `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.audit.lock` — are **not** reaped by

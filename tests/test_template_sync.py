@@ -164,6 +164,10 @@ PAIRS = [
     # leg without the gate proving it holds no removal path would carry a leg nothing checks,
     # and one that took the gate without the leg would run probes that cannot pass.
     ("tests/test_hygiene_build_residue.py", "TEMPLATE/tests/test_hygiene_build_residue.py"),
+    # Added with its registration (G2, q13): same reason as the G3 pair above -- the gate
+    # reads the declaration surfaces that `tools/hygiene.py` sweeps, so a factory carrying
+    # one half without the other would ship a sweep nothing checks, or probes that cannot run.
+    ("tests/test_hygiene_declaration_sweep.py", "TEMPLATE/tests/test_hygiene_declaration_sweep.py"),
     ("tests/test_close_board_recorded.py", "TEMPLATE/tests/test_close_board_recorded.py"),
     ("tests/test_ledger_commit_cites_no_rows.py", "TEMPLATE/tests/test_ledger_commit_cites_no_rows.py"),
     ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),
