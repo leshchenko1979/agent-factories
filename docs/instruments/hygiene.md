@@ -116,7 +116,7 @@ available here**. A member that adopts the declared set and nothing else has a r
 
 ## 4. The gate set and its registry entries
 
-**All three rows are registered in `registry/gates.json`**, which is what makes them run rather than
+**All four rows are registered in `registry/gates.json`**, which is what makes them run rather than
 merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
@@ -124,10 +124,25 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tools/hygiene.py` | `script` | 3.03 | 5.316× | 0.57 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
 | `tests/test_hygiene_inflight.py` | `pytest` | 26.67 | 4.116× | 6.48 | `d36ce91cae0ef3f1d07c43c389bf58e8384c00a7` |
 | `tests/test_hygiene_namespace.py` | `pytest` | 35.95 | 4.085× | 8.8 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
+| `tests/test_hygiene_build_residue.py` | `pytest` | 63.87 | 4.048× | 15.781 | `049a93cc73c4f02be4c8e47f1028924936644d03` |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
-that ceiling.
+that ceiling. The last row's measurement was taken at load **10.39**, so it is a conservative upper
+bound on a quiet-tree runtime rather than a tight one.
+
+**Build residue is DECLARED OUT, and its population is PRINTED (G3; q15, ruled 2026-09-30).** The four
+residue names — `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.audit.lock` — are **not** reaped by
+this instrument and are **not** a gate failure. The reason is the one a member must not get wrong: a
+worktree's cache belongs to that worktree and dies with the tree, so removing it from outside buys
+nothing the tree's own removal does not, while a reaper that reaches into a peer lane's live worktree
+is exactly the class of harm the report-leg shape (`removes: no`) exists to refuse. What the ruling
+requires instead is **visibility**, and `tools/hygiene.py` prints the population on every run —
+`hygiene build residue: N item(s) over M worktree(s) — <counts> (declared out, q15; removes: no)` —
+with an unreadable worktree census reporting **NOT RUN** and its reason, never a clean zero. The
+`removes: no` half is asserted **structurally**, by scanning the leg's own source for a removal call,
+the shape established for the worktree leg by `leshchenko1979/agent-factories#220`.
+
 
 **The docs leg is PARTIAL, and this is a declared gap rather than a footnote (frame §2, part 5).** The
 BOOTSTRAP step exists — `TEMPLATE/BOOTSTRAP.md` names the tool, both gates and the declaration

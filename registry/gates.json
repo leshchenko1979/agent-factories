@@ -120,6 +120,13 @@
       "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
       "measured_sec": 4.28
     },
+    "tests/test_hygiene_build_residue.py": {
+      "budget_sec": 63.87,
+      "load_at_measure": 10.39,
+      "margin_x": 4.048,
+      "measured_at": "049a93cc73c4f02be4c8e47f1028924936644d03",
+      "measured_sec": 15.781
+    },
     "tests/test_hygiene_inflight.py": {
       "budget_sec": 26.67,
       "margin_x": 4.116,
