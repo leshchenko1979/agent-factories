@@ -2416,6 +2416,33 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_hygiene_stale_dirs.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_stale_dirs.py"])
 
+    # 79. hygiene evidence supersession (G7, q13) -- origin 2026-10-02, the owner's ruling
+    #     that hygiene owns the WHOLE inventory and builds a gate for every ungated surface.
+    #     THE MECHANISM IT GUARDS: `evidence/` and `reviews/` are append-only history -- an
+    #     artifact is never deleted when a later run replaces it -- so the ONLY thing that
+    #     says which snapshot governs is a hand-written notice, or the reader noticing a
+    #     later dated sibling. Measured 2026-10-02: 25 dated artifacts over 15 families, and
+    #     ZERO `superseded_by` markers anywhere in the tree, so every supersession here is
+    #     prose-only. This gate holds the leg to two signals that fail differently: the
+    #     DECLARED naming convention (an older dated member of a family is superseded; a TIE
+    #     at the newest date is a set of CURRENT siblings, not a supersession) and a PROSE
+    #     notice naming a successor path (which catches the singleton the convention cannot
+    #     see). A mechanical `superseded_by` naming a LIVE path EXCUSES the artifact, so the
+    #     census MOVES; a marker naming nothing is a STALE MARKER reported separately, never
+    #     folded into `marked`, because a fabricated supersession reads as a decision
+    #     somebody made and is worse than an unmarked one. An absent evidence/ tree is
+    #     `absent` and never a clean zero -- a bootstrapped factory has none yet. The gate
+    #     scans the leg's own source for a removal call, because what a successor IS is a
+    #     judgement by the lane that produced the artifact and this leg only REPORTS
+    #     (`removes: no`). REQUIRED, not OPTIONAL: every fixture is planted under a
+    #     THROWAWAY root, so it reads no live board and no fleet manifest and passes in a
+    #     bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE
+    #     copy. Its MODE is declared in `registry/gates.json` in the SAME landing; its
+    #     BUDGET lands in the basis commit that follows, because a base may never name its
+    #     own commit.
+    if (repo_root / "tests/test_hygiene_evidence_supersession.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_evidence_supersession.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

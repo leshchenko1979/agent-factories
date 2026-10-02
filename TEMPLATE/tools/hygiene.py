@@ -1048,6 +1048,208 @@ def render_stale_dirs(leg: dict) -> str:
     return "\n".join(lines)
 
 
+# --- Evidence supersession: PROSE-ONLY supersessions are REPORTED (G7; q13) -----------
+"""An evidence artifact superseded in PROSE but not MECHANICALLY, reported (G7; q13).
+
+`evidence/` and `reviews/` are append-only history: an artifact is never deleted when a
+later run replaces it, so the tree accumulates snapshots and the ONLY thing that says which
+one governs is a hand-written notice -- or, more often, the reader noticing that a later
+dated sibling exists. Measured 2026-10-02: 25 dated artifacts over 15 families, 6 families
+with more than one member, and **zero** `superseded_by` markers anywhere in the tree. So
+every supersession in this repository is prose-only, which is the gap G7 names.
+
+Two signals say an artifact is superseded, and the leg reads BOTH because they fail
+differently:
+
+  * **the naming convention** -- a dated artifact `<stem>-YYYY-MM-DD[-<suffix>].md` whose
+    date is STRICTLY older than its family's newest date. A tie at the newest date is a
+    set of CURRENT siblings, not a supersession: the suffix distinguishes a variant (a
+    refused census is not an older census);
+  * **a prose notice** -- the artifact's own text names a successor path. This catches the
+    singleton case the convention cannot see, where a file supersedes something outside
+    its own family.
+
+A mechanical marker is the declared field `superseded_by:` naming an existing path. An
+artifact that is superseded by EITHER signal and carries NO marker is the population this
+leg reports. It is a DEBT CENSUS and not a fault list: the report is expected to be
+non-empty on this tree, and the number falls only as markers are added.
+
+`removes: no`, and the leg never writes a marker for you: what a successor IS is a
+judgement by the lane that produced the artifact, and a marker this tool invented would be
+a fabricated supersession -- worse than an unmarked one, because it reads as a decision
+somebody made. The shape is the one established for this class by
+leshchenko1979/agent-factories#220.
+"""
+
+SUPERSEDED_FIELD = "superseded_by"
+
+# `<stem>-YYYY-MM-DD[-<suffix>].md`: the DECLARED naming convention. The suffix is part of
+# the convention rather than an exception to it -- `-refused` and `-self-audit` are real
+# members of this tree, and a variant shares its date with its sibling.
+DATED_ARTIFACT = re.compile(
+    r"^(?P<stem>.+?)-(?P<date>\d{4}-\d{2}-\d{2})(?:-(?P<suffix>[A-Za-z0-9._-]+))?\.md$"
+)
+
+# A prose notice that names a successor. Deliberately narrow: it requires a PATH-like token
+# ending in `.md`, because "superseded" as a bare word appears in this tree describing
+# ledger rows, measurements and channel surfaces, none of which is an artifact.
+SUPERSESSION_NOTICE = re.compile(
+    r"(?i)supersed(?:e[sd]?|ing)\s+by\s+`?(?P<path>[\w./-]+\.md)`?"
+)
+
+EVIDENCE_DIR = "evidence"
+
+def _dated_artifacts(root: Path) -> list[dict]:
+    """Every artifact under `evidence/` whose name carries the convention's date."""
+    base = root / EVIDENCE_DIR
+    records: list[dict] = []
+    for path in sorted(base.rglob("*.md")):
+        match = DATED_ARTIFACT.match(path.name)
+        if not match:
+            continue
+        records.append(
+            {
+                "path": path.relative_to(root).as_posix(),
+                "family": (path.parent / match.group("stem")).relative_to(root).as_posix(),
+                "date": match.group("date"),
+            }
+        )
+    return records
+
+def _reads_marker(root: Path, rel: str) -> str | None:
+    """The declared `superseded_by` value, or None when the artifact carries no marker.
+
+    A marker whose target does not exist is returned as-is and reported SEPARATELY: it is
+    a stale marker rather than a clean one, and folding it into "marked" would let a
+    fabricated supersession read as a satisfied one.
+    """
+    try:
+        text = (root / rel).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines()[:40]:
+        stripped = line.strip().lstrip("*-").strip()
+        if stripped.lower().startswith(SUPERSEDED_FIELD):
+            _, _, value = stripped.partition(":")
+            value = value.strip().strip("`").strip()
+            if value:
+                return value
+    return None
+
+def _names_successor(root: Path, rel: str) -> str | None:
+    """The successor path a prose notice names, when it names one that exists."""
+    try:
+        text = (root / rel).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for match in SUPERSESSION_NOTICE.finditer(text):
+        candidate = match.group("path")
+        for form in (root / candidate, root / EVIDENCE_DIR / candidate):
+            if form.is_file():
+                return form.relative_to(root).as_posix()
+    return None
+
+def evidence_supersession_leg(root: Path | None = None) -> dict:
+    """The artifacts superseded by convention or prose that carry no marker (G7).
+
+    Report-only (`removes: False`): a supersession is a judgement by the lane that produced
+    the artifact, so the leg PRINTS the debt and a human settles it.
+    """
+    root = Path(root) if root is not None else repo_root()
+    leg: dict = {
+        "class": "evidence-supersession",
+        "predicate": "an artifact superseded in prose or by the naming convention carries a mechanical marker",
+        "removes": False,
+        "root": str(root),
+        "dir": EVIDENCE_DIR,
+        "field": SUPERSEDED_FIELD,
+        "artifacts": [],
+        "families": {},
+        "newest": {},
+        "by_convention": [],
+        "by_prose": [],
+        "marked": [],
+        "stale_marker": [],
+        "prose_only": [],
+    }
+
+    base = root / EVIDENCE_DIR
+    if not base.is_dir():
+        leg["status"] = "absent"
+        leg["reason"] = f"no `{EVIDENCE_DIR}/` in this tree"
+        return leg
+    if not os.access(base, os.R_OK):
+        leg["status"] = "NOT RUN"
+        leg["reason"] = f"`{EVIDENCE_DIR}/` exists but cannot be read"
+        return leg
+
+    records = _dated_artifacts(root)
+    leg["artifacts"] = records
+    families: dict[str, list[str]] = {}
+    for record in records:
+        families.setdefault(record["family"], []).append(record["date"])
+    leg["families"] = {family: sorted(dates) for family, dates in families.items()}
+    leg["newest"] = {family: max(dates) for family, dates in families.items()}
+
+    for record in records:
+        rel = record["path"]
+        newest = leg["newest"][record["family"]]
+        by_convention = record["date"] < newest
+        successor = _names_successor(root, rel)
+        marker = _reads_marker(root, rel)
+        entry = {
+            "path": rel,
+            "family": record["family"],
+            "date": record["date"],
+            "newest": newest,
+            "by_convention": by_convention,
+            "successor": successor,
+            "marker": marker,
+        }
+        if by_convention:
+            leg["by_convention"].append(rel)
+        if successor:
+            leg["by_prose"].append(rel)
+        if marker:
+            if (root / marker).is_file():
+                leg["marked"].append(rel)
+                continue
+            leg["stale_marker"].append(entry)
+        if by_convention or successor:
+            leg["prose_only"].append(entry)
+
+    leg["status"] = "ASSERTED"
+    return leg
+
+def render_evidence_supersession(leg: dict) -> str:
+    """One summary line, then one line per unmarked supersession (G7)."""
+    if leg.get("status") == "NOT RUN":
+        return f"hygiene evidence supersession: NOT RUN — {leg.get('reason', 'no reason recorded')}"
+    if leg.get("status") == "absent":
+        return f"hygiene evidence supersession: absent — {leg.get('reason', 'no evidence tree')}"
+    head = (
+        f"hygiene evidence supersession: {len(leg['artifacts'])} dated artifact(s) over "
+        f"{len(leg['families'])} family(ies) — {len(leg['by_convention'])} superseded by the "
+        f"naming convention, {len(leg['prose_only'])} prose-only (unmarked), "
+        f"{len(leg['marked'])} marked (removes: no)"
+    )
+    lines = [head]
+    for entry in leg["prose_only"]:
+        why = (
+            f"superseded by {entry['family']}-{entry['newest']}.md"
+            if entry["by_convention"]
+            else f"names {entry['successor']} as its successor"
+        )
+        lines.append(
+            f"  PROSE-ONLY {entry['path']} — {why}, and carries no `{leg['field']}` marker"
+        )
+    for entry in leg["stale_marker"]:
+        lines.append(
+            f"  STALE MARKER {entry['path']} — declares `{leg['field']}: {entry['marker']}`, "
+            f"which does not exist in this tree"
+        )
+    return "\n".join(lines)
+
 def _split_status_line(line: str) -> tuple[str, str]:
     """Return (status code, path) from one `git status --porcelain` line.
 
@@ -1239,6 +1441,11 @@ def main() -> int:
     # (G6). The reaper's glob is the whole of its vision, so a tree this factory created at
     # a path that does not match it -- every `git worktree add` -- is invisible to it.
     print(render_stale_dirs(stale_dirs_leg(namespace=args.namespace)))
+    # The evidence artifacts superseded in PROSE that carry no mechanical marker (G7).
+    # A DEBT CENSUS and not a fault list: `evidence/` is append-only history, so an
+    # unmarked supersession is the expected state and the number falls only as markers
+    # are added by the lanes that produced the artifacts.
+    print(render_evidence_supersession(evidence_supersession_leg()))
     patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
     count, items = reap_stale_scratch(
         dry_run=dry_run, patterns=patterns, protected=protected

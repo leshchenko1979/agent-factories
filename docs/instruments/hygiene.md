@@ -116,7 +116,7 @@ available here**. A member that adopts the declared set and nothing else has a r
 
 ## 4. The gate set and its registry entries
 
-**All seven rows are registered in `registry/gates.json`**, which is what makes them run rather than
+**All eight rows are registered in `registry/gates.json`**, which is what makes them run rather than
 merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
@@ -128,6 +128,7 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tests/test_hygiene_declaration_sweep.py` | `pytest` | 51.2 | 4.059× | 12.615 | `0eb39c7915699688a4f42b8f0887de893eac2a83` |
 | `tests/test_hygiene_placement.py` | `pytest` | 46.94 | 4.065× | 11.546 | `84dbddf8d9575a181b7401920ff9e63f1516390e` |
 | `tests/test_hygiene_stale_dirs.py` | `pytest` | 26.1 | 4.118× | 6.337 | `ae34b695ef90f48abbfeb53a5d717a9b8f1f9643` |
+| `tests/test_hygiene_evidence_supersession.py` | `pytest` | — | — | — | — |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
@@ -148,6 +149,27 @@ turn to **12.04 s** in the basis commit beside this one. A gate over its budget 
 reads as a red that says nothing about the tree. A basis is a declaration about what runs, so it is
 re-declared rather than left standing as a stale number beside a larger tool — the same class this
 instrument exists to catch, caught in its own registry.
+
+**Evidence supersession is REPORTED, report-only (G7; q13, ruled 2026-09-30).** `evidence/` and
+`reviews/` are **append-only history**: an artifact is never deleted when a later run replaces it, so
+the tree accumulates snapshots and the only thing that says which one governs is a hand-written notice
+— or, more often, the reader noticing that a later dated sibling exists. Measured 2026-10-02: **25 dated
+artifacts over 15 artifact families**, six of them carrying more than one member, and **zero**
+`superseded_by` markers
+anywhere in the tree — so every supersession in this repository is prose-only, which is exactly the gap
+G7 names. The leg reads **two signals that fail differently**: the **declared naming convention** (a
+dated artifact `<stem>-YYYY-MM-DD[-<suffix>].md` whose date is strictly older than its family's newest
+is superseded) and a **prose notice naming a successor path** (which catches the singleton case the
+convention cannot see). A **tie at the newest date is not a supersession** — the suffix distinguishes a
+variant, not an older snapshot, so a plain census beside a `-refused` one are both current. A
+mechanical `superseded_by` naming a **live** path **excuses** the artifact and the census moves; a
+marker naming nothing is a **STALE MARKER reported separately**, never folded into `marked`, because a
+fabricated supersession reads as a decision somebody made and is worse than an unmarked one. An absent
+`evidence/` tree is **`absent`**, never a clean zero. This is a **debt census and not a fault list**:
+the report is expected to be non-empty here, and the number falls only as markers are added. The
+`removes: no` half is asserted **structurally**, by scanning the leg's own source for a removal call —
+what a successor *is* is a judgement by the lane that produced the artifact, and a marker this tool
+invented would be a fabricated supersession.
 
 **Stale directories outside the namespace are REPORTED, report-only (G6; q13, ruled 2026-09-30).** The
 reaper's glob is `/tmp/<namespace>-*`, and that glob is the whole of its vision: a directory this

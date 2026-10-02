@@ -670,6 +670,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     # `/tmp/af-225/wt` are both ours and neither matches. Report-only (`removes: no`),
     # asserted structurally; the census is git's own and the population is shown to move.
     "test_hygiene_stale_dirs.py",
+    # G7 (q13, 2026-10-02): evidence supersession. `evidence/` is append-only history, so
+    # which snapshot governs is stated in PROSE -- and measured 2026-10-02 there is not one
+    # mechanical `superseded_by` marker in the tree. The leg reads the declared naming
+    # convention AND a prose successor notice, both failing differently; a tie at the newest
+    # date is a set of CURRENT siblings, not a supersession. Report-only (`removes: no`),
+    # asserted structurally; a marker naming nothing is its own debt, reported separately.
+    "test_hygiene_evidence_supersession.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

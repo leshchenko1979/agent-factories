@@ -390,6 +390,7 @@
     "tests/test_hygiene_declaration_sweep.py": "pytest",
     "tests/test_hygiene_placement.py": "pytest",
     "tests/test_hygiene_stale_dirs.py": "pytest",
+    "tests/test_hygiene_evidence_supersession.py": "pytest",
     "tests/test_hygiene_inflight.py": "pytest",
     "tests/test_hygiene_namespace.py": "pytest",
     "tests/test_insights_author.py": "pytest",
