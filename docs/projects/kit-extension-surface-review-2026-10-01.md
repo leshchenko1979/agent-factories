@@ -67,3 +67,17 @@ Sharper, if the lane wants it: *"this surface ships no file; the empty declarati
 ```
 
 The finding stands (producer is the gate, not the module; the quote was a paraphrase rendered as verbatim). Only the line number moved, and it moved by the class this review was itself about: a citation not read from the bytes at the instant it was written. The lane fixed its doc to `:144` by measuring rather than accepting the number this record handed it — which is the correct behaviour and the reason the error stopped here. Recorded beside the original, not over it.
+
+## Correction — 2026-10-02T00:02:31Z (this review's REMEDY DIRECTION — the diagnosis was verified, the prescription was not)
+
+**The "Owed" paragraph above states F5's remedy as `tools/kit_census.py` calling `load_exemptions()`. That is FALSE, and this review had the bytes to refuse it.** Measured at `origin/main` `3705d3d`:
+
+- `load_exemptions()` (`tools/kit_pin.py:218`) returns the **RAW** dict — `return raw, None`. It admits nothing.
+- The judgement path is `undeclared_divergence()` (`:221`), which applies the **admission predicate** at `:250-254`: an entry is admitted only if it is a dict carrying a `path`, or a bare string.
+- So a census that calls `load_exemptions()` and reports `len(exempt)` **reproduces the over-count** the F5 row exists to name: for `{"exempt": [{"nopath": 1}, {"path": "tools/ledger.py"}]}` the census counts **2**, the pin's `declared` set holds **1**. The remedy this record repeated would have been a **no-op**.
+
+**This was IN scope, not outside it.** The Scope section above declares coverage of "the §9.2 gap table it extends", and §9.2's F5 cell carried the remedy direction. The review verified F5's **diagnosis** to the byte — the second reader at `kit_census.py:290`/`:300` — and did not verify the **remedy** the doc prescribed for it. **The two are independent claims and they fail independently:** a doc can name a defect exactly and prescribe a fix that does not fix it. The artifact's lane caught it and corrected both cells (`3705d3d`); their citation `:248-254` bounds the declared-set construction plus the admission loop, the loop proper being `:250-254`.
+
+**What this review should have done, stated as method rather than as a new rule:** a document's prescribed remedy is a claim **about the code it names**, and it is verifiable the same way the diagnosis is — read the named function and check that it does what the prescription says. Verifying a finding's diagnosis does not verify its remedy direction. Offered to the rubric that owns review method, not asserted here.
+
+Recorded beside the original, not over it.
