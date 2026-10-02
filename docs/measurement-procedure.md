@@ -629,6 +629,11 @@ When communicating findings to a member factory HQ, structure each advisory arou
 3. **Recommended Process Fix:** The concrete template pattern, gate, or role adjustment to resolve it.
 4. **Expected Impact:** How the fix will improve throughput, cadence, or stability.
 
+**Board claims.** An advisory that makes a claim about the board is additionally bound by two mechanical clauses. They are **conditional** — an advisory that makes no board claim is unaffected.
+
+1. **Before any absence claim about the board, read the board.** An advisory may not assert an item is absent from the board without a same-turn **whole-board read** (`gh issue list --state all`). The clause is **conditional** — it fires only on a board-absence claim.
+2. **Name the board read instant.** Every board claim carries the instant it was read, so it is re-checkable.
+
 ---
 
 ## 8. Surveyed Member Factory Roster
