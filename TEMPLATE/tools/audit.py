@@ -2391,6 +2391,31 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_hygiene_placement.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_placement.py"])
 
+    # 78. hygiene stale directories (G6, q13) -- origin 2026-10-02, the owner's ruling that
+    #     hygiene owns the WHOLE inventory and builds a gate for every ungated surface.
+    #     THE MECHANISM IT GUARDS: the reaper globs `/tmp/<namespace>-*`, and that glob is
+    #     the whole of its vision -- so a directory this factory created at any other path is
+    #     invisible to every leg of `tools/hygiene.py`. `git worktree add` is the declared
+    #     creation convention that produces exactly that class, and the path is the caller's
+    #     choice: `/tmp/af-223` and `/tmp/af-225/wt` are both trees this factory made and
+    #     NEITHER matches the pattern. This gate holds the leg to git's OWN census
+    #     (`git worktree list --porcelain`), never a `/tmp` glob, and plants census fixtures
+    #     so the population is shown to MOVE. It also holds three disciplines: an unreadable
+    #     census is NOT RUN and never a clean zero, an unanswerable reachability check
+    #     degrades to a stated NOT RUN rather than `0 landed`, and `landed`/`age` stay COUNTS
+    #     -- this very worktree sat on a landed commit while the leg was written, so a landed
+    #     tree is not an abandoned one. A prunable tree is ENUMERATED BY NAME with git's own
+    #     reason. The gate scans the leg's own source for a removal call, because
+    #     `git worktree prune` is a write and the tree may hold a peer lane's uncommitted
+    #     work: this leg REPORTS (`removes: no`). REQUIRED, not OPTIONAL: every fixture is
+    #     in-memory or under a THROWAWAY root, so it reads no live board and no fleet
+    #     manifest and passes in a bootstrapped factory exactly as it does here. It is
+    #     byte-paired with a TEMPLATE copy. Its MODE is declared in `registry/gates.json` in
+    #     the SAME landing; its BUDGET lands in the basis commit that follows, because a base
+    #     may never name its own commit.
+    if (repo_root / "tests/test_hygiene_stale_dirs.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_stale_dirs.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

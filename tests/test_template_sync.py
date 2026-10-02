@@ -173,6 +173,11 @@ PAIRS = [
     # have a map nothing holds to the tree, and one carrying the gate without the leg
     # would run probes against a map that does not exist.
     ("tests/test_hygiene_placement.py", "TEMPLATE/tests/test_hygiene_placement.py"),
+    # Added with its registration (G6, q13): the gate plants worktree-census fixtures that
+    # `tools/hygiene.py`'s stale-directory leg reads, so a factory carrying the leg without
+    # the gate would ship a population nothing holds to git's own list, and one carrying the
+    # gate without the leg would probe a function that does not exist.
+    ("tests/test_hygiene_stale_dirs.py", "TEMPLATE/tests/test_hygiene_stale_dirs.py"),
     ("tests/test_close_board_recorded.py", "TEMPLATE/tests/test_close_board_recorded.py"),
     ("tests/test_ledger_commit_cites_no_rows.py", "TEMPLATE/tests/test_ledger_commit_cites_no_rows.py"),
     ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),

@@ -89,6 +89,7 @@ seconds; a gate KILLED by its own budget reads to every reader as a red.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import glob
 import json
 import os
@@ -233,6 +234,75 @@ def reap_stale_scratch(
 
     return (len(found) if dry_run else reaped), found
 
+# --- Worktree census: ONE `git worktree list`, shared by the G3 and G6 legs -----------
+
+"""The tree census both worktree-reading legs share, and why it lives this high up.
+
+`build_residue_leg` takes `registered_worktrees` as a DEFAULT ARGUMENT, and Python
+evaluates a default at definition time -- so the census has to be bound before that
+`def` runs, not merely before the leg is called. One census for both legs is also the
+point: two `git worktree list` calls would be two populations free to disagree between
+themselves, and the G3 leg would then report a residue count over a tree set the G6 leg
+had never seen.
+"""
+
+WORKTREE_STALE_HOURS = 24.0
+
+def worktree_records(root: Path | None = None) -> tuple[list[dict], str | None]:
+    """(records, error) for every tree `git worktree list` reports.
+
+    Each record carries the path git reports, the tree's HEAD, its branch when it is on
+    one, and git's own `prunable` reason when it declares one. The census is git's OWN,
+    never a `/tmp` glob: a scratch prefix would miss the MAIN tree and every tree named
+    outside the namespace, and would sweep a directory belonging to nobody -- the
+    #174/#220 class this factory files against. An unreadable census is an ERROR and never
+    an empty one: "no trees" and "the instrument failed" must not render as one verdict.
+    """
+    root = root or repo_root()
+    try:
+        proc = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+    except OSError as exc:
+        return [], f"`git worktree list` could not run: {exc}"
+    if proc.returncode != 0:
+        return [], f"`git worktree list` exited {proc.returncode}: {proc.stderr.strip()}"
+    records: list[dict] = []
+    for block in proc.stdout.strip().split("\n\n"):
+        if not block.strip():
+            continue
+        record: dict = {"path": None, "head": None, "branch": None,
+                        "detached": False, "prunable": None}
+        for line in block.splitlines():
+            if line.startswith("worktree "):
+                record["path"] = line[len("worktree "):].strip()
+            elif line.startswith("HEAD "):
+                record["head"] = line[len("HEAD "):].strip()
+            elif line.startswith("branch "):
+                record["branch"] = line[len("branch "):].strip()
+            elif line.startswith("detached"):
+                record["detached"] = True
+            elif line.startswith("prunable"):
+                record["prunable"] = line[len("prunable"):].strip() or "prunable"
+        if record["path"]:
+            records.append(record)
+    if not records:
+        return [], "`git worktree list` reported no tree, which a repository cannot do"
+    return records, None
+
+def registered_worktrees(root: Path | None = None) -> tuple[list[str], str | None]:
+    """(paths, error) -- the path half of `worktree_records`.
+
+    Kept as its own name because the build-residue leg reads only the paths, and both legs
+    share ONE census: two `git worktree list` calls would be two populations that could
+    disagree between them.
+    """
+    records, error = worktree_records(root)
+    if error:
+        return [], error
+    return [record["path"] for record in records], None
+
 # --- Build residue: DECLARED OUT, PRINTED (G3; q15, ruled 2026-09-30) -----------------
 #
 # The class pytest and ruff create and then HIDE: each writes a `.gitignore` containing `*`
@@ -256,34 +326,6 @@ BUILD_RESIDUE_MAXDEPTH = 3
 # Never descended: a nested checkout or an installed environment is not THIS tree's
 # residue, and following one would report another repository's caches as ours.
 BUILD_RESIDUE_PRUNE = (".git", "node_modules", ".venv", "venv")
-
-def registered_worktrees(root: Path | None = None) -> tuple[list[str], str | None]:
-    """(paths, error) for every tree `git worktree list` reports.
-
-    The census is git's OWN, never a `/tmp` glob: a scratch prefix would miss the MAIN tree
-    and every tree named outside the namespace, and would sweep a directory belonging to
-    nobody -- the #174/#220 class this factory files against. An unreadable census is an
-    ERROR and never an empty one: "no trees" and "the instrument failed" must not render as
-    the same verdict.
-    """
-    root = root or repo_root()
-    try:
-        proc = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        )
-    except OSError as exc:
-        return [], f"`git worktree list` could not run: {exc}"
-    if proc.returncode != 0:
-        return [], f"`git worktree list` exited {proc.returncode}: {proc.stderr.strip()}"
-    paths = [
-        line[len("worktree "):].strip()
-        for line in proc.stdout.splitlines()
-        if line.startswith("worktree ")
-    ]
-    if not paths:
-        return [], "`git worktree list` reported no tree, which a repository cannot do"
-    return paths, None
 
 def _find_residue(roots: list[str]) -> list[str]:
     """The residue names under `roots`, by ONE bounded `find`.
@@ -848,6 +890,164 @@ def render_placement(leg: dict) -> str:
     return "\n".join(lines)
 
 
+"""Stale directories OUTSIDE the namespace, PRINTED and never reclaimed (G6; q13).
+
+The reaper above globs `/tmp/<namespace>-*`, and that glob is the whole of its vision: a
+directory this factory created at a path that does not match it is invisible to every leg
+of this tool. `git worktree add` is the declared creation convention that produces exactly
+that class -- the path is the caller's choice, so `/tmp/af-223` and `/tmp/af-225/wt` are
+both worktrees this factory made and NEITHER matches the pattern. Measured 2026-10-02: 75
+registered trees, 75 of them outside the namespace, so a tree left behind by a killed lane
+survives indefinitely and no leg reports it.
+
+What this leg PRINTS is git's own census, plus three facts read from it:
+
+  * **prunable** -- git itself says the tree's gitdir points at a non-existent location.
+    This is the definitive stale class and the only one this leg ENUMERATES, because it is
+    a declaration by the tool that owns the data rather than an inference by this one;
+  * **outside the namespace** -- the structural fact that the reaper cannot see the tree at
+    all, reported as a count because it holds of every tree here and so cannot discriminate;
+  * **landed** and **age** -- reported as counts and never as a verdict. A tree's HEAD being
+    an ancestor of the primary branch means its WORK LANDED, NOT that the tree is abandoned:
+    a live lane sits on a landed commit between edits, and this very worktree did while the
+    leg was being written. Age is the discriminator this factory already uses for in-flight
+    versus stranded (#38), so both are printed BESIDE each other and the judgement is left
+    to a reader.
+
+`removes: no`, and the leg never reclaims: `git worktree prune` is a write, the tree may
+hold a peer lane's uncommitted work, and the shape established for this class by
+leshchenko1979/agent-factories#220 is a report that a human acts on.
+"""
+
+
+def _primary_reachable(root: Path) -> tuple[str | None, set[str] | None, str | None]:
+    """(revision, every commit reachable from it, error) for the landed test.
+
+    ONE `git rev-list` call rather than one `merge-base --is-ancestor` per tree: 75
+    subprocesses would cost more than this whole leg, and the reachable set answers the
+    same question for every tree at once. `origin/main` is preferred and the local `main`
+    is the fallback, because a factory with no remote still has a primary branch; when
+    NEITHER resolves the landed count is `NOT RUN` with its reason, never a zero.
+    """
+    for rev in ("origin/main", "main"):
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}"],
+            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            listed = subprocess.run(
+                ["git", "rev-list", rev],
+                cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            if listed.returncode != 0:
+                return rev, None, (
+                    f"`git rev-list {rev}` exited {listed.returncode}: {listed.stderr.strip()}"
+                )
+            return rev, set(listed.stdout.split()), None
+    return None, None, "neither `origin/main` nor `main` resolves here"
+
+def stale_dirs_leg(
+    root: Path | None = None,
+    namespace: str | None = None,
+    records_fn=None,
+    reachable_fn=None,
+) -> dict:
+    """The population of directories this factory created outside its own scratch glob.
+
+    Report-only (`removes: False`): the tree may hold a peer lane's uncommitted work, so
+    the leg PRINTS and a human decides.
+    """
+    root = Path(root) if root is not None else repo_root()
+    namespace = namespace or NAMESPACE
+    pattern = f"/tmp/{namespace}-*"
+    records_fn = records_fn or worktree_records
+    reachable_fn = reachable_fn or _primary_reachable
+
+    leg: dict = {
+        "class": "stale-directories",
+        "predicate": "a directory this factory created is visible to the reaper that maintains it",
+        "removes": False,
+        "root": str(root),
+        "namespace": namespace,
+        "pattern": pattern,
+        "grace_hours": WORKTREE_STALE_HOURS,
+        "total": 0,
+        "outside": [],
+        "prunable": [],
+        "landed": [],
+        "aged": [],
+        "trees": [],
+        "reach_rev": None,
+        "reach_error": None,
+    }
+
+    records, error = records_fn(root)
+    if error:
+        leg["status"] = "NOT RUN"
+        leg["reason"] = error
+        return leg
+
+    rev, reachable, reach_error = reachable_fn(root)
+    leg["reach_rev"] = rev
+    leg["reach_error"] = reach_error
+
+    now = time.time()
+    for record in records:
+        path = record["path"]
+        try:
+            age = (now - os.path.getmtime(path)) / 3600.0
+        except OSError:
+            age = None
+        inside = fnmatch.fnmatch(path, pattern)
+        landed = None
+        if reachable is not None and record.get("head"):
+            landed = record["head"] in reachable
+        leg["trees"].append(
+            {
+                "path": path,
+                "head": record.get("head"),
+                "prunable": record.get("prunable"),
+                "inside_namespace": inside,
+                "age_hours": age,
+                "landed": landed,
+            }
+        )
+        if not inside:
+            leg["outside"].append(path)
+        if record.get("prunable"):
+            leg["prunable"].append(path)
+        if landed:
+            leg["landed"].append(path)
+        if age is not None and age > WORKTREE_STALE_HOURS:
+            leg["aged"].append(path)
+
+    leg["total"] = len(records)
+    leg["status"] = "ASSERTED"
+    return leg
+
+def render_stale_dirs(leg: dict) -> str:
+    """One summary line, then one line per PRUNABLE tree (G6)."""
+    if leg.get("status") == "NOT RUN":
+        return f"hygiene stale directories: NOT RUN — {leg.get('reason', 'no reason recorded')}"
+    bits = [
+        f"{leg['total']} tree(s)",
+        f"{len(leg['outside'])} outside the namespace `{leg['pattern']}`",
+        f"{len(leg['prunable'])} prunable",
+    ]
+    if leg.get("reach_error"):
+        bits.append(f"landed NOT RUN ({leg['reach_error']})")
+    else:
+        bits.append(f"{len(leg['landed'])} landed")
+    bits.append(f"{len(leg['aged'])} older than {leg['grace_hours']:.0f}h")
+    lines = ["hygiene stale directories: " + ", ".join(bits) + " (removes: no)"]
+    for path in leg["prunable"]:
+        why = next(
+            (tree["prunable"] for tree in leg["trees"] if tree["path"] == path), "prunable"
+        )
+        lines.append(f"  PRUNABLE {path} — git reports: {why}")
+    return "\n".join(lines)
+
+
 def _split_status_line(line: str) -> tuple[str, str]:
     """Return (status code, path) from one `git status --porcelain` line.
 
@@ -1035,6 +1235,10 @@ def main() -> int:
     # folder its content belongs to", so a file could sit in a directory its content does
     # not belong to and every leg above would still read clean.
     print(render_placement(placement_leg()))
+    # The stale-directory population OUTSIDE the scratch namespace, PRINTED on every run
+    # (G6). The reaper's glob is the whole of its vision, so a tree this factory created at
+    # a path that does not match it -- every `git worktree add` -- is invisible to it.
+    print(render_stale_dirs(stale_dirs_leg(namespace=args.namespace)))
     patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
     count, items = reap_stale_scratch(
         dry_run=dry_run, patterns=patterns, protected=protected

@@ -116,7 +116,7 @@ available here**. A member that adopts the declared set and nothing else has a r
 
 ## 4. The gate set and its registry entries
 
-**All six rows are registered in `registry/gates.json`**, which is what makes them run rather than
+**All seven rows are registered in `registry/gates.json`**, which is what makes them run rather than
 merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
@@ -127,12 +127,13 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tests/test_hygiene_build_residue.py` | `pytest` | 63.87 | 4.048× | 15.781 | `049a93cc73c4f02be4c8e47f1028924936644d03` |
 | `tests/test_hygiene_declaration_sweep.py` | `pytest` | 51.2 | 4.059× | 12.615 | `0eb39c7915699688a4f42b8f0887de893eac2a83` |
 | `tests/test_hygiene_placement.py` | `pytest` | 46.94 | 4.065× | 11.546 | `84dbddf8d9575a181b7401920ff9e63f1516390e` |
+| `tests/test_hygiene_stale_dirs.py` | `pytest` | — | — | — | — |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
-that ceiling. The last three rows were measured on a loaded box — build residue at load **10.39**, the
-declaration sweep at load **4.14**, the placement map at load **8.23** — so each is a conservative
-upper bound on a quiet-tree runtime rather than a tight one. Each of those rows' basis landed in the
+that ceiling. The later rows were measured on a loaded box (build residue at load **10.39**, the declaration
+sweep at load **4.14**, the placement map at load **8.23**), so each is a conservative upper bound
+on a quiet-tree runtime rather than a tight one. Each of those rows' basis landed in the
 **commit that follows its registration**, deliberately and not in the registration itself: a budget
 base may never name the commit that introduces it, because the staleness leg compares the gate file at
 `measured_at` against the same file at HEAD, so a base pointing at its own commit would compare the
@@ -146,6 +147,26 @@ about **1.6×**, and a gate over its budget is **KILLED**, which reads as a red 
 the tree. A basis is a declaration about what runs, so it was re-declared rather than left standing as
 a stale number beside a larger tool — the same class this instrument exists to catch, caught in its
 own registry.
+
+**Stale directories outside the namespace are REPORTED, report-only (G6; q13, ruled 2026-09-30).** The
+reaper's glob is `/tmp/<namespace>-*`, and that glob is the whole of its vision: a directory this
+factory created at any other path is invisible to every leg of `tools/hygiene.py`. `git worktree add`
+is the declared creation convention that produces exactly that class, and the path is the caller's
+choice — `/tmp/af-223` and `/tmp/af-225/wt` are both trees this factory made and **neither** matches
+the pattern. Measured 2026-10-02, the leg's first run reports **75 registered trees, all 75 outside the
+namespace**, so a tree left behind by a killed lane survives indefinitely and nothing reported it. The
+census is **git's own** (`git worktree list --porcelain`), never a `/tmp` glob, because a scratch
+prefix would miss the main tree and every tree named outside the namespace. The leg prints the
+population — `hygiene stale directories: N tree(s), M outside the namespace \`<pattern>\`, P prunable,
+L landed, A older than 24h (removes: no)` — and enumerates only the **prunable** class by name, with
+git's own reason, because that is a declaration by the tool that owns the data rather than an inference
+by this one. **`landed` and `age` are counts, never a verdict:** a tree's HEAD being an ancestor of the
+primary branch means its *work* landed, not that the tree is abandoned — a live lane sits on a landed
+commit between edits, and this very worktree did while the leg was written — so both are printed beside
+each other and the judgement is left to a reader. An unreadable census is **NOT RUN** with its reason,
+and an unanswerable reachability check renders `landed NOT RUN` rather than a false `0 landed`. The
+`removes: no` half is asserted **structurally**, by scanning the leg's own source for a removal call —
+`git worktree prune` is a write, and the tree may hold a peer lane's uncommitted work.
 
 **Placement is CHECKED against a declared map, report-only (G5; q13, ruled 2026-09-30).** The owner's
 own bullet names this surface — "files grouped/regrouped in folders, proper naming consistent with the

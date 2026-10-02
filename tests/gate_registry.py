@@ -664,6 +664,12 @@ REQUIRED_GATES: tuple[str, ...] = (
     # structurally; the map is checked against the TREE, so an undeclared directory is
     # reported rather than absorbed.
     "test_hygiene_placement.py",
+    # G6 (q13, 2026-10-02): stale directories outside the namespace. The reaper's glob is
+    # the whole of its vision, so a worktree this factory created at any other path is
+    # invisible to it -- `git worktree add` names the path, so `/tmp/af-223` and
+    # `/tmp/af-225/wt` are both ours and neither matches. Report-only (`removes: no`),
+    # asserted structurally; the census is git's own and the population is shown to move.
+    "test_hygiene_stale_dirs.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather
