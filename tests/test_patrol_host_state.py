@@ -266,7 +266,7 @@ def test_a_non_empty_board_with_a_missing_leg_is_reported() -> None:
 def test_a_clean_board_reads_clean_and_STATES_ITS_COVERAGE() -> None:
     """Non-vacuity: a green must be green over a NON-ZERO examined count."""
     issues = [_issue(1, "OPEN"), _issue(2, "OPEN"), _issue(3, "CLOSED")]
-    rows = _rows(("intake", "#1", 1), ("intake", "#2", 2), ("intake", "#3", 3))
+    rows = _rows(("intake", "#1", 1), ("intake", "#2", 2), ("intake", "#3", 3), ("close", "#3", 4))
     rc, out, _ = _run(issues, rows)
     assert rc == 0, f"a fully intaken board must pass, got rc={rc}\n{out}"
     assert "2 examined" in out, f"the clean verdict must name what it examined\n{out}"
