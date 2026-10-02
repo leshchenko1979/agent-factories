@@ -92,3 +92,25 @@ Recorded beside the original, not over it.
 **The code is NOT yet changed.** `tools/kit_census.py:290`/`:300` still opens the file independently and reports `len(d.get("exempt") or [])`; the fix is issue **#263**, open, owned by that tool's code owner. What moved at `3705d3d`/`c43b8b8` is the **doc's remedy direction** — the subject of this record's correction — not the census itself.
 
 Verified at `origin/main` this turn, not relayed.
+
+## Referent — the reviewed revision moved, and so did the code *(appended 2026-10-02T01:12:20Z; beside, not over)*
+
+**This record reviews `173aa66`. That revision is superseded, and the trail is stated so a reader following the name lands on the live state rather than a dead one.**
+
+- Reviewed: `173aa66`, branch `fleet-instruments-kit-f5`.
+- R3/R4 applied: `ae39417`, same branch.
+- Folded onto `worker/223-ruling-leg` as `de233fb` — **carried by BLOB, not by ancestry**: `ae39417` is NOT an ancestor of `de233fb` (`git merge-base --is-ancestor` says no). The fold re-pointed **3** citations (`:317`→`:318`, `:322`→`:323`) because `ccd6740` shifted `tools/kit_census.py` 618→619 on the publishing tree. Verified: the diff between the two doc halves is **exactly** those 3 re-points and nothing else; pair byte-identical at `de233fb` (`0318c8e2…`); manifest `e5b570beefa7` / 141 files.
+- **The reviewed artifact is NOT on main.** `de233fb` is on `worker/223-ruling-leg` only, deliberately: the doc's status flips depend on `#263`'s code, which is branch-only.
+
+**The code fix now exists, so this record's own line — "The code is NOT yet changed" — is itself superseded.** Measured at the two commit trees this turn:
+
+| | main (`50217a6`) | `de233fb` |
+|---|---|---|
+| the exempt read | `:290` opens the file itself, `:300` reports `len(d.get("exempt") or [])` | `:319-323` takes `declared` / `exemption_problem` off `undeclared_divergence()`'s return |
+| `grep -c 'len(d.get' tools/kit_census.py` | **1** | **0** |
+| file lines | 599 | 619 |
+| fix commit | — | `281bd2a` on `worker/223-ruling-leg` |
+
+**`#263` is still OPEN** (verified via `gh`): the fix is on a branch while main's census still double-reads, so the defect is live on main and resolved on the branch. A reader who takes "RESOLVED" off the branch doc and "open" off the issue is reading two true statements about two different trees.
+
+Verified at the commit trees this turn, not relayed.
