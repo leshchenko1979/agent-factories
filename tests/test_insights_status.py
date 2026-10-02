@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Gate: the insights register's STATUS — where an entry stands in its workflow.
 
-`class` says what KIND of claim an entry is (who it serves). `status` says what has been
-DONE about it, which is a different axis and is read by a different question: not "who
-wants this?" but "what is still owed, and for how long?". Six invariants, each one a way
-the field can LIE rather than merely be absent:
+`audience` says what the claim IS and who it serves. `status` says what has been DONE
+about it, which is a different axis and is read by a different question: not "who wants
+this?" but "what is still owed, and for how long?". Ten invariants, each one a way a
+field can LIE rather than merely be absent:
 
-1. **A new entry OPENS at `pending` and is stamped.** Class is a property of the claim,
-   which the author knows; a destination is the owner's routing call, so the append
+1. **A new entry OPENS at `pending` and is stamped.** The audience is a property of the
+   claim, which the author knows; a destination is the owner's routing call, so the append
    asserts only the row's own state. The default exists so a fresh row is never a silent
    blank in a register whose whole job is to show what is owed.
 2. **A blank status is refused at the append, and an UNKNOWN one too.** The second is the
@@ -24,7 +24,7 @@ the field can LIE rather than merely be absent:
    byte-identical afterwards — a status move that restated a claim would be a rewrite
    wearing a routing change's name. All-or-nothing too: one unknown id and the register
    is left untouched, because a half-applied move reads exactly like a complete one.
-6. **The two axes are ORTHOGONAL.** Setting a status must not disturb the class, and
+6. **The two axes are ORTHOGONAL.** Setting a status must not disturb the audience, and
    re-routing a row must not disturb any other row.
 7. **A reason-owing status carries its reason, and the rule holds on BOTH write paths.** insights.md §6 rule 4
    states the requirement; the append and the status move are the two ways a row can END UP
@@ -37,6 +37,15 @@ the field can LIE rather than merely be absent:
    and one row has ONE successor or "the newest governs" stops being decidable. The
    superseded row is never deleted, and every reader PRINTS that it was superseded: a value
    that quietly stopped applying is the failure this shape exists to prevent.
+9. **A row in the PUBLISHING PATH names where it lands, and no other row does.** `surface`
+   is required while the status is `publishing` or `published` and REFUSED on any other,
+   so a destination cannot sit on a row that is not going anywhere. A move that takes a row
+   OUT of that path CLEARS the surface and PRINTS the clear, because a destination that
+   quietly stopped applying is the same defect as one that was never named.
+10. **The routing group and the status cannot contradict each other.** The publishing path
+   asserts a `public` audience; the HQ path asserts `process: yes`. A pair saying otherwise
+   is refused on BOTH write paths — the append and the status move — because a row reading
+   "internal, being published" is a field lying about what was decided.
 
 **Fixture-driven by construction, and that is load-bearing.** Every probe redirects
 `INSIGHTS_PATH` and `LOCK_PATH` into a temporary directory, because the live register is
@@ -55,8 +64,8 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import insights  # noqa: E402
 
-CLAIM_KEYS = ("n", "id", "ts", "author", "class", "topic", "stage",
-              "naive_assumption", "empirical_reality", "mechanism")
+CLAIM_KEYS = ("n", "id", "ts", "author", "class", "audience", "process", "surface",
+              "topic", "stage", "naive_assumption", "empirical_reality", "mechanism")
 
 
 def _redirect(tmp_path, monkeypatch):
@@ -68,6 +77,10 @@ def _redirect(tmp_path, monkeypatch):
 
 
 def _append(**over):
+    # The routing group and the status are coupled, so the fixture reads the writer's OWN
+    # sets rather than a second list of which statuses owe which field — a hardcoded copy
+    # would drift, and the probe would then pass while testing the wrong law.
+    status = over.get("status", "pending")
     kwargs = dict(
         slug="probe-insight",
         topic="A probe",
@@ -76,8 +89,13 @@ def _append(**over):
         empirical_reality="measured",
         mechanism="structural",
         author="Surveys",
-        insight_class="general",
+        audience="public",
+        process="yes" if status in insights.HQ_PATH_STATUSES else "no",
     )
+    if status in insights.REASON_REQUIRED_STATUSES:
+        kwargs["reason"] = "probe"
+    if status in insights.SURFACE_REQUIRED_STATUSES:
+        kwargs["surface"] = "x"
     kwargs.update(over)
     return insights.append_insight(**kwargs)
 
@@ -222,7 +240,10 @@ def test_status_moves_the_label_stamps_it_and_leaves_every_claim_identical(tmp_p
     _legacy_register(register, [_row(1), _row(2)])
     before = _rows(register)
 
-    changes = insights.set_statuses({"row-1": "publishing", "row-2": "hq"})
+    changes = insights.set_statuses({
+        "row-1": {"status": "publishing", "surface": "x", "audience": "public"},
+        "row-2": {"status": "hq", "process": "yes"},
+    })
 
     assert [c[0] for c in changes] == ["row-1", "row-2"]
     assert [c[1] for c in changes] == [None, None], (
@@ -230,8 +251,10 @@ def test_status_moves_the_label_stamps_it_and_leaves_every_claim_identical(tmp_p
     after = _rows(register)
     assert [r["status"] for r in after] == ["publishing", "hq"]
     assert all(r["status_at"] for r in after), "every move is stamped"
-    assert [_without(r, "status", "status_at") for r in after] == before, (
-        "every CLAIM field must be byte-identical across a status move")
+    assert [_without(r, "status", "status_at", "audience", "process", "surface")
+            for r in after] == before, (
+        "every CLAIM field must be byte-identical across a status move; the routing group "
+        "is a LABEL, and it travels with the status it belongs to")
     assert insights.verify_insights()[0], "a moved register must verify clean"
 
 
@@ -240,7 +263,8 @@ def test_status_keeps_the_row_key_order_and_puts_the_pair_at_their_positions(tmp
     original = _row(1)
     _legacy_register(register, [original])
 
-    insights.set_statuses({"row-1": "hq"})
+    # A status that owes no routing field, so this probe is about the PAIR and nothing else.
+    insights.set_statuses({"row-1": "pending"})
 
     row = _rows(register)[0]
     added = [k for k in row if k not in original]
@@ -254,7 +278,8 @@ def test_status_re_stamps_on_a_second_move_and_touches_nothing_else(tmp_path, mo
     """Re-routing is a normal event: the label and its instant move, the claims do not."""
     register = _redirect(tmp_path, monkeypatch)
     _legacy_register(register, [_row(1)])
-    insights.set_statuses({"row-1": "pending"})
+    insights.set_statuses({"row-1": {"status": "publishing", "surface": "x",
+                                     "audience": "public"}})
     first = _rows(register)[0]
 
     insights.set_statuses({"row-1": "published"})
@@ -271,7 +296,8 @@ def test_status_refuses_an_unknown_id_and_writes_nothing(tmp_path, monkeypatch):
     before = register.read_text(encoding="utf-8")
 
     try:
-        insights.set_statuses({"row-1": "hq", "row-nope": "hq"})
+        insights.set_statuses({"row-1": {"status": "hq", "process": "yes"},
+                               "row-nope": {"status": "hq", "process": "yes"}})
     except ValueError as exc:
         assert "row-nope" in str(exc)
     else:
@@ -301,7 +327,8 @@ def test_status_leaves_rows_absent_from_the_mapping_untouched(tmp_path, monkeypa
     register = _redirect(tmp_path, monkeypatch)
     _legacy_register(register, [_row(1), _row(2), _row(3)])
 
-    insights.set_statuses({"row-2": "publishing"})
+    insights.set_statuses({"row-2": {"status": "publishing", "surface": "x",
+                                     "audience": "public"}})
 
     stored = _rows(register)
     assert "status" not in stored[0] and "status" not in stored[2], "an untouched row gained a key"
@@ -320,31 +347,39 @@ def test_status_refuses_an_empty_mapping(tmp_path, monkeypatch):
     assert "status" not in register.read_text(encoding="utf-8")
 
 
-# --- the two axes are orthogonal -----------------------------------------------------
+# --- the routing group and the status are orthogonal ----------------------------------
 
-def test_a_status_move_does_not_disturb_the_class(tmp_path, monkeypatch):
-    """`class` and `status` answer different questions; moving one must not move the other."""
+def test_a_status_move_does_not_disturb_the_audience(tmp_path, monkeypatch):
+    """`audience` and `status` answer different questions; moving one must not move the other."""
     register = _redirect(tmp_path, monkeypatch)
     _legacy_register(register, [_row(1), _row(2)])
 
-    insights.classify_insights({"row-1": "general", "row-2": "implementation"})
-    insights.set_statuses({"row-1": "publishing", "row-2": "hq"})
+    insights.set_audience({"row-1": "public", "row-2": "internal"})
+    insights.set_process({"row-1": "no", "row-2": "yes"})
+    insights.set_statuses({
+        "row-1": {"status": "publishing", "surface": "x"},
+        "row-2": {"status": "hq"},
+    })
     stored = _rows(register)
 
-    assert [r["class"] for r in stored] == ["general", "implementation"]
+    assert [r["audience"] for r in stored] == ["public", "internal"]
+    assert [r["process"] for r in stored] == ["no", "yes"]
     assert [r["status"] for r in stored] == ["publishing", "hq"]
 
-    # And a class move on top of a routed row leaves the routing alone.
-    routed = stored[0]["status_at"]
-    insights.classify_insights({"row-1": "implementation"})
+    # And an audience move on a row OUTSIDE the publishing path leaves its routing alone.
+    # (Inside that path the cross-axis law binds instead: a public-audience assertion is
+    # what `publishing` MEANS, so an audience move there is refused rather than allowed —
+    # see test_a_publishing_row_cannot_be_re_audienced_out_of_the_path.)
+    routed = stored[1]["status_at"]
+    insights.set_audience({"row-2": "public"})
     stored = _rows(register)
-    assert stored[0]["class"] == "implementation"
-    assert stored[0]["status"] == "publishing", "a class move must not re-route the row"
-    assert stored[0]["status_at"] == routed, "a class move must not re-stamp the status"
+    assert stored[1]["audience"] == "public"
+    assert stored[1]["status"] == "hq", "an audience move must not re-route the row"
+    assert stored[1]["status_at"] == routed, "an audience move must not re-stamp the status"
     assert insights.verify_insights()[0], "both axes together must still verify clean"
 
 
-def test_class_and_status_share_one_backfill_and_neither_accepts_the_others_field(tmp_path, monkeypatch):
+def test_status_and_the_routing_verbs_share_one_backfill_and_neither_accepts_the_others_field(tmp_path, monkeypatch):
     """The shared mechanism is deliberately narrow: each verb writes only its own field."""
     register = _redirect(tmp_path, monkeypatch)
     _legacy_register(register, [_row(1)])
@@ -353,8 +388,16 @@ def test_class_and_status_share_one_backfill_and_neither_accepts_the_others_fiel
     except ValueError as exc:
         assert "status" in str(exc), str(exc)
     else:
-        raise AssertionError("a CLASS value was accepted as a status")
+        raise AssertionError("a retired CLASS value was accepted as a status")
     assert "status" not in register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_audience({"row-1": "publishing"})
+    except ValueError as exc:
+        assert "audience" in str(exc), str(exc)
+    else:
+        raise AssertionError("a STATUS value was accepted as an audience")
+    assert "audience" not in register.read_text(encoding="utf-8")
 
 # --- insights.md §6 rule 4: a dropped row carries its REASON, on both write paths -----------------
 
@@ -487,7 +530,8 @@ def test_the_owners_override_CLEARS_the_reason_and_lands(tmp_path, monkeypatch):
                                           "reason": "not-an-outcome: a specification"})])
     assert insights.verify_insights()[0]
 
-    insights.set_statuses({"row-1": "publishing"})
+    insights.set_statuses({"row-1": {"status": "publishing", "surface": "x",
+                                     "audience": "public"}})
 
     row = _rows(register)[0]
     assert row["status"] == "publishing"
@@ -639,3 +683,191 @@ def test_a_correction_leaves_the_corrected_row_byte_identical(tmp_path, monkeypa
     after = register.read_text(encoding="utf-8")
     assert after.startswith(original), (
         "the corrected row and every row before the correction are byte-identical")
+
+# --- the SURFACE: a publishing unit names where it lands, and only such a row does -------
+
+def test_append_refuses_a_publishing_row_with_no_surface(tmp_path, monkeypatch):
+    """A unit in the publishing path with no destination is unroutable: the lane differs
+    by surface, so 'publishing' without one names no lane to hand it to."""
+    register = _redirect(tmp_path, monkeypatch)
+    for value in sorted(insights.SURFACE_REQUIRED_STATUSES):
+        try:
+            _append(slug=f"probe-{value}", status=value, surface="")
+        except ValueError as exc:
+            assert "surface" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"a surface-less '{value}' append was accepted")
+    assert not register.exists(), "a refused append must write nothing"
+
+def test_append_records_the_surface_and_accepts_each_allowed_value(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    for value in insights.ALLOWED_SURFACES:
+        entry = _append(slug=f"probe-{value}", status="publishing", surface=value)
+        assert entry["surface"] == value
+    assert [r["surface"] for r in _rows(register)] == insights.ALLOWED_SURFACES, (
+        "the surface must reach the PERSISTED row, not only the returned dict")
+
+def test_append_refuses_an_unknown_surface(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    for unknown in ("X", "twitter", "blog", "miidas-blog"):
+        try:
+            _append(status="publishing", surface=unknown)
+        except ValueError as exc:
+            assert "surface" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"an unknown surface {unknown!r} was accepted")
+    assert not register.exists()
+
+def test_append_refuses_a_surface_on_a_row_outside_the_publishing_path(tmp_path, monkeypatch):
+    """The field's other lie: a destination on a row that is not going anywhere."""
+    register = _redirect(tmp_path, monkeypatch)
+    try:
+        _append(status="pending", surface="x")
+    except ValueError as exc:
+        assert "surface" in str(exc), str(exc)
+    else:
+        raise AssertionError("a surface was accepted on a non-publishing row")
+    assert not register.exists()
+
+def test_a_move_out_of_the_publishing_path_CLEARS_the_surface_and_says_so(tmp_path, monkeypatch, capsys):
+    """A destination that quietly stopped applying is the defect; a printed clear is not."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1)])
+    insights.set_statuses({"row-1": {"status": "publishing", "surface": "x",
+                                     "audience": "public", "process": "yes"}})
+    assert _rows(register)[0]["surface"] == "x"
+
+    capsys.readouterr()  # discard the first move's own output
+    insights.set_statuses({"row-1": "hq"})
+
+    row = _rows(register)[0]
+    assert row["status"] == "hq"
+    assert "surface" not in row, "the destination must not survive leaving the path"
+    assert insights.verify_insights()[0]
+    printed = capsys.readouterr().out
+    assert "cleared the surface" in printed and "row-1" in printed, (
+        "a deleted label announced is reviewable; one that disappears silently is the "
+        "class this register files against")
+
+def test_a_move_that_would_strand_a_publishing_row_is_refused(tmp_path, monkeypatch):
+    """Both write paths, one rule: entering the path owes its surface in the SAME mapping."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"audience": "public"})])
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_statuses({"row-1": "publishing"})
+    except ValueError as exc:
+        assert "surface" in str(exc), str(exc)
+    else:
+        raise AssertionError("a move that stranded a publishing row was accepted")
+    assert register.read_text(encoding="utf-8") == before, (
+        "a refused move must leave the register byte-identical")
+
+def test_verify_reports_a_surface_less_publishing_row_and_a_surface_outside_the_path(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "published",
+                                           "status_at": "2026-09-14T09:00:00Z",
+                                           "audience": "public", "process": "no"})])
+    ok, errors = insights.verify_insights()
+    assert not ok and any("surface" in e for e in errors), errors
+
+    _legacy_register(register, [_row(1, **{"status": "hq", "status_at": "2026-09-14T09:00:00Z",
+                                           "process": "yes", "surface": "x"})])
+    ok, errors = insights.verify_insights()
+    assert not ok and any("surface" in e for e in errors), errors
+
+# --- the routing group and the status cannot CONTRADICT each other -----------------------
+
+def test_append_refuses_a_publishing_row_that_is_not_public(tmp_path, monkeypatch):
+    """`publishing` ASSERTS a public audience; a row saying otherwise is a field lying."""
+    register = _redirect(tmp_path, monkeypatch)
+    try:
+        _append(status="publishing", surface="x", audience="internal")
+    except ValueError as exc:
+        assert "audience" in str(exc), str(exc)
+    else:
+        raise AssertionError("an internal-audience publishing row was accepted")
+    assert not register.exists()
+
+def test_append_refuses_an_hq_row_that_does_not_apply_to_our_processes(tmp_path, monkeypatch):
+    """`hq` routes the row to HQ, which acts on it BECAUSE it changes how we work."""
+    register = _redirect(tmp_path, monkeypatch)
+    for value in sorted(insights.HQ_PATH_STATUSES):
+        try:
+            _append(slug=f"probe-{value}", status=value, process="no")
+        except ValueError as exc:
+            assert "process" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"a '{value}' row with process='no' was accepted")
+    assert not register.exists()
+
+def test_a_move_into_the_publishing_path_that_contradicts_the_audience_is_refused(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"audience": "internal", "process": "no"})])
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_statuses({"row-1": {"status": "publishing", "surface": "x"}})
+    except ValueError as exc:
+        assert "audience" in str(exc), str(exc)
+    else:
+        raise AssertionError("a move to a contradicting pair was accepted")
+    assert register.read_text(encoding="utf-8") == before
+
+def test_a_move_into_the_hq_path_that_contradicts_process_is_refused(tmp_path, monkeypatch):
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"audience": "internal", "process": "no"})])
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_statuses({"row-1": "hq"})
+    except ValueError as exc:
+        assert "process" in str(exc), str(exc)
+    else:
+        raise AssertionError("an HQ move that does not apply to our processes was accepted")
+    assert register.read_text(encoding="utf-8") == before
+
+def test_the_contradicting_pair_can_be_corrected_in_the_SAME_mapping(tmp_path, monkeypatch):
+    """One transaction, both fields — so no window exists in which the register contradicts
+    itself, and the owner's correction is not blocked by the very rule it corrects."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"audience": "internal", "process": "no"})])
+
+    insights.set_statuses({"row-1": {"status": "publishing", "surface": "miidas",
+                                     "audience": "public"}})
+
+    row = _rows(register)[0]
+    assert (row["status"], row["surface"], row["audience"]) == ("publishing", "miidas", "public")
+    assert insights.verify_insights()[0]
+
+def test_a_publishing_row_cannot_be_re_audienced_out_of_the_path(tmp_path, monkeypatch):
+    """The invariant binds on EVERY write path, not only the status move: a lone audience
+    move would otherwise be the way around it."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1)])
+    insights.set_statuses({"row-1": {"status": "publishing", "surface": "x",
+                                     "audience": "public"}})
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_audience({"row-1": "internal"})
+    except ValueError as exc:
+        assert "audience" in str(exc), str(exc)
+    else:
+        raise AssertionError("a publishing row was re-audienced out of the path")
+    assert register.read_text(encoding="utf-8") == before
+
+def test_verify_reports_both_contradicting_pairs(tmp_path, monkeypatch):
+    """The write paths refuse them; this leg catches a pair that reached the store anyway."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "publishing", "status_at": "2026-09-14T09:00:00Z",
+                                           "surface": "x", "audience": "internal",
+                                           "process": "no"})])
+    ok, errors = insights.verify_insights()
+    assert not ok and any("audience" in e for e in errors), errors
+
+    _legacy_register(register, [_row(1, **{"status": "hq", "status_at": "2026-09-14T09:00:00Z",
+                                           "audience": "public", "process": "no"})])
+    ok, errors = insights.verify_insights()
+    assert not ok and any("process" in e for e in errors), errors

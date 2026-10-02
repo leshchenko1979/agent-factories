@@ -55,7 +55,8 @@ def _append(**over):
         empirical_reality="measured",
         mechanism="structural",
         author="Surveys",
-        insight_class="general",
+        audience="public",
+        process="no",
     )
     kwargs.update(over)
     return insights.append_insight(**kwargs)

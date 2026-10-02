@@ -9,15 +9,27 @@ insights from a lane's. `--author` is explicit; omitted, it is DERIVED from the
 writing session (`OPENCRABS_SESSION_ID`) and never defaulted — the same identity
 law the ledger reads its own actor under.
 
-Every entry also carries a CLASS, and there are exactly two:
+Every entry carries a ROUTING GROUP of three fields, and the owner re-cut it on
+2026-10-02: "I was wrong when I told that an issue can be either general or
+implementation-based. Instead, the axis should be - marketable or not."
 
-  general         the claim stands outside this fleet: publishable content
-  implementation  its subject is this fleet's own machinery: an internal
-                  amendment for HQ
+  audience  public | internal    does the claim have a reader OUTSIDE this factory?
+  process   yes | no             can it be applied to OUR OWN processes?
+  surface   x | miidas | both    WHICH publishing surface the unit lands on
 
-`--class` is required. An entry that names no audience feeds neither consumer, and
-the two are read by different downstream surfaces, so an unclassified row is
-unusable rather than merely tidy.
+`audience` and `process` are BOTH required, and they answer different questions: a
+claim can be worth publishing and change nothing about how we work, or change our
+processes and interest nobody outside. The retired `class` asked one question and was
+read as answering the other — which is why 8 of the 14 `general` rows sent to the
+content funnel came back refused, the funnel's own words being "class is not an
+audience axis". `class` is kept on the rows that already carry it as a LEGACY key:
+never rewritten, printed as `legacy`, read by no consumer.
+
+`surface` is required whenever the row is in the PUBLISHING PATH (`publishing`,
+`published`), because the lane that owns a unit differs by surface — X is authored
+here, the miidas blog is handed to the Marketing lane. It is CLEARED when the row
+leaves that path, the same shape the reason rule uses, so a unit outside the
+publishing path cannot carry a destination it is no longer going to.
 
 Every entry also carries a STATUS, which is where it stands in the WORKFLOW rather
 than what kind of claim it is. The two axes are orthogonal, and a row needs both to
@@ -59,8 +71,11 @@ Usage:
   python3 tools/insights.py list
   python3 tools/insights.py format <id> [--format=tweet|ru|markdown]
   python3 tools/insights.py verify
-  python3 tools/insights.py classify --file <mapping.json>   # backfill the class on existing rows
+  python3 tools/insights.py audience --file <mapping.json>   # backfill `audience` on rows predating it
+  python3 tools/insights.py process --file <mapping.json>    # record the process verdict on a row
+  python3 tools/insights.py surface --file <mapping.json>    # name the publishing surface
   python3 tools/insights.py status --file <mapping.json>     # move existing rows to a new status
+  python3 tools/insights.py reason --file <mapping.json>     # set a refusal's grounds
 """
 
 from __future__ import annotations
@@ -80,16 +95,42 @@ LOCK_PATH = REPO / "evidence" / ".insights.lock"
 
 ALLOWED_STAGES = ["stage-0", "stage-1", "stage-2", "stage-3", "stage-4", "fleet-wide"]
 
-# The register feeds TWO consumers, so every entry names the one it serves. The values
-# are deliberately coarse: an AUDIENCE split, not a topic taxonomy. A finer value would
-# be a second axis pretending to be this one.
-ALLOWED_CLASSES = ["general", "implementation"]
+# The routing group. THREE fields, each answering ONE question, and each read by a
+# different consumer — which is why there are three and not one. The values are
+# deliberately coarse: a routing split, not a topic taxonomy. A finer value would be a
+# second axis pretending to be this one.
+#
+# `audience` is the question the retired `class` was READ as answering but never asked:
+# does the claim have a reader OUTSIDE this factory? `public` routes it to a publishing
+# surface; `internal` does not. It is a PROPERTY of the claim, never the funnel's verdict
+# on it — which is the whole reason for the 2026-10-02 re-cut, because `class=general` let
+# an author assert a routing the consumer then refused, and the register ended up holding
+# rows whose declared routing contradicted their fate.
+ALLOWED_AUDIENCE = ["public", "internal"]
 
-# The second axis, deliberately NOT a renaming of the first: `class` says what kind of
-# claim the entry is (who it serves), `status` says where it stands in the workflow
-# (what has been DONE about it). The values name the two destinations and the terminals
-# they can reach, because a routing register that cannot tell "queued for publishing"
-# from "published" is a register of intentions rather than of state.
+# `process` is asked of EVERY row, whatever its audience, because an insight routed to a
+# publishing surface was never asked whether it changes how we work — and the answer is
+# owed either way. `yes` routes the row to HQ; `no` is a RECORDED FINDING, not silence.
+ALLOWED_PROCESS = ["yes", "no"]
+
+# `surface` names WHERE a unit is published, because the LANE that owns it differs by
+# surface: X is authored here (the `viral-x-post` skill), the miidas blog is handed to the
+# Marketing lane and follows its own funnel law. `both` is two units under two contracts,
+# not one artifact cross-posted.
+ALLOWED_SURFACES = ["x", "miidas", "both"]
+
+# RETIRED 2026-10-02 — the vocabulary `class` drew on. Kept as the record of what the rows
+# still carrying the key were classified under; NOT a live vocabulary, so no value is
+# validated against it any more and `verify` no longer rejects an unknown one. New rows
+# carry no `class` at all.
+RETIRED_CLASSES = ["general", "implementation"]
+
+# The TRACKER, deliberately separate from the routing group: the axes say what a claim IS
+# and who it serves, `status` says where it stands in the workflow (what has been DONE
+# about it). The values name the destinations and the terminals they can reach, because a
+# routing register that cannot tell "queued for publishing" from "published" is a register
+# of intentions rather than of state. The two are held in agreement by the cross-axis
+# invariants below, checked at the write path and reported by `verify`.
 #
 # `refused` is deliberately NON-terminal, and that is the whole reason it exists: a
 # CONSUMER (the content funnel) refused the unit, and the refusal is now in front of the
@@ -106,6 +147,22 @@ ALLOWED_STATUSES = ["pending", "publishing", "hq", "published", "landed", "refus
 # files against.
 REASON_REQUIRED_STATUSES = frozenset({"refused", "dropped"})
 
+# The PUBLISHING PATH, and the one home for it — the same shape REASON_REQUIRED_STATUSES
+# has, for the same reason. A row in this path owes a `surface`, because the lane that
+# owns a publishing unit differs by surface (X is authored here, the miidas blog is the
+# Marketing lane's), so a unit cannot be published without naming where it went. Read by
+# the append path, the backfill path and `verify`, and used for the CLEAR: a row that
+# leaves the path loses its surface in the same transaction, exactly as it loses its
+# reason, because a destination on a row that is not going anywhere is the field's other
+# lie.
+SURFACE_REQUIRED_STATUSES = frozenset({"publishing", "published"})
+
+# D4's second invariant, and the same one-home shape: a row routed to HQ asserts that the
+# insight IS applicable to our processes, so `process` must say `yes` on it. The two
+# fields are separate — `audience` and `process` answer different questions — but they
+# must not CONTRADICT each other, and this is the set on which they could.
+HQ_PATH_STATUSES = frozenset({"hq", "landed"})
+
 # The owner is an AUTHOR no session can stand for, so this literal is accepted
 # as a first-class value and is NEVER derived.
 OWNER_AUTHOR = "Alexey"
@@ -114,8 +171,14 @@ OWNER_AUTHOR = "Alexey"
 # position here, and every other key keeps the place it already had — so the diff
 # a backfill produces is ADDITIVE: a reader scanning it meets one inserted label
 # and no restated claim.
-CANONICAL_ORDER = ["n", "id", "ts", "supersedes", "author", "class", "status",
-                   "status_at", "reason",
+#
+# The routing group sits immediately after `author` and the retired `class` after it, so a
+# backfilled row reads: identity, then the LIVE routing, then the dead label. `class` keeps
+# a rank rather than being dropped from this list because the rows that carry it must keep
+# their position, and a key absent from here would be ranked last and float to the tail.
+CANONICAL_ORDER = ["n", "id", "ts", "supersedes", "author",
+                   "audience", "process", "surface",
+                   "class", "status", "status_at", "reason",
                    "topic", "stage", "naive_assumption", "empirical_reality",
                    "mechanism", "tweet_hook", "ru_summary"]
 _RANK = {k: i for i, k in enumerate(CANONICAL_ORDER)}
@@ -260,7 +323,9 @@ def append_insight(
     tweet_hook: str = "",
     ru_summary: str = "",
     author: str = "",
-    insight_class: str = "",
+    audience: str = "",
+    process: str = "",
+    surface: str = "",
     status: str = "pending",
     reason: str = "",
     supersedes: int | None = None,
@@ -270,11 +335,24 @@ def append_insight(
     if not str(author or "").strip():
         raise ValueError("author is required — a row with no author reads as provenance "
                          "while carrying none")
-    if not str(insight_class or "").strip():
-        raise ValueError("class is required — an entry that names no audience feeds "
-                         "neither the content pipeline nor HQ")
-    if insight_class not in ALLOWED_CLASSES:
-        raise ValueError(f"class must be one of {ALLOWED_CLASSES}, got '{insight_class}'")
+    # BOTH routing questions are required at append, because a row that answers one and
+    # not the other is exactly the defect the retired `class` produced: one answer standing
+    # in for two questions, so the half that was never asked read as answered.
+    if not str(audience or "").strip():
+        raise ValueError("audience is required — a row that names no reader outside the "
+                         "factory is routed to no publishing surface")
+    if audience not in ALLOWED_AUDIENCE:
+        raise ValueError(f"audience must be one of {ALLOWED_AUDIENCE}, got '{audience}'")
+    if not str(process or "").strip():
+        raise ValueError("process is required — every insight is asked whether it applies "
+                         "to our own processes, and 'no' is a recorded finding, not silence")
+    if process not in ALLOWED_PROCESS:
+        raise ValueError(f"process must be one of {ALLOWED_PROCESS}, got '{process}'")
+    # `surface` is NOT required the way the two axes are — only a row in the publishing
+    # path owes one — but a value that IS given must name a real destination, and a value
+    # given on a row outside that path is refused below with the reason rule's own shape.
+    if str(surface or "").strip() and surface not in ALLOWED_SURFACES:
+        raise ValueError(f"surface must be one of {ALLOWED_SURFACES}, got '{surface}'")
     # Status is NOT required the way class is, and the asymmetry is the point: the author
     # knows the CLAIM's kind, but the destination is the owner's call, so this DEFAULTS
     # rather than being demanded. A value that IS given must still be in the vocabulary —
@@ -301,6 +379,32 @@ def append_insight(
             f"status '{status}' does not carry a reason — a reason states why a unit was "
             f"refused or dropped ({'/'.join(sorted(REASON_REQUIRED_STATUSES))}), and "
             f"'{status}' is neither")
+    # The publishing path's own requirement, from the same one home and for the same
+    # reason: a unit in that path is going to a surface, and the LANE that owns it differs
+    # by surface, so publishing it without naming where is a record that cannot be routed.
+    if status in SURFACE_REQUIRED_STATUSES and not str(surface or "").strip():
+        raise ValueError(f"status '{status}' requires a --surface — a publishing unit must "
+                         f"name where it lands ({', '.join(ALLOWED_SURFACES)})")
+    # The field's other lie, mirroring the reason rule: a surface names a publishing unit's
+    # destination, so one supplied on a status outside that path reads as a routing
+    # decision for a row that is not being routed anywhere.
+    if str(surface or "").strip() and status not in SURFACE_REQUIRED_STATUSES:
+        raise ValueError(
+            f"status '{status}' does not carry a surface — a surface names where a "
+            f"publishing unit lands, so it belongs to "
+            f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
+    # D4's two cross-axis invariants, at the one place the row can still be refused: the
+    # routing group and the tracker answer different questions, but they must not
+    # CONTRADICT each other. A row in the publishing path asserts a reader outside the
+    # factory, and a row routed to HQ asserts the insight applies to our processes.
+    if status in SURFACE_REQUIRED_STATUSES and audience != "public":
+        raise ValueError(
+            f"status '{status}' is in the publishing path, which asserts a public "
+            f"audience — so audience must be 'public', got '{audience}'")
+    if status in HQ_PATH_STATUSES and process != "yes":
+        raise ValueError(
+            f"status '{status}' routes the row to HQ, which asserts the insight applies to "
+            f"our processes — so process must be 'yes', got '{process}'")
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -351,7 +455,10 @@ def append_insight(
             if supersedes is not None:
                 entry["supersedes"] = supersedes
             entry["author"] = str(author).strip()
-            entry["class"] = str(insight_class).strip()
+            entry["audience"] = str(audience).strip()
+            entry["process"] = str(process).strip()
+            if str(surface or "").strip():
+                entry["surface"] = str(surface).strip()
             entry["status"] = str(status).strip()
             entry["status_at"] = now_iso()
             if str(reason or "").strip():
@@ -376,20 +483,25 @@ def append_insight(
 
 # Every labelled field, with the vocabulary its values come from. One table, so a new
 # label is declared in ONE place and every verb below inherits its validation.
-FIELD_VOCAB: dict[str, list[str]] = {"class": ALLOWED_CLASSES, "status": ALLOWED_STATUSES}
+FIELD_VOCAB: dict[str, list[str]] = {
+    "audience": ALLOWED_AUDIENCE,
+    "process": ALLOWED_PROCESS,
+    "surface": ALLOWED_SURFACES,
+    "status": ALLOWED_STATUSES,
+}
 
 
 def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
               optional_fields: list[str] | None = None) -> list[tuple[str, dict]]:
     """Set the labelled `fields` on entries that ALREADY EXIST, in one transaction.
 
-    Shared by `classify` and `status`: both write a routing label onto existing rows,
-    so both owe the same guarantees, and a second copy of this logic would be a second
-    place for those guarantees to drift apart.
+    Shared by the routing verbs (`audience`, `process`, `surface`) and `status`: all write
+    a label onto existing rows, so all owe the same guarantees, and a second copy of this
+    logic would be a second place for those guarantees to drift apart.
 
     `optional_fields` names fields a caller may set WITHOUT demanding one on every row —
-    the split matters because `reason` is required only where a status makes it
-    meaningful, so "every row must name it" would refuse the 23 rows it does not apply
+    the split matters because `reason` and `surface` are required only where a status makes
+    them meaningful, so "every row must name it" would refuse the rows they do not apply
     to. An optional field IS validated when it is given, and an unknown name is still
     refused, so the narrow-writer guarantee binds both kinds.
 
@@ -445,7 +557,7 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                 raise ValueError(f"unknown id(s), nothing written: {', '.join(unknown)}")
 
             changes: list[tuple[str, dict]] = []
-            cleared: list[str] = []
+            cleared: list[tuple[str, str]] = []
             out_rows: list[dict] = []
             for entry in entries:
                 slug = entry.get("id")
@@ -485,7 +597,17 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                         and updates[slug]["status"] not in REASON_REQUIRED_STATUSES
                         and "reason" in row):
                     row = _without_field(row, "reason")
-                    cleared.append(slug)
+                    cleared.append((slug, "reason"))
+                # The surface is a publishing unit's DESTINATION, so it is true only while
+                # the row is in the publishing path. A row moved out of it — retired, or
+                # landed at HQ — would otherwise carry a destination it is no longer going
+                # to, and `verify` refuses exactly that. The same clear as the reason's, for
+                # the same reason, and PRINTED for the same reason.
+                if ("status" in updates[slug]
+                        and updates[slug]["status"] not in SURFACE_REQUIRED_STATUSES
+                        and "surface" in row):
+                    row = _without_field(row, "surface")
+                    cleared.append((slug, "surface"))
                 # insights.md §6 rule 4 and rule 6, checked on the row AS IT WOULD BE WRITTEN
                 # rather than on the mapping alone: a row left in a reason-owing status
                 # without one is the same defect as one appended that way, and a rule
@@ -506,6 +628,39 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                         f"'{slug}' would carry a reason on status '{row.get('status')}' — a "
                         f"reason states why a unit was refused or dropped, so it belongs to "
                         f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
+                # The publishing path's own requirement, on the row AS IT WOULD BE WRITTEN:
+                # a row left in that path with no surface cannot be routed, and the same
+                # rule has to bind here as binds the append, or a move becomes the way
+                # around it.
+                if (row.get("status") in SURFACE_REQUIRED_STATUSES
+                        and not str(row.get("surface") or "").strip()):
+                    raise ValueError(
+                        f"'{slug}' would be left '{row.get('status')}' with no surface — a "
+                        f"publishing unit must name where it lands "
+                        f"({', '.join(ALLOWED_SURFACES)}), so name it in the same mapping")
+                if (str(row.get("surface") or "").strip()
+                        and row.get("status") not in SURFACE_REQUIRED_STATUSES):
+                    raise ValueError(
+                        f"'{slug}' would carry a surface on status '{row.get('status')}' — "
+                        f"a surface names where a publishing unit lands, so it belongs to "
+                        f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
+                # D4's cross-axis invariants, on the row as it would be written: the routing
+                # group says what the claim IS and who it serves, `status` says what has been
+                # DONE about it, and the two must not contradict each other. Checked here as
+                # well as at the append, because a status move is the other way a row reaches
+                # a contradicting pair.
+                if (row.get("status") in SURFACE_REQUIRED_STATUSES
+                        and row.get("audience") != "public"):
+                    raise ValueError(
+                        f"'{slug}' would be '{row.get('status')}', which is in the publishing "
+                        f"path and asserts a public audience — so audience must be 'public', "
+                        f"got '{row.get('audience')}'")
+                if (row.get("status") in HQ_PATH_STATUSES
+                        and row.get("process") != "yes"):
+                    raise ValueError(
+                        f"'{slug}' would be '{row.get('status')}', which routes the row to HQ "
+                        f"and asserts it applies to our processes — so process must be 'yes', "
+                        f"got '{row.get('process')}'")
                 changes.append((slug, before))
                 out_rows.append(row)
 
@@ -521,20 +676,47 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
             if cleared:
                 # Never silent: the register's own law forbids a change that a reader
                 # cannot see, and this one DELETES a label rather than adding one.
-                print(f"cleared the reason on {len(cleared)} row(s) whose status no longer "
-                      f"owes one: {', '.join(cleared)}")
+                by_field: dict[str, list[str]] = {}
+                for slug, field in cleared:
+                    by_field.setdefault(field, []).append(slug)
+                for field, slugs in sorted(by_field.items()):
+                    print(f"cleared the {field} on {len(slugs)} row(s) whose status no "
+                          f"longer owes one: {', '.join(slugs)}")
             return changes
         finally:
             fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 
-def classify_insights(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
-    """Set `class` on entries that PREDATE the field. The owner rules on the values;
+def set_audience(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Set `audience` on entries that PREDATE the field. The owner rules on the values;
     this applies the ruling, and `_backfill` carries the guarantees behind it.
     """
-    changes = _backfill({k: {"class": v} for k, v in mapping.items()},
-                        ["class"], "classifications")
-    return [(slug, before["class"] or None, mapping[slug]) for slug, before in changes]
+    changes = _backfill({k: {"audience": v} for k, v in mapping.items()},
+                        ["audience"], "audiences")
+    return [(slug, before["audience"] or None, mapping[slug]) for slug, before in changes]
+
+def set_process(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Record the `process` verdict on entries that PREDATE the field.
+
+    Asked of EVERY row, whatever its audience: an insight routed to a publishing surface
+    was never asked whether it changes how we work, and the answer is owed either way.
+    `no` is a recorded finding, not silence — which is why the field is required at append
+    and backfilled here rather than left absent on the rows that predate it.
+    """
+    changes = _backfill({k: {"process": v} for k, v in mapping.items()},
+                        ["process"], "process verdicts")
+    return [(slug, before["process"] or None, mapping[slug]) for slug, before in changes]
+
+def set_surfaces(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
+    """Name the publishing `surface` of entries already in the publishing path.
+
+    Lawful only on a row whose status is in that path, because a destination on a row that
+    is not going anywhere is the field's other lie — `_backfill` refuses it from the one
+    home, the same way it refuses a reason on a row that owes none.
+    """
+    changes = _backfill({k: {"surface": v} for k, v in mapping.items()},
+                        ["surface"], "surfaces")
+    return [(slug, before["surface"] or None, mapping[slug]) for slug, before in changes]
 
 
 def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]]:
@@ -550,6 +732,12 @@ def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]
     to `refused` or `dropped` owes a reason and one transaction should carry both — the
     alternative is a window in which such a row has no reason, which is the state
     insights.md §6 rule 4 forbids.
+
+    The same door carries the routing group, for the same one-transaction reason: a row
+    moved INTO the publishing path owes a `surface` and a `public` audience, and a row
+    moved to HQ owes `process: yes`, so `audience`, `process` and `surface` may travel with
+    the status rather than forcing a second write that leaves the register contradicting
+    itself in between.
 
     Moving a row OUT of those statuses CLEARS its reason in the same transaction. That is
     not a convenience: it is what makes the owner's override landable, since a reason on a
@@ -568,7 +756,8 @@ def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]
     updates: dict[str, dict] = {}
     for k, v in mapping.items():
         if isinstance(v, dict):
-            names = sorted(set(v) - {"status", "reason", "status_at"})
+            names = sorted(set(v) - {"status", "reason", "status_at",
+                                     "audience", "process", "surface"})
             if names:
                 raise ValueError(f"status for '{k}' carries unsettable field(s): "
                                  f"{', '.join(names)}")
@@ -576,8 +765,9 @@ def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]
                 raise ValueError(f"status for '{k}' names no 'status'")
             updates[k] = {"status": v["status"],
                           "status_at": v.get("status_at") or stamp}
-            if "reason" in v:
-                updates[k]["reason"] = v["reason"]
+            for extra in ("reason", "audience", "process", "surface"):
+                if extra in v:
+                    updates[k][extra] = v[extra]
         else:
             updates[k] = {"status": v, "status_at": stamp}
 
@@ -599,7 +789,7 @@ def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]
                     f"forward and never mints one")
 
     changes = _backfill(updates, ["status", "status_at"], "statuses",
-                        optional_fields=["reason"])
+                        optional_fields=["reason", "audience", "process", "surface"])
     return [(slug, before["status"] or None, updates[slug]["status"])
             for slug, before in changes]
 
@@ -694,15 +884,27 @@ def verify_insights() -> tuple[bool, list[str]]:
         if "author" in data and not data.get("author"):
             errors.append(f"line {idx}: empty author")
 
-        # `class` follows the same rule as `author`: rows predating the field carry no
-        # key at all and stay valid, while an EMPTY value is a defect either way. An
-        # UNKNOWN value is the same defect wearing a value — a typo'd class feeds
-        # neither consumer while reading as a classification.
-        if "class" in data:
-            if not data.get("class"):
-                errors.append(f"line {idx}: empty class")
-            elif data["class"] not in ALLOWED_CLASSES:
-                errors.append(f"line {idx}: unknown class '{data['class']}'")
+        # `class` is RETIRED (owner re-cut, 2026-10-02) and kept on the rows that already
+        # carry it as a legacy label: it is never rewritten and read by no consumer, so its
+        # VALUES are no longer validated against a live vocabulary. An EMPTY value is still a
+        # defect — it reads as a classification while carrying none — but an unknown one is
+        # now just history, and refusing it would make the retirement a rewrite.
+        if "class" in data and not data.get("class"):
+            errors.append(f"line {idx}: empty class")
+
+        # The routing group, checked the way `status` is: a row predating a field carries no
+        # key and stays valid, while an EMPTY or UNKNOWN value is a defect either way. A
+        # typo'd value routes the row nowhere while reading as a routing decision, which is
+        # the same class of lie the retired `class` told.
+        for field, vocab in (("audience", ALLOWED_AUDIENCE),
+                             ("process", ALLOWED_PROCESS),
+                             ("surface", ALLOWED_SURFACES)):
+            if field not in data:
+                continue
+            if not data.get(field):
+                errors.append(f"line {idx}: empty {field}")
+            elif data[field] not in vocab:
+                errors.append(f"line {idx}: unknown {field} '{data[field]}'")
 
         # `status` follows the same rule as the two fields before it: a row predating the
         # field carries no key and stays valid, while an EMPTY or UNKNOWN value is a
@@ -737,6 +939,47 @@ def verify_insights() -> tuple[bool, list[str]]:
                               f"'{data.get('status')}' — a reason states why a unit was "
                               f"refused or dropped, so it belongs to "
                               f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
+
+        # The publishing path owes a DESTINATION, and the surface's other lie is reported
+        # from the same one home the write path refuses it from. The leg binds rows that
+        # carry the routing group — `audience` and `process` are BOTH required at append, so
+        # a row holding both is one written under the re-cut, while a row predating it
+        # carries neither and stays valid, exactly as the 31 author-less rows do. Without
+        # that bound the check would demand a `surface` from history, which is the same
+        # rewrite the append-only rule forbids.
+        carries_routing_group = "audience" in data and "process" in data
+        if carries_routing_group and data.get("status") in SURFACE_REQUIRED_STATUSES:
+            if not str(data.get("surface") or "").strip():
+                errors.append(f"line {idx}: status '{data.get('status')}' carries no surface "
+                              f"— a publishing unit must name where it lands "
+                              f"({', '.join(ALLOWED_SURFACES)})")
+        # A surface on a row outside that path is the field's other lie: it reads as a
+        # destination for a unit that is not going anywhere.
+        if "surface" in data:
+            if not str(data.get("surface") or "").strip():
+                errors.append(f"line {idx}: empty surface")
+            elif data.get("status") not in SURFACE_REQUIRED_STATUSES:
+                errors.append(f"line {idx}: surface recorded on status "
+                              f"'{data.get('status')}' — a surface names where a publishing "
+                              f"unit lands, so it belongs to "
+                              f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
+
+        # D4's two cross-axis invariants. The routing group says what the claim IS and who
+        # it serves; `status` says what has been DONE about it. The two answer different
+        # questions and must not CONTRADICT each other — a row in the publishing path
+        # asserts a public reader, and a row routed to HQ asserts the insight applies to our
+        # processes. Each leg fires only where the row CARRIES the routing field, so a row
+        # predating the re-cut is not condemned for a claim it never made.
+        if (data.get("status") in SURFACE_REQUIRED_STATUSES
+                and "audience" in data and data.get("audience") != "public"):
+            errors.append(f"line {idx}: status '{data.get('status')}' is in the publishing "
+                          f"path, which asserts a public audience — but audience is "
+                          f"'{data.get('audience')}'")
+        if (data.get("status") in HQ_PATH_STATUSES
+                and "process" in data and data.get("process") != "yes"):
+            errors.append(f"line {idx}: status '{data.get('status')}' routes the row to HQ, "
+                          f"which asserts the insight applies to our processes — but process "
+                          f"is '{data.get('process')}'")
 
     # Half 2 — supersession. A correction is a NEW row naming the row it corrects, and
     # the reader takes the NEWEST. Two ways that reading breaks, both checked here: a
@@ -787,11 +1030,20 @@ def main() -> int:
                           help=f"the authoring lane, or the literal {OWNER_AUTHOR} for the "
                                f"owner's own insights. Omitted: DERIVED from "
                                f"OPENCRABS_SESSION_ID, and refused when it resolves to nothing")
-    p_append.add_argument("--class", dest="insight_class", default="",
-                          choices=ALLOWED_CLASSES,
-                          help="the audience this entry serves: 'general' for publishable "
-                               "content, 'implementation' for an internal HQ amendment. "
-                               "Required.")
+    p_append.add_argument("--audience", default="", choices=[""] + ALLOWED_AUDIENCE,
+                          help="does the claim have a reader OUTSIDE this factory? 'public' "
+                               "routes it to a publishing surface, 'internal' does not. "
+                               "Required. It is a PROPERTY of the claim, never the funnel's "
+                               "verdict on it")
+    p_append.add_argument("--process", default="", choices=[""] + ALLOWED_PROCESS,
+                          help="can the insight be applied to OUR OWN processes? Asked of "
+                               "EVERY row, whatever its audience; 'yes' routes it to HQ and "
+                               "'no' is a recorded finding, not silence. Required")
+    p_append.add_argument("--surface", default="", choices=[""] + ALLOWED_SURFACES,
+                          help="where the unit is published: 'x' (authored here, "
+                               "viral-x-post skill), 'miidas' (the Marketing lane's blog) or "
+                               "'both' (two units, two contracts). Required when --status is "
+                               "'publishing' or 'published', refused otherwise")
     p_append.add_argument("--status", default="pending", choices=ALLOWED_STATUSES,
                           help="where the entry stands in the workflow. Omitted: opens at "
                                "'pending', which asserts the row's own state and never "
@@ -810,10 +1062,23 @@ def main() -> int:
     sub.add_parser("list", help="List all insights")
     sub.add_parser("verify", help="Verify integrity of insights ledger")
 
-    p_cls = sub.add_parser("classify",
-                           help="Set the class on entries that predate the field")
-    p_cls.add_argument("--file", required=True, metavar="MAPPING.json",
-                       help="JSON object {id: class}, applied in ONE transaction")
+    p_aud = sub.add_parser("audience",
+                           help="Set `audience` on entries that predate the field")
+    p_aud.add_argument("--file", required=True, metavar="MAPPING.json",
+                       help="JSON object {id: public|internal}, applied in ONE transaction")
+
+    p_prc = sub.add_parser("process",
+                           help="Record the `process` verdict on entries that predate it")
+    p_prc.add_argument("--file", required=True, metavar="MAPPING.json",
+                       help="JSON object {id: yes|no}, applied in ONE transaction. Asked of "
+                            "every row, whatever its audience")
+
+    p_srf = sub.add_parser("surface",
+                           help="Name the publishing surface of entries already in that path")
+    p_srf.add_argument("--file", required=True, metavar="MAPPING.json",
+                       help="JSON object {id: x|miidas|both}. Lawful only on a row whose "
+                            "status is 'publishing' or 'published': a destination on a row "
+                            "that is not going anywhere is the field's other lie")
 
     p_st = sub.add_parser("status",
                           help="Move existing entries to a new workflow status")
@@ -857,13 +1122,16 @@ def main() -> int:
                 tweet_hook=args.tweet,
                 ru_summary=args.ru,
                 author=author,
-                insight_class=args.insight_class,
+                audience=args.audience,
+                process=args.process,
+                surface=args.surface,
                 status=args.status,
                 reason=args.reason,
                 supersedes=args.supersedes,
             )
             print(f"appended insight #{entry['n']}: {entry['id']} [{entry['stage']}] "
-                  f"by {entry['author']} [{entry['class']}] [{entry['status']}]")
+                  f"by {entry['author']} [{entry['audience']}] [{entry['process']}] "
+                  f"[{entry['status']}]")
             if entry.get("supersedes") is not None:
                 print(f"  revises n={entry['supersedes']} — the newest governing row wins")
             return 0
@@ -897,9 +1165,12 @@ def main() -> int:
                 # NEVER SILENT: a value that quietly stopped applying is the failure the
                 # supersession shape exists to prevent, so the row says so in place.
                 mark = f" [superseded by n={superseded_by[d['n']]}]"
-            print(f"#{d['n']} [{d['stage']}] [{d.get('class') or 'legacy'}] "
+            print(f"#{d['n']} [{d['stage']}] "
+                  f"[{d.get('audience') or 'legacy'}] [{d.get('process') or 'legacy'}]"
+                  f"{' [' + d['surface'] + ']' if d.get('surface') else ''} "
                   f"[{d.get('status') or 'unrouted'}] "
-                  f"{d['id']} ({d.get('author') or 'legacy'}): {d['topic']}{mark}")
+                  f"{d['id']} ({d.get('author') or 'legacy'}): {d['topic']}"
+                  f"{' [class=' + d['class'] + ' legacy]' if d.get('class') else ''}{mark}")
         return 0
 
     elif args.cmd == "format":
@@ -925,7 +1196,16 @@ def main() -> int:
         else:
             print(f"## Insight #{target['n']}: {target['topic']} ({target['stage']})\n")
             print(f"**Author:** {target.get('author') or 'legacy — predates the field'}\n")
-            print(f"**Class:** {target.get('class') or 'legacy — predates the field'}\n")
+            print(f"**Audience:** {target.get('audience') or 'legacy — predates the field'}\n")
+            print(f"**Process:** {target.get('process') or 'legacy — predates the field'}\n")
+            if target.get("surface"):
+                print(f"**Surface:** {target['surface']}\n")
+            if target.get("class"):
+                # RETIRED 2026-10-02 and kept on the rows that carry it. Printed rather than
+                # hidden, because the register's own law forbids a value that silently stops
+                # applying — but marked legacy, because no consumer reads it any more.
+                print(f"**Class:** {target['class']} *[legacy — retired axis, never "
+                      f"rewritten, read by no consumer]*\n")
             since = f" (since {target['status_at']})" if target.get("status_at") else ""
             print(f"**Status:** {target.get('status') or 'unrouted'}{since}\n")
             if target.get("reason"):
@@ -953,17 +1233,26 @@ def main() -> int:
                       f"longer governs.\n")
         return 0
 
-    elif args.cmd == "classify":
+    elif args.cmd in ("audience", "process", "surface"):
+        # One branch for the three routing verbs: they share the mapping file shape, the
+        # all-or-nothing transaction and the report, so a copy per verb would be three
+        # places for the same guarantees to drift.
+        verbs = {
+            "audience": (set_audience, "{id: public|internal}", "audience"),
+            "process": (set_process, "{id: yes|no}", "process verdict"),
+            "surface": (set_surfaces, "{id: x|miidas|both}", "surface"),
+        }
+        apply, shape, noun = verbs[args.cmd]
         try:
             mapping = json.loads(Path(args.file).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             print(f"FAIL: cannot read mapping {args.file}: {exc}", file=sys.stderr)
             return 1
         if not isinstance(mapping, dict):
-            print("FAIL: the mapping must be a JSON object {id: class}", file=sys.stderr)
+            print(f"FAIL: the mapping must be a JSON object {shape}", file=sys.stderr)
             return 1
         try:
-            changes = classify_insights({str(k): str(v) for k, v in mapping.items()})
+            changes = apply({str(k): str(v) for k, v in mapping.items()})
         except ValueError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
@@ -971,8 +1260,9 @@ def main() -> int:
         for slug, old, new in changes:
             print(f"  {slug}: {old or 'legacy'} -> {new}")
             counts[new] = counts.get(new, 0) + 1
-        summary = ", ".join(f"{n} {cls}" for cls, n in sorted(counts.items()))
-        print(f"classified {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: {summary}")
+        summary = ", ".join(f"{n} {val}" for val, n in sorted(counts.items()))
+        print(f"set {noun} on {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: "
+              f"{summary}")
         return 0
 
     elif args.cmd == "status":

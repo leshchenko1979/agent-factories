@@ -2280,22 +2280,25 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_insights_author.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_author.py"])
 
-    # tests/test_insights_class.py -- the CLASS field on the same register: the AUDIENCE
-    # every entry names, because the two consumers are different surfaces. The same three
-    # failure modes one field over: an append that accepts no class, an append that accepts
-    # an UNKNOWN one (a typo'd class passes any "is it set?" check and still feeds neither
-    # consumer), and a `verify` that passes a stored blank. Its MODE is declared in
-    # registry/gates.json in the SAME landing -- the omission #204 had to repair, not
-    # repeated here.
-    if (repo_root / "tests/test_insights_class.py").is_file():
-        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_class.py"])
+    # tests/test_insights_audience.py -- the AUDIENCE field on the same register: the reader
+    # a claim has OUTSIDE this factory, which is what routes it to a publishing surface. The
+    # same three failure modes one field over: an append that accepts no audience, an append
+    # that accepts an UNKNOWN one (a typo'd audience passes any "is it set?" check and still
+    # routes the row nowhere), and a `verify` that passes a stored blank. It also guards the
+    # RETIREMENT of the `class` axis, which is kept as history and validated against nothing.
+    # Its MODE is declared in registry/gates.json in the SAME landing -- the omission #204
+    # had to repair, not repeated here.
+    if (repo_root / "tests/test_insights_audience.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_audience.py"])
 
     # tests/test_insights_status.py -- the STATUS field on the same register: the WORKFLOW
-    # axis, orthogonal to what KIND of claim an entry is. It guards the failure modes the
-    # class field does not have: a row that opens with a silent blank instead of `pending`,
-    # a status stored without the instant that lets it be aged out, and a transition that
-    # restates a claim while moving the label. Its MODE is declared in registry/gates.json
-    # in the SAME landing -- the omission #204 had to repair, not repeated here.
+    # axis, orthogonal to the routing group (audience, process, surface). It guards the
+    # failure modes the audience field does not have: a row that opens with a silent blank
+    # instead of `pending`, a status stored without the instant that lets it be aged out, a
+    # transition that restates a claim while moving the label, and the two cross-axis
+    # invariants the status and the routing group must never contradict. Its MODE is declared
+    # in registry/gates.json in the SAME landing -- the omission #204 had to repair, not
+    # repeated here.
     if (repo_root / "tests/test_insights_status.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_insights_status.py"])
 
