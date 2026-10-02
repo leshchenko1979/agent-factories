@@ -27,6 +27,7 @@ import re
 import signal
 import subprocess
 import sys
+import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -246,16 +247,39 @@ def format_yield_percent(value: float | None) -> str:
     """
     return "n/a" if value is None else f"{round(value * 100, 1)}%"
 
-def format_run_row_detail(stats: dict[str, Any], outcome: str, gate_summary: str) -> str:
+def format_elapsed_seconds(elapsed_secs: float) -> str:
+    """The run row's `duration=` value, rendered from the run's OWN measured wall time.
+
+    `duration=` is a TELEMETRY key — `docs/instruments/ledger.md` names it among the
+    measurements the tool supplies — so a value in it must be one the emitting path
+    measured. This function is the ONE site that renders it, and it takes the number as
+    an argument precisely so no literal can live in the key: a constant here would be a
+    fabricated measurement, which is not repaired by being small (#276, the #130 class).
+
+    Integer seconds, matching every sibling run row's form (`duration=3s`, `duration=0s`).
+    A sub-second run renders `0s`, which is a MEASUREMENT and not a floor: the audit
+    stamps its row after the whole gate suite, so `0s` is a fact about a run that took
+    less than a second, never a default standing in for an unmeasured one.
+    """
+    return f"{int(elapsed_secs)}s"
+
+def format_run_row_detail(
+    stats: dict[str, Any], outcome: str, gate_summary: str, elapsed_secs: float
+) -> str:
     """The self-audit run row's canonical detail — the ONE site that renders its `yield=`.
 
     Factored out so the row is PROBEABLE (#143): the row and the report disagreed because
     each rendered the ratio itself, and a probe that can only reach the report cannot catch
     the row's arithmetic. This function and the report's renderers all call
     `format_yield_percent`, so their agreement is an identity rather than a coincidence.
+
+    `duration=` is rendered from `elapsed_secs` — the caller's own measurement of the run
+    — and never from a literal (#276). `turns=0` is honest: a mechanical run takes no agent
+    turns, so it stays.
     """
     return (
-        f"duration=4s turns=0 outcome={outcome} gate={gate_summary} "
+        f"duration={format_elapsed_seconds(elapsed_secs)} turns=0 outcome={outcome} "
+        f"gate={gate_summary} "
         f"yield={format_yield_percent(stats.get('first_pass_yield'))}"
     )
 
@@ -2619,6 +2643,10 @@ def format_report_markdown(
 
 
 def main() -> int:
+    # The run's own clock, taken FIRST so `duration=` covers the whole run — the gate suite
+    # included — rather than the stamp step alone. It is read once, at the stamp site, and
+    # rendered by `format_elapsed_seconds`; no other site may invent a duration (#276).
+    started = time.monotonic()
     parser = argparse.ArgumentParser(description="Operational process audit runner.")
     parser.add_argument("--json", action="store_true", help="Output JSON results to stdout")
     parser.add_argument("--report", action="store_true", help="Write the dated report in evidence/scores/ AND record its telemetry run row")
@@ -2857,7 +2885,8 @@ def main() -> int:
                 else ("gate-unknown" if verdict.status == "UNKNOWN" else "gate-failure")
             )
         )
-        detail = format_run_row_detail(ledger_stats, outcome, gate_summary)
+        elapsed_secs = time.monotonic() - started
+        detail = format_run_row_detail(ledger_stats, outcome, gate_summary, elapsed_secs)
         stamp_cmd = [
             sys.executable,
             "tools/ledger.py",

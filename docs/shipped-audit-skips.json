@@ -64,6 +64,26 @@
       ],
       "reason": "`hygiene_namespace` resolves the MAIN worktree deliberately (#174), so run from the shipped tree this leg judges the repository that CONTAINS it -- a population the ROOT audit already owns -- and can go RED for reasons entirely outside the shipped tree, measured: a peer's in-flight evidence file past the 60m grace window. The shipped tree has no git working tree of its own, so there is no 'the shipped tree's hygiene' for this leg to judge. Exit 1 is accepted for THIS entry only, because the tool's own contract is a violation report and the marker is still verified in the source. MARKER HOME: `marker_in` names `tools/audit.py` rather than the tool, because the reason belongs to the audit's own registration comment \u2014 the leg is a shared tool whose behaviour is not the kit's to change.",
       "marker_in": "tools/audit.py"
+    },
+    "tests/test_hygiene_placement.py": {
+      "artifact": "the factory's own directory layout + evidence/ (BOOTSTRAP-created, BOOTSTRAP.md steps 4b/4c)",
+      "marker": "# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)",
+      "reason": "the placement leg judges the LIVE working tree against PLACEMENT_MAP and PLACEMENT_UNMAPPED, and the shipped tree carries neither a top-level `roles/` declaration it can resolve nor any unmapped directory to state a reason for \u2014 a factory's layout, not the kit's"
+    },
+    "tests/test_hygiene_declaration_sweep.py": {
+      "artifact": "the declaration surfaces the sweep cross-reads (BOOTSTRAP-created, steps 4b/4c)",
+      "marker": "# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)",
+      "reason": "the sweep cross-reads every declaration surface the tree carries \u2014 the ledger, the rework log, the ontology \u2014 and asserts each family it finds is NON-EMPTY; none of those artifacts exist at the shipped depth, so the leg has no population to sweep rather than a clean one"
+    },
+    "tests/test_hygiene_stale_dirs.py": {
+      "artifact": "git's own census of the live tree (BOOTSTRAP-created by `git init`)",
+      "marker": "# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)",
+      "reason": "the census is git's own and reads the LIVE tree, asserting the main worktree appears in it; the shipped tree is not a git repository of its own, so the leg has no census to judge"
+    },
+    "tests/test_hygiene_evidence_supersession.py": {
+      "artifact": "evidence/ (BOOTSTRAP-created, BOOTSTRAP.md steps 4b/4c)",
+      "marker": "# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)",
+      "reason": "the leg reads evidence/insights.jsonl and the evidence tree's supersession state, and the shipped tree carries no evidence/ at all \u2014 so the population it judges is absent rather than current"
     }
   }
 }
