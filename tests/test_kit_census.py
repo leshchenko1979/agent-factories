@@ -26,6 +26,10 @@ WHAT IT PINS, and why each arm is here:
      summarised as one verdict clears the leg it cannot see;
   9. a member's own copy reads LIVE / inert / ABSENT / undetermined FROM the answering
      path, and INERT is never claimed when that path was not measured.
+ 10. the census's declared count IS the pin's own judgement — an entry the pin IGNORES is
+     never counted as a declaration (F5, #263), so the report cannot disagree with the gate;
+ 11. an UNREADABLE exemptions file reads None, never 0 — absent-vs-zero is a lie the count
+     must not tell, and the empty state stays a separate, real zero.
 
 The leg AND the answering-path result are both injected, so these arms run with no live
 fleet, no live board and no live answering path: a probe that could only run against five
@@ -207,7 +211,10 @@ def main() -> int:
             # ARM 6 — THE PIN COLUMN REFLECTS THE MEMBER'S OWN TREE, NOT A CONSTANT.
             vendored = tmp / "vendored"
             (vendored / "registry").mkdir(parents=True)
-            (vendored / "registry" / "kit.json").write_text("{}")
+            (vendored / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "files": {"TEMPLATE/tools/ledger.py": "0" * 64},
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
             (vendored / "registry" / "kit-exemptions.json").write_text(
                 json.dumps({"exempt": [{"path": "tools/ledger.py"}]}))
             KC.P.kit_drift_leg = lambda **kw: leg_with([
@@ -308,6 +315,55 @@ def main() -> int:
                   "NONE of the declared members" in t13b,
                   "the case that ended the install round")
 
+            # ARM 14 — THE CENSUS'S DECLARED COUNT IS THE PIN'S OWN, NEVER A SECOND READING.
+            # F5 (#263): the census used to open kit-exemptions.json itself and report
+            # len(exempt), so an entry the pin IGNORES was still counted as a declaration.
+            mixed = tmp / "mixed"
+            (mixed / "registry").mkdir(parents=True)
+            (mixed / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "files": {"TEMPLATE/tools/ledger.py": "0" * 64},
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
+            (mixed / "registry" / "kit-exemptions.json").write_text(json.dumps(
+                {"exempt": [{"nopath": 1}, {"path": "tools/ledger.py"}]}))
+            KC.P.kit_drift_leg = lambda **kw: leg_with([member("mixed", str(mixed))])
+            out14 = tmp / "f5.md"
+            with contextlib.redirect_stdout(io.StringIO()):
+                KC.main(["--out", str(out14)])
+            t14 = out14.read_text()
+            check("ARM 14: the census counts the pin's ADMITTED set, not the raw list",
+                  "vendored · 1 exempt" in t14,
+                  "F5: the raw list reads 2; the pin admits 1 (kit_pin.py admission predicate)")
+            check("ARM 14: the count AGREES with the pin's own judgement",
+                  KC.pin_state(str(mixed))["exemptions"] == 1,
+                  "one computation — the report cannot disagree with the gate")
+
+            # ARM 15 — UNREADABLE IS NOT ZERO. The judgement reports `declared` 0 PLUS an
+            # `exemption_problem` for a file it cannot read; collapsing that back to 0 would
+            # trade the over-count for an absent-vs-zero lie.
+            broken = tmp / "broken"
+            (broken / "registry").mkdir(parents=True)
+            (broken / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "files": {"TEMPLATE/tools/ledger.py": "0" * 64},
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
+            (broken / "registry" / "kit-exemptions.json").write_text("{not json")
+            ps15 = KC.pin_state(str(broken))
+            check("ARM 15: an UNREADABLE exemptions file reads None, never 0",
+                  ps15["exemptions"] is None,
+                  "0 would be indistinguishable from a member that declared nothing")
+            check("ARM 15: and the reason is carried, not swallowed",
+                  bool(ps15["why"]), "an unreadable file must say so")
+            # The control: an ABSENT file is genuinely 0, so the two states are told apart.
+            absent_ex = tmp / "absent_ex"
+            (absent_ex / "registry").mkdir(parents=True)
+            (absent_ex / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "files": {"TEMPLATE/tools/ledger.py": "0" * 64},
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
+            check("ARM 15: the ABSENT file is 0, distinct from unreadable",
+                  KC.pin_state(str(absent_ex))["exemptions"] == 0,
+                  "the empty state is a real zero, not a failure")
         finally:
             KC.DECISIONS, KC.P.kit_drift_leg, KC.answering_path = saved_decl, saved_leg, saved_ans
 
