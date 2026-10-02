@@ -714,7 +714,14 @@ PLACEMENT_MAP: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("evidence/reviews", ("markdown",), "prose"),
     ("TEMPLATE", ("template", "markdown"),
      "the shipped mirror: templates, plus its own README"),
-    ("TEMPLATE/roles", ("markdown",), "one role file per lane"),
+    # `roles/` is a TOP-LEVEL member-factory directory, not a TEMPLATE-only one: BOOTSTRAP.md
+    # has every bootstrapped factory split its own procedure into `roles/`, and
+    # `tests/test_commit_pathspec_law.py` names `roles/<role>.md` as a path a factory carries.
+    # It was declared ONLY as `TEMPLATE/roles`, so the undeclared scan -- which reads the map's
+    # TOP-LEVEL segments -- reported `roles` as undeclared in the shipped tree, where REPO IS
+    # the TEMPLATE directory. Nothing is lost by moving the declaration up: the mirror branch
+    # below generates `TEMPLATE/roles` from this entry whenever that directory exists.
+    ("roles", ("markdown",), "one role file per lane; the template ships the four cards"),
     ("tools", ("python", "shell", "javascript", "text"),
      "an executable instrument; python is the house language and shell/js are permitted"),
     ("tools/box", ("unit", "shell", "markdown"),
@@ -736,8 +743,17 @@ PLACEMENT_NAMING: tuple[tuple[str, str, str], ...] = (
      "ONTOLOGY.md `## Naming law`: `evidence/scores/YYYY-MM-DD.md`"),
 )
 
+# `.audit.lock` is here because the module docstring ABOVE already declares it SELF-IGNORING
+# and invisible to every leg -- `BUILD_RESIDUE_NAMES` carries it, the residue leg prints it --
+# and `placement_leg` was the one leg that forgot it. Measured 2026-10-02: the nested shipped
+# audit creates `TEMPLATE/.audit.lock` and never unlinks it (a `flock` file persists by
+# design, `tools/audit.py::acquire_run_lock`), so the ROOT placement gate reported it as
+# `unknown:.lock` in a directory that allows only `template`/`markdown` -- a mismatch raised
+# by an artifact the tool's own contract says no leg can see. `rm -f` before the audit does
+# NOT help: `tests/test_shipped_audit_runs.py` is registered BEFORE this gate and recreates it.
 PLACEMENT_SKIP = frozenset(
-    {".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".venv", "venv", "node_modules"}
+    {".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".audit.lock", ".venv", "venv",
+     "node_modules"}
 )
 
 

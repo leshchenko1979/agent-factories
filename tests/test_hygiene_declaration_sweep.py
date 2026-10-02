@@ -40,6 +40,20 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# BOTH INVOCATION MODES MUST REACH THE GUARD (#199). The audit invokes this gate in PYTEST
+# mode, and this module has no `main()` at all, so the guard is a module-level `pytestmark`:
+# it COLLECTS the tests and SKIPS them (exit 0). A module-level `pytest.skip` would exit 5
+# ("no tests were collected"), which the audit reads as a failure.
+# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ledger_boundary import module_skip  # noqa: E402
+
+_SKIP_REASON = module_skip(REPO)
+if _SKIP_REASON:
+    import pytest as _pytest  # noqa: E402
+
+    pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
 HYGIENE = REPO / "tools" / "hygiene.py"
 
 def _load_hygiene():
