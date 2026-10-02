@@ -146,7 +146,7 @@
     }
   ],
   "substrates_owned": [
-    "/root/ai-antispam - public repo alexeyleshchenko/ai-antispam (git via SSH alias github.com-alexey)",
+    "/root/ai-antispam - public repo leshchenko1979/ai-antispam (canonical, remote origin; board alexeyleshchenko/ai-antispam, second remote via SSH alias github.com-alexey)",
     "/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach",
     "Postgres ai_spam_bot on apps - single writer outreach/lib/db.py",
     "the bot container and MAX webhook route on apps"
