@@ -1,0 +1,258 @@
+# The hygiene instrument
+
+**Owns:** this instrument's own law — its declared file set, its closure, its gate set, its data
+surfaces, its version source and its adoption census. It owns **no** cross-instrument definition;
+those live in the frame it cites.
+**Writer:** the Hygiene lane — addressed by the authoring commit's `Session-Id` trailer, never by a
+lane name in a heading (frame §8).
+**Reviewer:** the Instruments-methodology lane. The frame makes review of a per-instrument law file a
+**requirement, not a courtesy** (frame §8).
+**Authority:** **HQ retains cross-factory authority.** Any clause in this file that binds a member
+factory is HQ's, and so is the process law *about* instruments; both are cited here, never coined.
+**Class:** `standalone` — a **shipped** instrument. Canonical half
+`TEMPLATE/docs/instruments/hygiene.md`; repo pair `docs/instruments/hygiene.md` (byte-identical);
+reload link `skills/meta-factory/hygiene.md` (frame §6).
+
+**This file cites `template-instruments.md`, the frame, and never restates it** — restating is how one
+definition becomes two, and two definitions drift. Parts 4, 7, 8 and 9 are cross-instrument by
+construction: the frame defines them **once, precisely so an instrument owner does not coin their
+own.** This file therefore supplies only what is true of THIS instrument:
+
+| part | defined by | what this file supplies |
+|---|---|---|
+| **4** — version identifier | frame §7.1 | the declared file set the identifier is read over (§2, §5) |
+| **7** — data surfaces | frame §2 | which surface ships as `.example` and which the factory owns (§6) |
+| **8** — self-probe | frame §2 | the named probes that make this instrument's gate actually BITE (§7) |
+| **9** — update path | frame §7.2 and §6.1 | the member's adoption steps for THIS instrument (§8) |
+
+## 1. What the hygiene instrument is
+
+**Its job, in one sentence: a factory audits and reaps its own workspace on a declared cadence, and
+tells a lane's work IN FLIGHT from work STRANDED by age — so a healthy factory with busy lanes never
+reads DEGRADED, and genuine litter is still caught.**
+
+It upholds **Process 4 — Workspace Hygiene Sweep** (`docs/processes.md`), HQ-owned, whose declared
+cadence is daily and whose client value is *zero runaway storage, zero stale scratch interference,
+reproducible builds*.
+
+The lifecycle is one pass over the factory's own tree, and no state in it is a silent pass:
+
+```
+    walk ──▶ classify ──▶ (advisory | violation) ──▶ report ──▶ [--clean] reap ──▶ record
+                │                                         │
+         age vs the grace window              the namespace is PRINTED with its provenance
+```
+
+**Four commitments, each tracing to a defect this instrument exists to close. They are stated because
+a reader who does not know them will "simplify" the tool back into one of them:**
+
+- **The namespace is OWNED, and derived rather than hardcoded.** `NAMESPACE` is the repository
+  directory name, so a factory bootstrapped from this template owns its own prefix automatically. The
+  first version globbed `/tmp/oc-*` and went RED for the OpenCrabs dev tooling's litter — a **false
+  red**, the mirror of a false green and just as corrosive, because a gate that cries wolf gets
+  switched off. `--scratch-glob` adds an owned namespace; it is never a way to widen the list to a
+  prefix somebody else already writes to.
+- **AGE is the discriminator, never a path allowlist.** This factory's working tree is shared, so "a
+  path is dirty" and "a path was abandoned" are different facts. A file written minutes ago belongs to
+  a lane still working; the same file a day later is stranded. `--grace-minutes` (default 60) declares
+  the window, and it is declared by the CALLER because how long a lane may hold a file is a property
+  of the factory's process, not of this tool. The allowlist form was refused by name: exempting one
+  path removes that case and leaves the general one.
+- **A foreign stranded path is RECORDED, never silenced.** The run's closing invariant admits the
+  verdict `workspace_gate=blocked-by-unowned`, lawful only when the run NAMES the blocking paths. It
+  is never a forged clean, and `--require-committed <path>` ADDS a leg (a run's own artifacts, no
+  grace at all) rather than removing one.
+- **A declaration is a FILE, not a flag.** The reaper consults `docs/hygiene-protected.json` before it
+  unlinks, because AGE ALONE cannot tell a stale scratch file from LIVE STATE: a lock created once and
+  held long-term has an mtime nothing refreshes. A runtime flag is a declaration a cron forgets.
+
+**Two claims this instrument has WITHDRAWN rather than made true, both stated because a reader will
+otherwise infer them:**
+
+- **The run-scoped form does not exist.** The module docstring once promised a "run-scoped check"
+  beside the whole-tree one; the tool has never had it. The claim was withdrawn, because a reader who
+  believed it went looking for a flag that is not here.
+- **The declaration is a PREVENTION surface, not a repair.** An entry matching nothing is PRINTED but
+  is **not** a problem — the point is to declare a path BEFORE the code that creates it lands. That is
+  the one deliberate difference from the exemption surfaces, where an unmatched entry is a stale debt.
+
+## 2. The declared file set
+
+**Predicate:** the shipped paths the manifest classifies `standalone` that carry this instrument.
+**Scope:** `registry/kit.json` at the instant named in §5. Both halves are listed because the pair is
+what a member adopts; the manifest hashes the `TEMPLATE/` half (frame §5.1).
+
+| # | path (root half ↔ TEMPLATE half) | class | what it is |
+|---|---|---|---|
+| 1 | `tools/hygiene.py` ↔ `TEMPLATE/tools/hygiene.py` | `standalone` | **the executable** — audit, classify, reap |
+| 2 | `tests/test_hygiene_inflight.py` ↔ `TEMPLATE/tests/test_hygiene_inflight.py` | `standalone` | **the gate** — in-flight vs stranded |
+| 3 | `tests/test_hygiene_namespace.py` ↔ `TEMPLATE/tests/test_hygiene_namespace.py` | `standalone` | **the gate** — the owned namespace |
+| 4 | `docs/hygiene-protected.example.json` ↔ `TEMPLATE/docs/hygiene-protected.example.json` | `standalone` | the data-surface skeleton (§6) |
+| 5 | `docs/instruments/hygiene.md` ↔ `TEMPLATE/docs/instruments/hygiene.md` | `standalone` | this file |
+
+**A reader holding the law file and the tree can answer *"is this instrument complete here?"* without
+enumerating imports**, which is what frame §1 requires of a declaration. The four pairs of rows 1–4
+were compared byte-for-byte and are identical; row 5's pair is held by `tests/test_docs_sync.py`.
+
+## 3. The closure — declared, and it is EMPTY
+
+**Frame §1.1 is the load-bearing half and is cited, not restated: completeness is DECLARED, never
+derived**, because a static import walk is blind to a dependency loaded from a string constant and a
+gate can be green over a missing closure.
+
+**This instrument's closure is empty, and that is a declaration rather than an omission.** Measured
+over the executable at its source:
+
+- `tools/hygiene.py` imports **only stdlib** — `argparse`, `glob`, `json`, `os`, `shutil`,
+  `subprocess`, `sys`, `time`, `pathlib` — and carries **no local-module import at all** (0 hits for
+  `^import tools`, `^from tools`, `^from .`).
+- It therefore has **no HARD tier and no LAZY tier**: frame §1.2's silent tier cannot exist where
+  there is no second module to fail to import.
+
+**The consequence is stated because it is the one a member must not get wrong:** this instrument
+cannot be broken at import by a missing sibling, so **the ported-without-its-closure class is not
+available here**. A member that adopts the declared set and nothing else has a runnable executable.
+
+## 4. The gate set and its registry entries
+
+**All three rows are registered in `registry/gates.json`**, which is what makes them run rather than
+merely exist — a gate never registered never runs (frame §2, part 3).
+
+| gate | invocation mode | budget (s) | margin | measured (s) | measured at |
+|---|---|---|---|---|---|
+| `tools/hygiene.py` | `script` | 3.03 | 5.316× | 0.57 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
+| `tests/test_hygiene_inflight.py` | `pytest` | 26.67 | 4.116× | 6.48 | `d36ce91cae0ef3f1d07c43c389bf58e8384c00a7` |
+| `tests/test_hygiene_namespace.py` | `pytest` | 35.95 | 4.085× | 8.8 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
+
+The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
+a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
+that ceiling.
+
+**The docs leg is PARTIAL, and this is a declared gap rather than a footnote (frame §2, part 5).** The
+BOOTSTRAP step exists — `TEMPLATE/BOOTSTRAP.md` names the tool, both gates and the declaration
+skeleton, and names `--audit` as the adoption evidence — and the methodology entry exists
+(`docs/processes.md`, the Process 4 row and its §4.4). **The SKILL clause does not exist:** measured
+over `skills/meta-factory/SKILL.md` and `TEMPLATE/SKILL.md.tmpl`, this instrument's name occurs **0**
+times in either. Adding one is a clause about the process *about* an instrument, which is **HQ's
+authority, not this lane's** (frame §8) — so it is recorded here as a declared gap and routed, never
+coined in this file.
+
+## 5. The version identifier — part 4
+
+**This instrument's version is DERIVED from the manifest, never hand-typed, and the executable carries
+no version string of its own** — measured over `tools/hygiene.py`, which carries no version attribute
+and no self-probe flag. That is the frame's requirement rather than a gap (§7.1): a hand-typed number
+is a claim about the tree that nothing can test.
+
+The identifier is read over **the declared file set of §2** — not over the whole kit — so a member can
+state *which version of the hygiene instrument it holds*:
+
+```
+python3 tools/kit_manifest.py --identity tools/hygiene.py tests/test_hygiene_inflight.py \
+    tests/test_hygiene_namespace.py docs/hygiene-protected.example.json docs/instruments/hygiene.md
+```
+
+**This file cannot publish its own current value, and that is a property of the measurement rather
+than a defect of it** (frame §7.4): the doc is itself a manifest path, so any edit to it moves the
+digest it would be quoting, and the reading would move because the writer wrote. Publish instead the
+**predicate** and the **command** above; the row a reviewer can reproduce is the one at the COMMIT
+this file ships in.
+
+## 6. Data surfaces — part 7
+
+Two surfaces, and the split is the whole point (frame §2):
+
+| surface | ships? | what it is |
+|---|---|---|
+| `docs/hygiene-protected.example.json` ↔ `TEMPLATE/docs/hygiene-protected.example.json` | **ships** — `standalone`, a declared path of §2 | the skeleton a factory copies; **the example itself is never read** |
+| `docs/hygiene-protected.json` | **never ships** — factory data, and deliberately not a manifest path | the factory's own declaration of which paths inside its scratch namespace are LIVE STATE |
+
+**The declaration carries two lists, `protected` and `scratch`, and both are empty in the shipped
+state.** `protected` entries name paths the reaper must SKIP — never reported as stale, never
+unlinked. `scratch` entries name paths that are genuinely reapable, classified so the classifier leg
+can tell a declared literal from a new one. **Every entry carries two REQUIRED fields — `path` and
+`why` — and a blank `why` is REFUSED when the declaration is read**, because an entry nobody could
+defend in the output is one that should be fixed instead.
+
+**Three states, and only one of them is a problem.** An **ABSENT** file means this factory has
+declared no live paths, which is the shipped state of a new factory. A **readable** file is read. A
+file that **EXISTS and cannot be read** is a reported problem — because only the silent failure is the
+hazard. Every run prints how many entries are declared, so a reaper protecting nothing can never read
+as one protecting everything.
+
+## 7. Self-probe and non-vacuity — part 8
+
+**A gate that has only seen good input has not been shown to bite** (frame §2). This instrument's
+probes are its two gates, and each bites a different failure — neither is satisfied by the other:
+
+- **`tests/test_hygiene_namespace.py`** probes the OWNERSHIP property by **planting litter under a
+  prefix this factory does not own** (`oc-snap-oc-deploy-*`) inside a throwaway directory, and
+  asserting the audit neither reports nor reaps it. It also pins that the prefix is **derived, not
+  hardcoded**: `NAMESPACE` must equal the repository directory name, so a fork owns its own.
+- **`tests/test_hygiene_inflight.py`** probes the CLASSIFICATION property. Its load-bearing arm runs
+  the **SAME fresh edit** at the default window (rc=0, the in-flight criterion) and at
+  `--grace-minutes 0` (rc=1, the stranded criterion in its strict form). The two criteria cannot both
+  hold at one window, so the gate proves the window is the lever rather than asserting a
+  classification.
+
+**Both probes are hermetic**: every arm runs in a throwaway repo with the tool shipped into it, so the
+live working tree is never touched and the exit codes under test are the real ones.
+
+## 8. Update path and the member's adoption — part 9
+
+The three legs are the frame's (§6) and are not restated here; what this section supplies is the
+member's steps for THIS instrument:
+
+1. **Take the declared set of §2** — the four executable, gate and skeleton pairs, and this file's
+   pair.
+2. **Regenerate or verify against the member's own pin**, never against this repo's live manifest
+   (frame §9 O3).
+3. **Create the member's own reload link** — `skills/<member-skill>/hygiene.md` →
+   `../../docs/instruments/hygiene.md`. It is the member's act, in the member's tree, because only the
+   member knows its own skill directory name, and it is never installed from here (frame §6.1).
+4. **Declare the state** — `instruments.hygiene` on the member's own fragment
+   (`registry/factories/<slug>.json`), naming BOTH axes: `held` and `green` (frame §7.2). A deferral
+   names its reason; **silence is not a disposition**, and absence is valid only while the obligation
+   is new.
+5. **Set the window in the member's own process law.** A single-lane factory gets the strict form by
+   declaring `--grace-minutes 0`; a factory with lanes declares a non-zero one. The tool will not
+   choose for the member.
+
+**A note on the run site, because it is a live trap.** `--namespace` defaults to the directory the
+TOOL sits in, so a run from a **worktree** measures a namespace belonging to nobody. The namespace and
+its provenance are PRINTED on every run for exactly this reason.
+
+## 9. Adoption census
+
+**Predicate:** the `instruments` map on each `registry/factories/<slug>.json` fragment.
+**Scope:** the six fragments present. **Instant:** the turn that wrote this file.
+
+| fragment | declares hygiene? |
+|---|---|
+| `ai-antispam` | no |
+| `inferhub-watch` | no |
+| `infra-factory` | no |
+| `meta-factory` | no |
+| `miidas` | no |
+| `opencrabs-dev` | no |
+
+**Zero of six declare it, and that is the census rather than a verdict**: no member has been asked for
+this instrument yet, and a member that never considered it and one that deferred it read identically
+until a fragment names it (frame §7.2). The row exists so the first declaration has a place to land,
+and so a later census has a baseline it did not have to reconstruct.
+
+**And the reload leg is verified in the MEMBER's tree, never in a worktree** (frame §6.3): a link that
+exists only here reads `absent` against a member, correctly, because the member's tree has not
+advanced.
+
+## 10. Where this instrument's law lives
+
+| role | path | held by |
+|---|---|---|
+| **canonical, shipped** | `TEMPLATE/docs/instruments/hygiene.md` | the manifest (`registry/kit.json`, sha256 + class) |
+| **repo pair** | `docs/instruments/hygiene.md` — **byte-identical** | `tests/test_docs_sync.py` |
+| **reload path** | `skills/meta-factory/hygiene.md` — **relative symlink** into the template half | the loader, which follows symlinks |
+
+**Enforcement needs no third gate** (frame §6): the manifest hashes the shipped half and
+`tests/test_docs_sync.py` holds the pair. A gate for a relation two gates already enforce is the
+duplication this project's law forbids.
