@@ -11,12 +11,13 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, and ai-antispam-day7-retire-wake plus ai-antispam-watch-funnel-day7-report are 2027 one-shots)"
+      "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, disabled 2026-10-01 and retired per q13; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots)",
+      "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
     ],
     "does_not_own": [
       "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
       "VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory",
-      "token provisioning, model routing, inference pricing - inferhub-watch",
+      "token provisioning, model routing (EXCEPT the ai-gateway ai-antispam route, which this factory writes per q11), inference pricing - inferhub-watch",
       "the factory template and meta-factory law - meta-factory",
       "Miidas accounting - miidas",
       "tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)"
@@ -221,7 +222,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-02T06:15:03Z",
+  "attested_at": "2026-10-02T06:48:32Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

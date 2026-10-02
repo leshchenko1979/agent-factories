@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-02T06:25:11Z",
+  "resolved_at": "2026-10-02T06:58:29Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -185,7 +185,7 @@
       "id": "ops-fallback-chain-reordered",
       "severity": "warning",
       "scope": "profile",
-      "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
+      "text": "The ops-profile client fallback chain is inferhub, openrouter — two hops, inferhub first. The earlier four-hop chain (inferhub, opencode, openrouter, gemini) has been trimmed; opencode and gemini remain configured providers but are no longer in the chain. Any lane running on the ops profile reaches a provider through this order, failing over from inferhub to openrouter.",
       "since": "2026-09-19T12:21:40Z",
       "review_by": null,
       "check": null,
@@ -442,7 +442,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-10-02T06:15:03Z",
+      "attested_at": "2026-10-02T06:48:32Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -454,12 +454,13 @@
           "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
           "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
           "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-          "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, and ai-antispam-day7-retire-wake plus ai-antispam-watch-funnel-day7-report are 2027 one-shots)"
+          "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, disabled 2026-10-01 and retired per q13; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots)",
+          "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
         ],
         "does_not_own": [
           "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
           "VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory",
-          "token provisioning, model routing, inference pricing - inferhub-watch",
+          "token provisioning, model routing (EXCEPT the ai-gateway ai-antispam route, which this factory writes per q11), inference pricing - inferhub-watch",
           "the factory template and meta-factory law - meta-factory",
           "Miidas accounting - miidas",
           "tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)"
@@ -701,11 +702,11 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-10-02T06:20:00Z",
+      "attested_at": "2026-10-02T06:51:21Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
-      "skill_revision": "1.0.106",
+      "skill_revision": "1.0.107",
       "purpose": "Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value.",
       "zone": {
         "owns": [
@@ -713,7 +714,7 @@
           "Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
           "Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
           "The new_api channels table on apps as an AUTHORED POLICY OBJECT - the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-02: exactly THREE rows - id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED, priority 210, auto_ban 1). id 43 is ENABLED again: re-enabled 2026-10-01T20:57:24Z (new_api.audit_logs row 1154, auth_method=session, ip 2.27.120.75) inside a ~2-minute interactive failover-tuning session that had toggled it 1->2 at 20:55:44 (row 1152) and re-enabled id 46 at 20:55:51 (row 1153) - the same self-attributing root-session pattern as the 09-25 re-enable, so it is NOT unattributed. id 46 has since been auto-banned again (status 3). Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.",
-          "Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)",
+          "Client-side fallback-chain order and provider settings for all OpenCrabs profiles (four live 2026-10-02: default, family, oc348probe, ops) (owner-granted 2026-09-19)",
           "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
           "This factory's own crons and its daily GitHub Actions sweep"
         ],
@@ -749,7 +750,7 @@
         {
           "name": "inferhub-daily-report",
           "audience": "owner",
-          "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b — the HQ lane re-posts it to Telegram thread 2; it does NOT deliver to the thread itself",
+          "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b - it delivers to the HQ lane, and its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg); measured 2026-10-02 the card rendered into topic 2 as msg 4790 carrying a '(truncated)' marker (the #490 head+tail elision, working as designed), so no lane re-post is owed.",
           "cadence": "daily"
         },
         {
@@ -830,7 +831,7 @@
         {
           "id": "ops-fallback-chain-reordered",
           "severity": "warning",
-          "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
+          "text": "The ops-profile client fallback chain is inferhub, openrouter — two hops, inferhub first. The earlier four-hop chain (inferhub, opencode, openrouter, gemini) has been trimmed; opencode and gemini remain configured providers but are no longer in the chain. Any lane running on the ops profile reaches a provider through this order, failing over from inferhub to openrouter.",
           "scope": "profile",
           "since": "2026-09-19T12:21:40Z",
           "review_by": null,
@@ -1127,7 +1128,7 @@
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
-      "skill_revision": "0.1.36",
+      "skill_revision": "0.1.38",
       "purpose": "Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy.",
       "zone": {
         "owns": [
@@ -1263,7 +1264,7 @@
           "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-01T23:22:31Z",
+          "bound_at": "2026-10-02T06:29:18Z",
           "announcements": []
         },
         {
@@ -1570,7 +1571,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-10-01T06:09:07Z",
+      "attested_at": "2026-10-02T06:48:51Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -2102,8 +2103,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-02T06:30:00+00:00",
-      "last_run_at": "2026-10-02T06:00:22Z",
+      "next_run_at": "2026-10-02T07:00:00+00:00",
+      "last_run_at": "2026-10-02T06:30:37Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "profile": "ops",
@@ -2198,8 +2199,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-02T06:30:00+00:00",
-      "last_run_at": "2026-10-01T06:30:22Z",
+      "next_run_at": "2026-10-03T06:30:00+00:00",
+      "last_run_at": "2026-10-02T06:30:38Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2230,8 +2231,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-02T06:40:00+00:00",
-      "last_run_at": "2026-10-02T00:40:08Z",
+      "next_run_at": "2026-10-02T12:40:00+00:00",
+      "last_run_at": "2026-10-02T06:40:23Z",
       "deliver_to": "telegram:-1003993000918:10780",
       "trigger_cmd": "timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/stream_liveness_check.py; rc=$?; echo \"check_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -2262,8 +2263,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-02T06:25:00+00:00",
-      "last_run_at": "2026-10-02T00:25:04Z",
+      "next_run_at": "2026-10-02T12:25:00+00:00",
+      "last_run_at": "2026-10-02T06:25:30Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",

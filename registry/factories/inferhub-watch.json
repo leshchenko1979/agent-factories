@@ -11,7 +11,7 @@
       "Grafana dashboard inferhub-watch on grafana.l1979.ru \u2014 its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
       "Postgres inferhub_logs on apps \u2014 route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
       "The new_api channels table on apps as an AUTHORED POLICY OBJECT - the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-02: exactly THREE rows - id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED, priority 210, auto_ban 1). id 43 is ENABLED again: re-enabled 2026-10-01T20:57:24Z (new_api.audit_logs row 1154, auth_method=session, ip 2.27.120.75) inside a ~2-minute interactive failover-tuning session that had toggled it 1->2 at 20:55:44 (row 1152) and re-enabled id 46 at 20:55:51 (row 1153) - the same self-attributing root-session pattern as the 09-25 re-enable, so it is NOT unattributed. id 46 has since been auto-banned again (status 3). Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.",
-      "Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)",
+      "Client-side fallback-chain order and provider settings for all OpenCrabs profiles (four live 2026-10-02: default, family, oc348probe, ops) (owner-granted 2026-09-19)",
       "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
       "This factory's own crons and its daily GitHub Actions sweep"
     ],
@@ -40,7 +40,7 @@
     {
       "name": "inferhub-daily-report",
       "audience": "owner",
-      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b \u2014 the HQ lane re-posts it to Telegram thread 2; it does NOT deliver to the thread itself",
+      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b - it delivers to the HQ lane, and its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg); measured 2026-10-02 the card rendered into topic 2 as msg 4790 carrying a '(truncated)' marker (the #490 head+tail elision, working as designed), so no lane re-post is owed.",
       "cadence": "daily"
     },
     {
@@ -82,7 +82,7 @@
     },
     {
       "id": "ops-fallback-chain-reordered",
-      "text": "The ops-profile client fallback chain is now **`inferhub` ALONE** \u2014 `[providers.fallback] providers = [\"inferhub\"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT \u2014 the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `[\"inferhub\"]` too, so all three profiles now carry one entry.",
+      "text": "The ops-profile client fallback chain is inferhub, openrouter \u2014 two hops, inferhub first. The earlier four-hop chain (inferhub, opencode, openrouter, gemini) has been trimmed; opencode and gemini remain configured providers but are no longer in the chain. Any lane running on the ops profile reaches a provider through this order, failing over from inferhub to openrouter.",
       "severity": "warning",
       "scope": "profile",
       "since": "2026-09-19T12:21:40Z",
@@ -139,7 +139,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-02T06:20:00Z",
+  "attested_at": "2026-10-02T06:51:21Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-02T06:25:11Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-02T06:58:29Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-02T06:25:11Z` |
+| generated | live reads | resolved `2026-10-02T06:58:29Z` |
 
 ## Announcements
 
@@ -37,7 +37,7 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-25 · declared by: ai-antispam
 - 🟡 **`gatus-config-carries-live-credentials`** — vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe. A third chokepoint is any TOOL whose output path renders the file's content: a diff, a checksum-and-dump, or a guard that prints a drift diff between two key-bearing copies discloses both. Read the output path before you ship the tool, not after.
   - affects: profile · since: 2026-09-23 · review by: 2026-10-07 · declared by: infra-factory
-- 🟡 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = ["inferhub"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `["inferhub"]` too, so all three profiles now carry one entry.
+- 🟡 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is inferhub, openrouter — two hops, inferhub first. The earlier four-hop chain (inferhub, opencode, openrouter, gemini) has been trimmed; opencode and gemini remain configured providers but are no longer in the chain. Any lane running on the ops profile reaches a provider through this order, failing over from inferhub to openrouter.
   - affects: profile · since: 2026-09-19T12:21:40Z · declared by: inferhub-watch
 - 🟡 **`pacemaker-triggers-still-pass-mode-quiet`** — Pacemaker cron triggers on this box still pass `--mode quiet` for three jobs, NONE of them meta-factory's: `ai-antispam-owner-digest` and `ai-antispam-triage-sweep` (ai-antispam, both ENABLED), and `oc-triage-owner-digest` (opencrabs-dev, now DISABLED — so only TWO of the three are live; the earlier "all three enabled" is superseded). The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit `--mode turn-end` on 2026-09-23 (byte-verified; schedule and next_run_at preserved): of its SEVEN `factory-*` jobs, FIVE carry it (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and TWO carry none (`factory-registry-attest`, `factory-publish`). Infra-factory's four now read plain `--mode turn-end` with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING TWO — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries. Live census 2026-10-02T06:19Z: of 66 cron rows, 12 carry `--mode` — 9 turn-end, 3 quiet (one of the three disabled). Prior censuses kept as the steps this one follows, never overwritten: 2026-10-01T06:07Z of 65 rows, 12 — 9 turn-end / 3 quiet; 2026-09-29T08:26Z of 64, 12 — 9/3; 2026-09-28T11:35:19Z of 63, 12 — 9/3; 2026-09-26T06:20Z of 57, 12 — 9/3; 2026-09-23T11:31Z of 55, 13 — 10/3.
   - affects: profile · since: 2026-09-19T03:36:54Z · declared by: meta-factory
@@ -100,15 +100,15 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-10-02T06:15:03Z |
+| freshness | ✅ attested 2026-10-02T06:48:32Z |
 | purpose | Run the ai-antispam AI spam-blocker bot service (Telegram + MAX) and the outreach campaign that recruits channel owners to install it. |
 | profile | `ops` |
 | repo | `/root/ai-antispam` |
 | law | `/root/ai-antispam/SKILL.md` — revision 0.1.0 |
-| owns | ['the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)', 'the outreach campaign repo /root/ai-antispam-outreach and its Postgres state', 'Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)', 'the MAX domain - API surface, webhook ingress, subscription, moderation port', "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, and ai-antispam-day7-retire-wake plus ai-antispam-watch-funnel-day7-report are 2027 one-shots)"] |
-| does not own | ['the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory', 'VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory', 'token provisioning, model routing, inference pricing - inferhub-watch', 'the factory template and meta-factory law - meta-factory', 'Miidas accounting - miidas', 'tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)'] |
+| owns | ['the ai-antispam bot service repo /root/ai-antispam (LLM classifier, handlers, deploys)', 'the outreach campaign repo /root/ai-antispam-outreach and its Postgres state', 'Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)', 'the MAX domain - API surface, webhook ingress, subscription, moderation port', "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, disabled 2026-10-01 and retired per q13; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots)", 'the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)'] |
+| does not own | ['the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory', 'VDS host infrastructure, fleet deploy scripts, Gatus - infra-factory', 'token provisioning, model routing (EXCEPT the ai-gateway ai-antispam route, which this factory writes per q11), inference pricing - inferhub-watch', 'the factory template and meta-factory law - meta-factory', 'Miidas accounting - miidas', 'tg_* tools (fast-mcp-telegram) and telegram_send (OpenCrabs core)'] |
 | substrates owned | ['/root/ai-antispam - public repo alexeyleshchenko/ai-antispam (git via SSH alias github.com-alexey)', '/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach', 'Postgres ai_spam_bot on apps - single writer outreach/lib/db.py', 'the bot container and MAX webhook route on apps'] |
-| attested at | 2026-10-02T06:15:03Z |
+| attested at | 2026-10-02T06:48:32Z |
 
 **Services**
 
@@ -164,17 +164,17 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | `ai-antispam-62-close-gate` | ops | `15 3 * * *` | UTC | **no** | 0 | **absent** | 2026-10-02T03:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 62 --repo alexeyleshchenko/ai-a… |
 | `ai-antispam-bot-service-health` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | telegram:-1003993000918:10784 | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
-| `ai-antispam-loss-watch` | ops | `*/30 * * * *` | UTC | yes | 0 | **absent** | 2026-10-02T06:30:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
+| `ai-antispam-loss-watch` | ops | `*/30 * * * *` | UTC | yes | 0 | **absent** | 2026-10-02T07:00:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
 | `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-db-sync` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-mining-tranche` | ops | `0 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-05T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T00:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:07:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T06:30:00+00:00 | — | — |
+| `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:30:00+00:00 | — | — |
 | `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T05:50:00+00:00 | session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 | — |
-| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T06:40:00+00:00 | telegram:-1003993000918:10780 | timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/strea… |
+| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:40:00+00:00 | telegram:-1003993000918:10780 | timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/strea… |
 | `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:00:00+00:00 | telegram:-1003993000918:10784 | CT=$(ssh apps "docker ps --filter name=ai-antispam --format '{{.Names}}… |
-| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T06:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
+| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
 | `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-wave0-unactivated-reprobe` | ops | `0 12 * * 2` | Europe/Moscow | yes | 0 | **absent** | 2026-10-05T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
@@ -187,15 +187,15 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-10-02T06:20:00Z |
+| freshness | ✅ attested 2026-10-02T06:51:21Z |
 | purpose | Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value. |
 | profile | `ops` |
 | repo | `/root/inferhub-watch` |
-| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.106 |
-| owns | ['leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law', 'Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author', 'Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics', 'The new_api channels table on apps as an AUTHORED POLICY OBJECT - the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-02: exactly THREE rows - id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED, priority 210, auto_ban 1). id 43 is ENABLED again: re-enabled 2026-10-01T20:57:24Z (new_api.audit_logs row 1154, auth_method=session, ip 2.27.120.75) inside a ~2-minute interactive failover-tuning session that had toggled it 1->2 at 20:55:44 (row 1152) and re-enabled id 46 at 20:55:51 (row 1153) - the same self-attributing root-session pattern as the 09-25 re-enable, so it is NOT unattributed. id 46 has since been auto-banned again (status 3). Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.', 'Client-side fallback-chain order and provider settings for all three OpenCrabs profiles (owner-granted 2026-09-19)', 'The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)', "This factory's own crons and its daily GitHub Actions sweep"] |
+| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.107 |
+| owns | ['leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law', 'Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author', 'Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics', 'The new_api channels table on apps as an AUTHORED POLICY OBJECT - the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-02: exactly THREE rows - id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED, priority 210, auto_ban 1). id 43 is ENABLED again: re-enabled 2026-10-01T20:57:24Z (new_api.audit_logs row 1154, auth_method=session, ip 2.27.120.75) inside a ~2-minute interactive failover-tuning session that had toggled it 1->2 at 20:55:44 (row 1152) and re-enabled id 46 at 20:55:51 (row 1153) - the same self-attributing root-session pattern as the 09-25 re-enable, so it is NOT unattributed. id 46 has since been auto-banned again (status 3). Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.', 'Client-side fallback-chain order and provider settings for all OpenCrabs profiles (four live 2026-10-02: default, family, oc348probe, ops) (owner-granted 2026-09-19)', 'The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)', "This factory's own crons and its daily GitHub Actions sweep"] |
 | does not own | ['The New-API gateway itself — its container, config and serving behaviour on apps (Infra Factory / LLM Gateway lane). We author the channel policy; they run the gateway.', 'Grafana deployment and provisioning, and the generic /grafana skill tooling in /root/vds-servers (Infra Factory)', 'The upstream provider api.inferhub.dev — external; we measure it and never change it', 'OpenCrabs core source (/root/opencrabs): we may file fork issues for runtime anomalies we observe, but we never open PRs or edit source (external-lane boundary)', "Other member factories' repos, lanes and process law", 'Host and box infrastructure (owner)'] |
 | substrates owned | ['leshchenko1979/inferhub-watch', "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship", 'Postgres inferhub_logs on apps — route_metrics, usage_logs, model_rollup', 'Grafana dashboard inferhub-watch — panels and queries', 'The new_api channels table - priority, auto_ban and model_mapping policy. Live 2026-10-02: three rows, ids 43 (ENABLED, status 1, priority 300, auto_ban 1) / 44 (enabled, status 1, priority 200, auto_ban 0) / 46 (auto-banned, status 3, priority 210, auto_ban 1); the tier ladder is gone and no automatic writer runs. id 43 was re-enabled 2026-10-01T20:57:24Z by an interactive root session (new_api.audit_logs row 1154).'] |
-| attested at | 2026-10-02T06:20:00Z |
+| attested at | 2026-10-02T06:51:21Z |
 
 **Services**
 
@@ -203,14 +203,14 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 |---|---|---|---|
 | inferhub-usage-logs-sync | agent | cron 2d9112a6-b697-4eeb-b6ac-3e2462e23483, expr 23 */6 * * *, enabled — TAIL-ONLY: its prompt carries --skip-data --skip-scoreboard --skip-switch, so it pages no API and writes no table; the usage_logs data leg belongs to the no-wake host runner /usr/local/bin/inferhub-usage-sync.sh (*/10 — no daemon, no session, no tokens). Do NOT read this cron as the writer of route_metrics or usage_logs | 6h |
 | inferhub-hq-pacemaker | agent | cron 5c960cfb-16a5-4a35-918b-5acd1d30336f, expr 0 */6 * * *, enabled, delivers to session 359fe71b | 6h |
-| inferhub-daily-report | owner | cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b — the HQ lane re-posts it to Telegram thread 2; it does NOT deliver to the thread itself | daily |
+| inferhub-daily-report | owner | cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b - it delivers to the HQ lane, and its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg); measured 2026-10-02 the card rendered into topic 2 as msg 4790 carrying a '(truncated)' marker (the #490 head+tail elision, working as designed), so no lane re-post is owed. | daily |
 | inferhub-self-audit-daily | agent | cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 0 9 * * *, enabled, delivers to session 359fe71b | daily |
 | inferhub-auto-switcher | agent | cron fef19c4f-ab16-442e-8ee9-e041d3d0919b, expr 33 */6 * * *, DISABLED | disabled |
 | watch.yml scheduled sweep | agent | host crontab dispatcher /usr/local/bin/inferhub-sweep-dispatch.sh at 17 2 * * * (declared once in repo scripts/sweep_schedule.py), which calls gh workflow run; the workflow's own on.schedule line is a deduped BACKSTOP — measured over all 27 scheduled runs to 2026-09-22 it fires +0.7 h to +12.2 h late, mean +5.2 h, and the delay tracks the declaration. Do not treat 02:17Z as GitHub-side | daily 02:17Z (host crontab) |
 
 **Announcements reaching this factory**
 
-- 🟡 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is now **`inferhub` ALONE** — `[providers.fallback] providers = ["inferhub"]`, enabled. The chain this notice declared on 2026-09-29 (`inferhub, openrouter, gemini`) no longer matches the file: `openrouter` and `gemini` are both `enabled = false` and absent from the chain, and `opencode` is `enabled = false` and absent. The 2026-09-29 caveat that the change was INERT until restart is SPENT — the ops daemon started `2026-10-01T02:57:00Z`, after the write, so the single-entry chain is what runs. The root default and `family` profile chains read `["inferhub"]` too, so all three profiles now carry one entry.
+- 🟡 **`ops-fallback-chain-reordered`** — The ops-profile client fallback chain is inferhub, openrouter — two hops, inferhub first. The earlier four-hop chain (inferhub, opencode, openrouter, gemini) has been trimmed; opencode and gemini remain configured providers but are no longer in the chain. Any lane running on the ops profile reaches a provider through this order, failing over from inferhub to openrouter.
   - affects: profile · since: 2026-09-19T12:21:40Z · declared by: inferhub-watch
 - 🟡 **`inferhub-auto-route-failure-escalation`** — Routing through the ops fallback chain remains unreliable, but the failure CLASS SHIFTED. The 2026-09-27 escalation (2,852 failures / 13.4% over 24h, concentrated on cheap iq-75-plus members) RECEDED — 09-28 22:00Z and 23:00Z each recorded 0 failures at ~1,300 requests. Live since: the gateway's STREAMING path — handshake timeouts ran 14.2% across 09-27 rising to 33.6% across 09-28, flat across every prompt band (30.6% under 50k, 31.4% above 300k) while /health answers sub-second — so it surfaces as latency (retries usually recover it), not loss, and route selection is not the cause. Tracked on #158.
   - affects: profile · since: 2026-09-27T06:36:31Z · declared by: inferhub-watch
@@ -317,7 +317,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 | purpose | Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy. |
 | profile | `ops` |
 | repo | `/root/agent-factories` |
-| law | `/root/agent-factories/skills/meta-factory/SKILL.md` — revision 0.1.36 |
+| law | `/root/agent-factories/skills/meta-factory/SKILL.md` — revision 0.1.38 |
 | owns | ['the template instrument surface — methodology, development and cross-member deployment (owner-commissioned 2026-09-27)', 'the ASIF template and rulebook (TEMPLATE/ and the derived laws)', 'the fleet registry (registry/)', 'member-factory surveys, scores and the measurement cadence', 'the pacemaker and outer-trigger methodology (P28)', "this factory's own process law (skills/meta-factory/SKILL.md)"] |
 | does not own | ["member factories' products, backlogs, repos and code", "member factories' ontologies and issue boards", 'the OpenCrabs runtime, daemon and core tools - a client-supplier loop, not ownership', 'token provisioning, model routing and inference pricing (InferHub Watch)', 'the tg_* tool surface (fast-mcp-telegram)'] |
 | substrates owned | ['/root/agent-factories', '/root/agent-factories/skills/meta-factory/SKILL.md', '/root/agent-factories/registry/'] |
@@ -360,7 +360,7 @@ Fresh reading 2026-10-01T06:08:14Z: LEG A, the always-injected Tier 0 triple (SO
 | Delegate | 68 | delegate | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | Telegram: Factories / Delegate [chat:-1004497192134:topic:68] | resolved | telegram | 2026-09-28T11:47:14Z | — |
 | Worker | 1271 | worker | `dcd8f7a9-c1e7-48c3-b184-d901dc08eac7` | Telegram: Factories / Worker [chat:-1004497192134:topic:1271] | resolved | telegram | 2026-09-30T12:54:22Z | — |
 | Factories / Ledger | 3981 | ledger | `d0cba805-92c9-4377-8808-a1cf715bce9e` | Telegram: Factories / Ledger [chat:-1004497192134:topic:3981] | resolved | telegram | 2026-09-29T08:30:32Z | — |
-| Factories / Open Question Tool | 4087 | questions | `9f635151-4311-44ab-94f8-d4fd86e9b6c2` | Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087] | resolved | telegram | 2026-10-01T23:22:31Z | — |
+| Factories / Open Question Tool | 4087 | questions | `9f635151-4311-44ab-94f8-d4fd86e9b6c2` | Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087] | resolved | telegram | 2026-10-02T06:29:18Z | — |
 | Factories / Pacemakers / Crons | 4223 | pacemakers | `ee5cd2f5-6c1b-41bb-b031-1150a3132fb1` | Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223] | resolved | telegram | 2026-09-27T16:45:04Z | — |
 | Factories / Instruments methodology | 4186 | methodology | `4515ea72-eb39-4a3c-9b05-a1dc02b1c977` | Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186] | resolved | telegram | 2026-10-02T06:24:41Z | — |
 | Factories / Fleet instruments | 4555 | fleet-instruments | `37e71e03-0022-4d38-9279-1687fec7a823` | Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555] | resolved | telegram | 2026-09-27T22:00:11Z | — |
@@ -449,7 +449,7 @@ Attribution basis: deliver_to -> lane.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-10-01T06:09:07Z |
+| freshness | ✅ attested 2026-10-02T06:48:51Z |
 | purpose | Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what. |
 | profile | `ops` |
 | repo | `/root/opencrabs` |
@@ -457,7 +457,7 @@ Attribution basis: deliver_to -> lane.
 | owns | ['the OpenCrabs source fork leshchenko1979/opencrabs and its carrier build and swap pipeline', "the opencrabs-dev skill set: SKILL.md, the five role files (editor, hq, triage, toolsmith, harvest), fleet-directives.md and the runbooks -- NARROWED BY FIVE OWNER-APPROVED CARVE-OUTS: the Toolsmith lane owns tools/ CODE; the Triage lane owns AFFINITY_KEYWORDS and lane repurposing; Duty-4/6 finding remediation ships without the design gate; harvesting needs no design gate; and per-instrument law files under /root/agent-factories/docs/instruments/ are authored by each instrument's own owner, with the superseded fleet-directives.md copy reduced to a [LANE] pointer", 'the workers-ledger and skill-version consensus', 'the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory', 'the fork issue board on leshchenko1979/opencrabs'] |
 | does not own | ['the fast-mcp-telegram substrate and its tg_* tool family', 'the meta-factory registry, its surveys and its scoring surface', 'the live daemon configuration on this box: config.toml, keys.toml and the running units', "member factories' own process law, repos and backlogs", 'upstream adolfousier/opencrabs, which receives PRs only and never issues'] |
 | substrates owned | ['the OpenCrabs source fork and its carrier build pipeline', 'the opencrabs-dev skill set and the workers-ledger'] |
-| attested at | 2026-10-01T06:09:07Z |
+| attested at | 2026-10-02T06:48:51Z |
 
 **Services**
 
