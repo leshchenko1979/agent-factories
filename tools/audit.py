@@ -2324,6 +2324,26 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_law_no_raw_session_uuid.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_law_no_raw_session_uuid.py"])
 
+    # 75. Hygiene build-residue gate (G3 in the surface inventory; q15 ruled 2026-09-30).
+    #     The residue pytest and ruff create is SELF-IGNORING -- each writes a `.gitignore`
+    #     containing `*` into the cache it makes -- so `__pycache__/`, `.pytest_cache/`,
+    #     `.ruff_cache/` and `.audit.lock` are absent from `git status`, excluded from the
+    #     manifest as transient, and outside hygiene's `/tmp`-only scratch glob. No leg of
+    #     `tools/hygiene.py` could see the class, which is the failure mode that instrument
+    #     exists to catch: a surface that reads clean because nothing looked. The owner
+    #     ruled it DECLARED OUT rather than reaped (a worktree's cache is that worktree's
+    #     and dies with the tree), so the remedy is a POPULATION PRINTED on every run --
+    #     and this gate holds the leg to that, plus the structural refusal (`removes: no`)
+    #     and the non-vacuity arm, because a promise in a docstring is not a mechanism.
+    #     REQUIRED, not OPTIONAL: it drives the leg over THROWAWAY directories under a temp
+    #     root -- no live board, no fleet manifest, no box-local fixture -- so it passes in
+    #     a bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE
+    #     copy, so the manifest grain is what keeps a factory from dropping the runner and
+    #     keeping the file. Its MODE and its budget are declared in `registry/gates.json`
+    #     in the SAME landing.
+    if (repo_root / "tests/test_hygiene_build_residue.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_build_residue.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

@@ -159,6 +159,11 @@ PAIRS = [
     ("tests/test_hq_delegation.py", "TEMPLATE/tests/test_hq_delegation.py"),
     ("tests/test_template_integrity.py", "TEMPLATE/tests/test_template_integrity.py"),
     ("tests/test_hygiene_inflight.py", "TEMPLATE/tests/test_hygiene_inflight.py"),
+    # Added with its registration (G3, q15): the gate drives `tools/hygiene.py`, which is a
+    # paired file, so it is only meaningful where BOTH ship — a factory that took the report
+    # leg without the gate proving it holds no removal path would carry a leg nothing checks,
+    # and one that took the gate without the leg would run probes that cannot pass.
+    ("tests/test_hygiene_build_residue.py", "TEMPLATE/tests/test_hygiene_build_residue.py"),
     ("tests/test_close_board_recorded.py", "TEMPLATE/tests/test_close_board_recorded.py"),
     ("tests/test_ledger_commit_cites_no_rows.py", "TEMPLATE/tests/test_ledger_commit_cites_no_rows.py"),
     ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),

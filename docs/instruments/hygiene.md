@@ -89,10 +89,11 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (frame §5.1).
 | 3 | `tests/test_hygiene_namespace.py` ↔ `TEMPLATE/tests/test_hygiene_namespace.py` | `standalone` | **the gate** — the owned namespace |
 | 4 | `docs/hygiene-protected.example.json` ↔ `TEMPLATE/docs/hygiene-protected.example.json` | `standalone` | the data-surface skeleton (§6) |
 | 5 | `docs/instruments/hygiene.md` ↔ `TEMPLATE/docs/instruments/hygiene.md` | `standalone` | this file |
+| 6 | `tests/test_hygiene_build_residue.py` ↔ `TEMPLATE/tests/test_hygiene_build_residue.py` | `standalone` | **the gate** — build residue is declared out and printed (§4) |
 
 **A reader holding the law file and the tree can answer *"is this instrument complete here?"* without
-enumerating imports**, which is what frame §1 requires of a declaration. The four pairs of rows 1–4
-were compared byte-for-byte and are identical; row 5's pair is held by `tests/test_docs_sync.py`.
+enumerating imports**, which is what frame §1 requires of a declaration. The five pairs of rows 1–4 and
+6 were compared byte-for-byte and are identical; row 5's pair is held by `tests/test_docs_sync.py`.
 
 ## 3. The closure — declared, and it is EMPTY
 

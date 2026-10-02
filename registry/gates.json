@@ -357,6 +357,7 @@
     "tests/test_gate_invocation_mode.py": "script",
     "tests/test_gate_registration.py": "script",
     "tests/test_hq_delegation.py": "pytest",
+    "tests/test_hygiene_build_residue.py": "pytest",
     "tests/test_hygiene_inflight.py": "pytest",
     "tests/test_hygiene_namespace.py": "pytest",
     "tests/test_insights_author.py": "pytest",

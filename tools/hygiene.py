@@ -62,6 +62,28 @@ The real contract, stated so nothing has to be inferred:
     silence: the closing invariant admits the second verdict
     `workspace_gate=blocked-by-unowned`, lawful only when the run NAMES the blocking paths,
     and never a forged clean.
+
+## Build residue is DECLARED OUT and PRINTED, never reaped (G3; q15, ruled 2026-09-30)
+
+pytest and ruff write a `.gitignore` containing `*` into the cache they create, so
+`__pycache__/`, `.pytest_cache/`, `.ruff_cache/` and `.audit.lock` are SELF-IGNORING:
+absent from `git status`, excluded from `registry/kit.json` as transient, and outside this
+tool's `/tmp`-only glob. They are invisible to every leg above -- the class that reads as
+clean because nothing looked, which is the one failure mode this instrument exists to
+catch.
+
+They are not reaped, and the ruling is why: a worktree's cache is that worktree's and dies
+with the tree, and a reap races a test that is running. What is owed instead is that the
+class be MEASURED, so "we chose not to reap it" can never read as "there is none". So
+`build_residue_leg()` prints the population on every run and declares `removes: no` -- the
+#220 shape (a report leg, never a widened glob), which G6 reuses for the same reason.
+
+**The bound travels with the number.** The walk is depth-bounded and the bound is
+MEASURED, not chosen: over the live census on 2026-10-02 the population by depth was
+1:42, 2:132, 3:48, 4+:0, so depth 3 carries the whole class and a deeper walk buys nothing.
+Cost is the argument for `find` over `os.walk` -- the same 222 items took 0.19-0.49s warm
+through one `find` where an unbounded Python walk took 7.0s cold, against a cap of a few
+seconds; a gate KILLED by its own budget reads to every reader as a red.
 """
 
 from __future__ import annotations
@@ -209,6 +231,146 @@ def reap_stale_scratch(
                 pass
 
     return (len(found) if dry_run else reaped), found
+
+# --- Build residue: DECLARED OUT, PRINTED (G3; q15, ruled 2026-09-30) -----------------
+#
+# The class pytest and ruff create and then HIDE: each writes a `.gitignore` containing `*`
+# into the cache it makes, so the directory is self-ignoring -- absent from `git status`,
+# excluded from the manifest as transient, and outside this tool's `/tmp`-only glob. It is
+# invisible to every leg above, which is why it is PRINTED rather than swept: the debt is
+# the silence, not the bytes.
+#
+# NOT reaped, by ruling: a worktree's cache is that worktree's and dies with the tree, and
+# a reap races a test that is running. The #220 shape -- a report leg, `removes: no`, never
+# a widened glob -- is what G6 reuses for the same reason.
+BUILD_RESIDUE_NAMES = ("__pycache__", ".pytest_cache", ".ruff_cache", ".audit.lock")
+
+# MEASURED, not chosen (2026-10-02, live census): the population by depth was 1:42, 2:132,
+# 3:48, 4+:0 -- so depth 3 carries the whole class and a deeper walk buys nothing while
+# costing the gate's budget. `find` rather than `os.walk` for the same reason: the same 222
+# items read in 0.19-0.49s warm through one `find` where an unbounded Python walk took 7.0s
+# cold, and a gate KILLED by its own cap reads to every reader as a red.
+BUILD_RESIDUE_MAXDEPTH = 3
+
+# Never descended: a nested checkout or an installed environment is not THIS tree's
+# residue, and following one would report another repository's caches as ours.
+BUILD_RESIDUE_PRUNE = (".git", "node_modules", ".venv", "venv")
+
+def registered_worktrees(root: Path | None = None) -> tuple[list[str], str | None]:
+    """(paths, error) for every tree `git worktree list` reports.
+
+    The census is git's OWN, never a `/tmp` glob: a scratch prefix would miss the MAIN tree
+    and every tree named outside the namespace, and would sweep a directory belonging to
+    nobody -- the #174/#220 class this factory files against. An unreadable census is an
+    ERROR and never an empty one: "no trees" and "the instrument failed" must not render as
+    the same verdict.
+    """
+    root = root or repo_root()
+    try:
+        proc = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+    except OSError as exc:
+        return [], f"`git worktree list` could not run: {exc}"
+    if proc.returncode != 0:
+        return [], f"`git worktree list` exited {proc.returncode}: {proc.stderr.strip()}"
+    paths = [
+        line[len("worktree "):].strip()
+        for line in proc.stdout.splitlines()
+        if line.startswith("worktree ")
+    ]
+    if not paths:
+        return [], "`git worktree list` reported no tree, which a repository cannot do"
+    return paths, None
+
+def _find_residue(roots: list[str]) -> list[str]:
+    """The residue names under `roots`, by ONE bounded `find`.
+
+    One process for every root, not one per root: the cost is in the spawn, and the same
+    population read in a single `find` is what keeps this leg inside the gate's cap.
+    """
+    if not roots:
+        return []
+    names: list[str] = []
+    for name in BUILD_RESIDUE_NAMES:
+        names += ["-name", name, "-o"]
+    names = names[:-1]
+    prune: list[str] = []
+    for name in BUILD_RESIDUE_PRUNE:
+        prune += ["-name", name, "-prune", "-o"]
+    cmd = [
+        "find", *roots, "-maxdepth", str(BUILD_RESIDUE_MAXDEPTH),
+        *prune, "(", "(", *names, ")", "-print", ")",
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+    except OSError:
+        return []
+    return [line for line in proc.stdout.splitlines() if line]
+
+def build_residue_leg(
+    worktrees_fn=registered_worktrees,
+    find_fn=_find_residue,
+) -> dict:
+    """The build-residue report leg: the population, PRINTED, and `removes: no`.
+
+    DECLARED OUT rather than reaped (q15). The report IS the mechanism, so this leg holds
+    no removal path at all, and `removes` is asserted False here so a reader of the REPORT
+    is told the same thing the code does (#220). Both the census and the walk are injected
+    so a probe can drive the leg over a throwaway tree rather than the live host.
+    """
+    paths, error = worktrees_fn()
+    coverage: dict = {
+        "class": "build residue (pytest/ruff caches, .audit.lock)",
+        "predicate": (
+            f"one `find <worktree> -maxdepth {BUILD_RESIDUE_MAXDEPTH}` per census, for "
+            f"{', '.join(BUILD_RESIDUE_NAMES)}"
+        ),
+        "maxdepth": BUILD_RESIDUE_MAXDEPTH,
+        "worktrees_total": len(paths),
+        "removes": False,
+    }
+    if error:
+        # An unreadable census is NOT RUN with its reason, never a clean zero: a leg that
+        # cannot see its population must not print one.
+        coverage["status"] = "NOT RUN"
+        coverage["reason"] = error
+        return coverage
+
+    live = [p for p in paths if os.path.isdir(p)]
+    found = find_fn(live)
+    counts = {name: 0 for name in BUILD_RESIDUE_NAMES}
+    for item in found:
+        base = os.path.basename(item)
+        if base in counts:
+            counts[base] += 1
+    coverage["status"] = "ASSERTED"
+    coverage["items"] = len(found)
+    coverage["counts"] = counts
+    coverage["paths"] = found
+    return coverage
+
+def render_build_residue(coverage: dict) -> str:
+    """The leg's one line, carrying its population AND its `removes: no`.
+
+    The counts are printed BY NAME and only where non-zero, so a clean run still states
+    which class was read rather than rendering a bare zero a reader cannot attribute.
+    """
+    if coverage.get("status") != "ASSERTED":
+        return (
+            "hygiene build residue: NOT RUN — "
+            f"{coverage.get('reason') or 'reason not stated'}"
+        )
+    counts = coverage["counts"]
+    parts = ", ".join(f"{name} {counts[name]}" for name in BUILD_RESIDUE_NAMES if counts[name])
+    return (
+        f"hygiene build residue: {coverage['items']} item(s) over "
+        f"{coverage['worktrees_total']} worktree(s) — {parts or 'none of the four names'} "
+        f"(declared out, q15; removes: no)"
+    )
 
 def _split_status_line(line: str) -> tuple[str, str]:
     """Return (status code, path) from one `git status --porcelain` line.
@@ -385,6 +547,10 @@ def main() -> int:
         f"hygiene declaration: {len(protected)} path(s) declared live, "
         f"{len(scratch_entries)} declared scratch ({PROTECTED_REL})"
     )
+    # The build-residue population, PRINTED on every run and never reaped (G3; q15). It is
+    # the class no other leg can see -- self-ignoring caches -- so its whole remedy is that
+    # a reader meets its size here rather than inferring "none" from silence.
+    print(render_build_residue(build_residue_leg()))
     patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
     count, items = reap_stale_scratch(
         dry_run=dry_run, patterns=patterns, protected=protected

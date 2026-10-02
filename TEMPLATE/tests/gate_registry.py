@@ -639,6 +639,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
     # dropping the gate and keeping the tool it guards.
     "test_audit_undefined_names.py",
+    # Added with its registration (G3 in the surface inventory; q15 ruled 2026-09-30).
+    # REQUIRED is the correct grain and OPTIONAL is not, for the deciding fact the entries
+    # around it state: the gate drives the leg against THROWAWAY directories under a temp
+    # root, so it reads no live board, no fleet manifest and no box-local fixture, and it
+    # passes in a bootstrapped factory exactly as it does here. It is byte-paired with a
+    # TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the runner
+    # and keeping the file. THE MECHANISM IT GUARDS: the build residue pytest and ruff
+    # create is SELF-IGNORING — each writes a `.gitignore` of `*` into its own cache — so it
+    # is absent from `git status`, excluded from the manifest as transient and outside the
+    # scratch glob, and NO leg of `tools/hygiene.py` could see it. The owner ruled the class
+    # DECLARED OUT rather than reaped, so the remedy is a printed population on every run:
+    # without this gate a factory would carry that declaration with nothing measuring it,
+    # which is the dead text P29 names.
+    "test_hygiene_build_residue.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather
