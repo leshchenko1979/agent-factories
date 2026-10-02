@@ -212,7 +212,7 @@ def load_exemptions(root: Path) -> tuple[dict | None, str | None]:
     becomes honoured. So a caller that wants the DECLARED COUNT must read it off that
     judgement (`undeclared_divergence(pin, root)["declared"]`) and must NOT count this list
     itself: the raw list and the admitted set are different populations, and a second count
-    is the divergence §6.5 contract part 3 forbids (F5, issue #263 — `tools/kit_census.py`
+    is the divergence docs/instruments/kit.md §6.5 forbids (F5, issue #263 — `tools/kit_census.py`
     reported the raw `len(exempt)` and counted an entry this predicate drops).
 
     THE PROBLEM STRING IS NOT A VERDICT ON EMPTINESS. A MISSING file and an UNREADABLE one

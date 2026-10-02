@@ -290,7 +290,8 @@ def pin_state(root: str) -> dict:
     this function opening `kit-exemptions.json` itself and reporting `len(exempt)`, while
     the judgement path (`kit_pin.undeclared_divergence`) admits only entries that carry a
     `path` (or a bare string). An entry the pin IGNORES was still COUNTED, so a member read
-    a declaration its own gate then reds on — §6.5 contract part 3, lawful at the write path
+    a declaration its own gate then reds on — docs/instruments/kit.md §6.5 part 3, lawful at the
+    write path
     and unknown at `verify`. The count now comes off the verdict's own `declared`, so ONE
     computation serves the report and the judgement and the two cannot disagree.
 
