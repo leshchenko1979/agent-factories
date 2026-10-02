@@ -4,7 +4,7 @@ Writer: Insights lane — authors this file.
 Frame: `docs/instruments/template-instruments.md` — cross-instrument definitions are cited from there, never restated here.
 Authority: cross-factory clauses, and process law about instruments, rest with meta-factory HQ.
 
-**Owns:** this instrument — the record's semantics (`author`, `class`, `status`), its writer, its gate set, and this file. It exists because `author`, `class` and `status` were added to the register with no law home anywhere: their meaning lived only in a docstring and three test files, which is why a cross-instrument identity disagreement (#216: the register naming a lane `Factories / Insights` while the ledger named the same lane `insights`) could not be settled from any artifact.
+**Owns:** this instrument — the record's semantics (the routing group `audience` · `process` · `surface`, plus `author` and `status`), its writer, its gate set, and this file. It exists because `author`, `class` and `status` were added to the register with no law home anywhere: their meaning lived only in a docstring and three test files, which is why a cross-instrument identity disagreement (#216: the register naming a lane `Factories / Insights` while the ledger named the same lane `insights`) could not be settled from any artifact.
 
 ## 1. The instrument, declared
 
@@ -13,9 +13,9 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 | field (frame §1) | this instrument |
 |---|---|
 | **name** | Insights register |
-| **executable(s)** | `tools/insights.py` — verbs `append` · `list` · `verify` · `format` · `classify` · `status` · `reason`. One writer, seven verbs (§6, §7) |
+| **executable(s)** | `tools/insights.py` — verbs `append` · `list` · `verify` · `audience` · `process` · `surface` · `status` · `reason` · `format`. One writer, nine verbs (§5, §6, §7) |
 | **closure** | **none** — the CLI imports only the standard library, and its one repo-relative constant is the store it writes. There is no asset that must sit beside the binary (contrast `open-questions.md` §1, whose render asset is a closure member) |
-| **gate set** | the instrument's own suite, all root-local: `tests/test_insights_author.py` · `tests/test_insights_class.py` · `tests/test_insights_status.py`, plus the ledger-invariant gate `tests/test_insights_gate_recorded.py` — it judges this artifact's closing verdict and belongs to a shared family (`test_close_row_revision.py`, `test_score_gate_recorded.py`), and it is factory-local since 2026-09-28 (§2) |
+| **gate set** | the instrument's own suite, all root-local: `tests/test_insights_author.py` · `tests/test_insights_audience.py` · `tests/test_insights_status.py`, plus the ledger-invariant gate `tests/test_insights_gate_recorded.py` — it judges this artifact's closing verdict and belongs to a shared family (`test_close_row_revision.py`, `test_score_gate_recorded.py`), and it is factory-local since 2026-09-28 (§2) |
 | **version source** | **none** — the instrument is not a kit member, so it carries no manifest hash and owes no version (§2) |
 | **data surfaces** | `evidence/insights.jsonl` — factory-owned, in-repo, append-only (§3). No external store, so no member owes a migration |
 
@@ -37,7 +37,7 @@ Everything in the instrument is therefore **factory-local** and in no kit manife
 |---|---|---|
 | `tools/insights.py` | tool | the writer (§6) |
 | `tools/synthesize_insights.py` | tool | the weekly **proposer** — it prints JSON and has no write path to the store (§7) |
-| `tests/test_insights_author.py` · `tests/test_insights_class.py` · `tests/test_insights_status.py` | gates | the three axes' gates |
+| `tests/test_insights_author.py` · `tests/test_insights_audience.py` · `tests/test_insights_status.py` | gates | the three axes' gates |
 | `tests/test_insights_gate_recorded.py` | gate | the ledger-invariant gate — the closing workspace-gate verdict for this artifact, sibling to `test_close_row_revision.py` and `test_score_gate_recorded.py`, sharing ONE boundary reader (`tests/ledger_boundary.py`). Factory-local by the order above; registered in this factory's audit behind a presence guard |
 | `tests/test_synthesize_insights.py` | gate | the proposer's gate |
 | `evidence/insights.jsonl` | data | the store |
@@ -73,7 +73,9 @@ One JSON object per line, append-only. A row is one insight, and it carries thre
 |---|---|---|
 | **identity** | `n` · `id` · `ts` · `topic` · `stage` | which record this is, when, and what it is called |
 | **the claim** | `naive_assumption` · `empirical_reality` · `mechanism` | what was assumed, what was measured, and why they differ |
-| **routing** | `author` · `class` · `status` (+ `status_at` · `reason`) | who wrote it, what it requires of its reader, and where it stands |
+| **routing** | `audience` · `process` · `surface` (+ the RETIRED `class`) | who may read it, whether it changes how we work, and where a unit lands (§5) |
+| **provenance** | `author` | which lane wrote it (§4) |
+| **workflow** | `status` (+ `status_at` · `reason`) | where it stands in the workflow (§6) |
 | **revision** | `supersedes` | present only on a row that corrects an earlier one — the `n` it names |
 | **publication seed** | `tweet_hook` · `ru_summary` | material for the content funnel (`ru_summary` is REQUIRED at the append) |
 
@@ -101,48 +103,75 @@ This is the one definition in this file that is not a free choice, and the reaso
 
 ---
 
-## 5. `class` — what the claim requires of its reader
+## 5. The routing group — `audience` · `process` · `surface`
 
-Two values, and the test is stated rather than left to judgement:
+Three fields, each answering **one** question, and each read by a **different consumer** — which is why there are three and not one. The values are deliberately coarse: a routing split, not a topic taxonomy. A finer value would be a second axis pretending to be this one.
 
-**Does the claim hold for a reader who has never heard of agent-factories?**
+### 5.1 `audience` — does the claim have a reader OUTSIDE this factory?
 
-- **`general`** — yes. It survives without our internal machinery, so it travels beyond this factory. **It does NOT follow that it is publishable.** The first live use of this axis sent 14 `general` claims to the content funnel and **8 came back `dropped`** — gate-independence is *necessary* for publication and not *sufficient* for it.
-- **`implementation`** — no; it is only intelligible once you know our gates, ledgers or processes. It is a technical finding for a narrower audience, and its consumer is HQ (§8).
+Two values: **`public`** (yes — routes it to a publishing surface) and **`internal`** (no).
 
-Both bullets answer *what the claim requires of its reader*. Neither answers *who will want to read it*, and the 2026-09-28 measurement is the proof: of 14 `general` claims the funnel took 5 and dropped 8 — four because one finding appeared in four spellings, three because they were specifications rather than outcomes, and one because it partly duplicated an already-published post. **Class is not an audience axis**, and reading it as one is the error this paragraph exists to block.
+**The test:** *does the claim have a reader outside this factory?* It is a **property of the claim**, never the funnel's verdict on it.
 
-**Class is REQUIRED at the append**, and rightly so: the class is a property of the claim itself, and the author is the one who knows it. A default would be this file inventing a routing decision the author was in a position to make.
+**Why it replaced `class`, and what the replacement fixes.** `class` asked *"does the claim hold for a reader who has never heard of agent-factories?"* — gate-independence. That is a claim about the claim, and it was **read as** a claim about audience, which it never was. The register ended up holding rows whose declared routing contradicted their fate: `class=general` sent 14 claims to the content funnel and **8 came back `dropped`**, because gate-independence is *necessary* for publication and not *sufficient* for it. `audience` asks the routing question **directly**, so an author asserts what they are in a position to know — that the claim travels — and the funnel's verdict stays the funnel's.
 
-**A misspelled class is REFUSED, not defaulted** — an unknown value passes any "is it set?" check while reaching no consumer, which is the failure mode the argument-choices check exists to prevent.
+**`audience: public` is still not a publishability verdict**, and the axis's first live population is the proof: it landed with 8 rows and **all 8 are `dropped`**. A claim can have an outside reader and still be refused. `public` routes; it does not promise.
+
+**`audience` is REQUIRED at the append**, together with `process` (§5.2) — both routing questions are owed on every arrival. A row that answers one and not the other is exactly the defect the retired `class` produced: one answer standing in for two, with the second never asked.
+
+**A misspelled value is REFUSED, not defaulted** — an unknown value passes any "is it set?" check while reaching no consumer, which is the failure mode the argument-choices check exists to prevent.
+
+### 5.2 `process` — does it change how we work?
+
+Two values: **`yes`** (routes the row to **HQ** as an internal amendment) and **`no`**.
+
+**It is asked of EVERY row, whatever its audience.** An insight routed to a publishing surface was never asked whether it changes how we work — and the answer is owed either way. `no` is a **RECORDED FINDING, not silence**: *"we looked, and this does not change our process"* is a result, and a row that skips the question is indistinguishable from one nobody read.
+
+This is the axis that closes the gap §8 used to have: before it, a `public` claim left the factory and its applicability to our own processes was never asked. The duty to ask it is stated in §9; the consumer it feeds is in §8.
+
+### 5.3 `surface` — where a unit lands
+
+**`x`** · **`miidas`** · **`both`.** `surface` names **where** a unit is published, because the **lane** that owns it differs by surface: X is authored **here** (the `viral-x-post` skill), the miidas blog is handed to the **Marketing** lane and follows its own funnel law. `both` is **two units under two contracts**, not one artifact cross-posted.
+
+`surface` is **NOT required the way the two axes are** — only a row in the **publishing path** owes one (§6 rule 7), because a unit cannot be published without naming where it went. A `surface` on a row **outside** that path is refused, the same way a `reason` on a row that owes none is.
+
+### 5.4 The retired `class` — kept, never deleted
+
+`class` was **RETIRED on 2026-10-02** by the re-cut above. It is retired **in place, never dropped**: the rows that carry it keep their key and their position in the canonical order, because deleting it would restate the record to make room for a new field — the one thing §3's additive promise forbids.
+
+- Its vocabulary (`general`, `implementation`) is kept as **the record of what those rows were classified under**. It is **not a live vocabulary**: no value is validated against it any more, and `verify` no longer rejects an unknown one.
+- New rows carry **no `class` at all**.
+- A reader meeting a `class` key is meeting a **legacy label**. The question it was read as answering is now asked directly, by §5.1.
 
 ---
 
 ## 6. `status` — where it stands in the workflow
 
-`status` is **orthogonal to `class`**. `class` says *what the claim requires of its reader*; `status` says *what has been DONE about it*. They divide the same population differently, and neither derives from the other — a `general` claim can be `pending` just as an `implementation` claim can be `dropped`.
+`status` is the **tracker**, deliberately separate from the routing group (§5). The axes say what a claim **IS** and who it serves; `status` says where it stands in the **workflow** — what has been DONE about it. They divide the same population differently, and neither derives from the other: a `public` claim can be `pending` just as an `internal` claim can be `dropped`.
+
+The two are held in **agreement** by the cross-axis invariants (rules 7–9), checked at the write path and reported by `verify` — because a routing register that cannot tell *"queued for publishing"* from *"published"* is a register of intentions rather than of state.
 
 | status | meaning |
 |---|---|
 | `pending` | recorded, destination not yet ruled on — **the append default** |
-| `publishing` | earmarked for the content funnel (§8) |
-| `hq` | earmarked for HQ as an internal amendment (§8) |
+| `publishing` | earmarked for a publishing surface — the row owes a `surface` (§5.3, §8) |
+| `hq` | earmarked for HQ as an internal amendment — the row asserts `process: yes` (§5.2, §8) |
 | `refused` | **waiting** — a consumer refused it, the refusal's grounds are in `reason`, and the insight now waits on the OWNER (§6 rule 6) |
 | `published` | **terminal** — the unit went out |
 | `landed` | **terminal** — HQ changed a process |
 | `dropped` | **terminal** — deliberately not acted on, with the reason in `reason` |
 
-Six rules, each of which has a way of going wrong that this file closes:
+Nine rules, each of which has a way of going wrong that this file closes:
 
 1. **A fresh row opens `pending`, and `status` is NOT required at the append.** A destination is a *routing* decision, not a property of the claim, so a new row asserts only its own state rather than guessing someone else's decision. If the two axes were coupled at the append, the register would record an intent nobody formed.
 2. **`status_at` travels with `status`.** Without the instant, *"what has been sitting in `hq` for a fortnight?"* — the question the field exists to answer — is unanswerable.
 3. **Terminal states are recorded when they happen, never forecast.** `published` and `landed` are outcomes; a row that asserted one on expectation would be a prediction wearing a record's clothes.
 4. **A status that owes a reason requires one, and the rule is MECHANICALLY ENFORCED.** Silence and refusal are different records, and only one of them is checkable later — so the requirement is not left to the law's own reader. Two statuses owe a reason — **`refused` and `dropped`** — and they are held in ONE place (`REASON_REQUIRED_STATUSES`), read by all four enforcement points, so the write path and the reader cannot drift apart on which statuses owe one. The **write path REFUSES** a row left reason-owing with no `reason` (the append, and every backfill that sets the status), and `verify` **REPORTS** a stored row that carries none. A law whose only enforcer is whoever reads it is the shape this rule was written to close: the clause and its check land together, or the clause is decoration. Setting the status and setting the reason are one act — `status {"<id>": {"status": "refused", "reason": "…"}}` — so there is no window in which such a row exists without one. **Both directions are refused**: a reason on a row in neither state is the field's other lie.
-5. **`reason` is prose, not a vocabulary.** It is a **settable field** (`classify` · `status` · `reason`) and never a `FIELD_VOCAB` member, because the vocabulary is closed and a reason's whole value is saying the specific thing that was decided. A `reason` on a row that owes none is the field's other lie — it reads as a refusal where none was recorded — and `verify` refuses it. **The overturn clears it**: when the owner overturns a refusal, the status moves and the reason is *removed*, because a reason left standing beside a non-owing status is a reader trap — it says the row was refused while the status says it is moving. This is the one non-additive edit a backfill may make, it is **declared** rather than silent, and it is reported by name.
-6. **A refusal is NOT terminal: it directs the insight to the OWNER for gating.** `refused` means a *consumer* — for a `general` claim, the content funnel — declined the unit, and recorded its grounds. It is emphatically **not** `dropped`: `dropped` records a decision the owner made, and a consumer's refusal recorded as the owner's decision puts a judgement in his mouth that he never formed. So the refusal **waits on the owner**, who settles it one way or the other:
+5. **`reason` is prose, not a vocabulary.** It is a **settable field** (`status` · `reason`) and never a `FIELD_VOCAB` member, because the vocabulary is closed and a reason's whole value is saying the specific thing that was decided. A `reason` on a row that owes none is the field's other lie — it reads as a refusal where none was recorded — and `verify` refuses it. **The overturn clears it**: when the owner overturns a refusal, the status moves and the reason is *removed*, because a reason left standing beside a non-owing status is a reader trap — it says the row was refused while the status says it is moving. This is the one non-additive edit a backfill may make, it is **declared** rather than silent, and it is reported by name.
+6. **A refusal is NOT terminal: it directs the insight to the OWNER for gating.** `refused` means a *consumer* — for a `public` claim, the content funnel — declined the unit, and recorded its grounds. It is emphatically **not** `dropped`: `dropped` records a decision the owner made, and a consumer's refusal recorded as the owner's decision puts a judgement in his mouth that he never formed. So the refusal **waits on the owner**, who settles it one way or the other:
 
    - **uphold the refusal** → `dropped`, with the refusal's grounds kept as the reason (the consumer's words, not a re-typed paraphrase)
-   - **overturn** → the row returns to the workflow (`publishing` for a `general` claim) and its `reason` is cleared by §6 rule 5
+   - **overturn** → the row returns to the workflow (`publishing` for a `public` claim) and its `reason` is cleared by §6 rule 5
 
    The vehicle is the **open questions register** (`docs/instruments/open-questions.md`), one question carrying every refused row with its grounds, defaulting to *uphold* — so the owner marks only what he would overturn rather than voting on each. A refusal that never reaches him is the same defect class as #216 and #227, one surface over: a rule whose only carrier is whoever happened to see it. This is where the owner keeps the last word without becoming the classifier.
 
@@ -154,13 +183,24 @@ Six rules, each of which has a way of going wrong that this file closes:
 
    These are the grounds a refusal **records**, not a gate: no offline predicate reads them, and the decision stays with the owner under this rule. Each refusal names the test it failed in its own `reason`, with a link to the entry or published piece it overlaps, so the grounds are checkable rather than a matter of taste. The derivation is kept here for the same reason §9 keeps its research: a rule whose only carrier is the turn that produced it does not survive a compaction.
 
+7. **A row in the PUBLISHING PATH owes a `surface`, and the path is held in ONE home.** The path is `publishing` · `published` (`SURFACE_REQUIRED_STATUSES`), read by the append path, the backfill path and `verify` — the same one-home shape rule 4 gives the reason-owing statuses, for the same reason. A unit cannot be published without naming where it went, because the **lane that owns it differs by surface** (§5.3). **The CLEAR is part of the rule:** a row that LEAVES the path loses its `surface` in the same transaction, exactly as it loses its `reason` — a destination on a row that is not going anywhere is the field's other lie, and `verify` refuses it.
+
+8. **D4's first invariant — the publishing path asserts a PUBLIC audience.** A row whose `status` is in the publishing path asserts `audience: public`; a publishing row declaring `internal` contradicts itself, and the write path refuses it. The invariant fires **only where the row CARRIES the routing group** — a row predating the re-cut is not condemned for a claim it never made.
+
+   **That guard is load-bearing, and its omission is a filed defect (#279).** The write leg's copy of this predicate once omitted the carrier check while `verify`'s kept it — two implementations of one predicate, diverging on exactly the population the guard was written for. The effect was a **refusal cycle with no exit**: all three single-field verbs (`process`, `audience`, `surface`) refused on every pre-re-cut row, each naming a **different** missing sibling, and **none naming the door that works**. The door is `status`, carrying the row's own `status_at` forward (§7); the single-field verbs are for rows **already carrying** the group.
+
+9. **D4's second invariant — a row routed to HQ asserts `process: yes`.** `hq` and `landed` (`HQ_PATH_STATUSES`) assert that the insight **IS applicable to our processes**, so `process` must say `yes` on them. The two fields stay separate — `audience` and `process` answer different questions — but they must not **contradict** each other, and this is the set on which they could. Refused at the write path, reported by `verify`.
+
+**A routed row migrates ATOMICALLY.** A row that is `hq`/`landed` owes `process: yes`; a row in the publishing path owes `audience: public` **and** a `surface`. So a routed row can take **no single field alone** — which is why the door for a legacy routed row is `status`, and not any one of the three axes.
+
 ---
 
 ## 7. The writer
 
 - **`tools/insights.py` is the ONE writer.** Every write verb it exposes is the SAME writer; there is no second path by construction rather than by good intentions.
 - **The weekly proposer does not write.** `tools/synthesize_insights.py` prints JSON and has **no** write path to the store — `INSIGHTS_PATH` is only ever read, and the `insights` it builds is a local list. A lane does the appending. This matters twice over: the register has one writer, and adding a required field cannot break the weekly cron, because the proposer never appends.
-- **`classify`, `status` and `reason` are BACKFILLS over one shared mechanism**, and their safety property is asserted rather than asserted-to-be-true: strip the keys they add and the store is **byte-identical** to its previous revision. A backfill adds a label; it never restates a claim. `reason` is a settable field rather than a vocabulary member (§6 rule 5), and it is its own verb because a backfilled reason must not re-date the row: `status` moves `status_at`, while `reason` sets the prose and nothing else, so an unset field filled in later cannot silently move the instant that field's sibling exists to record.
+- **`audience`, `process`, `surface`, `status` and `reason` are BACKFILLS over one shared mechanism**, and their safety property is asserted rather than asserted-to-be-true: strip the keys they add and the store is **byte-identical** to its previous revision. A backfill adds a label; it never restates a claim. `reason` is a settable field rather than a vocabulary member (§6 rule 5), and it is its own verb because a backfilled reason must not re-date the row: `status` moves `status_at`, while `reason` sets the prose and nothing else, so an unset field filled in later cannot silently move the instant that field's sibling exists to record.
+- **The single-field verbs are for rows ALREADY carrying the routing group.** A legacy routed row — one written before the re-cut — cannot take one axis alone: §6's invariants refuse each, and the three refusals each name a **different** missing sibling (#279). The door that works for such a row is **`status`**, carrying the row's **OWN** `status_at` forward — it is the **preserve-only door** for the instant, so a caller may carry an instant forward and may never mint one. The result is additive in the same sense as every other backfill: the strip is byte-identical.
 - **All-or-nothing.** One unknown `id` writes nothing.
 - **Refusal is loud.** An unspecified or unrecognised verb exits non-zero rather than reporting success.
 
@@ -168,16 +208,23 @@ Six rules, each of which has a way of going wrong that this file closes:
 
 ## 8. `verify`, and what each axis feeds
 
-`verify` is the store's own precondition: it rejects a stored **blank** or **unknown** value on any axis, while **accepting an absent key** on a legacy row — the distinction between *unrecorded* and *recorded as empty* is the whole point. `list` and `format` print `[legacy]` for a row that predates a field, so "not recorded" can never be read as a category. Three further refusal classes ride the same reader, each one a rule §3 or §6 states and this section enforces: a row left reason-owing (`refused` or `dropped`) with no `reason` (§6 rule 4), a `reason` recorded on a row that owes none (§6 rule 5), and a broken **supersession** chain — a marker naming a later, missing, differently-`id`d or already-superseded row (§3).
+`verify` is the store's own precondition: it rejects a stored **blank** or **unknown** value on any axis, while **accepting an absent key** on a legacy row — the distinction between *unrecorded* and *recorded as empty* is the whole point. `list` and `format` print `[legacy]` for a row that predates a field, so "not recorded" can never be read as a category. Six further refusal classes ride the same reader, each one a rule §3 or §6 states and this section enforces: a row left reason-owing (`refused` or `dropped`) with no `reason` (§6 rule 4); a `reason` recorded on a row that owes none (§6 rule 5); a broken **supersession** chain — a marker naming a later, missing, differently-`id`d or already-superseded row (§3); a row in the **publishing path** with no `surface`, and its mirror, a `surface` on a row **outside** the path (§6 rule 7); a publishing row whose `audience` is not `public` (§6 rule 8); and an `hq`/`landed` row whose `process` is not `yes` (§6 rule 9).
 
-The two classes feed two different consumers, and both are DECLARED:
+**One predicate, two legs — and the legs must not drift.** The cross-axis classes above are enforced at the write path *and* reported by `verify`, and both legs read the SAME declared set (`SURFACE_REQUIRED_STATUSES`, `HQ_PATH_STATUSES`). Where one leg carries a guard the other omits, the divergence lands on exactly the population the guard exists for: **#279 is the measured instance**, and its cost was a refusal cycle with no exit (§6 rule 8).
 
-| class | derived output | consumer |
+The register feeds **three** consumers, and all three are DECLARED. The axis that selects each one is stated, so a row's destination is read **off the row** rather than inferred:
+
+| axis value | derived output | consumer |
 |---|---|---|
-| `general` | publishable content units (site, Telegram channel, X) | the miidas content funnel — Marketing drafts under `CONTENT-FUNNEL.md` §6, and the **owner approves final copy** under §5 |
-| `implementation` | factory improvement ideas and process amendments | **HQ**, worked **one item at a time**, with this register's own `status` axis as the tracker — `hq` → `landed` or `dropped` |
+| `process: yes` | factory improvement ideas and process amendments | **HQ**, worked **one item at a time**, with this register's own `status` axis as the tracker — `hq` → `landed` or `dropped` |
+| `surface: x` | a post for the X account | **this lane**, authored with the `viral-x-post` skill |
+| `surface: miidas` (or `both`) | a unit for the miidas blog | the **miidas content funnel** — Marketing drafts under `CONTENT-FUNNEL.md` §6, and the **owner approves final copy** under §5 |
 
-**No second artifact.** The register is the single source for both derivatives; a brief, a summary or a queue minted beside it is the drift class this factory keeps measuring. HQ's ruling of 2026-09-28 states the intake shape: the pointer is the register, the cadence is per-item rather than batched, and the tracker is the `status` axis that already exists — never a parallel one.
+**`process` and `surface` are independent, and a row can feed both.** They answer different questions — *does it change how we work?* and *where does it land?* — so a row may be `process: yes` **and** `surface: x`. `both` means two units under two contracts (§5.3), not one artifact cross-posted.
+
+**The consumers are addressed by LANE, never by a topic.** The X series is authored **here**; the miidas units are handed to **Marketing**; the `process` queue is **HQ's**. A handoff is verified **by content in the target's own rows** — never by a send receipt.
+
+**No second artifact.** The register is the single source for all three derivatives; a brief, a summary or a queue minted beside it is the drift class this factory keeps measuring. HQ's ruling of 2026-09-28 states the intake shape: the pointer is the register, the cadence is per-item rather than batched, and the tracker is the `status` axis that already exists — never a parallel one.
 
 ---
 
@@ -187,9 +234,11 @@ The two classes feed two different consumers, and both are DECLARED:
 
 That defect sat one surface further in on 2026-09-29, and this section is where it was closed: measured at the row for `n=32`, **1 of 10** research findings — 1 of 5 cited sources and 0 of 5 mapping clause names — had reached the register, because this clause required the research to be *presented* and said nothing about where it was *kept*. A reply is a context-time object, which is precisely the thing rung 1 of that same insight externalises. So each of the three outputs is required to **land in the row**, where a later lane reaches it after a compaction, and not merely where the turn that produced it could see it.
 
-1. **RECORD.** One `append`, carrying its `author` (§4) and its `class` (§5). The owner's insights carry `author: Alexey`. `class` is the authoring lane's call, derived by §5's test — of what the claim requires of its reader — never by the submitter's sense of audience.
+1. **RECORD.** One `append`, carrying its `author` (§4) and the **routing group** — `audience` **and** `process` are both **REQUIRED at the append** (§5), and a `surface` is owed the moment the row lands in the publishing path (§6 rule 7). The owner's insights carry `author: Alexey`. Both axes are the authoring lane's call, derived by §5's tests — *does it have a reader outside the factory?* and *does it change how we work?* — never by the submitter's sense of audience.
 2. **RESEARCH.** Search external best practice on the problem the insight discusses, and present it with **its sources and their dates**, stating of each whether it **agrees with**, **sharpens**, or **contradicts** the insight. **Every source lands in the row, cited by id and date, in the field it evidences** — `n=32` is the pattern rather than an exception: its `empirical_reality` carries *arXiv:2606.22953* with the figures it contributes (4.1×, 34.7 pp, 56.7% → 22.0%), so the evidence is readable from the store alone. A source that reached only the reply is one the register cannot show, and the finding dies with the turn that found it. `No practice found` is a **declared finding**, never silence: the search is itself evidence, an empty result is still a result, **and the row records it as one**.
-3. **MAP.** State what the insight would change, in **which** factories, and **where it does not apply**. **The mapping lands in the row too** — where the insight is **already codified**, the **clause names** it points at are recorded in the row, so *"already codified"* is checkable by a later reader rather than recalled by whoever held the turn. The mapping is a dedupe as much as a translation: an insight the fleet **already codifies** is answered by **pointing at the clause**, and is settled `landed` with that clause as its reason rather than re-filed — the already-codified arm of the sort §8's `implementation` consumer works one item at a time.
+3. **MAP.** State what the insight would change, in **which** factories, and **where it does not apply**. **The mapping lands in the row too** — where the insight is **already codified**, the **clause names** it points at are recorded in the row, so *"already codified"* is checkable by a later reader rather than recalled by whoever held the turn. The mapping is a dedupe as much as a translation: an insight the fleet **already codifies** is answered by **pointing at the clause**, and is settled `landed` with that clause as its reason rather than re-filed — the already-codified arm of the sort §8's `process: yes` consumer works one item at a time.
+
+**The `process` verdict is a DUTY, not an option — and it is owed on EVERY arrival.** *"We looked, and this does not change our process"* is a **recorded finding** (`process: no`), and it is the answer most arrivals will get. What is not permitted is **not asking**: before this axis existed, a claim routed to a publishing surface was never asked whether it applies to our own processes, so the fleet's own improvement ideas could leave as marketing copy and never reach HQ. The verdict is owed in the turn the insight arrives, by the lane that records it — the same turn that owes the research and the mapping.
 
 **The bound.** Intake is a judgement about content, and it builds **no gate**: no offline predicate reads whether a mapping is honest or a cited practice real, and this clause adds none. *Requiring a finding to be stored is not requiring it to be true* — that is why `verify` reads the axes and never the prose, and why the difference between the two is stated here rather than left to be assumed. What upholds the workflow is the authoring lane performing it **and the finding reaching the row**; the reload leg exists so that this clause itself survives a compaction, which is the same argument one level up.
 
@@ -198,5 +247,6 @@ That defect sat one surface further in on 2026-09-29, and this section is where 
 ## 10. Rollout
 
 - **Declared executor: meta-factory.** Not a kit member (§2), so nothing is owed to a member and no version bump attends a change here.
-- **A change to this file's meaning owes the three axis gates**, which is why they exist: `test_insights_author.py`, `test_insights_class.py`, `test_insights_status.py`. Each drives the CLI, and the author gate additionally drives **both** instruments (§4) and asserts one string, so the register and the ledger cannot drift apart on a lane's identity again without a red.
+- **A change to this file's meaning owes the three axis gates**, which is why they exist: `test_insights_author.py`, `test_insights_audience.py`, `test_insights_status.py`. Each drives the CLI, and the author gate additionally drives **both** instruments (§4) and asserts one string, so the register and the ledger cannot drift apart on a lane's identity again without a red.
+- **The re-cut is a rollout, not a rewrite of history.** `class` is retired **in place** (§5.4) and no row is backfilled to remove it; the 7 publishing-path rows still owe their routing group **atomically**, on the owner's answer to the question that carries them, and they take it through `status`, carrying their own `status_at` forward (§7). Nothing is backfilled by a second path.
 - **The store is the record, and this file defines it — not the reverse.** Where they disagree, one of the two is wrong and the disagreement is a defect to file, never a reading to reconcile by hand.
