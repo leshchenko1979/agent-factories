@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-02T06:58:29Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-02T13:22:15Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-02T06:58:29Z` |
+| generated | live reads | resolved `2026-10-02T13:22:15Z` |
 
 ## Announcements
 
@@ -152,31 +152,31 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | Triage | 10781 | triage | `6ca0d547-4a72-4c29-ac10-967daa98af0a` | Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781] | resolved | telegram | 2026-10-01T11:01:30Z | — |
 | HQ | 10782 | hq | `cb06a94a-be02-4e8c-b6c6-c8c9f09922f4` | Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782] | resolved | telegram | 2026-09-30T22:17:43Z | — |
 | ai-antispam Landing lane | 10783 | landing | `99b348f6-a040-4119-8aa8-00736c7fb61d` | ai-antispam Landing lane | resolved | telegram | 2026-09-11T21:55:58Z | — |
-| Bot lane — ai-antispam service (Bot topic) | 10784 | bot | `6d921dca-fb0a-455b-bceb-dfb78dcf1f07` | Bot lane — ai-antispam service (Bot topic) | resolved | telegram | 2026-10-01T08:40:35Z | — |
+| Bot lane — ai-antispam service (Bot topic) | 10784 | bot | `6d921dca-fb0a-455b-bceb-dfb78dcf1f07` | Bot lane — ai-antispam service (Bot topic) | resolved | telegram | 2026-10-02T12:57:37Z | — |
 | MAX domain — lane acceptance & verification | 11156 | _unstated_ | `85425045-2567-4beb-9867-100d6755e2cd` | MAX domain — lane acceptance & verification | resolved | telegram | 2026-09-15T03:45:41Z | — |
 
 **Pacemakers**
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `ai-antispam-43-close-gate` | ops | `5 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:05:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | [ "$(date -u +%Y%m%d)" -ge 20260927 ] && /usr/local/bin/gh issue view 4… |
-| `ai-antispam-52-close-gate` | ops | `30 11 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T11:30:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 52 --repo alexeyleshchenko/ai-a… |
+| `ai-antispam-43-close-gate` | ops | `5 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T12:05:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | [ "$(date -u +%Y%m%d)" -ge 20260927 ] && /usr/local/bin/gh issue view 4… |
+| `ai-antispam-52-close-gate` | ops | `30 11 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T11:30:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 52 --repo alexeyleshchenko/ai-a… |
 | `ai-antispam-62-close-gate` | ops | `15 3 * * *` | UTC | **no** | 0 | **absent** | 2026-10-02T03:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 62 --repo alexeyleshchenko/ai-a… |
-| `ai-antispam-bot-service-health` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | telegram:-1003993000918:10784 | — |
+| `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:15:00+00:00 | telegram:-1003993000918:10784 | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
-| `ai-antispam-loss-watch` | ops | `*/30 * * * *` | UTC | yes | 0 | **absent** | 2026-10-02T07:00:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
-| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-db-sync` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-mining-tranche` | ops | `0 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-05T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-02T13:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
+| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T07:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:15:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-05T06:15:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T00:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:07:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:07:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:30:00+00:00 | — | — |
 | `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T05:50:00+00:00 | session:cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 | — |
-| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:40:00+00:00 | telegram:-1003993000918:10780 | timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/strea… |
-| `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:00:00+00:00 | telegram:-1003993000918:10784 | CT=$(ssh apps "docker ps --filter name=ai-antispam --format '{{.Names}}… |
-| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
+| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:40:00+00:00 | telegram:-1003993000918:10780 | timeout 25 python3 -u /root/ai-antispam-outreach/outreach/scripts/strea… |
+| `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T12:00:00+00:00 | telegram:-1003993000918:10784 | CT=$(ssh apps "docker ps --filter name=ai-antispam --format '{{.Names}}… |
+| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
 | `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
+| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
 | `ai-antispam-wave0-unactivated-reprobe` | ops | `0 12 * * 2` | Europe/Moscow | yes | 0 | **absent** | 2026-10-05T09:00:00+00:00 | telegram:-1003993000918:10780 | — |
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
@@ -187,24 +187,24 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-10-02T06:51:21Z |
+| freshness | ✅ attested 2026-10-02T13:13:05Z |
 | purpose | Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value. |
 | profile | `ops` |
 | repo | `/root/inferhub-watch` |
-| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.107 |
+| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.109 |
 | owns | ['leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law', 'Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author', 'Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics', 'The new_api channels table on apps as an AUTHORED POLICY OBJECT - the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-02: exactly THREE rows - id 43 gemini (status 1 = ENABLED, priority 300, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED, priority 210, auto_ban 1). id 43 is ENABLED again: re-enabled 2026-10-01T20:57:24Z (new_api.audit_logs row 1154, auth_method=session, ip 2.27.120.75) inside a ~2-minute interactive failover-tuning session that had toggled it 1->2 at 20:55:44 (row 1152) and re-enabled id 46 at 20:55:51 (row 1153) - the same self-attributing root-session pattern as the 09-25 re-enable, so it is NOT unattributed. id 46 has since been auto-banned again (status 3). Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names.', 'Client-side fallback-chain order and provider settings for all OpenCrabs profiles (four live 2026-10-02: default, family, oc348probe, ops) (owner-granted 2026-09-19)', 'The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)', "This factory's own crons and its daily GitHub Actions sweep"] |
 | does not own | ['The New-API gateway itself — its container, config and serving behaviour on apps (Infra Factory / LLM Gateway lane). We author the channel policy; they run the gateway.', 'Grafana deployment and provisioning, and the generic /grafana skill tooling in /root/vds-servers (Infra Factory)', 'The upstream provider api.inferhub.dev — external; we measure it and never change it', 'OpenCrabs core source (/root/opencrabs): we may file fork issues for runtime anomalies we observe, but we never open PRs or edit source (external-lane boundary)', "Other member factories' repos, lanes and process law", 'Host and box infrastructure (owner)'] |
 | substrates owned | ['leshchenko1979/inferhub-watch', "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship", 'Postgres inferhub_logs on apps — route_metrics, usage_logs, model_rollup', 'Grafana dashboard inferhub-watch — panels and queries', 'The new_api channels table - priority, auto_ban and model_mapping policy. Live 2026-10-02: three rows, ids 43 (ENABLED, status 1, priority 300, auto_ban 1) / 44 (enabled, status 1, priority 200, auto_ban 0) / 46 (auto-banned, status 3, priority 210, auto_ban 1); the tier ladder is gone and no automatic writer runs. id 43 was re-enabled 2026-10-01T20:57:24Z by an interactive root session (new_api.audit_logs row 1154).'] |
-| attested at | 2026-10-02T06:51:21Z |
+| attested at | 2026-10-02T13:13:05Z |
 
 **Services**
 
 | name | audience | entry | cadence |
 |---|---|---|---|
 | inferhub-usage-logs-sync | agent | cron 2d9112a6-b697-4eeb-b6ac-3e2462e23483, expr 23 */6 * * *, enabled — TAIL-ONLY: its prompt carries --skip-data --skip-scoreboard --skip-switch, so it pages no API and writes no table; the usage_logs data leg belongs to the no-wake host runner /usr/local/bin/inferhub-usage-sync.sh (*/10 — no daemon, no session, no tokens). Do NOT read this cron as the writer of route_metrics or usage_logs | 6h |
-| inferhub-hq-pacemaker | agent | cron 5c960cfb-16a5-4a35-918b-5acd1d30336f, expr 0 */6 * * *, enabled, delivers to session 359fe71b | 6h |
+| inferhub-hq-pacemaker | agent | cron 5c960cfb-16a5-4a35-918b-5acd1d30336f, expr 10 */6 * * *, enabled, delivers to session 359fe71b | 6h |
 | inferhub-daily-report | owner | cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b - it delivers to the HQ lane, and its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg); measured 2026-10-02 the card rendered into topic 2 as msg 4790 carrying a '(truncated)' marker (the #490 head+tail elision, working as designed), so no lane re-post is owed. | daily |
-| inferhub-self-audit-daily | agent | cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 0 9 * * *, enabled, delivers to session 359fe71b | daily |
+| inferhub-self-audit-daily | agent | cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 10 9 * * *, enabled, delivers to session 359fe71b | daily |
 | inferhub-auto-switcher | agent | cron fef19c4f-ab16-442e-8ee9-e041d3d0919b, expr 33 */6 * * *, DISABLED | disabled |
 | watch.yml scheduled sweep | agent | host crontab dispatcher /usr/local/bin/inferhub-sweep-dispatch.sh at 17 2 * * * (declared once in repo scripts/sweep_schedule.py), which calls gh workflow run; the workflow's own on.schedule line is a deduped BACKSTOP — measured over all 27 scheduled runs to 2026-09-22 it fires +0.7 h to +12.2 h late, mean +5.2 h, and the delay tracks the declaration. Do not treat 02:17Z as GitHub-side | daily 02:17Z (host crontab) |
 
@@ -230,9 +230,9 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 |---|---|---|---|---|---|---|---|---|---|
 | `inferhub-auto-switcher` | ops | `33 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:33:00+00:00 | — | — |
 | `inferhub-daily-report` | ops | `0 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T05:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-hq-pacemaker` | ops | `0 */6 * * *` | UTC | yes | 1 | present | 2026-10-02T12:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-self-audit-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:23:00+00:00 | — | — |
+| `inferhub-hq-pacemaker` | ops | `10 */6 * * *` | UTC | yes | 1 | present | 2026-10-02T18:10:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
+| `inferhub-self-audit-daily` | ops | `10 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:10:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
+| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:23:00+00:00 | — | — |
 
 Attribution basis: deliver_to -> lane, name prefix.
 2 of 5 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
@@ -302,8 +302,8 @@ Attribution basis: deliver_to -> lane, name prefix.
 | `infra-handler-escalation-check` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T00:00:00+00:00 | — | P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service… |
 | `infra-mac-backup-verify-oneshot` | ops | `15 19 28 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-28T16:15:00+00:00 | telegram:-1004486255170:4 | — |
 | `infra-sender-logs-check` | ops | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T15:05:00+00:00 | — | — |
-| `infra-surveys-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | — | — |
-| `infra-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | present | 2026-10-02T12:00:00+00:00 | — | /root/vds-servers/tools/triage_preflight.py |
+| `infra-surveys-daily` | ops | `5 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:05:00+00:00 | — | — |
+| `infra-triage-patrol` | ops | `5 */6 * * *` | UTC | yes | 0 | present | 2026-10-02T18:05:00+00:00 | — | /root/vds-servers/tools/triage_preflight.py |
 
 Attribution basis: deliver_to -> chat, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -374,11 +374,11 @@ Fresh reading 2026-10-01T06:08:14Z: LEG A, the always-injected Tier 0 triple (SO
 | `factory-growth-map-biweekly` | ops | `0 9 1,15 * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-15T06:00:00+00:00 | — | — |
 | `factory-insights-weekly` | ops | `0 18 * * Fri` | Europe/Moscow | yes | 0 | **absent** | 2026-10-02T15:00:00+00:00 | — | python3 /root/agent-factories/tools/synthesize_insights.py --audit |
 | `factory-measurement-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | — | — |
-| `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:00:00+00:00 | — | — |
+| `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:00:00+00:00 | — | — |
 | `factory-registry-attest` | ops | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T06:00:00+00:00 | — | — |
 | `factory-template-weekly` | ops | `0 9 * * Mon` | Europe/Moscow | yes | 0 | **absent** | 2026-10-05T06:00:00+00:00 | — | python3 /root/agent-factories/tools/roadmap.py --cadence |
-| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
-| `meta-factory-questions-redeliver` | ops | `12 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:12:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | /root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh |
+| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
+| `meta-factory-questions-redeliver` | ops | `12 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:12:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | /root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh |
 
 Attribution basis: deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -431,8 +431,8 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|
-| HQ | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-09-29T08:35:34Z | — |
-| Agent runtime | 6 | _unstated_ | `5a5335ee-db68-46fe-b13e-a082b2beadb5` | Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6] | resolved | telegram | 2026-09-30T10:37:33Z | — |
+| HQ | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-10-02T08:55:26Z | — |
+| Agent runtime | 6 | _unstated_ | `5a5335ee-db68-46fe-b13e-a082b2beadb5` | Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6] | resolved | telegram | 2026-10-02T08:50:00Z | — |
 | Manager | 9 | _unstated_ | `b64ca6ba-9ec0-47f7-8450-0d25b6c1d854` | Telegram: Miidas Factory / Manager [chat:-1003996392908:topic:9] | resolved | telegram | 2026-09-25T16:25:13Z | — |
 | Worker | 56 | worker | `b57efabd-85df-4467-bed7-f5a596285f68` | Telegram: Miidas Factory / Worker — #39 board vs ledger comparison gate [chat:-1003996392908:topic:56] | resolved | telegram | 2026-09-29T07:19:56Z | — |
 | Marketing | 393 | marketing | `39d2b612-dbfc-4953-ae02-609267c68c3e` | Telegram: Miidas Factory / Marketing [chat:-1003996392908:topic:393] | resolved | telegram | 2026-09-29T09:03:05Z | — |
@@ -441,7 +441,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
+| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-10-03T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
 
 Attribution basis: deliver_to -> lane.
 
@@ -484,15 +484,15 @@ Attribution basis: deliver_to -> lane.
 | Providers: Routing | 30045 | _unstated_ | `127429e6-08de-439c-9162-2c8b0a9f73d9` | Gemini Reasoning and Flow Message Analysis | resolved | telegram | 2026-09-29T06:47:55Z | — |
 | Telegram: Push | 30090 | editor | `d18ce16a-75a0-447c-90c7-ab7dabce4411` | Editor lane: #17/#19 channel-ownership PRs | resolved | telegram | 2026-09-24T11:58:12Z | — |
 | Telegram: Options | 30134 | _unstated_ | `1a63f103-b899-4ad2-a5b3-c89f2902bf97` | Deploy #235 Option Collision Guard | resolved | telegram | 2026-09-28T08:13:31Z | — |
-| OC DEV HQ | 30220 | hq | `0117dd29-5f4b-4184-9bf4-d19dc74ac266` | Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220] | resolved | telegram | 2026-10-02T06:12:21Z | — |
+| OC DEV HQ | 30220 | hq | `0117dd29-5f4b-4184-9bf4-d19dc74ac266` | Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220] | resolved | telegram | 2026-10-02T10:41:04Z | — |
 | Core: Subagents | 30517 | _unstated_ | `a5b34466-1c14-441f-b2c6-6eaf4f316dde` | Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517] | resolved | telegram | 2026-09-29T09:25:18Z | — |
-| Telegram: Throttling | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-10-02T06:00:53Z | — |
+| Telegram: Throttling | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-10-02T12:26:35Z | — |
 | Lifecycle: Restarts | 31683 | _unstated_ | `7e1ebbb6-68b3-478b-abc2-b697e70c2f37` | Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683] | resolved | telegram | 2026-09-29T06:44:05Z | — |
 | Core: Plan & Tasks | 31789 | _unstated_ | `462181e9-ad99-4163-bd3d-c983c48049a8` | Telegram: Opencrabs Dev Factory / Core: Plan & Tasks [chat:-1003936827469:topic:31789] | resolved | telegram | 2026-09-28T14:56:57Z | — |
 | Telegram: Rich Text | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Issue #234: Review Implementation Button | resolved | telegram | 2026-09-28T17:42:56Z | — |
 | Memory: Compaction | 34653 | _unstated_ | `cbdfde4a-b3fe-457a-817b-5113b938f12d` | Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-09-27T14:33:47Z | — |
 | Memory: Vectors | 36841 | _unstated_ | `212b3c83-6659-49c8-9984-0cf849f769c1` | Telegram: Opencrabs Dev Factory / Vector memory [chat:-1003936827469:topic:36841] | resolved | telegram | 2026-09-28T19:33:58Z | — |
-| OC DEV TOOLSMITH | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-10-01T22:04:41Z | — |
+| OC DEV TOOLSMITH | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-10-02T11:35:27Z | — |
 | Upstream: Harvest | 39218 | _unstated_ | `4b0990b7-aff8-4744-8de5-e38e54de7693` | Harvesting upstream PRs into OpenCrabs | resolved | telegram | 2026-10-02T05:57:13Z | — |
 | Lifecycle: Boot | 39862 | _unstated_ | `c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1` | Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862] | resolved | telegram | 2026-10-01T12:53:47Z | — |
 | Core: Loop | 39883 | _unstated_ | `40427d4f-af4a-48ba-993f-f5f0b21916c0` | Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883] | resolved | telegram | 2026-09-27T14:32:52Z | — |
@@ -504,7 +504,7 @@ Attribution basis: deliver_to -> lane.
 | Core: Goal Loop | 42311 | _unstated_ | `9fa7c71a-f009-418a-ac06-d0336efcf491` | Telegram: Opencrabs Dev Factory / Core: Goal Loop [chat:-1003936827469:topic:42311] | resolved | telegram | 2026-09-27T10:21:20Z | — |
 | Governance: Roles | 42360 | _unstated_ | `63d775f9-18e2-4097-8696-d9a2ca796f14` | Telegram: Opencrabs Dev Factory / Role split [chat:-1003936827469:topic:42360] | resolved | telegram | 2026-09-30T22:41:33Z | — |
 | Triage | 42487 | triage | `530c29ec-596e-43a4-9c7e-1b6dfc3cd870` | Triage: Issue Portfolio & Harvest Analysis | resolved | telegram | 2026-09-30T23:53:15Z | — |
-| Process: Waits | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-10-01T22:09:29Z | — |
+| Process: Waits | 42744 | _unstated_ | `facd50af-0807-4fee-942b-008bff037f6f` | Telegram: Opencrabs Dev Factory / oc-waiter + #111 durable-notify [chat:-1003936827469:topic:42744] | resolved | telegram | 2026-10-02T11:42:29Z | — |
 | Telegram: Host Guards | 42940 | _unstated_ | `c78e78e0-099e-455e-8dfb-7e9b8f7d13e5` | Telegram: Opencrabs Dev Factory / #92 demoted-host guard [chat:-1003936827469:topic:42940] | resolved | telegram | 2026-09-27T10:14:30Z | — |
 | Governance: Audits | 43440 | _unstated_ | `30ab6f43-3326-4aad-abe3-eb4a5a98f630` | Telegram: Crabs Kanban Board [chat:-1003936827469:topic:43440] | resolved | telegram | 2026-09-07T05:45:18Z | — |
 | Telegram: Bot API | 43727 | _unstated_ | `95bec69b-0e96-46a9-9d91-dc355e8af18f` | Telegram flow card metrics telemetry bar #232 | resolved | telegram | 2026-09-29T07:58:48Z | — |
@@ -521,7 +521,7 @@ Attribution basis: deliver_to -> lane.
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
 | `538-probe-boundary-delivery` | ops | `0 3 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T03:00:00+00:00 | telegram:-1003936827469:49607 | cat /tmp/538-payload.txt |
-| `oc-629-fallback-watch` | ops | `20 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T12:20:00+00:00 | session:9fa7c71a-f009-418a-ac06-d0336efcf491 | p=$(printf "%s.*%s%s" "rich::api" "falling back to " "html dialect"); f… |
+| `oc-629-fallback-watch` | ops | `20 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-02T18:20:00+00:00 | session:9fa7c71a-f009-418a-ac06-d0336efcf491 | p=$(printf "%s.*%s%s" "rich::api" "falling back to " "html dialect"); f… |
 | `oc-harvest-18-resume` | ops | `0 7 * * *` | UTC | **no** | 0 | **absent** | 2026-09-25T07:00:00+00:00 | session:7e1ebbb6-68b3-478b-abc2-b697e70c2f37 | — |
 | `oc-harvest-225-resume` | ops | `0 8 * * *` | UTC | **no** | 0 | **absent** | 2026-09-25T08:00:00+00:00 | session:a5b34466-1c14-441f-b2c6-6eaf4f316dde | — |
 | `oc-harvest-250-resume` | ops | `15 15 * * *` | UTC | **no** | 0 | **absent** | 2026-09-25T15:15:00+00:00 | session:63d775f9-18e2-4097-8696-d9a2ca796f14 | echo HARVEST-PENDING-250 |

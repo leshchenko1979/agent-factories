@@ -34,7 +34,7 @@
     {
       "name": "inferhub-hq-pacemaker",
       "audience": "agent",
-      "entry": "cron 5c960cfb-16a5-4a35-918b-5acd1d30336f, expr 0 */6 * * *, enabled, delivers to session 359fe71b",
+      "entry": "cron 5c960cfb-16a5-4a35-918b-5acd1d30336f, expr 10 */6 * * *, enabled, delivers to session 359fe71b",
       "cadence": "6h"
     },
     {
@@ -46,7 +46,7 @@
     {
       "name": "inferhub-self-audit-daily",
       "audience": "agent",
-      "entry": "cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 0 9 * * *, enabled, delivers to session 359fe71b",
+      "entry": "cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 10 9 * * *, enabled, delivers to session 359fe71b",
       "cadence": "daily"
     },
     {
@@ -139,7 +139,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-02T06:51:21Z",
+  "attested_at": "2026-10-02T13:13:05Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
