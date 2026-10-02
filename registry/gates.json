@@ -148,6 +148,13 @@
       "measured_at": "ae34b695ef90f48abbfeb53a5d717a9b8f1f9643",
       "measured_sec": 6.337
     },
+    "tests/test_hygiene_evidence_supersession.py": {
+      "budget_sec": 53.46,
+      "load_at_measure": 11.05,
+      "margin_x": 4.057,
+      "measured_at": "aa5c175baef03f29ab97400f73fba7ed19315b8a",
+      "measured_sec": 13.178
+    },
     "tests/test_hygiene_inflight.py": {
       "budget_sec": 26.67,
       "margin_x": 4.116,
@@ -325,11 +332,11 @@
       "measured_sec": 0.93
     },
     "tools/hygiene.py": {
-      "budget_sec": 12.04,
-      "load_at_measure": 7.45,
-      "margin_x": 4.266,
-      "measured_at": "ae34b695ef90f48abbfeb53a5d717a9b8f1f9643",
-      "measured_sec": 2.821
+      "budget_sec": 14.22,
+      "load_at_measure": 10.77,
+      "margin_x": 4.223,
+      "measured_at": "aa5c175baef03f29ab97400f73fba7ed19315b8a",
+      "measured_sec": 3.369
     },
     "tools/ledger.py": {
       "budget_sec": 14.87,

@@ -121,19 +121,19 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
 |---|---|---|---|---|---|
-| `tools/hygiene.py` | `script` | 12.04 | 4.266× | 2.821 | `ae34b695ef90f48abbfeb53a5d717a9b8f1f9643` |
+| `tools/hygiene.py` | `script` | 14.22 | 4.223× | 3.369 | `aa5c175baef03f29ab97400f73fba7ed19315b8a` |
 | `tests/test_hygiene_inflight.py` | `pytest` | 26.67 | 4.116× | 6.48 | `d36ce91cae0ef3f1d07c43c389bf58e8384c00a7` |
 | `tests/test_hygiene_namespace.py` | `pytest` | 35.95 | 4.085× | 8.8 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
 | `tests/test_hygiene_build_residue.py` | `pytest` | 63.87 | 4.048× | 15.781 | `049a93cc73c4f02be4c8e47f1028924936644d03` |
 | `tests/test_hygiene_declaration_sweep.py` | `pytest` | 51.2 | 4.059× | 12.615 | `0eb39c7915699688a4f42b8f0887de893eac2a83` |
 | `tests/test_hygiene_placement.py` | `pytest` | 46.94 | 4.065× | 11.546 | `84dbddf8d9575a181b7401920ff9e63f1516390e` |
 | `tests/test_hygiene_stale_dirs.py` | `pytest` | 26.1 | 4.118× | 6.337 | `ae34b695ef90f48abbfeb53a5d717a9b8f1f9643` |
-| `tests/test_hygiene_evidence_supersession.py` | `pytest` | — | — | — | — |
+| `tests/test_hygiene_evidence_supersession.py` | `pytest` | 53.46 | 4.057× | 13.178 | `aa5c175baef03f29ab97400f73fba7ed19315b8a` |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
 that ceiling. The later rows were measured on a loaded box (build residue at load **10.39**, the declaration
-sweep at load **4.14**, the placement map at load **8.23**, the stale-directory leg at load **6.92**, the tool itself at load **7.45**), so each is a conservative upper bound
+sweep at load **4.14**, the placement map at load **8.23**, the stale-directory leg at load **6.92**, the supersession leg at load **11.05**, the tool itself at load **10.77**), so each is a conservative upper bound
 on a quiet-tree runtime rather than a tight one. Each of those rows' basis landed in the
 **commit that follows its registration**, deliberately and not in the registration itself: a budget
 base may never name the commit that introduces it, because the staleness leg compares the gate file at
@@ -144,8 +144,9 @@ file with itself and could never report drift.
 its basis was declared the tool measured 0.57 s and took a 3.03 s ceiling. G3 and G5 then added two
 report legs to it — a worktree census and a directory walk — and each one grew it further: measured
 again after G5 it ran 0.93–1.89 s, so the old 3.03 s left a margin of about **1.6×**, and it was
-re-declared to 8.32 s; measured again after G6 it runs 1.20–2.82 s, so the 8.32 s was re-declared in
-turn to **12.04 s** in the basis commit beside this one. A gate over its budget is **KILLED**, which
+re-declared to 8.32 s; measured again after G6 it runs 1.20–2.82 s, so that was re-declared in turn
+to 12.04 s; and measured again after G7 it runs 1.27–3.37 s, so the basis beside this landing
+re-declares it a third time, to **14.22 s**. A gate over its budget is **KILLED**, which
 reads as a red that says nothing about the tree. A basis is a declaration about what runs, so it is
 re-declared rather than left standing as a stale number beside a larger tool — the same class this
 instrument exists to catch, caught in its own registry.
