@@ -2096,6 +2096,107 @@ def probe_the_live_manifest_states_its_load_population() -> None:
     print(f"  live manifest — {len(budgets.load_declared)} of {len(budgets.gates)} declared "
           f"entries carry a load reading")
 
+# THE RE-DERIVATION LEG (issue #269, ledger n=1924 / dispatch n=1928). The staleness sweep
+# above REPORTS which declared bases no longer describe what runs; the leg is the standing
+# duty that CLEARS them, declared in `docs/measurement-procedure.md` §5.2 and invoked inside
+# the daily measurement round. These probes cover the LEG — the command the round runs —
+# because the sweep's own predicate is already probed above and a command's properties
+# (does it exit non-zero on a vacuous read, does it print the population it examined, does
+# it refuse an apply it cannot support) are not properties of the function it calls.
+#
+# THE PROBE IS TWO-SIDED, and that is the load-bearing half: a leg that reported EVERY
+# declared base as stale would satisfy a one-sided "it found the stale one" check and be
+# useless. So one synthetic file's bytes move between the two commits while another's hold
+# at the same declared revision, and the probes assert the moved one appears and the held
+# one does not.
+
+def _leg_proc(*args: str) -> subprocess.CompletedProcess:
+    """The leg, run as the round runs it — the COMMAND, never an in-process call."""
+    return subprocess.run(
+        [sys.executable, str(REPO / "tools" / "gate_budget_rederive.py"), *args],
+        capture_output=True, text=True, timeout=300,
+    )
+
+def probe_the_rederivation_leg_prints_and_bites() -> None:
+    """Two-sided over one synthetic history: the moved base is reported, the held one is not."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        # STATED SKIP, never a RED. The leg is this factory's standing duty under
+        # `docs/measurement-procedure.md` §5.2, and that document does NOT ship: a factory
+        # bootstrapped from the template carries the staleness SWEEP (`tools/gate_budget.py`
+        # ships, `tools/audit.py` imports it) without the leg that CLEARS the class. Whether
+        # the kit should ship the leg — and with it a clause in the shipped law — is an
+        # adoption question with more than one viable shape, so it is PARKED, not decided
+        # here. A factory that has not adopted the leg is BEHIND, not in violation, and a
+        # gate that reds on it would be a tax on adoption. Same shape and same reason as the
+        # missing-manifest skip in `probe_the_live_rederivation_leg_is_non_vacuous` below.
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty (§5.2), not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the re-derivation probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        manifest = _manifest(root, {
+            "tests/test_moved.py": _basis(base),
+            "tests/test_same.py": _basis(base),
+        })
+        done = _leg_proc("--manifest", str(manifest), "--repo-root", str(root))
+        check("the leg examines the synthetic population and exits 0", done.returncode == 0,
+              f"rc={done.returncode}: {done.stdout[-300:]}")
+        check("a base whose BYTES moved is REPORTED — the leg BITES",
+              "[STALE] tests/test_moved.py" in done.stdout, done.stdout[:400])
+        check("a base unchanged at the same revision is NOT reported — the control",
+              "[STALE] tests/test_same.py" not in done.stdout, done.stdout[:400])
+        check("the printed population names exactly the one entry that moved",
+              "1 entry in the containment set" in done.stdout, done.stdout[:400])
+        as_json = _leg_proc("--manifest", str(manifest), "--repo-root", str(root), "--json")
+        try:
+            payload = json.loads(as_json.stdout)
+        except ValueError:
+            payload = {}
+        check("the JSON form names the same population",
+              payload.get("population") == ["tests/test_moved.py"],
+              str(payload.get("population")))
+
+        # NON-VACUITY: a manifest declaring no basis must reach NO verdict, never a green one.
+        empty = _manifest(root, {})
+        vacuous = _leg_proc("--manifest", str(empty), "--repo-root", str(root))
+        check("a manifest declaring NO basis exits non-zero", vacuous.returncode != 0,
+              f"rc={vacuous.returncode}")
+        check("and says VACUOUS rather than reporting a clean sweep",
+              "VACUOUS" in vacuous.stdout, vacuous.stdout[:300])
+
+        # THE REFUSAL IS BYTE-CHECKED: `--apply` with no sample source must not touch the file.
+        before = manifest.read_text(encoding="utf-8")
+        refused = _leg_proc("--manifest", str(manifest), "--repo-root", str(root), "--apply")
+        check("--apply without an audit report is REFUSED", refused.returncode != 0,
+              f"rc={refused.returncode}")
+        check("and the refusal leaves the manifest byte-identical",
+              manifest.read_text(encoding="utf-8") == before, "the refusal WROTE")
+
+def probe_the_live_rederivation_leg_is_non_vacuous() -> None:
+    """The leg over THIS tree: a non-zero population, printed with its count."""
+    manifest = REPO / "registry" / "gates.json"
+    if not manifest.is_file():
+        # STATED SKIP — the same shape `tests/test_gate_invocation_mode.py` uses for this
+        # file: a bootstrapped factory ships `gates.example.json` and no live manifest, so
+        # there is no declared basis to re-derive and a RED here would be a tax on adoption.
+        print("  SKIP  no registry/gates.json in this tree — factory data, nothing to re-derive")
+        return
+    done = _leg_proc("--manifest", str(manifest))
+    declared = json.loads(manifest.read_text(encoding="utf-8")).get("gates") or {}
+    check("the leg exits 0 over the live manifest", done.returncode == 0,
+          f"rc={done.returncode}: {done.stderr[-300:]}")
+    check("the run PRINTS the population it examined",
+          f"{len(declared)} declared entries" in done.stdout, done.stdout[:300])
+    check("the run prints the containment set with its count",
+          "population:" in done.stdout and "in the containment set" in done.stdout,
+          done.stdout[:300])
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -2185,6 +2286,10 @@ def main() -> int:
 
     print("  live manifest — the default's derivation, and its population")
     probe_the_live_default_states_a_derivation_that_holds()
+
+    print("  synthetic probes — #269: the re-derivation leg bites, and its population is printed")
+    probe_the_rederivation_leg_prints_and_bites()
+    probe_the_live_rederivation_leg_is_non_vacuous()
 
     print()
     if failures:
