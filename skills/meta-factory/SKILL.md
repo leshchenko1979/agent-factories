@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.40
+version: 0.1.41
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -156,7 +156,7 @@ Work goes **sender → owner of the resource**, directly. No relay hops.
 
 **The intake leg is dispatched at FILING time, never last.** Filing a board item is a sequence
 with four legs — the board issue, the ledger intake row, the claim, and the dispatch to the lane
-that implements it. Intake is **Triage's** row, so filing a board item owes Triage a dispatch in
+that implements it. Intake is **Triage's** leg, so filing a board item owes Triage a dispatch in
 the **same turn** as the filing. **The row is stamped by the FILER, in the same turn as the
 filing; Triage owns the leg's ORDERING and receives the dispatch.** Filed last, the intake row
 lands after the claim, and
@@ -723,7 +723,7 @@ of the function is what is codified, correctness of the reading is
 
 **"A close row is refused at the write path when its subject has no preceding intake and claim."** `tools/ledger.py append --event close` runs the same sequence predicate `verify` runs — one predicate, two call sites — and exits non-zero, naming the subject and the missing leg, without writing anything. The refusal carries no exemption surface and needs none: a close appended now can never predate the gate. EXEMPTIONS governs `verify`'s reading of history only, and stays printed there. This does not replace `verify`: the order leg (a claim after its close) and any row written around the append path remain `verify`'s. §11's guarantee is one append path, not tamper-proof (#98, ruling n=596).
 
-**A claim is an ACCEPTANCE, and it is stamped by the lane that takes the work — when it takes it, and before its first edit.** The three legs answer three questions: intake is Triage's filing, claim is WHO took the work, close is its completion. HQ's dispatch names the lane, and the lane's claim answers it; HQ never stamps the claim of the lane that took the work, because a claim records a taking and two actors on one transition is the shape this section forbids, applied to an actor rather than to the append path. The write-path refusal above is the BACKSTOP, not the step: it makes an omission impossible to reach a close SILENTLY, which is how the shape first appeared twice. A claim stamped after the work is a RECONSTRUCTED record: it must declare itself in terms, carry the token `claim=reconstructed`, and name the basis it rests on with the canonical marker `BASIS:` — and `verify` prints those rows beside its `excused:` lines together with the interval it recomputes from the row's own `ts` and its close row's `ts`, so clean, excused and reconstructed are never the same output. Forward-only: a reconstruction written before this sentence existed is not retrofitted (#98, ruling n=602; the interval moved from DECLARED to RECOMPUTED-AND-PRINTED under #115, ruling n=687).
+**A claim is an ACCEPTANCE, and it is stamped by the lane that takes the work — when it takes it, and before its first edit.** The three legs answer three questions: intake is Triage's leg, claim is WHO took the work, close is its completion. HQ's dispatch names the lane, and the lane's claim answers it; HQ never stamps the claim of the lane that took the work, because a claim records a taking and two actors on one transition is the shape this section forbids, applied to an actor rather than to the append path. The write-path refusal above is the BACKSTOP, not the step: it makes an omission impossible to reach a close SILENTLY, which is how the shape first appeared twice. A claim stamped after the work is a RECONSTRUCTED record: it must declare itself in terms, carry the token `claim=reconstructed`, and name the basis it rests on with the canonical marker `BASIS:` — and `verify` prints those rows beside its `excused:` lines together with the interval it recomputes from the row's own `ts` and its close row's `ts`, so clean, excused and reconstructed are never the same output. Forward-only: a reconstruction written before this sentence existed is not retrofitted (#98, ruling n=602; the interval moved from DECLARED to RECOMPUTED-AND-PRINTED under #115, ruling n=687).
 
 **A lane's bindings are a SUPERSESSION CHAIN, and the live session is the newest binding within its own profile: a topic re-opened several times carries one binding per generation, and the newest is the lane. Only a match across two PROFILES is ambiguous, because there the registry cannot tell which daemon's session owns the topic; a single-profile chain is resolved by recency and the resolution is reported, never suppressed. The exit code carries the verdict: unbound and no-thread-id mean a declared lane is unreachable and exit non-zero, while a superseded chain is a live lane and does not (#100).**
 
