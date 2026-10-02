@@ -116,7 +116,7 @@ available here**. A member that adopts the declared set and nothing else has a r
 
 ## 4. The gate set and its registry entries
 
-**All five rows are registered in `registry/gates.json`**, which is what makes them run rather than
+**All six rows are registered in `registry/gates.json`**, which is what makes them run rather than
 merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
@@ -126,6 +126,7 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tests/test_hygiene_namespace.py` | `pytest` | 35.95 | 4.085× | 8.8 | `ed419678fb911774d2fac0a4ac48c6e7344f9984` |
 | `tests/test_hygiene_build_residue.py` | `pytest` | 63.87 | 4.048× | 15.781 | `049a93cc73c4f02be4c8e47f1028924936644d03` |
 | `tests/test_hygiene_declaration_sweep.py` | `pytest` | 51.2 | 4.059× | 12.615 | `0eb39c7915699688a4f42b8f0887de893eac2a83` |
+| `tests/test_hygiene_placement.py` | `pytest` | — | — | — | — |
 
 The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
@@ -136,6 +137,26 @@ registration**, deliberately and not in the registration itself: a budget base m
 commit that introduces it, because the staleness leg compares the gate file at `measured_at` against
 the same file at HEAD, so a base pointing at its own commit would compare the file with itself and
 could never report drift.
+
+**Placement is CHECKED against a declared map, report-only (G5; q13, ruled 2026-09-30).** The owner's
+own bullet names this surface — "files grouped/regrouped in folders, proper naming consistent with the
+contents" — and `ONTOLOGY.md` states the naming half only as *patterns* (`## Naming law`). Nothing
+answered the placement half at all, so a file could sit in a directory its content does not belong to
+and every leg of `tools/hygiene.py` would still read clean. The leg is the smallest predicate that
+bites: a **declared map of directory -> content class**, checked against the tree —
+`hygiene placement: N file(s) over M declared directory(ies) — X mismatch(es), Y naming mismatch(es)
+(removes: no)`. `tools/kit_names.py` answers a different question (one name meaning two things across
+**trees**) and is **cited here, not replaced**. Three properties keep the map honest. **An unmapped
+directory states its reason** — never silently exempt, the discipline the declaration sweep applies to
+its unswept families. **A mapped directory that is absent is `absent`, not clean**, for the same reason
+the other two legs refuse a silent zero. And **the map is checked against the tree rather than against
+itself**: a top-level directory holding files that the map names nowhere is reported `UNDECLARED`, so a
+new directory cannot arrive without a declared content class — a self-describing map could never see
+that drift. The naming half is read from the law's own example
+(`evidence/scores/YYYY-MM-DD.md`), and a mapped directory is judged in the shipped mirror as well as at
+the root, because `TEMPLATE/` is the root's mirror by construction and a factory inherits what is
+there. The `removes: no` half is asserted **structurally**, by scanning the leg's own source for a
+removal call — a misplaced file is a decision for a human to make, and this leg only reports it.
 
 **The declaration surfaces are CROSS-SWEPT, report-only (G2; q13, ruled 2026-09-30).** The `docs/*.json`
 declaration files are the factory's own debt register: an exemption, a skip or an authorization is a

@@ -658,6 +658,12 @@ REQUIRED_GATES: tuple[str, ...] = (
     # nothing -- so an entry whose target no longer exists must be REPORTED. Report-only
     # (`removes: no`), asserted structurally; each surface's own tool keeps its write path.
     "test_hygiene_declaration_sweep.py",
+    # G5 (q13, 2026-10-02): the placement map. `ONTOLOGY.md` states the naming half only
+    # as patterns; nothing answered "is this file in the folder its content belongs to",
+    # so a misplaced file read clean everywhere. Report-only (`removes: no`), asserted
+    # structurally; the map is checked against the TREE, so an undeclared directory is
+    # reported rather than absorbed.
+    "test_hygiene_placement.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

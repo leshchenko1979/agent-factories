@@ -168,6 +168,11 @@ PAIRS = [
     # reads the declaration surfaces that `tools/hygiene.py` sweeps, so a factory carrying
     # one half without the other would ship a sweep nothing checks, or probes that cannot run.
     ("tests/test_hygiene_declaration_sweep.py", "TEMPLATE/tests/test_hygiene_declaration_sweep.py"),
+    # Added with its registration (G5, q13): the gate checks the placement map that
+    # `tools/hygiene.py` declares, so a factory carrying the leg without the gate would
+    # have a map nothing holds to the tree, and one carrying the gate without the leg
+    # would run probes against a map that does not exist.
+    ("tests/test_hygiene_placement.py", "TEMPLATE/tests/test_hygiene_placement.py"),
     ("tests/test_close_board_recorded.py", "TEMPLATE/tests/test_close_board_recorded.py"),
     ("tests/test_ledger_commit_cites_no_rows.py", "TEMPLATE/tests/test_ledger_commit_cites_no_rows.py"),
     ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),

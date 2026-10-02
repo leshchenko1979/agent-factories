@@ -2367,6 +2367,30 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_hygiene_declaration_sweep.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_declaration_sweep.py"])
 
+    # 77. hygiene placement map (G5, q13) -- origin 2026-10-02, the owner's ruling that
+    #     hygiene owns the WHOLE inventory and builds a gate for every ungated surface.
+    #     THE MECHANISM IT GUARDS: `ONTOLOGY.md` states the naming half of this surface only
+    #     as PATTERNS (`## Naming law`), and nothing answered the placement half at all -- so
+    #     a file could sit in a directory its content does not belong to and every leg of
+    #     `tools/hygiene.py` would still read clean. The name census (`tools/kit_names.py`)
+    #     answers a different question (one name meaning two things across TREES) and is
+    #     CITED by the law doc, not replaced. This gate holds the declared map to the TREE:
+    #     a directory holding files that neither PLACEMENT_MAP nor PLACEMENT_UNMAPPED names
+    #     is reported UNDECLARED, a planted misplaced file is REPORTED (with an allowed-class
+    #     sibling as the positive control), an unrecognised suffix is never silently
+    #     defaulted, the naming pattern is read from the law's own example and shown to
+    #     discriminate, an absent directory is `absent` and never a clean zero, the shipped
+    #     mirror is judged too, and every unmapped directory states its REASON. It also
+    #     scans the leg's own source for a removal call, because a misplaced file is a
+    #     decision for a human to make and this leg only REPORTS (`removes: no`). REQUIRED,
+    #     not OPTIONAL: every fixture is planted under a THROWAWAY root, so it reads no live
+    #     board and no fleet manifest and passes in a bootstrapped factory exactly as it does
+    #     here. It is byte-paired with a TEMPLATE copy. Its MODE is declared in
+    #     `registry/gates.json` in the SAME landing; its BUDGET lands in the basis commit
+    #     that follows, because a base may never name its own commit.
+    if (repo_root / "tests/test_hygiene_placement.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_placement.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

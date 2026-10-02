@@ -92,6 +92,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -604,6 +605,249 @@ def render_declaration_sweep(leg: dict) -> str:
         )
     return "\n".join(lines)
 
+"""## Placement: a file lives where its content belongs, and its name says what it is (G5; q13)
+
+The owner's own bullet names this surface -- "files grouped/regrouped in folders, proper
+naming consistent with the contents" -- and `ONTOLOGY.md` states the naming half only as
+*patterns* (`## Naming law`). Nothing answered the placement question at all, so a file
+could sit in a directory its content does not belong to and no leg would notice: the name
+census (`tools/kit_names.py`) answers a different question -- one name meaning two things
+across TREES -- and is cited here, not replaced.
+
+This leg is the smallest predicate that bites: a **declared map of directory -> content
+class**, checked against the tree. The map is a declaration, not a measurement, which is
+the point -- it says what each directory is FOR, so a file whose class is not allowed there
+is a placement decision nobody made. Three properties keep it honest:
+
+  * **an unmapped directory states its reason** -- never silently exempt, the same
+    discipline the declaration sweep applies to its unswept families;
+  * **a mapped directory that is absent is `absent`, not clean** -- a bootstrapped factory
+    has no `evidence/`, and a missing directory that read as zero mismatches would be the
+    exempt-by-silence surface this factory refuses;
+  * **a mapped directory is checked in BOTH trees** where `TEMPLATE/<rel>` exists, because
+    `TEMPLATE/` is the shipped mirror of the root by construction.
+
+`evidence/scores/` additionally carries the one tree-path naming pattern `ONTOLOGY.md`
+actually states -- `evidence/scores/YYYY-MM-DD.md` -- so the naming half is read from the
+law rather than invented here.
+"""
+
+PLACEMENT_CLASS: dict[str, str] = {
+    ".py": "python",
+    ".md": "markdown",
+    ".json": "json",
+    ".jsonl": "jsonl",
+    ".sh": "shell",
+    ".tmpl": "template",
+    ".mjs": "javascript",
+    ".service": "unit",
+    ".path": "unit",
+    ".txt": "text",
+    ".log": "log",
+    ".bak": "backup",
+}
+
+# (directory, allowed content classes, where the expectation comes from)
+PLACEMENT_MAP: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("registry", ("json",),
+     "a machine-read register: every file is parsed, never read as prose"),
+    ("registry/factories", ("json",),
+     "the same register grain, one file per member"),
+    ("skills/meta-factory", ("markdown",),
+     "a skill is prose law, read by an agent"),
+    ("tests", ("python",),
+     "a gate is a program; the fixtures it plants live in subdirectories"),
+    ("docs", ("markdown", "json"),
+     "prose, plus the declaration JSONs the instruments read"),
+    ("docs/instruments", ("markdown",), "one law doc per instrument"),
+    ("docs/methodology", ("markdown",), "prose"),
+    ("docs/projects", ("markdown",), "prose"),
+    ("docs/proposals", ("markdown",), "prose"),
+    ("docs/stories", ("markdown",), "prose"),
+    ("docs/subject", ("markdown",), "prose"),
+    ("evidence", ("markdown", "jsonl"),
+     "a dated record, plus the append-only ledger"),
+    ("evidence/scores", ("markdown",), "one score record per day"),
+    ("evidence/deliverables", ("markdown",), "prose"),
+    ("evidence/reviews", ("markdown",), "prose"),
+    ("TEMPLATE", ("template", "markdown"),
+     "the shipped mirror: templates, plus its own README"),
+    ("TEMPLATE/roles", ("markdown",), "one role file per lane"),
+    ("tools", ("python", "shell", "javascript", "text"),
+     "an executable instrument; python is the house language and shell/js are permitted"),
+    ("tools/box", ("unit", "shell", "markdown"),
+     "systemd units, the script that drives them, and a README"),
+    ("tools/hooks", ("text",),
+     "git invokes these by their bare names (`commit-msg`, `pre-commit`), so a suffix is "
+     "not expressible"),
+)
+
+# Directories that hold files but are deliberately NOT mapped, each with its reason.
+PLACEMENT_UNMAPPED: tuple[tuple[str, str], ...] = (
+    ("reviews", "a container of per-review subdirectories; no file sits directly under it"),
+    ("skills", "a container of per-skill subdirectories; the skill itself is mapped below it"),
+)
+
+# (directory, the ONTOLOGY naming pattern, the law sentence it comes from)
+PLACEMENT_NAMING: tuple[tuple[str, str, str], ...] = (
+    ("evidence/scores", r"^\d{4}-\d{2}-\d{2}(-[a-z0-9-]+)?\.md$",
+     "ONTOLOGY.md `## Naming law`: `evidence/scores/YYYY-MM-DD.md`"),
+)
+
+PLACEMENT_SKIP = frozenset(
+    {".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".venv", "venv", "node_modules"}
+)
+
+
+def content_class(name: str) -> str:
+    """The content class a file's own name declares, or `unknown:<suffix>`.
+
+    An unrecognised suffix is reported as unknown rather than defaulted to a class the
+    map might allow: a silent default is how a `.log` in `docs/` would pass a check it
+    should fail.
+    """
+    suffix = Path(name).suffix.lower()
+    if not suffix:
+        return "text"
+    return PLACEMENT_CLASS.get(suffix, f"unknown:{suffix}")
+
+
+def placement_leg(root: Path | None = None) -> dict:
+    """Check every mapped directory against its declared content classes.
+
+    Report-only (`removes: False`): a mismatch is a decision nobody made, so it is
+    PRINTED for a human to make, never moved or deleted by this leg.
+    """
+    root = Path(root) if root is not None else repo_root()
+    leg: dict = {
+        "class": "placement",
+        "predicate": "a file's content class is allowed in the directory that holds it",
+        "removes": False,
+        "root": str(root),
+        "directories": [],
+        "unmapped": [],
+        "undeclared": [],
+        "mismatches": [],
+        "naming": [],
+        "files": 0,
+    }
+    if not root.is_dir():
+        leg["status"] = "NOT RUN"
+        leg["reason"] = f"{root} is not a directory"
+        return leg
+
+    # A mapped directory is judged in BOTH trees when the shipped mirror carries it, so a
+    # divergence between root and TEMPLATE is a placement mismatch like any other.
+    targets: list[tuple[str, str, tuple[str, ...], str]] = []
+    for rel, classes, basis in PLACEMENT_MAP:
+        targets.append((rel, rel, classes, basis))
+        if (root / "TEMPLATE" / rel).is_dir():
+            targets.append((f"TEMPLATE/{rel}", f"TEMPLATE/{rel}", classes, basis))
+
+    for shown, rel, classes, basis in targets:
+        directory = root / rel
+        if not directory.is_dir():
+            leg["directories"].append(
+                {"dir": shown, "status": "absent", "files": 0, "allowed": list(classes)}
+            )
+            continue
+        found = 0
+        bad = 0
+        for entry in sorted(directory.iterdir()):
+            if not entry.is_file() or entry.name in PLACEMENT_SKIP:
+                continue
+            found += 1
+            leg["files"] += 1
+            cls = content_class(entry.name)
+            if cls not in classes:
+                bad += 1
+                leg["mismatches"].append(
+                    {
+                        "path": str(entry.relative_to(root)),
+                        "dir": shown,
+                        "class": cls,
+                        "allowed": list(classes),
+                        "basis": basis,
+                    }
+                )
+        leg["directories"].append(
+            {"dir": shown, "status": "ok" if not bad else "MISMATCH",
+             "files": found, "allowed": list(classes)}
+        )
+
+    for rel, pattern, basis in PLACEMENT_NAMING:
+        directory = root / rel
+        if not directory.is_dir():
+            continue
+        compiled = re.compile(pattern)
+        for entry in sorted(directory.iterdir()):
+            if not entry.is_file() or entry.name in PLACEMENT_SKIP:
+                continue
+            if not compiled.match(entry.name):
+                leg["naming"].append(
+                    {"path": str(entry.relative_to(root)), "dir": rel, "pattern": pattern,
+                     "basis": basis}
+                )
+
+    for rel, reason in PLACEMENT_UNMAPPED:
+        if (root / rel).is_dir():
+            leg["unmapped"].append({"dir": rel, "reason": reason})
+
+    # A directory that holds files directly and is named NOWHERE is a placement decision
+    # nobody made -- the same bite the declaration sweep applies to an undeclared family.
+    declared = {rel.split("/")[0] for rel, _, _ in PLACEMENT_MAP}
+    declared |= {rel for rel, _ in PLACEMENT_UNMAPPED}
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir() or entry.name in PLACEMENT_SKIP or entry.name.startswith("."):
+            continue
+        if entry.name in declared:
+            continue
+        if any(child.is_file() for child in entry.iterdir()):
+            leg["undeclared"].append(entry.name)
+
+    leg["status"] = "ASSERTED"
+    return leg
+
+
+def render_placement(leg: dict) -> str:
+    """One summary line, then one line per declared directory (G5)."""
+    if leg.get("status") == "NOT RUN":
+        return f"hygiene placement: NOT RUN — {leg.get('reason', 'no reason recorded')}"
+    head = (
+        f"hygiene placement: {leg['files']} file(s) over "
+        f"{sum(1 for d in leg['directories'] if d['status'] != 'absent')} declared directory(ies)"
+        f" — {len(leg['mismatches'])} mismatch(es), {len(leg['naming'])} naming mismatch(es)"
+        f" (removes: no)"
+    )
+    lines = [head]
+    for record in leg["directories"]:
+        if record["status"] == "absent":
+            lines.append(f"  {record['dir']:24} absent (no such directory)")
+        else:
+            lines.append(
+                f"  {record['dir']:24} {record['files']:3} file(s), "
+                f"{'|'.join(record['allowed'])}"
+            )
+    for record in leg["unmapped"]:
+        lines.append(f"  {record['dir']:24} unmapped — {record['reason']}")
+    for record in leg["undeclared"]:
+        lines.append(
+            f"  UNDECLARED {record} — a directory this tree carries that neither "
+            f"PLACEMENT_MAP nor PLACEMENT_UNMAPPED names, so nothing checks its contents"
+        )
+    for record in leg["mismatches"]:
+        lines.append(
+            f"  MISMATCH {record['path']} — {record['class']}, and `{record['dir']}` declares "
+            f"{'|'.join(record['allowed'])} ({record['basis']})"
+        )
+    for record in leg["naming"]:
+        lines.append(
+            f"  NAME {record['path']} — does not match `{record['pattern']}` "
+            f"({record['basis']})"
+        )
+    return "\n".join(lines)
+
+
 def _split_status_line(line: str) -> tuple[str, str]:
     """Return (status code, path) from one `git status --porcelain` line.
 
@@ -787,6 +1031,10 @@ def main() -> int:
     # its own file for readability; nothing asked whether the thing an entry points at still
     # exists, so a debt left by a rename read as a live exemption on every one of them.
     print(render_declaration_sweep(declaration_sweep_leg()))
+    # The placement map, PRINTED on every run (G5). Nothing answered "is this file in the
+    # folder its content belongs to", so a file could sit in a directory its content does
+    # not belong to and every leg above would still read clean.
+    print(render_placement(placement_leg()))
     patterns = scratch_patterns_for(args.namespace) + list(args.scratch_glob or [])
     count, items = reap_stale_scratch(
         dry_run=dry_run, patterns=patterns, protected=protected
