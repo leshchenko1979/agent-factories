@@ -143,10 +143,19 @@ rather than a widened glob. That precedent is the template for both.
 |---|---|---|
 | **The instrument** — the law doc, `hygiene.py` + its closure, its gates, the declaration example, the version identifier, the adoption census, the re-arm duty | `TEMPLATE/` (ships) + the root pair | this lane |
 | **The instance** — `docs/hygiene-protected.json`, `--grace-minutes`, `--namespace`, its own litter policy, its own exemption surfaces | the member's own tree, never shipped | the member's own HQ |
+| **The shared profile brain** (G4) — `SOUL` `USER` `AGENTS` `TOOLS` `CODE` `SECURITY` `BOOT` `MEMORY` under `~/.opencrabs/profiles/ops/` | no repository — 8 core brain files, 21 `.md` in the directory as read 2026-10-02 | **the Infra Factory**, ROUTED by q16 |
 
 This split is already the tool's design ("the grace window is declared by the caller … a property of
 the factory's process, not of this tool"); what is missing is that it is nowhere **stated as law**,
 which is G1. A member's declaration is data; our law is the predicate.
+
+**G4 is routed, not owned here (q16, ruled 2026-09-30).** The shared profile brain's mechanical gate
+belongs to the **Infra Factory** lane, and the routing was delivered by `session_notify` on 2026-10-02
+with G4's row above verbatim and the owner's answer. Infra accepted it at source and parked it as
+ledger subject `shared-brain-mechanical-gate` (row n=1020, 2026-10-02T16:50:54Z), disposition
+**accepted, not built**: the gate's shape has more than one viable form and its blast radius reaches
+every lane on the box, so the register's design gate puts the shape on the owner. No gate is built
+here, and no further loop is owed by this lane.
 
 ---
 
