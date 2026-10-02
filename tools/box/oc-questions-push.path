@@ -1,0 +1,11 @@
+[Unit]
+Description=Push Open Questions to vpn when the store changes
+
+[Path]
+PathChanged=/root/.opencrabs/profiles/ops/questions
+PathModified=/root/.opencrabs/profiles/ops/questions/pages/latest.json
+PathModified=/root/.opencrabs/profiles/ops/questions/open.json
+Unit=oc-questions-push.service
+
+[Install]
+WantedBy=default.target
