@@ -168,6 +168,18 @@
       ],
       "scope": "profile",
       "evidence": "Owner ruling 2026-09-29 (via the RedeVest lane). Live verification the same turn: webhook bothelp.l1979.ru/telegram, pending_update_count 0, last_error none; /healthz {ok:true,pending:0,overdue:0,oldest_pending_age_s:0.0}; systemd bothelp-relay-receiver + bothelp-relay-forwarder active on vpn; Gatus endpoint apps_bothelp-relay green."
+    },
+    {
+      "id": "ops-lane-silence-on-provider-5xx",
+      "text": "An ops-profile lane can fall silent for ~1.9 h with nothing posted in its topic: when the provider fallback chain holds only the provider that is failing, five 5xx retries exhaust and the turn settles Failed producing no text. The chain is now [inferhub, openrouter], so a repeat is less likely, but the class is not closed - the daemon accepts a one-entry chain equal to its own provider and logs '1 ready, 0 skipped' with no warning.",
+      "severity": "warning",
+      "since": "2026-10-01T19:35:04Z",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "Ledger n=966 (intake) / n=967 (ruling). Daemon log: five 'API error (502)' retries 19:41:32.728064Z-19:54:04.974683Z; tool_loop.rs:3635 'All 5 5xx retries failed, checking for fallback provider'; turn_settle Failed 19:54:06.727609Z; ConfigWatcher 'fallback chain reloaded - [inferhub, openrouter] (was [inferhub])' 20:57:14.402309Z.",
+      "review_by": "2026-10-16"
     }
   ],
   "lanes": [
@@ -203,7 +215,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-01T06:35:42Z",
+  "attested_at": "2026-10-02T06:13:21Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

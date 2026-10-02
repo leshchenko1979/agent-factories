@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: two one-shots parked for 2027, and ai-antispam-62-close-gate disabled 2026-10-01T03:27:48Z)"
+      "this factory's own chat (-1003993000918), its topics and its 19 cron rows (16 enabled, 3 disabled: ai-antispam-62-close-gate is a daily 03:15 UTC trigger-gated close gate, and ai-antispam-day7-retire-wake plus ai-antispam-watch-funnel-day7-report are 2027 one-shots)"
     ],
     "does_not_own": [
       "the OpenCrabs daemon, its core tools, brain/skill loading - OpenCrabs factory",
@@ -123,13 +123,25 @@
       "name": "ai-antispam-62-close-gate",
       "audience": "agent",
       "entry": "cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open",
-      "cadence": "daily 03:15 UTC - DISABLED 2026-10-01T03:27:48Z"
+      "cadence": "daily 03:15 UTC \u2014 DISABLED (see anomaly below)"
     },
     {
       "name": "ai-antispam-loss-watch",
       "audience": "agent",
       "entry": "cron 65b4457f-2b33-4326-8970-f1973bf77ab1",
-      "cadence": "every 30 min, deliver session:6d921dca (Bot lane)"
+      "cadence": "every 30 min UTC \u2014 ENABLED"
+    },
+    {
+      "name": "ai-antispam-day7-retire-wake",
+      "audience": "agent",
+      "entry": "cron 9caeac81-e355-4bd0-8704-a0e9aad27abc",
+      "cadence": "disabled 2027 one-shot (22 Sep 2027 06:15 UTC)"
+    },
+    {
+      "name": "ai-antispam-watch-funnel-day7-report",
+      "audience": "owner",
+      "entry": "cron 23e41198-75b4-41b4-acc0-4059a1972974",
+      "cadence": "disabled 2027 one-shot (22 Sep 2027 09:00 MSK)"
     }
   ],
   "substrates_owned": [
@@ -209,7 +221,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-01T06:07:50Z",
+  "attested_at": "2026-10-02T06:15:03Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

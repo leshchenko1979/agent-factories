@@ -110,7 +110,7 @@
         "profile"
       ],
       "since": "2026-09-26",
-      "evidence": "deploy_lib.sh:148-152 \u2014 miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind. Sanctioned path is miidas_compose() at deploy_lib.sh:154-158, which passes --env-file. Measured 2026-09-25: a host-side init:true edit existed only on apps while the repo carried no init key; the sync would have reverted it. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
+      "evidence": "deploy_lib.sh:157 \u2014 miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path at :159-160, one file, blind. The sanctioned path is miidas_compose() at deploy_lib.sh:163, which passes --env-file. Call sites: manager/deploy.sh:33, landing/deploy.sh:27, deploy-all.sh:36. Measured 2026-10-02. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
     },
     {
       "id": "miidas-kit-forks-declared",
@@ -119,7 +119,7 @@
       "affects": [
         "profile"
       ],
-      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 18 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 25 carried paths judged, 1 factory-class path excluded by class, 18 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
+      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 19 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 27 carried paths judged, 1 factory-class path excluded by class, 19 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
       "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
     },
     {
@@ -141,7 +141,7 @@
         "profile"
       ],
       "scope": "profile",
-      "evidence": "measured 2026-09-29T06:42Z \u2014 agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:27 APP_HOST default; the deploy-host change is draft leshchenko1979/miidas#82, unreviewed."
+      "evidence": "measured 2026-10-02 \u2014 agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:36 defaults APP_HOST to agents-old (env override applied first at :21-34); .master.env:34 reads agents-old; leshchenko1979/miidas#82 MERGED 2026-09-29T08:39:31Z; miidas-claim-forward.service on apps is active + enabled."
     }
   ],
   "lanes": [
@@ -177,7 +177,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-01T06:06:09Z",
+  "attested_at": "2026-10-02T06:20:23Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
