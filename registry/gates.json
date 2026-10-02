@@ -435,6 +435,7 @@
     "tests/test_rework_declared_landed.py": "script",
     "tests/test_rework_relative_revision.py": "script",
     "tests/test_roadmap_transition.py": "script",
+    "tests/test_ruling_row_recorded.py": "pytest",
     "tests/test_score_artifact_sections.py": "pytest",
     "tests/test_score_gate_recorded.py": "pytest",
     "tests/test_self_audit_instant.py": "script",

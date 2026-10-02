@@ -2366,6 +2366,24 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     basis commit that follows, because a base may never name its own commit.
     if (repo_root / "tests/test_hygiene_declaration_sweep.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_declaration_sweep.py"])
+    # 77. Ruling-pairing gate (board #270, ruled n=1925, dispatched n=1927). A ruling is
+    #     two acts in two surfaces -- a board comment and a ledger `ruling` row -- and
+    #     until #270 nothing bound them, so they diverged: 11 instances, then 13 while the
+    #     detector watched. The board-ruling leg in `tools/patrol_host_state.py` reads the
+    #     BOARD and so cannot live in an offline suite; this gate reads the LEDGER alone
+    #     and asserts the row side -- every `ruling` row at or after the pairing
+    #     requirement carries `comment=<id>` in its canonical terminal run, so the pairing
+    #     is recorded on the surface that travels with the tree. Pre-requirement rows are
+    #     EXCUSED with their count and never backfilled; a token that IS declared must be
+    #     a well-formed numeric id resolving to a board issue whatever its age. The
+    #     forward-only arm's population is legitimately zero until `tools/rule.py` is next
+    #     used, so the run PRINTS the population and the PROBES carry non-vacuity -- the
+    #     split ledger n=657 item 8 rules. It is byte-paired with a TEMPLATE copy. It
+    #     carries NO `registry/gates.json` entry: a budget value is the process owner's
+    #     (n=574 PART 5) and is never the implementing lane's to mint, so this gate runs
+    #     on the DECLARED DEFAULT and the audit prints that it did.
+    if (repo_root / "tests/test_ruling_row_recorded.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ruling_row_recorded.py"])
 
     # 77. hygiene placement map (G5, q13) -- origin 2026-10-02, the owner's ruling that
     #     hygiene owns the WHOLE inventory and builds a gate for every ungated surface.

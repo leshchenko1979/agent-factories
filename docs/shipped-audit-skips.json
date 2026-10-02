@@ -41,6 +41,11 @@
       "marker": "# STATED SKIP: evidence/ledger.jsonl",
       "reason": "both the live-ledger and the offline-denominator legs read the ledger"
     },
+    "tests/test_ruling_row_recorded.py": {
+      "artifact": "evidence/ledger.jsonl + docs/ledger-invariants.json (BOOTSTRAP-created, step 4b)",
+      "marker": "# STATED SKIP: evidence/ledger.jsonl",
+      "reason": "the live leg reads the ledger's `ruling` rows against the factory's own DECLARED boundary, and the shipped tree carries neither the ledger nor a declaration — so it skips with that reason rather than red on the tree it ships to (#248)"
+    },
     "tools/roadmap.py": {
       "artifact": "docs/products.json (factory data; the kit ships products.example.json)",
       "marker": "no product declaration at",

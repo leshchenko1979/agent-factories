@@ -350,6 +350,13 @@ PAIRS = [
     # `TEMPLATE/**` AND `tools/**` in THIS tree, so without the entry the two copies
     # could drift and the shipped half would keep citing by number in every member.
     ("tests/test_citation_clause_titles.py", "TEMPLATE/tests/test_citation_clause_titles.py"),
+    # Added with its registration (issue #270, the atomic ruling act). The pairing gate
+    # drives the writer `tools/rule.py`, and both ship whole for the same reason the ledger
+    # and its gates do: a factory that took the writer without the gate proving every
+    # `ruling` row carries its `comment=<id>` token would carry the #270 defect unnoticed,
+    # and one that took the gate without the writer would run probes that cannot pass.
+    ("tools/rule.py", "TEMPLATE/tools/rule.py"),
+    ("tests/test_ruling_row_recorded.py", "TEMPLATE/tests/test_ruling_row_recorded.py"),
 ]
 
 

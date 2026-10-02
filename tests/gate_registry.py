@@ -677,6 +677,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # date is a set of CURRENT siblings, not a supersession. Report-only (`removes: no`),
     # asserted structurally; a marker naming nothing is its own debt, reported separately.
     "test_hygiene_evidence_supersession.py",
+    # Added with its registration (board #270, ruled n=1925, dispatched n=1927). REQUIRED is
+    # the correct grain and OPTIONAL is not, for the deciding fact the entries around it
+    # state: the gate reads `evidence/ledger.jsonl` plus kit files loaded BY PATH -- the
+    # predicate module and the live leg's own `resolve_ruling_issue`, both pure over their
+    # arguments -- so it reads no live board, no fleet manifest and no box-local fixture, and
+    # it passes in a bootstrapped factory exactly as it does here. Its writer probe runs
+    # `tools/rule.py --dry-run`, which is HERMETIC by construction: it resolves no `gh` and
+    # no `git remote`, so the probe cannot fail for a network reason. It is byte-paired with
+    # a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the runner
+    # and keeping the file. THE MECHANISM IT GUARDS: a ruling is two acts in two surfaces --
+    # a board comment and a ledger `ruling` row -- and until #270 nothing bound them, so they
+    # diverged 11 times, then 13 while the board-ruling leg watched. A reader does not
+    # prevent; this gate is the ROW side of the pairing that `tools/rule.py` writes.
+    "test_ruling_row_recorded.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

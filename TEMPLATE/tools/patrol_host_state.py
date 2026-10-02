@@ -751,10 +751,25 @@ first meets it, instead of being indistinguishable from absent.
 RULING_CANONICAL_HEADING = "## RULED"
 """The head the convention NAMES, so a lane writing a ruling converges rather than infers.
 
-Declared rather than enforced: the writer is an agent typing `gh issue comment`, and there
-is no tool on that path, so a rule "use this head" would be unenforceable exactly where it
-matters — the dead-text shape P29 removes. It is stated, and the clause below is what
-catches the spelling that ignores it.
+ENFORCED at the write path since #270. `tools/rule.py` posts the board comment and stamps
+the `ruling` row in ONE invocation, and it REFUSES a body that does not open with this head
+-- boundary-checked exactly as `_accepted_heading` below is, so the writer and the reader
+cannot disagree about the accepted set. The tool IMPORTS this constant rather than
+restating it: a second copy of the accepted openings is the drift class this factory files
+repeatedly, so a widening here moves the writer with the reader in one edit.
+
+THIS REVERSES THE PREMISE THIS DOCSTRING WAS WRITTEN UNDER, which held that the writer was
+an agent typing `gh issue comment` with nothing on the path to hold it, so a "use this
+head" rule would be unenforceable exactly where it matters -- the dead-text shape P29
+removes. That premise is measured FALSE as of #270: `tools/rule.py` sits on that path, so
+the head is a mechanism rather than dead text. The retired reading is named here rather
+than silently deleted, because a docstring that simply changed its mind leaves the old
+claim unaccounted for.
+
+The leg's own unmatched-heading clause is NOT made redundant by the tool, which is why it
+stays: a comment posted BY HAND still has no writer to refuse it. So the run still PRINTS
+every heading comment it did not match -- a spelling that bypassed the tool surfaces as a
+finding on the run that first meets it, instead of being indistinguishable from absent.
 """
 
 _RULING_HEADING_LINE = re.compile(r"^(#{1,6})\s+(\S.*)$")
