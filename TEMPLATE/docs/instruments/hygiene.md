@@ -252,7 +252,9 @@ skeleton, and names `--audit` as the adoption evidence — and the methodology e
 over `skills/meta-factory/SKILL.md` and `TEMPLATE/SKILL.md.tmpl`, this instrument's name occurs **0**
 times in either. Adding one is a clause about the process *about* an instrument, which is **HQ's
 authority, not this lane's** (frame §8) — so it is recorded here as a declared gap and routed, never
-coined in this file.
+coined in this file. The routing is the act that makes this sentence true: `session_notify` to the
+meta-factory HQ lane, arriving in that lane's own store at **2026-10-02 17:10 UTC** (read there, not
+inferred). Until that act, "routed" was an unbacked claim in a shipped artifact.
 
 **Scope, as ruled (q13, answered 2026-09-30).** Hygiene owns the **whole inventory** — all five surface
 classes (A language, B filesystem, C work state, D kit, E runtime) — and it owns the **declaration** of
