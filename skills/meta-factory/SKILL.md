@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.39
+version: 0.1.40
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -157,7 +157,9 @@ Work goes **sender → owner of the resource**, directly. No relay hops.
 **The intake leg is dispatched at FILING time, never last.** Filing a board item is a sequence
 with four legs — the board issue, the ledger intake row, the claim, and the dispatch to the lane
 that implements it. Intake is **Triage's** row, so filing a board item owes Triage a dispatch in
-the **same turn** as the filing. Filed last, the intake row lands after the claim, and
+the **same turn** as the filing. **The row is stamped by the FILER, in the same turn as the
+filing; Triage owns the leg's ORDERING and receives the dispatch.** Filed last, the intake row
+lands after the claim, and
 `tests/test_board_intake_recorded.py` **fails on a numeric subject carrying a `claim` or a
 `close` with no intake row of its own**.
 
