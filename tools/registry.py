@@ -1128,7 +1128,7 @@ def check_cron_min_gap_ge_6h() -> tuple[bool, str]:
     nobody on its schedule. The exclusion is VISIBLE rather than silent, because an
     unreported exclusion is the #102 defect one population over — and a zero
     floor-population read FAILS rather than passing, since a predicate that
-    examined nothing has reported nothing (SKILL §8).
+    examined nothing has reported nothing (SKILL.md §Verdicts and claims).
     """
     try:
         dbs, unreached = opencrabs_home_dbs()
@@ -1295,7 +1295,7 @@ def job_naming_problems(
 ) -> tuple[list[str], int, set[str], int]:
     """(offenders, jobs checked, factories resolved, jobs left unattributed).
 
-    SKILL §11: a factory's own jobs are named `<declared-prefix><what-it-does>`,
+    SKILL.md §State — every surface has one writer: a factory's own jobs are named `<declared-prefix><what-it-does>`,
     and the PREFIX — never the slug — is the only token attribution resolves. A
     job that reaches its factory by `deliver_to` identity while its name carries
     no prefix (or the SLUG) is therefore mis-named, and the render's `deliver_to`
@@ -1310,7 +1310,7 @@ def job_naming_problems(
 
     Only ENABLED rows are judged: a disabled row is not a live claim. A row
     attributed to no factory is COUNTED and returned rather than dropped — it is
-    not a clean row, and a verdict over a population nobody named is what §8 bars.
+    not a clean row, and a verdict over a population nobody named is what SKILL.md §Verdicts and claims bars.
     """
     import registry_render  # lazy: the renderer imports this module at its top
 
@@ -1341,7 +1341,7 @@ def check_job_naming_prefix() -> tuple[bool, str]:
     population the render attributes — so the claim is exactly "the render's own
     attribution obeys the naming law". The verdict NAMES that population (homes
     read, jobs read, factories resolved, jobs unattributed) because a predicate
-    that examined nothing has reported nothing, not HOLDS (§8): a zero-job read
+    that examined nothing has reported nothing, not HOLDS (SKILL.md §Verdicts and claims): a zero-job read
     FAILS rather than passing.
     """
     try:

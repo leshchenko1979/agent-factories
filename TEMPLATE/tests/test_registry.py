@@ -1429,7 +1429,7 @@ def probe_a_trigger_gated_poll_leaves_the_floor_population() -> None:
     SAME cadence with NO `trigger_cmd` DOES offend (the floor still bites); a row
     with a `trigger_cmd` but `trigger_on='always'` DOES offend (an unconditional
     trigger does not gate, so the row wakes a lane and keeps the floor); and a read
-    whose floor population is EMPTY FAILS loudly rather than passing (§8). The
+    whose floor population is EMPTY FAILS loudly rather than passing (SKILL.md §Verdicts and claims). The
     fixture is a throwaway DB, and the box reader is INJECTED for the last leg, so
     no live DB is opened.
     """
@@ -1645,7 +1645,7 @@ def probe_a_slug_named_job_attributed_by_deliver_to_fails() -> None:
     answer in a member factory's tree, where the live manifest declares a different
     fleet; a probe that needed `meta-factory` in `MANIFEST_RECORDS` would fail the gate
     for every factory but this one. The slug is deliberately NOT its own prefix, which
-    is the class §11 is about — the two tokens coincide for most factories, which is
+    is the class SKILL.md §State — every surface has one writer is about: the two tokens coincide for most factories, which is
     why the distinction stayed invisible until one of them did not.
     """
     slug = "meta-factory"
@@ -1655,7 +1655,7 @@ def probe_a_slug_named_job_attributed_by_deliver_to_fails() -> None:
     good_name = f"{declared}questions-redeliver"
 
     check(
-        "the fixture slug is NOT its own declared prefix — the class §11 is about",
+        "the fixture slug is NOT its own declared prefix — the class SKILL.md §State — every surface has one writer is about",
         not slug.startswith(declared),
         f"slug={slug!r} declared={declared!r}",
     )
