@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.41
+version: 0.1.42
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -197,6 +197,16 @@ another lane's unreviewed work. Use `git commit -m <msg> -- <paths>`, or stage a
 single invocation. The staging rule alone is satisfiable in full while this fires: it governs the
 *staging* step, and the hazard lives in the *commit* step. Origin: #47, recurred on this lane
 2026-09-20 when a bare commit carried a peer's staged registry-gate fix into a law commit.
+
+**The shared tree is a READ surface; work happens in a worktree.** The tree every lane can
+see is for READING — `git log`, `grep`, `sed`, the ledger's own bytes. A change is made in a
+worktree checked out at `origin/main`, and a lane that edits the shared tree in place races
+every peer who does the same, so its result is not a revision anyone chose. Origin: #241,
+ruled 2026-09-29 (n=1696) — the patrol's board legs read a shared tree another lane was
+mid-write on, and the fork produced FALSE VERDICTS: no single location gave a wholly correct
+read. NOT ruled: that the shared tree must be reconciled first — the remedy is the discipline
+above, plus the patrol's cheap rider that prints the blocking paths and the read instant, and
+prints NOT RUN with its reason when the tree cannot be read.
 
 ---
 
