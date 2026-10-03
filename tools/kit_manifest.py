@@ -244,6 +244,12 @@ SEEDS = frozenset({
                                              # adopter red against a file that is theirs to
                                              # write, which is the false-red direction the
                                              # ledger-commit entry above already measured.
+    # The close-board gate's exemption table: the gate's LOGIC is universal and its
+    # PARAMETERS are the factory's own declared debt. Same class and the
+    # same measured reason as the entries above -- classed `standalone`, it would compare a
+    # factory's own filled-in table byte-for-byte against this empty skeleton and red every
+    # adopter for writing the file it is told to write.
+    "TEMPLATE/docs/close-board-exemptions.example.json",
     "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
     "TEMPLATE/docs/ledger-retirements.example.json",
     "TEMPLATE/docs/ledger-schema-exemptions.example.json",
