@@ -39,6 +39,18 @@ therefore names `session_notify` and points at the notify's own `from` header. N
 written into the text: the header is the live source, so nothing in the brief can go
 stale, and the tool's own rule against a declared session id still holds.
 
+**The brief's essentials live in its HEAD, because the classic leg elides the MIDDLE.**
+The brief is longer than the classic transport's cap, and the cap is tail-preserving: it
+keeps `head = inner*2/3` and `tail = inner-head_len` and drops what is between them (#267,
+measured: 2313 chars dropped, QUESTION 3 — which sat 2313 chars in — elided while ANSWER BY
+survived). So a target on that leg read Q1, Q2 and the answer instruction and could not
+read what it was being asked about its prefix and cron rows, and the loss was invisible
+from the send side because the send still succeeded. The remedy is structural rather than a
+second variant: a CONDENSED block — all three questions and the answer route — sits ABOVE
+the full detail, so any cap that preserves head+tail preserves the essentials.
+`tests/test_registry_attest.py` projects the brief through that cap and asserts all four
+survive, with the pre-fix shape as its mutation control.
+
 **And the collection leg DECLARES its population** (`--collect`). A round is not
 complete because M lanes answered; it is complete when the count of M is accounted for
 against the N targets, split into answers that arrived BY NOTIFY and answers RECOVERED
@@ -88,6 +100,30 @@ NOTIFY_FROM_FULL = re.compile(r"\[session-notify from=([0-9a-fA-F-]{36})\]")
 NOTIFY_FROM_SHORT = re.compile(r"notify from ([0-9a-fA-F]{8}):")
 
 BRIEF = """Registry re-attestation — {slug} ({stamp})
+
+ANSWER BY session_notify TO THE COLLECTOR — reply to the session id in THIS notify's own
+`from` header, not into your own session. The collector cannot read your session, so an
+answer left there is a gap in the round rather than an answer to it.
+
+THREE QUESTIONS — all three need an answer. Each one is spelled out in full below.
+
+QUESTION 1 — YOUR FRAGMENT. Confirm `registry/factories/{slug}.json` unchanged, or send
+back ONLY the fields that changed, as JSON. Read it back before answering.
+
+QUESTION 2 — YOUR ANNOUNCEMENTS. For each entry in your fragment's `announcements`:
+STILL HOLDS, or EXPIRED (say why), or AMENDED (send the new text). An empty list is the
+honest answer. To ADD an entry, send an OBJECT (id, text, severity, since, affects) —
+never a bare string; `evidence` is REQUIRED when severity is warning or critical.
+
+QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. (a) PREFIX — the `job_prefixes` entry
+your `registry/fleet.json` record declares, and whether it still matches how you name your
+jobs. (b) ORPHANS — any cron row you cannot attribute to your own factory: name the job,
+the profile home you read it from, and what you saw. "None seen" is a complete answer, and
+never disable, delete, edit or repace a job attributed to another factory.
+
+If every answer is "unchanged", reply CONFIRMED and that is a complete answer.
+
+--- FULL DETAIL BELOW ---
 
 Your factory is one entry in the fleet registry (docs/factory-registry.md). The
 GENERATED half of that entry is read live from this box every render, so it cannot

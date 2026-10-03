@@ -67,6 +67,11 @@ import registry_attest as ra  # noqa: E402
 
 PROFILE = reg.FACTORY_PROFILE
 
+# #267 — the marker that ends the brief's CONDENSED head block. Kept as a constant read by
+# the cap arm, not as a literal inside it, so the boundary and the thing it bounds cannot
+# drift apart.
+HEAD_BLOCK_END = "--- FULL DETAIL BELOW ---"
+
 
 def _fragment(slug: str, lanes: list[dict]) -> dict:
     """A synthetic fragment. Only `factory`, `profile` and `lanes` are read by the
@@ -248,6 +253,83 @@ def test_the_brief_carries_all_three_questions():
         assert phrase in text.lower(), (phrase, text)
     assert "{slug}" not in text and "{stamp}" not in text, text
 
+
+def test_the_head_block_survives_the_classic_cap():
+    """#267 — the classic-leg cap elides the MIDDLE, so Q3 must live in the HEAD.
+
+    `truncate_chars_tail_preserving` (opencrabs `src/utils/string.rs:46`) keeps
+    `head = inner*2/3` and `tail = inner-head_len` and elides what is BETWEEN them. The
+    brief is over the classic budget, so on that leg the middle is what is lost — and
+    before this change QUESTION 3 (2313 chars in) sat exactly there, while ANSWER BY
+    survived in the tail. The target therefore receives Q1, Q2 and the answer instruction
+    and cannot read what it is asked about its prefix and cron rows.
+
+    The remedy is not a second variant: a CONDENSED block in the HEAD survives any cap
+    that preserves head+tail. This arm asserts that on a FAITHFUL projection.
+
+    The cap is DECLARED here with its provenance rather than derived from the harness,
+    which this repo does not vendor: `ECHO_BODY_CAP_CHARS = 3200` (opencrabs
+    `src/utils/echo_budget.rs`, quoted in #267). A literal that the harness moves is a
+    reading, so the numbers travel with the issue that measured them.
+    """
+    text = _rendered_brief()
+    cap = 3200
+    marker = "\n\n[... middle elided ...]\n\n"  # the elision marker's own footprint
+    inner = cap - len(marker)
+    head_len = inner * 2 // 3
+    tail_len = inner - head_len
+    assert len(text) > cap, f"the brief is {len(text)} chars — it no longer over-caps, so this arm tests nothing"
+    projected = text[:head_len] + marker + text[-tail_len:]
+
+    for token in ("QUESTION 1", "QUESTION 2", "QUESTION 3", "ANSWER BY session_notify"):
+        assert token in projected, (
+            f"{token!r} does not survive the classic cap — a classic-leg target cannot "
+            f"read it. Projection tail:\n{projected[-400:]}"
+        )
+
+    # The head block itself must END inside the preserved head, or a cap that trims the
+    # block would still lose a question. Asserted as a boundary, not as a length, so the
+    # arm survives the block being reworded.
+    head_block_end = text.find(HEAD_BLOCK_END)
+    assert head_block_end != -1, f"the head block terminator {HEAD_BLOCK_END!r} is gone"
+    assert head_block_end <= head_len, (
+        f"the condensed head block ends at {head_block_end}, past the {head_len} chars the "
+        "classic cap preserves — Q3 would be elided again"
+    )
+
+def test_the_head_block_arm_bites_when_the_block_is_removed():
+    """MUTATION CONTROL — the arm above must FAIL on the brief that caused #267.
+
+    Without this, the projection assertion could pass on any brief at all: a test that
+    renders the string it just asserted on re-reads its own text. So the head block is
+    STRUCK OUT and the same projection must lose QUESTION 3 — which is exactly the shape
+    the issue measured (2313 chars in, elided), while ANSWER BY survives in the tail.
+    """
+    text = _rendered_brief()
+    neutered = text[text.find(HEAD_BLOCK_END) + len(HEAD_BLOCK_END):]
+    assert HEAD_BLOCK_END not in neutered, "the neutering did not remove the head block"
+    assert "QUESTION 3" in neutered, (
+        "the pre-fix shape still carries Q3 in the BODY — that is the text the cap elides, "
+        "and removing it here would make this control test nothing"
+    )
+
+    cap = 3200
+    marker = "\n\n[... middle elided ...]\n\n"
+    inner = cap - len(marker)
+    head_len = inner * 2 // 3
+    tail_len = inner - head_len
+    projected = neutered[:head_len] + marker + neutered[-tail_len:]
+    # The measured defect, reproduced: Q1 and Q2 arrive, Q3 does NOT, and ANSWER BY
+    # survives in the tail — which is exactly why the loss was invisible from the send side.
+    assert "QUESTION 1" in projected, projected[:400]
+    assert "QUESTION 2" in projected, projected[:400]
+    assert "QUESTION 3" not in projected, (
+        "the neutered brief still carries Q3 in the projection — the arm above cannot bite"
+    )
+    assert "ANSWER BY session_notify" in projected, (
+        "ANSWER BY is expected to SURVIVE in the tail — the issue's own measurement — so "
+        "losing it here means the projection model no longer matches the harness"
+    )
 
 def test_no_placeholder_survives_the_format():
     """A `{...}` left in the rendered brief is a template bug the sender cannot see, and
