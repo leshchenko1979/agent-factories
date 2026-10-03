@@ -379,32 +379,15 @@ def append_insight(
             f"status '{status}' does not carry a reason — a reason states why a unit was "
             f"refused or dropped ({'/'.join(sorted(REASON_REQUIRED_STATUSES))}), and "
             f"'{status}' is neither")
-    # The publishing path's own requirement, from the same one home and for the same
-    # reason: a unit in that path is going to a surface, and the LANE that owns it differs
-    # by surface, so publishing it without naming where is a record that cannot be routed.
-    if status in SURFACE_REQUIRED_STATUSES and not str(surface or "").strip():
-        raise ValueError(f"status '{status}' requires a --surface — a publishing unit must "
-                         f"name where it lands ({', '.join(ALLOWED_SURFACES)})")
-    # The field's other lie, mirroring the reason rule: a surface names a publishing unit's
-    # destination, so one supplied on a status outside that path reads as a routing
-    # decision for a row that is not being routed anywhere.
-    if str(surface or "").strip() and status not in SURFACE_REQUIRED_STATUSES:
-        raise ValueError(
-            f"status '{status}' does not carry a surface — a surface names where a "
-            f"publishing unit lands, so it belongs to "
-            f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
-    # D4's two cross-axis invariants, at the one place the row can still be refused: the
-    # routing group and the tracker answer different questions, but they must not
-    # CONTRADICT each other. A row in the publishing path asserts a reader outside the
-    # factory, and a row routed to HQ asserts the insight applies to our processes.
-    if status in SURFACE_REQUIRED_STATUSES and audience != "public":
-        raise ValueError(
-            f"status '{status}' is in the publishing path, which asserts a public "
-            f"audience — so audience must be 'public', got '{audience}'")
-    if status in HQ_PATH_STATUSES and process != "yes":
-        raise ValueError(
-            f"status '{status}' routes the row to HQ, which asserts the insight applies to "
-            f"our processes — so process must be 'yes', got '{process}'")
+    # The routing-group legs, from the ONE home that also serves `_backfill` and `verify`.
+    # The append is a WRITE path, so the exemption is OFF: the row it is building carries
+    # the group by construction, and an absent audience here is a violation rather than a
+    # legacy row that predates the field.
+    written = {"status": status, "audience": audience, "process": process,
+               "surface": surface}
+    legs = routing_group_violations(written, exempt_legacy=False)
+    if legs:
+        raise ValueError(routing_leg_message(legs[0], written, subject="the row"))
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK_PATH, "w") as lock_f:
@@ -490,9 +473,102 @@ FIELD_VOCAB: dict[str, list[str]] = {
     "status": ALLOWED_STATUSES,
 }
 
+# The routing-group legs, in ONE home and one order. `audience` and `process` say what the
+# claim IS and who it serves; `status` says what has been DONE about it, and the two must
+# not contradict each other. Four legs bind them:
+#   surface_missing      — a unit in the publishing path names where it lands
+#   surface_outside_path — a destination belongs only to that path
+#   audience_not_public  — the publishing path asserts a reader outside the factory
+#   process_not_yes      — the HQ path asserts the insight applies to our processes
+ROUTING_LEGS = ("surface_missing", "surface_outside_path",
+                "audience_not_public", "process_not_yes")
+
+def routing_group_violations(row: dict, *, exempt_legacy: bool) -> list[str]:
+    """The routing-group legs `row` violates, from the one home all three callers read.
+
+    `exempt_legacy` is the ONE difference between the two readers, and it is an explicit
+    parameter because two implementations of one predicate drift on exactly the inputs that
+    matter (`tools/ledger_declaration.py`). It is NOT a drift to be repaired: the legs are
+    one invariant applied to two populations.
+
+    * `False` — the WRITE path (`append_insight`, `_backfill`). A row being written is not
+      history, so it must carry the group and NOTHING is exempt: an absent `audience` on a
+      publishing-path row is a violation, never a legacy row.
+    * `True` — the READ path (`verify_insights`), which judges rows already STORED. History
+      is never rewritten to invent a group, so a leg that DEMANDS a field fires only where
+      the row carries the group; a row predating the re-cut is not condemned for a claim it
+      never made.
+
+    Widening the write leg to the read leg's membership test is the direction HQ refused on
+    #279: it would let a single-field verb write a PARTIAL group — `audience=public` with no
+    `surface` — that the read leg's own carrier marker then forgives, which is a
+    half-applied routing decision reading exactly like a complete one.
+
+    The row is read AS IT WOULD BE WRITTEN, so a caller applies its own clears first.
+    """
+    status = row.get("status")
+    in_publishing = status in SURFACE_REQUIRED_STATUSES
+    in_hq_path = status in HQ_PATH_STATUSES
+    carries_group = "audience" in row and "process" in row
+    has_surface = bool(str(row.get("surface") or "").strip())
+
+    violations: list[str] = []
+    if in_publishing and not has_surface and (carries_group or not exempt_legacy):
+        violations.append("surface_missing")
+    if has_surface and not in_publishing:
+        violations.append("surface_outside_path")
+    if (in_publishing and row.get("audience") != "public"
+            and ("audience" in row or not exempt_legacy)):
+        violations.append("audience_not_public")
+    if (in_hq_path and row.get("process") != "yes"
+            and ("process" in row or not exempt_legacy)):
+        violations.append("process_not_yes")
+    return violations
+
+def routing_leg_message(leg: str, row: dict, *, subject: str) -> str:
+    """One renderer for the four legs, so a message cannot drift from the leg it reports.
+
+    `subject` names the row for the reader — `'<slug>'` on the write path, `line <n>` on
+    the read path — and every message states the state the write would produce, because
+    that is the row the legs judged.
+    """
+    status = row.get("status")
+    if leg == "surface_missing":
+        return (f"{subject} is '{status}' with no surface — a publishing unit must name "
+                f"where it lands ({', '.join(ALLOWED_SURFACES)})")
+    if leg == "surface_outside_path":
+        return (f"{subject} carries a surface on status '{status}' — a surface names where "
+                f"a publishing unit lands, so it belongs to "
+                f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
+    if leg == "audience_not_public":
+        return (f"{subject} is '{status}', which is in the publishing path and asserts a "
+                f"public audience — so audience must be 'public', got "
+                f"'{row.get('audience')}'")
+    if leg == "process_not_yes":
+        return (f"{subject} is '{status}', which routes the row to HQ and asserts it applies "
+                f"to our processes — so process must be 'yes', got "
+                f"'{row.get('process')}'")
+    raise ValueError(f"unknown routing leg '{leg}'")
+
+def routing_door_hint(row: dict) -> str:
+    """The exit a CHANGE-only verb's refusal must name when the row PREDATES the group.
+
+    Empty when the row already carries the group: there the refusal is about a bad VALUE,
+    and the way back into a group that is already present is the caller's own mapping, not
+    `routing`. Conditional because an unconditional hint would tell a row that carries the
+    group that it predates one — a refusal that lies about its own population is the defect
+    (#279) it exists to close. Named once, so no single-field verb can point at a door that
+    does not open.
+    """
+    if "audience" in row and "process" in row:
+        return ""
+    return (" — a row that predates the routing group is backfilled by `routing`, which "
+            "lands `audience` and `process` (and `surface` where the status owes one) in "
+            "ONE transaction; this verb CHANGES a field the row already carries")
 
 def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
-              optional_fields: list[str] | None = None) -> list[tuple[str, dict]]:
+              optional_fields: list[str] | None = None,
+              *, change_only: bool = False) -> list[tuple[str, dict]]:
     """Set the labelled `fields` on entries that ALREADY EXIST, in one transaction.
 
     Shared by the routing verbs (`audience`, `process`, `surface`) and `status`: all write
@@ -565,6 +641,16 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                     out_rows.append(entry)
                     continue
                 before = {name: entry.get(name) for name in fields}
+                if change_only and not ("audience" in entry and "process" in entry):
+                    # The verb's real population is a row that ALREADY carries the routing
+                    # group — a field CHANGE, never a backfill (#279, ruled). A row that
+                    # predates the group is refused here rather than served one field at a
+                    # time, and the refusal NAMES the door that works: three refusals each
+                    # naming a different missing sibling is the cycle that was measured.
+                    raise ValueError(
+                        f"'{slug}' predates the routing group, so "
+                        f"{', '.join(fields)} cannot be changed one field at a time"
+                        + routing_door_hint(entry))
                 row = entry
                 for name in fields:
                     row = _with_field(row, name, updates[slug][name])
@@ -628,39 +714,20 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
                         f"'{slug}' would carry a reason on status '{row.get('status')}' — a "
                         f"reason states why a unit was refused or dropped, so it belongs to "
                         f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
-                # The publishing path's own requirement, on the row AS IT WOULD BE WRITTEN:
-                # a row left in that path with no surface cannot be routed, and the same
-                # rule has to bind here as binds the append, or a move becomes the way
-                # around it.
-                if (row.get("status") in SURFACE_REQUIRED_STATUSES
-                        and not str(row.get("surface") or "").strip()):
+                # The routing-group legs, from the ONE home that also serves the append and
+                # `verify` — the same invariant on the row AS IT WOULD BE WRITTEN, because a
+                # row written now is not history and a move must not become the way around
+                # the append's requirement. The write path exempts NOTHING: see
+                # `routing_group_violations` for why the read leg's exemption is refused
+                # here rather than mirrored.
+                legs = routing_group_violations(row, exempt_legacy=False)
+                if legs:
+                    # A CHANGE-only verb that meets a row predating the group names the door
+                    # that works. The refusal is correct; a refusal that names no exit is the
+                    # cycle #279 measured.
                     raise ValueError(
-                        f"'{slug}' would be left '{row.get('status')}' with no surface — a "
-                        f"publishing unit must name where it lands "
-                        f"({', '.join(ALLOWED_SURFACES)}), so name it in the same mapping")
-                if (str(row.get("surface") or "").strip()
-                        and row.get("status") not in SURFACE_REQUIRED_STATUSES):
-                    raise ValueError(
-                        f"'{slug}' would carry a surface on status '{row.get('status')}' — "
-                        f"a surface names where a publishing unit lands, so it belongs to "
-                        f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
-                # D4's cross-axis invariants, on the row as it would be written: the routing
-                # group says what the claim IS and who it serves, `status` says what has been
-                # DONE about it, and the two must not contradict each other. Checked here as
-                # well as at the append, because a status move is the other way a row reaches
-                # a contradicting pair.
-                if (row.get("status") in SURFACE_REQUIRED_STATUSES
-                        and row.get("audience") != "public"):
-                    raise ValueError(
-                        f"'{slug}' would be '{row.get('status')}', which is in the publishing "
-                        f"path and asserts a public audience — so audience must be 'public', "
-                        f"got '{row.get('audience')}'")
-                if (row.get("status") in HQ_PATH_STATUSES
-                        and row.get("process") != "yes"):
-                    raise ValueError(
-                        f"'{slug}' would be '{row.get('status')}', which routes the row to HQ "
-                        f"and asserts it applies to our processes — so process must be 'yes', "
-                        f"got '{row.get('process')}'")
+                        routing_leg_message(legs[0], row, subject=f"'{slug}'")
+                        + (routing_door_hint(row) if change_only else ""))
                 changes.append((slug, before))
                 out_rows.append(row)
 
@@ -688,35 +755,87 @@ def _backfill(updates: dict[str, dict], fields: list[str], noun: str,
 
 
 def set_audience(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
-    """Set `audience` on entries that PREDATE the field. The owner rules on the values;
-    this applies the ruling, and `_backfill` carries the guarantees behind it.
+    """CHANGE the `audience` of an entry that already carries the routing group.
+
+    A field CHANGE, never a backfill. The group is load-bearing only where a status sits in
+    the publishing or HQ path, and there a row that does not yet carry it cannot be served
+    one field at a time: it is refused, and the refusal NAMES the door that works —
+    `routing`, which lands `audience` and `process` (and `surface` where the status owes
+    one) in ONE transaction. Where the status is in no path, no group is owed and a lone
+    `audience` is a complete record.
+
+    The owner rules on the values; this applies the ruling, and `_backfill` carries the
+    guarantees behind it.
     """
     changes = _backfill({k: {"audience": v} for k, v in mapping.items()},
-                        ["audience"], "audiences")
+                        ["audience"], "audiences", change_only=True)
     return [(slug, before["audience"] or None, mapping[slug]) for slug, before in changes]
 
 def set_process(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
-    """Record the `process` verdict on entries that PREDATE the field.
+    """CHANGE the `process` verdict on an entry that already carries the routing group.
 
-    Asked of EVERY row, whatever its audience: an insight routed to a publishing surface
-    was never asked whether it changes how we work, and the answer is owed either way.
-    `no` is a recorded finding, not silence — which is why the field is required at append
-    and backfilled here rather than left absent on the rows that predate it.
+    A field CHANGE, never a backfill: a row that PREDATES the group is `routing`'s, and the
+    refusal here NAMES it.
+
+    Asked of EVERY row, whatever its audience: an insight routed to a publishing surface was
+    never asked whether it changes how we work, and the answer is owed either way. `no` is a
+    recorded finding, not silence — which is why the field is required at append and
+    backfilled rather than left absent on the rows that predate it.
     """
     changes = _backfill({k: {"process": v} for k, v in mapping.items()},
-                        ["process"], "process verdicts")
+                        ["process"], "process verdicts", change_only=True)
     return [(slug, before["process"] or None, mapping[slug]) for slug, before in changes]
 
 def set_surfaces(mapping: dict[str, str]) -> list[tuple[str, str | None, str]]:
-    """Name the publishing `surface` of entries already in the publishing path.
+    """Name or CHANGE the publishing `surface` of an entry that already carries the group.
 
-    Lawful only on a row whose status is in that path, because a destination on a row that
-    is not going anywhere is the field's other lie — `_backfill` refuses it from the one
-    home, the same way it refuses a reason on a row that owes none.
+    A field CHANGE, never a backfill: a row that PREDATES the routing group is refused, and
+    the refusal NAMES `routing`.
+
+    Lawful only on a row whose status is in the publishing path, because a destination on a
+    row that is not going anywhere is the field's other lie — `_backfill` refuses it from
+    the one home, the same way it refuses a reason on a row that owes none.
     """
     changes = _backfill({k: {"surface": v} for k, v in mapping.items()},
-                        ["surface"], "surfaces")
+                        ["surface"], "surfaces", change_only=True)
     return [(slug, before["surface"] or None, mapping[slug]) for slug, before in changes]
+
+def set_routing(mapping: dict[str, dict]) -> list[tuple[str, dict]]:
+    """BACKFILL the routing group — `audience`, `process` and, where the status owes one,
+    `surface` — onto entries that PREDATE it, in ONE transaction and WITHOUT a status.
+
+    This is the door the three single-field verbs point at, and the reason they are
+    CHANGE-only. The group is ATOMIC: `audience` and `process` are both required at the
+    append, so a row carrying one without the other is a PARTIAL group that reads as a
+    routing decision which was made. A sequence of single-field writes passes through exactly
+    that state — and on a row already in the publishing path `verify` would FORGIVE it,
+    because its own carrier marker requires both fields. One transaction cannot pass through
+    it, which is why the backfill is a verb of its own rather than three writes in a row.
+
+    Named for what it does, never for status: it writes no `status` and no `status_at`, so a
+    backfilled group cannot re-date the transition that produced the row.
+
+    `surface` is optional here for the same reason it is at the append — it is owed only
+    where the row's status is in the publishing path — and `_backfill` refuses the row it
+    would strand, so a publishing-path row passes all three fields and a `pending` row
+    passes two.
+
+    Mapping: `{id: {"audience": public|internal, "process": yes|no[, "surface":
+    x|miidas|both]}}`.
+    """
+    updates: dict[str, dict] = {}
+    for slug, value in mapping.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"routing group for '{slug}' must be an object, got "
+                             f"{type(value).__name__}")
+        names = sorted(set(value) - {"audience", "process", "surface"})
+        if names:
+            raise ValueError(f"routing group for '{slug}' carries unsettable field(s): "
+                             f"{', '.join(names)}")
+        updates[slug] = {name: value[name]
+                         for name in ("audience", "process", "surface") if name in value}
+    return _backfill(updates, ["audience", "process"], "routing group",
+                     optional_fields=["surface"])
 
 
 def set_statuses(mapping: dict[str, object]) -> list[tuple[str, str | None, str]]:
@@ -940,46 +1059,17 @@ def verify_insights() -> tuple[bool, list[str]]:
                               f"refused or dropped, so it belongs to "
                               f"{'/'.join(sorted(REASON_REQUIRED_STATUSES))}")
 
-        # The publishing path owes a DESTINATION, and the surface's other lie is reported
-        # from the same one home the write path refuses it from. The leg binds rows that
-        # carry the routing group — `audience` and `process` are BOTH required at append, so
-        # a row holding both is one written under the re-cut, while a row predating it
-        # carries neither and stays valid, exactly as the 31 author-less rows do. Without
-        # that bound the check would demand a `surface` from history, which is the same
-        # rewrite the append-only rule forbids.
-        carries_routing_group = "audience" in data and "process" in data
-        if carries_routing_group and data.get("status") in SURFACE_REQUIRED_STATUSES:
-            if not str(data.get("surface") or "").strip():
-                errors.append(f"line {idx}: status '{data.get('status')}' carries no surface "
-                              f"— a publishing unit must name where it lands "
-                              f"({', '.join(ALLOWED_SURFACES)})")
-        # A surface on a row outside that path is the field's other lie: it reads as a
-        # destination for a unit that is not going anywhere.
-        if "surface" in data:
-            if not str(data.get("surface") or "").strip():
-                errors.append(f"line {idx}: empty surface")
-            elif data.get("status") not in SURFACE_REQUIRED_STATUSES:
-                errors.append(f"line {idx}: surface recorded on status "
-                              f"'{data.get('status')}' — a surface names where a publishing "
-                              f"unit lands, so it belongs to "
-                              f"{'/'.join(sorted(SURFACE_REQUIRED_STATUSES))}")
-
-        # D4's two cross-axis invariants. The routing group says what the claim IS and who
-        # it serves; `status` says what has been DONE about it. The two answer different
-        # questions and must not CONTRADICT each other — a row in the publishing path
-        # asserts a public reader, and a row routed to HQ asserts the insight applies to our
-        # processes. Each leg fires only where the row CARRIES the routing field, so a row
-        # predating the re-cut is not condemned for a claim it never made.
-        if (data.get("status") in SURFACE_REQUIRED_STATUSES
-                and "audience" in data and data.get("audience") != "public"):
-            errors.append(f"line {idx}: status '{data.get('status')}' is in the publishing "
-                          f"path, which asserts a public audience — but audience is "
-                          f"'{data.get('audience')}'")
-        if (data.get("status") in HQ_PATH_STATUSES
-                and "process" in data and data.get("process") != "yes"):
-            errors.append(f"line {idx}: status '{data.get('status')}' routes the row to HQ, "
-                          f"which asserts the insight applies to our processes — but process "
-                          f"is '{data.get('process')}'")
+        # The routing-group legs, from the ONE home the two write paths also read. The READ
+        # path is the one that exempts a row predating the group — see
+        # `routing_group_violations` for why the exemption is a named parameter and why it
+        # is NOT mirrored onto the write leg.
+        for leg in routing_group_violations(data, exempt_legacy=True):
+            errors.append(routing_leg_message(leg, data, subject=f"line {idx}"))
+        # An EMPTY surface is not a routing-group leg: it is a value that was WRITTEN and
+        # says nothing, which is the same defect a blank audience is, and it is reported
+        # whether or not the row sits in the publishing path.
+        if "surface" in data and not str(data.get("surface") or "").strip():
+            errors.append(f"line {idx}: empty surface")
 
     # Half 2 — supersession. A correction is a NEW row naming the row it corrects, and
     # the reader takes the NEWEST. Two ways that reading breaks, both checked here: a
@@ -1063,22 +1153,37 @@ def main() -> int:
     sub.add_parser("verify", help="Verify integrity of insights ledger")
 
     p_aud = sub.add_parser("audience",
-                           help="Set `audience` on entries that predate the field")
+                           help="CHANGE the audience of an entry that already carries the "
+                                "routing group")
     p_aud.add_argument("--file", required=True, metavar="MAPPING.json",
-                       help="JSON object {id: public|internal}, applied in ONE transaction")
+                       help="JSON object {id: public|internal}, applied in ONE transaction. "
+                            "A row that PREDATES the routing group is `routing`'s — this "
+                            "verb changes a field the row already carries")
 
     p_prc = sub.add_parser("process",
-                           help="Record the `process` verdict on entries that predate it")
+                           help="CHANGE the process verdict on an entry that already carries "
+                                "the routing group")
     p_prc.add_argument("--file", required=True, metavar="MAPPING.json",
                        help="JSON object {id: yes|no}, applied in ONE transaction. Asked of "
-                            "every row, whatever its audience")
+                            "every row, whatever its audience. A row that PREDATES the "
+                            "routing group is `routing`'s")
 
     p_srf = sub.add_parser("surface",
-                           help="Name the publishing surface of entries already in that path")
+                           help="Name or CHANGE the publishing surface of an entry that "
+                                "already carries the routing group")
     p_srf.add_argument("--file", required=True, metavar="MAPPING.json",
                        help="JSON object {id: x|miidas|both}. Lawful only on a row whose "
                             "status is 'publishing' or 'published': a destination on a row "
                             "that is not going anywhere is the field's other lie")
+
+    p_rt = sub.add_parser("routing",
+                          help="Backfill the routing group on entries that predate it")
+    p_rt.add_argument("--file", required=True, metavar="MAPPING.json",
+                      help="JSON object {id: {\"audience\": public|internal, \"process\": "
+                           "yes|no[, \"surface\": x|miidas|both]}}, applied in ONE "
+                           "transaction and WITHOUT a status. This is the door the three "
+                           "single-field verbs point at: the group is atomic, so a row in "
+                           "the publishing path takes all three fields at once")
 
     p_st = sub.add_parser("status",
                           help="Move existing entries to a new workflow status")
@@ -1263,6 +1368,35 @@ def main() -> int:
         summary = ", ".join(f"{n} {val}" for val, n in sorted(counts.items()))
         print(f"set {noun} on {len(changes)} entr{'y' if len(changes) == 1 else 'ies'}: "
               f"{summary}")
+        return 0
+
+    elif args.cmd == "routing":
+        # The named backfill door the three single-field verbs point at (#279, ruled). Its
+        # mapping carries an OBJECT per row, so it reads the file itself rather than sharing
+        # the scalar-verb branch above.
+        try:
+            mapping = json.loads(Path(args.file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"FAIL: cannot read mapping {args.file}: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(mapping, dict):
+            print("FAIL: the mapping must be a JSON object "
+                  "{id: {audience, process[, surface]}}", file=sys.stderr)
+            return 1
+        try:
+            changes = set_routing({str(k): v for k, v in mapping.items()})
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        for slug, before in changes:
+            moved = ", ".join(
+                f"{name} {before.get(name) or 'legacy'} -> "
+                f"{json.dumps(mapping[slug][name], ensure_ascii=False)}"
+                for name in ("audience", "process", "surface")
+                if name in mapping[slug])
+            print(f"  {slug}: {moved}")
+        print(f"backfilled the routing group on {len(changes)} "
+              f"entr{'y' if len(changes) == 1 else 'ies'}")
         return 0
 
     elif args.cmd == "status":

@@ -354,8 +354,8 @@ def test_a_status_move_does_not_disturb_the_audience(tmp_path, monkeypatch):
     register = _redirect(tmp_path, monkeypatch)
     _legacy_register(register, [_row(1), _row(2)])
 
-    insights.set_audience({"row-1": "public", "row-2": "internal"})
-    insights.set_process({"row-1": "no", "row-2": "yes"})
+    insights.set_routing({"row-1": {"audience": "public", "process": "no"},
+                          "row-2": {"audience": "internal", "process": "yes"}})
     insights.set_statuses({
         "row-1": {"status": "publishing", "surface": "x"},
         "row-2": {"status": "hq"},
@@ -391,13 +391,16 @@ def test_status_and_the_routing_verbs_share_one_backfill_and_neither_accepts_the
         raise AssertionError("a retired CLASS value was accepted as a status")
     assert "status" not in register.read_text(encoding="utf-8")
 
+    # The audience verb's VALUE check needs a row inside its narrowed population — one that
+    # already carries the group — or the population refusal would answer first (#279).
+    insights.set_routing({"row-1": {"audience": "public", "process": "no"}})
     try:
         insights.set_audience({"row-1": "publishing"})
     except ValueError as exc:
         assert "audience" in str(exc), str(exc)
     else:
         raise AssertionError("a STATUS value was accepted as an audience")
-    assert "audience" not in register.read_text(encoding="utf-8")
+    assert json.loads(register.read_text(encoding="utf-8").strip())["audience"] == "public"
 
 # --- insights.md §6 rule 4: a dropped row carries its REASON, on both write paths -----------------
 
@@ -846,8 +849,11 @@ def test_a_publishing_row_cannot_be_re_audienced_out_of_the_path(tmp_path, monke
     move would otherwise be the way around it."""
     register = _redirect(tmp_path, monkeypatch)
     _legacy_register(register, [_row(1)])
+    # The group lands whole, so the row genuinely CARRIES it — otherwise the lone-audience
+    # move would be refused for the population rather than for the contradiction, and the
+    # leg this test names would never be reached.
     insights.set_statuses({"row-1": {"status": "publishing", "surface": "x",
-                                     "audience": "public"}})
+                                     "audience": "public", "process": "yes"}})
     before = register.read_text(encoding="utf-8")
 
     try:
@@ -871,3 +877,104 @@ def test_verify_reports_both_contradicting_pairs(tmp_path, monkeypatch):
                                            "audience": "public", "process": "no"})])
     ok, errors = insights.verify_insights()
     assert not ok and any("process" in e for e in errors), errors
+
+# --- the named backfill door, and the ONE home the legs are read from (#279) -------------
+
+def test_set_surfaces_CHANGES_the_surface_of_a_row_that_carries_the_group(tmp_path, monkeypatch):
+    """`set_surfaces`' real population: a row that already carries the routing group."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1)])
+    insights.set_statuses({"row-1": {"status": "publishing", "surface": "x",
+                                     "audience": "public", "process": "yes"}})
+
+    assert insights.set_surfaces({"row-1": "miidas"}) == [("row-1", "x", "miidas")]
+    assert _rows(register)[0]["surface"] == "miidas"
+    assert insights.verify_insights()[0]
+
+def test_set_surfaces_refuses_a_legacy_publishing_row_and_names_the_door(tmp_path, monkeypatch):
+    """The population that breaks: a row already IN the publishing path that predates the
+    group. It owes all three fields at once, so a lone surface write is refused — and the
+    refusal NAMES `routing` rather than the missing sibling (#279)."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "published",
+                                           "status_at": "2026-09-14T09:00:00Z"})])
+    before = register.read_text(encoding="utf-8")
+
+    try:
+        insights.set_surfaces({"row-1": "x"})
+    except ValueError as exc:
+        assert "routing" in str(exc), str(exc)
+    else:
+        raise AssertionError("a legacy publishing row took a lone surface write")
+    assert register.read_text(encoding="utf-8") == before
+
+def test_the_named_backfill_lands_the_whole_group_on_a_legacy_publishing_row(tmp_path, monkeypatch):
+    """THE PROBE THAT BITES (#279 criterion 1). On a legacy row whose status is already in
+    the publishing path, no single-field verb can serve it and each refusal names the door;
+    `routing` then writes the whole group in ONE transaction, writes no status, and leaves
+    `verify` clean. Against the unpatched tree this fails twice over — `set_routing` does not
+    exist, and the three refusals name no exit."""
+    register = _redirect(tmp_path, monkeypatch)
+    _legacy_register(register, [_row(1, **{"status": "published",
+                                           "status_at": "2026-09-14T09:00:00Z"})])
+
+    for verb, mapping in ((insights.set_audience, {"row-1": "public"}),
+                          (insights.set_process, {"row-1": "yes"}),
+                          (insights.set_surfaces, {"row-1": "x"})):
+        try:
+            verb(mapping)
+        except ValueError as exc:
+            assert "routing" in str(exc), str(exc)
+        else:
+            raise AssertionError(f"{verb.__name__} served a legacy publishing row")
+
+    assert [c[0] for c in insights.set_routing(
+        {"row-1": {"audience": "public", "process": "yes", "surface": "x"}})] == ["row-1"]
+
+    row = _rows(register)[0]
+    assert (row["status"], row["status_at"]) == ("published", "2026-09-14T09:00:00Z"), (
+        "the backfill writes no status, so it cannot re-date the transition")
+    assert (row["audience"], row["process"], row["surface"]) == ("public", "yes", "x")
+    ok, errors = insights.verify_insights()
+    assert ok, errors
+
+def test_the_routing_legs_have_ONE_home_and_the_exemption_is_an_explicit_parameter():
+    """#279 criterion 5, and the law it cites — `tools/ledger_declaration.py`: *two
+    implementations would drift on exactly the inputs that matter*. Each leg is named by the
+    SAME function at every call site, and the one difference between the readers is the
+    parameter rather than a re-derivation a later reader has to guess at."""
+    assert insights.ROUTING_LEGS == ("surface_missing", "surface_outside_path",
+                                     "audience_not_public", "process_not_yes")
+
+    cases = [
+        ("surface_missing", {"status": "published", "audience": "public", "process": "no"}),
+        ("surface_outside_path", {"status": "hq", "process": "yes", "surface": "x"}),
+        ("audience_not_public", {"status": "publishing", "surface": "x",
+                                 "audience": "internal", "process": "no"}),
+        ("process_not_yes", {"status": "hq", "audience": "public", "process": "no"}),
+    ]
+    for leg, row in cases:
+        assert insights.routing_group_violations(row, exempt_legacy=False) == [leg], leg
+        assert insights.routing_group_violations(row, exempt_legacy=True) == [leg], leg
+        # The renderer is ONE function, and it must render THIS leg's own fact — the row's
+        # status is named in every message, so a message that drifted from its leg shows up
+        # as a message about the wrong state.
+        message = insights.routing_leg_message(leg, row, subject="line 1")
+        assert message.startswith("line 1 ") and row["status"] in message, message
+    try:
+        insights.routing_leg_message("no_such_leg", {}, subject="line 1")
+    except ValueError as exc:
+        assert "no_such_leg" in str(exc)
+    else:
+        raise AssertionError("an unknown leg was rendered instead of refused")
+
+    # The ONE difference, asserted rather than described: a row that predates the group is
+    # exempt for the reader of stored history and a violation for either write path. The
+    # exemption is the read leg's alone — widening the write leg is what #279 REFUSED.
+    legacy = {"status": "published", "status_at": "2026-09-14T09:00:00Z"}
+    assert insights.routing_group_violations(legacy, exempt_legacy=True) == []
+    # The write path demands the WHOLE group, so it reports EVERY leg the row would violate
+    # rather than the one a lone verb happens to name first — which is exactly why a
+    # single-field verb cannot serve this row and the refusal points at the door.
+    assert insights.routing_group_violations(legacy, exempt_legacy=False) == [
+        "surface_missing", "audience_not_public"]
