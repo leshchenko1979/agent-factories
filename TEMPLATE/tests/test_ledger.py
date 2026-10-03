@@ -917,6 +917,64 @@ def main() -> int:
         check("verify accepts a row written by a declared lane",
               r.returncode == 0, r.stdout.strip().splitlines()[0] if r.stdout else "")
 
+        print("\nthe actor set is duplicate-free across the two declaration surfaces (#287)")
+        # The two membership surfaces OVERLAP BY DESIGN: a lane this factory both HAS
+        # (tools/actors.txt) and AUTHORIZES (authorizations.actors) is named on both, so
+        # `extra` carries it twice and only the within-`extra` dedupe keeps the tuple unique.
+        # The #283 change added that dedupe; nothing asserted the RESULT until #287, so the
+        # derivation's uniqueness rested on review alone (P29). A rule that has only seen good
+        # input has not been shown to reject bad input, so the assertion is paired with a BITE
+        # arm that neuters the dedupe in the STAGED copy and shows the same assertion red.
+        dup_tree = Path(tmp) / "dup-tree"
+        _fixture_repo(dup_tree)
+        dup_actors = dup_tree / "tools" / "actors.txt"
+        dup_auth = dup_tree / "dup-authorizations.json"
+        # The SAME role on BOTH surfaces — the overlap that produced the #283 duplicates.
+        dup_actors.write_text("instrument\nsurveys\n", encoding="utf-8")
+        dup_auth.write_text(json.dumps({"actors": ["instrument", "surveys"], "by_event": {}}))
+        dup_env = {
+            "OC_ACTORS_PATH": str(dup_actors),
+            "OC_AUTHORIZATIONS_PATH": str(dup_auth),
+        }
+
+        def known_actors_over(root: Path) -> list[str]:
+            """`known_actors()` from the STAGED copy, over the overlapping population.
+
+            Run against the staged tree, not the live tool, so the BITE arm can mutate the
+            copy this reads. The population is PRINTED by the caller — a clean verdict over an
+            unexamined set is the failure the law names. `-B` keeps no `.pyc` from masking the
+            mutation.
+            """
+            proc = subprocess.run(
+                [sys.executable, "-B", "-c",
+                 "import sys; sys.path.insert(0, 'tools'); import ledger;"
+                 "print('|'.join(ledger.known_actors()))"],
+                capture_output=True, text=True, env={**os.environ, **dup_env}, cwd=str(root),
+            )
+            if proc.returncode != 0:
+                raise AssertionError(proc.stderr.strip()[-300:])
+            return proc.stdout.strip().split("|") if proc.stdout.strip() else []
+
+        live_actors = known_actors_over(dup_tree)
+        check("known_actors() is duplicate-free across the two declaration surfaces",
+              len(live_actors) == len(set(live_actors)),
+              f"population examined: {live_actors!r}")
+        # The population must EXERCISE the dedupe, or the assertion above passes over a set
+        # that was unique anyway and proves nothing. The overlapping role is named on BOTH
+        # surfaces and must appear exactly ONCE in the result.
+        check("the population exercises the dedupe (the overlap is real)",
+              live_actors.count("instrument") == 1 and live_actors.count("surveys") == 1,
+              f"instrument={live_actors.count('instrument')}x surveys={live_actors.count('surveys')}x")
+
+        # BITE: neuter the within-`extra` dedupe — the exact #283 defect — and show the
+        # duplicate-free assertion now FAILS, naming the role returned twice.
+        _stage_mutant(dup_tree, "if role in ACTORS or role in seen:", "if role in ACTORS:")
+        mut_actors = known_actors_over(dup_tree)
+        duplicated = sorted({a for a in mut_actors if mut_actors.count(a) > 1})
+        check("the probe BITES — neutering the within-extra dedupe reds the assertion",
+              len(mut_actors) != len(set(mut_actors)),
+              f"mutated population: {mut_actors!r} — duplicated: {duplicated!r}")
+
         print("\ncorruption is detected, not tolerated")
         with open(ledger, "a") as fh:
             fh.write(json.dumps({"n": 999, "ts": "2026-01-01T00:00:00Z",
