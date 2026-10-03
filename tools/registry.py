@@ -1039,17 +1039,47 @@ def opencrabs_home_dbs(root: Path | None = None) -> tuple[list[Path], list[str]]
             unreached.append(f"profile home {home}: no opencrabs.db")
     return dbs, unreached
 
-def cron_min_gap_problems(dbs: list[Path]) -> tuple[list[str], list[str], int]:
-    """(offenders, unreadable, enabled jobs checked) over the given DBs.
+def is_trigger_gated_poll(trigger_cmd: object, trigger_on: object) -> bool:
+    """Is this row's schedule a GATE rather than a lane-wake? (#289)
+
+    The 6 h floor exists so nothing WAKES a lane more often than every 6 h. A row
+    whose `trigger_cmd` is non-empty runs that command on the schedule and wakes a
+    lane only when the command's gate OPENS (`trigger_on` decides how), so a poll
+    at a 30-min cadence short-circuits at 0 tokens on the 47 fires out of 48 that
+    change nothing — and judging it against a lane-wake floor reds a row that never
+    breached it.
+
+    A row is a POLL when it carries a non-empty `trigger_cmd` AND a gating
+    `trigger_on`. `trigger_on='always'` fires unconditionally, so the command does
+    not gate it and the row IS a lane-wake; it keeps the floor. An absent
+    `trigger_cmd` is a plain lane-wake, which is also the answer for a home whose
+    `cron_jobs` predates the column — the two are read through a NULL projection, so
+    the safe direction (judge it) is the default and never an unstated exclusion.
+    """
+    if not str(trigger_cmd or "").strip():
+        return False
+    return str(trigger_on or "").strip().lower() != "always"
+
+def cron_min_gap_problems(dbs: list[Path]) -> tuple[list[str], list[str], int, int]:
+    """(offenders, unreadable, lane-wakes judged, trigger-gated polls excluded).
 
     Separate from the check that calls it so it can be driven over a THROWAWAY
     root: a floor law that has only ever run against the live box has not been
     shown to see a job that breaks it, and the one offender this predicate missed
     until #102 sat in a home the live reader could not reach.
+
+    The population is LANE-WAKES, and the polls are counted APART rather than
+    dropped (#289). An exclusion nobody can see is the same defect as the narrower
+    reader #102 fixed, one population over: the read must say how many rows it set
+    aside, so `check_cron_min_gap_ge_6h` can PRINT both counts. `trigger_cmd` and
+    `trigger_on` are PROBED, not assumed — a home whose `cron_jobs` predates them
+    reads NULL, every row there is judged as a lane-wake, and a home with no
+    `cron_jobs` table at all is a home that runs no jobs, not an unreadable one.
     """
     offenders: list[str] = []
     unreadable: list[str] = []
-    checked = 0
+    judged = 0
+    polls = 0
     for db in dbs:
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
@@ -1057,10 +1087,22 @@ def cron_min_gap_problems(dbs: list[Path]) -> tuple[list[str], list[str], int]:
             unreadable.append(f"{db.name}: {exc}")
             continue
         try:
-            for name, expr in conn.execute(
-                "select name, cron_expr from cron_jobs where enabled = 1"
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(cron_jobs)")}
+            if not columns:
+                continue  # a home with no cron table runs no jobs
+            if not {"name", "cron_expr"} <= columns:
+                unreadable.append(f"{db.name}: cron_jobs lacks name/cron_expr")
+                continue
+            cmd_col = "trigger_cmd" if "trigger_cmd" in columns else "NULL as trigger_cmd"
+            on_col = "trigger_on" if "trigger_on" in columns else "NULL as trigger_on"
+            for name, expr, cmd, on in conn.execute(
+                f"select name, cron_expr, {cmd_col}, {on_col} "
+                f"from cron_jobs where enabled = 1"
             ):
-                checked += 1
+                if is_trigger_gated_poll(cmd, on):
+                    polls += 1
+                    continue
+                judged += 1
                 gap, note = cron_min_gap(expr)
                 if gap is None:
                     unreadable.append(f"{name} ({expr}): {note}")
@@ -1070,25 +1112,37 @@ def cron_min_gap_problems(dbs: list[Path]) -> tuple[list[str], list[str], int]:
             unreadable.append(f"{db.name}: {exc}")
         finally:
             conn.close()
-    return offenders, unreadable, checked
+    return offenders, unreadable, judged, polls
 
 def check_cron_min_gap_ge_6h() -> tuple[bool, str]:
-    """No ENABLED job in the box's OpenCrabs homes may have a minimum gap below 6 h.
+    """No ENABLED LANE-WAKE in the box's OpenCrabs homes may have a gap below 6 h.
 
     The claim is about the BOX, so the read is box-wide, and the evidence names
     the population it read — the job count AND the home count — because the
     defect this predicate carried until #102 was precisely a box-wide claim over
     a profile-scoped reader: it answered HOLDS while the only offender on the box
     sat in the default home that reader could not reach.
+
+    The population is LANE-WAKES, and the POLLS it set aside are PRINTED beside it
+    (#289): the floor binds what WAKES a lane, and a trigger-gated poll wakes
+    nobody on its schedule. The exclusion is VISIBLE rather than silent, because an
+    unreported exclusion is the #102 defect one population over — and a zero
+    floor-population read FAILS rather than passing, since a predicate that
+    examined nothing has reported nothing (SKILL §8).
     """
     try:
         dbs, unreached = opencrabs_home_dbs()
     except FleetManifestError as exc:
         return (False, str(exc))
-    offenders, unreadable, checked = cron_min_gap_problems(dbs)
-    scope = f"{checked} enabled job(s) across {len(dbs)} home(s)"
+    offenders, unreadable, judged, polls = cron_min_gap_problems(dbs)
+    scope = (
+        f"{judged} lane-wake(s) judged across {len(dbs)} home(s); "
+        f"{polls} trigger-gated poll(s) excluded"
+    )
     if unreached:
         scope += f"; {len(unreached)} home(s) unreached: {'; '.join(unreached[:3])}"
+    if judged == 0:
+        return False, f"read {scope} — the floor population came back empty, so nothing was examined"
     if offenders:
         return False, f"{'; '.join(offenders[:4])} — read {scope}"
     if unreadable:

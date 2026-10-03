@@ -1378,7 +1378,7 @@ def probe_the_box_wide_reader_reaches_the_default_home() -> None:
             default_db in dbs and profile_db in dbs,
             f"{len(dbs)} db(s): {[d.parent.name for d in dbs]}",
         )
-        offenders, _unreadable, checked = reg.cron_min_gap_problems(dbs)
+        offenders, _unreadable, checked, _polls = reg.cron_min_gap_problems(dbs)
         check(
             "...and the offender in that default home is FOUND, not skipped",
             any("default-offender" in o and "300 min" in o for o in offenders),
@@ -1413,6 +1413,107 @@ def probe_the_box_wide_reader_reaches_the_default_home() -> None:
             set(globbed) < set(box_dbs)
             and all(str(p).startswith(str(reg.PROFILE_ROOT)) for p in globbed),
             f"profile glob {len(globbed)} db(s), box reader {len(box_dbs)} db(s)",
+        )
+
+def probe_a_trigger_gated_poll_leaves_the_floor_population() -> None:
+    """#289: the 6 h floor binds LANE-WAKES, and a trigger-gated poll is not one.
+
+    `ai-antispam-loss-watch` runs at `15,45 * * * *` — a 30-min cadence — but it
+    carries a non-empty `trigger_cmd` with `trigger_on='non_empty'`, so its schedule
+    runs a gate that short-circuits at 0 tokens and wakes no lane. The predicate
+    projected only (name, cron_expr), so it judged the poll against a floor it does
+    not breach and red the box.
+
+    Four legs, because a red alone is satisfiable by a predicate that reds on
+    everything: the poll at 30 min is EXCLUDED and does not offend; a row at the
+    SAME cadence with NO `trigger_cmd` DOES offend (the floor still bites); a row
+    with a `trigger_cmd` but `trigger_on='always'` DOES offend (an unconditional
+    trigger does not gate, so the row wakes a lane and keeps the floor); and a read
+    whose floor population is EMPTY FAILS loudly rather than passing (§8). The
+    fixture is a throwaway DB, and the box reader is INJECTED for the last leg, so
+    no live DB is opened.
+    """
+    table = {
+        "cmd+gate": reg.is_trigger_gated_poll("cmd", "non_empty"),
+        "cmd+null": reg.is_trigger_gated_poll("cmd", None),
+        "blank+gate": reg.is_trigger_gated_poll("", "non_empty"),
+        "spaces+gate": reg.is_trigger_gated_poll("   ", "non_empty"),
+        "cmd+always": reg.is_trigger_gated_poll("cmd", "always"),
+    }
+    check(
+        "the poll predicate's truth table: non-empty cmd AND a non-'always' gate",
+        table
+        == {
+            "cmd+gate": True,
+            "cmd+null": True,
+            "blank+gate": False,
+            "spaces+gate": False,
+            "cmd+always": False,
+        },
+        f"{table}",
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "opencrabs.db"
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "create table cron_jobs(name text, cron_expr text, enabled integer, "
+            "trigger_cmd text, trigger_on text)"
+        )
+        conn.executemany(
+            "insert into cron_jobs values (?, ?, 1, ?, ?)",
+            [
+                ("poller", "15,45 * * * *", "test -f /tmp/.gate", "non_empty"),
+                ("waker", "15,45 * * * *", "", "non_empty"),
+                ("always-fires", "15,45 * * * *", "echo hi", "always"),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        offenders, unreadable, judged, polls = reg.cron_min_gap_problems([db])
+        check(
+            "a trigger-gated poll at 30 min is EXCLUDED, and the exclusion is COUNTED",
+            not unreadable and polls == 1 and judged == 2,
+            f"judged={judged} polls={polls} unreadable={unreadable}",
+        )
+        check(
+            "...and it does NOT offend, while the SAME cadence with no trigger_cmd DOES",
+            not any("poller" in o for o in offenders)
+            and any("waker" in o for o in offenders),
+            f"offenders={offenders}",
+        )
+        check(
+            "...and trigger_on='always' does NOT gate, so that row keeps the floor and offends",
+            any("always-fires" in o for o in offenders),
+            f"offenders={offenders}",
+        )
+
+        # The floor population is the thing judged; an EMPTY one is a read that
+        # examined nothing and must FAIL, never pass.
+        poll_only = Path(tmp) / "poll-only.db"
+        conn = sqlite3.connect(poll_only)
+        conn.execute(
+            "create table cron_jobs(name text, cron_expr text, enabled integer, "
+            "trigger_cmd text, trigger_on text)"
+        )
+        conn.execute(
+            "insert into cron_jobs values (?, ?, 1, ?, ?)",
+            ("lonely-poller", "15,45 * * * *", "test -f /tmp/.gate", "non_empty"),
+        )
+        conn.commit()
+        conn.close()
+
+        saved_reader = reg.opencrabs_home_dbs
+        reg.opencrabs_home_dbs = lambda: ([poll_only], [])
+        try:
+            ok, why = reg.check_cron_min_gap_ge_6h()
+        finally:
+            reg.opencrabs_home_dbs = saved_reader
+        check(
+            "a floor population that came back EMPTY FAILS, naming both counts",
+            not ok and "came back empty" in why and "1 trigger-gated poll(s) excluded" in why,
+            why[:150],
         )
 
 def _manifest_record(slug: str, prefixes: list) -> dict:
@@ -1950,6 +2051,7 @@ PROBES = (
     probe_a_command_shaped_check_fails,
     probe_a_future_review_by_fails,
     probe_the_box_wide_reader_reaches_the_default_home,
+    probe_a_trigger_gated_poll_leaves_the_floor_population,
     probe_a_factory_with_no_prefixes_fails,
     probe_overlapping_prefixes_fail,
     probe_the_live_manifest_satisfies_the_prefix_law,
