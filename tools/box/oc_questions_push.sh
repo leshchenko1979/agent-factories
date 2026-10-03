@@ -1,8 +1,20 @@
 #!/bin/bash
-# oc-questions-push — mirror the published pages and the register to vpn.
+# oc-questions-push — mirror the published pages to vpn.
 #
-# DIRECTION: agents -> vpn (outbound). vpn needs NO inbound access to this host,
-# so the public host holds no key that can reach the private one.
+# DIRECTION, and it is not ONE direction. The MIRROR leg below is agents ->
+# vpn (outbound only): vpn needs no inbound access to this host to RECEIVE
+# the pages. The ANSWER leg is the REVERSE, and the header this replaces was
+# FALSE of it -- it read "the public host holds no key that can reach the
+# private one" while the answer backend on vpn runs the canonical CLI on
+# this host over ssh (OQ_SSH=agents) on every submission, so vpn DOES hold a
+# key to this host. What bounds it is the CLI's own surface, not the absence
+# of a key: the backend runs the resolved CLI and nothing else, and it
+# cannot read this store.
+#
+# The register is NOT mirrored (S2, 2026-10-02). The confirmation's lane and
+# question title ride in the token's own page meta, so the public host needs
+# no copy of the register -- and a copy it never had cannot go stale. The
+# register still drives the RENDER below, from this host.
 #
 # Triggered by oc-questions-push.path when the store changes.
 #
@@ -19,7 +31,7 @@
 #
 # THE COPY IS CORRECT BY COMPARISON, NOT BY TIMING (#207 shape 3):
 # after the copy, the SOURCE digest is compared against the SERVED digest for
-# the page tree AND the register. Agreement -> ok. Disagreement -> re-copy,
+# the page tree. Agreement -> ok. Disagreement -> re-copy,
 # bounded to 2 further attempts; still divergent -> exit non-zero naming both
 # digests. The comparison prints on EVERY run, clean or not, so "ok" carries the
 # population it judged instead of being a bare word. An uncalibrated settle
@@ -31,7 +43,7 @@
 # SKIPPED and the served copy stays content-stale. Measured here: same-length
 # rewrite with the mtime restored -> rsync copied nothing, exited 0. Without
 # `-c` the digest comparison would diverge every time and no retry could
-# converge. Trees are small (pages ~29 files/100 KB, register ~50 KB).
+# converge. The tree is small (pages ~29 files/100 KB).
 #
 # BOUND (until 2026-10-02): this made the COPY correct. It said nothing about the
 # page's CONTENT -- "a render that never ran is a different leg". THE RENDER LEG
@@ -47,7 +59,9 @@ SRC_ROOT="${OC_QUESTIONS_SRC_ROOT:-/root/.opencrabs/profiles/ops/questions}"
 PAGES_SRC="${OC_QUESTIONS_PAGES_SRC:-$SRC_ROOT/pages}"
 REG_SRC="${OC_QUESTIONS_REG_SRC:-$SRC_ROOT/open.json}"
 PAGES_DST="${OC_QUESTIONS_PAGES_DST:-/srv/questions}"
-REG_DST="${OC_QUESTIONS_REG_DST:-/var/lib/questions/open.json}"
+# NOTE: the register has no destination path here, deliberately -- it is not
+# mirrored (see the header). The local $REG_SRC is still read: the render leg
+# renders it.
 SETTLE="${OC_QUESTIONS_PUSH_SETTLE:-3}"
 MAX_RETRY="${OC_QUESTIONS_PUSH_MAX_RETRY:-2}"
 TARGET="${OC_QUESTIONS_PUSH_TARGET-vpn}"
@@ -71,14 +85,10 @@ fi
 # local copy, which is how the comparison is tested.
 if [ -n "$TARGET" ]; then
     pages_dest="$TARGET:$PAGES_DST/"
-    reg_dest="$TARGET:$REG_DST"
     rsync_e=(-e "$SSH_CMD $SSH_OPTS")
-    remote_mv() { $SSH_CMD $SSH_OPTS "$TARGET" "mv -f '$REG_DST.tmp' '$REG_DST'"; }
 else
     pages_dest="$PAGES_DST/"
-    reg_dest="$REG_DST"
     rsync_e=()
-    remote_mv() { mv -f "$REG_DST.tmp" "$REG_DST"; }
 fi
 
 # Per-file digests over a tree, path-relative and sorted, folded to one line.
@@ -95,15 +105,9 @@ tree_digest() { # $1 = directory, $2 = "" | remote-host
     fi
 }
 
-file_digest() { # $1 = file, $2 = "" | remote-host
-    local f=$1 host=${2:-}
-    if [ -n "$host" ]; then
-        $SSH_CMD $SSH_OPTS "$host" "md5sum '$f'" 2>/dev/null | cut -d' ' -f1
-    else
-        md5sum "$f" 2>/dev/null | cut -d' ' -f1
-    fi
-}
-
+# (file_digest() is gone with the register leg. It had exactly two call
+# sites, both of them the register halves of the comparison, so keeping it
+# would leave a helper the next reader believes is in use.)
 # Content fingerprint of the whole SOURCE side (pages + register). Used to tell
 # whether the source MOVED across a copy -- a digest comparison can agree at an
 # instant when the source has not yet finished changing, and a copy is only
@@ -251,38 +255,33 @@ while :; do
     # Pages: --delete, so a rotated or expired token stops being served.
     rsync -a -c --delete --timeout=60 "${rsync_e[@]}" "$PAGES_SRC/" "$pages_dest" || exit 2
 
-    # Register: to a temp path then rename, so a reader never sees a partial file.
-    rsync -a -c --timeout=60 "${rsync_e[@]}" "$REG_SRC" "$reg_dest.tmp" || exit 3
-    remote_mv || exit 4
-
-    # The comparison: source vs SERVED, both legs. Printed unconditionally.
+    # The comparison: source vs SERVED. Printed unconditionally, so "ok"
+    # carries the population it judged instead of being a bare word.
     src_pages=$(tree_digest "$PAGES_SRC")
     dst_pages=$(tree_digest "$PAGES_DST" "$TARGET")
-    src_reg=$(file_digest "$REG_SRC")
-    dst_reg=$(file_digest "$REG_DST" "$TARGET")
-    echo "push: compare - pages src=$src_pages served=$dst_pages | register src=$src_reg served=$dst_reg"
+    echo "push: compare - pages src=$src_pages served=$dst_pages"
 
     # Settled = the served copy matches the source AND the source held still
     # across the attempt. Either half alone is insufficient: agreement can be
     # momentary (the source is still being written), and stillness alone says
     # nothing about what was actually mirrored.
     after=$(fingerprint)
-    if [ "$src_pages" = "$dst_pages" ] && [ "$src_reg" = "$dst_reg" ] \
+    if [ "$src_pages" = "$dst_pages" ] \
        && [ "$before" = "$after" ] && [ "$src_pages" = "$stage_digest" ]; then
         break
     fi
 
     if [ "$attempt" -gt "$MAX_RETRY" ]; then
-        echo "push: DIVERGENT after $attempt attempt(s) - pages src=$src_pages served=$dst_pages | register src=$src_reg served=$dst_reg | canonical=$stage_digest" >&2
+        echo "push: DIVERGENT after $attempt attempt(s) - pages src=$src_pages served=$dst_pages | canonical=$stage_digest" >&2
         exit 6
     fi
     if [ "$src_pages" != "$stage_digest" ]; then
         echo "push: re-rendering - the live page tree no longer matches the canonical render (attempt $attempt of $((MAX_RETRY + 1)))"
-    elif [ "$src_pages" = "$dst_pages" ] && [ "$src_reg" = "$dst_reg" ]; then
+    elif [ "$src_pages" = "$dst_pages" ]; then
         echo "push: re-copying - the copy matched but the source was still moving (attempt $attempt of $((MAX_RETRY + 1)))"
     else
         echo "push: re-copying - the served copy does not match the source (attempt $attempt of $((MAX_RETRY + 1)))"
     fi
 done
 
-echo "push: ok - $count page entries, register refreshed (attempts=$attempt, pages=$src_pages, register=$src_reg, canonical=$stage_digest)"
+echo "push: ok - $count page entries (attempts=$attempt, pages=$src_pages, canonical=$stage_digest)"
