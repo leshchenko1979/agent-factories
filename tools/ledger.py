@@ -378,7 +378,21 @@ def known_actors() -> tuple[str, ...]:
                 extra.append(role)
     declared, _ = load_authorizations(REPO)
     extra.extend(declared)
-    return ACTORS + tuple(role for role in extra if role not in ACTORS)
+    # DEDUPED WITHIN `extra`, not only against `ACTORS` (#283 leg 2). The two declaration
+    # surfaces overlap by design -- a lane this factory both HAS (actors.txt) and AUTHORIZES
+    # (authorizations.actors) appears in both -- so filtering against the core constant alone
+    # returned every such lane TWICE. Measured 2026-10-03 at the #283 declaration: 19 entries
+    # for 15 roles, with fleet-instruments, review-rotation, insights and hygiene each
+    # duplicated. Order is preserved (first sighting wins) so the tuple stays stable for a
+    # reader diffing two revisions.
+    seen: set[str] = set()
+    declared_extra: list[str] = []
+    for role in extra:
+        if role in ACTORS or role in seen:
+            continue
+        seen.add(role)
+        declared_extra.append(role)
+    return ACTORS + tuple(declared_extra)
 
 
 def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
