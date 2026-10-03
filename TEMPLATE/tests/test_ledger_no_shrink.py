@@ -64,12 +64,29 @@ not forgiveness: every matching entry is printed as an `excused:` line on EVERY 
 the closing line distinguishes clean from excused so the two are never the same output. A
 malformed entry, or one that matches no removal, is a gate ERROR rather than a silent pass.
 
+**A removal is accounted for in one of two ways, and the two are never conflated.** An
+EXEMPTION (the sha-keyed table above) is the case where the repair space is genuinely
+EMPTY: the commit is pushed, rewriting it is barred by the identity law, and nothing on the
+record already accounts for the removal. A DECLARED RECONCILIATION is the case #298 decided
+— a fork where BOTH sides were PUBLISHED, so two lanes each published rows around the same
+`n` and a merge re-minted one side, removing a published identity by a path the re-mint
+protocol does not cover (`docs/instruments/ledger.md` section 9.1). There the lawful repair
+is an explicit reconciliation ROW naming the removed identities and the disposition, and the
+gate reads it from the ledger itself rather than from a second factory-data file: a line
+ANCHORED at `reconciles:` at the start of a line in any row's `detail`, carrying
+`{"removed": [<identity>, ...], ...}`. A declared identity is matched VERBATIM against an
+identity the walk actually observed removed — a declaration naming a row that was not
+removed, or naming it with the wrong `ts`, excuses nothing and is a gate ERROR, so a false
+declaration cannot buy silence. The mechanism is deliberately NOT a second exemption: #47
+clause 4 rules that a second entry of the same shape is a PROCESS DEFECT, and the remedy for
+a process defect is a mechanism, never another row.
+
 **Zero commits examined is a FAILURE, never a pass.** A gate that silently examines nothing
 is indistinguishable from a gate that examines nothing and passes. If the walk finds no
 commit touching the ledger, this gate FAILS naming what it could not read.
 
 Run:  python3 tests/test_ledger_no_shrink.py
-Exit: 0 clean or fully excused, 1 on any unaccounted row removal.
+Exit: 0 clean or fully accounted, 1 on any unaccounted row removal.
 """
 
 from __future__ import annotations
@@ -90,6 +107,12 @@ FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 # The #52 clause 1 identity tuple. A row is identified by these five fields; a commit that
 # alters any of them removes the old identity and adds a new one.
 IDENTITY_KEYS = ("n", "ts", "event", "actor", "subject")
+
+# The reconciliation declaration, as it appears in a ledger row's `detail`. ANCHORED at the
+# start of a line so a mid-sentence mention of the word cannot satisfy it — a declaration is
+# a record, and a record that any prose can impersonate is not one. `load_reconciliations`
+# reads it; the ledger itself is the store, so a reconciliation needs no second data file.
+RECONCILES_PREFIX = "reconciles:"
 
 
 def _git(*args: str, cwd: Path | None = None) -> tuple[int, str, str]:
@@ -132,44 +155,68 @@ def removed_identities(before_rows: list[dict], after_rows: list[dict]) -> list[
 
 
 def no_shrink_problems(
-    transitions: list[dict], exemptions: dict[str, dict]
-) -> tuple[list[str], list[str], list[str]]:
-    """Return `(problems, excused, stale)` for a list of revision transitions.
+    transitions: list[dict],
+    exemptions: dict[str, dict],
+    declared: set[tuple] | frozenset = frozenset(),
+) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+    """Return `(problems, excused, stale, reconciled, stale_declarations)`.
 
     Each transition is `{"sha", "subject", "before", "after"}` — the row lists at a commit
     and at its parent. Pure, so a synthetic history can drive it: a rule that has only ever
     seen good input has not been shown to reject bad input.
 
-    `problems` names every commit that removes an identity without an exemption; `excused`
-    names the exempted ones, so the two are never conflated; `stale` names exemptions that
-    matched nothing, because an exemption that silently excuses nothing inflates the count
-    of visible debt while weakening the gate.
+    A removal is accounted for by an EXEMPTION (keyed by the commit's sha) or by a DECLARED
+    RECONCILIATION (keyed by the removed identity itself). The two are returned separately
+    and printed separately, so `clean`, `excused` and `reconciled` are never the same output.
+    `declared` holds the identity tuples a reconciliation row named, and each is matched
+    VERBATIM against an identity the walk observed removed.
+
+    `stale` names exemptions that matched nothing, and `stale_declarations` names declared
+    identities that no transition removed. Both are gate ERRORS rather than silent passes:
+    an accounting entry that excuses nothing inflates the visible debt while weakening the
+    gate, and a declaration for a removal that did not happen is a false record.
     """
     problems: list[str] = []
     excused: list[str] = []
-    matched: set[str] = set()
+    reconciled: list[str] = []
+    matched_exemptions: set[str] = set()
+    matched_declarations: set[tuple] = set()
 
     for transition in transitions:
         sha = transition["sha"]
         removed = removed_identities(transition["before"], transition["after"])
         if not removed:
             continue
-        described = ", ".join(
-            f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in removed
-        )
         entry = exemptions.get(sha)
-        if entry is None:
+        if entry is not None:
+            matched_exemptions.add(sha)
+            excused.append(f"{sha} — {entry.get('reason', '')}")
+        # Declarations are read for EVERY transition, exempted or not: an exemption and a
+        # reconciliation can both be on the record for one removal, and a declaration that
+        # is true must not read as stale merely because an exemption also covers it.
+        named = [key for key in removed if key in declared]
+        matched_declarations.update(named)
+        undeclared = [key for key in removed if key not in declared]
+        if named:
+            reconciled.append(
+                f"{sha[:12]} — {len(named)} identity(ies) named by a reconciliation row: "
+                + ", ".join(f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in named)
+            )
+        if undeclared and entry is None:
+            described = ", ".join(
+                f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in undeclared
+            )
             problems.append(
-                f"{sha[:12]} removes {len(removed)} row identity(ies) from "
+                f"{sha[:12]} removes {len(undeclared)} row identity(ies) from "
                 f"{LEDGER_PATH} without a sanctioning row: {described} "
                 f"— subject: {transition['subject'][:70]}"
             )
-        else:
-            matched.add(sha)
-            excused.append(f"{sha} — {entry.get('reason', '')}")
 
-    stale = sorted(set(exemptions) - matched)
-    return problems, excused, stale
+    stale = sorted(set(exemptions) - matched_exemptions)
+    stale_declarations = sorted(
+        declared - matched_declarations, key=lambda key: (key[0] is None, key[0])
+    )
+    return problems, excused, stale, reconciled, stale_declarations
 
 
 def load_exemptions(path: Path) -> tuple[dict[str, dict], list[str]]:
@@ -214,6 +261,67 @@ def load_exemptions(path: Path) -> tuple[dict[str, dict], list[str]]:
         entries[sha] = item
     return entries, problems
 
+
+def load_reconciliations(rows: list[dict]) -> tuple[set[tuple], list[str]]:
+    """`({identity tuple}, problems)` read from the ledger's own rows.
+
+    A reconciliation is a LEDGER ROW, not a second data file: the row that names a removed
+    identity IS the record, and the ledger is already the surface every lane can read. The
+    declaration is a line ANCHORED at `reconciles:` — at the start of a line, so prose that
+    merely mentions the word cannot satisfy it — followed by a JSON object carrying
+    `"removed": [<identity>, ...]`. Extra keys (`sha`, `disposition`, `surviving`) are
+    provenance and are ignored by the match.
+
+    Anything malformed is a problem, never a silent pass: a declaration that quietly fails
+    to parse is indistinguishable from no declaration at all, which is the same vacuous-pass
+    shape the exemption loader and the zero-commits rule exist to forbid.
+    """
+    problems: list[str] = []
+    declared: set[tuple] = set()
+    for row in rows:
+        detail = row.get("detail")
+        if not isinstance(detail, str):
+            continue
+        for line in detail.splitlines():
+            if not line.startswith(RECONCILES_PREFIX):
+                continue
+            raw = line[len(RECONCILES_PREFIX):].strip()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                problems.append(
+                    f"row n={row.get('n')} carries a '{RECONCILES_PREFIX}' line that is "
+                    f"not JSON: {exc}"
+                )
+                continue
+            if not isinstance(payload, dict) or not isinstance(payload.get("removed"), list):
+                problems.append(
+                    f"row n={row.get('n')} carries a '{RECONCILES_PREFIX}' declaration "
+                    f"with no 'removed' list"
+                )
+                continue
+            if not payload["removed"]:
+                problems.append(
+                    f"row n={row.get('n')} declares a reconciliation naming no identity — "
+                    f"a declaration that names nothing accounts for nothing"
+                )
+                continue
+            for item in payload["removed"]:
+                if not isinstance(item, dict):
+                    problems.append(
+                        f"row n={row.get('n')} declares a removed identity that is not an "
+                        f"object: {item!r}"
+                    )
+                    continue
+                identity = identity_of(item)
+                if any(part is None for part in identity):
+                    problems.append(
+                        f"row n={row.get('n')} declares a removed identity missing one of "
+                        f"{IDENTITY_KEYS}: {item!r}"
+                    )
+                    continue
+                declared.add(identity)
+    return declared, problems
 
 def resolvable(ref: str, cwd: Path) -> bool:
     """True when a ref resolves — the `origin/main` -> `HEAD` degradation (clause 4)."""
@@ -352,13 +460,16 @@ def probe_removal_without_exemption_is_a_problem() -> list[str]:
     """A synthetic history that removes a row identity must turn the gate RED."""
     fails: list[str] = []
     transitions = [_transition(SHA_A, [_row(1), _row(2)], [_row(1)])]
-    problems, excused, stale = no_shrink_problems(transitions, {})
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(transitions, {})
     if not problems:
         fails.append("a removed identity raised no problem")
     elif "n=2" not in problems[0]:
         fails.append(f"the problem does not name the removed identity: {problems[0]}")
-    if excused or stale:
-        fails.append(f"unexpected excused/stale: {excused} {stale}")
+    if excused or stale or reconciled or stale_declarations:
+        fails.append(
+            f"unexpected excused/stale/reconciled: {excused} {stale} {reconciled} "
+            f"{stale_declarations}"
+        )
     return fails
 
 
@@ -368,9 +479,14 @@ def probe_a_content_change_is_not_a_removal() -> list[str]:
     before = [_row(1), _row(2)]
     after = [_row(1), _row(2)]
     after[1]["detail"] = "corrected by a later row"
-    problems, excused, stale = no_shrink_problems([_transition(SHA_A, before, after)], {})
-    if problems or excused or stale:
-        fails.append(f"a detail-only change was reported: {problems} {excused} {stale}")
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, before, after)], {}
+    )
+    if problems or excused or stale or reconciled or stale_declarations:
+        fails.append(
+            f"a detail-only change was reported: {problems} {excused} {stale} {reconciled} "
+            f"{stale_declarations}"
+        )
     return fails
 
 
@@ -378,22 +494,24 @@ def probe_an_exempted_removal_is_excused_not_clean() -> list[str]:
     """An exemption excuses loudly — `clean` and `excused` must never be the same output."""
     fails: list[str] = []
     transitions = [_transition(SHA_A, [_row(1), _row(2)], [_row(1)])]
-    problems, excused, stale = no_shrink_problems(
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
         transitions, {SHA_A: {"sha": SHA_A, "reason": "sanctioned by n=318"}}
     )
     if problems:
         fails.append(f"an exempted removal was still a problem: {problems}")
     if len(excused) != 1 or "n=318" not in excused[0]:
         fails.append(f"the exemption was not printed with its proof: {excused}")
-    if stale:
-        fails.append(f"a matched exemption read as stale: {stale}")
+    if stale or reconciled or stale_declarations:
+        fails.append(
+            f"unexpected stale/reconciled: {stale} {reconciled} {stale_declarations}"
+        )
     return fails
 
 
 def probe_a_stale_exemption_is_an_error() -> list[str]:
     """An exemption matching nothing inflates visible debt while excusing nothing."""
     fails: list[str] = []
-    problems, _, stale = no_shrink_problems(
+    problems, _, stale, _, stale_declarations = no_shrink_problems(
         [_transition(SHA_A, [_row(1)], [_row(1)])],
         {SHA_B: {"sha": SHA_B, "reason": "matches nothing"}},
     )
@@ -401,6 +519,129 @@ def probe_a_stale_exemption_is_an_error() -> list[str]:
         fails.append(f"an unrelated exemption raised a problem: {problems}")
     if stale != [SHA_B]:
         fails.append(f"the stale exemption was not reported: {stale}")
+    if stale_declarations:
+        fails.append(
+            f"a declaration was reported with no declaration present: {stale_declarations}"
+        )
+    return fails
+
+def probe_a_declared_reconciliation_is_reconciled_not_clean() -> list[str]:
+    """#298's leg: a declared identity accounts for a removal, LOUDLY and separately.
+
+    The declaration names the identity the walk observed removed, so the removal is
+    accounted for — and it must be printed as `reconciled`, never folded into `clean`
+    (a silent pass) or into `excused` (a different accounting path, #47 clause 4).
+    """
+    fails: list[str] = []
+    before = [_row(1), _row(2)]
+    after = [_row(1)]
+    declared = {identity_of(_row(2))}
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, before, after)], {}, declared
+    )
+    if problems:
+        fails.append(f"a declared reconciliation was still a problem: {problems}")
+    if excused:
+        fails.append(f"a reconciliation was reported as an exemption: {excused}")
+    if len(reconciled) != 1 or "n=2" not in reconciled[0]:
+        fails.append(
+            f"the reconciliation did not name the identity it accounted for: {reconciled}"
+        )
+    if stale or stale_declarations:
+        fails.append(f"a matched declaration read as stale: {stale} {stale_declarations}")
+    return fails
+
+def probe_an_undeclared_removal_beside_a_declared_one_is_still_a_problem() -> list[str]:
+    """A declaration excuses ONLY the identities it names — never the commit it rides on.
+
+    This is the arm that keeps the leg from becoming a blanket: if one declared identity
+    silenced a commit that removed three, the mechanism would be a second exemption wearing
+    a different name.
+    """
+    fails: list[str] = []
+    before = [_row(1), _row(2), _row(3)]
+    after = [_row(1)]
+    declared = {identity_of(_row(2))}
+    problems, _, _, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, before, after)], {}, declared
+    )
+    if len(problems) != 1:
+        fails.append(f"the undeclared remainder was not reported: {problems}")
+    elif "n=3" not in problems[0]:
+        fails.append(f"the problem does not name the UNDECLARED identity: {problems[0]}")
+    elif "n=2" in problems[0]:
+        fails.append(f"the declared identity was reported as undeclared: {problems[0]}")
+    if len(reconciled) != 1:
+        fails.append(f"the declared identity was not printed as reconciled: {reconciled}")
+    if stale_declarations:
+        fails.append(f"a matched declaration read as stale: {stale_declarations}")
+    return fails
+
+def probe_a_declaration_for_a_removal_that_did_not_happen_is_an_error() -> list[str]:
+    """A declaration naming an identity no transition removed is a FALSE RECORD, not silence.
+
+    A stale exemption inflates visible debt; a stale declaration claims a reconciliation
+    that never happened, which is worse — it reads as an accounted removal on a surface
+    where nothing was accounted for.
+    """
+    fails: list[str] = []
+    declared = {identity_of(_row(9))}
+    problems, _, _, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, [_row(1)], [_row(1)])], {}, declared
+    )
+    if problems:
+        fails.append(f"an unrelated declaration raised a problem: {problems}")
+    if reconciled:
+        fails.append(f"a declaration matching nothing was printed as reconciled: {reconciled}")
+    if len(stale_declarations) != 1 or stale_declarations[0][0] != 9:
+        fails.append(f"the stale declaration was not reported: {stale_declarations}")
+    return fails
+
+def probe_the_reader_anchors_and_rejects_malformed_declarations() -> list[str]:
+    """`load_reconciliations`: an anchored line parses; a mid-sentence mention does not.
+
+    The anchor is the whole mechanism — a record that any prose mentioning the word can
+    impersonate is not a record — and a malformed declaration must be a PROBLEM, never a
+    quiet read of zero declarations.
+    """
+    fails: list[str] = []
+    good = _row(5)
+    good["detail"] = (
+        "RECONCILIATION #1 — prose above the line.\n"
+        'reconciles: {"removed": [{"n": 7, "ts": "2026-01-01T00:00:00Z", "event": "run", '
+        '"actor": "hq", "subject": "#1"}]}\n'
+    )
+    declared, problems = load_reconciliations([good])
+    if problems:
+        fails.append(f"a well-formed declaration was reported: {problems}")
+    if len(declared) != 1 or (7, "2026-01-01T00:00:00Z", "run", "hq", "#1") not in declared:
+        fails.append(f"the anchored declaration was not read: {declared}")
+
+    # A mention INSIDE a sentence must not satisfy the anchor.
+    mention = _row(6)
+    mention["detail"] = (
+        'the row says reconciles: {"removed": [{"n": 7, "ts": "2026-01-01T00:00:00Z", '
+        '"event": "run", "actor": "hq", "subject": "#1"}]} and then continues.'
+    )
+    declared, problems = load_reconciliations([mention])
+    if declared or problems:
+        fails.append(f"a mid-sentence mention was read as a declaration: {declared} {problems}")
+
+    # Malformed JSON, an absent `removed` list, an empty list, and an identity missing four
+    # of its five fields are all problems.
+    for detail, label in (
+        ('reconciles: {"removed": [}', "unparseable JSON"),
+        ('reconciles: {"disposition": "no removed key"}', "no 'removed' list"),
+        ('reconciles: {"removed": []}', "an empty 'removed' list"),
+        ('reconciles: {"removed": [{"n": 7}]}', "an identity missing four of its five fields"),
+    ):
+        bad = _row(8)
+        bad["detail"] = detail
+        declared, problems = load_reconciliations([bad])
+        if declared:
+            fails.append(f"{label} was read as a declaration: {declared}")
+        if not problems:
+            fails.append(f"{label} was not reported as a problem")
     return fails
 
 
@@ -525,6 +766,10 @@ def main() -> int:
         probe_a_content_change_is_not_a_removal,
         probe_an_exempted_removal_is_excused_not_clean,
         probe_a_stale_exemption_is_an_error,
+        probe_a_declared_reconciliation_is_reconciled_not_clean,
+        probe_an_undeclared_removal_beside_a_declared_one_is_still_a_problem,
+        probe_a_declaration_for_a_removal_that_did_not_happen_is_an_error,
+        probe_the_reader_anchors_and_rejects_malformed_declarations,
     ):
         for line in probe():
             fails.append(f"{probe.__name__}: {line}")
@@ -545,25 +790,42 @@ def main() -> int:
         print(f"  note: {PRIMARY_REF} is unreadable here — degrading to {FALLBACK_REF}")
 
     transitions, entries, err = build_transitions(ref, LEDGER_PATH, cwd)
+    excused: list[str] = []
+    reconciled: list[str] = []
+    stale: list[str] = []
+    stale_declarations: list[tuple] = []
     if transitions is None:
         problems.append(f"could not read {LEDGER_PATH}'s committed history from {ref}: {err}")
-        excused: list[str] = []
-        stale: list[str] = []
     elif not entries:
         problems.append(
             f"no commit touches {LEDGER_PATH} on {ref} — a gate examining zero commits is "
             f"indistinguishable from one that examines zero commits and passes"
         )
-        excused, stale = [], []
     else:
-        gate_problems, excused, stale = no_shrink_problems(transitions, exemptions)
+        # The reconciliation declarations are read from the ledger's OWN rows at the ref
+        # under examination — the ledger is the store, so a reconciliation needs no second
+        # factory-data file and no sha to key on. The identity IS the key.
+        tip_rows = rows_at(ref, LEDGER_PATH, cwd) or []
+        declared, decl_problems = load_reconciliations(tip_rows)
+        problems.extend(decl_problems)
+        gate_problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
+            transitions, exemptions, declared
+        )
         problems.extend(gate_problems)
         for line in excused:
             print(f"  excused: {line}")
+        for line in reconciled:
+            print(f"  reconciled: {line}")
         for sha in stale:
             problems.append(
                 f"exemption {sha} matches no row removal on {ref} — a stale exemption "
                 f"excuses nothing; remove it or correct the sha"
+            )
+        for key in stale_declarations:
+            problems.append(
+                f"a reconciliation row declares n={key[0]} ({key[2]} {key[3]} {key[4]}) "
+                f"removed, but no commit on {ref} removes that identity — a false record "
+                f"accounts for nothing; correct the declaration or remove it"
             )
 
     if transitions is not None and entries:
@@ -582,10 +844,15 @@ def main() -> int:
         print(f"ledger no-shrink FAILED: {len(problems) + len(fails)} problem(s)")
         return 1
 
-    if excused:
+    if excused or reconciled:
+        parts: list[str] = []
+        if excused:
+            parts.append(f"{len(excused)} exempted")
+        if reconciled:
+            parts.append(f"{len(reconciled)} reconciled")
         print(
-            f"ledger no-shrink: excused — {len(excused)} exempted removal(s) on {ref}; "
-            f"this is a visible debt, not a clean run"
+            f"ledger no-shrink: accounted — {', '.join(parts)} removal(s) on {ref}; "
+            f"this is a visible accounting, not a clean run"
         )
     else:
         print("ledger no-shrink: clean — no commit removes a row identity")
