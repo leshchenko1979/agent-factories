@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.44
+version: 0.1.45
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -149,6 +149,30 @@ it. A subagent session has no channel binding, so it cannot be a lane.
 
 **An agent is briefed by a direct message to its own session UUID — never by a post in the
 chat.** The chat exists for the operator to observe and archive.
+
+**A NOTIFICATION MUST CARRY A STATE CHANGE OR AN ASK — a bare acknowledgment is neither, and is
+NOT SENT (owner order 2026-10-03: *"Which of the notifications you receive are useless? Issue a
+law not to send them."*).** The class has been ordered against twice before and both orders were
+SCOPED — the ledger-as-ACK-channel order of 2026-09-11 (freeze waves) and the zero-ACK dispatch
+order of 2026-09-13 (task & harvest dispatches) — so the general form is stated here:
+
+- a **STATE CHANGE** — a fact the recipient cannot read from a surface it already reads. The
+  ledger, the board and the recipient's own session are surfaces it already reads, so *"I stamped
+  `n=X`"*, *"the row is closed"*, *"the law has LANDED"* are **not** state changes: they are
+  re-reads of a surface the recipient can open itself.
+- an **ASK** — an action requested of the recipient, carrying what it needs to act.
+
+**The sender's test, before pressing send:** name the state the recipient lacks, or the action
+you are asking of it. If you can name neither, write the ledger row and stop. The receipt for a
+dispatch, a wave, a freeze or a law-change is the **ledger row**, never a reply: the sender reads
+acks in one `oc-ledger events` call and counts them. A conversational receipt — *"received",
+"ack", "starting now", "confirmed", "nothing owed"* — spends the sender's tokens, interrupts a
+working lane, and puts a second surface beside a fact the first already holds. **No gate upholds
+this and that is stated, not implied** — a notify body lives in no tree the offline suite reads
+(§8) — so what upholds it is this text and the sender's own test. Nothing is backfilled: the law
+governs what is sent from here, and it does not narrow the notifies that DO earn their interrupt,
+because a dispatch, a return leg, a correction, a finding or an ask carries a state change or an
+ask by construction.
 
 Before dispatching work to any lane, check it is not already claimed.
 

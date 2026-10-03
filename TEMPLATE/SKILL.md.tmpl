@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.20
+version: 0.1.21
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -90,7 +90,30 @@ factory.
 
 **A freshly started session may not be reachable yet.** The binding states the
 mechanism and its trap; the requirement here is: **do not treat a dispatch as
-delivered until the lane has acknowledged it.** Accepted is not delivered.
+delivered until the lane has acknowledged it.** Accepted is not delivered. The
+acknowledgement that counts is the **ledger claim**, never a reply message.
+
+**A NOTIFICATION MUST CARRY A STATE CHANGE OR AN ASK — a bare acknowledgment is neither, and is
+NOT SENT.** The class was ordered against twice in scoped form before it was stated generally —
+the ledger-as-ACK-channel order (freeze waves) and the zero-ACK dispatch order (task & harvest
+dispatches) — so the general form is stated here:
+
+- a **STATE CHANGE** — a fact the recipient cannot read from a surface it already reads. The
+  ledger, the board and the recipient's own session are surfaces it already reads, so *"I stamped
+  `n=X`"*, *"the row is closed"*, *"the law has LANDED"* are **not** state changes: they are
+  re-reads of a surface the recipient can open itself.
+- an **ASK** — an action requested of the recipient, carrying what it needs to act.
+
+**The sender's test, before pressing send:** name the state the recipient lacks, or the action
+you are asking of it. If you can name neither, write the ledger row and stop. The receipt for a
+dispatch, a wave, a freeze or a law-change is the **ledger row**, never a reply. A conversational
+receipt — *"received", "ack", "starting now", "confirmed", "nothing owed"* — spends the sender's
+tokens, interrupts a working lane, and puts a second surface beside a fact the first already
+holds. **No gate upholds this and that is stated, not implied** — a notify body lives in no tree
+the offline suite reads — so what upholds it is this text and the sender's own test. Nothing is
+backfilled: the law governs what is sent from here, and it does not narrow the notifies that DO
+earn their interrupt, because a dispatch, a return leg, a correction, a finding or an ask carries
+a state change or an ask by construction.
 
 A brief states: the issue number, the goal, the done-criteria, the evidence
 expected, and the named place the lane reports into.
