@@ -7,9 +7,69 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# The directory the review engine writes cycles into, and it is TRACKED: `reviews/` holds 25
+# committed files (two real cycles, `20260917-c1` and `20260927-c1`, and the donor replay
+# `rr-donor-replay`). This gate's own probes write TEST cycles beside them and remove them.
+REVIEWS_ROOT = REPO_ROOT / "reviews"
+
+# The namespace this gate's probes write in. EVERY cycle id in this file is `test-…`
+# (`test-cycle-01`, `test-intake-ro`, `test-migrate-no-digest`, …) and NO real cycle carries
+# the prefix — the tracked ids are date-based or a named replay. That is what lets the JANITOR
+# below tell a leaked probe dir from a legitimate cycle WITHOUT an allow-list a new test would
+# silently escape.
+TEST_CYCLE_PREFIX = "test-"
+
+
+def repair_leaked_cycles(reviews_root: Path | None = None) -> list[str]:
+    """JANITOR — remove cycle dirs a KILLED run left under the TRACKED `reviews/` (#293).
+
+    Every test in this file creates `reviews/<test-cycle-id>` and removes it in a `finally`.
+    A `finally` survives an exception and does NOT survive a `SIGKILL`, and this box runs a
+    documented crash loop (`opencrabs#638`) — so a run killed mid-flight leaves the dir in the
+    tree, and the next `git add -A` carries it into a commit. That is the `5b7857a` shape the
+    #197 remedy fixed for `docs/factory-registry.md` (`54cc3fc`), and this is the SAME CLASS at
+    a larger population: **24 cycle restores**, counted in this file rather than taken from the
+    #197 report's 17 (which undercounted) — 23 at the base this issue was filed against
+    (`87791dd`), plus one the review-rotation lane added (`f54cdea`) while this remedy was in
+    flight. The file now carries 25 `finally` lines and exactly 24 of them are cycle restores —
+    the 25th belongs to the janitor's own probe, and it restores a module global, never a cycle.
+
+    **A repair that depends on the process that died is not a repair**, so the restore does not
+    live in the probes' `finally` blocks alone: it lives HERE, and the module runs it at the
+    START of every run — at MODULE LEVEL, so it fires on BOTH `python3 -m pytest
+    tests/test_review.py` (import) and `python3 tests/test_review.py` (script) — before any test
+    creates or removes anything. `main()` reports the result on the script path.
+
+    The predicate is EXACT: only entries whose NAME carries `TEST_CYCLE_PREFIX` are removed, so
+    a real cycle (`20260917-c1`, `rr-donor-replay`) is never touched however the gate is run.
+    An absent `reviews/` — a bootstrapped member that never ran a review — returns an empty list
+    with no crash. Returns the names repaired, sorted, so a caller can report them.
+    """
+    root = REVIEWS_ROOT if reviews_root is None else reviews_root
+    if not root.is_dir():
+        return []
+    repaired: list[str] = []
+    for entry in sorted(root.iterdir()):
+        if not entry.name.startswith(TEST_CYCLE_PREFIX):
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+        repaired.append(entry.name)
+    return repaired
+
+
+# THE JANITOR RUNS AT THE START OF EVERY RUN (#293). Module level, so it PRECEDES every test
+# under both invocation modes — a `finally` cannot be relied on because the process it lives in
+# is the one the crash loop kills. Captured, so `main()` can REPORT on the script path what a
+# killed predecessor left behind rather than re-running into a silent no-op.
+_JANITOR_REPAIRED_AT_IMPORT = repair_leaked_cycles()
 
 
 def _schema_pair() -> list[Path]:
@@ -1187,7 +1247,148 @@ def test_the_shipped_seed_declares_nothing() -> None:
         assert json.loads(seed.read_text(encoding="utf-8"))["lenses"] == [], seed
 
 
-if __name__ == "__main__":
+def test_the_janitor_repairs_a_killed_runs_leak() -> None:
+    """POSITIVE CONTROL for the JANITOR (#293 acceptance criterion 2), plus its non-vacuity arm.
+
+    Three arms over a SYNTHETIC reviews root, so no real cycle is touched:
+      (a) LEAK -> REPAIRED: a dir a killed run left (`test-leak-01/`, payload included) is gone
+          after `repair_leaked_cycles()`, payload and all.
+      (b) CLEAN -> UNTOUCHED: a real-shaped sibling (`20260917-c1`, no `test-` prefix) survives
+          — the predicate is a NAMESPACE, never a blanket sweep of `reviews/`.
+      (c) ABSENT -> NO CRASH: a root that does not exist returns `[]` rather than raising.
+
+    The non-vacuity arm (#112) is last: with the predicate NEUTERED the SAME leak survives, so
+    arm (a) is shown to bite on the janitor's own code rather than passing by construction. A
+    janitor neutered to a no-op reds `main()`, which names this JANITOR.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "reviews"
+        root.mkdir()
+
+        # (a) LEAK -> REPAIRED, byte-identically: the dir and its payload are gone.
+        leak = root / "test-leak-01"
+        (leak / "state.json").parent.mkdir(parents=True, exist_ok=True)
+        (leak / "state.json").write_text('{"cycle": "test-leak-01"}', encoding="utf-8")
+        assert leak.is_dir(), "fixture: the killed run's leak must exist before the repair"
+        repaired = repair_leaked_cycles(root)
+        assert repaired == ["test-leak-01"], f"the JANITOR did not name the leak: {repaired}"
+        assert not leak.exists(), "the JANITOR left a killed run's cycle dir in reviews/"
+
+        # (b) CLEAN -> UNTOUCHED: a real cycle is outside the janitor's namespace.
+        real = root / "20260917-c1"
+        (real / "cycle.json").parent.mkdir(parents=True, exist_ok=True)
+        (real / "cycle.json").write_text("{}", encoding="utf-8")
+        assert repair_leaked_cycles(root) == [], "the JANITOR touched a real cycle dir"
+        assert real.is_dir(), "the JANITOR removed a tracked-shaped cycle — predicate too broad"
+
+        # (c) ABSENT -> NO CRASH.
+        assert repair_leaked_cycles(Path(tmp) / "no-such-reviews") == [], (
+            "the JANITOR crashed or reported a repair on an absent reviews root"
+        )
+
+        # NON-VACUITY (#112): neuter the predicate and the SAME leak survives, so arm (a) is
+        # proven to bite rather than passing by construction.
+        leak2 = root / "test-leak-02"
+        leak2.mkdir()
+        original_prefix = globals()["TEST_CYCLE_PREFIX"]
+        globals()["TEST_CYCLE_PREFIX"] = "zz-never-matches-"
+        try:
+            assert repair_leaked_cycles(root) == [], (
+                "a NEUTERED JANITOR still reported a repair — the predicate is not what bit"
+            )
+            assert leak2.is_dir(), (
+                "the leak vanished with the JANITOR's predicate neutered — arm (a) is vacuous"
+            )
+        finally:
+            globals()["TEST_CYCLE_PREFIX"] = original_prefix
+
+
+def test_the_next_run_repairs_a_killed_runs_leak() -> None:
+    """Criterion 1 — a leak a KILLED run left is repaired by the NEXT run, end to end.
+
+    The probe above calls the janitor directly; this one proves the WIRING. The module-level
+    call fires when the gate is LOADED, which is what the next `python3 -m pytest
+    tests/test_review.py` or `python3 tests/test_review.py` does. A SYNTHETIC tree carries a
+    copy of this file under `tests/` and a `reviews/` root holding BOTH a killed run's leak
+    (`test-killed-01/`, payload included) and a real-shaped sibling; a fresh interpreter loads
+    the copy, and the leak is gone while the sibling is untouched.
+
+    The probe deliberately does NOT restore the leak in a `finally`: a `finally` does not
+    survive a `SIGKILL`, which is the whole reason the janitor exists, and this tree is a
+    throwaway so nothing depends on the restore. It asserts on the SUBPROCESS's own exit code
+    and output, so a module that failed to import reds rather than reading as a clean repair.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = Path(tmp)
+        (tree / "tests").mkdir()
+        shutil.copy2(Path(__file__).resolve(), tree / "tests" / "test_review.py")
+        root = tree / "reviews"
+        leak = root / "test-killed-01"
+        (leak / "state.json").parent.mkdir(parents=True, exist_ok=True)
+        (leak / "state.json").write_text('{"cycle": "test-killed-01"}', encoding="utf-8")
+        sibling = root / "20260927-c1"
+        (sibling / "cycle.json").parent.mkdir(parents=True, exist_ok=True)
+        (sibling / "cycle.json").write_text("{}", encoding="utf-8")
+        assert leak.is_dir(), "fixture: the killed run's leak must be on disk before the next run"
+
+        res = subprocess.run(
+            [sys.executable, "-c", _LOAD_AND_JANITOR_SNIPPET,
+             str(tree / "tests" / "test_review.py")],
+            cwd=tree, capture_output=True, text=True,
+        )
+        assert res.returncode == 0, (
+            "the next run failed to load the gate: " + res.stdout + res.stderr
+        )
+        assert not leak.exists(), (
+            "the NEXT run did not repair the killed run's leak — "
+            f"{leak.relative_to(tree)} survived (janitor output: {res.stdout.strip()!r})"
+        )
+        assert not (leak / "state.json").exists(), "the leak's payload survived the repair"
+        assert sibling.is_dir(), (
+            "the next run's JANITOR removed a real-shaped cycle beside the leak"
+        )
+
+
+# The fresh-interpreter loader used by `test_the_next_run_repairs_a_killed_runs_leak`. It loads
+# the module BY PATH, so the module-level JANITOR fires exactly as it does at the top of a real
+# run, and it prints what that call repaired so the caller can see the MECHANISM, not only its
+# effect.
+_LOAD_AND_JANITOR_SNIPPET = (
+    "import importlib.util as _u, sys\n"
+    "_p = sys.argv[1]\n"
+    "_s = _u.spec_from_file_location('_review_gate_next_run', _p)\n"
+    "_m = _u.module_from_spec(_s)\n"
+    "_s.loader.exec_module(_m)\n"
+    "print('JANITOR repaired on load:', ','.join(_m._JANITOR_REPAIRED_AT_IMPORT) or 'none')\n"
+)
+
+
+def main() -> int:
+    print("Tests for the Multi-Lens Review Engine (tools/review.py / P32)")
+    print(f"  python {sys.version.split()[0]}")
+
+    # THE JANITOR, before any check or probe (#293). The module-level call already ran it at
+    # import — this REPORTS what a killed predecessor left, and re-runs it so a leak introduced
+    # between import and here is caught too. A `finally` cannot do this job: the process it
+    # lives in is the one the crash loop kills.
+    if _JANITOR_REPAIRED_AT_IMPORT:
+        print(f"  JANITOR: repaired {len(_JANITOR_REPAIRED_AT_IMPORT)} cycle dir(s) a killed run "
+              f"left under reviews/: {', '.join(_JANITOR_REPAIRED_AT_IMPORT)} (#293).")
+    else:
+        print("  JANITOR: reviews/ carried no leaked test cycle dir (#293).")
+    repair_leaked_cycles()
+
+    # THE JANITOR'S POSITIVE CONTROL (#293 acceptance criteria 2 and 3). A failure here reds
+    # the run NAMING the janitor, so a janitor neutered to a no-op cannot pass by silence.
+    for _probe in (test_the_janitor_repairs_a_killed_runs_leak,
+                   test_the_next_run_repairs_a_killed_runs_leak):
+        try:
+            _probe()
+        except AssertionError as exc:
+            print(f"  FAIL: JANITOR — {_probe.__name__}: {exc}", file=sys.stderr)
+            return 1
+    print("  ok: JANITOR — leak repaired, clean untouched, absent safe, next run repairs (#293)")
+
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
     test_cadence_boundary_is_anchored()
@@ -1217,3 +1418,8 @@ if __name__ == "__main__":
     test_a_declared_lens_extends_the_catalogue_without_forking_it(Path("/tmp"))
     test_the_shipped_seed_declares_nothing()
     print("ALL TESTS PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
