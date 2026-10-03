@@ -730,6 +730,16 @@ the remedy is **protocol, not mechanism**:
   declaration naming an identity no commit removed is a FALSE RECORD and reds the gate as a stale
   declaration. No second factory-data file and no sha-keyed lookup is owed, and a malformed
   declaration is a gate ERROR, never a silent read of zero declarations.
+- **The declaration may also name what SURVIVES, and that claim is read against the tip.** Beside
+  `removed`, it may carry `"surviving": [<identity>, ...]` — the identities it says hold at the tip
+  after the re-mint, each as the full tuple. This is not decoration: `tests/test_ledger_no_shrink.py`
+  reads every named identity against the rows standing at the tip, and one naming an identity that is
+  not there is a problem — a declaration describing a state the ledger is not in accounts for
+  nothing. A `surviving` field is a field with a READER by construction, because a field written and
+  never read can only lie. `removed` and `surviving` are judged against DIFFERENT things on purpose —
+  `removed` against the removal the walk observed (a REMOVAL against its sanction), `surviving`
+  against the present rows (the declaration's own factual claim about the present) — so the two are
+  never folded into one judgement.
 - **A reconciliation is not an exemption, and it does not soften the bar on one.** An exemption
   excuses a removal without naming its identities, keyed by the offending SHA; a reconciliation names
   the identities and accounts for them by append. `#47` clause 4 (ruling `n=328`) stands unchanged —

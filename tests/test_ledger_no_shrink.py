@@ -262,15 +262,19 @@ def load_exemptions(path: Path) -> tuple[dict[str, dict], list[str]]:
     return entries, problems
 
 
-def load_reconciliations(rows: list[dict]) -> tuple[set[tuple], list[str]]:
-    """`({identity tuple}, problems)` read from the ledger's own rows.
+def load_reconciliations(
+    rows: list[dict],
+) -> tuple[set[tuple], set[tuple], list[str]]:
+    """`({removed identity}, {surviving identity}, problems)` read from the ledger's rows.
 
     A reconciliation is a LEDGER ROW, not a second data file: the row that names a removed
     identity IS the record, and the ledger is already the surface every lane can read. The
     declaration is a line ANCHORED at `reconciles:` — at the start of a line, so prose that
     merely mentions the word cannot satisfy it — followed by a JSON object carrying
-    `"removed": [<identity>, ...]`. Extra keys (`sha`, `disposition`, `surviving`) are
-    provenance and are ignored by the match.
+    `"removed": [<identity>, ...]`. The `sha` and `disposition` keys are provenance and are
+    ignored by the match. `"surviving": [<identity>, ...]` is NOT ignored: it is the
+    declaration's claim about what stands at the tip, and `surviving_problems` reads it
+    against the tip rows — a field written and never read can only lie.
 
     Anything malformed is a problem, never a silent pass: a declaration that quietly fails
     to parse is indistinguishable from no declaration at all, which is the same vacuous-pass
@@ -278,6 +282,7 @@ def load_reconciliations(rows: list[dict]) -> tuple[set[tuple], list[str]]:
     """
     problems: list[str] = []
     declared: set[tuple] = set()
+    surviving: set[tuple] = set()
     for row in rows:
         detail = row.get("detail")
         if not isinstance(detail, str):
@@ -286,6 +291,15 @@ def load_reconciliations(rows: list[dict]) -> tuple[set[tuple], list[str]]:
             if not line.startswith(RECONCILES_PREFIX):
                 continue
             raw = line[len(RECONCILES_PREFIX):].strip()
+            # The parse is ATOMIC per declaration: both halves are collected into locals and
+            # committed only when the whole record is sound. A record that any prose can
+            # impersonate is not a record, and neither is one that is half garbage — honouring
+            # a well-formed `removed` half beside a malformed `surviving` half would let a
+            # broken declaration sanction a real removal while its own defect read as an
+            # unrelated problem.
+            local_declared: set[tuple] = set()
+            local_surviving: set[tuple] = set()
+            local_problems: list[str] = []
             try:
                 payload = json.loads(raw)
             except json.JSONDecodeError as exc:
@@ -306,22 +320,70 @@ def load_reconciliations(rows: list[dict]) -> tuple[set[tuple], list[str]]:
                     f"a declaration that names nothing accounts for nothing"
                 )
                 continue
+            if "surviving" in payload and not isinstance(payload["surviving"], list):
+                problems.append(
+                    f"row n={row.get('n')} carries a 'surviving' value that is not a list: "
+                    f"{payload['surviving']!r}"
+                )
+                continue
             for item in payload["removed"]:
                 if not isinstance(item, dict):
-                    problems.append(
+                    local_problems.append(
                         f"row n={row.get('n')} declares a removed identity that is not an "
                         f"object: {item!r}"
                     )
                     continue
                 identity = identity_of(item)
                 if any(part is None for part in identity):
-                    problems.append(
+                    local_problems.append(
                         f"row n={row.get('n')} declares a removed identity missing one of "
                         f"{IDENTITY_KEYS}: {item!r}"
                     )
                     continue
-                declared.add(identity)
-    return declared, problems
+                local_declared.add(identity)
+            for item in payload.get("surviving", []):
+                if not isinstance(item, dict):
+                    local_problems.append(
+                        f"row n={row.get('n')} declares a surviving identity that is not "
+                        f"an object: {item!r}"
+                    )
+                    continue
+                identity = identity_of(item)
+                if any(part is None for part in identity):
+                    local_problems.append(
+                        f"row n={row.get('n')} declares a surviving identity missing one of "
+                        f"{IDENTITY_KEYS}: {item!r}"
+                    )
+                    continue
+                local_surviving.add(identity)
+            # Commit the record only when it is WHOLE: a malformed half makes the whole
+            # declaration account for nothing, so a well-formed `removed` list beside a
+            # malformed `surviving` list cannot sanction a removal on its own. That is
+            # "malformed is a problem, never a silent pass" at the granularity of ONE record.
+            if local_problems:
+                problems.extend(local_problems)
+                continue
+            declared |= local_declared
+            surviving |= local_surviving
+    return declared, surviving, problems
+
+def surviving_problems(surviving: set[tuple], tip_rows: list[dict]) -> list[str]:
+    """Problems for `surviving` identities a reconciliation row names but the tip lacks.
+
+    A `surviving` list is a CLAIM about what stands at the tip after a re-mint, and a claim
+    with no reader is a record that can only lie (the four-shapes family, shape (d)). So it
+    is read: every identity the declaration says survived must be a row at the tip, or the
+    declaration describes a state the ledger is not in. This is deliberately kept OUT of
+    `no_shrink_problems`: that function judges a REMOVAL against a declaration, while this
+    judges the declaration's own factual claim about the present.
+    """
+    present = {identity_of(row) for row in tip_rows}
+    return [
+        f"a reconciliation row declares n={key[0]} ({key[2]} {key[3]} {key[4]}) survived, "
+        f"but no such row stands at the tip — a declaration describing a state the ledger "
+        f"is not in accounts for nothing"
+        for key in sorted(surviving - present, key=lambda k: (k[0] is None, k[0]))
+    ]
 
 def resolvable(ref: str, cwd: Path) -> bool:
     """True when a ref resolves — the `origin/main` -> `HEAD` degradation (clause 4)."""
@@ -611,7 +673,7 @@ def probe_the_reader_anchors_and_rejects_malformed_declarations() -> list[str]:
         'reconciles: {"removed": [{"n": 7, "ts": "2026-01-01T00:00:00Z", "event": "run", '
         '"actor": "hq", "subject": "#1"}]}\n'
     )
-    declared, problems = load_reconciliations([good])
+    declared, surviving, problems = load_reconciliations([good])
     if problems:
         fails.append(f"a well-formed declaration was reported: {problems}")
     if len(declared) != 1 or (7, "2026-01-01T00:00:00Z", "run", "hq", "#1") not in declared:
@@ -623,25 +685,81 @@ def probe_the_reader_anchors_and_rejects_malformed_declarations() -> list[str]:
         'the row says reconciles: {"removed": [{"n": 7, "ts": "2026-01-01T00:00:00Z", '
         '"event": "run", "actor": "hq", "subject": "#1"}]} and then continues.'
     )
-    declared, problems = load_reconciliations([mention])
+    declared, surviving, problems = load_reconciliations([mention])
     if declared or problems:
         fails.append(f"a mid-sentence mention was read as a declaration: {declared} {problems}")
 
-    # Malformed JSON, an absent `removed` list, an empty list, and an identity missing four
-    # of its five fields are all problems.
+    # Malformed JSON, an absent `removed` list, an empty list, an identity missing four of
+    # its five fields, a `surviving` that is not a list, a `surviving` entry that is not an
+    # object, and a `surviving` identity missing four of its five fields are all problems.
     for detail, label in (
         ('reconciles: {"removed": [}', "unparseable JSON"),
         ('reconciles: {"disposition": "no removed key"}', "no 'removed' list"),
         ('reconciles: {"removed": []}', "an empty 'removed' list"),
         ('reconciles: {"removed": [{"n": 7}]}', "an identity missing four of its five fields"),
+        ('reconciles: {"removed": [{"n": 7, "ts": "t", "event": "run", "actor": "hq", '
+         '"subject": "#1"}], "surviving": 5}',
+         "a 'surviving' value that is not a list"),
+        ('reconciles: {"removed": [{"n": 7, "ts": "t", "event": "run", "actor": "hq", '
+         '"subject": "#1"}], "surviving": ["n=8"]}',
+         "a surviving entry that is not an object"),
+        ('reconciles: {"removed": [{"n": 7, "ts": "t", "event": "run", "actor": "hq", '
+         '"subject": "#1"}], "surviving": [{"n": 8}]}',
+         "a surviving identity missing four of its five fields"),
     ):
         bad = _row(8)
         bad["detail"] = detail
-        declared, problems = load_reconciliations([bad])
-        if declared:
-            fails.append(f"{label} was read as a declaration: {declared}")
+        declared, surviving, problems = load_reconciliations([bad])
+        if declared or surviving:
+            fails.append(f"{label} was read as a declaration: {declared} {surviving}")
         if not problems:
             fails.append(f"{label} was not reported as a problem")
+    return fails
+
+def probe_a_reconciliation_whose_surviving_identity_does_not_exist_is_an_error() -> list[str]:
+    """`surviving_problems`: the declaration's claim about the tip must be TRUE.
+
+    A `surviving` list with no reader is a field that can only lie — the four-shapes
+    family's shape (d). Here the declaration says three rows survived; the tip carries
+    only two, so the third is a claim about a state the ledger is not in and MUST be a
+    problem rather than a quietly-accepted decoration.
+    """
+    fails: list[str] = []
+    tip = [_row(1), _row(2)]
+    present = {identity_of(_row(2))}
+    absent = {identity_of(_row(9))}
+    problems = surviving_problems(present, tip)
+    if problems:
+        fails.append(f"a surviving identity that IS at the tip raised a problem: {problems}")
+    problems = surviving_problems(absent, tip)
+    if not problems:
+        fails.append("a surviving identity absent from the tip was not reported")
+    if not any("n=9" in line for line in problems):
+        fails.append(f"the problem does not name the absent identity: {problems}")
+    # The control: an empty declaration raises nothing, so the arm is not blanket-RED.
+    if surviving_problems(set(), tip):
+        fails.append("an empty surviving set raised a problem — the arm is blanket")
+    return fails
+
+def probe_a_stale_reconciliation_is_an_error() -> list[str]:
+    """A declaration naming a removal that never happened is a FALSE RECORD (#112, P29).
+
+    The same property as the older `..._a_declaration_for_a_removal_that_did_not_happen_...`
+    probe, asserted here under the reconciliation vocabulary the law uses: `stale_declarations`
+    must carry the identity, `problems` must stay empty for the unrelated declaration, and
+    `reconciled` must not print it — a false record is never a reconciled one.
+    """
+    fails: list[str] = []
+    declared = {identity_of(_row(9))}
+    problems, _, _, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, [_row(1)], [_row(1)])], {}, declared
+    )
+    if problems:
+        fails.append(f"an unrelated declaration raised a problem: {problems}")
+    if reconciled:
+        fails.append(f"a stale declaration was printed as reconciled: {reconciled}")
+    if len(stale_declarations) != 1 or stale_declarations[0][0] != 9:
+        fails.append(f"the stale declaration was not reported: {stale_declarations}")
     return fails
 
 
@@ -761,7 +879,7 @@ def main() -> int:
     print("ledger no-shrink — a pushed row is never removed (P11, issue #58)")
     fails: list[str] = []
     print("  synthetic probes")
-    for probe in (
+    probes = (
         probe_removal_without_exemption_is_a_problem,
         probe_a_content_change_is_not_a_removal,
         probe_an_exempted_removal_is_excused_not_clean,
@@ -769,12 +887,18 @@ def main() -> int:
         probe_a_declared_reconciliation_is_reconciled_not_clean,
         probe_an_undeclared_removal_beside_a_declared_one_is_still_a_problem,
         probe_a_declaration_for_a_removal_that_did_not_happen_is_an_error,
+        probe_a_stale_reconciliation_is_an_error,
+        probe_a_reconciliation_whose_surviving_identity_does_not_exist_is_an_error,
         probe_the_reader_anchors_and_rejects_malformed_declarations,
-    ):
+        probe_the_walker_DETECTS_a_deletion_when_one_is_present,
+    )
+    # The probe set is PRINTED, by count and by name, so a probe deleted from this tuple is
+    # VISIBLE: a run that silently stops exercising a leg reads exactly like one that
+    # exercises it and passes (#112, P29 -- a gate's population is part of its verdict).
+    print(f"  examined {len(probes)} probe(s): " + ", ".join(p.__name__ for p in probes))
+    for probe in probes:
         for line in probe():
             fails.append(f"{probe.__name__}: {line}")
-    for line in probe_the_walker_DETECTS_a_deletion_when_one_is_present():
-        fails.append(f"probe_the_walker_DETECTS_a_deletion_when_one_is_present: {line}")
 
     live = report_the_live_history_walk()
     if live.startswith("FAIL"):
@@ -806,8 +930,9 @@ def main() -> int:
         # under examination — the ledger is the store, so a reconciliation needs no second
         # factory-data file and no sha to key on. The identity IS the key.
         tip_rows = rows_at(ref, LEDGER_PATH, cwd) or []
-        declared, decl_problems = load_reconciliations(tip_rows)
+        declared, surviving, decl_problems = load_reconciliations(tip_rows)
         problems.extend(decl_problems)
+        problems.extend(surviving_problems(surviving, tip_rows))
         gate_problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
             transitions, exemptions, declared
         )
