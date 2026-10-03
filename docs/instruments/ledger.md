@@ -715,17 +715,47 @@ the remedy is **protocol, not mechanism**:
 - **The unpublished sibling re-appends at the next free `n`**, and owes **no** `re-minted-from`
   declaration: the lost copy was never published, and declaring it would imply a published row moved,
   which is the one thing §9.6 forbids.
-- **A fork where BOTH sides are PUBLISHED is a different case** and is **not** covered by the rule
-  above: it needs an explicit reconciliation row naming both rows and the disposition. That shape is
-  **undecided**, recorded here rather than silently omitted, so a reader who meets it knows it is an
-  open case and not an oversight.
+- **A fork where BOTH sides are PUBLISHED is DECIDED, and it is never the case above: the removal is
+  UNLAWFUL, and the repair is an append-only RECONCILIATION ROW.** The re-mint freedom does not reach
+  it — a row a peer can observe has an identity, and moving that row removes the identity from the
+  published lineage. The reconciliation row NAMES every removed identity verbatim, as the full tuple
+  `(n, ts, event, actor, subject)`: a `ts` change is exactly what a re-mint leaves behind, so a naming
+  that omits the tuple names nothing. The identities cannot be restored (the lineage is pushed, and
+  rewriting it is barred by the identity law), so the repair is by APPEND and by nothing else.
+- **The reconciliation is a DECLARATION the machine reads, and it lives in the ledger itself.** A
+  row's `detail` carries a line ANCHORED at `reconciles:` — at the start of a line, so prose that
+  merely mentions the word cannot satisfy it — followed by a JSON object whose `removed` list holds
+  one object per removed identity, each carrying all five `IDENTITY_KEYS`. The identity IS the key:
+  `tests/test_ledger_no_shrink.py` matches it verbatim against what its walk observed removed, so a
+  declaration naming an identity no commit removed is a FALSE RECORD and reds the gate as a stale
+  declaration. No second factory-data file and no sha-keyed lookup is owed, and a malformed
+  declaration is a gate ERROR, never a silent read of zero declarations.
+- **A reconciliation is not an exemption, and it does not soften the bar on one.** An exemption
+  excuses a removal without naming its identities, keyed by the offending SHA; a reconciliation names
+  the identities and accounts for them by append. `#47` clause 4 (ruling `n=328`) stands unchanged —
+  a SECOND exemption of the same shape is a PROCESS DEFECT, and the remedy is a mechanism. This
+  clause IS that mechanism: the shape that produced it (`#298`, ruled at `n=2139`; reconciliation row
+  `n=2147`) is reconciled by row, never by a second exemption.
+- **A declaration accounts for the identities it names and NOTHING ELSE.** A commit removing five
+  identities is not excused by a declaration naming one — the remainder is still a problem. The leg
+  is scoped per-identity for exactly this reason: a commit-scoped declaration would be an exemption
+  wearing a different name.
+- **The declaration names only what the walk can SEE, and that bound is stated, not hidden.** The
+  walker reads `git log --numstat`, which emits no diff for merge commits, so a merge that re-mints a
+  published identity is invisible to it. A declaration naming such an identity would read as stale and
+  red the gate on a true statement — so the declaration carries the identities the walker observes,
+  the prose carries the rest, and the walker's merge-blindness is filed as its own defect rather than
+  papered over here.
 
 **The residual was RULED, and the ruling is what makes this clause an ACCEPTANCE rather than an
 omission.** HQ ruling n=1584 states it in terms — *"even with both legs, two checkouts each holding
 an uncommitted unpushed append can still fork, since no ref carries either row; irreducible without
 commit-on-append, and the remedy is the protocol"* — and orders it written here; n=1583 rules the
 re-mint protocol and closes with *"a fork where BOTH sides are published is not decided here"*. This
-clause is the delivery of that order, and it landed at `bccbda1` on 2026-09-29T01:31Z.
+clause is the delivery of that order, and it landed at `bccbda1` on 2026-09-29T01:31Z. **The shape
+`n=1583` left open is now CLOSED:** `#298` ruled it on 2026-10-03 — HQ ruling `n=2139`
+(`comment=5974017076`), reconciliation row `n=2147` — and the clause above is that ruling's
+delivery, so this section carries no open case.
 
 **"Protocol, not mechanism" governs the REMEDY; it does not leave the acceptance unupheld.** P29
 still owes the rule an active process or a deterministic gate, and this one has four, none of which
@@ -851,6 +881,9 @@ text search: the one measured case removes a row whose surviving neighbours stil
 word it carried. Its exemptions are factory data in `docs/ledger-no-shrink-exemptions.json`, keyed
 by full sha and never inline in the gate, and every run prints them so "clean" and "excused" are
 never the same output; a gate that examines zero commits fails loudly rather than passing vacuously.
+A removal that a **reconciliation row NAMES** is a third case and prints as `reconciled:` — accounted
+for by append, never excused (`§9.1`) — so `clean`, `excused` and `reconciled` are three distinct
+outputs and none of them reads as another.
 
 **"Retired" names two different objects**, and the difference carries the teeth: a row's IDENTITY,
 and a FIELD VALUE the ledger cannot remove. A close row declares the revision its receipts describe
