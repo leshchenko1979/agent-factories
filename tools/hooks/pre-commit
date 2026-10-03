@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """pre-commit hook: refuse a staged set that is not self-consistent.
 
-Two refusals live here, and they are one family: the pending commit contradicts
+Three refusals live here, and they are one family: the pending commit contradicts
 itself, and the contradiction is visible at pre-commit and nowhere later.
 
   leg 1  a declared byte pair is staged on ONE side only
   leg 2  the shipped kit moved and `registry/kit.json` did not follow it
+  leg 3  the staged registry artifact carries a probe's working-tree marker
 
 Leg 1 — the one-sided pair class (issue #92, ruled at n=630)
 ------------------------------------------------------------
@@ -32,6 +33,36 @@ left behind when a later commit touched `TEMPLATE/`. The gate
 noticed, and every member measured against it in the meantime was told it DIFFERS
 from a file it may have ported byte-identically. A stale reference does not fail;
 it accuses.
+
+Leg 3 — the marker a killed probe leaves behind (issue #197, ruled at the board
+comment 2026-09-28T13:36:20Z)
+---------------------------------------------------------------------------------
+`tests/test_registry.py`'s working-tree probe writes `TREE_EDIT_MARKER` to line 1
+of the tracked `docs/factory-registry.md`, to prove the registry gate reads HEAD
+rather than the working tree. Its restore is a `finally` — and a `finally` survives
+an exception but NOT a SIGKILL, while this box runs a documented crash loop
+(opencrabs#638). Measured 2026-09-28: the marker survived a kill, `5b7857a`
+committed it, and the registry gate read RED for every lane until `ba2daf1`.
+
+The class has a second half, and it is the sharper one: **the gate was red and the
+commit landed anyway**, because the suite is run by lanes and the commit path judged
+only the kit manifest and the pair table. This leg converts that from "a lane should
+have run the suite" into "the index cannot carry the marker" — a mechanism rather
+than a process, which is what P29 prefers.
+
+The predicate is EXACT, which is what makes it cheap enough for every commit: the
+marker is written by that one probe and `tools/registry_render.py` contains it 0
+times, so no legitimate render can begin with it and there is no false-positive
+population to excuse. The hook does NOT import `tests/test_registry.py` for the
+constant — that module WRITES A FILE at import time, and a hook that mutates the
+tree it is judging is the defect rather than the fix — so the value is copied here
+and a probe in `tests/test_commit_pair_hook.py` holds the copy to the original and
+fails if the two drift.
+
+Leg 3 sits OUTSIDE the shipped-kit guard, and that placement is load-bearing:
+`docs/factory-registry.md` is FACTORY DATA (#199) rather than a shipped file, so it
+exists in trees that carry no `TEMPLATE/` at all — exactly the trees whose registry
+the incident reddened.
 
 Why the naive hook would be worse than none
 -------------------------------------------
@@ -98,6 +129,26 @@ KIT_ROOT_RELATIVE = "TEMPLATE"
 MANIFEST_RELATIVE = "registry/kit.json"
 GENERATOR_RELATIVE = "tools/kit_manifest.py"
 
+# THE ARTIFACT LEG 3 JUDGES, and the marker it must not begin with (issue #197).
+#
+# `docs/factory-registry.md` is FACTORY DATA (#199) rather than a shipped file, so this
+# path is absent in the tree the kit ships FROM and present in every tree that rendered
+# its own registry. `index_bytes` returns None for an absent path, which leg 3 reads as
+# CLEAN — a commit that does not touch the artifact is outside the leg's population.
+REGISTRY_MD_RELATIVE = "docs/factory-registry.md"
+
+# THE MARKER A PROBE WRITES INTO A TRACKED ARTIFACT, and why the hook carries a COPY of
+# the constant instead of importing it.
+#
+# `tests/test_registry.py` defines this value and writes it to line 1 of the tracked
+# artifact to prove the registry gate reads HEAD rather than the working tree. The value
+# is copied here because importing that module would WRITE A FILE: it renders at import
+# time, and a hook that mutates the tree it is judging is the defect rather than the fix.
+# The copy is not trusted either — a probe in `tests/test_commit_pair_hook.py` reads the
+# original out of `tests/test_registry.py` and FAILS if the two ever drift, so the second
+# call site is held to the first rather than assumed equal to it.
+TREE_EDIT_MARKER = "<!-- working-tree-only edit -->"
+
 REMEDY = """pre-commit: REFUSED — a declared byte pair was staged on ONE side only.
 
   staged:  {staged}
@@ -126,6 +177,26 @@ Regenerate and stage it in this commit:
 
     python3 {generator}
     git add {manifest}
+
+The index was NOT rewritten — staging is your act."""
+
+MARKER_REMEDY = """pre-commit: REFUSED — the staged {relative} begins with a PROBE'S MARKER.
+
+  {detail}
+
+The marker {marker} is written by a probe in tests/test_registry.py to prove the registry
+gate reads HEAD rather than the working tree, and NO renderer can produce it (measured:
+tools/registry_render.py contains it 0 times), so it cannot be in this artifact by design.
+It gets there when that probe is KILLED before its restore runs — measured 2026-09-28: it
+survived a SIGKILL, was committed in 5b7857a, and reddened the registry gate for every lane
+until ba2daf1. A red gate did not stop that commit, because the suite is run by lanes; this
+refusal is the mechanism that stops the next one.
+
+Restore the artifact, or re-render it and stage the result:
+
+    git checkout -- {relative}
+    # or, when the render is genuinely stale:
+    python3 tools/registry.py render && git add {relative}
 
 The index was NOT rewritten — staging is your act."""
 
@@ -203,6 +274,38 @@ def index_bytes(top: Path, relative: str) -> bytes | None:
         ["git", "-C", str(top), "show", f":{relative}"], capture_output=True
     )
     return proc.stdout if proc.returncode == 0 else None
+
+def tree_edit_marker_problems(body: bytes | None, relative: str) -> list[str]:
+    """Whether a staged blob begins with a probe's working-tree marker — PURE (#197).
+
+    `None` means the INDEX does not hold the path at all, and that is CLEAN rather than a
+    gap: a commit that does not touch the artifact, and a tree that never rendered one,
+    are both outside this leg's population. An EMPTY list is judged and clean; a non-empty
+    one is the finding, and it says WHAT was seen rather than only that something was
+    wrong — a refusal that cannot be told from a hook crash is not a refusal.
+
+    The predicate is EXACT, which is what makes it cheap enough for every commit: the
+    marker is written by the probe in `tests/test_registry.py` and by nothing else, and
+    `tools/registry_render.py` contains it 0 times, so a legitimate render cannot begin
+    with it and there is no false-positive population to excuse.
+
+    FIRST LINE, not a substring search. The incident put the marker at line 1 of the
+    committed artifact; a body-wide search would fire on any document that merely QUOTES
+    the marker — this hook's own remedy text, a gate's expected string, a rendered field
+    carrying a commit message — and a leg that fires on prose ABOUT the defect is a leg
+    that gets excused. Line 1 is the position a probe's prepend produces and a renderer
+    cannot.
+
+    A leading BOM is stripped before the comparison. `write_text` never emits one, so a
+    BOM is corruption rather than a legitimate render, and letting it mask the marker
+    would be a hole in an otherwise exact predicate.
+    """
+    if body is None:
+        return []
+    first = body.decode("utf-8", "replace").lstrip("\ufeff").split("\n", 1)[0]
+    if first.startswith(TREE_EDIT_MARKER):
+        return [f"line 1 reads {first[:80]!r}"]
+    return []
 
 def staged_kit(top: Path) -> dict[str, str] | None:
     """`{path: sha256}` for the shipped set as the INDEX holds it.
@@ -308,13 +411,36 @@ def main(argv: list[str]) -> int:
         )
         return 0
 
-    # A tree without `TEMPLATE/` has no byte pairs and no shipped kit, so neither
-    # leg can fire: there is simply nothing here to check, and saying so on every
-    # commit would be noise that teaches lanes to ignore this hook.
-    if not kit_present(top):
-        return 0
-
+    # LEG 3 RUNS FIRST, and it sits OUTSIDE the shipped-kit guard below (issue #197).
+    #
+    # `docs/factory-registry.md` is FACTORY DATA (#199), not a shipped file: it exists in
+    # the tree this kit ships FROM and in every tree that rendered its own registry --
+    # including the bootstrapped factories that carry no `TEMPLATE/` at all. The guard
+    # below returns early for those trees, so a leg placed after it would be absent
+    # exactly where the incident reddened the registry. A refusal that cannot fire where
+    # the defect lives is not a refusal.
     problems: list[str] = []
+    marker_detail = tree_edit_marker_problems(
+        index_bytes(top, REGISTRY_MD_RELATIVE), REGISTRY_MD_RELATIVE
+    )
+    if marker_detail:
+        problems.append(
+            MARKER_REMEDY.format(
+                relative=REGISTRY_MD_RELATIVE,
+                marker=TREE_EDIT_MARKER,
+                detail="\n".join(marker_detail),
+            )
+        )
+
+    # A tree without `TEMPLATE/` has no byte pairs and no shipped kit, so legs 1 and 2
+    # cannot fire: there is simply nothing there to check, and saying so on every commit
+    # would be noise that teaches lanes to ignore this hook. Leg 3 has ALREADY run, since
+    # its class exists in those trees, so this guard covers legs 1 and 2 only and the
+    # verdict leg 3 reached is carried out through it.
+    if not kit_present(top):
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1 if problems else 0
 
     pairs = load_pairs(top)
     if pairs is None:

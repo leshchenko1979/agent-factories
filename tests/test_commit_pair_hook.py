@@ -352,6 +352,155 @@ def hook_wiring_probes(top: Path) -> list[str]:
 
     return failures
 
+def marker_leg_probes(hook_mod, top: Path) -> list[str]:
+    """Leg 3 (issue #197): the staged-blob marker refusal — predicates AND wiring.
+
+    Three groups, because each can pass while the others are broken:
+
+      1. the DRIFT GUARD — the hook carries a COPY of `TREE_EDIT_MARKER` (it cannot
+         import `tests/test_registry.py`, which writes a file at import), and a copy
+         nobody checks is two sources of truth. Read the original as SOURCE TEXT and
+         fail if the two ever differ.
+      2. the PURE predicate — including the two shapes that make it exact: a marker
+         that is merely QUOTED in prose must not fire, and a marker NOT on line 1 must
+         not fire. Without these the leg would be excused the first time it cried wolf.
+      3. the WIRING, in a throwaway repo with NO `TEMPLATE/` — the bootstrapped-factory
+         case. Leg 3 sits ABOVE the shipped-kit guard, and that placement is the whole
+         reason the incident class is covered: those are exactly the trees whose own
+         registry the marker reddened. A wiring arm run only where `TEMPLATE/` exists
+         would pass with the leg parked below the guard and prove nothing.
+    """
+    failures: list[str] = []
+    marker = hook_mod.TREE_EDIT_MARKER
+
+    # --- group 1: the drift guard ---------------------------------------------
+    # Read the ORIGINAL as text. Importing that module RENDERS A FILE (measured: it
+    # is the module the incident probe lives in), and a gate that mutates the tree
+    # it judges is the defect rather than the check.
+    registry_test = top / "tests" / "test_registry.py"
+    if not registry_test.is_file():
+        failures.append(
+            "probe: tests/test_registry.py is absent, so the marker's ORIGINAL could not "
+            "be read and the hook's copy is unverified — this is STATED, never read as a "
+            "pass (the copy is the whole reason the guard exists)"
+        )
+    else:
+        import re
+
+        m = re.search(
+            r'^TREE_EDIT_MARKER\s*=\s*(".*")\s*$',
+            registry_test.read_text(encoding="utf-8"),
+            re.M,
+        )
+        if m is None:
+            failures.append(
+                "probe: TREE_EDIT_MARKER is no longer a module-level literal in "
+                "tests/test_registry.py — the hook's copy can no longer be checked "
+                "against it, and this is STATED rather than silently skipped"
+            )
+        else:
+            original = eval(m.group(1))  # a string literal from this repo's own test file
+            if original != marker:
+                failures.append(
+                    f"probe: the hook's TREE_EDIT_MARKER copy ({marker!r}) has DRIFTED from "
+                    f"the original in tests/test_registry.py ({original!r}) — the hook would "
+                    "refuse the wrong prefix, and it refuses by DESIGN so the drift is silent"
+                )
+
+    # --- group 2: the pure predicate ------------------------------------------
+    rel = hook_mod.REGISTRY_MD_RELATIVE
+    cases: list[tuple[str, bytes | None, bool]] = [
+        ("the index does not hold the path at all", None, False),
+        ("a clean render", b"# Fleet Factory Registry\n\nbody\n", False),
+        ("the marker at line 1", (marker + "\n").encode() + b"# Fleet Registry\n", True),
+        ("the marker on a LATER line only", b"a\nb\n" + marker.encode() + b"\n", False),
+        ("a BOM before the marker", b"\xef\xbb\xbf" + (marker + "\n").encode() + b"x\n", True),
+        ("the marker merely QUOTED in prose", b"# Doc\n\nthe marker " + marker.encode() + b" here\n", False),
+    ]
+    for label, body, should_fire in cases:
+        got = hook_mod.tree_edit_marker_problems(body, rel)
+        fired = bool(got)
+        if fired != should_fire:
+            failures.append(
+                f"probe: leg 3 on {label} must {'FIRE' if should_fire else 'stay CLEAN'} "
+                f"— it returned {got!r}"
+            )
+        elif fired and len(got) != 1:
+            failures.append(f"probe: leg 3 on {label} must state exactly one finding — got {got!r}")
+
+    # --- group 3: the wiring, in a tree with NO TEMPLATE/ ---------------------
+    def git(repo: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+    def run(repo: Path) -> tuple[int, str]:
+        p = subprocess.run(
+            [sys.executable, str(repo / HOOK_PATH)],
+            capture_output=True,
+            text=True,
+            cwd=str(repo),
+        )
+        return p.returncode, p.stderr
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "r"
+        (repo / "tools" / "hooks").mkdir(parents=True)
+        (repo / "docs").mkdir()
+        shutil.copy2(top / HOOK_PATH, repo / HOOK_PATH)
+        # NO TEMPLATE/ HERE, deliberately: this is the bootstrapped-factory shape, and
+        # leg 3 must fire in it. Legs 1 and 2 are inert without a shipped kit.
+        (repo / "docs" / "factory-registry.md").write_text(
+            "# Fleet Factory Registry\n\nclean\n", encoding="utf-8"
+        )
+        git(repo, "init", "-q")
+        git(repo, "config", "user.email", "probe@probe.invalid")
+        git(repo, "config", "user.name", "probe")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "init")
+
+        rc, _ = run(repo)
+        if rc != 0:
+            failures.append(
+                f"probe: a clean staged artifact in a tree with NO TEMPLATE/ must PASS — "
+                f"the real hook returned {rc}"
+            )
+
+        # The marker in the WORKING TREE only: the index is clean, so the hook must NOT
+        # fire. P37 — a check that judges a COMMIT reads the index; one that judges LIVE
+        # state says so. Without this arm the leg could be reading the tree and pass.
+        (repo / "docs" / "factory-registry.md").write_text(
+            (marker + "\n") + "dirty working tree only\n", encoding="utf-8"
+        )
+        rc, _ = run(repo)
+        if rc != 0:
+            failures.append(
+                f"probe: a marker in the WORKING TREE alone must NOT be refused (the index "
+                f"is what a commit carries) — the real hook returned {rc}, so it is judging "
+                "the tree rather than the staged blob"
+            )
+
+        # ...and the SAME bytes staged must be refused, naming file AND marker.
+        git(repo, "add", "-A")
+        rc, err = run(repo)
+        if rc != 1:
+            failures.append(
+                f"probe: a staged artifact beginning with the marker must be REFUSED even "
+                f"with no TEMPLATE/ present — the real hook returned {rc}, so leg 3 is not "
+                "reached from main outside the shipped-kit guard"
+            )
+        else:
+            if rel not in err:
+                failures.append(
+                    f"probe: the refusal must NAME the file ({rel}) — a silent non-zero exit "
+                    "is indistinguishable from a hook crash"
+                )
+            if marker not in err:
+                failures.append(
+                    f"probe: the refusal must NAME the marker ({marker!r}) — the reader has "
+                    "to be told what was seen, not merely that something was wrong"
+                )
+
+    return failures
+
 def main() -> int:
 # STATED SKIP: TEMPLATE/ (a tree with no shipped kit of its own)
     top = repo_toplevel() or REPO
@@ -374,6 +523,7 @@ def main() -> int:
         problems.extend(probe(hook_mod, pairs))
 
     problems.extend(kit_leg_probes(hook_mod, top))
+    problems.extend(marker_leg_probes(hook_mod, top))
     problems.extend(hook_wiring_probes(top))
     problems.extend(hook_installation_problems(top, HOOK_PATH, HOOKS_PATH_CONFIG))
 

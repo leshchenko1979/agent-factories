@@ -898,6 +898,36 @@ def probe_a_hand_edited_committed_artifact_is_named() -> None:
 # output if the monitor read the working tree.
 TREE_EDIT_MARKER = "<!-- working-tree-only edit -->"
 
+def repair_leaked_marker() -> bool:
+    """JANITOR — repair a marker a KILLED probe left in the tracked artifact (#197).
+
+    The probe below writes `TREE_EDIT_MARKER` to line 1 of `docs/factory-registry.md` and
+    restores it. A `finally` survives an exception and does NOT survive a `SIGKILL`, and
+    this box runs a documented crash loop (opencrabs#638) — measured 2026-09-28: the marker
+    survived a kill and `5b7857a` committed it, reddening GATE A for every lane until
+    `ba2daf1`. **A repair that depends on the process that died is not a repair**, so the
+    reliable restore does not live in the probe's `finally`: it lives HERE, and `main()`
+    runs it at the START of every run, before any check or probe, so a leak is repaired at
+    the NEXT run rather than surviving into a commit. (`tools/hooks/pre-commit`'s leg 3 is
+    the second net: it refuses the staged artifact outright, at the one point where the
+    bytes are about to become a commit.)
+
+    The predicate is EXACT and the rewrite is MINIMAL: the marker is written by that one
+    probe and by nothing else, and the renderer contains it 0 times, so a file that BEGINS
+    with it is a leak and never a legitimate render. Only the prepended first line is
+    removed, so a document that merely QUOTES the marker lower down is left untouched, and
+    a CLEAN file is returned unchanged with no write at all. Returns whether it repaired.
+    """
+    try:
+        raw = rr.MD_PATH.read_bytes()
+    except OSError:
+        return False
+    prefix = (TREE_EDIT_MARKER + "\n").encode()
+    if not raw.startswith(prefix):
+        return False
+    rr.MD_PATH.write_bytes(raw[len(prefix):])
+    return True
+
 
 def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
     """Criterion 3 — a working-tree edit must move NEITHER the verdict NOR the monitor:
@@ -923,18 +953,21 @@ def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
 
     The working-tree file is written, measured and RESTORED byte-identically, and the
     restoration is asserted by digest inside the probe rather than trusted: a probe that
-    left the tree dirty would corrupt every later reading, its own included.
+    left the tree dirty would corrupt every later reading, its own included. **The restore
+    is the JANITOR, not a `finally` (#197)** — a `finally` does not survive a `SIGKILL`, so
+    the reliable repair is `repair_leaked_marker()`, which `main()` also runs at the START of
+    every run; the call here keeps THIS run clean, and its return is asserted below so the
+    repair is shown to bite rather than assumed.
     """
     before = len(counts)
     original = rr.MD_PATH.read_bytes()
     digest = hashlib.md5(original).hexdigest()
-    try:
-        rr.MD_PATH.write_bytes((TREE_EDIT_MARKER + "\n").encode() + original)
-        verdict = check_render_reproduces()
-        del counts[before:]  # the probe drives the verdict; it does not report a second time
-        monitor = report_freshness()
-    finally:
-        rr.MD_PATH.write_bytes(original)
+    rr.MD_PATH.write_bytes((TREE_EDIT_MARKER + "\n").encode() + original)
+    verdict = check_render_reproduces()
+    del counts[before:]  # the probe drives the verdict; it does not report a second time
+    monitor = report_freshness()
+    repaired = repair_leaked_marker()
+    untouched = repair_leaked_marker()  # a second call, on the file the first just cleaned
 
     check(
         "a WORKING-TREE edit does NOT move GATE A's verdict — it reads HEAD, not the tree",
@@ -952,6 +985,13 @@ def probe_a_working_tree_edit_does_not_move_the_verdict() -> None:
         "this probe wrote cannot appear anywhere in its output",
         not monitor.startswith("NOT TAKEN") and TREE_EDIT_MARKER not in monitor,
         monitor[:110],
+    )
+    check(
+        "...and the JANITOR restores it — it reports the repair on the leaked file and "
+        "leaves the now-CLEAN file untouched, so the restore is a minimal prefix-strip and "
+        "never a rewrite that could clobber a legitimate render",
+        repaired and not untouched,
+        f"repaired={repaired}, second call on the cleaned file returned {untouched}",
     )
 
 def probe_the_monitor_read_path_is_load_bearing() -> None:
@@ -2080,6 +2120,16 @@ def main() -> int:
               f"judge. Both are FACTORY DATA generated from this factory's own fleet manifest; "
               f"the kit ships the shape, not a member's records.")
         return 0
+    # THE JANITOR, before any check or probe (#197). A probe killed before its restore leaves
+    # its marker at line 1 of the tracked artifact, and the repair must not depend on the
+    # process that died — so it runs HERE, at the start of every run. `check_resolved_at`
+    # reads this file's working-tree bytes, so a leak repaired after CHECKS would still be
+    # read as state; the pre-commit leg is the second net, at commit time.
+    if repair_leaked_marker():
+        print(
+            f"  JANITOR: repaired a probe's marker left at line 1 of "
+            f"{relpath(rr.MD_PATH)} by a killed run (#197)."
+        )
     print("")
     for label, function in CHECKS:
         problems = function()
