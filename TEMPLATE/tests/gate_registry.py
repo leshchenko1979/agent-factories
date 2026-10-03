@@ -841,6 +841,17 @@ OPTIONAL_GATES: dict[str, str] = {
         "indistinguishable from one that passes, which is how an S1 predicate that could "
         "never match a hyphenated tool survived as its own headline red."
     ),
+    "test_kit_questions_homes.py": (
+        "meta-factory-only (issue #188 step 2) — its POPULATION is the EXECUTING copy of "
+        "the questions register, which `/opt/questions/backend.py` resolves from the ops "
+        "profile's skill tree and which sits inside NO member root. A member has no second "
+        "home to compare, and this gate resolves that copy through `tools/kit_census.py`, "
+        "repo-side and unshipped, so it has neither the tool nor the population. It is this "
+        "factory's gate for the RETURN leg nothing owned: a fix landed on "
+        "`TEMPLATE/tools/questions` alone while the executing copy kept the pre-fix refusal "
+        "for two days (#183 -> #188). Its predicate is a SUBSET, so byte-identity PASSES — "
+        "the gate stays green once the Toolsmith's owner-ordered adoption completes."
+    ),
 }
 
 REQUIRED_PREDICATE = (

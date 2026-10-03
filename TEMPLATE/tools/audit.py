@@ -2139,6 +2139,21 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_kit_surfaces.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_kit_surfaces.py"])
 
+    # `test_kit_questions_homes.py` (issue #188 step 2) is the kit gate for the questions
+    # register's TWO HOMES: `TEMPLATE/tools/questions` here, and the EXECUTING copy an
+    # owner's tap actually reaches (resolved by `/opt/questions/backend.py`'s CLI_ROOT glob).
+    # It asserts the difference is CONFINED TO the declared parameter layer (PROG, RENDER_SRC,
+    # USAGE, FORK_REPO) plus one NAMED kept local fix (OC_ACTOR), and it TOLERATES byte-
+    # identity so it stays green once the Toolsmith's owner-ordered adoption completes.
+    # OPTIONAL and unshipped, for the deciding fact its siblings state: its POPULATION is the
+    # executing copy, which lives in the ops profile's skill tree inside NO member root -- a
+    # member has no second home to compare -- and it resolves that copy through
+    # `tools/kit_census.py`, which is repo-side and unshipped. It is this factory's instrument
+    # for the RETURN leg nothing owned: a fix landed on the template alone while the executing
+    # copy kept the pre-fix refusal for two days (#183 -> #188).
+    if (repo_root / "tests/test_kit_questions_homes.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_kit_questions_homes.py"])
+
     # 56. Publish gate (issue #146, ruling n=1168): the pusher holds a commit inside its
     #     grace window, publishes one past it, reports a diverged branch without resolving
     #     it, and carries no force or rebase in its executable path. Registered rather than
