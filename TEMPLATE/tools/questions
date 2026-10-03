@@ -1175,7 +1175,7 @@ def cmd_answer(argv):
     positional, flags = parse_flags(
         argv,
         valued=["--text", "--via", "--by"],
-        boolean=["--json", "--clarify", "--no-publish"],
+        boolean=["--json", "--clarify", "--no-publish", "--notify"],
     )
     if len(positional) < 2:
         die(2, "answer requires <set-id> <question-id> [choice-index|clarify]")
@@ -1310,13 +1310,30 @@ def cmd_answer(argv):
     meta = republish(flags)
     page = (meta or {}).get("url")
     total, sets = open_totals()
+
+    # `--notify` folds the delivery into this verb (S2, 2026-10-02). It runs
+    # HERE -- after the RegisterLock() block has exited -- because deliver_answer
+    # -> stamp_delivery takes RegisterLock itself and a nested acquire dies after
+    # 10 s (die(4)). The flag is OPT-IN: with it absent this verb is byte-for-byte
+    # what it was, so a caller that already runs `notify` (the cron sweep) is
+    # unchanged and nothing is delivered twice. The exit code stays the
+    # MUTATION's -- a failed delivery is DATA in the payload below, never an rc,
+    # because the backend's confirmation has two branches and needs the fact.
+    delivery = None
+    if flags.get("--notify"):
+        delivery = deliver_answer(set_id, qid, mode="turn-end")
+
     if flags.get("--json"):
-        print(json.dumps({"set": set_id, "qid": qid, "status": question["status"],
-                          "answer": question.get("answer"),
-                          "remaining": len(remaining), "archived": archived,
-                          "open_questions": total, "open_sets": sets,
-                          "page": page},
-                         indent=2, ensure_ascii=False))
+        payload = {"set": set_id, "qid": qid, "status": question["status"],
+                   "answer": question.get("answer"),
+                   "remaining": len(remaining), "archived": archived,
+                   "open_questions": total, "open_sets": sets,
+                   "page": page}
+        if delivery is not None:
+            payload["delivery"] = delivery.get("delivery")
+            payload["http"] = delivery.get("http")
+            payload["delivered"] = delivery.get("delivery") == "delivered"
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         print(f"{set_id}/{qid} -> {question['status']}: {question.get('answer')!r}")
         if remaining:
@@ -1326,6 +1343,12 @@ def cmd_answer(argv):
         print(f"{total} open question(s) across {sets} set(s)")
         if page:
             print(f"  page {page}")
+        if delivery is not None:
+            if delivery.get("error"):
+                print(f"  delivery: NOT attempted -- {delivery['error']}")
+            else:
+                print(f"  delivery: {delivery.get('delivery')} "
+                      f"(http {delivery.get('http')})")
     return 0
 
 # =============================================================================
@@ -4958,6 +4981,68 @@ def selftest():
             ck("stamped 1 question(s) as delivered" in (proc.stdout or ""),
                "\u2026and the verb SAYS what it stamped (%r)"
                % ((proc.stdout or "").strip()[:90],))
+
+            # S2 (2026-10-02): `answer --notify` folds the delivery into the
+            # answer verb for a caller that does NOT already run `notify` (the
+            # answer backend, which cannot afford a second round trip). Three
+            # properties are load-bearing and each is pinned here, because a
+            # selftest that passes WITHOUT covering the new path is the green
+            # receipt over an unverifiable check: the fold is OPT-IN, it runs
+            # OUTSIDE the register lock, and the exit code stays the MUTATION's
+            # -- a failed delivery is DATA, never an rc.
+            rc, out, _ = run("ask", "--factory", "f-notify-fold",
+                             "--title", "Fold the delivery in?",
+                             "--description", "d",
+                             "--option", "yes", "--option", "no", "--json")
+            _fset = json.loads(out)["set"]
+            _fold = subprocess.run(
+                [tool, "answer", _fset, "q1", "0", "--notify", "--json",
+                 "--no-publish"], env=ok_env, capture_output=True, text=True,
+                timeout=90)
+            try:
+                _fj = json.loads(_fold.stdout)
+            except Exception:
+                _fj = {}
+            ck(_fold.returncode == 0 and _fj.get("delivery") == "delivered"
+               and _fj.get("delivered") is True,
+               "answer --notify folds a REACHABLE delivery in: rc=0, "
+               "delivered=true (delivery=%r, rc=%d)"
+               % (_fj.get("delivery"), _fold.returncode))
+
+            rc, out, _ = run("ask", "--factory", "f-notify-fold2",
+                             "--title", "Fold the delivery in?",
+                             "--description", "d",
+                             "--option", "yes", "--option", "no", "--json")
+            _fset2 = json.loads(out)["set"]
+            _fold2 = subprocess.run(
+                [tool, "answer", _fset2, "q1", "0", "--notify", "--json",
+                 "--no-publish"], env=dead, capture_output=True, text=True,
+                timeout=90)
+            try:
+                _fj2 = json.loads(_fold2.stdout)
+            except Exception:
+                _fj2 = {}
+            ck(_fold2.returncode == 0 and _fj2.get("delivery") == "unreachable"
+               and _fj2.get("delivered") is False,
+               "answer --notify: an UNREACHABLE delivery is DATA and the exit "
+               "code stays the answer's (delivery=%r, rc=%d)"
+               % (_fj2.get("delivery"), _fold2.returncode))
+
+            rc, out, _ = run("ask", "--factory", "f-notify-fold3",
+                             "--title", "Fold the delivery in?",
+                             "--description", "d",
+                             "--option", "yes", "--option", "no", "--json")
+            _fset3 = json.loads(out)["set"]
+            _fold3 = subprocess.run(
+                [tool, "answer", _fset3, "q1", "0", "--json", "--no-publish"],
+                env=dead, capture_output=True, text=True, timeout=90)
+            try:
+                _fj3 = json.loads(_fold3.stdout)
+            except Exception:
+                _fj3 = {}
+            ck(_fold3.returncode == 0 and "delivery" not in _fj3,
+               "answer WITHOUT --notify is unchanged: no delivery key in --json "
+               "(%r, rc=%d)" % (sorted(_fj3), _fold3.returncode))
         finally:
             _srv.shutdown()
             _srv.server_close()
@@ -5223,11 +5308,17 @@ USAGE = """questions — the Open Questions register (#547)
            is an override for callers outside a turn. Prints the open-question
            TOTAL and the page URL -- there is no card.
   answer   <set-id> <qid> <choice-index|clarify> [--text T] [--via card|page|cli]
-           recording an answer does NOT notify the asker: delivery is the
-           separate `notify` verb, and an answer whose asker never received it
-           reads as closed on every surface. `notify` now stamps each question
-           it carried with the outcome and instant (delivery: delivered |
-           refused | unreachable), and `list` prints that beside the answer.
+           [--notify]
+           recording an answer does NOT notify the asker BY DEFAULT: delivery is
+           the separate `notify` verb, and an answer whose asker never received
+           it reads as closed on every surface. `--notify` folds that delivery
+           into THIS call for a caller that does not already run `notify` --
+           opt-in, so nothing is delivered twice. The delivery runs OUTSIDE the
+           register lock and its outcome lands in --json as delivery / http /
+           delivered; the exit code stays the ANSWER's, so a delivery failure is
+           data, never an rc. `notify` stamps each question it carried with the
+           outcome and instant (delivery: delivered | refused | unreachable), and
+           `list` prints that beside the answer.
            [--no-publish]
            clarify with NO --text is a COMPLETE request (#183): the owner's
            click alone asks the lane to restate the question in wider context
