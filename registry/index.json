@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-03T06:25:09Z",
+  "resolved_at": "2026-10-03T06:28:23Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -1557,7 +1557,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-10-02T06:48:51Z",
+      "attested_at": "2026-10-03T06:27:26Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -2249,8 +2249,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-03T06:25:00+00:00",
-      "last_run_at": "2026-10-03T00:25:18Z",
+      "next_run_at": "2026-10-03T12:25:00+00:00",
+      "last_run_at": "2026-10-03T06:25:40Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",

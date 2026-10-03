@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-03T06:25:09Z",
+  "resolved_at": "2026-10-03T06:28:23Z",
   "fragments": [
     {
       "path": "/tmp/oc-wt-r7/registry/factories/ai-antispam.json",
@@ -1357,7 +1357,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-02T06:48:51Z",
+        "attested_at": "2026-10-03T06:27:26Z",
         "instruments": {
           "ledger": {
             "state": "not-applicable",
@@ -2348,7 +2348,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1791008585,
+      "session_updated_at": 1791008846,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2712,7 +2712,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1791008668,
+      "session_updated_at": 1791008877,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2959,7 +2959,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1791008033,
+      "session_updated_at": 1791008819,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3344,8 +3344,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-03T06:25:00+00:00",
-      "last_run_at": "2026-10-03T00:25:18Z",
+      "next_run_at": "2026-10-03T12:25:00+00:00",
+      "last_run_at": "2026-10-03T06:25:40Z",
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "_profile": "ops"
     },
