@@ -1164,10 +1164,162 @@ def check_profile_gateway_listening() -> tuple[bool, str]:
         return False, f"127.0.0.1:{port} refused: {exc}"
 
 
+def enabled_job_rows(dbs: list[Path]) -> tuple[list[dict], list[str]]:
+    """(enabled rows, unreadable) from the given DBs, read in place.
+
+    Only the three fields the naming law is about are read — `name`, `enabled`,
+    `deliver_to` — and the columns are PROBED rather than assumed, so a home whose
+    `cron_jobs` predates `deliver_to` reads NULL for it instead of failing the
+    whole read. A profile with no `cron_jobs` table is not an error: it is a home
+    that runs no jobs, which is a different answer from a home that could not be
+    read, and the two are kept apart.
+    """
+    rows: list[dict] = []
+    unreadable: list[str] = []
+    for db in dbs:
+        try:
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error as exc:
+            unreadable.append(f"{db.name}: {exc}")
+            continue
+        try:
+            tables = {
+                r[0] for r in conn.execute("select name from sqlite_master where type='table'")
+            }
+            if "cron_jobs" not in tables:
+                continue  # a profile with no cron table runs no jobs
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(cron_jobs)")}
+            if not {"name", "enabled"} <= columns:
+                unreadable.append(f"{db.name}: cron_jobs lacks name/enabled")
+                continue
+            deliver = "deliver_to" if "deliver_to" in columns else "NULL as deliver_to"
+            for name, enabled, deliver_to in conn.execute(
+                f"select name, enabled, {deliver} from cron_jobs where enabled = 1"
+            ):
+                rows.append(
+                    {
+                        "name": name,
+                        "enabled": enabled,
+                        "deliver_to": deliver_to,
+                        "_profile": db.parent.name,
+                    }
+                )
+        except sqlite3.Error as exc:
+            unreadable.append(f"{db.name}: {exc}")
+        finally:
+            conn.close()
+    return rows, unreadable
+
+def job_owner_maps(bindings: list[dict]) -> tuple[dict, dict]:
+    """(uuid_owner, chat_owner) — the two maps `registry_render.job_owner` consumes.
+
+    Built the way `registry_render.build_context` builds them: `chat_owner` from
+    the manifest's declared chats, `uuid_owner` from each factory's DECLARED lanes
+    resolved against the live bindings. The construction MIRRORS the renderer's on
+    purpose — the predicate asserts that the render's own attribution obeys the
+    naming law, so it must attribute through the renderer's map and not a looser
+    one, which would flag a job the render places under another factory.
+    """
+    chat_owner = {str(chat): slug for slug, chat in FACTORY_CHATS.items()}
+    uuid_owner: dict[str, str] = {}
+    for path in live_fragment_paths([]):
+        data, error = load_fragment(path)
+        if error or not isinstance(data, dict):
+            continue
+        slug = str(data.get("factory"))
+        for lane in data.get("lanes") or []:
+            if not isinstance(lane, dict):
+                continue
+            resolved = resolve_lane(lane, bindings, {}, chat_id=FACTORY_CHATS.get(slug))
+            session_id = resolved.get("session_id")
+            if session_id:
+                uuid_owner[str(session_id)] = slug
+    return uuid_owner, chat_owner
+
+def job_naming_problems(
+    jobs: list[dict], uuid_owner: dict, chat_owner: dict
+) -> tuple[list[str], int, set[str], int]:
+    """(offenders, jobs checked, factories resolved, jobs left unattributed).
+
+    SKILL §11: a factory's own jobs are named `<declared-prefix><what-it-does>`,
+    and the PREFIX — never the slug — is the only token attribution resolves. A
+    job that reaches its factory by `deliver_to` identity while its name carries
+    no prefix (or the SLUG) is therefore mis-named, and the render's `deliver_to`
+    fallback is exactly what hides it: the row renders under its owner while its
+    name says nothing a census can read (#288).
+
+    The attribution is `registry_render.job_owner` — the SAME function the render
+    attributes with, imported lazily because the renderer imports THIS module at
+    its top and a top-level import here would be a cycle. Re-deriving the
+    precedence would be a second copy that can disagree, which is the defect
+    `NAME_PREFIXES` was de-duplicated to remove.
+
+    Only ENABLED rows are judged: a disabled row is not a live claim. A row
+    attributed to no factory is COUNTED and returned rather than dropped — it is
+    not a clean row, and a verdict over a population nobody named is what §8 bars.
+    """
+    import registry_render  # lazy: the renderer imports this module at its top
+
+    offenders: list[str] = []
+    owners: set[str] = set()
+    unattributed = 0
+    checked = 0
+    for job in jobs:
+        if not job.get("enabled"):
+            continue
+        checked += 1
+        owner, basis = registry_render.job_owner(job, uuid_owner, chat_owner)
+        if owner is None:
+            unattributed += 1
+            continue
+        owners.add(owner)
+        name = str(job.get("name") or "")
+        prefixes = tuple(MANIFEST_RECORDS.get(owner, {}).get("job_prefixes") or ())
+        if not any(name.startswith(prefix) for prefix in prefixes):
+            declared = ", ".join(f"`{p}`" for p in prefixes) or "no declared prefix"
+            offenders.append(f"{name or '<unnamed>'} -> {owner} (by {basis}) carries {declared}")
+    return offenders, checked, owners, unattributed
+
+def check_job_naming_prefix() -> tuple[bool, str]:
+    """Every enabled job attributed to a factory must carry that factory's prefix.
+
+    The population is the declared profiles' ENABLED cron rows — the SAME
+    population the render attributes — so the claim is exactly "the render's own
+    attribution obeys the naming law". The verdict NAMES that population (homes
+    read, jobs read, factories resolved, jobs unattributed) because a predicate
+    that examined nothing has reported nothing, not HOLDS (§8): a zero-job read
+    FAILS rather than passing.
+    """
+    try:
+        dbs = profile_dbs()
+    except FleetManifestError as exc:
+        return False, str(exc)
+    rows, unreadable = enabled_job_rows(dbs)
+    if unreadable:
+        return False, f"{len(unreadable)} home(s) unreadable: {'; '.join(unreadable[:3])}"
+    try:
+        bindings, errors = all_bindings()
+    except FleetManifestError as exc:
+        return False, str(exc)
+    if errors:
+        return False, f"bindings unreadable: {'; '.join(errors[:3])}"
+    uuid_owner, chat_owner = job_owner_maps(bindings)
+    offenders, checked, owners, unattributed = job_naming_problems(rows, uuid_owner, chat_owner)
+    scope = (
+        f"{checked} enabled job(s) across {len(dbs)} home(s); "
+        f"{len(owners)} factory/factories resolved; {unattributed} unattributed"
+    )
+    if checked == 0:
+        return False, f"read {scope} — the population came back empty, so nothing was examined"
+    if offenders:
+        return False, f"{'; '.join(offenders[:4])} — read {scope}"
+    return True, f"{scope}; every attributed job carries its factory's declared prefix"
+
 CHECKS.update(
     {
         "sqlite3_present": check_sqlite3_present,
         "cron_min_gap_ge_6h": check_cron_min_gap_ge_6h,
+        "job_naming_prefix": check_job_naming_prefix,
         "daemon_cgroup_cap_present": check_daemon_cgroup_cap_present,
         "cross_profile_cli_route": check_cross_profile_cli_route,
         "profile_gateway_listening": check_profile_gateway_listening,

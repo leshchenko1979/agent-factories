@@ -1523,6 +1523,100 @@ def probe_the_live_manifest_satisfies_the_prefix_law() -> None:
         f"{len(declared)} factory(s): {declared}",
     )
 
+def probe_a_slug_named_job_attributed_by_deliver_to_fails() -> None:
+    """#288: the naming law, driven through the render's OWN attribution.
+
+    `meta-factory-questions-redeliver` wore the factory SLUG while its `deliver_to`
+    named a meta-factory lane, so the render placed it under its owner and the
+    `deliver_to` fallback masked the violation. The predicate must read that same
+    attribution and red on it.
+
+    Four legs, because a red alone is satisfiable by a predicate that reds on
+    everything: the row is FIRST shown to be attributed by `deliver_to -> lane` (the
+    precondition — without it the red could come from the name-prefix path), then the
+    offender is read, then a correctly-prefixed sibling under the SAME `deliver_to` is
+    shown CLEAN (the control), and a DISABLED offender is proven unjudged (only enabled
+    rows are live claims).
+
+    The rows come out of a throwaway sqlite DB through `enabled_job_rows`, and the
+    manifest record is INJECTED rather than read live — the same shape `FRAGMENT_STORE`
+    is injected in (#211's lesson). The probe pins the LAW, so it must read the same
+    answer in a member factory's tree, where the live manifest declares a different
+    fleet; a probe that needed `meta-factory` in `MANIFEST_RECORDS` would fail the gate
+    for every factory but this one. The slug is deliberately NOT its own prefix, which
+    is the class §11 is about — the two tokens coincide for most factories, which is
+    why the distinction stayed invisible until one of them did not.
+    """
+    slug = "meta-factory"
+    declared = "factory-"
+    lane_uuid = "00000000-0000-4000-8000-00000000c288"
+    slug_name = f"{slug}-questions-redeliver"
+    good_name = f"{declared}questions-redeliver"
+
+    check(
+        "the fixture slug is NOT its own declared prefix — the class §11 is about",
+        not slug.startswith(declared),
+        f"slug={slug!r} declared={declared!r}",
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "opencrabs.db"
+        conn = sqlite3.connect(db)
+        conn.execute("create table cron_jobs(name text, enabled integer, deliver_to text)")
+        conn.executemany(
+            "insert into cron_jobs values (?, ?, ?)",
+            [
+                (slug_name, 1, f"session:{lane_uuid}"),
+                (good_name, 1, f"session:{lane_uuid}"),
+                (f"{slug}-disabled-offender", 0, f"session:{lane_uuid}"),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        rows, unreadable = reg.enabled_job_rows([db])
+        check(
+            "the reader returns only ENABLED rows, naming the home it read",
+            not unreadable and len(rows) == 2,
+            f"unreadable={unreadable} rows={[r['name'] for r in rows]}",
+        )
+
+        uuid_owner = {lane_uuid: slug}
+        slug_row = next((r for r in rows if r["name"] == slug_name), None)
+        check(
+            "...and the slug-named row IS attributed by deliver_to, not by its name",
+            slug_row is not None
+            and rr.job_owner(slug_row, uuid_owner, {}) == (slug, "deliver_to -> lane"),
+            f"rows={[r['name'] for r in rows]}",
+        )
+        if slug_row is None:
+            return
+
+        saved = reg.MANIFEST_RECORDS
+        reg.MANIFEST_RECORDS = {slug: {"job_prefixes": [declared]}}
+        try:
+            offenders, checked, owners, unattributed = reg.job_naming_problems(
+                rows, uuid_owner, {}
+            )
+        finally:
+            reg.MANIFEST_RECORDS = saved
+        check(
+            "a slug-named job attributed by deliver_to FAILS, naming the row and its prefix",
+            len(offenders) == 1
+            and offenders[0].startswith(f"{slug_name} -> {slug}")
+            and f"`{declared}`" in offenders[0]
+            and "deliver_to -> lane" in offenders[0],
+            f"offenders={offenders}",
+        )
+        check(
+            "...while the correctly-prefixed sibling under the SAME deliver_to stays clean",
+            checked == 2
+            and owners == {slug}
+            and unattributed == 0
+            and not any(o.startswith(good_name) for o in offenders),
+            f"checked={checked} owners={owners} unattributed={unattributed}",
+        )
+
 CHECKS = (
     ("1. every fragment validates against the schema", check_fragments_validate),
     ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
@@ -1859,6 +1953,7 @@ PROBES = (
     probe_a_factory_with_no_prefixes_fails,
     probe_overlapping_prefixes_fail,
     probe_the_live_manifest_satisfies_the_prefix_law,
+    probe_a_slug_named_job_attributed_by_deliver_to_fails,
     probe_a_key_set_change_is_refused_naming_the_lost_keys,
     probe_a_mutation_preserves_every_key_the_fragment_carried,
     probe_the_verb_refuses_to_create_a_fragment,
