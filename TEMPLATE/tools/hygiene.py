@@ -770,6 +770,55 @@ def content_class(name: str) -> str:
     return PLACEMENT_CLASS.get(suffix, f"unknown:{suffix}")
 
 
+def _gitignored(root: Path, rels: list[str]) -> tuple[set[str], str, str]:
+    """(ignored, status, reason) for repo-relative paths, read from git's OWN declaration.
+
+    THE TREE'S OWN DECLARATION, not a list this tool keeps (#282). `.gitignore` is where the
+    repo states which artifacts it CREATES but does not track, so the placement predicate
+    reads that declaration instead of growing an allowlist. The allowlist form was refused by
+    name in this instrument's law -- *exempting one path removes that case and leaves the
+    general one* -- and that is exactly how `PLACEMENT_SKIP` accreted: `.audit.lock` was
+    appended one path at a time, and each patch left the next case uncaught. Measured
+    2026-10-03 on a working checkout, the live leg reported three paths the repo itself
+    writes and gitignores (`evidence/.insights.lock`, `evidence/.ledger.lock`,
+    `evidence/.ledger-index.sqlite`), so the gate was RED on a clean tree -- which trains
+    lanes to ignore a red gate.
+
+    Three outcomes, and the middle one is why this returns a triple rather than a bool:
+
+      * `rc=0` -- git reported at least one ignored path; the set is returned, `APPLIED`.
+      * `rc=1` -- git reported NONE ignored. A VALID EMPTY, not an error: the predicate ran
+        and found nothing, which is a different statement from the one below.
+      * `rc=128` (or git absent) -- NOT A REPOSITORY at this root, so the predicate could not
+        be applied. Returned as `NOT APPLIED` with its reason and NEVER as "nothing is
+        ignored", because a clean zero from a dead instrument is the surface this module
+        refuses. A bootstrapped factory and the shipped `TEMPLATE/` tree both take this path,
+        and the report says so rather than reading clean by silence.
+
+    `-z` on BOTH sides -- NUL-terminated input and output -- so a path carrying a space or a
+    newline cannot be mis-split. ONE batched call for the whole tree: a subprocess per file
+    would make the leg quadratic on a tree this size.
+    """
+    if not rels:
+        return set(), "APPLIED", ""
+    payload = b"".join(rel.encode("utf-8") + b"\0" for rel in rels)
+    try:
+        proc = subprocess.run(
+            ["git", "check-ignore", "-z", "--stdin"],
+            cwd=str(root),
+            input=payload,
+            capture_output=True,
+        )
+    except OSError as exc:
+        return set(), "NOT APPLIED", f"git could not be run ({exc.__class__.__name__})"
+    if proc.returncode == 0:
+        return {chunk.decode("utf-8") for chunk in proc.stdout.split(b"\0") if chunk}, "APPLIED", ""
+    if proc.returncode == 1:
+        return set(), "APPLIED", ""
+    detail = [line for line in proc.stderr.decode("utf-8", "replace").splitlines() if line.strip()]
+    reason = detail[0] if detail else f"git check-ignore exited {proc.returncode}"
+    return set(), "NOT APPLIED", reason
+
 def placement_leg(root: Path | None = None) -> dict:
     """Check every mapped directory against its declared content classes.
 
@@ -787,6 +836,9 @@ def placement_leg(root: Path | None = None) -> dict:
         "undeclared": [],
         "mismatches": [],
         "naming": [],
+        "ignored": [],
+        "ignore_status": "APPLIED",
+        "ignore_reason": "",
         "files": 0,
     }
     if not root.is_dir():
@@ -802,6 +854,20 @@ def placement_leg(root: Path | None = None) -> dict:
         if (root / "TEMPLATE" / rel).is_dir():
             targets.append((f"TEMPLATE/{rel}", f"TEMPLATE/{rel}", classes, basis))
 
+    # The ignored set is computed ONCE for the whole tree, before the per-directory walk,
+    # because `git check-ignore` is a subprocess and one call per file would be quadratic.
+    candidates: list[str] = []
+    for _shown, _rel, _classes, _basis in targets:
+        _directory = root / _rel
+        if not _directory.is_dir():
+            continue
+        for _entry in sorted(_directory.iterdir()):
+            if _entry.is_file():
+                candidates.append(str(_entry.relative_to(root)))
+    ignored, ignore_status, ignore_reason = _gitignored(root, candidates)
+    leg["ignore_status"] = ignore_status
+    leg["ignore_reason"] = ignore_reason
+
     for shown, rel, classes, basis in targets:
         directory = root / rel
         if not directory.is_dir():
@@ -813,6 +879,14 @@ def placement_leg(root: Path | None = None) -> dict:
         bad = 0
         for entry in sorted(directory.iterdir()):
             if not entry.is_file() or entry.name in PLACEMENT_SKIP:
+                continue
+            relpath = str(entry.relative_to(root))
+            if relpath in ignored:
+                # OUT of the placement population, PRINTED BY NAME (#282). Silently dropping
+                # it would be the exempt-by-silence surface this factory files against, and
+                # the reader of the report is the only one who can say whether the tree's
+                # own .gitignore is the right place for that path.
+                leg["ignored"].append({"path": relpath, "dir": shown})
                 continue
             found += 1
             leg["files"] += 1
@@ -874,10 +948,21 @@ def render_placement(leg: dict) -> str:
     head = (
         f"hygiene placement: {leg['files']} file(s) over "
         f"{sum(1 for d in leg['directories'] if d['status'] != 'absent')} declared directory(ies)"
-        f" — {len(leg['mismatches'])} mismatch(es), {len(leg['naming'])} naming mismatch(es)"
-        f" (removes: no)"
+        f" — {len(leg['mismatches'])} mismatch(es), {len(leg['naming'])} naming mismatch(es), "
+        f"{len(leg.get('ignored', []))} git-ignored (excluded) (removes: no)"
     )
     lines = [head]
+    if leg.get("ignore_status", "APPLIED") != "APPLIED":
+        # The predicate could not be applied -- NOT A CLEAN ZERO. Printed as its own line so
+        # a reader never mistakes "git could not answer" for "nothing is ignored" (#282).
+        lines.append(
+            f"  gitignore predicate NOT APPLIED — {leg.get('ignore_reason', 'no reason recorded')}"
+        )
+    for record in leg.get("ignored", []):
+        lines.append(
+            f"  IGNORED {record['path']} — the tree's own .gitignore declares this path, so it "
+            f"is OUT of the placement population (the repo creates it; it does not track it)"
+        )
     for record in leg["directories"]:
         if record["status"] == "absent":
             lines.append(f"  {record['dir']:24} absent (no such directory)")

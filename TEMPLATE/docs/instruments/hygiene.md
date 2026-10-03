@@ -198,8 +198,8 @@ contents" — and `ONTOLOGY.md` states the naming half only as *patterns* (`## N
 answered the placement half at all, so a file could sit in a directory its content does not belong to
 and every leg of `tools/hygiene.py` would still read clean. The leg is the smallest predicate that
 bites: a **declared map of directory -> content class**, checked against the tree —
-`hygiene placement: N file(s) over M declared directory(ies) — X mismatch(es), Y naming mismatch(es)
-(removes: no)`. `tools/kit_names.py` answers a different question (one name meaning two things across
+`hygiene placement: N file(s) over M declared directory(ies) — X mismatch(es), Y naming mismatch(es),
+Z git-ignored (excluded) (removes: no)`. `tools/kit_names.py` answers a different question (one name meaning two things across
 **trees**) and is **cited here, not replaced**. Three properties keep the map honest. **An unmapped
 directory states its reason** — never silently exempt, the discipline the declaration sweep applies to
 its unswept families. **A mapped directory that is absent is `absent`, not clean**, for the same reason
@@ -211,6 +211,22 @@ that drift. The naming half is read from the law's own example
 the root, because `TEMPLATE/` is the root's mirror by construction and a factory inherits what is
 there. The `removes: no` half is asserted **structurally**, by scanning the leg's own source for a
 removal call — a misplaced file is a decision for a human to make, and this leg only reports it.
+
+**A path the tree's OWN `.gitignore` declares is OUT of the placement population, and it is PRINTED (#282).**
+The population is every file in a declared directory, but a repository **creates** runtime artifacts it does not
+**track** — `evidence/.ledger.lock`, `evidence/.insights.lock`, the derived `evidence/.ledger-index.sqlite` — and a
+file the repo itself declares out is not a misplacement. The first remedy, extending `PLACEMENT_SKIP`, is the same
+allowlist this file already refused by name for AGE (*exempting one path removes that case and leaves the general
+one*): `PLACEMENT_SKIP` grew by exactly that accretion — `.audit.lock` appended one path at a time — until #282
+arrived. The predicate therefore reads **git's own declaration** (`git check-ignore`) for the whole tree in **one
+batched call before the walk** — one call per file would be quadratic — and every excluded path is printed by name:
+`IGNORED <path> — the tree's own .gitignore declares this path, so it is OUT of the placement population`. Two
+properties are load-bearing. **The predicate asks the tree in front of it** — a fresh repository carrying a rule this
+code has never seen (`*.unheard-of-extension`) is honoured, so the read is never a list maintained here, and the gate
+proves it with a throwaway repo rather than by re-asserting this tree's known names. And **a tree where git cannot
+answer is `NOT APPLIED` with its reason, never a clean zero** — a non-repo root, a missing `git` — and with the
+predicate unavailable the paths stay **IN** the population, so the leg fails toward reporting, never toward silence.
+The `removes: no` half is asserted **structurally**, by scanning the leg's own source for a removal call.
 
 **The declaration surfaces are CROSS-SWEPT, report-only (G2; q13, ruled 2026-09-30).** The `docs/*.json`
 declaration files are the factory's own debt register: an exemption, a skip or an authorization is a
