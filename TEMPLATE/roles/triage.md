@@ -76,11 +76,13 @@ ever took**. A lane woken by the patrol re-dispatches through `session_notify` �
 runner cannot deliver on its behalf, and its own shell-CLI dispatch path is measured at
 **0/6** delivery (ledger n=975).
 
-**The census is recorded in the cycle's receipt, not row-by-row in the ledger.** Clearing
-an `OWED` line is an ACT — a re-dispatch or a board close — and that act's own row is the
-record. The census itself is a READING: it is declared once, in the sweep's own `run`
-receipt (`duty=completed`, with `receipt_subject` naming the round). One ledger row per
-`OWED` line would put the patrol's reading into the ledger's own state.
+**The census is recorded in the CENSUS PROSE this sweep writes — never row-by-row in the
+ledger.** The surface is the prose the patrol already writes each cycle, and it is named
+here rather than left to the reader: a 15-line cycle would otherwise mint 15 rows and
+dilute the ledger's own signal (ruling n=1861 point 4). Clearing an `OWED` line is an ACT
+— a re-dispatch through `session_notify`, or a board close — and that act's own row is the
+record. The census itself is a READING, so it is declared ONCE in the prose, naming which
+`OWED` lines were re-dispatched and which were not, and why.
 
 ## The rework entry
 
