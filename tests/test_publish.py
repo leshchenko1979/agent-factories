@@ -300,6 +300,73 @@ def old_commit_publishes_arm() -> None:
         )
 
 
+def receipt_arm() -> None:
+    """Issue #284, leg (c)(1). The pusher records the push it made, so the patrol can tell
+    'the pusher ran late' from 'the pusher never ran' -- and can name a tip that left through
+    some other path. The record is a FILE, never a ledger row: the pusher is not a lane, and
+    the ledger's actor set is closed.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=GRACE * 4)
+        sha = commit(repo, "b.txt", when=old)
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=True)
+        rec = report.get("receipt") or {}
+        path = repo / "evidence" / "publish-receipt.json"
+
+        check(
+            report["status"] == "published" and rec.get("sha") == sha,
+            "a published round records the sha it pushed",
+            f"status={report['status']} receipt={rec}",
+        )
+        check(
+            path.is_file(), "the receipt is written under evidence/",
+            f"receipt={rec} exists={path.is_file()}",
+        )
+        body = pub.read_receipt(repo)[0] if path.is_file() else None
+        check(
+            isinstance(body, dict) and body.get("sha") == sha and body.get("instant"),
+            "the receipt carries the sha AND the instant of the push",
+            f"body={body}",
+        )
+        check(
+            rec.get("path") == "evidence/publish-receipt.json"
+            and not (repo / "evidence" / "ledger.jsonl").exists(),
+            "the receipt is a FILE under evidence/, never a ledger row",
+            f"receipt={rec}",
+        )
+
+    # The control: a round that pushed NOTHING must leave no receipt behind, or the arm
+    # above would pass on a file written unconditionally.
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=GRACE * 4)
+        commit(repo, "b.txt", when=old)
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=False)
+        check(
+            report["status"] == "would-publish"
+            and not (repo / "evidence" / "publish-receipt.json").exists(),
+            "a round that pushed nothing records NO receipt (the control)",
+            f"status={report['status']}",
+        )
+
+        # An absent receipt is neither an error nor a mismatch: the leg reads it as
+        # "no baseline", never as a clean one.
+        absent, why = pub.read_receipt(repo)
+        check(
+            absent is None and bool(why),
+            "an absent receipt is reported as absent, never as a clean read",
+            f"receipt={absent} why={why!r}",
+        )
+
 def dry_run_arm() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         remote = init_bare(Path(tmp) / "remote.git")
@@ -430,6 +497,7 @@ def main() -> int:
     in_sync_arm()
     grace_holds_arm()
     old_commit_publishes_arm()
+    receipt_arm()
     dry_run_arm()
     divergence_arm()
     remote_tip_is_read_from_the_remote_arm()

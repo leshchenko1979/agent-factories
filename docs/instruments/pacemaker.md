@@ -98,7 +98,7 @@ listed because the pair is what a member adopts, and the manifest hashes the `TE
 | 3 | `tests/test_patrol_host_state.py` ↔ `TEMPLATE/tests/test_patrol_host_state.py` | `standalone` | **the gate** — the runner's wiring |
 | 4 | `tools/field_predicate.py` ↔ `TEMPLATE/tools/field_predicate.py` | `closure` | the canonical-trailer read the close-board leg binds to |
 | 5 | `tools/kit_pin.py` ↔ `TEMPLATE/tools/kit_pin.py` | `closure` | the pin reader — travels with its pin (frame §3) |
-| 6 | `tools/publish.py` ↔ `TEMPLATE/tools/publish.py` | `standalone` | the publish-freshness leg |
+| 6 | `tools/publish.py` ↔ `TEMPLATE/tools/publish.py` | `standalone` | the publish-freshness leg. **SCOPE — the pusher holds its OWN pushes only.** Its 900 s grace window and 6 h cadence are **the pusher's declared bounds**: they bind `tools/publish.py` and nothing else, and they are not a property of the fleet. The leg this row feeds measures **LAG** — commits committed but not yet on the remote — and never cadence compliance. |
 | 7 | `tools/registry.py` ↔ `TEMPLATE/tools/registry.py` | `standalone` | the registry read the legs share — also a CLI of its own |
 | 8 | `tests/test_board_intake_recorded.py` ↔ `TEMPLATE/tests/test_board_intake_recorded.py` | `standalone` | the board-intake predicate |
 | 9 | `tests/test_close_board_recorded.py` ↔ `TEMPLATE/tests/test_close_board_recorded.py` | `standalone` | the close-board gate |
@@ -240,6 +240,7 @@ which is the one thing `job_prefixes` exists to state.
 | `registry/factories/*.json` | the adopter writes its own | **the factory** | the fragment store the attestation round reads and writes |
 | `evidence/ledger.jsonl` | created on first append | **the factory** | the duty-receipt store — the run rows that make a duty's completion provable |
 | `/tmp/<job-name>.log` | created by the job | **the factory** | the redirect log; its label must equal the job name, which is a contract between every pacemaker and the leg that reads it |
+| `evidence/publish-receipt.json` | created by the pusher | **the factory** | the pusher's record of its OWN last push — `{sha, instant, remote, branch}` (issue #284). **LOCAL and gitignored, by design:** a receipt that rode the pushed history would move the remote tip PAST the sha it records, which is the one property the publish-freshness leg compares against. Written by `tools/publish.py`, read through the pusher's own `read_receipt`, and never a ledger row — the pusher is not a lane and the ledger's actor set is closed |
 | `registry/kit.json` | generated | the **kit** | the version source (§5) — regenerated, never hand-edited |
 
 **A surface absent from this table is absent by measurement, not by omission.**
