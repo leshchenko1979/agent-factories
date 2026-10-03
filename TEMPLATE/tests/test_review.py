@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,21 @@ def _schema_pair() -> list[Path]:
     return paths
 
 
+def _known_lens_count() -> int:
+    """The lawful lens count, read from the ENGINE -- never hardcoded.
+
+    The core catalogue is 14, but a member may DECLARE lenses of its own at the
+    instrument's extension surface (`docs/review-lenses.json`; law doc section 6),
+    and a shipped gate that hardcoded 14 would red an adopter for lawfully using the
+    surface it was given. `lenses --json` is the ONE reader, so the assertion is made
+    against the same set every path folds in.
+    """
+    res = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tools" / "review.py"), "lenses", "--json"],
+        cwd=REPO_ROOT, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    return len(json.loads(res.stdout)["known"])
+
 def test_review_lifecycle(tmp_path: Path) -> None:
     # Use isolated test directory
     cycle_id = "test-cycle-01"
@@ -53,7 +69,7 @@ def test_review_lifecycle(tmp_path: Path) -> None:
             state = json.load(f)
         assert state["cycle_id"] == cycle_id
         assert state["status"] == "IN_PROGRESS"
-        assert len(state["lenses"]) == 14
+        assert len(state["lenses"]) == _known_lens_count()
 
         # 2. Record Lens A
         report_text = "# Lens A Review\nVerbatim quote found in role file: 'foo'\n"
@@ -69,8 +85,12 @@ def test_review_lifecycle(tmp_path: Path) -> None:
         res = subprocess.run(cmd_base + ["status", cycle_id], cwd=REPO_ROOT, capture_output=True, text=True)
         assert res.returncode == 1  # non-zero because pending > 0
 
-        # 4. Waive the remaining 13 lenses
-        for lens in ["B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I", "S"]:
+        # 4. Waive the remaining lenses. Iterated from the state rather than from a
+        # hardcoded list: a member that DECLARES a lens of its own (law doc section 6)
+        # would otherwise leave it PENDING and red the suite for using the surface.
+        for lens in state["lenses"]:
+            if lens == "A":
+                continue
             res = subprocess.run(
                 cmd_base + ["waive", cycle_id, lens, "--reason", "Test waiver"],
                 cwd=REPO_ROOT,
@@ -266,7 +286,7 @@ def test_legacy_state_is_refused_and_migrated_explicitly(tmp_path: Path) -> None
         assert migrated["corpus"]["hash"] == "cafe1234"
         assert "corpus_hash" not in migrated
         # Every catalog lens is materialized, so coverage is computable.
-        assert len(migrated["lenses"]) == 14
+        assert len(migrated["lenses"]) == _known_lens_count()
     finally:
         if cycle_dir.exists():
             shutil.rmtree(cycle_dir)
@@ -320,7 +340,9 @@ def test_verify_reports_unreceipted_lenses() -> None:
         state["lenses"]["A"]["receipt"] = None
         (cycle_dir / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
 
-        for lens in ["B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I", "S"]:
+        for lens in state["lenses"]:
+            if lens == "A":
+                continue
             subprocess.run(cmd_base + ["waive", cycle_id, lens, "--reason", "trial"],
                            cwd=REPO_ROOT, capture_output=True, text=True)
 
@@ -536,7 +558,7 @@ def test_step0_recovery_reads_state_alone_and_records_durable_evidence() -> None
         assert res.returncode == 0, res.stdout + res.stderr
         assert "Step 0 recovery" in res.stdout
         assert "frozen=no" in res.stdout
-        assert "14 pending" in res.stdout
+        assert f"{_known_lens_count()} pending" in res.stdout
         assert "next action" in res.stdout
 
         res = subprocess.run(cmd_base + ["step0", cycle_id, "--record"], cwd=REPO_ROOT,
@@ -545,7 +567,7 @@ def test_step0_recovery_reads_state_alone_and_records_durable_evidence() -> None
         state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
         assert len(state["step0_log"]) == 1, "step0 --record wrote no durable evidence"
         entry = state["step0_log"][0]
-        assert entry["pending"] == 14 and entry["frozen"] is False
+        assert entry["pending"] == _known_lens_count() and entry["frozen"] is False
         assert entry["next_action"].strip(), "a recorded reading must carry its next action"
     finally:
         if cycle_dir.exists():
@@ -1073,6 +1095,98 @@ def test_close_completed_is_refused_while_the_census_is_incomplete() -> None:
             shutil.rmtree(cycle_dir)
 
 
+def test_a_declared_lens_extends_the_catalogue_without_forking_it(tmp_path: Path) -> None:
+    """The declared extension surface: a member ADDS a lens, it never forks the core.
+
+    The core catalogue IS the instrument's shape and is centralised (the frame,
+    docs/instruments/template-instruments.md §6.4); what a member may do is DECLARE
+    its own lenses in `docs/review-lenses.json` (template-instruments.md §6.5). This arm pins the whole
+    contract: an addition becomes lawful on EVERY path, a declared id that collides
+    with a core letter is DROPPED so the core entry keeps the law that letter
+    carries, and an absent declaration leaves the core set standing alone.
+    """
+    decl = tmp_path / "review-lenses.json"
+    decl.write_text(json.dumps({"lenses": [
+        {"id": "X-anti", "family": "member", "name": "AntiSpam domain rules",
+         "scope": "docs/antispam/*.md", "instructions": "1. check the factory's own domain rules"},
+        {"id": "A", "family": "member", "name": "SHOULD NOT WIN",
+         "scope": "hijack", "instructions": "hijack"},
+    ]}) + "\n", encoding="utf-8")
+
+    env = dict(os.environ, OC_REVIEW_LENSES_PATH=str(decl))
+    cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+
+    def run(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(cmd_base + list(args), cwd=REPO_ROOT, capture_output=True,
+                              text=True, env=env)
+
+    # (1) The declaration ADDS exactly one lens; the colliding id is DROPPED.
+    res = run("lenses", "--json")
+    assert res.returncode == 0, res.stderr
+    listed = json.loads(res.stdout)
+    assert listed["core"] == ["A", "B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I", "S"]
+    assert listed["declared"] == ["X-ANTI"], listed["declared"]
+    assert listed["known"] == listed["core"] + ["X-ANTI"]
+
+    # (2) The declared lens briefs with ITS OWN metadata...
+    res = run("brief", "x-anti", "--json")
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout)["name"] == "AntiSpam domain rules"
+
+    # (3) ...and a declared id colliding with a core letter does NOT redefine it.
+    res = run("brief", "a", "--json")
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout)["name"] == "Redundancy, Ontology & Provenance Sediment"
+
+    # (4) init MATERIALISES the declared lens, so the cycle's census carries it.
+    cycle_id = "test-declared-lens"
+    cycle_dir = REPO_ROOT / "reviews" / cycle_id
+    try:
+        res = run("init", cycle_id)
+        assert res.returncode == 0, res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert set(state["lenses"]) == set(listed["known"]), sorted(state["lenses"])
+
+        # (5) verify REQUIRES it: a declared lens is not decoration. Waive every
+        # lens EXCEPT the declared one and the census still FAILS, naming it.
+        for lens in state["lenses"]:
+            if lens == "X-ANTI":
+                continue
+            res = run("waive", cycle_id, lens, "--reason", "test waiver")
+            assert res.returncode == 0, res.stderr
+        res = run("verify", cycle_id)
+        assert res.returncode == 1, res.stdout
+        assert "X-ANTI" in res.stdout, res.stdout
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+    # (6) An ABSENT declaration leaves the core catalogue standing alone -- the
+    # field ships before any factory has declared a lens.
+    env_absent = dict(os.environ, OC_REVIEW_LENSES_PATH=str(tmp_path / "absent.json"))
+    res = subprocess.run(cmd_base + ["lenses", "--json"], cwd=REPO_ROOT,
+                         capture_output=True, text=True, env=env_absent)
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout)["declared"] == []
+
+
+def test_the_shipped_seed_declares_nothing() -> None:
+    """The `.example.json` seed ships EMPTY, so an adopter carries no dead vocabulary.
+
+    The frame's extension contract (docs/instruments/template-instruments.md §6.5,
+    part 1): the template's copy declares nothing and the manifest tracks it, so a
+    factory that declares nothing is the DEFAULT rather than a special case.
+    """
+    root = REPO_ROOT.parent if REPO_ROOT.name == "TEMPLATE" else REPO_ROOT
+    seeds = [root / "docs" / "review-lenses.example.json"]
+    template_copy = root / "TEMPLATE" / "docs" / "review-lenses.example.json"
+    if template_copy.parent.is_dir():
+        seeds.append(template_copy)
+    for seed in seeds:
+        assert seed.is_file(), seed
+        assert json.loads(seed.read_text(encoding="utf-8"))["lenses"] == [], seed
+
+
 if __name__ == "__main__":
     test_review_lifecycle(Path("/tmp"))
     test_schema_artifact_is_generated()
@@ -1100,4 +1214,6 @@ if __name__ == "__main__":
     test_an_empty_plan_is_not_a_gap()
     test_codify_records_a_finding_and_refuses_a_carrier_less_one()
     test_close_completed_is_refused_while_the_census_is_incomplete()
+    test_a_declared_lens_extends_the_catalogue_without_forking_it(Path("/tmp"))
+    test_the_shipped_seed_declares_nothing()
     print("ALL TESTS PASSED")

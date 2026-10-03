@@ -5,6 +5,11 @@
 
 Periodic multi-lens reviews prevent process decay, law bloat, tool rot, ledger drift, and token waste.
 
+**This catalogue is the instrument's CORE, and it is centralised: a member does not fork it.** A
+factory whose domain the fourteen lenses below carry no lens for DECLARES its own at the
+instrument's extension surface, `docs/review-lenses.json`; the declaration ADDS to this catalogue
+and never redefines a letter in it. Contract: `docs/instruments/review-rotation.md` §6.
+
 **The Adversarial Isolation Requirement:** Review lenses must be executed by **dedicated adversarial sub-agents** spawned with clean, unpolluted context windows and explicit adversarial briefs (`tools/review.py brief <LENS>`). The primary authoring lane naturally suffers from conversational self-confirmation bias; an isolated sub-agent enters without authorial baggage and is primed specifically to detect flaws, prompt bloat, and un-gated rules.
 
 ---

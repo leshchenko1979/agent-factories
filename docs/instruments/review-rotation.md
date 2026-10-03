@@ -121,13 +121,24 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (§5).
 | # | path (root half ↔ TEMPLATE half) | class | what it is |
 |---|---|---|---|
 | 1 | `tools/review.py` ↔ `TEMPLATE/tools/review.py` | `standalone` | **the executable** — every leg of the lifecycle |
-| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **27 collected** (`pytest --collect-only`) at the instant named in §5's last row |
+| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **29 collected** (`pytest --collect-only -q`) at **2026-10-03T22:35:40Z**, in the tree this doc ships in |
 | 3 | `docs/review-cycle.schema.json` ↔ `TEMPLATE/docs/review-cycle.schema.json` | `standalone` | the state schema, **emitted** by `review.py schema`, never hand-kept |
 | 4 | `docs/review-lenses.md` ↔ `TEMPLATE/docs/review-lenses.md` | `standalone` | the lens catalogue law and the Adversarial Isolation Requirement |
 | 5 | `docs/instruments/review-rotation.md` ↔ `TEMPLATE/docs/instruments/review-rotation.md` | `standalone` | this file |
 
 **A reader holding the law file and the tree can answer *"is this instrument complete here?"* without
 enumerating imports**, which is what frame §1 requires of a declaration.
+
+**Row 2's count is a TREE reading and it moves with the tree**, which is why it carries its own
+instant rather than §5's: §5's pinned row names the revision a reviewer reproduces for the
+**version** reading, and a test count read from a different revision is a different number.
+
+**Not in the measured set, and why — recorded so a later reader does not read the list as
+accidental.** `docs/review-lenses.example.json` ships in the kit but is a **factory-owned
+declaration's skeleton**: it ships EMPTY, a factory that declares its own lenses writes a
+different path (§6), and its absence is the default state rather than an incomplete
+instrument. Measuring it would report every member as incomplete for declining a file it may
+lawfully never create.
 
 ## 3. The closure — declared, and it is EMPTY
 
@@ -274,30 +285,54 @@ collect.
 | the declared LEDGER path | the member's own | **the factory** | optional and explicitly declared; intake reads it and never writes it |
 | `registry/kit.json` | generated | the **kit** | the version source (§5) — regenerated, never hand-edited |
 | `docs/review-cycle.schema.json` | generated | the **kit** | emitted by `review.py schema`; the pair is held byte-identical by `test_docs_sync.py` |
+| `docs/review-lenses.json` | **the member declares it** | **the factory** | the extension surface (below) — the member's own lens additions. ABSENT is the default state, and an update that overwrote it would delete the member's vocabulary. The manifest does **not** track it |
+| `docs/review-lenses.example.json` | **shipped, and EMPTY** | the **kit** | the skeleton a member copies to declare its own lenses; manifest-tracked, so it stays byte-identical and a member never edits it |
 
 **A surface absent from this table is absent by measurement, not by omission.** Note the shape that
-distinguishes this instrument: **it ships no `.example` data at all.** Its inputs are the member's,
-declared at runtime; the only shipped artifacts are the executable, its gate, its schema and its law.
-A member therefore cannot "adopt the example and keep the runner" here — there is no example to
-adopt, which is why §4's manifest grain carries the whole weight.
+distinguishes this instrument: **it ships exactly ONE `.example` artifact, and that artifact is
+empty.** Its other inputs are the member's, declared at runtime; the remaining shipped artifacts are
+the executable, its gate, its schema and its law. So the example cannot be "adopted while the runner
+is kept": the one that ships declares nothing, and the path a member actually fills
+(`docs/review-lenses.json`) is a different file the manifest never touches. §4's manifest grain
+therefore still carries the whole weight.
 
-**This instrument has NO extension surface: member subject matter lives outside it** (frame §6.5).
-Nothing a member declares here ADDS to the instrument's shape, and that is measured rather than
-asserted. The lens catalogue is a module constant (`CATALOG_LENSES`, 14 lenses over 6 families) with
-**no file read for lenses at all**: `brief`, `record` and `waive` each refuse a lens outside it, and
-`verify` is bounded by the same constant because it takes no lens argument and iterates the
-catalogue. The state schema is CLOSED and emitted from one authoring home (§3, above); the lens
-states are a fixed three-value enum. What a member declares into this instrument is a **channel, not
-a vocabulary** — `intake.json` names where its input lands and `proposals/` carries it — and both are
-read as the review's **subject**, never folded into how the instrument reads.
+**This instrument's extension surface is `docs/review-lenses.json`, and this is its contract**
+(frame §6.5). The core catalogue is the instrument's **shape**: `CATALOG_LENSES` (14 lenses over 6
+families) and `LENS_METADATA` are module constants, centralised under frame §6.4, and a member
+cannot fork them. What a member MAY do is DECLARE lenses the core catalogue carries no lens for, at
+the one point the instrument's own reader accepts. The contract is the frame's, and it has four
+parts:
 
-A member's own domain rules therefore live where they already do: in its own repo skill, which is
-this instrument's own instruction to its own lens (*"Check that member-specific domain rules live
-only in their dedicated repo skills"*, `tools/review.py` lens S). A member that needs an addition to
-the instrument ITSELF — a new lens, a new family — has one path and it is not a private one: §5's
-promotion, the same route that promoted this instrument. §9's **O1** and **O4** carry the member's
-own duties (dispose of a copy it already holds; declare what its instrument accepts, or state why it
-has none); neither is coined here.
+1. **The field ships EMPTY.** `docs/review-lenses.example.json` declares nothing
+   (`{"lenses": []}`), so an adopter that declares nothing carries no dead vocabulary, and the
+   surface ships before any factory has used it.
+2. **A declaration ADDS; it never removes or redefines a core lens.** A declared id that collides
+   with a core letter is **DROPPED**, so a member cannot shadow a core letter and escape the law
+   that letter carries.
+3. **ONE reader serves every path.** `known_lenses()` and `lens_metadata()` are read by `init`,
+   `step0`, `status`, `verify`, `close`, `compile`, `migrate`, `census_gaps` and the `lenses`
+   subcommand alike, so a declared lens is materialised, counted and verified exactly as a core
+   lens is, and the write path and the gate cannot disagree.
+4. **An addition a SECOND factory needs PROMOTES to the core**, by frame §5 — the same route
+   that promoted this instrument. The declaration is the fleet's R&D channel, not a permanent
+   private fork.
+
+The declaration is read at `REVIEW_LENSES_FILE`, relocatable through `OC_REVIEW_LENSES_PATH` for the
+same reason every declared surface in this fleet is: a member whose layout differs points the
+instrument at its own declaration without editing the instrument, and the same seam makes a fixture
+lawful. **Absent or unreadable is NOT an error** — the core catalogue stands alone without it,
+which is what lets the field ship before any factory has declared a lens. The live specimen for
+this shape is `ledger`'s `docs/ledger-refs-kinds.json` (frame §6.5, cited rather than restated
+here), and `tests/test_review.py` pins all four parts.
+
+What a member declares into the OTHER surfaces stays what it was: a **channel, not a vocabulary**
+— `intake.json` names where its input lands and `proposals/` carries it, and both are read as the
+review's **subject**, never folded into how the instrument reads. A member's own domain RULES
+therefore live where they already do, in its own repo skill — which is this instrument's own
+instruction to its own lens (*"Check that member-specific domain rules live only in their dedicated
+repo skills"*, `tools/review.py` lens S). §9's **O1** and **O4** carry the member's own duties
+(dispose of a copy it already holds; declare what its instrument accepts, or state why it has
+none); neither is coined here.
 
 ## 7. Self-probe and non-vacuity — part 8
 

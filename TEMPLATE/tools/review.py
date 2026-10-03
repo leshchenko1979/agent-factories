@@ -30,6 +30,11 @@ Enforces:
      the bytes on disk now answer a different question than the one the cycle
      closed on.  `--live` is the explicit way to say the reader means today's
      bytes, and the read then says so.
+  8. A DECLARED extension surface: the core catalogue IS the instrument's shape
+     and is centralised -- a member cannot fork it.  A member's OWN lenses are
+     DECLARED in `docs/review-lenses.json` (shipped as an empty
+     `docs/review-lenses.example.json`), which ONE reader folds into the
+     catalogue.  A declaration ADDS; it never removes or redefines a core lens.
 
 Usage:
   python3 tools/review.py init <cycle_id>
@@ -37,6 +42,7 @@ Usage:
   python3 tools/review.py record <cycle_id> <lens> <report_path_or_text>
   python3 tools/review.py waive <cycle_id> <lens> --reason "..." [--by WHO]
   python3 tools/review.py status <cycle_id>
+  python3 tools/review.py lenses [--json]
   python3 tools/review.py verify <cycle_id>
   python3 tools/review.py compile <cycle_id>
   python3 tools/review.py close <cycle_id> [--status COMPLETED|ABANDONED] [--stamp --ledger F]
@@ -53,6 +59,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -248,6 +255,77 @@ SCHEMA_VERSION = 1
 # the same defect the donor fixed for `ended_at`.
 LIFECYCLE_STATES = ["IN_PROGRESS", "COMPLETED", "ABANDONED"]
 LENS_STATES = ["PENDING", "COMPLETED", "WAIVED"]
+
+# THE DECLARED EXTENSION SURFACE (frame template-instruments.md §6.5; the live
+# specimen is ledger's `docs/ledger-refs-kinds.json`).  The core catalogue above
+# is the instrument's SHAPE and is CENTRALISED (template-instruments.md §6.4): a member cannot fork
+# it.  What a member MAY do is DECLARE its own lenses -- subject matter the core
+# catalogue carries no lens for -- in `docs/review-lenses.json`, which ships as an
+# EMPTY `docs/review-lenses.example.json` and which the manifest does NOT track.
+# ONE reader (`known_lenses` / `lens_metadata`) serves every path, so the writer
+# and the verifier cannot disagree.  A declaration ADDS; it never removes or
+# redefines a core lens -- a declared id that collides with a core letter is
+# dropped, so the core entry keeps the law that letter carries.  The path is
+# relocatable for the same reason every declared surface in this fleet is: a
+# member whose layout differs points the instrument at its own declaration
+# without editing the instrument, and the same seam makes a fixture lawful.
+REVIEW_LENSES_FILE = Path(
+    os.environ.get("OC_REVIEW_LENSES_PATH", REPO_ROOT / "docs" / "review-lenses.json")
+)
+
+def _read_declared_lenses() -> list[dict]:
+    """The factory's declared lens additions.  Absent or unreadable is NOT an error.
+
+    The core catalogue stands alone without it, which is what lets the field ship
+    before any factory has declared a lens.
+    """
+    try:
+        data = json.loads(REVIEW_LENSES_FILE.read_text(encoding="utf-8")) or {}
+    except (OSError, json.JSONDecodeError):
+        return []
+    out: list[dict] = []
+    for item in (data.get("lenses") or []) if isinstance(data, dict) else []:
+        if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"].strip():
+            out.append(item)
+    return out
+
+def declared_lenses() -> list[dict]:
+    """Declared lenses whose id does NOT shadow a core lens -- a declaration ADDS.
+
+    A colliding id is dropped here rather than merged, so a factory cannot shadow
+    a core letter and escape the law that letter carries.
+    """
+    return [
+        d for d in _read_declared_lenses()
+        if d["id"].strip().upper() not in CATALOG_LENSES
+    ]
+
+def known_lenses() -> list[str]:
+    """The core catalogue PLUS this factory's declared additions -- ONE reader.
+
+    Every path that enumerates lenses (init, step0, status, verify, close, compile,
+    migrate, census_gaps) reads THIS, so a declared lens is materialised, counted and
+    verified exactly as a core lens is, and the write path and the gate cannot disagree.
+    """
+    return CATALOG_LENSES + [d["id"].strip().upper() for d in declared_lenses()]
+
+def lens_metadata(lens: str) -> dict | None:
+    """The metadata for a lens -- core first, then the member's declaration.
+
+    Core takes precedence, so a declared id that collides with a core letter never
+    redefines it.  `None` is the single refusal predicate for brief/record/waive.
+    """
+    if lens in LENS_METADATA:
+        return LENS_METADATA[lens]
+    for d in declared_lenses():
+        if d["id"].strip().upper() == lens:
+            return {
+                "name": str(d.get("name") or d["id"].strip().upper()),
+                "family": str(d.get("family") or "member-declared"),
+                "scope": str(d.get("scope") or ""),
+                "instructions": str(d.get("instructions") or ""),
+            }
+    return None
 
 # The donor's terminal SYNONYM, and only the synonym.  `PERSISTED` is
 # deliberately NOT mapped: it says a report was written, not that a lens
@@ -550,7 +628,7 @@ def _empty_state(cycle_id: str) -> dict[str, Any]:
         "lenses": {
             lens: {"status": "PENDING", "report_path": None, "sha256": None, "verdict": None,
                    "receipt": None, "fallback": None, "recorded_at": None, "reason": None}
-            for lens in CATALOG_LENSES
+            for lens in known_lenses()
         },
         "waivers": [],
         "proposals": [],
@@ -600,10 +678,10 @@ def normalize_state(state: dict[str, Any], cycle_id: str) -> dict[str, Any]:
     if out.get("status") in TERMINAL_SYNONYMS:
         out["status"] = TERMINAL_SYNONYMS[out["status"]]
 
-    # lenses: normalize each entry, and materialize every catalog lens.
+    # lenses: normalize each entry, and materialize every KNOWN lens.
     raw_lenses = state.get("lenses") or {}
     if isinstance(raw_lenses, dict):
-        for lens in CATALOG_LENSES:
+        for lens in known_lenses():
             entry = dict(out["lenses"][lens])
             incoming = raw_lenses.get(lens)
             if isinstance(incoming, dict):
@@ -927,9 +1005,9 @@ def cmd_step0(cycle_id: str, record: bool = False) -> int:
         return 2
 
     lenses = state.get("lenses", {})
-    completed = [l for l in CATALOG_LENSES if (lenses.get(l) or {}).get("status") == "COMPLETED"]
-    waived = [l for l in CATALOG_LENSES if (lenses.get(l) or {}).get("status") == "WAIVED"]
-    pending = [l for l in CATALOG_LENSES
+    completed = [l for l in known_lenses() if (lenses.get(l) or {}).get("status") == "COMPLETED"]
+    waived = [l for l in known_lenses() if (lenses.get(l) or {}).get("status") == "WAIVED"]
+    pending = [l for l in known_lenses()
                if (lenses.get(l) or {}).get("status", "PENDING") not in ("COMPLETED", "WAIVED")]
     frozen = is_frozen(state)
 
@@ -950,7 +1028,7 @@ def cmd_step0(cycle_id: str, record: bool = False) -> int:
     print(f"status      : {state.get('status')}  frozen={'yes' if frozen else 'no'}{frozen_note}")
     print(f"started_at  : {state.get('started_at')}   ended_at: {state.get('ended_at')}")
     print(f"census      : {len(completed)} completed | {len(waived)} waived | "
-          f"{len(pending)} pending (of {len(CATALOG_LENSES)})")
+          f"{len(pending)} pending (of {len(known_lenses())})")
     print(f"proposals   : {len(state.get('proposals') or [])} receipt(s)")
     snapshot = state.get("inputs_snapshot") or {}
     if snapshot:
@@ -991,19 +1069,19 @@ def cmd_init(cycle_id: str) -> int:
     if rc != 0:
         return rc
     print(
-        f"Initialized review cycle '{cycle_id}' with {len(CATALOG_LENSES)} "
-        f"catalog lenses (schema v{SCHEMA_VERSION})."
+        f"Initialized review cycle '{cycle_id}' with {len(known_lenses())} "
+        f"lenses, core + declared (schema v{SCHEMA_VERSION})."
     )
     return 0
 
 
 def cmd_brief(lens: str, json_out: bool = False) -> int:
     lens = lens.upper()
-    if lens not in CATALOG_LENSES or lens not in LENS_METADATA:
-        print(f"Error: Lens '{lens}' not found in catalog {CATALOG_LENSES}", file=sys.stderr)
+    if lens_metadata(lens) is None:
+        print(f"Error: Lens '{lens}' not in catalog {known_lenses()}", file=sys.stderr)
         return 2
 
-    meta = LENS_METADATA[lens]
+    meta = lens_metadata(lens)
     prompt_text = f"""# ADVERSARIAL AUDITOR BRIEF — LENS {lens}: {meta['name']}
 Family: {meta['family']}
 
@@ -1048,8 +1126,8 @@ Record your findings via:
 
 def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
     lens = lens.upper()
-    if lens not in CATALOG_LENSES:
-        print(f"Error: Lens '{lens}' not in catalog {CATALOG_LENSES}", file=sys.stderr)
+    if lens_metadata(lens) is None:
+        print(f"Error: Lens '{lens}' not in catalog {known_lenses()}", file=sys.stderr)
         return 2
 
     cycle_dir = get_cycle_dir(cycle_id)
@@ -1115,8 +1193,8 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
 
 def cmd_waive(cycle_id: str, lens: str, reason: str, by: str | None = None) -> int:
     lens = lens.upper()
-    if lens not in CATALOG_LENSES:
-        print(f"Error: Lens '{lens}' not in catalog {CATALOG_LENSES}", file=sys.stderr)
+    if lens_metadata(lens) is None:
+        print(f"Error: Lens '{lens}' not in catalog {known_lenses()}", file=sys.stderr)
         return 2
     if not reason.strip():
         print("Error: Waiver reason cannot be empty.", file=sys.stderr)
@@ -1224,7 +1302,7 @@ def cmd_status(cycle_id: str) -> int:
     waived = 0
     pending = 0
 
-    for lens in CATALOG_LENSES:
+    for lens in known_lenses():
         info = lenses.get(lens, {})
         status = info.get("status", "PENDING")
         if status == "COMPLETED":
@@ -1255,7 +1333,7 @@ def cmd_status(cycle_id: str) -> int:
         f"{'FIRE' if cadence.get('fires') else 'WAIT'} "
         f"(boundary {boundary.get('ref')}, evaluated {cadence.get('evaluated_at')})"
     )
-    print(f"\nSummary: {completed} Completed | {waived} Waived | {pending} Pending (Total: {len(CATALOG_LENSES)})")
+    print(f"\nSummary: {completed} Completed | {waived} Waived | {pending} Pending (Total: {len(known_lenses())})")
     return 0 if pending == 0 else 1
 
 
@@ -1325,7 +1403,7 @@ def census_gaps(state: dict[str, Any]) -> list[str]:
     """
     gaps: list[str] = []
     lenses = state.get("lenses") or {}
-    for lens in CATALOG_LENSES:
+    for lens in known_lenses():
         info = lenses.get(lens) or {}
         status = info.get("status", "PENDING")
         if status == "WAIVED":
@@ -1336,6 +1414,31 @@ def census_gaps(state: dict[str, Any]) -> list[str]:
             gaps.append(f"{lens} ({status})")
     return gaps
 
+
+def cmd_lenses(json_out: bool = False) -> int:
+    """The lawful lens set: the core catalogue plus this factory's declarations.
+
+    The one place a member can SEE which lenses its own declaration made lawful,
+    so the extension surface is observable rather than inferred from a refusal.
+    """
+    declared = declared_lenses()
+    if json_out:
+        print(json.dumps({
+            "core": CATALOG_LENSES,
+            "declared": [d["id"].strip().upper() for d in declared],
+            "known": known_lenses(),
+            "declaration_file": str(REVIEW_LENSES_FILE),
+            "declaration_read": REVIEW_LENSES_FILE.is_file(),
+        }, indent=2))
+        return 0
+    print(f"Core catalogue ({len(CATALOG_LENSES)}): {', '.join(CATALOG_LENSES)}")
+    if declared:
+        names = ", ".join(d["id"].strip().upper() for d in declared)
+        print(f"Declared here ({len(declared)}): {names}")
+    else:
+        print(f"Declared here (0): none -- {REVIEW_LENSES_FILE} is absent or declares nothing")
+    print(f"Known ({len(known_lenses())}): {', '.join(known_lenses())}")
+    return 0
 
 def cmd_verify(cycle_id: str) -> int:
     state = read_state(cycle_id)
@@ -1348,7 +1451,7 @@ def cmd_verify(cycle_id: str) -> int:
     corrupted: list[str] = []
     unverified: list[str] = []
 
-    for lens in CATALOG_LENSES:
+    for lens in known_lenses():
         info = lenses.get(lens, {})
         status = info.get("status", "PENDING")
         if status == "WAIVED":
@@ -1397,7 +1500,7 @@ def cmd_verify(cycle_id: str) -> int:
 
     plan = state.get("codification_plan") or []
     print(
-        f"PASS: Cycle '{cycle_id}' census verified clean across all {len(CATALOG_LENSES)} lenses "
+        f"PASS: Cycle '{cycle_id}' census verified clean across all {len(known_lenses())} lenses "
         f"(codification plan: {len(plan)} accepted finding(s), all accounted for)."
     )
     return 0
@@ -1424,10 +1527,10 @@ def cmd_compile(cycle_id: str) -> int:
         "|---|---|---|---|",
     ]
 
-    lens_names = {k: v["name"] for k, v in LENS_METADATA.items()}
+    lens_names = {k: (lens_metadata(k) or {}).get("name", "") for k in known_lenses()}
 
     lenses = state.get("lenses", {})
-    for lens in CATALOG_LENSES:
+    for lens in known_lenses():
         info = lenses.get(lens, {})
         status = info.get("status", "PENDING")
         path = info.get("report_path", "—")
@@ -1572,7 +1675,7 @@ def cmd_close(cycle_id: str, status: str, stamp: bool,
     # different number from the cycle span, never conflated with it.
     recorded = [
         _parse_ts((state["lenses"].get(lens) or {}).get("recorded_at"))
-        for lens in CATALOG_LENSES
+        for lens in known_lenses()
     ]
     recorded = [t for t in recorded if t is not None]
     if recorded and started:
@@ -1653,7 +1756,7 @@ def cmd_migrate(cycle_id: str, dry_run: bool) -> int:
     # some entries and carries keys the schema has no home for, and a migration that absorbed
     # either in silence would leave a reader unable to tell what was kept from what was lost.
     template_keys: set[str] = set()
-    for lens in CATALOG_LENSES:
+    for lens in known_lenses():
         e = (migrated.get("lenses") or {}).get(lens)
         if isinstance(e, dict):
             template_keys = set(e)
@@ -1919,6 +2022,9 @@ def main() -> int:
     p_init = subparsers.add_parser("init", help="Initialize a new review cycle")
     p_init.add_argument("cycle_id", help="Review cycle identifier (e.g. 20260917-c1)")
 
+    p_lenses = subparsers.add_parser("lenses", help="List the lawful lens set (core + declared)")
+    p_lenses.add_argument("--json", action="store_true", help="Output as JSON object")
+
     p_brief = subparsers.add_parser("brief", help="Generate adversarial subagent prompt for a lens")
     p_brief.add_argument("lens", help="Lens letter (A-J, P, M, T, S)")
     p_brief.add_argument("--json", action="store_true", help="Output as JSON object")
@@ -2009,6 +2115,8 @@ def main() -> int:
         return cmd_record(args.cycle_id, args.lens, args.content)
     elif args.subcommand == "waive":
         return cmd_waive(args.cycle_id, args.lens, args.reason, by=args.by)
+    elif args.subcommand == "lenses":
+        return cmd_lenses(json_out=args.json)
     elif args.subcommand == "status":
         return cmd_status(args.cycle_id)
     elif args.subcommand == "verify":
