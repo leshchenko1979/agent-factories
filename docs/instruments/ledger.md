@@ -1099,6 +1099,55 @@ row about to be written, so it can never predate itself. Upheld by the arms in
 `tests/test_ledger.py` — refuse the squat, admit the one lawful value on the SAME text, admit a
 prose MENTION, show the scope is the key rather than the event, and prove `#104` is untouched.
 
+### 9.13 The dispatch leg requires PRESENCE, never precedence
+
+**A `dispatch` row naming a work unit is a problem only when its subject has no `intake` row
+ANYWHERE in the ledger — the intake need not PRECEDE it.** The leg asks whether the subject was
+filed, not when. The designed filing-time order is `ruling -> dispatch -> intake`: the ruling and
+the dispatches are stamped before the intake row exists, because they are written by different
+lanes whose wake latencies are independent, so a POSITIONAL check fires on the DESIGN rather than
+on a defect. This is the sibling-leg retirement applied a second time — the CLAIM leg's precedence
+clause was retired to presence the same way (`n=602`) — and for the same reason: the two rows are
+written by two lanes, so their order is a DERIVED outcome of that race, not an error by either.
+
+**The ordering leg was POSITIONAL and rows are immutable, so an inversion was PERMANENT.** The
+measured instance: a dispatch written 62 seconds before its intake made `verify` exit non-zero
+with a problem no lane could repair — the row's position is one of the five `ROW_IDENTITY` fields,
+so a fresh dispatch cannot retract the old one and a correction row only ADDS a second dispatch.
+Presence is checkable without asking one lane to control another lane's timing; precedence is not.
+
+**The pre-gate boundary is retired with the clause it bounded.** The leg had excused a historical
+population against a declared `DISPATCH_LEG_BOUNDARY` date, because the law had never been enforced
+and every instance predated it by construction. That excusal lumped TWO different facts together: a
+race instance has an intake LATER, while a genuine routing-before-filing has none at all. With the
+ordering requirement gone the race class is lawful and needs no excusal, so the boundary has
+nothing left to bound — and no exemption surface is created in its place, because the surviving
+rule is satisfied by the very rows the boundary used to excuse.
+
+**A subject may name ANOTHER board's issue (`§9.5`), and this leg reads `#N` as THIS factory's
+board.** The number is not bound to one board, so a bare `#N` citing a second repository's unit is
+a known FALSE-POSITIVE class: the leg cannot resolve which board a number belongs to. The lawful
+exit is an exemption entry (`§9.3`) whose proof names the board the number belongs to — never a
+weakening of the predicate. `§9.5` prescribes a DISTINCT DESCRIPTIVE STEM for a second board's
+units precisely so this class does not arise; where an immutable row predates that, it stands as
+visible debt.
+
+**The `malformed subject` half is UNCHANGED** (`n=524`): a bare or hash-led non-strict subject is
+REPORTED and named, never gated, because the row's identity is immutable once pushed and only a
+NEW row can repair it.
+
+| leg | rule |
+|---|---|
+| **problem** | a `dispatch` whose strict `#<n>` subject has no `intake` row ANYWHERE in the ledger |
+| **clean** | the same row with an intake anywhere — BEFORE or AFTER the dispatch |
+| **exemptable** | yes, like every other leg, by an entry in `docs/ledger-exemptions.json` (`§9.3`); admitted by an external receipt, never by the omission it excuses |
+| **reported, never gated** | a malformed subject — not a strict `#<n>` and not a descriptive stem |
+
+Upheld by the arms in `tests/test_ledger.py` — a dispatch whose intake lands LATER reads CLEAN, and
+a dispatch whose subject has no intake anywhere reads a PROBLEM naming the subject — each arm
+proven to BITE by the other's absence, so neither a clean nor a problem verdict is reachable
+without a population.
+
 ---
 
 ## 10. What this file does not own

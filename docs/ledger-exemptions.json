@@ -1,5 +1,5 @@
 {
-  "_note": "THIS factory's sequence exemptions — meta-factory's own, moved here from tools/ledger.py on 2026-09-25. They excuse three closes written before the sequence gate existed (2026-09-12), which is a fact about THIS ledger and about no other. Each entry is a visible debt printed as an `excused:` line on every run. Skeleton and field rules: docs/ledger-exemptions.example.json.",
+  "_note": "THIS factory's sequence exemptions — meta-factory's own, moved here from tools/ledger.py on 2026-09-25. Three of them excuse closes written before the sequence gate existed (2026-09-12), which is a fact about THIS ledger and about no other; the fourth excuses a dispatch naming ANOTHER board's issue, which the retired ordering leg could not tell from a same-turn race. Each entry is a visible debt printed as an `excused:` line on every run. Skeleton and field rules: docs/ledger-exemptions.example.json.",
   "exempt": [
     {
       "subject": "#6",
@@ -23,11 +23,11 @@
       "proof": "the ruling that granted it: ledger n=14, which records the boundary fact"
     },
     {
-      "subject": "#226",
+      "subject": "#366",
       "leg": "dispatch",
-      "granted": "2026-09-28",
-      "reason": "the dispatch at n=1604 was written in the SAME TURN as the filing, before Triage's intake row landed -- two lanes whose wake latencies are independent, which is the derived-race shape the claim leg already accepts (n=602). The subject WAS filed: board issue #226 exists, and Triage's intake row n=1610 records it 3m17s after the dispatch. The leg's own comment states the population's gaps have 'NO SEAM that could separate a same-turn race from a genuine routing-before-filing', so this instance cannot be distinguished from that class by the predicate; it is post-boundary only because it happened after the boundary date. The row's POSITION is immutable, so the repair space for this row is empty and a fresh dispatch cannot retract it.",
-      "proof": "external receipt that the subject was filed rather than routed-before-filing: Triage's intake row n=1610 (`intake triage #226`) plus board issue #226 filed by HQ. Both are outside the dispatch row and independently readable."
+      "granted": "2026-10-03",
+      "reason": "the dispatch at n=436 names the UPSTREAM `opencrabs` board's issue #366, not a work unit of this factory's own board, so no intake row is owed here and none exists. `docs/instruments/ledger.md` section 9.5 allows a subject to cite another repository's issue but prescribes a DISTINCT DESCRIPTIVE STEM for a second board's units, so this bare `#N` is a form defect; the row's identity is immutable once pushed, so its repair space is empty. The instance was invisible until the ordering leg retired to PRESENCE: the pre-boundary excusal lumped it with the same-turn race class, every member of which has an intake row LATER.",
+      "proof": "external receipt naming the board the number belongs to: `gh issue view 366 --repo leshchenko1979/opencrabs` resolves (CLOSED, created 2026-09-18T23:13:21Z), while `gh issue view 366 --repo leshchenko1979/agent-factories` does not resolve at all. Ledger n=433 records the ruling that made the reference, and it too was verified against the opencrabs board."
     }
   ]
 }
