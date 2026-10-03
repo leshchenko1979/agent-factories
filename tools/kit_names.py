@@ -23,8 +23,9 @@ not know which tree owns a name. It reports the population and names the conflic
 resolution is the naming criteria's (plan 2646d31a A.2).
 
 Run:  python3 tools/kit_names.py [--json] [--out PATH]
-Exit: 0 the census was taken; 1 the population could not be read (no tree reachable), because
-      an empty census reads as a clean fleet.
+Exit: 0 the census was taken; 1 the population could not be read (no tree reachable) or a
+      registry manifest could not be read, because an empty or narrowed census reads as a
+      clean fleet.
 """
 
 from __future__ import annotations
@@ -34,14 +35,19 @@ import ast
 import datetime as dt
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
-FLEET_MANIFEST = REPO / "registry" / "fleet.json"
-KIT_MANIFEST = REPO / "registry" / "kit.json"
+# The ONE home for the HEAD read (#185, #292). `head_manifest` lives in the patrol module
+# because the patrol's kit-drift leg needed it first; both readers below go through it rather
+# than opening a second private `git show HEAD:...`.
+from patrol_host_state import KIT_MANIFEST_REL, head_manifest  # noqa: E402
+
+FLEET_MANIFEST_REL = "registry/fleet.json"
 
 # The D.1 promotion candidates (plan 2646d31a), which is what made a census necessary: each
 # is a member instrument with a template counterpart under a DIFFERENT name, or none.
@@ -53,17 +59,80 @@ SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", ".mypy_cache", ".py
 MAX_DEPTH = 6
 
 
-def fleet_trees() -> dict[str, Path]:
-    """Every tree the fleet declares, plus this repo, read from the fleet manifest.
+def is_git_work_tree(repo: Path) -> bool:
+    """True when `repo` is inside a git work tree, so HEAD is a reference it can be read at.
+
+    `git rev-parse --is-inside-work-tree` answers for a repo with an UNBORN HEAD too, which
+    is exactly the case that matters: a git tree whose manifest is not committed must REFUSE
+    rather than fall back to whatever the working copy happens to hold. A missing `git`
+    binary, or a directory that is no work tree at all, answers False — which is what lets
+    the disk fallback serve a bootstrapped tree that was never git-init'd.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0 and proc.stdout.strip() == "true"
+
+
+def _manifest_text(rel: str, *, repo: Path) -> tuple[str, str]:
+    """A registry manifest read from HEAD, falling back to disk only for a NON-GIT tree.
+
+    THE ONE READ DISCIPLINE (#185, #292). The git read goes through
+    `patrol_host_state.head_manifest`, so this module never opens its own
+    `git show HEAD:...`; both readers (`kit_names` and `fleet_trees`) come through here, so
+    the fallback rule is stated once rather than twice.
+
+    A GIT tree whose HEAD read fails REFUSES: the manifest is COMMITTED, so the committed
+    revision is the reference, and a disk read would put the windowing straight back. A
+    non-git tree — a bootstrapped factory that was never git-init'd, or a hermetic fixture —
+    has no HEAD to read and falls back to disk. If that read fails too the refusal is LOUD,
+    because a population narrowed to nothing is indistinguishable from a clean one.
+
+    Returns (text, source); `source` names the revision actually read, so a caller can say so
+    rather than implying HEAD.
+    """
+    text, why = head_manifest(rel, repo=repo)
+    source = f"HEAD:{rel}"
+    if text is not None:
+        return text, source
+    disk = repo / rel
+    if is_git_work_tree(repo):
+        raise SystemExit(
+            f"kit names: REFUSED — {source} could not be read ({why}); this is a git tree, "
+            f"so the committed manifest is the reference and a disk read would reintroduce "
+            f"the windowing this fixes (#292)"
+        )
+    try:
+        return disk.read_text(encoding="utf-8"), str(disk)
+    except OSError as exc:
+        raise SystemExit(
+            f"kit names: REFUSED — {source} could not be read ({why}) and there is no disk "
+            f"fallback for a non-git tree at {disk} ({exc}); refusing rather than publishing "
+            f"a population narrowed to the {len(D1_CANDIDATES)} D.1 candidate(s) alone"
+        )
+
+
+def fleet_trees(*, repo: Path | None = None, rel: str | None = None) -> dict[str, Path]:
+    """Every tree the fleet declares, plus this repo, read from the fleet manifest at HEAD.
 
     Read from the manifest rather than hardcoded so a member that moves is followed by the
-    manifest: a second list would be a second derivation of a fact the registry carries.
+    manifest: a second list would be a second derivation of a fact the registry carries. The
+    read is the same discipline as the kit manifest's (#292) — HEAD first, disk only for a
+    non-git tree — and a manifest that cannot be read REFUSES rather than publishing a tree
+    set narrowed to this repo alone, which is the census's own examined-nothing case.
     """
-    trees: dict[str, Path] = {"meta-factory": REPO}
+    repo = REPO if repo is None else repo
+    rel = FLEET_MANIFEST_REL if rel is None else rel
+    text, source = _manifest_text(rel, repo=repo)
     try:
-        man = json.loads(FLEET_MANIFEST.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"kit names: FAILED — {FLEET_MANIFEST} unreadable: {exc}")
+        man = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"kit names: REFUSED — {source} is not valid JSON ({exc})")
+    trees: dict[str, Path] = {"meta-factory": repo}
     for f in man.get("factories") or []:
         slug, repo = f.get("slug"), f.get("repo")
         if slug and repo:
@@ -79,12 +148,23 @@ def fleet_trees() -> dict[str, Path]:
     return trees
 
 
-def kit_names() -> list[str]:
-    """The basenames the kit ships, so the census covers what we are adopting, not only D.1."""
+def kit_names(*, repo: Path | None = None, rel: str | None = None) -> list[str]:
+    """The basenames the kit ships, so the census covers what we are adopting, not only D.1.
+
+    Read from HEAD through the ONE read discipline (#292), never off the working tree: the
+    manifest is GENERATED, so a disk read follows whatever the last generation happened to
+    see and a lane mid-write changes the published population under the reader. An
+    unreadable manifest REFUSES — it is never a silent `[]`, because an empty name set
+    narrows the census to the D.1 candidates and prints a result indistinguishable from a
+    full one (measured live at the filing: 90 names -> 4).
+    """
+    repo = REPO if repo is None else repo
+    rel = KIT_MANIFEST_REL if rel is None else rel
+    text, source = _manifest_text(rel, repo=repo)
     try:
-        man = json.loads(KIT_MANIFEST.read_text())
-    except (OSError, json.JSONDecodeError):
-        return []
+        man = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"kit names: REFUSED — {source} is not valid JSON ({exc})")
     names = []
     for rel in (man.get("files") or {}):
         base = rel.rsplit("/", 1)[-1]

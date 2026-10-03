@@ -21,7 +21,13 @@ WHAT IT PINS:
   4. a name carried by ONE tree is not a conflict, however its purpose reads;
   5. an unreachable tree set is a REFUSAL, not an empty census — an empty census reads as a
      clean fleet, which is the examined-nothing class;
-  6. HERMETICITY — every arm runs in a TemporaryDirectory, so the live evidence directory
+  6. the KIT MANIFEST is read from HEAD, not the working tree (#292) — proven over a fixture
+     whose HEAD and working copy DISAGREE, the only shape that can show it, since on a clean
+     tree the two agree and the pre-fix code passes the same assertion;
+  7. an unreadable manifest REFUSES rather than returning `[]` and censusing the D.1
+     candidates alone — with a companion showing the refusal is conditional on the failure;
+  8. the companion `fleet_trees()` read of `registry/fleet.json` is the same discipline;
+  9. HERMETICITY — every arm runs in a TemporaryDirectory, so the live evidence directory
      gains nothing.
 
 Run:  python3 tests/test_kit_names.py
@@ -30,6 +36,8 @@ Exit: 0 all arms hold; 1 a failure, printed.
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -54,6 +62,17 @@ def tree(root: Path, files: dict[str, str]) -> Path:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(body, encoding="utf-8")
     return root
+
+def _git(root: Path) -> None:
+    """Init a repo and COMMIT whatever is in it, so HEAD is a real revision to read.
+
+    A fixture that is NOT a git repo cannot prove the HEAD read at all: the fix falls back to
+    disk there, so the pre-fix and post-fix code agree and the arm would pass vacuously.
+    """
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t",
+                    "-c", "user.name=t", "commit", "-qm", "init"], check=True)
 
 
 def main() -> int:
@@ -130,6 +149,52 @@ def main() -> int:
         r7 = KN.census({"gone": tmp / "nope"}, ["thing.py"])
         check("ARM 5: an unreachable tree set is a REFUSAL, not an empty census",
               bool(r7.get("problems")), str(r7.get("problems"))[:80])
+
+        # ---- ARM 7: the kit manifest is read from HEAD, not the working tree (#292).
+        # A git repo whose HEAD manifest and working-tree manifest DISAGREE: only a HEAD read
+        # returns the committed population. On a clean live tree the two agree and the pre-fix
+        # code would pass this same assertion, which is why the fixture must differ.
+        a7 = tmp / "headkit"
+        (a7 / "registry").mkdir(parents=True)
+        (a7 / "registry" / "kit.json").write_text(
+            json.dumps({"files": {"tools/committed_only.py": "h"}}))
+        _git(a7)
+        (a7 / "registry" / "kit.json").write_text(          # working tree now disagrees
+            json.dumps({"files": {"tools/working_only.py": "d"}}))
+        got7 = KN.kit_names(repo=a7)
+        check("ARM 7: kit_names() returns the HEAD population, not the dirty working copy",
+              got7 == ["committed_only.py"],
+              f"got {got7} — a disk read would return working_only.py")
+
+        # ---- ARM 8: an unreadable manifest REFUSES; a readable one does NOT.
+        a8 = tmp / "nokit"
+        (a8 / "registry").mkdir(parents=True)
+        (a8 / "README.md").write_text("a tree with a HEAD, but no committed manifest\n")
+        _git(a8)                                            # manifest never committed
+        (a8 / "registry" / "kit.json").write_text(
+            json.dumps({"files": {"tools/untracked.py": "u"}}))
+        refused8, why8 = False, ""
+        try:
+            KN.kit_names(repo=a8)
+        except SystemExit as exc:
+            refused8, why8 = True, str(exc)[:70]
+        check("ARM 8: an uncommitted manifest REFUSES rather than censusing D.1 alone",
+              refused8, why8 or "returned instead of refusing")
+        check("ARM 8 COMPANION: a readable manifest does NOT refuse",
+              len(KN.kit_names(repo=REPO)) > 0,
+              "the refusal must be conditional on the failure, not unconditional")
+
+        # ---- ARM 9: the companion fleet_trees() read is the same discipline.
+        a9 = tmp / "headfleet"
+        (a9 / "registry").mkdir(parents=True)
+        (a9 / "registry" / "fleet.json").write_text(
+            json.dumps({"factories": [{"slug": "committed", "repo": "/tmp/committed"}]}))
+        _git(a9)
+        (a9 / "registry" / "fleet.json").write_text(
+            json.dumps({"factories": [{"slug": "working", "repo": "/tmp/working"}]}))
+        ft9 = KN.fleet_trees(repo=a9)
+        check("ARM 9: fleet_trees() reads the fleet manifest from HEAD too",
+              "committed" in ft9 and "working" not in ft9, f"trees={list(ft9)}")
 
     # ---- ARM 6: HERMETICITY.
     live_after = sorted(p.name for p in (REPO / "evidence").glob("name-census-*"))
