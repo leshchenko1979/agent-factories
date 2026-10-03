@@ -64,6 +64,12 @@
       "audience": "agent",
       "entry": "cron factory-publish",
       "cadence": "every 6h (UTC)"
+    },
+    {
+      "name": "factory-questions-redeliver",
+      "audience": "agent",
+      "entry": "cron factory-questions-redeliver",
+      "cadence": "every 6h at :12 (UTC); fires only when its trigger_cmd exits non-empty"
     }
   ],
   "substrates_owned": [
@@ -175,7 +181,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-02T06:20:45Z",
+  "attested_at": "2026-10-03T06:23:05Z",
   "instruments": {
     "ledger": {
       "state": "adopted",

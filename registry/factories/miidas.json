@@ -120,7 +120,7 @@
         "profile"
       ],
       "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 19 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 27 carried paths judged, 1 factory-class path excluded by class, 19 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
-      "evidence": "Measured 2026-09-27T11:44Z by the registry writer: tests/test_kit_pin_member.py rc=0, 'judged 24 carried path(s); 1 factory-class path(s) excluded by class; 17 declared exempt'; pin version 6ab591c618ec, 128 paths declared. The gate path is named in the text because the loader's `check` field names an ALLOWLISTED predicate and is never executed - a path there is refused."
+      "evidence": "Measured 2026-10-03 by the miidas lane: python3 tests/test_kit_pin_member.py rc=0, 'judged 27 carried path(s); 1 factory-class path(s) excluded by class; 19 declared exempt'; 0 undeclared divergence. Pin version 6ab591c618ec, 128 paths declared."
     },
     {
       "id": "miidas-slot-volume-git-config-carries-remote-credential",
@@ -177,7 +177,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-02T06:20:23Z",
+  "attested_at": "2026-10-03T06:16:54Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
