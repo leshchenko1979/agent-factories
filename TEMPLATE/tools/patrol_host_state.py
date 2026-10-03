@@ -111,6 +111,23 @@ PUBLISH_CADENCE_SECS = 6 * 3600
 PUBLISH_GRACE_SECS = 900
 PUBLISH_RESIDUAL_SECS = PUBLISH_CADENCE_SECS + PUBLISH_GRACE_SECS
 
+# WHOSE BOUNDS THESE ARE, and what this leg does NOT measure. The three figures above are
+# the PUSHER's declared bounds (`tools/publish.py`): they say how often it runs and how long
+# it holds a young commit, and they bind that tool ALONE. They are not a property of the
+# fleet and not a property of this leg. What this leg measures is LAG -- commits committed
+# but not yet on the remote -- and it does NOT measure cadence compliance: a pusher that ran
+# late and a pusher that never ran both leave the same unpushed commit behind, and only the
+# commit is this leg's subject.
+PUBLISH_LEG_SCOPE = (
+    "LAG only: commits committed but not yet on the remote. This leg does NOT measure "
+    "whether the pusher ran on its cadence, and the pusher's window binds the pusher "
+    "alone -- neither is a property of the fleet."
+)
+PUBLISH_BOUNDS_LABEL = (
+    "the PUSHER's declared bounds (tools/publish.py), which bind it alone -- grace_secs / "
+    "cadence_secs / residual_secs are NOT a property of the fleet"
+)
+
 # THE DUTY RESIDUAL, stated because a threshold without its derivation is unreadable.
 # A round's receipt lands when the lane the trigger woke FINISHES ITS TURN, and the leg
 # cannot read a lane's turn -- so a round young enough that its lane is plausibly still
@@ -2471,19 +2488,40 @@ def publish_freshness_leg(
 
     A finding NAMES each offending sha with its age and its lane trailer. A count alone
     cannot be dispatched, claimed or closed; a named commit can be all three (#148).
+
+    SCOPE (issue #284). This leg measures LAG -- commits committed but not yet on the
+    remote -- and NOT cadence compliance. The pusher's grace window and cadence are the
+    PUSHER's declared bounds and bind `tools/publish.py` alone, so a late pusher and an
+    absent one leave the same unpushed commit behind and this leg cannot tell them apart.
+    The cadence side it does carry is a RECEIPT comparison: the pusher records its own last
+    push in a file under `evidence/`, and a remote tip that is not that sha left through
+    some other path. That arm names the tip, its age and the lane trailer of its commit.
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     coverage = {
         "remote": remote,
         "branch": branch,
         "read_at": read_at,
+        # THE PUSHER'S BOUNDS, labelled as such. They travel here because a reader needs
+        # them to interpret `stale`; they are NOT this leg's bounds and NOT the fleet's.
         "residual_secs": PUBLISH_RESIDUAL_SECS,
         "grace_secs": PUBLISH_GRACE_SECS,
         "cadence_secs": PUBLISH_CADENCE_SECS,
+        "bounds_label": PUBLISH_BOUNDS_LABEL,
+        "leg_scope": PUBLISH_LEG_SCOPE,
         "unpushed": 0,
         "shas": [],
         "stale": [],
         "remote_tip": None,
+        # THE CADENCE SIDE (issue #284). `receipt` is the pusher's own record of its last
+        # push; a remote tip that is not that sha left through some OTHER path, and the
+        # tip-age arm is the opportunistic half -- it only sees a tip SAMPLED while young.
+        "receipt": None,
+        "receipt_reason": "",
+        "receipt_mismatch": None,
+        "remote_tip_age_secs": None,
+        "remote_tip_age_reason": "",
+        "tip_younger_than_grace": False,
     }
     problems: list[str] = []
 
@@ -2558,6 +2596,70 @@ def publish_freshness_leg(
                 f"{PUBLISH_GRACE_SECS}s grace) -- no healthy pusher explains this; "
                 f"lane {entry['session_id'] if entry['session_id'] else 'no lane trailer'} -- {entry['subject'][:60]}"
             )
+
+    # --- the cadence side (issue #284) ------------------------------------------------
+    #
+    # Two arms, and they are NOT equal. The RECEIPT arm is decisive: the pusher records the
+    # sha it pushed, so a remote tip that is not that sha did not leave through the pusher.
+    # The TIP-AGE arm is opportunistic -- it can only see a tip that happens to be sampled
+    # while still younger than the grace window -- and its bound is printed beside it, so a
+    # quiet round is never read as a clean one.
+    tip_info, tip_why = pub.commit_info(Path(repo), tip)
+
+    receipt, receipt_why = pub.read_receipt(Path(repo))
+    if receipt is None:
+        coverage["receipt_reason"] = receipt_why
+    else:
+        rec_age = pub.age_secs(receipt.get("instant") or "", now)
+        coverage["receipt"] = {
+            "sha": str(receipt.get("sha") or ""),
+            "instant": str(receipt.get("instant") or ""),
+            "age_secs": None if rec_age is None else int(rec_age),
+        }
+        if coverage["receipt"]["sha"] != tip:
+            lane = (tip_info or {}).get("session_id") or ""
+            subject = (tip_info or {}).get("subject") or ""
+            trailer = lane if tip_info is not None else f"unreadable ({tip_why})"
+            coverage["receipt_mismatch"] = {
+                "remote_tip": tip,
+                "receipt_sha": coverage["receipt"]["sha"],
+                "receipt_instant": coverage["receipt"]["instant"],
+                "lane": lane,
+                "subject": subject,
+            }
+            problems.append(
+                f"the remote tip {tip} is NOT the sha the pusher last recorded "
+                f"({coverage['receipt']['sha']} at {coverage['receipt']['instant']}) -- a "
+                f"push that did not go through the pusher; lane "
+                f"{trailer or 'no lane trailer'}"
+                + (f" -- {subject[:60]}" if subject else "")
+            )
+
+    if tip_info is None:
+        coverage["remote_tip_age_reason"] = tip_why
+    else:
+        tip_age = pub.age_secs(tip_info.get("committed_at") or "", now)
+        if tip_age is None:
+            coverage["remote_tip_age_reason"] = (
+                f"the tip's own instant did not parse ({tip_info.get('committed_at')!r})"
+            )
+        else:
+            coverage["remote_tip_age_secs"] = int(tip_age)
+            if tip_age < PUBLISH_GRACE_SECS:
+                coverage["tip_younger_than_grace"] = True
+                # The pusher HOLDS a commit this young, so no governed push explains this
+                # tip -- but only say so when no receipt has the stronger word. A receipt
+                # that names this tip explains it; a receipt that names ANOTHER sha is
+                # already reported above, and one tip is named once.
+                if coverage.get("receipt") is None:
+                    problems.append(
+                        f"the remote tip {tip} is {int(tip_age)}s old, YOUNGER than the "
+                        f"pusher's {PUBLISH_GRACE_SECS}s grace window, and no receipt "
+                        f"records any push -- the pusher holds a commit this young, so this "
+                        f"tip left through some other path (arm bound: it sees only a tip "
+                        f"SAMPLED while still young -- roughly 1 round in "
+                        f"{PUBLISH_CADENCE_SECS // PUBLISH_GRACE_SECS} at this cadence)"
+                    )
 
     return {
         "name": "publish-freshness",
@@ -2822,6 +2924,48 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"  residual window: {cov.get('residual_secs', 0)}s "
                     f"({cov.get('cadence_secs', 0)}s cadence + {cov.get('grace_secs', 0)}s "
                     f"grace); {len(cov.get('stale') or [])} commit(s) past it"
+                )
+                lines.append(f"  those bounds are {cov.get('bounds_label', 'the pusher\u2019s own')}")
+                lines.append(f"  SCOPE: {cov.get('leg_scope', '')}")
+                rec = cov.get("receipt")
+                if rec:
+                    lines.append(
+                        f"  pusher receipt: {rec.get('sha')} pushed at {rec.get('instant')}"
+                        + (
+                            f" ({rec.get('age_secs')}s ago)"
+                            if rec.get("age_secs") is not None
+                            else " (age unreadable)"
+                        )
+                    )
+                else:
+                    lines.append(
+                        f"  pusher receipt: NONE — {cov.get('receipt_reason', 'unstated')}"
+                    )
+                if cov.get("receipt_mismatch"):
+                    mm = cov["receipt_mismatch"]
+                    lines.append(
+                        f"  UNGOVERNED PUSH: remote tip {mm.get('remote_tip')} is not the "
+                        f"pusher's last receipt ({mm.get('receipt_sha')}) — lane "
+                        f"{mm.get('lane') or 'no lane trailer'}"
+                    )
+                if cov.get("remote_tip_age_secs") is not None:
+                    lines.append(
+                        f"  remote tip age at read time: {cov['remote_tip_age_secs']}s"
+                        + (
+                            " — YOUNGER than the pusher's grace window"
+                            if cov.get("tip_younger_than_grace")
+                            else ""
+                        )
+                    )
+                elif cov.get("remote_tip_age_reason"):
+                    lines.append(
+                        f"  remote tip age: UNREADABLE — {cov['remote_tip_age_reason']}"
+                    )
+                lines.append(
+                    f"  tip-age arm bound: it sees only a tip SAMPLED while younger than the "
+                    f"{cov.get('grace_secs', 0)}s grace window — roughly 1 round in "
+                    f"{(cov.get('cadence_secs') or 0) // max(1, cov.get('grace_secs') or 1)} "
+                    f"at this cadence; the receipt comparison is the arm that catches the rest"
                 )
                 for entry in cov.get("commits", []):
                     lines.append(

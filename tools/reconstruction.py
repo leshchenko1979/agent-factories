@@ -23,7 +23,7 @@ caller. This module computes and reports; it never judges.
 from __future__ import annotations
 
 from ledger_declaration import parse_ts
-from field_predicate import declares_token
+from field_predicate import declares_token, own_voice_text
 
 # The token pair that puts a row in the population. Read LEXICALLY anywhere in the detail,
 # scoped by the caller to event `claim` — a row of another event that merely QUOTES it is
@@ -50,13 +50,31 @@ def reconstructed_claims(rows: list[dict]) -> list[dict]:
         row
         for row in rows
         if row.get("event") == "claim"
-        and declares_token(row.get("detail", ""), RECONSTRUCTION_KEY, RECONSTRUCTION_VALUE)
+        and declares_token(
+            own_voice_text(row.get("detail", "")),
+            RECONSTRUCTION_KEY,
+            RECONSTRUCTION_VALUE,
+        )
     ]
 
 
 def names_basis(detail: str) -> bool:
-    """True when this detail names the basis it rests on under the canonical marker."""
-    return BASIS_MARKER in str(detail)
+    """True when this detail names the basis it rests on under the canonical marker,
+    IN THE ROW'S OWN VOICE.
+
+    The marker is read over `own_voice_text(detail)`, never the raw detail, because the two
+    legs of one self-declaration must share ONE scope. The population leg asks whether the
+    row declares itself reconstructed; this leg asks what it rests on. Where a row merely
+    QUOTES another row's defect inside a parenthetical aside — `(… with no BASIS: marker …)`
+    — the raw substring test finds a `BASIS:` that is not this row's, satisfies the basis
+    leg, and MASKS the fact that the quoting row states no basis of its own. So the same
+    aside that keeps a row out of the population also stops its quoted marker from answering
+    the basis leg: one scope, two readers, no masking.
+
+    Forward-only, like the population: no row is rewritten, and a row that leaves the
+    population simply stops being judged here.
+    """
+    return BASIS_MARKER in own_voice_text(detail)
 
 
 def close_row_for(claim_row: dict, rows: list[dict]) -> dict | None:

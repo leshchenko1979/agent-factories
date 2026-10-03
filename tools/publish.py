@@ -100,6 +100,82 @@ def age_secs(value: str, now: dt.datetime):
     return None if when is None else (now - when).total_seconds()
 
 
+# --- the push RECEIPT: a FILE, never a ledger row --------------------------------
+#
+# The pusher is not a lane. The ledger's actor set is the roles the law names, and a
+# clock-driven tool is not one of them -- so the record of its own last push lives in a
+# file beside the evidence it protects. It is LOCAL and never committed: a receipt that
+# travelled in the pushed history would move the remote tip PAST the sha it records, so
+# the record would contradict itself on the very round it was written.
+RECEIPT_REL = Path("evidence") / "publish-receipt.json"
+
+
+def receipt_path(repo: Path) -> Path:
+    """Where the pusher records its OWN last push."""
+    return Path(repo) / RECEIPT_REL
+
+
+def write_receipt(repo: Path, *, sha: str, remote: str, branch: str, instant: str):
+    """Record the push this round made. `(path, reason)`; a failure is REPORTED.
+
+    Written through a sibling temp file and renamed, so a reader never sees a half-written
+    receipt -- the same reason the ledger fsyncs before it releases its lock.
+    """
+    path = receipt_path(repo)
+    body = {"sha": sha, "instant": instant, "remote": remote, "branch": branch}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        return None, f"the receipt could not be written to {RECEIPT_REL}: {exc}"
+    return path, ""
+
+
+def read_receipt(repo: Path):
+    """`(receipt, reason)`. An ABSENT receipt is neither an error nor a mismatch.
+
+    A factory that has never pushed has no receipt, and reporting that as a finding would
+    red the reader on every fresh clone. The absence is stated; it is not a verdict.
+    """
+    path = receipt_path(repo)
+    if not path.is_file():
+        return None, f"no receipt recorded at {RECEIPT_REL}"
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return None, f"the receipt at {RECEIPT_REL} could not be read: {exc}"
+    if not isinstance(body, dict) or not str(body.get("sha") or "").strip():
+        return None, f"the receipt at {RECEIPT_REL} names no sha"
+    return body, ""
+
+
+def commit_info(repo: Path, sha: str):
+    """`(info, reason)` for ONE commit -- its instant, its lane trailer and its subject.
+
+    Read through the same log format the unpushed read uses, so a caller comparing a remote
+    tip against the local history reads both halves the same way. A tip the local object
+    store does not carry -- a push from another clone this one never fetched -- is REPORTED
+    as unreadable rather than rendered as an absent commit.
+    """
+    if not str(sha or "").strip():
+        return None, "no sha was given"
+    rc, out, err = _git(repo, "log", "-1", f"--format={_LOG_FORMAT}", str(sha))
+    if rc != 0:
+        return None, (err or out).strip() or f"git log exited {rc}"
+    record = out.strip().split(_RECORD)[0]
+    parts = record.split(_FIELD)
+    if len(parts) < 4:
+        return None, f"git log returned an unreadable record for {sha}"
+    return {
+        "sha": parts[0].strip(),
+        "committed_at": parts[1].strip(),
+        "session_id": parts[2].strip(),
+        "subject": parts[3].strip(),
+    }, ""
+
+
 def remote_tip(repo: Path, remote: str, branch: str, *, timeout: int = LS_REMOTE_TIMEOUT):
     """`(sha, reason)` — the tip read FROM THE REMOTE, never from the local ref."""
     rc, out, err = _git(
@@ -253,6 +329,23 @@ def publish(
         report["reason"] = (err or out).strip()
         return report
     report["status"] = "published"
+
+    # THE RECEIPT. The pushed sha is read AFTER the push, so the record names what the
+    # remote actually received rather than what this round intended to send. A commit
+    # landing between the two reads is the one residual race, and the reader's own
+    # comparison -- remote tip against this receipt -- is what surfaces it.
+    rc2, out2, _ = _git(repo, "rev-parse", branch)
+    pushed = out2.strip()
+    if rc2 != 0 or not pushed:
+        pushed = report["shas"][0] if report["shas"] else ""
+    path, problem = write_receipt(
+        repo, sha=pushed, remote=remote, branch=branch, instant=report["read_at"]
+    )
+    report["receipt"] = {
+        "sha": pushed,
+        "path": None if path is None else str(RECEIPT_REL),
+        "reason": problem,
+    }
     return report
 
 
@@ -275,6 +368,12 @@ def render(report: dict) -> str:
             f"  held (within the {report['grace_secs']}s window, age {held['age_secs']}s): "
             f"{held['sha']} {held['session_id'] or 'no lane trailer'} — {held['subject']}"
         )
+    if report.get("receipt"):
+        rec = report["receipt"]
+        if rec.get("reason"):
+            lines.append(f"  receipt: NOT WRITTEN — {rec['reason']}")
+        else:
+            lines.append(f"  receipt: {rec['path']} records {rec['sha']}")
     if report.get("reason"):
         lines.append(f"  {report['reason']}")
     return "\n".join(lines)

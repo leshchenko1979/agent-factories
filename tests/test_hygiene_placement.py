@@ -75,6 +75,9 @@ LEG_FUNCTIONS = (
     "placement_leg",
     "render_placement",
     "content_class",
+    # The gitignore predicate is part of the leg's read surface (#282): the removal-verb
+    # scan must cover it too, so it can never grow a deletion.
+    "_gitignored",
 )
 
 REMOVAL_VERBS = (
@@ -320,3 +323,100 @@ def test_the_tool_PRINTS_the_placement_map_on_every_run():
     # The exit code is deliberately NOT asserted: this factory's tree is shared, so a peer
     # lane's stranded path legitimately makes the audit non-zero, and that is not this
     # gate's subject.
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────
+# The gitignore predicate (#282). The placement population is every tracked file in a
+# declared directory; a path the tree's OWN .gitignore declares is created by the repo
+# and NOT tracked by it, so it is OUT of the population. The predicate reads git's own
+# declaration — never a list this code maintains, which is how `.audit.lock` accreted
+# into PLACEMENT_SKIP one incident at a time until #282 arrived.
+# ─────────────────────────────────────────────────────────────────────────────────────
+
+def _git_repo(root: Path, gitignore: str) -> Path:
+    """A throwaway git repo whose ONLY declaration of ignored paths is `gitignore`.
+
+    No commit is made: `git check-ignore` answers from the working tree's ignore files,
+    which is exactly the surface the leg reads.
+    """
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    (root / ".gitignore").write_text(gitignore)
+    (root / "evidence").mkdir(parents=True)
+    return root
+
+
+def test_a_gitignored_path_is_EXCLUDED_and_PRINTED_by_name():
+    """The #282 regression: a runtime artifact the tree ignores is not a mismatch."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _git_repo(Path(tmp), "*.lock\n")
+        (root / "evidence" / "thing.lock").write_text("")
+        (root / "evidence" / "kept.md").write_text("prose")
+        leg = _leg(root)
+    assert "evidence/thing.lock" not in _mismatch_paths(leg), (
+        "a path the tree's own .gitignore declares must not be judged a mismatch"
+    )
+    assert [r["path"] for r in leg["ignored"]] == ["evidence/thing.lock"]
+    text = hygiene.render_placement(leg)
+    assert "IGNORED evidence/thing.lock" in text, (
+        "an excluded path must be PRINTED BY NAME — exempt-by-silence is the surface "
+        "this factory refuses"
+    )
+    assert leg["files"] == 1, "the surviving population is counted (kept.md, not the lock)"
+    assert "evidence" in text, "the directory that still holds files must be reported"
+
+
+def test_the_predicate_reads_the_TREES_OWN_declaration_not_a_list_in_this_code():
+    """DISCRIMINATING ARM: the pattern is one this code has never seen.
+
+    A hardcoded list (or PLACEMENT_SKIP accretion) cannot pass this; only a predicate
+    that asks git about the tree in front of it can.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _git_repo(Path(tmp), "*.unheard-of-extension\n")
+        (root / "evidence" / "novel.unheard-of-extension").write_text("")
+        leg = _leg(root)
+    assert leg["ignore_status"] == "APPLIED"
+    assert [r["path"] for r in leg["ignored"]] == ["evidence/novel.unheard-of-extension"]
+    assert not _mismatch_paths(leg)
+
+
+def test_a_NON_REPO_root_states_NOT_APPLIED_and_never_a_clean_zero():
+    """An instrument that could not read the declaration must not report success.
+
+    The fixture tree of the other tests is not a git repo, so this is also the state
+    every pre-existing test runs in — and it must never be indistinguishable from
+    'nothing is ignored'.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _fixture(Path(tmp))  # deliberately NOT a git repo
+        (root / "evidence" / "scores" / "runtime.lock").write_text("")
+        leg = _leg(root)
+    assert leg["ignore_status"] == "NOT APPLIED", (
+        "a root where git cannot answer is NOT APPLIED, never a clean zero"
+    )
+    assert leg["ignore_reason"].strip(), "the third state must carry its reason"
+    assert leg["ignored"] == [], "nothing may be claimed excluded when the read failed"
+    text = hygiene.render_placement(leg)
+    assert "gitignore predicate NOT APPLIED" in text, (
+        "the failure must reach the report, not only the leg dict"
+    )
+    assert "evidence/scores/runtime.lock" in _mismatch_paths(leg), (
+        "with the predicate unavailable the path stays IN the population — the leg must "
+        "fail toward reporting, never toward silence"
+    )
+
+
+def test_the_LIVE_tree_ignores_its_own_runtime_artifacts():
+    """#282 named three paths; assert the tree really does declare them (the basis).
+
+    This reads git's own answer about the live checkout, so it fails if a future edit
+    drops the .gitignore lines the predicate depends on — the declaration is the contract.
+    """
+    for rel in ("evidence/.insights.lock", "evidence/.ledger.lock", "evidence/.ledger-index.sqlite"):
+        proc = subprocess.run(
+            ["git", "check-ignore", "-q", rel], cwd=str(REPO), capture_output=True
+        )
+        assert proc.returncode == 0, (
+            f"{rel} is no longer declared ignored by the tree — either the .gitignore "
+            "lost the rule or the runtime artifact moved"
+        )

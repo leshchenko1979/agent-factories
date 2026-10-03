@@ -166,6 +166,12 @@
       "thread_id": 6865,
       "role": "insights",
       "announcements": []
+    },
+    {
+      "topic": "Factories / Hygiene",
+      "thread_id": 8733,
+      "role": "hygiene",
+      "announcements": []
     }
   ],
   "status": "attested",

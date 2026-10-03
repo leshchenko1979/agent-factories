@@ -378,7 +378,21 @@ def known_actors() -> tuple[str, ...]:
                 extra.append(role)
     declared, _ = load_authorizations(REPO)
     extra.extend(declared)
-    return ACTORS + tuple(role for role in extra if role not in ACTORS)
+    # DEDUPED WITHIN `extra`, not only against `ACTORS` (#283 leg 2). The two declaration
+    # surfaces overlap by design -- a lane this factory both HAS (actors.txt) and AUTHORIZES
+    # (authorizations.actors) appears in both -- so filtering against the core constant alone
+    # returned every such lane TWICE. Measured 2026-10-03 at the #283 declaration: 19 entries
+    # for 15 roles, with fleet-instruments, review-rotation, insights and hygiene each
+    # duplicated. Order is preserved (first sighting wins) so the tuple stays stable for a
+    # reader diffing two revisions.
+    seen: set[str] = set()
+    declared_extra: list[str] = []
+    for role in extra:
+        if role in ACTORS or role in seen:
+            continue
+        seen.add(role)
+        declared_extra.append(role)
+    return ACTORS + tuple(declared_extra)
 
 
 def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
@@ -932,25 +946,18 @@ def sequence_problems(
 # THREE classifications, and the split is the ruling's own (n=524), taken because a
 # binary split certified a row it could not see:
 #
-#   (1) a strict `#<n>` subject  — a WORK-UNIT handoff. That subject's intake must
-#       precede the dispatch, or the route promises a filing that never happened.
+#   (1) a strict `#<n>` subject  — a WORK-UNIT handoff. That subject must have an
+#       intake row SOMEWHERE in the ledger, or the route promises a filing that never
+#       happened. The intake need NOT precede the dispatch: the designed filing-time
+#       order is ruling -> dispatch -> intake, so a positional check fires on the
+#       design. The requirement is PRESENCE, not precedence (n=2014, retiring the
+#       ordering clause; the sibling claim leg was retired the same way at n=602).
 #   (2) a descriptive stem       — an observation dispatch, EXPLICITLY LEGAL. These are
-#       not work-unit handoffs and sit outside the ordering leg entirely.
+#       not work-unit handoffs and sit outside the work-unit leg entirely.
 #   (3) a BARE or HASH-LED form that is not strict (`77`, `# 12`, `#12a`) — a DEFECT IN
 #       THE ROW: a work-unit dispatch was INTENDED and its subject cannot be resolved by
 #       any subject-keyed predicate. REPORTED and named, never gated: the row's identity
 #       is immutable once pushed (#52 clause 1), so only a NEW row can repair it.
-#
-# FORWARD-ONLY, WITH A DECLARED BOUNDARY — and the boundary is a measured decision, not
-# a convenience. The law ("a work-unit dispatch promises the subject was filed") has
-# never been enforced, so every historical instance is PRE-GATE by construction, and the
-# measured population is 28, not the 2 the ruling knew: their gaps run 0.3 min to
-# 276.7 min with NO SEAM that could separate a same-turn race from a genuine
-# routing-before-filing. An EXEMPTIONS entry is admitted by an EXTERNAL RECEIPT
-# (n=620), so 28 entries would mean inventing 26 receipts that do not exist. The
-# boundary excuses and PRINTS the historical population instead — never backfilled, and
-# never by weakening the leg (the #190 pattern).
-DISPATCH_LEG_BOUNDARY = "2026-09-27T16:22:43Z"
 def is_work_unit(subject: str) -> bool:
     """A STRICT `#<n>` subject — a hash, then digits, then nothing else.
 
@@ -965,39 +972,34 @@ def is_work_unit(subject: str) -> bool:
 
 def dispatch_problems(
     rows: list[dict], by_subject: dict[str, list[tuple[int, str]]],
-) -> tuple[list[tuple[str, str, str]], list[tuple[str, int]], list[tuple[str, int, str]]]:
-    """(problems, malformed, excused) for the dispatch leg — PURE over the row list.
+) -> tuple[list[tuple[str, str, str]], list[tuple[str, int]]]:
+    """(problems, malformed) for the dispatch leg — PURE over the row list.
 
-    Returned as three populations rather than one verdict, because they are three
-    different facts: a post-boundary ordering defect (a problem), a row whose subject
-    cannot be resolved (a report), and a pre-boundary instance (a visible debt printed
-    as an `excused:` line). Collapsing them would make the report of an unrepairable
-    row indistinguishable from a defect the lane could fix.
+    Returned as two populations rather than one verdict, because they are two
+    different facts: a work-unit dispatch whose subject has no intake ANYWHERE in
+    the ledger (a problem), and a row whose subject cannot be resolved (a report).
+    Collapsing them would make the report of an unrepairable row indistinguishable
+    from a defect the lane could fix.
     """
     problems: list[tuple[str, str, str]] = []
     malformed: list[tuple[str, int]] = []
-    excused: list[tuple[str, int, str]] = []
     for i, row in enumerate(rows):
         if row.get("event") != "dispatch":
             continue
         subject = str(row.get("subject") or "").strip()
         if is_work_unit(subject):
-            precedes = any(
-                ev == "intake" and j < i for j, ev in by_subject.get(subject, [])
+            present = any(
+                ev == "intake" for _j, ev in by_subject.get(subject, [])
             )
-            if precedes:
-                continue
-            ts = str(row.get("ts") or "")
-            if ts and ts < DISPATCH_LEG_BOUNDARY:
-                excused.append((subject, i + 1, ts))
+            if present:
                 continue
             problems.append((subject, "dispatch",
-                f"line {i + 1}: dispatch of {subject} has no intake before it — a "
-                f"work-unit dispatch promises the subject was filed, and the board has "
-                f"no record of this one being taken in"))
+                f"line {i + 1}: dispatch of {subject} has no intake anywhere in the "
+                f"ledger — a work-unit dispatch promises the subject was filed, and "
+                f"the board has no record of this one being taken in"))
         elif subject and (subject[0].isdigit() or subject[0] == "#"):
             malformed.append((subject, i + 1))
-    return problems, malformed, excused
+    return problems, malformed
 
 
 # THE LEXICAL BRANCH OF A DECLARATION GUARD IS A NOTE, NEVER A REFUSAL (#247).
@@ -2156,9 +2158,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     # The dispatch leg is INDEPENDENT of the close sequence above (n=524: the malformed
     # check "may land with it or before it"), and its two halves have different
-    # dispositions: the ordering half is EXEMPTABLE like every other leg, the malformed
-    # half is REPORTED and never gated.
-    dispatch_defects, dispatch_malformed, dispatch_excused = dispatch_problems(
+    # dispositions: the work-unit half (PRESENCE, n=2014) is EXEMPTABLE like every other
+    # leg, the malformed half is REPORTED and never gated.
+    dispatch_defects, dispatch_malformed = dispatch_problems(
         rows, by_subject
     )
     seq_problems.extend(dispatch_defects)
@@ -2216,8 +2218,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
     print(
         f"dispatch rows examined: {dispatch_examined} "
         f"({dispatch_work_units} work-unit, {dispatch_observations} observation, "
-        f"{len(dispatch_malformed)} malformed), ordering leg forward-only from "
-        f"{DISPATCH_LEG_BOUNDARY}"
+        f"{len(dispatch_malformed)} malformed), work-unit leg requires PRESENCE "
+        f"(an intake row anywhere, not necessarily before)"
     )
     if problems:
         print(f"ledger problems: {len(problems)}")
@@ -2250,12 +2252,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
         # (`n=405` clause 5, `n=599`), never a private copy that can drift in silence.
         for row in reconstructed_claims(rows):
             print(f"  {interval_line(row, rows)}")
-        for subject, line_no, ts in dispatch_excused:
-            print(
-                f"  excused: dispatch of {subject} at line {line_no} ({ts}) precedes "
-                f"its intake — pre-boundary, and the law that orders them has never "
-                f"been enforced before {DISPATCH_LEG_BOUNDARY}"
-            )
         rc = 0
     # The malformed population prints on BOTH paths: a row whose subject cannot be
     # resolved is a finding about the ROW, and it stays visible even when the ledger is

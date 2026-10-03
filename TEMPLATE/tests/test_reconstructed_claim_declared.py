@@ -54,6 +54,20 @@ The scan is LEXICAL and the CALLER scopes it by the row's own event, because `n=
 RULING row whose detail states the token it defines — and a ruling that quotes a token is
 not a row that carries one (`tools/field_predicate.py::declares_token` records that need).
 
+THE TOKEN IS ALSO SCOPED BY THE ROW'S OWN VOICE — the THIRD scope (#278)
+-------------------------------------------------------------------------
+Event scope keeps a RULING that quotes the token out (`n=602`), but it cannot separate a
+`claim` row that DECLARES the token from one that merely QUOTES it while describing another
+row's defect — both are event `claim` rows. That discriminator is the row's OWN VOICE: a
+token is a DECLARATION when it stands outside every parenthetical aside (this ledger writes
+its asides about other rows in parentheses) and a QUOTATION when it sits inside one. It is
+`tools/field_predicate.py::own_voice_text`, ONE predicate imported by BOTH readers here
+(`reconstructed_claims` and `names_basis`) — the module's one-field-one-home law (`n=405`
+clause 5, `n=599`). Scoping to the canonical trailer alone was REFUSED: a genuine
+reconstruction may declare mid-detail, and a positional scope would drop those rows silently.
+Measured when this landed: 51 -> 50, dropping only the one quotation (`n=1990`), with every
+genuine mid-detail declaration kept.
+
 WHY THE BASIS IS A MARKER AND NOT A TRAILER TOKEN
 --------------------------------------------------
 `BASIS:` carries descriptive prose — which ruling, which dispatch, what it answers — and a
@@ -345,9 +359,11 @@ def _claim_detail(basis: str | None = f"{BASIS_MARKER} HQ ruling n=687") -> str:
     the reconstruction token.
 
     The split is deliberate: the token is read LEXICALLY and the marker lives in prose, so a
-    fixture that put both in the same place would not exercise the two scopes separately —
-    and the trailer is what makes `claim=reconstructed` a canonical declaration rather than
-    a quotation.
+    fixture that put both in the same place would not exercise the two scopes separately.
+    The trailer is the canonical declaration surface (`n=602`); a token OUTSIDE it is a
+    declaration only when it stands in the row's OWN VOICE — outside every parenthetical
+    aside — which is the THIRD scope #278 ruled (`tools/field_predicate.py::own_voice_text`).
+    A token quoted inside an aside is a QUOTATION and carries nothing.
     """
     head = "Written now because the edits preceded this row."
     if basis is not None:
@@ -647,6 +663,98 @@ def test_probe_a_quoted_token_outside_event_claim_is_out_of_the_population(tmp_p
     assert status == "skip", (status, reason, problems)
     assert checked == 0, checked
     assert "reconstructed claim" in reason, reason
+
+
+def test_probe_a_token_quoted_in_an_aside_is_out_of_the_population(tmp_path: Path) -> None:
+    """#278's measured need: a `claim` row that merely QUOTES `claim=reconstructed` inside a
+    parenthetical aside — describing a peer row's defect — is not a row that carries one. The
+    EVENT scope does not help here (the row IS an event `claim`), so the OWN-VOICE scope is
+    what keeps the quotation out: the token sits at parenthetical depth 1, and the `BASIS:`
+    the same aside quotes is not the row's own basis either.
+
+    This probe BITES. Under the lexical predicate it replaced, this row entered the
+    population (`checked == 1`) and was judged; the `checked == 0` assertion below is exactly
+    what failed, which is what makes it a probe rather than a restatement."""
+    tree = _probe_tree(
+        tmp_path / "aside",
+        [
+            _row(
+                900,
+                "2026-09-19T14:00:00Z",
+                "#7",
+                event="claim",
+                detail=(
+                    "An ordinary claim row, taking work whose first edit preceded it "
+                    "(n=899 declared claim=reconstructed with no BASIS: marker, so the gate "
+                    "refused it; repaired at n=901). This row reconstructs nothing."
+                ),
+            ),
+            _close(902, "2026-09-19T14:05:00Z", "#7"),
+        ],
+    )
+    status, reason, problems, excused, checked, intervals = evaluate(tree)
+    assert status == "skip", (status, reason, problems)
+    assert checked == 0, checked
+    assert problems == [], problems
+    assert excused == [], excused
+    assert intervals == [], intervals
+    assert "reconstructed claim" in reason, reason
+
+
+def test_probe_the_same_token_free_standing_is_in_the_population(tmp_path: Path) -> None:
+    """The other half of the own-voice scope, and the reason it is not a re-scope to the
+    canonical trailer: a reconstruction whose token sits MID-DETAIL at depth 0 — the shape the
+    live ledger's genuine reconstructions carry — is a DECLARATION and stays in the
+    population. A positional scope would drop this row silently, which is the false-negative
+    the module's own docstring refuses; this probe fails if the scope ever becomes one."""
+    tree = _probe_tree(
+        tmp_path / "free-standing",
+        [
+            _row(
+                900,
+                "2026-09-19T14:00:00Z",
+                "#7",
+                event="claim",
+                detail=(
+                    "Written now because the edits preceded this row. It carries the token "
+                    "claim=reconstructed on that basis. BASIS: HQ ruling n=687"
+                ),
+            ),
+            _close(901, "2026-09-19T14:05:00Z", "#7"),
+        ],
+    )
+    status, reason, problems, _, checked, _ = evaluate(tree)
+    assert status == "pass", (status, reason, problems)
+    assert checked == 1, (status, reason, problems, checked)
+    assert problems == [], problems
+
+
+def test_probe_a_basis_quoted_in_an_aside_does_not_answer_the_basis_leg(tmp_path: Path) -> None:
+    """The second reader's own-voice scope, and the masking it closes. A reconstruction that
+    declares its token in its OWN voice but whose only `BASIS:` sits inside an aside
+    describing a peer row states no basis of ITS OWN — so the basis leg must read the marker
+    over the own-voice text and FIRE. Reading the raw detail would let the quoted marker
+    answer for the quoting row, which is the false clean the ruling names."""
+    tree = _probe_tree(
+        tmp_path / "masked-basis",
+        [
+            _row(
+                900,
+                "2026-09-19T14:00:00Z",
+                "#7",
+                event="claim",
+                detail=(
+                    "claim=reconstructed — the edits preceded this row "
+                    "(n=899 named its BASIS: HQ ruling n=687, which is not this row's basis)."
+                ),
+            ),
+            _close(901, "2026-09-19T14:05:00Z", "#7"),
+        ],
+    )
+    status, reason, problems, _, checked, _ = evaluate(tree)
+    assert status == "fail", (status, reason, problems)
+    assert checked == 1, checked
+    assert len(problems) == 1 and "n=900" in problems[0], problems
 
 
 def test_probe_a_pre_boundary_reconstruction_is_excused_not_judged(tmp_path: Path) -> None:

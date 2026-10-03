@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.42
+version: 0.1.43
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -369,6 +369,7 @@ leaning on shared memory rather than on what it said.
   REQUIRED — most closes resolve no defect, and a required field degrades to boilerplate — and
   nothing is backfilled, because a disposition reconstructed after the fact is a falsified
   record, not a repair (n=386 clauses 3/5/6; #53 clause 7).
+- **A close row's `rework=#N` is a FORWARD REFERENCE to a file, so it and the entry it names land in the SAME commit (#286, ruling n=2032).** The token names a row of `evidence/rework.md`, not a ledger row, so nothing orders the two writes: a close row committed ahead of its entry leaves `main` RED for `tests/test_rework_declared_landed.py` until the entry lands — measured at **48.03 min** (`89b4692` → `1cbefd2`). **No hook is owed.** A pre-commit or pre-push leg is (i) bypassable with `--no-verify`, (ii) local-only (hooks are not cloned, so it cannot bind a lane that lacks it), and (iii) a PREVENTION where the class needs a DETECTOR (#247/#281; the #284 ruling at `n=2010`). The convention is this sentence; the detector is the gate that already exists (`tools/audit.py` block 41), and the residual is the audit's own LATENCY, ACCEPTED and STATED.
 - **A repair must not terminate the canonical run.** The trailer is POSITIONAL, so text
   appended AFTER it ends the run and every trailer-scoped reader stops seeing the row's
   declared telemetry — the repair silently REMOVES a measurement from the fleet total.

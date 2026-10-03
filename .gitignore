@@ -5,3 +5,10 @@ __pycache__/
 
 # The derived ledger index: disposable, regenerable, ~2.9x the text.
 .ledger-index.sqlite
+
+# The pusher's own record of its last push (issue #284). LOCAL by design: a receipt that
+# rode the pushed history would move the remote tip PAST the sha it records, which is the
+# one property the publish-freshness leg compares against. Written by `tools/publish.py`,
+# read by the patrol, never committed.
+evidence/publish-receipt.json
+evidence/publish-receipt.json.tmp

@@ -958,15 +958,21 @@ def main() -> int:
         seq_case("P4b a claim AFTER its close is still refused (presence, positional)",
                  (("intake", "#4b"), ("close", "#4b"), ("claim", "#4b")), 1, ("#4b", "claim"))
 
-        # THE DISPATCH LEG (#45, ruling n=255, refined n=524). `verify` modelled intake ->
-        # claim -> close and `dispatch` was no leg of that model, so the ledger could say
-        # "this was routed" for a subject it could not say "was this taken in?" for. The
-        # leg is FORWARD-ONLY from a DECLARED BOUNDARY, so a probe must control the row's
-        # `ts`: `write_ledger`'s fixed 2026-09-12 is pre-boundary and would be excused,
-        # which is exactly the trap a probe that used it would fall into.
-        print("\nthe dispatch leg — ordering, observations, malformed subjects (#45)")
-        POST = "2027-01-01T00:00:00Z"   # after any plausible landing boundary
-        PRE = "2026-09-12T00:00:00Z"    # the boundary's own pre-image
+        # THE DISPATCH LEG (#45, ruling n=255, refined n=524, RETIRED TO PRESENCE n=2014).
+        # `verify` modelled intake -> claim -> close and `dispatch` was no leg of that
+        # model, so the ledger could say "this was routed" for a subject it could not say
+        # "was this taken in?" for. The leg first required the intake to PRECEDE the
+        # dispatch, bounded by a declared date so history was excused; that ordering
+        # requirement is RETIRED because the designed filing-time order is
+        # ruling -> dispatch -> intake, written by lanes whose wake latencies are
+        # independent -- so a positional check fires on the DESIGN. What remains is
+        # PRESENCE: the subject must have an intake row ANYWHERE. The arms below prove
+        # BOTH directions, and the pair is the point -- the clean arm alone would pass a
+        # predicate that examined nothing, and the problem arm alone would pass one that
+        # never returned clean.
+        print("\nthe dispatch leg — PRESENCE, observations, malformed subjects (#45)")
+        POST = "2027-01-01T00:00:00Z"   # after any plausible landing instant
+        PRE = "2026-09-12T00:00:00Z"    # the sequence leg's own pre-image
 
         def write_ledger_ts(path: Path, *rows: tuple[str, str, str]) -> None:
             """(event, subject, ts) rows, numbered 1..N — the sequence leg's own fixture."""
@@ -987,8 +993,15 @@ def main() -> int:
             lines = [l for l in r.stdout.strip().splitlines() if l.strip()]
             check(name, ok, lines[1].strip() if len(lines) > 1 else (lines[0] if lines else ""))
 
-        dispatch_case("P5 a work-unit dispatch with no intake before it is REFUSED",
-                      (("dispatch", "#5", POST),), 1, ("#5", "dispatch of #5"))
+        # THE PAIR (#285). A dispatch whose intake lands LATER is CLEAN -- the designed
+        # filing-time order -- and a dispatch whose subject has NO intake anywhere is a
+        # PROBLEM. Each arm is the other's positive control: the CLEAN arm would pass a
+        # predicate that examined nothing, and the PROBLEM arm would pass one that never
+        # returned clean, so neither verdict is reachable without a population.
+        dispatch_case("P5 a dispatch whose intake lands LATER is CLEAN (presence, not order)",
+                      (("dispatch", "#5", POST), ("intake", "#5", POST)), 0, ())
+        dispatch_case("P5b a dispatch with NO intake ANYWHERE is a PROBLEM naming the subject",
+                      (("dispatch", "#55", POST),), 1, ("#55", "dispatch of #55", "no intake anywhere"))
         dispatch_case("P6 the same ledger with the dispatch row REMOVED passes",
                       (("intake", "#6", PRE),), 0, ())
         dispatch_case("P7 an OBSERVATION dispatch is legal and never swept in",
@@ -999,11 +1012,9 @@ def main() -> int:
                       ("malformed subject", "77", "immutable once pushed"))
         dispatch_case("P8b a HASH-LED non-strict subject is reported too",
                       (("dispatch", "#332-D5", POST),), 0, ("malformed subject", "#332-D5"))
-        dispatch_case("P9 a PRE-boundary instance is EXCUSED and printed, never refused",
-                      (("dispatch", "#9", PRE),), 0, ("excused: dispatch of #9", "pre-boundary"))
         dispatch_case("P10 the population is printed beside the verdict",
                       (("dispatch", "advisory-x", POST),), 0,
-                      ("dispatch rows examined:", "forward-only from"))
+                      ("dispatch rows examined:", "requires PRESENCE"))
         print("\nthe close-row revision — declared at the WRITE PATH (#187)")
         # The invariant `close_row_revision` was enforced by the gate and by NOTHING at the
         # write path, so four instances in one session were each repaired by a SECOND append
@@ -1208,6 +1219,29 @@ def main() -> int:
         r = exempt_run(proven)
         check("a proof-bearing entry excuses the omission and still prints it",
               r.returncode == 0 and "excused: #7 missing claim" in r.stdout,
+              (r.stdout + r.stderr).strip().splitlines()[-1][:100])
+
+        # The DISPATCH leg is exemptable on the same terms (#285). Its PRESENCE predicate
+        # keys on the subject and carries the leg token `dispatch`, so the entry that
+        # excuses a cross-board reference is the SAME shape as the claim one above -- and
+        # this arm proves the leg is reachable by an exemption at all, which is what admits
+        # the immutable #366 row. Without it, "exemptable like every other leg" is a claim
+        # about a mechanism nothing exercises.
+        dispatch_tree = stage_with_exemptions("exempt-dispatch", [
+            {"subject": "#707", "leg": "dispatch", "granted": "2026-10-03",
+             "reason": "the subject names another board's issue; no intake is owed here",
+             "proof": "the other board's issue resolves; ledger n=433 records the reference"},
+        ]).parent.parent
+        write_ledger(dispatch_tree / "evidence" / "ledger.jsonl", ("dispatch", "#707"))
+        r = subprocess.run(
+            [sys.executable, str(dispatch_tree / "tools" / "ledger.py"), "verify"],
+            capture_output=True, text=True, cwd=dispatch_tree,
+            env={**os.environ,
+                 "OC_LEDGER_PATH": str(dispatch_tree / "evidence" / "ledger.jsonl"),
+                 "OC_ACTORS_PATH": str(dispatch_tree / "no-actors.txt")},
+        )
+        check("a dispatch exemption excuses a missing intake and still prints it",
+              r.returncode == 0 and "excused: #707 missing dispatch" in r.stdout,
               (r.stdout + r.stderr).strip().splitlines()[-1][:100])
 
         print("\nverify --against — the identity check is a command, not a discipline")

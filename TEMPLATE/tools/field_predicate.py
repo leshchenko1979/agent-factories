@@ -198,6 +198,71 @@ def declares_token(detail: str, key: str, value: str) -> bool:
             return True
     return False
 
+def own_voice_text(detail: str) -> str:
+    """`detail` with every PARENTHETICAL ASIDE removed — the row's own voice.
+
+    The THIRD scope, and the one a reader needs when a row QUOTES a token: the canonical
+    trailer is POSITIONAL and the lexical scan is ANYWHERE, so a token sitting inside a
+    parenthetical aside — `n=1990 (… declared claim=reconstructed with no BASIS: marker …)`
+    — reads as a declaration to every lexical reader while being, in fact, a CITATION of
+    another row's defect. Scoping to the trailer alone was refused for the opposite harm
+    (`declares_token` records it): a token written mid-detail would go silently invisible,
+    and a declaration no reader can see is worse than one a reader can check. So the scope
+    is neither positional nor unlimited — it is the text that speaks in the row's OWN VOICE.
+
+    The rule is the one a careful reader applies and can state: a token is a DECLARATION
+    when it stands at parenthetical depth 0 — in the canonical trailer or in the row's own
+    mid-detail prose — and a QUOTATION when it sits inside an aside. Measured on the live
+    ledger when this landed: it keeps every one of the genuine mid-detail declarations and
+    drops exactly the one quotation.
+
+    The parentheses are replaced by a SPACE, never deleted, so the tokens on either side
+    cannot FUSE: deleting `(x)` from `claim=(aside)reconstructed` would mint the declaration
+    `claim= reconstructed` -> `claim=reconstructed` out of nothing. An aside replaced by a
+    space leaves a token boundary exactly where the original had one.
+
+    UNBALANCED PARENTHESES FAIL OPEN, and the asymmetry is deliberate. Where the parentheses
+    cannot be paired the depth of any given token is undefined, so this returns the detail
+    UNCHANGED and the caller keeps the lexical reading it had before this function existed.
+    Fail-open means the worst outcome is the pre-existing over-inclusion, which a human sees
+    and which is the very defect this function narrows; fail-closed would mean a stray `(`
+    silently DROPPING a genuine declaration, which is the false-negative the caller's
+    population exists to catch and which no reader would see. Measured on the live ledger
+    when this landed: ten rows carry unbalanced parentheses and NONE of them is in the
+    reconstructed-claim population, so the asymmetry is unexercised on real rows and stated
+    rather than hidden.
+
+    ONE predicate, shared (`n=405` clause 5, `n=599`): the two readers that need the
+    own-voice scope — `reconstruction.reconstructed_claims` and `reconstruction.names_basis`
+    — import THIS function rather than each carrying a private parenthesis walk, which is
+    the drift class this module exists to close. It reads the WHOLE detail and never a
+    trailer: an aside removed from a trailer would be a fourth reading of the trailer, and
+    `trailer_tokens` is already the one positional reader.
+    """
+    text = str(detail)
+    if "(" not in text and ")" not in text:
+        # The common case, and it is not only an optimisation: with no parentheses to pair
+        # the depth is trivially zero everywhere, so the detail IS its own voice.
+        return text
+    out: list[str] = []
+    depth = 0
+    balanced = True
+    for char in text:
+        if char == "(":
+            depth += 1
+            out.append(" ")
+        elif char == ")":
+            if depth == 0:
+                balanced = False
+            else:
+                depth -= 1
+            out.append(" ")
+        elif depth == 0:
+            out.append(char)
+    if depth != 0 or not balanced:
+        return text
+    return "".join(out)
+
 def trailer_tokens(detail: str) -> list[str]:
     """The maximal run of `=`-carrying tokens at the END of `detail`, in order.
 

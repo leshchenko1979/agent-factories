@@ -2319,10 +2319,17 @@ def _commit(repo: Path, name: str, *, when: dt.datetime | None = None,
 
 
 def _seeded(root: Path):
-    """A bare remote carrying one commit, and a clone of it. Returns (remote, work)."""
+    """A bare remote carrying one commit, and a clone of it. Returns (remote, work).
+
+    The seed commit is BACKDATED. A repo with history has an old tip, and the publish leg's
+    tip-age arm (issue #284) reads a tip younger than the pusher's grace window as one no
+    governed push explains -- which a just-created seed would be. Backdating keeps the
+    fixture representative, so a control that asserts a clean leg is asserting it about a
+    healthy repo rather than about an artifact of the fixture's own clock.
+    """
     remote = _bare(root / "remote.git")
     seed = _work(root / "seed", remote)
-    _commit(seed, "a.txt")
+    _commit(seed, "a.txt", when=dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=6))
     _git(seed, "push", "-q", "origin", "main:main")
     work = root / "work"
     _git(root, "clone", "-q", str(remote), str(work))
@@ -2458,6 +2465,131 @@ def test_the_publish_leg_is_WIRED_into_the_runner_and_prints_its_population() ->
         assert sha in text and "cafebabe-lane" in text, text
         assert "STALE" in text, text
 
+
+# --- the publish leg's CADENCE SIDE (issue #284) -------------------------------------
+#
+# The leg above measures LAG, and a late pusher and an absent one leave the same unpushed
+# commit behind -- so the leg could not tell them apart. Leg (c) gives it a second side: the
+# pusher records its own last push in a file under `evidence/`, and a remote tip that is not
+# that sha left through some OTHER path. These probes drive both arms, and the control that
+# keeps them from passing on a leg that reds on every healthy round.
+
+def _pusher():
+    return RUNNER.load_module("publish", RUNNER.PUBLISH_PUSHER)
+
+def test_the_publish_leg_REPORTS_an_ungoverned_push_BY_NAME() -> None:
+    """Leg (c)(2). The receipt names the sha the pusher pushed; a tip that is not that sha
+    left through some other path, and the finding must NAME the tip, the lane trailer of its
+    commit and the receipt it contradicts. A count alone cannot be dispatched or closed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        pub = _pusher()
+        now = dt.datetime.now(dt.timezone.utc)
+        old = now - dt.timedelta(hours=6)
+
+        governed = _commit(work, "b.txt", when=old, trailer="gov-lane")
+        _git(work, "push", "-q", "origin", "main:main")
+        path, why = pub.write_receipt(
+            work, sha=governed, remote="origin", branch="main",
+            instant=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+        assert path is not None and not why, why
+
+        # The ungoverned push: committed 6h ago (so the tip-age arm stays out of it) and
+        # pushed straight to the remote, bypassing the pusher entirely.
+        rogue = _commit(work, "rogue.txt", when=old, trailer="rogue-lane")
+        _git(work, "push", "-q", "origin", "main:main")
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        joined = " ".join(leg["problems"])
+        assert leg["problems"], "a tip the receipt does not account for must be a finding"
+        assert rogue in joined, f"the finding must NAME the ungoverned sha: {leg['problems']}"
+        assert "rogue-lane" in joined, f"the finding must NAME its lane: {leg['problems']}"
+        assert governed in joined, (
+            f"the finding must NAME the receipt it contradicts: {leg['problems']}"
+        )
+        assert leg["coverage"]["receipt_mismatch"]["remote_tip"] == rogue
+
+        text = RUNNER.render(
+            [leg], [], slug="owner/repo", read_at="2026-10-03T00:00:00Z", issues=[]
+        )
+        assert "UNGOVERNED PUSH" in text and rogue in text, text
+
+def test_the_publish_leg_is_QUIET_when_the_receipt_ACCOUNTS_for_the_tip() -> None:
+    """The control. Without it, a leg that red on ANY receipt would pass the arm above --
+    and would red the patrol on every healthy round, since a governed push leaves the tip
+    exactly equal to the sha the pusher recorded."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        pub = _pusher()
+        now = dt.datetime.now(dt.timezone.utc)
+        old = now - dt.timedelta(hours=6)
+
+        governed = _commit(work, "b.txt", when=old, trailer="gov-lane")
+        _git(work, "push", "-q", "origin", "main:main")
+        pub.write_receipt(
+            work, sha=governed, remote="origin", branch="main",
+            instant=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg["problems"] == [], leg["problems"]
+        assert leg["coverage"]["receipt_mismatch"] is None
+        assert leg["coverage"]["receipt"]["sha"] == governed
+        assert leg["coverage"]["tip_younger_than_grace"] is False
+
+def test_the_publish_leg_flags_a_YOUNG_tip_no_receipt_can_explain() -> None:
+    """Leg (c)(3), the cheap arm. The pusher HOLDS a commit younger than its grace window,
+    so a tip that young cannot have left through it -- and this arm speaks when there is no
+    receipt at all, which is the case the receipt arm is blind to. Its bound is printed
+    beside it: it sees only a tip SAMPLED while still young."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        now = dt.datetime.now(dt.timezone.utc)
+
+        fresh = _commit(
+            work, "direct.txt", when=now - dt.timedelta(seconds=30), trailer="direct-lane"
+        )
+        _git(work, "push", "-q", "origin", "main:main")
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg["coverage"]["receipt"] is None, "the arm's own precondition: no receipt"
+        assert leg["coverage"]["tip_younger_than_grace"] is True
+        joined = " ".join(leg["problems"])
+        assert fresh in joined, f"the young tip must be NAMED: {leg['problems']}"
+        assert "grace window" in joined, leg["problems"]
+
+        text = RUNNER.render(
+            [leg], [], slug="owner/repo", read_at="2026-10-03T00:00:00Z", issues=[]
+        )
+        assert "tip-age arm bound" in text, text
+
+def test_the_publish_leg_prints_the_PUSHERS_bounds_and_its_OWN_scope() -> None:
+    """Leg (b)(2). The three figures travel as the PUSHER's declared bounds, and the leg's
+    own scope is printed beside them -- a coverage line that reads as a fleet-wide property
+    is the defect #284 closes. Presence is not behaviour, so this reads the rendered text."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        leg = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe"
+        )
+        text = RUNNER.render(
+            [leg], [], slug="owner/repo", read_at="2026-10-03T00:00:00Z", issues=[]
+        )
+        assert "the PUSHER's declared bounds" in text, text
+        assert "SCOPE: LAG only" in text, text
+        assert "not a property of the fleet" in text.lower(), text
+        assert "pusher receipt:" in text, text
 
 # --- the duty-receipt leg's FORWARD BOUND (#175) --------------------------------
 #
