@@ -592,7 +592,7 @@ the move is deliberately not in this commit:
 
 | today's home | what it carries about this instrument |
 |---|---|
-| `skills/meta-factory/SKILL.md` §11 *State — every surface has one writer* | the **duty receipt** (a `run` row written by the woken lane, declaring `receipt_subject`) and the **redirect log** (its label equals the job name) |
+| `skills/meta-factory/state.md` (the clause tail of `SKILL.md` §11 *State — every surface has one writer*) | the **duty receipt** (a `run` row written by the woken lane, declaring `receipt_subject`) and the **redirect log** (its label equals the job name) |
 | `docs/best-practices.md` P7, P28 | the thin-wake rule itself |
 | `tools/patrol_host_state.py` | the enforcement of all three, as machine-checked legs |
 
