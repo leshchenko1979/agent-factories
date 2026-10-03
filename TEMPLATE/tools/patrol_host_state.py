@@ -191,7 +191,7 @@ PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
 # (member, manifest file) pair; `bootstrap_cells` is the subset restricted to the files
 # `TEMPLATE/BOOTSTRAP.md` step 4c names, which is what the 1/20/29 baseline was taken
 # over. Reporting only one of them would make the other unreproducible.
-KIT_MANIFEST = REPO / "registry" / "kit.json"
+KIT_MANIFEST_REL = "registry/kit.json"
 FLEET_MANIFEST = REPO / "registry" / "fleet.json"
 
 # The files `TEMPLATE/BOOTSTRAP.md` step 4c instructs a factory to copy, by their
@@ -2093,9 +2093,51 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
         },
     }
 
+def head_manifest(rel: str | None = None, *, repo: Path | None = None) -> tuple[str | None, str]:
+    """Read the kit manifest from HEAD rather than from the working tree (issue #185).
+
+    WHY HEAD AND NOT DISK. `registry/kit.json` is GENERATED FROM THE WORKING TREE, so a
+    reference read off disk is whatever the last generation happened to see, and a lane
+    mid-write changes it under the reader. Measured at the filing (2026-09-26): five
+    distinct `kit_version` values in about 23 minutes, TWO of which appeared in NO commit
+    at all, `registry/kit.json` changed between two reads 14 seconds apart, and the
+    manifest included two files untracked at that instant. A member's pin is COMMITTED, so
+    comparing it against an uncommitted reference makes the verdict unreproducible by any
+    reader who was not here. HEAD is the one revision every reader can re-derive from the
+    repository alone, and it is what the pin is actually a statement about.
+
+    `HEAD:./<rel>` is CWD-RELATIVE, and that is deliberate rather than incidental. This
+    file is byte-identical to its TEMPLATE twin, whose REPO resolves to TEMPLATE/ where
+    `registry/kit.json` is factory data that never ships — so the twin reports the path
+    absent, exactly as it did before this change, instead of silently reading the PARENT
+    tree's manifest and comparing a factory's own files against the template source.
+
+    Returns (text, why). `text` is None when HEAD cannot be read, and `why` names the
+    reason so the leg reports NOT RUN with it rather than a clean sweep over nothing.
+
+    Both coordinates default to the module globals and are resolved AT CALL TIME rather
+    than frozen as default arguments, so a probe can point them at a throwaway repository
+    and prove the HEAD read against a tree whose HEAD and working copy DISAGREE — which is
+    the only way to show this leg reads HEAD, since on a clean live tree the two agree and
+    the pre-fix code would pass the same assertion.
+    """
+    repo = REPO if repo is None else repo
+    rel = KIT_MANIFEST_REL if rel is None else rel
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "show", f"HEAD:./{rel}"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git show HEAD:./{rel} could not run: {exc}"
+    if proc.returncode != 0:
+        lines = (proc.stderr or "").strip().splitlines()
+        return None, lines[-1] if lines else f"git show HEAD:./{rel} failed"
+    return proc.stdout, ""
+
 def kit_drift_leg(
     *,
-    manifest_path: Path = KIT_MANIFEST,
+    manifest_path: Path | None = None,
     fleet_path: Path = FLEET_MANIFEST,
     bootstrap_named: tuple[str, ...] = BOOTSTRAP_NAMED,
     read_at: str = "",
@@ -2120,19 +2162,44 @@ def kit_drift_leg(
     totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
     boot_totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
 
-    if not manifest_path.is_file():
-        problems.append(
-            f"the kit manifest {manifest_path} is absent — there is no reference to measure "
-            f"drift against, so this leg examined NOTHING and says so rather than reporting "
-            f"a clean sweep over no population"
-        )
-        return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
-                "excused": [], "coverage": {"reason": str(manifest_path), "read_at": read_at}}
+    if manifest_path is None:
+        # THE #185 REMEDY: the live reference is the COMMITTED manifest, never the file on
+        # disk. See `head_manifest` for the measurement that forced it. A probe passes an
+        # explicit path and keeps the disk read it has always had, which is what lets one
+        # leg serve both the live patrol and a hermetic fixture.
+        source = f"HEAD:{KIT_MANIFEST_REL}"
+        raw, why = head_manifest()
+        if raw is None:
+            problems.append(
+                f"the kit manifest {source} could not be read from HEAD ({why}) — there is "
+                f"no reference to measure drift against, so this leg examined NOTHING and "
+                f"says so rather than reporting a clean sweep over no population"
+            )
+            return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                    "excused": [], "coverage": {"reason": f"{source} — {why}",
+                                                "read_at": read_at}}
+    else:
+        source = str(manifest_path)
+        if not manifest_path.is_file():
+            problems.append(
+                f"the kit manifest {manifest_path} is absent — there is no reference to "
+                f"measure drift against, so this leg examined NOTHING and says so rather "
+                f"than reporting a clean sweep over no population"
+            )
+            return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                    "excused": [], "coverage": {"reason": str(manifest_path),
+                                                "read_at": read_at}}
+        try:
+            raw = manifest_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            problems.append(f"the kit manifest {manifest_path} could not be read: {exc}")
+            return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
+                    "excused": [], "coverage": {"reason": str(exc), "read_at": read_at}}
 
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        problems.append(f"the kit manifest {manifest_path} could not be read: {exc}")
+        manifest = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        problems.append(f"the kit manifest {source} could not be read: {exc}")
         return {"name": "kit-drift", "status": "NOT RUN", "problems": problems,
                 "excused": [], "coverage": {"reason": str(exc), "read_at": read_at}}
 
@@ -2226,6 +2293,14 @@ def kit_drift_leg(
         "coverage": {
             "manifest_files": len(files),
             "kit_version": manifest.get("kit_version"),
+            # WHICH REFERENCE WAS READ, and the revision IT was generated from (issue #185).
+            # Without the first, a reader cannot tell a HEAD read from a disk read -- the two
+            # are the whole point of the change and they print identically otherwise. The
+            # second is the manifest's own `source_head`: the pin is windowed only when both
+            # halves travel, since a HEAD read of a manifest that names no revision still
+            # leaves the reader unable to say which commit the content came from.
+            "manifest_source": source,
+            "manifest_head": manifest.get("source_head"),
             "members_declared": len(members),
             "members_reachable": len(reachable),
             "members_unreachable": [m["slug"] for m in members if not m["reachable"]],
@@ -3149,7 +3224,7 @@ def main(
     cron_rows_fn=box_cron_rows,
     prefixes_fn=declared_prefixes,
     log_dir: Path = LOG_DIR,
-    kit_manifest: Path = KIT_MANIFEST,
+    kit_manifest: Path | None = None,
     fleet_manifest: Path = FLEET_MANIFEST,
     predicate=None,
     publish_fn=None,
@@ -3164,7 +3239,10 @@ def main(
     cron-thinness leg with NO live database. The two drift manifests are injected for the
     fourth: the kit-drift leg's population is five OTHER repositories, so a probe that
     could only run against the live box would be measuring whatever those trees happen to
-    hold rather than the leg's behaviour. The publish leg is injected for the fifth and
+    hold rather than the leg's behaviour. `kit_manifest` defaults to None, which is the
+    LIVE reference: the leg then reads the manifest from HEAD rather than from disk (issue
+    #185). A probe passes a path and keeps the disk read, so no probe's fixture changed
+    meaning when the live default did. The publish leg is injected for the fifth and
     the most practical reason of all: it reads the remote, so a probe that did not stub it
     would make a NETWORK call on every run of every probe that drives this function --
     measured at ~2s each, which is how a 3s gate becomes a 40s one.

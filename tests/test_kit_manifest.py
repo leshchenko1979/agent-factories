@@ -206,6 +206,81 @@ def main() -> int:
     check("the live shipped file was never mutated",
           sha(REPO / PROBE_FILE) == live_digest_before, PROBE_FILE)
 
+    # ARM 8 — THE COMMITTED MANIFEST AND THE COMMITTED VEHICLE MOVE TOGETHER (board #185).
+    # The vehicle is the copy a factory VENDORS, so the two files are ONE artifact in two
+    # places and a commit that regenerates only `registry/kit.json` ships a vehicle that
+    # describes a kit nobody has. Measured: commit 71aaf12 (2026-09-27) staged the manifest
+    # and not the vehicle, so `registry/kit.example.json` stood at the PREVIOUS kit_version
+    # while the manifest beside it moved — and no gate read the pair, because every arm
+    # above compares the manifest to the LIVE TREE and the vehicle is outside that
+    # population by design (see ARM 6).
+    #
+    # Read from HEAD, not from disk. A disk read would pass for a lane that had regenerated
+    # without committing, which is the same defect one step later — and it would pass for
+    # the very commit that introduced it. This is a DETECTOR rather than a prevention
+    # (#247/#281, ruling n=2010): at commit time HEAD is still the PARENT, so an asymmetric
+    # commit is caught on the NEXT run of this gate rather than being blocked, which is the
+    # grain the ruling chose. A hook leg would be bypassable and local-only.
+    def _pair_problems(rev: str) -> list[str] | None:
+        """None when `rev` cannot be read; else the shared fields on which the pair differs."""
+        got: dict[str, dict] = {}
+        for rel in ("registry/kit.json", "registry/kit.example.json"):
+            proc = subprocess.run(["git", "-C", str(REPO), "show", f"{rev}:{rel}"],
+                                  capture_output=True, text=True)
+            if proc.returncode != 0:
+                return None
+            got[rel] = json.loads(proc.stdout)
+        manifest, vehicle = got["registry/kit.json"], got["registry/kit.example.json"]
+        # `_note` is deliberately DIFFERENT — the manifest describes our own kit while the
+        # vehicle instructs a reader who is about to vendor it — so it is the one field not
+        # compared. Every other field the vehicle carries IS shared, and each is named
+        # rather than compared as a whole object, so a field added later cannot be silently
+        # exempted by an `==` over a hand-picked subset.
+        # `source_head` is NOT in this tuple, and that is a decision rather than an
+        # omission: the manifest names a commit HERE, and the vehicle is vendored into a
+        # tree where that sha resolves nowhere (ARM 9 below holds it to a tree-independent
+        # value, and the portability leg of `tests/test_template_sync.py` refuses such a
+        # literal by name). `_note` differs for the other reason -- the manifest describes
+        # our own kit, the vehicle instructs a reader about to vendor it. Both are named
+        # here so a third field cannot join them silently.
+        return [f for f in ("kit_version", "file_count", "files", "classes")
+                if manifest.get(f) != vehicle.get(f)]
+
+    head_pair = _pair_problems("HEAD")
+    check("the COMMITTED manifest and the COMMITTED vehicle agree on every shared field",
+          head_pair is not None and head_pair == [],
+          "a HEAD blob could not be read" if head_pair is None else f"they disagree on {head_pair}")
+
+    # NON-VACUITY, taken from the RECORDED instance rather than from a synthetic pair, so
+    # the proof is that this predicate finds the defect that actually happened. At 71aaf12
+    # the manifest read e90c5558a39b against the vehicle's a49eaba9ada7 — on `kit_version`
+    # AND `files`, which is the same fact twice — and the commit before it was clean. A
+    # predicate that flagged both would be flagging the comparison, not the defect.
+    at_defect = _pair_problems("71aaf12")
+    at_parent = _pair_problems("71aaf12^")
+    if at_defect is None or at_parent is None:
+        print("  STATED NOT RUN — 71aaf12 is not in this clone, so the non-vacuity probe "
+              "could not be driven. It is NOT read as a pass.")
+    else:
+        check("the pair predicate BITES on the recorded instance 71aaf12",
+              at_defect == ["kit_version", "files"], f"found {at_defect}")
+        check("and the commit BEFORE it is clean, so the bite is the defect and not the "
+              "comparison itself", at_parent == [], f"found {at_parent}")
+
+    # ARM 9 -- THE SHIPPED VEHICLE CARRIES NO REVISION OF THIS REPO (issue #185).
+    # `source_head` on the manifest names a commit HERE; on the vehicle that same value
+    # would be a literal that resolves in this tree and nowhere in the tree the file ships
+    # to. The predicate is the VALUE's FORM rather than a list of allowed spellings, so a
+    # future generator writing `HEAD` or an abbreviated sha is caught too.
+    live = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    shipped = json.loads((REPO / "TEMPLATE" / "registry" / "kit.example.json").read_text(encoding="utf-8"))
+    check("the shipped vehicle carries no revision of this repo in source_head",
+          re.fullmatch(r"[0-9a-f]{7,40}", str(shipped.get("source_head", ""))) is None,
+          f"the vehicle reads {shipped.get('source_head')!r}")
+    check("while the manifest DOES name one (or states `unknown`), so the field is not dead",
+          bool(re.fullmatch(r"[0-9a-f]{40}|unknown", str(live.get("source_head", "")))),
+          f"the manifest reads {live.get('source_head')!r}")
+
     if _failures:
         print(f"kit manifest FAILED: {len(_failures)} check(s)")
         return 1

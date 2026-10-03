@@ -2247,6 +2247,96 @@ def test_the_live_baseline_reproduces_the_measured_figure() -> None:
     print(f"  (live bootstrap drift: {boot['same']} same / {boot['DIFF']} DIFF / "
           f"{boot['ABSENT']} ABSENT over {cov['bootstrap_cells_total']} cells)")
 
+def test_the_reference_is_read_from_HEAD_not_from_the_working_tree() -> None:
+    """Issue #185: a member's pin is COMMITTED, so the reference it is judged against has
+    to be re-derivable by a reader who was not here.
+
+    The manifest is GENERATED FROM THE WORKING TREE, so a disk read returns whatever the
+    last generation happened to see — and a lane mid-write changes it under the reader.
+    Measured at the filing (2026-09-26): five distinct kit_version values in about 23
+    minutes, TWO of which appeared in no commit at all, the file changed between two reads
+    14 seconds apart, and the manifest included two files untracked at that instant.
+
+    THE PROBE IS HERMETIC AND THE BITE IS REAL, which is why it is built this way. On the
+    live tree HEAD and the working copy AGREE, so a live assertion would pass under the
+    PRE-FIX code too and would prove nothing about the dispatch. So the leg is pointed at a
+    throwaway repository built here whose HEAD and working copy deliberately DISAGREE — the
+    window the filing measured, reproduced deterministically — and driven twice over that
+    ONE tree: once with no manifest_path (the live call, which must read HEAD) and once with
+    an explicit path (the probe call, which must still read disk). The two answers must
+    DIFFER, and in that direction. Under the pre-fix code both arms read the file, both
+    return the dirty version, and the first assertion below fails.
+    """
+    import hashlib
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        repo = root / "repo"
+        (repo / "registry").mkdir(parents=True)
+
+        member = root / "member"
+        (member / "tools").mkdir(parents=True)
+        (member / "tools" / "a.py").write_bytes(b"a")
+        files = {"TEMPLATE/tools/a.py": hashlib.sha256(b"a").hexdigest()}
+
+        (repo / "registry" / "kit.json").write_text(
+            json.dumps({"kit_version": "COMMITTED", "files": files}), encoding="utf-8")
+        for args in (["init", "-q"], ["add", "-A"],
+                     ["-c", "user.email=probe@probe.invalid", "-c", "user.name=probe",
+                      "commit", "-qm", "probe"]):
+            done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+            assert done.returncode == 0, done.stderr
+
+        # THE WINDOW: the working copy now names a version that appears in NO commit.
+        (repo / "registry" / "kit.json").write_text(
+            json.dumps({"kit_version": "DIRTY-UNCOMMITTED", "files": files}), encoding="utf-8")
+
+        fleet = root / "fleet.json"
+        fleet.write_text(json.dumps({"factories": [{"slug": "alpha", "repo": str(member)}]}),
+                         encoding="utf-8")
+
+        with mock.patch.object(RUNNER, "REPO", repo), \
+                mock.patch.object(RUNNER, "KIT_MANIFEST_REL", "registry/kit.json"):
+            head_arm = RUNNER.kit_drift_leg(fleet_path=fleet, read_at="head")
+            disk_arm = RUNNER.kit_drift_leg(manifest_path=repo / "registry" / "kit.json",
+                                            fleet_path=fleet, read_at="disk")
+
+        assert head_arm["coverage"]["kit_version"] == "COMMITTED", head_arm["coverage"]
+        assert disk_arm["coverage"]["kit_version"] == "DIRTY-UNCOMMITTED", disk_arm["coverage"]
+        assert head_arm["coverage"]["manifest_source"] == "HEAD:registry/kit.json"
+        assert disk_arm["coverage"]["manifest_source"].endswith("registry/kit.json")
+        # Both arms saw the SAME member tree, so the only thing that moved the reference was
+        # where it was read from — not a different fixture.
+        assert (head_arm["coverage"]["manifest_files"]
+                == disk_arm["coverage"]["manifest_files"])
+
+def test_the_LIVE_reference_is_the_committed_manifest() -> None:
+    """The live half of the #185 remedy, and the provenance that makes it checkable.
+
+    The probe above proves the DISPATCH hermetically; this one pins the LIVE call to the
+    committed bytes, so a later change that quietly restored a disk default is caught
+    against the real repository rather than only against a fixture. It derives the expected
+    version the SAME way the leg does — `git show HEAD:registry/kit.json` — so it cannot
+    drift from the leg's own definition of "the committed manifest", and it asserts the
+    provenance field, because a HEAD read and a disk read print identically otherwise and
+    the whole change is which one happened.
+    """
+    leg = RUNNER.kit_drift_leg(read_at="probe")
+    cov = leg["coverage"]
+    if leg["status"] == "NOT RUN":
+        # A tree carrying no manifest at HEAD — a bootstrapped factory, or this file's
+        # TEMPLATE twin, whose REPO resolves to TEMPLATE/ where `registry/kit.json` is
+        # factory data that never ships. STATED, never silently passed.
+        print(f"  (no committed manifest to pin: {cov.get('reason')})")
+        return
+    done = subprocess.run(["git", "-C", str(RUNNER.REPO), "show", "HEAD:registry/kit.json"],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    at_head = json.loads(done.stdout)
+    assert cov["manifest_source"] == "HEAD:registry/kit.json", cov["manifest_source"]
+    assert cov["kit_version"] == at_head["kit_version"], (cov["kit_version"], at_head["kit_version"])
+    assert cov["manifest_files"] == len(at_head["files"]), cov["manifest_files"]
+
 def _stub_publish_leg(*, read_at: str) -> dict:
     """A publish leg that reads NOTHING, for probes that drive `main()`.
 
