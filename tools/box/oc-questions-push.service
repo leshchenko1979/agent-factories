@@ -1,5 +1,5 @@
 [Unit]
-Description=Mirror Open Questions pages + register from agents to vpn
+Description=Mirror Open Questions pages from agents to vpn
 
 [Service]
 Type=oneshot

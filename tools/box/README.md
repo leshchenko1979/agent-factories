@@ -73,11 +73,14 @@ touches the push path — and a stale copy is reported, never silently tolerated
 
 ## What the push script does
 
-It mirrors the Open Questions page tree and register from the agents' store to the vpn
-host, and it does so **by comparison rather than by timing**: the source digest and the
-served digest are taken for both the page tree and the register and printed on every run;
-a disagreement re-copies, bounded to two further attempts, and past the bound it exits
-non-zero naming both digests. `-c` is load-bearing for the retry — `rsync`'s default
+It mirrors the Open Questions page tree from the agents' store to the vpn host, and it
+does so **by comparison rather than by timing**: the source digest and the served digest
+are taken for the page tree and printed on every run; a disagreement re-copies, bounded
+to two further attempts, and past the bound it exits non-zero naming both digests. The
+register is **not** mirrored (2026-10-02, S2): the confirmation's lane and question title
+ride in the token's own page meta, so the public host needs no copy of the register — and
+a copy it never had cannot go stale. The register still drives the render leg below, from
+this host. `-c` is load-bearing for the retry — `rsync`'s default
 size-and-mtime quick-check skips a same-length rewrite whose mtime was restored, so the
 retry could otherwise never converge.
 
