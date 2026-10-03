@@ -3355,6 +3355,180 @@ def test_the_whole_run_PRINTS_the_worktree_population_and_never_a_bare_zero() ->
     assert "~ /probe/scratch — 2 path(s)" in out, out
     assert "read at " in out, out
 
+def _stall_row(n, event, subject, days_ago, *, actor="hq", detail="probe", refs=None,
+               now=None):
+    """A ledger row dated RELATIVE to the read clock.
+
+    The leg ages a row against `read_at`, so a hardcoded instant would make every probe
+    below a statement about the day it was written. Relative instants keep the fixture a
+    statement about the THRESHOLD, which is the property under test.
+    """
+    stamp = (now - dt.timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {"n": n, "ts": stamp, "event": event, "actor": actor, "subject": subject,
+            "detail": detail, "refs": refs}
+
+def test_the_stall_census_leg_BITES_and_discriminates_on_every_neighbour() -> None:
+    """#260 acceptance (1), the NON-VACUITY probe: the leg must NAME a never-claimed
+    dispatch past its threshold, and must NOT name the four neighbours that look like one.
+
+    The discriminating pairs are the whole point, because the naive predicate the ruling
+    was written from -- "the latest dispatch row with no later claim row" -- reports every
+    one of them. Measured on this ledger 2026-10-03, that literal form reports 36 units
+    where the true population is 20: the extras are claimed-then-RE-DISPATCHED
+    (`#132` intake n=836, claim n=837, dispatch n=838, close n=840; `#235` claim n=1674,
+    close n=1675, dispatch n=1681) and closed-without-claim. So each of these four is a
+    live false positive the leg must keep out, and a probe that supplied only the true
+    positive would pass a leg that reported all five.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [
+        _issue(901, "OPEN"),    # dispatched 3 d ago, NEVER claimed -> OWED
+        _issue(902, "OPEN"),    # dispatched seconds ago -> in flight, below threshold
+        _issue(903, "OPEN"),    # dispatched, then CLAIMED -> not owed
+        _issue(904, "OPEN"),    # dispatched, then CLOSED by a ledger close row
+        _issue(905, "CLOSED"),  # never claimed, but the BOARD carries it closed
+    ]
+    rows = [
+        _stall_row(1, "intake", "#901", 4, now=now),
+        _stall_row(2, "dispatch", "#901", 3, now=now),
+        _stall_row(3, "dispatch", "#902", 0.01, now=now),
+        _stall_row(4, "dispatch", "#903", 5, now=now),
+        _stall_row(5, "claim", "#903", 4.9, now=now),
+        _stall_row(6, "dispatch", "#904", 6, now=now),
+        _stall_row(7, "close", "#904", 5.9, now=now),
+        _stall_row(8, "dispatch", "#905", 7, now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #901" in named, f"the never-claimed dispatch must be NAMED\n{named}"
+    for quiet in ("#902", "#903", "#904", "#905"):
+        assert quiet not in named, (
+            f"{quiet} must NOT be reported owed: a below-threshold dispatch is in flight, "
+            f"a claimed one has a taker, a closed one is finished, and a board-closed item "
+            f"owes no claim\n{named}"
+        )
+    assert leg["coverage"]["units_owed"] == 1, leg["coverage"]
+
+    # ... and the same fixture through the REAL `main()`: the report must carry the OWED
+    # line AND the population it was read from. A leg returning a correct dict while the
+    # render drops it is the half-fix this half exists to catch.
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
+    assert "LEG stall-census — ASSERTED" in out, out
+    assert "OWED #901" in out, out
+    assert "population: 5 dispatched unit(s) -- 1 never claimed" in out, out
+    assert "read at " in out, out
+
+def test_the_stall_census_leg_reads_CARRIED_units_and_only_from_a_CARRIER() -> None:
+    """#260 acceptance (1), the population half: a unit dispatched by a WAVE row is a
+    dispatched unit, and each of the three shapes that merely LOOK like one is refused.
+
+    This is the measured class the whole leg exists for. Board #181 carries intake n=1221,
+    run n=1226 and ruling n=1233 and NO dispatch row of its own -- its dispatch leg is the
+    wave row n=1214 (`subject=kit-adoption-wave-2026-09-26`, `refs=None`), whose detail
+    reads "...carrying BOTH instruments (board #181 ledger bundle, board #182
+    questions)...". A subject-keyed census cannot see it (#2092, ruling n=2100).
+
+    The other half is the false positive the naive `#\\d+` scan generates, and the fixture
+    carries each shape the discriminator must refuse:
+
+    * `#908` is named inside a WORK-UNIT dispatch's own detail -- a cross-reference, not a
+      carrier's payload, so the row is never scanned as a carrier at all;
+    * `#909` is named by a real carrier but has NO ledger rows of its own, which is what a
+      prose mention of another repository's number looks like;
+    * `#910` HAS rows of its own and is named by a real carrier, yet is not an issue this
+      board declares -- the `#366` shape, which carries ledger rows n=433 and n=436 and is
+      not on this board at all (the fork's `#366`).
+
+    Measured 2026-10-03, a scan that admitted the prose shapes reported 160 units against a
+    true population of 206 examined / 20 owed, and corrupted ages -- a mention moved `#49`
+    from 15.05 d to 4.96 d.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(906, "OPEN"), _issue(907, "OPEN"), _issue(908, "OPEN")]
+    rows = [
+        _stall_row(1, "intake", "#906", 4, now=now),
+        _stall_row(2, "dispatch", "kit-adoption-wave-probe", 3, now=now,
+                   actor="delegate",
+                   detail="dispatched to five member HQs (board #906 ledger bundle)"),
+        _stall_row(3, "intake", "#907", 5, now=now),
+        _stall_row(4, "dispatch", "#907", 4, now=now,
+                   detail="WHY NOT COVERED BY #908"),
+        _stall_row(5, "dispatch", "sweep-probe-2026-10-03", 3, now=now,
+                   detail="sweep of the board (board #909 backlog)"),
+        _stall_row(6, "intake", "#910", 6, now=now),
+        _stall_row(7, "dispatch", "relay-probe-2026-10-03", 5, now=now,
+                   detail="relayed onward (board #910 follow-up)"),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #906" in named, (
+        f"a unit carried by a wave row IS a dispatched unit and must be named\n{named}"
+    )
+    assert "OWED #907" in named, f"a work-unit dispatch is dispatched too\n{named}"
+    assert "#908" not in named, (
+        f"a unit named inside another unit's dispatch is a cross-reference, not a "
+        f"carrier's payload\n{named}"
+    )
+    assert "#909" not in named, (
+        f"a unit with no ledger rows of its own is a prose mention\n{named}"
+    )
+    assert "#910" not in named, (
+        f"a unit the board does not declare is not a unit of this board's namespace, "
+        f"however many ledger rows it carries\n{named}"
+    )
+    cov = leg["coverage"]
+    assert cov["carried_units_resolved"] == 2, cov
+    assert cov["units_off_board"] == 1, cov
+    assert cov["observation_dispatches"] == 1, cov
+    assert cov["units_in_population"] == 3, cov
+    assert cov["units_owed"] == 2, cov
+
+def test_the_stall_census_leg_counts_an_OBSERVATION_dispatch_and_never_judges_it() -> None:
+    """A descriptive-stem dispatch naming NO work unit is EXPLICITLY LEGAL (ruling n=524),
+    and the leg must COUNT it rather than read it as an empty population.
+
+    The pair is deliberate: a leg that judged these would red the run for the ordinary
+    relay traffic this factory runs on, and a leg that silently dropped them would report
+    the same numbers whether it examined them or never looked.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(901, "OPEN")]
+    rows = [
+        _stall_row(1, "intake", "#901", 4, now=now),
+        _stall_row(2, "dispatch", "#901", 3, now=now),
+        _stall_row(3, "dispatch", "board-hygiene-observation", 2, now=now,
+                   detail="nothing in particular was handed over"),
+    ]
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    cov = leg["coverage"]
+    assert cov["dispatch_rows_examined"] == 2, cov
+    assert cov["observation_dispatches"] == 1, cov
+    assert cov["units_in_population"] == 1, cov
+    assert cov["units_owed"] == 1, cov
+    assert len(leg["problems"]) == 1, leg["problems"]
+
+def test_the_stall_census_leg_PRINTS_its_threshold_with_its_basis() -> None:
+    """#260 acceptance (3): the threshold and the basis it rests on are PRINTED on every
+    run, never carried in a reader's memory -- and the basis must NAME the distinction the
+    ruling drew, or the two thresholds read as one number in two places (n=1861).
+
+    Asserted on the RENDER, not on the constant: a basis declared in a module constant and
+    dropped from the report is the same failure as one never written.
+    """
+    rc, out, _ = _run([_issue(901, "OPEN")], [])
+    assert "LEG stall-census — ASSERTED" in out, out
+    assert "never claimed past the declared threshold of 1.0 d" in out, out
+    assert "threshold basis: 1.0 d" in out, out
+    assert "CLAIMED-but-silent" in out, (
+        f"the basis must name the Triage card's own predicate it is NOT\n{out}"
+    )
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]

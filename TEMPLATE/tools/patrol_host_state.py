@@ -78,6 +78,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -163,6 +164,34 @@ CANONICALITY_KEY = "tier"
 CANONICALITY_TIERS = ("T0", "T1", "T2", "T3", "T4")
 CANONICALITY_UNRESOLVED = "T4"
 PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
+
+# --- the stall-census leg (#260) -------------------------------------------------
+#
+# Triage's census keys on the SUBJECT field, so a unit dispatched by a WAVE row reads as
+# undispatched. Measured 2026-10-03 on this ledger: board #181 carries intake n=1221, run
+# n=1226 and ruling n=1233, and NO dispatch row of its own -- its dispatch leg is the wave
+# row n=1214 (`subject=kit-adoption-wave-2026-09-26`, `refs=None`), whose detail reads
+# "...carrying BOTH instruments (board #181 ledger bundle, board #182 questions)...". A
+# subject-keyed census cannot see it (#2092).
+#
+# WHY THE THRESHOLD IS 1.0 d AND NOT THE CARD'S 30 m. The two predicates are different
+# questions and the ruling names them apart (n=1861): the Triage card's `>30 m` binds a
+# CLAIMED-but-silent lane, and this leg binds a NEVER-claimed dispatch. Measured on this
+# ledger 2026-10-03: the active queue's own in-flight dispatches sit at 0.02-0.05 d and
+# fall below a day, so a threshold of one day reports a stall rather than the ordinary lag
+# between a dispatch and its claim. The threshold is PRINTED with this basis on every run
+# (acceptance criterion 3), never carried in a reader's memory.
+STALL_CENSUS_THRESHOLD_DAYS = 1.0
+STALL_CENSUS_THRESHOLD_BASIS = (
+    "1.0 d -- the shortest interval in which a lane that intends to take a dispatched "
+    "item would have claimed it. Distinct from the Triage card's >30 m, which binds a "
+    "CLAIMED-but-silent lane; this binds a NEVER-claimed dispatch. Measured on this "
+    "ledger 2026-10-03: the active queue's own in-flight dispatches sit at 0.02-0.05 d "
+    "and fall below it."
+)
+# The subject form `#<n>` is the ledger tool's, BOUND rather than re-derived: one field,
+# one predicate (SKILL.md section 11).
+LEDGER_TOOL = REPO / "tools" / "ledger.py"
 
 # ---- the kit-drift leg (plan 2646d31a step 10) --------------------------------------
 #
@@ -2093,6 +2122,202 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
         },
     }
 
+_LEDGER_PREDICATE = None
+
+def ledger_predicate():
+    """`tools/ledger.py`, loaded by path for its `is_work_unit` SUBJECT predicate.
+
+    One field, one predicate (SKILL.md section 11): the subject form `#<n>` is defined
+    once, in the ledger's own tool, and this leg BINDS to it rather than re-deriving it.
+    `is_work_unit` is deliberately regex-free -- its own docstring says why -- so the
+    private re-derivation this refuses is not hypothetical, and the class is the one ruled
+    at n=405 clause 5 and n=599.
+
+    Loaded by PATH, with the tool's own directory placed on `sys.path` for the exec and
+    removed after: `tools/ledger.py` imports its siblings (`ledger_declaration`,
+    `field_predicate`, `reconstruction`), which resolve when it runs as a SCRIPT --
+    `sys.path[0]` is then `tools/` -- and not when it is loaded by path from a test.
+    Measured 2026-10-03: a bare `spec_from_file_location` load of `tools/ledger.py`
+    raises `ModuleNotFoundError: No module named 'ledger_declaration'`.
+
+    Cached, because the module runs a `git` call at import (`_git_common_dir()`).
+    """
+    global _LEDGER_PREDICATE
+    if _LEDGER_PREDICATE is None:
+        tools_dir = str(LEDGER_TOOL.parent)
+        added = tools_dir not in sys.path
+        if added:
+            sys.path.insert(0, tools_dir)
+        try:
+            _LEDGER_PREDICATE = load_module("ledger_tool", LEDGER_TOOL)
+        finally:
+            if added:
+                try:
+                    sys.path.remove(tools_dir)
+                except ValueError:
+                    pass
+    return _LEDGER_PREDICATE
+
+def stall_census_leg(
+    issues: list[dict],
+    rows: list[dict],
+    *,
+    read_at: str,
+    threshold_days: float = STALL_CENSUS_THRESHOLD_DAYS,
+) -> dict:
+    """Every unit dispatched and NEVER claimed, past the declared threshold.
+
+    SHAPE (c), ruled at n=1857: this leg DETECTS AND PRINTS; the ACT stays a lane act. It
+    NOTIFIES NOTHING. The runner's shell-CLI dispatch path is measured at 0/6 delivery
+    (ledger n=975), so a delivery sent from here would be a message that never lands, and
+    a lane that cannot be told cannot act. The woken lane re-dispatches through
+    `session_notify`, which is a session tool this runner does not hold.
+
+    THE POPULATION has two halves (ruling n=2100):
+
+    * a dispatch row whose SUBJECT is a strict work unit (`#<n>`) dispatches THAT unit;
+    * a dispatch row whose subject is a DESCRIPTIVE STEM -- a wave, a relay, a sweep -- is
+      a CARRIER, and the units it names in its own detail/refs are the units it
+      dispatched. A carried unit is admitted only where the ledger carries rows of its
+      OWN, which is what separates a real board item carried by a wave (`#181`) from a
+      cross-reference into ANOTHER repository's namespace or a prose mention. Measured
+      2026-10-03: of the 14 units named only in dispatch prose, 11 have zero rows of their
+      own, and of the three that do, one is CLOSED (`#6`) and one is named by a row that
+      is itself a work-unit dispatch (`#262`, a cross-reference inside the `#75`
+      dispatch);
+    * a descriptive-stem dispatch naming no such unit is an OBSERVATION dispatch,
+      EXPLICITLY LEGAL (ruling n=524). It is COUNTED and printed, never judged.
+
+    THE BOARD IS THE DECLARATION OF THE NAMESPACE, and it is read for that reason. A `#N`
+    in free prose names whichever repository the writer had in mind, and the ledger holds
+    rows for foreign numbers too: measured 2026-10-03, `#366` carries ledger rows n=433
+    and n=436 and is NOT an issue on this board at all (the fork's `#366`), while
+    `openCrabs #435`, `opencrabs#504` and `#999` appear in dispatch prose and belong to
+    the OpenCrabs fork. So a unit enters the population only as an issue THIS board
+    declares, in state OPEN -- which is also the only reading under which "owes a claim"
+    is true, since a closed board item owes none.
+
+    THE PREDICATE IS "NEVER CLAIMED", and the ruling's own literal form was falsified by
+    measurement. Read literally -- "the latest dispatch row with no later claim row" -- it
+    reports 36 units on this ledger, and the extra ones are false positives of one shape:
+    a unit CLAIMED and then RE-DISPATCHED. `#132` is intake n=836, claim n=837, dispatch
+    n=838, close n=840; `#235` is claim n=1674, close n=1675, dispatch n=1681 (a delivery
+    receipt written after the close). Both are finished, and both read OWED under the
+    literal form. A `close` row is likewise disqualifying.
+
+    A unit is therefore OWED when it is in the population, carries NO `claim` row and NO
+    `close` row, and its age reaches the threshold. The age runs from the unit's EARLIEST
+    dispatch-bearing row -- its own dispatch where it has one, else the earliest CARRIER
+    that names it -- and never from a later MENTION, which is the second way a prose scan
+    corrupts the reading: on the live ledger a mention moved `#49` from 15.05 d to 4.96 d.
+    Earliest rather than latest is deliberate: a re-dispatch would otherwise reset the
+    clock and hide a stall that has stood for a fortnight.
+
+    THE OWED LINES ARE PROBLEMS, and that is stated rather than assumed, because this file
+    contains the opposite ruling for the kit-drift leg. That leg reports drift as COVERAGE
+    because its subject is FIVE OTHER FACTORIES' backlogs, which this factory cannot
+    clear. These lines are this factory's own, and the lane the patrol wakes -- Triage --
+    can clear every one of them by re-dispatching the unit or closing it on the board. The
+    red is an andon cord with a working exit, not the no-exit class #139 names.
+    """
+    is_unit = ledger_predicate().is_work_unit
+
+    claimed: set[str] = set()
+    closed: set[str] = set()
+    resident: set[str] = set()
+    for row in rows:
+        subject = str(row.get("subject") or "").strip()
+        resident.add(subject)
+        event = str(row.get("event") or "")
+        if event == "claim":
+            claimed.add(subject)
+        elif event == "close":
+            closed.add(subject)
+
+    open_on_board: set[str] = set()
+    for issue in issues:
+        number = issue.get("number")
+        if number is None:
+            continue
+        if str(issue.get("state", "")).strip().lower() == "open":
+            open_on_board.add(f"#{number}")
+
+    dispatch_rows = [row for row in rows if str(row.get("event") or "") == "dispatch"]
+    carriers: dict[str, dict] = {}
+    observation = 0
+    carried_units = 0
+    for row in dispatch_rows:
+        subject = str(row.get("subject") or "").strip()
+        if is_unit(subject):
+            carriers.setdefault(subject, row)
+            continue
+        blob = f"{row.get('detail') or ''} {row.get('refs') or ''}"
+        units = {
+            token
+            for token in re.findall(r"#\d+", blob)
+            if is_unit(token) and token in resident
+        }
+        if not units:
+            observation += 1
+            continue
+        carried_units += len(units)
+        for unit in units:
+            carriers.setdefault(unit, row)
+
+    problems: list[str] = []
+    excused: list[str] = []
+    owed: list[tuple[str, float, str]] = []
+    off_board = 0
+    for unit, row in carriers.items():
+        if unit not in open_on_board:
+            off_board += 1
+            continue
+        if unit in claimed or unit in closed:
+            continue
+        try:
+            fired = reader_parse_ts(str(row.get("ts") or ""))
+            now = reader_parse_ts(read_at)
+        except (ValueError, TypeError):
+            excused.append(
+                f"{unit}: the dispatch-bearing row n={row.get('n')} records an instant "
+                f"this leg cannot date ({row.get('ts')!r}), so its age cannot be measured "
+                f"-- NOT JUDGED"
+            )
+            continue
+        age_days = (now - fired).total_seconds() / 86400.0
+        if age_days < threshold_days:
+            continue
+        actor = str(row.get("actor") or "unstated")
+        owed.append((unit, age_days, actor))
+
+    owed.sort(key=lambda item: -item[1])
+    for unit, age_days, actor in owed:
+        problems.append(
+            f"OWED {unit}: dispatched {age_days:.2f} d ago and NEVER CLAIMED, and the "
+            f"board still carries it OPEN -- the dispatch-bearing row names "
+            f"actor={actor}. Re-dispatch it to the lane that owns it through "
+            f"`session_notify`, or close it on the board: a dispatch no lane has taken is "
+            f"work nobody is doing"
+        )
+
+    return {
+        "name": "stall-census",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "dispatch_rows_examined": len(dispatch_rows),
+            "observation_dispatches": observation,
+            "carried_units_resolved": carried_units,
+            "units_in_population": len(carriers),
+            "units_off_board": off_board,
+            "units_owed": len(owed),
+            "threshold_days": threshold_days,
+            "threshold_basis": STALL_CENSUS_THRESHOLD_BASIS,
+            "read_at": read_at,
+        },
+    }
+
 def head_manifest(rel: str | None = None, *, repo: Path | None = None) -> tuple[str | None, str]:
     """Read the kit manifest from HEAD rather than from the working tree (issue #185).
 
@@ -3154,6 +3379,21 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 for path in cov["missing_directory"]:
                     lines.append(f"    ~ {path}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "stall-census":
+            lines.append(
+                f"  dispatch rows examined: {cov['dispatch_rows_examined']} "
+                f"({cov['observation_dispatches']} observation dispatch(es), explicitly "
+                f"legal; {cov['carried_units_resolved']} carried unit(s) resolved, "
+                f"{cov['units_off_board']} unit(s) dropped as not an OPEN issue of this "
+                f"board)"
+            )
+            lines.append(
+                f"  population: {cov['units_in_population']} dispatched unit(s) -- "
+                f"{cov['units_owed']} never claimed past the declared threshold of "
+                f"{cov['threshold_days']} d"
+            )
+            lines.append(f"  threshold basis: {cov['threshold_basis']}")
+            lines.append(f"  read at {cov['read_at']}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -3205,12 +3445,16 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     notify = sum(
         int(leg["coverage"].get("logs_matched", 0)) for leg in legs
     )
+    owed = sum(
+        int(leg["coverage"].get("units_owed", 0)) for leg in legs
+    )
     lines.append(
         f"verdict: {total} problem(s) over {forward} open issue(s) examined, "
         f"{closes} close row(s) checked against the board, "
         f"{closed_items} closed item(s) checked for a close row, and {cron} cron row(s) "
-        f"attributed to this factory and judged, and {notify} notify log(s) judged "
-        f"for a receipt"
+        f"attributed to this factory and judged, {notify} notify log(s) judged for a "
+        f"receipt, and {owed} never-claimed dispatch(es) standing past the declared "
+        f"threshold"
     )
     return "\n".join(lines)
 
@@ -3270,7 +3514,8 @@ def main(
         err(f"patrol host-state read: FAILED at {read_at} — {exc}")
         err(
             "NOT RUN: every leg (board-intake, board-close, board-closed, board-ruling, "
-            "cron-thinness, notify-receipt, duty-receipt, canonicality-tier, kit-drift, "
+            "cron-thinness, notify-receipt, duty-receipt, canonicality-tier, stall-census, "
+            "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
         )
@@ -3293,6 +3538,7 @@ def main(
             cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at
         ),
         canonicality_leg(rows, read_at=read_at),
+        stall_census_leg(issues, rows, read_at=read_at),
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
         (publish_fn or publish_freshness_leg)(read_at=read_at),

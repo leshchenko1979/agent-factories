@@ -18,8 +18,13 @@
 - **Claim checking.** Before any dispatch, confirms the issue is unclaimed on the board
   and in the ledger. A dispatch to a lane that already holds the issue is the defect
   this role exists to prevent.
-- **Execution Watchdog (Rail 3).** Periodically sweeps active assignments:
-  - Detects stalled or unresponsive workers (no progress/update after *N* cycles or $>30\text{m}$).
+- **Execution Watchdog (Rail 3).** Periodically sweeps active assignments. TWO
+  predicates, named apart — they are different questions and must never be read as one:
+  - **CLAIMED-BUT-SILENT** — a worker holding a claim with no progress/update after
+    *N* cycles or > 30 m. Notify that worker through `session_notify`, or escalate to `HQ`.
+  - **NEVER-CLAIMED (an `OWED` line)** — a unit *dispatched* and never claimed at all,
+    past the declared threshold. The patrol leg `stall-census` prints these; re-dispatch
+    the unit to its owner through `session_notify`, or close it on the board.
   - Confirms completed tasks carry verified receipts before closing.
   - Escalates blocked or failing tasks to `HQ` or re-dispatches to an available worker.
 - **Enforcement.** Watches for work that bypassed the process: uncommitted
@@ -58,11 +63,24 @@
 ```
 1. List all active claimed tasks.
 2. Check last update / heartbeat of the assigned worker lane.
-3. If active & progress verified → maintain claim.
-   If stalled (> 30m SLA)        → notify worker / escalate to HQ.
-   If finished with receipts     → verify done-criteria, close issue, release claim.
+3. If active & progress verified  → maintain claim.
+   If CLAIMED-BUT-SILENT (> 30m)  → notify the worker via `session_notify` / escalate to HQ.
+   If NEVER-CLAIMED (`OWED` line) → re-dispatch to its owner via `session_notify`, or close it.
+   If finished with receipts      → verify done-criteria, close issue, release claim.
 4. If the close resolved a defect → the rework entry is written BEFORE the close.
 ```
+
+The two predicates are NOT the same question and are not interchangeable: `> 30m` binds a
+lane that HAS the claim and has gone quiet, while an `OWED` line binds a dispatch **no lane
+ever took**. A lane woken by the patrol re-dispatches through `session_notify` — the patrol
+runner cannot deliver on its behalf, and its own shell-CLI dispatch path is measured at
+**0/6** delivery (ledger n=975).
+
+**The census is recorded in the cycle's receipt, not row-by-row in the ledger.** Clearing
+an `OWED` line is an ACT — a re-dispatch or a board close — and that act's own row is the
+record. The census itself is a READING: it is declared once, in the sweep's own `run`
+receipt (`duty=completed`, with `receipt_subject` naming the round). One ledger row per
+`OWED` line would put the patrol's reading into the ledger's own state.
 
 ## The rework entry
 
