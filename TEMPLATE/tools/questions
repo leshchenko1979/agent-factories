@@ -45,8 +45,8 @@ DEFAULT_TTL_DAYS = 7
 # question was about has moved. The answer is never inferred from prose, so the
 # tracker has to be NAMED -- and which tracker is a FACTORY PARAMETER, not a law:
 # a factory that files its work units elsewhere gets no answer from this repo's
-# fork. Overridable per factory; the default is the tracker this instrument was
-# derived against, kept so a factory that shares it needs no configuration.
+# fork. Overridable per factory; the default is THIS factory's own tracker
+# (two-stream routing, SKILL.md v0.4.284, owner order 2026-10-03).
 FORK_REPO = os.environ.get("OC_QUESTIONS_TRACKER") or "leshchenko1979/opencrabs"
 ISSUE_RE = re.compile(r"#(\d{1,6})\b")
 # Every network or shell predicate is bounded. An unbounded probe inside a
@@ -545,7 +545,7 @@ def mechanical_close(entry, question):
     if why:
         return None, "issue-state SKIPPED (#%s: %s)" % (number, why)
     if state == "CLOSED":
-        return "fork issue #%s is CLOSED" % number, None
+        return "%s#%s is CLOSED" % (FORK_REPO, number), None
     return None, None
 
 

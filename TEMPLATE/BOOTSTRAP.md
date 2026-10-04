@@ -168,6 +168,10 @@ the creation response alone; and the counted list of acts that still require the
 ## Step 3 — Write the process law
 
 Copy [`SKILL.md.tmpl`](SKILL.md.tmpl) into the factory's skill directory and fill it.
+Copy [`verdicts-and-claims.md.tmpl`](verdicts-and-claims.md.tmpl) and
+[`state.md.tmpl`](state.md.tmpl) into the same directory, dropping the `.tmpl`
+suffix — they are the clause tails of the law's Verdicts and State sections, and
+`SKILL.md` points at them by those names (`verdicts-and-claims.md`, `state.md`).
 Split role-specific procedure into the files in [`roles/`](roles/) — one per
 role in `ROLES`.
 

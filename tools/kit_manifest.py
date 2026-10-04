@@ -231,6 +231,12 @@ SEEDS = frozenset({
     "TEMPLATE/SKILL.md.tmpl",
     "TEMPLATE/growth-stages.md.tmpl",
     "TEMPLATE/processes.md.tmpl",
+    "TEMPLATE/state.md.tmpl",             # board #302: the clause tail of the template
+                                             # law's State section. A seed for the same
+                                             # reason SKILL.md.tmpl is one -- a factory's
+                                             # own state.md is ITS law, not a stale copy.
+    "TEMPLATE/verdicts-and-claims.md.tmpl",  # board #302: the Verdicts section's clause
+                                             # tail, same class and same reason.
     "TEMPLATE/docs/ledger-commit-exemptions.example.json",
     "TEMPLATE/docs/ledger-exemptions.example.json",
     "TEMPLATE/docs/ledger-invariants.example.json",

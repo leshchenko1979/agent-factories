@@ -1,0 +1,117 @@
+# Verdicts and claims
+
+**Owns:** how a claim about this factory's own state is made and checked — the verdict
+verbs and their receipts, the canonicality ladder, the citation rule, and the four shapes
+of a surface that reports success while the work did not happen.
+
+**Home:** these clauses are the **Verdicts and claims** section of this factory's process
+law (`SKILL.md` §9), extracted into this file so the law body stays short enough to reload
+after every compaction — it is the first thing every session reads, so length there is paid
+on every turn. `SKILL.md` keeps the heading and a pointer; this file carries the clauses.
+**Load it before any verdict, receipt, citation or canonicality claim.**
+
+---
+
+- **Verdict verbs need a receipt — and the receipt must name the revision it measured.**
+  "Green", "passing", "verified", "shipped" may only be stated when the same turn contains
+  the tool output that shows it. A job name proves identity, never outcome. A receipt about
+  a TREE must name the revision it describes: a gate count or a row count is true of the
+  tree that produced it and unverifiable without the sha (issue #63).
+- **Identifiers are never hand-assembled.** Copy the full value from live
+  output — issue numbers, session UUIDs, run ids. A remembered prefix plus a
+  guessed tail is a fabrication, even when it happens to be right.
+- **No claim without a check.** Existence, absence and status all require a
+  tool call in the same turn. "I have not verified" is an acceptable answer;
+  a confident guess is not.
+- **A criterion is a claim too, and it is AUTHORED long before it is judged.** A plan
+  acceptance criterion that names a path, a gate or a file asserts that the artefact RESOLVES,
+  so the check the clause above requires is due **when the criterion is written**, not at
+  completion and not by whoever executes it days later. Resolve every name as you write it;
+  where the artefact does not exist, name the MECHANISM by the behaviour you will observe
+  rather than a filename that merely reads plausible. A name assembled from its neighbours is
+  the same fabrication as a guessed sha, and it survives longer because **nothing runs a
+  plan**, and a plan lives outside every tree the offline suite reads: a criterion naming a
+  test file that exists under **no revision** stood on a live plan for three days, its name
+  assembled from the two real artefacts beside it, and a patrol's report caught it rather
+  than any mechanical check. **No gate can uphold this and that is stated, not implied** —
+  so what upholds it is the process: the authoring lane resolves each name, and the lane
+  that meets a criterion naming an absent artefact reports it and never silently re-words
+  it (a judged acceptance is a record, and rewriting one is a backfill).
+- **A citation is resolvable by a reader who holds ONLY this document.** A reference to
+  tracked work carries its NUMBER, taken in full from the read that returned it; a reference
+  to another document NAMES that document; a bare section number resolves only inside the file
+  that holds it — which is precisely the reader an agent usually is: after a compaction, in
+  another session, or in another factory. A numberless "see above" reads as knowledge while
+  carrying none.
+- **An attribution names an ABSOLUTE revision, never a relative one.** The receipt rule above
+  governs RECEIPTS; this governs INVESTIGATION, which a probe that writes no receipt never
+  reaches. `HEAD~1` means *the parent of whatever HEAD is when the probe runs*, so in a shared
+  worktree where other lanes commit concurrently the revision it resolves is not the revision
+  the author meant, and the verdict describes a commit nobody chose. A claim about which commit
+  introduced a change is established by reading that commit's own blob (`git show <sha>:<path>`),
+  never by a relative revision, and a probe that must compare before and after resolves both
+  sides to named commits. The same binds the RECORD: a rework entry that cites a
+  relative-revision form must name the resolved absolute sha.
+- **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
+  run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
+  only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,
+  `duration=`) — taking a number is not a judgement. Every VERDICT in the trailer is the
+  author's, and the tool must never write one: it once appended `outcome=accepted` and
+  `gate=all-pass` for silence, so both headline rates could only ever report success (#53).
+  `rework=` joins that trailer on the same law — `rework=#N` names the rework entry the close
+  produced, `rework=none` states it produced none, and either is legitimate only when the
+  AUTHOR states it. ABSENCE stays `unstated`, never read as `none`: an unrecorded verdict is
+  UNKNOWN, never a value. The marker is AVAILABLE, not REQUIRED — most closes resolve no
+  defect, and a required field degrades to boilerplate — and nothing is backfilled.
+- **A close row's `rework=#N` is a FORWARD REFERENCE to a file, so it and the entry it names land in the SAME commit.** The token names a row of `evidence/rework.md`, not a ledger row, so nothing orders the two writes: a close row committed ahead of its entry leaves `main` RED for `tests/test_rework_declared_landed.py` until the entry lands. **No hook is owed** — a hook leg is bypassable (`--no-verify`), local-only (hooks are not cloned), and a PREVENTION where the class needs a DETECTOR. The convention is this sentence; the detector is the gate that ships with the ledger, and the residual is the audit's own LATENCY, ACCEPTED and STATED.
+- **A repair must not terminate the canonical run.** The trailer is POSITIONAL, so text
+  appended AFTER it ends the run and every trailer-scoped reader stops seeing the row's
+  declared telemetry — the repair silently REMOVES a measurement from the fleet total.
+  `tools/ledger.py repair` therefore inserts its appended text BEFORE the run, so a prose
+  note lands in the head and the run stays terminal; a `key=value` append EXTENDS the run
+  itself and is safe either way — **when its key is NEW**. An append that introduces a key
+  the run ALREADY declares is **REFUSED**, non-zero, before any write, so the ledger is
+  left byte-identical: one field carrying two values has no canonical reading, and a
+  consumer that takes the last occurrence reads the appended one while the row's own
+  declaration still stands beside it. Refusing costs nothing lawful, because repair's
+  lawful case is a row **INCOMPLETE** against a declared invariant — and an incomplete row
+  is MISSING the key, never carrying it twice. Both sides of the comparison are read
+  through the shared predicate and each is scoped to its own canonical run, so prose in the
+  head is not a declaration of the field and a prose append that merely NAMES a field is not
+  refused. Measured precedent: a repaired close row whose two appended
+  `REPAIR NOTE` sentences displaced its own canonical run, which was canonical when the row
+  was written. That row is **not** backfilled — the law above bars it — and stands as the
+  measured precedent.
+- **A predicate's SCOPE is its reader's population, and the two are stated together.** A
+  predicate that claims the box and reads one profile root answers about the profile root,
+  and its evidence must name the population it read — the count and the homes — so a
+  narrower read is visible as a narrower read rather than as a clean box. An enumeration
+  that cannot name its own population is not allowed to report HOLDS, and a home it could
+  not reach is reported as unreached, never omitted (#102).
+- **A measurement whose EITHER SIDE reads live state is a property of the INSTANT, not of the
+  revision — and naming the revision does not make it one.** It must name the instant it read, and
+  it must not be generalized into a revision property: the receipt rule above governs the case where
+  both sides are tree bytes, this governs the case where they are not. The two properties are then
+  kept APART. REPRODUCIBILITY — a committed artifact against a replay from its OWN RECORDED INPUTS —
+  is deterministic, offline, and belongs in the correctness pass. FRESHNESS — an artifact against
+  live state — is true only near the instant of the render, and it is REPORTED, never folded into
+  the correctness verdict, because a check that fails by construction carries no more information
+  than one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope
+  is its reader's population, and the two are stated together.
+
+- **A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number.**
+  A cap picked by feel is uncalibrated in both directions: too low, it kills a healthy gate and
+  reports a timeout as a verdict; too high, it hides a hung one. So each gate's cap is derived —
+  `budget_sec = margin_x × measured_sec` — with the margin, the measured runtime and the
+  ABSOLUTE revision the measurement was taken at declared together in the gate-budget manifest,
+  so the number carries its own basis and a reader can recompute it. The budget VALUES belong to
+  the process owner, never to the implementing lane. A gate with no entry uses the declared
+  default and the runner PRINTS which gates used it — a declared default with a printed
+  population is not an exempt-by-silence surface, an unprinted fallback would be. A budget
+  exhausted is UNKNOWN: never green, never a plain failure, and its recorded duration is the
+  MEASURED elapsed time, never a hardcoded zero — a timeout is a fact about a gate and must be
+  readable as one.
+
+- **A predicate that examined nothing has reported nothing, not HOLDS.** Naming a population and examining one are two properties, and the first does not carry the second: a predicate can name its population exactly and still read zero items inside it, and its clean verdict over that empty read is indistinguishable in the output from a verified one. So every predicate that reports a clean verdict over an enumerated population asserts that the enumeration was NON-EMPTY, prints the count it examined, and FAILS LOUDLY on a zero count, naming which population came back empty. A gate that examined zero items must never print the verdict of one that examined the population and found it clean. This generalises a property the suite's history-wide gates already practise; it is codified because a predicate that cannot name its own population is already barred from reporting HOLDS, and a predicate that names its population perfectly and examines nothing is the same failure one step further in.
+  The clause is **two-part**, and the second part is what keeps it from being satisfied by an exit code: a gate PRINTS the population it examined, and it is proven to BITE by a probe that makes it fail. **NON-VACUITY IS A PROPERTY OF THE PROBE, and POPULATION VISIBILITY is the property of the run.** A gate whose only evidence of working is an exit 0 over a population it does not print has not been shown to work. The loud-fail-on-zero form is right for a gate whose population is the whole history, and **wrong for a forward-only gate whose population is legitimately empty until its next instance**, where the probe is the only thing that can show the gate bites.
+- **A cited line is evidence of a FACT, never of a CAUSE.** A log line, a count or a config read can establish that something happened; it cannot establish what produced it, and a causal sentence built on top of a real observation is a separate assertion that needs its own support. A cause is established by varying it — the effect follows — or by its absence coinciding with the effect's absence, and the ruling or entry that asserts one names the disproof it rests on. The sharpest available test: **a cause that VANISHES while the effect persists at FULL RATE is not the cause.** No gate can read causation, so the upholding mechanism is a PROCESS (P29), not a gate — and the clause is the second half of the record law above: the RECORD of a defect states its cause, so the cause must be as checkable as the fact.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gate: hygiene's declaration cross-sweep REPORTS a stale debt and never writes.
 
-Fifteen declaration families live under `docs/` — the exemption surfaces, where an
+The declaration families live under `docs/` — the exemption surfaces, where an
 unmatched entry is a stale debt. Each surface's own tool reads its own file and checks it
 for READABILITY; not one of them asks whether the thing an entry POINTS AT still exists.
 So an exemption left behind by a rename or a deletion sits there looking live, and every
@@ -128,8 +128,10 @@ def test_every_declaration_family_on_disk_is_DECLARED() -> None:
         f"{undeclared} appear under docs/ but DECLARATION_SURFACES does not name them, so "
         f"nothing sweeps their entries"
     )
-    assert len(declared) == 15, (
-        f"the map names {len(declared)} families; the inventory's population is 15"
+    assert len(declared) == len(hygiene.DECLARATION_SURFACES), (
+        f"the map carries {len(hygiene.DECLARATION_SURFACES)} entries but names "
+        f"{len(declared)} distinct families — a duplicate family name collapses the set, "
+        f"and the surface it shadowed goes unswept while the map still reads complete"
     )
     assert hygiene.declaration_sweep_leg(root=REPO)["undeclared"] == []
 
@@ -142,7 +144,13 @@ def test_the_map_covers_EVERY_family_the_tree_carries() -> None:
     leg = hygiene.declaration_sweep_leg(root=REPO)
     assert leg["live_files"] > 0, leg
     assert leg["targets"] > 0, "the sweep found no target at all, so 0 unmatched is vacuous"
-    assert len(leg["families"]) == 15, len(leg["families"])
+    # Derived, never a literal: this arm catches a leg that SKIPS a declared family (a
+    # branch that returns without appending), not a population that grows whenever a new
+    # declaration surface lands. A pinned constant reds on growth and proves nothing —
+    # the stale-constant defect #304 repaired.
+    assert len(leg["families"]) == len(hygiene.DECLARATION_SURFACES), (
+        len(leg["families"]), len(hygiene.DECLARATION_SURFACES)
+    )
     assert leg["unmatched"] == 0, [f["unmatched"] for f in leg["families"] if f["unmatched"]]
 
 # --- the bite: a planted target that is gone ---------------------------------
