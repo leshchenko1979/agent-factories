@@ -204,7 +204,7 @@ were asserted in free-text `detail`, and no instrument could follow one.
 
 ### `refs` — a typed pointer
 
-An optional row key, a list of typed pointers: `{"row": 1228}`, `{"subject": "#149"}`,
+An optional row key, a list of typed pointers: `{"row": "1228"}`, `{"subject": "#149"}`,
 `{"commit": "be47c443…"}`, `{"session": "…"}`, `{"rework": "2026-09-11:#3"}`, or a **declared**
 kind for a member's own object.
 
