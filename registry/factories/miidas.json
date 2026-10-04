@@ -9,7 +9,7 @@
     "owns": [
       "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to agents-old (89.125.120.5:52676); the apps copy is retained as the rollback",
       "leshchenko1979/miidas and leshchenko1979/miidas-template",
-      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces, which span BOTH hosts during the rollback window",
+      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces: agents-old holds both (5 running containers, 1 volume), apps holds the volume namespace only (1 orphaned volume, 0 containers) as of 2026-10-04T06:11Z",
       "the Miidas Factory Telegram chat (-1003996392908) and its topics",
       "/root/miidas/SKILL.md \u2014 the live skill path is a symlink to it, so the repo file is the single writer",
       "cron miidas-hq-daily-trigger",
@@ -67,12 +67,12 @@
     "leshchenko1979/miidas-template",
     "leshchenko1979/miidas-landing",
     "/root/miidas/SKILL.md (live skill path is a symlink to it)",
-    "agents-old and apps: /data/projects/miidas/ (compose/, pool/slots/miidas-*.env, .master.env) and the miidas-* compose stack; agents-old carries the live set, apps the stopped rollback"
+    "agents-old: /data/projects/miidas/ (compose/, pool/slots/miidas-*.env, .master.env) and the miidas-* compose stack \u2014 the live set. apps: the repo copy, the images and one orphaned volume (miidas_maple-c23a-data) remain; no miidas container runs or rests there as of 2026-10-04T06:11Z"
   ],
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. The estate spans two hosts: agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 5 STOPPED containers and 1 such volume. Read 2026-10-01T06:27Z.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 1 such volume and 0 containers. Read 2026-10-04T06:11Z.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -134,7 +134,7 @@
     },
     {
       "id": "miidas-platform-moved-to-agents-old",
-      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676), not apps; apps holds the stopped rollbacks (5 containers, Exited). Do not start the stopped apps containers. The claim forward is miidas-claim-forward.service ON apps (active + enabled), tunnelling 172.18.0.1:8765 to agents-old. The APP_HOST footgun this notice originally warned about is CLOSED: deploy_lib.sh no longer defaults to apps \u2014 it applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), .master.env:34 reads agents-old, and leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft. A repo deploy with no override now lands on agents-old.",
+      "text": "The MIIDAS platform runs on agents-old (89.125.120.5:52676); apps now holds NO miidas container at all \u2014 0 running, 0 stopped. The rollback containers are gone; the repo copy /data/projects/miidas/, the images and one orphaned volume remain. The claim forward is miidas-claim-forward.service ON apps (active + enabled). The APP_HOST footgun is CLOSED in the DEPLOY SOURCE: deploy_lib.sh applies an environment override first and defaults to agents-old only when unset (deploy_lib.sh:21-34, :36), and the repo clone's /root/miidas/.master.env:34 reads APP_HOST=agents-old (mtime 2026-09-29T11:19Z). The DEPLOYED copy on agents-old (/data/projects/miidas/.master.env:34, mtime 2026-09-28T23:28Z) still reads apps: miidas_sync_master_env scp's the clone's file over it, but only deploy-all.sh:33 calls that, so a per-component deploy never refreshes it \u2014 the sanctioned path is the repo clone, which is correct. leshchenko1979/miidas#82 is MERGED (2026-09-29T08:39:31Z), not a draft.",
       "severity": "warning",
       "since": "2026-09-28T23:23:39Z",
       "affects": [
@@ -177,7 +177,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-03T06:16:54Z",
+  "attested_at": "2026-10-04T06:11:52Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
