@@ -79,6 +79,7 @@ Exit: 0 clean, non-zero on any gate that is unregistered, non-canonical, or sile
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -2197,6 +2198,140 @@ def probe_the_live_rederivation_leg_is_non_vacuous() -> None:
           "population:" in done.stdout and "in the containment set" in done.stdout,
           done.stdout[:300])
 
+# --- #240: a gate's own cap must sit UNDER its audit budget -------------------------------
+# A gate's OWN internal timeout and the audit's budget for it are two constants in two files,
+# and the ordering is load-bearing: the audit's budget must exceed the gate's internal cap, or
+# the audit kills the gate before the gate can report its own timeout, and the run reads
+# UNKNOWN rather than a verdict (#240, ruled n=1695). The relation was hand-measured once
+# (#230: 2543 < 2543.55, slack 0.55 s) and given no mechanism -- 0.55 s on 2543 s, so either
+# constant moving by half a second inverts it and nothing notices.
+#
+# WHAT COUNTS AS A GATE'S OWN CAP. A module-level constant whose NAME ends in `_TIMEOUT_SEC`
+# -- the suffix that names a timeout in seconds, the shape `tests/test_questions.py` uses for
+# `SELFTEST_TIMEOUT_SEC`. It is deliberately NOT a substring match on "TIMEOUT": a constant
+# like `PROBE_TIMEOUT_BUDGET_SEC` names the audit's OWN budget inside a synthetic probe, not a
+# gate's internal cap, and admitting it would compare a value to itself. A gate that declares
+# no such constant is NOT in the population and is not silently passing: it is NAMED as having
+# no declared cap.
+CAP_NAME_RE = re.compile(r"^([A-Z][A-Z0-9_]*_TIMEOUT_SEC)\s*=\s*(\d+)\s*$", re.M)
+
+def _gate_own_caps(path: Path) -> dict[str, int]:
+    """The module-level `*_TIMEOUT_SEC` caps a gate file declares, name -> int seconds."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    return {name: int(value) for name, value in CAP_NAME_RE.findall(text)}
+
+def cap_budget_problems(declared: dict, repo: Path) -> tuple[list[str], list[str], list[str]]:
+    """Compare every declared entry whose gate declares a cap against that gate's budget.
+
+    Returns (problems, compared, no_cap):
+      - problems: declared entries whose `budget_sec` does NOT exceed the gate's own cap;
+      - compared: the pairs actually compared, `gate: NAME=cap < budget_sec=budget`;
+      - no_cap:   declared gates that declare NO cap -- NOT in the population, never a
+                  silent pass.
+    """
+    problems: list[str] = []
+    compared: list[str] = []
+    no_cap: list[str] = []
+    for gate in sorted(declared):
+        entry = declared[gate] or {}
+        caps = _gate_own_caps(repo / gate)
+        if not caps:
+            no_cap.append(gate)
+            continue
+        budget = entry.get("budget_sec")
+        for name, cap in sorted(caps.items()):
+            if not isinstance(budget, (int, float)):
+                problems.append(f"{gate}: budget_sec is {budget!r}, cannot bound {name}={cap}")
+            elif budget <= cap:
+                problems.append(
+                    f"{gate}: budget_sec {budget} <= its own cap {name}={cap} -- the audit "
+                    f"kills the gate before it can report its own timeout (#240)")
+            else:
+                compared.append(f"{gate}: {name}={cap} < budget_sec={budget}")
+    return problems, compared, no_cap
+
+def _write_capped_gate(root: Path, rel: str, cap: int,
+                       cap_name: str = "SYNTHETIC_TIMEOUT_SEC") -> str:
+    """A throwaway gate declaring one module-level cap; returns its repo-relative path."""
+    gate = root / rel
+    gate.parent.mkdir(parents=True, exist_ok=True)
+    gate.write_text(
+        '#!/usr/bin/env python3\n"""Gate: a synthetic gate.\n\nBody.\n"""\n'
+        f"{cap_name} = {cap}\n",
+        encoding="utf-8",
+    )
+    return rel
+
+def probe_a_budget_below_its_gates_own_cap_is_named() -> None:
+    """THE BITE. An inverted pair is NAMED -- the gate whose audit budget does not clear its
+    own cap. Proven by the INVERSION, not by an exit 0 (#112 two-part clause)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        rel = _write_capped_gate(root, "tests/test_synthetic_cap.py", cap=100)
+        problems, compared, _ = cap_budget_problems({rel: {"budget_sec": 50.0}}, root)
+        check("a budget BELOW its gate's own cap is a PROBLEM",
+              len(problems) == 1 and "<= its own cap" in problems[0], str(problems))
+        check("and the inverted pair is NOT counted among the compared",
+              compared == [], str(compared))
+
+def probe_a_budget_above_its_gates_own_cap_is_clean() -> None:
+    """The CONTROL: the same pair, uninverted, is clean -- so the bite above is the inversion,
+    not the mere presence of a cap."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        rel = _write_capped_gate(root, "tests/test_synthetic_cap.py", cap=100)
+        problems, compared, _ = cap_budget_problems({rel: {"budget_sec": 150.0}}, root)
+        check("a budget ABOVE its gate's own cap is clean", problems == [], str(problems))
+        check("and the pair is PRINTED among the compared", len(compared) == 1, str(compared))
+
+def probe_a_gate_with_no_declared_cap_is_not_in_the_population() -> None:
+    """A declared gate that declares no cap is NAMED, never silently passing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        rel = "tests/test_nocap.py"
+        gate = root / rel
+        gate.parent.mkdir(parents=True, exist_ok=True)
+        gate.write_text('#!/usr/bin/env python3\n"""Gate: no cap.\n\nBody.\n"""\n', encoding="utf-8")
+        problems, compared, no_cap = cap_budget_problems({rel: {"budget_sec": 5.0}}, root)
+        check("a gate with no declared cap is NAMED, not silently passing",
+              no_cap == [rel] and problems == [] and compared == [],
+              f"no_cap={no_cap} problems={problems} compared={compared}")
+
+def probe_the_probe_budget_constant_is_not_misread_as_a_gate_cap() -> None:
+    """`PROBE_TIMEOUT_BUDGET_SEC` names the audit's own budget, not a gate's cap -- the
+    `_TIMEOUT_SEC` suffix rule excludes it, so this file is not in its own population."""
+    caps = _gate_own_caps(REPO / "tests" / "test_gate_registration.py")
+    check("the probe's own _BUDGET_SEC constant is not read as a gate cap",
+          caps == {}, str(caps))
+
+def probe_the_live_cap_budget_ordering_holds() -> None:
+    """The live tree: every declared gate that declares a cap has a budget ABOVE it.
+
+    PRINTS the population, the compared pairs and the gates with no declared cap -- so "no
+    inverted pair" and "a leg that examined nothing" never render the same (the population is
+    currently ONE gate, so a silent zero is live).
+    """
+    manifest = REPO / "registry" / "gates.json"
+    if not manifest.is_file():
+        print("  SKIP  no registry/gates.json in this tree -- factory data, nothing to compare")
+        return
+    declared = json.loads(manifest.read_text(encoding="utf-8")).get("gates") or {}
+    problems, compared, no_cap = cap_budget_problems(declared, REPO)
+    print(f"  live cap/budget ordering -- {len(compared)} pair(s) compared, "
+          f"{len(no_cap)} declared gate(s) with no declared cap, {len(problems)} inverted")
+    for line in compared:
+        print(f"    {line}")
+    if no_cap:
+        print("    no declared cap (NOT in the population, not silently passing): "
+              + ", ".join(sorted(no_cap)))
+    check("no declared gate's audit budget sits at or below its own cap",
+          problems == [], "; ".join(problems)[:300])
+    check("the live leg examined a non-empty population -- a silent zero is a defect",
+          len(compared) >= 1, f"compared={len(compared)}")
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -2290,6 +2425,15 @@ def main() -> int:
     print("  synthetic probes — #269: the re-derivation leg bites, and its population is printed")
     probe_the_rederivation_leg_prints_and_bites()
     probe_the_live_rederivation_leg_is_non_vacuous()
+
+    print("  synthetic probes — #240: a gate's own cap vs its audit budget")
+    probe_a_budget_below_its_gates_own_cap_is_named()
+    probe_a_budget_above_its_gates_own_cap_is_clean()
+    probe_a_gate_with_no_declared_cap_is_not_in_the_population()
+    probe_the_probe_budget_constant_is_not_misread_as_a_gate_cap()
+
+    print("  live manifest — #240: the cap/budget ordering, and its population")
+    probe_the_live_cap_budget_ordering_holds()
 
     print()
     if failures:
