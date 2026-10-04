@@ -368,7 +368,7 @@ not broken before it has migrated.
 
 ## 5. The gate set
 
-Six gates uphold this instrument. Per the frame's §5, a review is a **close condition**, not a step,
+Seven gates uphold this instrument. Per the frame's §5, a review is a **close condition**, not a step,
 and a gate lands with the first promotion rather than ahead of the population it judges.
 
 | gate | upholds |
@@ -379,6 +379,7 @@ and a gate lands with the first promotion rather than ahead of the population it
 | `tests/test_ledger_no_shrink.py` | the ledger never returns to empty |
 | `tests/test_ledger_close_preflight.py` | a close's preconditions at the write path |
 | `tests/test_ledger_index.py` | the derived index's own rule — a rebuild AGREES WITH A PLAIN SCAN |
+| `tests/test_ledger_citation_declared.py` | a `§N` written into a row NAMES the document it cites — judged over the row's OWN VOICE, so a quotation is not read as an assertion |
 
 `tests/test_ledger_commit_cites_no_rows.py` and `tests/test_ledger_identity.py` ride the same
 family. A gate that refuses what the instrument lawfully writes is worse than no gate: measured
@@ -1190,6 +1191,56 @@ Upheld by the arms in `tests/test_ledger.py` — a dispatch whose intake lands L
 a dispatch whose subject has no intake anywhere reads a PROBLEM naming the subject — each arm
 proven to BITE by the other's absence, so neither a clean nor a problem verdict is reachable
 without a population.
+
+---
+
+### 9.14 A row's citation NAMES its document, and only the row's OWN VOICE is judged
+
+**A `§N` written into a row NAMES the document it cites.** A row numbers no sections of its own, so a
+`§N` it carries can only point at ANOTHER document: a bare number resolves against nothing, and a
+reader who meets the row out of tree has nothing to resolve it against. The harm is measured, not
+theoretical (`#184`): a brief carrying a bare `§11` reached Miidas HQ asserting *"your law §11
+prescribes a remedy"* against a document whose section 11 holds no such thing. Measured when this
+clause was written, **149 of 219 `§N` citations in this factory's ledger (68%) named no document**,
+and the class had not died — the bare share ran 62–77% by band.
+
+**The ledger sits outside the shipped citation gate by a DIRECTORY BOUNDARY, never by that gate's own
+reason.** `tests/test_citation_clause_titles.py` excludes prose for a PROPERTY — docs are prose that
+may number their own sections — and a ledger ROW does not share that property, because it numbers no
+sections of its own. So this clause is upheld by its OWN leg, living with this instrument's gate set
+(`§5`), and the shipped gate keeps ONE population and ONE predicate: its `SCOPE_DIRS` gains nothing,
+and its comment states the boundary rather than the property. This is the clause `#262` was filed to
+close (ruled at ledger `n=2246`).
+
+**The predicate is QUOTING-AWARE, and that is the load-bearing half.** A row's `detail` is free prose
+that QUOTES other documents and rows, so a naive scan reads a QUOTATION as an assertion — the error
+class `§9.8` names, and repeating it in a second reader would be the very defect that clause forbids.
+The scope is therefore the row's OWN VOICE, and the predicate for it is the SHARED one:
+`tools/field_predicate.own_voice_text`, IMPORTED and never re-implemented. A `§N` inside a
+parenthetical aside is a quotation; a `§N` at parenthetical depth 0 is the row's own citation. **A
+document is named by the SHIPPED gate's own convention** — a markdown token
+(`([A-Za-z0-9_./-]+\.md)`) within a stated window BEFORE the marker — so the two legs agree about
+what naming means: `SKILL.md §State` and `docs/measurement-procedure.md §5` name their document;
+`SKILL §4` does not, because `SKILL` is the basename of a file every factory carries its own copy of
+and the numbering differs per tree; and a row reference (`n=950 §4`) is not a document either.
+
+**FORWARD-ONLY, from a boundary THIS FACTORY declares.** The ledger is append-only and its rows are
+immutable once published, so a historical bare citation is a RECORD and not a repairable defect —
+**nothing is backfilled**. The boundary lives in `docs/ledger-invariants.json` under this gate's own
+name and is read through `tests/ledger_boundary.py`; rows BEFORE it print as `excused:` on every run
+and are never folded into a bare "clean", and rows AT OR AFTER it are governed. A tree that has
+declared no boundary SKIPS with a stated reason — never a silent pass, and never another factory's
+date.
+
+**What this clause cannot do, stated rather than implied.** It cannot catch a WRONG section number. A
+row that NAMES a document for the wrong section satisfies the predicate completely — measured on this
+factory's own rows, which cited `docs/measurement-procedure.md` §8 for what is that document's §5
+STEP 8. That variant is a READ DISCIPLINE, not a gate: no gate can know which number was meant.
+
+Upheld by `tests/test_ledger_citation_declared.py` — a governed row carrying a bare `§N` reads a
+PROBLEM; the same citation with its document named reads CLEAN; a pre-boundary row reads EXCUSED; and
+a tree that declares no boundary reads SKIP with its reason. The run PRINTS the population it
+examined beside its verdict, so a clean read is never indistinguishable from a vacuous one.
 
 ---
 

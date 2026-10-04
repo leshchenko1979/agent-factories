@@ -43,8 +43,13 @@ OWN = Path(__file__).resolve()
 # prose that does so, and the check can never describe its own subject without failing it.
 SELF_NAMES = {OWN.name}
 
-# Interpolation of the scope: source instruments and gates, which never carry the law's
-# numbering. Docs are prose that may number their own sections and are out of scope.
+# Interpolation of the scope: source instruments and gates. `evidence/` -- the ledger -- is
+# outside this scope by a directory boundary, and NOT by the reason that excludes prose: a
+# ledger ROW numbers no sections of its own, so every `§N` it carries is a citation into
+# another document. Judging that is the ledger's OWN leg, which lives with the ledger's gate
+# set (`docs/instruments/ledger.md` section 5). Docs are the surface the prose reason covers:
+# they may number their own sections. Neither reason moves a path into `SCOPE_DIRS` -- this
+# gate keeps ONE population and ONE predicate (#262, ruled at ledger `n=2246`).
 SCOPE_DIRS = ("tools", "tests", "TEMPLATE/tools", "TEMPLATE/tests")
 SOURCE_SUFFIXES = (".py", "")  # extensionless executables ship too (`tools/questions`)
 SKIP_DIRS = {"__pycache__", ".git"}

@@ -701,8 +701,8 @@ REQUIRED_GATES: tuple[str, ...] = (
     # is the state a factory that has not adopted the invariant is legitimately in. It is
     # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
     # dropping the runner and keeping the file. THE MECHANISM IT GUARDS: the ledger is the
-    # one surface whose rows cite by `§N` and are never re-read out of tree, so a bare
-    # number in a row resolves against no document at all -- measured when the item was
+    # one surface whose rows cite by section number and are never re-read out of tree, so a
+    # bare number in a row resolves against no document at all -- measured when the item was
     # filed, 149 of 219 citations (68%) named nothing, and one of them asserted a remedy
     # against a section of a document that holds no such thing (#184). The shipped
     # citation gate keeps ONE population and ONE predicate and its `SCOPE_DIRS` is
