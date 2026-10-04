@@ -79,10 +79,26 @@ runner cannot deliver on its behalf, and its own shell-CLI dispatch path is meas
 **The census is recorded in the CENSUS PROSE this sweep writes — never row-by-row in the
 ledger.** The surface is the prose the patrol already writes each cycle, and it is named
 here rather than left to the reader: a 15-line cycle would otherwise mint 15 rows and
-dilute the ledger's own signal (ruling n=1861 point 4). Clearing an `OWED` line is an ACT
-— a re-dispatch through `session_notify`, or a board close — and that act's own row is the
-record. The census itself is a READING, so it is declared ONCE in the prose, naming which
-`OWED` lines were re-dispatched and which were not, and why.
+dilute the ledger's own signal (ruling n=1861 point 4). The census itself is a READING, so
+it is declared ONCE in the prose, naming which `OWED` lines were re-dispatched and which
+were not, and why.
+
+**Who re-dispatches, and what the duplicate bar actually binds.** The act is **Triage's** —
+the lane whose cycle runs this patrol — and never `HQ`'s: `HQ` rules, it does not dispatch.
+The duplicate bar in the `#135`/`#136` ruling (`n=950` §4, *"RE-DISPATCH is the duplicate
+shape"*) binds a **CLAIMED** item — a lane that already holds the claim and has gone quiet —
+and says nothing about a never-claimed `OWED` line. And a unit already dispatched (or
+re-dispatched) **inside the threshold window** is NOT dispatched again: a second dispatch of
+the same unit inside that window carries no state change.
+
+**DISCHARGED is not CLEARED.** Re-dispatching an `OWED` line **discharges the duty** this
+lane owed for that line — the act is done, and its own row is the record. It does **not**
+clear the line from the census **reading**. The leg keys each unit's **earliest**
+dispatch-bearing row and clears a unit only on a `claim` or a `close` — deliberately, so a
+re-dispatch cannot reset the clock and hide a stall that has stood for a fortnight. A
+re-dispatched line therefore **stands in the reading**, at its original age, until a `claim`
+or a `close` lands; the prose records the re-dispatch, and the line is reported again next
+cycle.
 
 ## The rework entry
 

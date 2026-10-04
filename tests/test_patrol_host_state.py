@@ -3421,6 +3421,73 @@ def test_the_stall_census_leg_BITES_and_discriminates_on_every_neighbour() -> No
     assert "population: 5 dispatched unit(s) -- 1 never claimed" in out, out
     assert "read at " in out, out
 
+def test_the_stall_census_leg_DISCHARGES_on_an_act_but_CLEARS_only_on_a_claim_or_close() -> None:
+    """#308 acceptance (3): a re-dispatch DISCHARGES the lane's duty but does NOT clear the
+    census READING, and does NOT reset the age clock.
+
+    The distinction the Triage card's old sentence collapsed -- *"Clearing an `OWED` line is
+    an ACT -- a re-dispatch through `session_notify`, or a board close"* -- into a single
+    verb. `stall_census_leg` keys each unit's EARLIEST dispatch-bearing row
+    (`carriers.setdefault`) and clears a unit only on a `claim` or a `close`, deliberately,
+    so that "a re-dispatch would otherwise reset the clock and hide a stall that has stood
+    for a fortnight" (its own docstring).
+
+    So a unit dispatched, then RE-dispatched hours ago, is still OWED at its ORIGINAL age --
+    and the age is read off the RENDER, because a leg naming the right unit at the wrong age
+    would be a different statement: that the re-dispatch reset the clock.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(911, "OPEN"), _issue(912, "OPEN")]
+    rows = [
+        _stall_row(1, "intake", "#911", 4, now=now),
+        _stall_row(2, "dispatch", "#911", 3, now=now),     # dispatched 3 d ago
+        _stall_row(3, "dispatch", "#911", 0.1, now=now),   # RE-dispatched 0.1 d ago
+        _stall_row(4, "intake", "#912", 4, now=now),
+        _stall_row(5, "dispatch", "#912", 3, now=now),     # dispatched 3 d ago
+        _stall_row(6, "claim", "#912", 0.1, now=now),      # then CLAIMED
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #911" in named, (
+        f"a re-dispatch is neither a `claim` nor a `close` -- the line must STAND, or the "
+        f"census clears on an act it is not supposed to clear on\n{named}"
+    )
+    assert "dispatched 3.00 d ago" in named, (
+        f"the age must run from the EARLIEST dispatch-bearing row: a re-dispatch must not "
+        f"reset the clock and hide a stall that has stood for a fortnight\n{named}"
+    )
+    assert "#912" not in named, (
+        f"a `claim` row clears the line -- that unit has a taker\n{named}"
+    )
+    assert leg["coverage"]["units_owed"] == 1, leg["coverage"]
+
+    # The render half: a leg returning the right dict while the report drops it is the
+    # half-fix this catches.
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
+    assert "OWED #911" in out, out
+    assert "dispatched 3.00 d ago" in out, out
+
+    # THE CONTROL, asserted rather than described: the naive "LATEST dispatch row" reading
+    # dates #911 at 0.10 d -- below the 1.0 d threshold -- and would report NOTHING owed. A
+    # leg that keyed the latest row fails on the assertions above; this measures that the
+    # fixture can TELL the two apart, so the probe is never vacuous.
+    latest = max(
+        (r for r in rows if r["event"] == "dispatch" and r["subject"] == "#911"),
+        key=lambda r: r["n"],
+    )
+    naive_age = (
+        now - dt.datetime.strptime(latest["ts"], "%Y-%m-%dT%H:%M:%SZ")
+        .replace(tzinfo=dt.timezone.utc)
+    ).total_seconds() / 86400.0
+    assert naive_age < RUNNER.STALL_CENSUS_THRESHOLD_DAYS, (
+        f"the control must BITE: the latest-dispatch reading is {naive_age:.2f} d and must "
+        f"fall BELOW the {RUNNER.STALL_CENSUS_THRESHOLD_DAYS} d threshold, or the fixture "
+        f"cannot tell earliest from latest and the probe proves nothing"
+    )
+
 def test_the_stall_census_leg_reads_CARRIED_units_and_only_from_a_CARRIER() -> None:
     """#260 acceptance (1), the population half: a unit dispatched by a WAVE row is a
     dispatched unit, and each of the three shapes that merely LOOK like one is refused.
