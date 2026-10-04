@@ -88,13 +88,13 @@
       "reason": null
     },
     "E": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-E.md",
+      "sha256": "d03de7f6a19d7b809efd805bdfe2a108dea1f3d128cb205132d2e89ba76610a7",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:19:00Z",
       "reason": null
     },
     "F": {
@@ -296,5 +296,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T21:06:53Z"
+  "updated_at": "2026-10-04T21:19:00Z"
 }
