@@ -529,4 +529,99 @@ refinement with no measured failure behind it; leave it out.
 ### 12.5 Status
 
 Nothing is implemented. The design gate stands. rev.4 supersedes §4.1 (set-path list), §4.3
-(drain rule) and §4.4 (re-nudge payload) in addition to the §11 corrections.
+(drain rule) and §4.4 (re-nudge payload) in addition to the §11 corrections. rev.5 supersedes §12.3 rule 3 (the quiet window) and Q6/Q7
+(§12.4) in addition to the §11 and §12 corrections.
+
+---
+
+## 13. Owner review (rev.5) — off-hours is measured, not configured; and the safe default was never a policy
+
+### 13.1 (Q8.2 rule 3) The AFK counter — yes, and the substrate has two of them
+
+The owner's question: *why a hardcoded quiet window rather than the existing AFK counter?*
+
+Because the window was an **assumption** about the owner's schedule where the substrate already
+carries a **measurement** of it. Read from source this turn, there are two quiet-gate mechanisms,
+and rule 3 should be a *consumer* of them, never a parallel clock:
+
+| Instrument | Scope | Writers | Where |
+|---|---|---|---|
+| `LAST_ACTIVITY` (#522) | **fleet-wide — one clock for the whole process** | every inbound channel message, plus the reclaim ticker while a turn is in flight | `session_routes.rs:223`; the channel writer at `handler.rs:759` |
+| `quiet_delivery` (fork #50) | **per target** | the target's own turn end | `quiet_delivery.rs` — pure due-predicate `is_due(mid_turn, quiet_elapsed, total_elapsed, quiet_for, max_delay)` + a per-entry starvation cap |
+
+**Verdict: replace the window with the counter.** It adapts to a late night, needs no config, and
+fails safe (`None` reads as *just active* → defer).
+
+**The catch that must be designed, not assumed.** `LAST_ACTIVITY` is **fleet-scoped, not
+owner-scoped**, and deliberately so — its own doc says *"One clock for the whole process …
+traffic in ANY chat the bot can see defers the reclaim for every chat"*, and the handler writer
+branches on **nothing**: *"No branch on chat type, sender, ACL, mention or `is_bot`."* It answers
+*"is the fleet busy"*, never *"is the owner awake"*. A peer lane posting at 03:00 would read as
+owner-activity and **permit** the 03:00 nudge — the exact failure this rule exists to prevent.
+
+**Fix: an owner-scoped sibling clock.** `note_owner_activity()`, written beside the fleet one at
+the same handler site — where the sender is already in hand — so the nudge gate reads the
+**owner's own** idle time.
+
+**Polarity — the nudge is the *inverse* of the reclaim.** The reclaim fires when the fleet is
+**quiet** (do not disrupt a live chat); the nudge is **suppressed** when the owner is quiet. Same
+clock, opposite sense — so this is a *consumer* of the counter, **not** a copy of
+`quiet_delivery::is_due`.
+
+**And the starvation cap must NOT force through this gate** (unlike the reclaim's). If the owner
+is genuinely asleep, waking him at 03:00 is precisely the harm; an unanswered nudge is resolved by
+the TTL and the terminal state (§13.2), never by a forced delivery.
+
+**Limits, stated honestly.** The counter is *reactive*: it detects *"quiet for 90 min"*, it cannot
+know he is **about to** sleep (worst case, a nudge at 23:10 — harmless). And **silence ≠ asleep**:
+a silent working afternoon reads as *away* and suppresses a nudge. That is acceptable — a nudge is
+a courtesy, the backoff retries it, and the alternative (assuming he is awake *because* he is
+silent) is worse.
+
+**Q7 therefore changes:** the window is **measured, not configured**. Drop *"MSK active-window
+only"*; keep the budget (3 nudges, geometric backoff) and the TTL (24 h).
+
+### 13.2 (Q6) The safe default was never a policy — it is an ask-time test
+
+The owner's objection, and it is correct: *if the lane knows what it would do, why did it ask?*
+
+"Safe default on timeout" is incoherent as a general rule, because it is one of two things and
+both are wrong:
+
+- If the lane **has** a safe default, it already knows what it would do → **the ask was the
+  waste**; it should have acted and recorded.
+- If the question **genuinely needed** the owner (no safe default), then auto-proceeding on
+  timeout is an **unauthorised irreversible action**.
+
+So the default is not a *timeout policy*. It is an **ask-time classification test** — and the
+presence of a safe default is itself the evidence that the question need not have been asked.
+
+**Best practices converge on exactly this; the test is reversibility, not preference:**
+
+| Source | Rule taken |
+|---|---|
+| Bezos, **one-way vs two-way doors** (Type 1 / Type 2) | reversible → delegate and decide fast; only irreversible warrants escalation. *"Most decisions should be made with ~70 % of the information you wish you had."* |
+| Parasuraman / Sheridan / Wickens, **levels of automation** | match human involvement to the **risk**, not to a uniform policy |
+| **Human-on-the-loop vs in-the-loop** | HITL is a **cost**; spend it where reversal is expensive |
+| Apache, **lazy consensus** | the one legitimate default: *"I will proceed with X unless you object by T"* — **announced**, and non-response is explicit consent. Not a question with a hidden default |
+
+**Corrected rule — classify at ask time:**
+
+| Decision class | Test | Action | Parks the lane? |
+|---|---|---|---|
+| **Two-way door** | reversible, bounded blast radius | decide, record, **notify as FYI** | **no** |
+| **One-way door** | irreversible or unbounded | ask; on timeout **escalate / hold — never auto-proceed** | yes |
+| **Reversible, but the owner cares** | reversible, but a cost or rule he would want to weigh | **lazy consensus**: announce the default + a deadline | soft (only if T > 0) |
+
+The residual use of a timeout default survives **only** as lazy consensus — and that is a
+*different construct*: an announced default with a deadline, never a default bolted silently onto
+an open question.
+
+**Consequence for the whole proposal: Q2 is upstream of Q1.** If two-way-door decisions stop
+parking lanes, most of the flood disappears at the root, and the §4 gate carries only genuine
+one-way-door asks. The gate is the safety net; this rule is the load-shedding.
+
+**Revised Q6** — no longer *"what is the terminal state"* but: **does the lane apply the
+reversibility test before asking?** *Recommended: yes — act-and-record for two-way doors;
+ask-only for one-way doors; lazy consensus for reversible-but-notable; and a one-way-door timeout
+**escalates, never defaults**.*
