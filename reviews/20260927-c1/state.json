@@ -138,13 +138,13 @@
       "reason": null
     },
     "T": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-T.md",
+      "sha256": "c3bbed04e70357d37b4073b5c213a43ed1680c9c334ac4b95f28f1104ab0d75c",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:54:33Z",
       "reason": null
     },
     "I": {
@@ -158,13 +158,13 @@
       "reason": null
     },
     "S": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-S.md",
+      "sha256": "37af27d1932bf8afd1b163ca42f0774995aa3e534af84d1cff148942bcf05633",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:54:39Z",
       "reason": null
     }
   },
@@ -303,5 +303,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T21:45:45Z"
+  "updated_at": "2026-10-04T21:54:39Z"
 }
