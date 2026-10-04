@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.22
+version: 0.1.23
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -309,6 +309,8 @@ State that lives only in chat is not state. It is a memory of a conversation,
 and it survives exactly as long as the context does. Every durable fact lives on
 a surface with **one named writer** — in the repo, or in the one surface this
 factory keeps outside it, the issue board. Every other path to it is read-only.
+
+**The workspace-hygiene instrument.** A factory audits and reaps its own workspace on a declared cadence, telling a lane's work IN FLIGHT from work STRANDED by age, so a busy factory never reads DEGRADED and genuine litter is still caught. Its law is `docs/instruments/hygiene.md` (shipped pair `TEMPLATE/docs/instruments/hygiene.md`), reloaded through the `skills/{{FACTORY_SLUG}}/hygiene.md` symlink; it upholds **Process 4 — Workspace Hygiene Sweep** (`docs/processes.md`).
 
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
