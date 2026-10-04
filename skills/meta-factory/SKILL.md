@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.48
+version: 0.1.49
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -368,6 +368,7 @@ outside it, the issue board. Every other path to it is read-only.
 | `evidence/subprocesses/*.jsonl` | granular domain-specific subprocess event streams | `tools/ledger.py append --subprocess` | `tail`, `verify` — read-only |
 | `evidence/insights.jsonl` | empirical factory insights across growth stages | `tools/insights.py` — the ONE writer; every write verb it exposes is the SAME writer, never a second one | `list`, `verify`, `format` — read-only |
 | `evidence/.ledger-index.sqlite` | the derived, disposable search index over the ledgers — a **cache, never a source of truth** | `tools/ledger-index.py build` | `find`, `subject`, `touching` — read-only; deletable at any instant, and STALE is not a defect |
+| `evidence/publish-receipt.json` | the pusher's record of its OWN last push — `{sha, instant, remote, branch}` (issue #284); **LOCAL and gitignored, by design** | `tools/publish.py` — the pusher's own write, read through its `read_receipt` | read-only; never a ledger row — the pusher is not a lane and the ledger's actor set is closed |
 | `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | the lane that HOLDS the defect: the declaring lane where a close declared the entry, the discovering lane where a patrol or survey found it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity, every rate claim's form, and that every determinate `Subject` resolves to a real closed work unit (each unresolvable one reported by name); the share of closes DECLARING a rework disposition is PRINTED, never gated — never the completeness of the set |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the daily measurement job (`Surveys`) | read-only |
 | `evidence/*.md` | survey receipts and dated evidence | the survey run | read-only |
