@@ -135,10 +135,12 @@ is not.**
 | session routing, ledger ownership, board identifiers, HQ-only actions | **ROUTED** | these belong to the donor's process law; the shipped executable must not carry them |
 | donor cycle state (`reviews/<cycle-id>/state.json`) | **ROUTED to a migration policy** | the two schemas differ; historical evidence is migrated by a documented adapter or a frozen legacy reader, never rewritten in place |
 
-**Open owner question (F5), carried and not settled:** whether a promotion review inherits Duty 4/6's
-"findings land in their entirety" duty or keeps the frame's recorded-non-fix permission. Until ruled,
-the **narrower** reading stands — a recorded non-fix with its reason is legal — and the frame's
-§5.2 is worded so that the wider reading, if ruled, changes one clause rather than the file.
+**F5 — the fix duty — is ANSWERED** (owner ruling, recorded 2026-09-28T17:24:42Z in the open-questions
+register, set `meta-factory`, `q10`; landed in the frame at `32d5662`, §5.2). A promotion review does
+**not** inherit Duty 4/6's completeness bar: **a finding is dispositioned, not completed** — a non-fix
+is lawful, and its recorded reason must name its **disposition class** (`declared-fork`,
+`factory-specific` or `out-of-scope-here`). The narrower reading this section carried is confirmed,
+with that class requirement added; the frame's §5.2 is the ruling's home and is cited, never restated.
 
 ## 9. Authority split (frame §8, applied)
 
@@ -171,10 +173,17 @@ What was reconciled instead, so one catalogue and one lifecycle govern every use
   channels (`inputs_snapshot`, digests streamed in constant memory). `intake` and `cadence --write`
   are REFUSED against a frozen cycle; `--live` is the deliberate override and says so on stderr.
 
-## 11. Open questions carried by this record
+## 11. Findings and questions carried by this record
 
-1. **F5 — the fix duty** (§8 above). Proceed on the narrower reading.
-2. **The instrument NAME** — **Review Rotation** is a working name, collision-checked. A rename is
+**Resolved since the promotion:**
+
+1. **F5 — the fix duty** — **ANSWERED** (owner ruling, `q10`, answered 2026-09-28; §8 above — the frame
+   §5.2 is the ruling's home): a promotion finding is **dispositioned, not completed**, and a non-fix
+   names its disposition class.
+
+**Still open:**
+
+1. **The instrument NAME** — **Review Rotation** is a working name, collision-checked. A rename is
    cheap now (no slug is published, no member has adopted a law file) and expensive after step 9.
 
 ## 12. Provenance
