@@ -108,33 +108,33 @@
       "reason": null
     },
     "D": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-D.md",
+      "sha256": "ca015a1bd87def7a7b162ff1cea8aff6518f8b4f64afa7ed62ea6f7d1cd7e64a",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:45:19Z",
       "reason": null
     },
     "H": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-H.md",
+      "sha256": "e96e014ea73318e3a44b26e9b19bba094bde5ca207f83747d7c14284257fbd45",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:45:20Z",
       "reason": null
     },
     "M": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-M.md",
+      "sha256": "02cc012b77b182b32a824039bf0b5cc68b6cded21a3b1084c34493f45c66a630",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:45:20Z",
       "reason": null
     },
     "T": {
@@ -240,6 +240,13 @@
       "home": null,
       "reason": "Owner order 2026-10-04 (MSK 17:37): DROP, superseding the 2026-09-28T19:02:21Z routed entry above. Basis, measured 2026-10-04T14:38:24Z over evidence/ledger.jsonl (2223 rows): the population ruling n=1375 declares \u2014 promotion=<instrument> in the detail \u2014 is EMPTY. promotion= 1 hit (n=1375, the ruling describing its own mechanism); naming= and vocabulary= 1 each (n=1375); review= 2 (n=1217, n=1375). A gate over that population opens over zero rows and reads green: a manufactured pass. Its sole specimen n=1302 is a CITATION omission, not a failure \u2014 the three artifacts landed 6h45m before the close (the figure HQ recorded at n=1375). No consumer is protected: it audits the meta-factory paperwork only.",
       "recorded_at": "2026-10-04T14:41:39Z"
+    },
+    {
+      "finding": "Lens E Finding 1 (HIGH): the read column named a `registry.py` verb that does not exist (`show`), and the string ships in TEMPLATE/SKILL.md.tmpl so every bootstrapped factory inherits a command that cannot run",
+      "disposition": "landed",
+      "home": "skills/meta-factory/SKILL.md:378 + TEMPLATE/SKILL.md.tmpl:325 (commit a862d47, the dead pointer replaced by the existing verb `resolve`)",
+      "reason": null,
+      "recorded_at": "2026-10-04T21:45:45Z"
     }
   ],
   "frozen_at": null,
@@ -296,5 +303,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T21:32:29Z"
+  "updated_at": "2026-10-04T21:45:45Z"
 }
