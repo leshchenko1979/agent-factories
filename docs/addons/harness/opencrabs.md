@@ -212,6 +212,38 @@ Deliver through `deliver_to` pointing at the right **topic**
 A job delivering to the group root defeats the topic map — the message lands in
 `General` where nobody's filter looks.
 
+### Two routes — and the relay shape a session target needs
+
+`deliver_to` carries one of two routes, and they deliver **different things**.
+
+| Route | Form | What lands |
+|---|---|---|
+| **Topic** | `oc://telegram/<chat>/<thread>` | the job's own output, posted where a human reads it |
+| **Session** | `session:<uuid>` | the delivery itself — it injects into that lane's queue and starts a turn |
+
+On a **session route the prompt is the payload, and it must address the receiving
+lane by name.** What a session route delivers is the cron session's **own reply**,
+never the prompt text — so a prompt that merely *describes* a sweep wakes the lane
+with a content-free message and no instruction, and nothing happens. The declared
+form is the **relay shape**:
+
+> Thin trigger only — do NOT execute any project work yourself … This cron's own
+> session only relays the wake below and stops.
+>
+> **TO THE RECEIVING LANE (`<lane>`, which owns `<surface>`): this delivery IS the
+> wake, not a notification.** <the work the lane must do>.
+
+The first paragraph is the wake-only marker the thinness gate reads (P7, leg b);
+the second is the instruction the woken lane acts on. The two legs are
+independent: a session-route row can carry the marker and still wake nobody
+usefully, because the gate is TEXTUAL and cannot judge whether a wake carries a
+usable instruction.
+
+*Proven:* measured on two session-route rows on 2026-10-04 — a member factory's
+`miidas-hq-daily-trigger`, and meta-factory's `factory-questions-redeliver`, whose
+677-byte prompt carried a full work order on a `session:` route and was repaired
+to this form.
+
 ### Creating one
 
 Creating a job is a write, and a write needs a receipt. **Never announce a
