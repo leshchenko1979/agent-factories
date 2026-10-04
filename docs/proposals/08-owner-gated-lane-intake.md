@@ -4,8 +4,8 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.2 2026-10-04** (§10: peer-lane waits) · **rev.3 2026-10-04** (§11: adversarial-review corrections)
-**Status:** design input — not law; owner has not ruled. **rev.3 corrects falsified claims: §4.2–§4.4 and §10.4.2/.5/.6 are SUPERSEDED by §11.** The adversarial review is `docs/proposals/08-owner-gated-lane-intake.review.md`.
+**Date:** 2026-10-03 · **rev.2** 2026-10-04 (§10: peer-lane waits) · **rev.3** 2026-10-04 (§11: adversarial-review corrections) · **rev.4** 2026-10-04 (§12: add-on boundary, re-nudge payload, sleeping owner) · **rev.5** 2026-10-04 (§13: off-hours measured, safe default is an ask-time test) · **rev.6** 2026-10-04 (§14: every citation re-verified through the code index)
+**Status:** design input — not law; owner has not ruled. **Supersessions:** §4.2–§4.4 and §10.4.2/.5/.6 by §11; §4.1 (set-path list), §4.3 (drain rule), §4.4 (re-nudge payload) by §12; §12.3 rule 3 (quiet window) and Q6/Q7 by §13. The adversarial review is `docs/proposals/08-owner-gated-lane-intake.review.md`.
 **Related:** `PROP-01` (cron-gated goal pipeline), `PROP-02` (human-load governed pacing),
 `docs/addons/harness/opencrabs.md`; upstream `leshchenko1979/opencrabs` — #13 (in-flight
 failsafe), #43/#50 (notify quiet mode), #344 (durable await record), #547 (oc-questions)
@@ -625,3 +625,69 @@ one-way-door asks. The gate is the safety net; this rule is the load-shedding.
 reversibility test before asking?** *Recommended: yes — act-and-record for two-way doors;
 ask-only for one-way doors; lazy consensus for reversible-but-notable; and a one-way-door timeout
 **escalates, never defaults**.*
+
+---
+
+## 14. rev.6 — every citation re-verified through the code index
+
+The owner's correction (2026-10-04): *"You should have used memory search for code."* Right — the
+external index already covers `/root/opencrabs/src` (`[[memory.extra_paths]]`), and rev.1–rev.5
+hand-rolled `grep` against a tree that was indexed. Every load-bearing citation below was re-read
+this turn **through the index** (`scope="external"`) **and** confirmed against the source at
+`/root/opencrabs` @ `97c0577cb` (2026-10-04 20:16:30Z).
+
+### 14.1 What the index changed, not just confirmed
+
+`grep -rn` returns **text hits, comments included**; the index returns **caller → callee with
+file:line**, which is the actual question. Two examples that materially sharpen the design:
+
+- **`who calls deliver_to_session`** → 7 callers (2 test, 5 production: `subagent/notify.rs:573`,
+  `a2a/handler/notify.rs:352`, `spawn.rs:99`, `quiet_delivery.rs:199`, plus the cron arm) — the
+  §11.1 "every producer hardcodes `interrupt=true`" claim, as a **call-site list** rather than a
+  grep of the literal.
+- **`who calls resolve_mode`** → `subagent/notify.rs:279` and `a2a/handler/notify.rs:125`: the
+  §11.1 "the handlers compute the mode then discard it" claim, read as call sites.
+
+**Instrument characterised before trusting a zero** (AGENTS.md rule 7): a bare symbol
+(`PushOrigin`, `DeliveryMode`) answers well; an English *"where is X defined"* against a **type**
+returns "No matches" — so that zero is a **phrasing artifact, not an absence**. Functions answer
+the definition form fine (`resolve_mode` → `notify_policy.rs:151`).
+
+### 14.2 The claims, each with its verdict
+
+| Claim (rev.5) | Verdict | What settled it |
+|---|---|---|
+| `deliver_to_session` is sync, takes only `interrupt: bool`, reads statics | **confirmed** | `session_routes.rs:366`; statics `channel_owner_probe` (:375), `turn_probe` (:416), `LAST_ACTIVITY` (:223) |
+| Every production producer hardcodes `interrupt = true` | **confirmed** | `scheduler.rs:1035`; `subagent/notify.rs:563`; `a2a/handler/notify.rs:347`; `spawn.rs:99`; `background_tasks.rs:1363,1443`; `restart_recovery.rs:700`; `quiet_delivery.rs:198-199` |
+| The `#393 TRAP` comment is real, and in **both** handlers | **confirmed** | `subagent/notify.rs:558-562`; `a2a/handler/notify.rs:342-346` |
+| `resolve_mode` already computes the mode; the handlers discard it | **confirmed** | def `notify_policy.rs:151`; called `notify.rs:279`, `a2a/…/notify.rs:125`, both then `let interrupt = true` |
+| The chokepoint is not single — `deliver_or_park` calls `session_route` directly | **confirmed** | `restart_recovery.rs:109-111`; boot redelivery at `notify_queue.rs:231` |
+| `session/notify` carries **no** correlation field | **confirmed** | `grep request_id\|correlation\|reply_to` over `a2a/handler/notify.rs`, `subagent/notify.rs`, `cli/session_notify.rs` → **0 hits** |
+| `owner-origin` is not representable | **confirmed** | `PushOrigin` `types.rs:218-232` (no owner variant); `QueuedUserMessage` `:311-321` (no identity) |
+| `await_*` columns + `is_awaiting()`; readers wake | **confirmed** | `session_binding.rs:71-77`, `:82`; readers `resume.rs:2166,2172` — action is to **wake** |
+| `AWAIT_KINDS` already names `owner_gate` and `peer_lane` | **confirmed** | `await_external.rs:36` |
+| `await_ref` is free text — no payload to re-emit | **confirmed** | `await_external.rs:86` ("a short identifier") |
+| `await_sweep` selects stale rows and **wakes**, consuming first | **confirmed** | `await_sweep.rs:68` (`AWAIT_WAKE_PROMPT`), `:217-241` (`sweep_inner`), `:262-268` (the "waking it" log) |
+| one-wake-boundary discipline | **confirmed** | `await_sweep.rs:130-137` |
+| `notify_queue`: durable, 72 h reap, redelivery, `wrap_busy_once` | **confirmed** | `:38` `MAX_ROW_AGE_SECS`, `:169` `redeliver_persisted`, `:85` `wrap_busy_once` |
+| `LAST_ACTIVITY` is fleet-scoped; handler branches on nothing | **confirmed** | `session_routes.rs:215-222` (doc), `:230` writer; `handler.rs:755-759` |
+| The approvable plan state | **corrected path** | `src/utils/plan_files.rs:200-211`, `PostInitEditing` `:208`, derivation `:303` — rev.5 cited bare `plan_files.rs` |
+| `suggest_options` is non-blocking | **confirmed** | `suggest_options.rs:1-14` |
+| Plan Approve is a callback button; 👍 is a reaction | **confirmed** | `flow_chrome.rs:62-63` (`"plan:ok"`); `agent.rs:1813`; reaction endpoint `agent.rs:2431-2436` |
+| Proposed new names are **not** already present | **confirmed** | `HeldForOwner` · `awaiting_owner` · `await_prompt` · `last_nudge_at` · `note_owner_activity` · `session/await` → **0 hits each** |
+
+### 14.3 Two citation slips corrected (claims stand, line numbers were off)
+
+| rev.5 wrote | Correct |
+|---|---|
+| `session_binding.rs:288` = "the binding setter is generic" | the setter is **`set_await` `:229`**; `:288` is `clear_await_of_kind` (`#567`). The claim — one set of three columns for every kind — holds (`:246`) |
+| `await_sweep.rs:44` = "serves telegram only" | `:44` is a `use` line; the telegram-only binding is **`interval_for` `:80`** (`TelegramConfig`) |
+
+Both are path/line slips only; the substantive claims they support are confirmed above.
+
+### 14.4 Status after rev.6
+
+Every load-bearing citation is now **index-verified and source-confirmed**; the §11 adversarial
+corrections and the §12/§13 owner answers stand unchanged. Nothing is implemented (the six
+proposed names are absent from the tree — the positive check that the design is still a design).
+The design gate holds; Q1 (automatic vs opt-in) and the rev.5 questions remain parked.
