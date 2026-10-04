@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "cycle_id": "20260927-c1",
-  "status": "IN_PROGRESS",
+  "status": "COMPLETED",
   "started_at": "2026-09-27T21:26:02Z",
-  "ended_at": null,
-  "duration_review_min": null,
-  "duration_cycle_min": null,
+  "ended_at": "2026-10-04T22:17:29Z",
+  "duration_review_min": 10109.9,
+  "duration_cycle_min": 10131.5,
   "cadence": {
     "trigger": {
       "kind": "version_bumps",
@@ -1115,10 +1115,35 @@
       "home": "HQ \u2014 reconcile docs/review-lenses.md:140 with the instruments' PRINTED, NEVER GATED stance",
       "reason": null,
       "recorded_at": "2026-10-04T22:14:38Z"
+    },
+    {
+      "finding": "Orchestrator observation (measured this run): the brief's REQUIRED FINDINGS FORMAT (tools/review.py:1102-1108) mandates locator, quote, analysis and remediation but NOT a severity, so 3 of 14 reports (A, D, G) carry none and 36 of 125 findings have no common ordering key for cross-lens triage",
+      "disposition": "routed",
+      "home": "tools/review.py:1102 \u2014 add a Severity line to the brief's REQUIRED FINDINGS FORMAT (one of CRITICAL/SEVERE/HIGH/MEDIUM/LOW/INFO), so every lens report is triageable on one key",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:16:30Z"
     }
   ],
-  "frozen_at": null,
-  "inputs_snapshot": null,
+  "frozen_at": "2026-10-04T22:17:29Z",
+  "inputs_snapshot": {
+    "taken_at": "2026-10-04T22:17:29Z",
+    "channels": [
+      {
+        "kind": "dir",
+        "ref": "proposals",
+        "exists": true,
+        "files": 3,
+        "sha256": "d26e62c7e0cbe05466924c2d5e83ad3e9e1bf7c673b2befa3b3bea838293da43"
+      },
+      {
+        "kind": "ledger",
+        "ref": "evidence/ledger.jsonl",
+        "exists": true,
+        "sha256": "2e5344c5c5efc13d1327858197e270f322cc9fecd7053daecebf00dac4ff35af",
+        "bytes": 4597791
+      }
+    ]
+  },
   "step0_log": [
     {
       "at": "2026-09-27T21:31:36Z",
@@ -1171,5 +1196,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T22:14:38Z"
+  "updated_at": "2026-10-04T22:17:29Z"
 }
