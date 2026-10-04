@@ -11,14 +11,14 @@
       "the opencrabs-dev skill set: SKILL.md, the five role files (editor, hq, triage, toolsmith, harvest), fleet-directives.md and the runbooks -- NARROWED BY FIVE OWNER-APPROVED CARVE-OUTS: the Toolsmith lane owns tools/ CODE; the Triage lane owns AFFINITY_KEYWORDS and lane repurposing; Duty-4/6 finding remediation ships without the design gate; harvesting needs no design gate; and per-instrument law files under /root/agent-factories/docs/instruments/ are authored by each instrument's own owner, with the superseded fleet-directives.md copy reduced to a [LANE] pointer",
       "the workers-ledger and skill-version consensus",
       "the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory",
-      "the fork issue board on leshchenko1979/opencrabs"
+      "the factory's two issue trackers: the fork board leshchenko1979/opencrabs (PRs and legacy issues; READ-ONLY for new issues) and the factory tracker leshchenko1979/opencrabs-dev-factory"
     ],
     "does_not_own": [
       "the fast-mcp-telegram substrate and its tg_* tool family",
       "the meta-factory registry, its surveys and its scoring surface",
       "the live daemon configuration on this box: config.toml, keys.toml and the running units",
       "member factories' own process law, repos and backlogs",
-      "upstream adolfousier/opencrabs, which receives PRs only and never issues"
+      "upstream adolfousier/opencrabs, which receives our PRs and -- since the 2026-10-03 two-stream routing order -- our BINARY issue filings; it is not ours to administer"
     ]
   },
   "services": [
@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" (read verbatim 2026-10-01T06:16Z) and resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at that same file, :29 \u2014 NOT notify.rs:172, where it no longer lives (the file moved). Code leg 07b6372c4 (2026-09-20T22:20:22Z) re-verified rc=0 as an ancestor of the now-deployed sha 1eca6c93a894dc01c4a48b6913f2d64c28170be8, superseding the cited 532e66397\u2026, which is no longer deployed."
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" and :200 resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 \u2014 NOT notify.rs:172, where it no longer lives (the file moved). Re-verified at attest 2026-10-04T06:18:37Z against the deployed tree: the Err is present at that line in `git show 4b3765dc4:src/brain/agent/service/notify_policy.rs`, and code leg 07b6372c4 is an ancestor of the deployed sha 4b3765dc4fe169adf7f91696d10065de3f689560 (swapped 2026-10-04T01:10:50Z) \u2014 superseding the cited 1eca6c93a\u2026 and 532e66397\u2026, neither now deployed."
     }
   ],
   "lanes": [
@@ -296,7 +296,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-03T06:27:26Z",
+  "attested_at": "2026-10-04T06:20:00Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

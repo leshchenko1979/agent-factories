@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.46
+version: 0.1.47
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -358,6 +358,8 @@ surface with **one named writer** — in the repo, or in the one surface this fa
 outside it, the issue board. Every other path to it is read-only.
 
 **An instrument's own law lives in its own file, and this section keeps what is THIS factory's.** The contract for an instrument — its verbs, store path, gates and closure — ships as a doc pair (`docs/instruments/<instrument>.md` + `TEMPLATE/docs/instruments/<instrument>.md`) and reloads into this skill through a relative symlink (`skills/meta-factory/<instrument>.md`), so the law survives a compaction without a second copy in this file. What stays here is the surface table below and its one-writer rule. The process law that binds a lane writing to one of these surfaces lives in `state.md`, beside this file. Where a clause in `state.md` restates an instrument's own contract, the shipped doc is the **delivery** home and this file is the **authority** — a member reads the doc, never a citation into this file (the §8 split, exercised in §9).
+
+**The workspace-hygiene instrument.** A factory audits and reaps its own workspace on a declared cadence, telling a lane's work IN FLIGHT from work STRANDED by age, so a busy factory never reads DEGRADED and genuine litter is still caught. Its law is `docs/instruments/hygiene.md` (shipped pair `TEMPLATE/docs/instruments/hygiene.md`), reloaded through the `skills/meta-factory/hygiene.md` symlink; it upholds **Process 4 — Workspace Hygiene Sweep** (`docs/processes.md`).
 
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
