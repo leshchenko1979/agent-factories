@@ -180,6 +180,16 @@ What was reconciled instead, so one catalogue and one lifecycle govern every use
 1. **F5 — the fix duty** — **ANSWERED** (owner ruling, `q10`, answered 2026-09-28; §8 above — the frame
    §5.2 is the ruling's home): a promotion finding is **dispositioned, not completed**, and a non-fix
    names its disposition class.
+2. **The promotion close-row gate** — **DROPPED** (owner order 2026-10-04, MSK 17:37). The review's
+   third finding, routed on 2026-09-28 to `tests/`, is superseded by a `rejected` entry the
+   methodology lane wrote into cycle `20260927-c1`'s `codification_plan` with the instrument's own
+   `codify` writer (`82c04f6`, ledger n=2226; entry timestamped 2026-10-04T14:41:39Z). The entry sits
+   **beside** the 2026-09-28T19:02:21Z `routed` one (append-only), and its own reason states the
+   supersession — so the routed entry is void **by supersession, never by an edit**, and the decision
+   record needs no further line. Measured basis: the population ruling `n=1375` declares —
+   `promotion=<instrument>` in a row detail — is **empty** over `evidence/ledger.jsonl` (2223 rows at
+   2026-10-04T14:38:24Z, the methodology lane's measurement), so a gate over it opens over zero rows
+   and reads green. No gate is owed.
 
 **Still open:**
 
