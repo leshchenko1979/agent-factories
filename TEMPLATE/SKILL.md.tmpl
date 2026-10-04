@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.21
+version: 0.1.22
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -17,6 +17,9 @@ globs:
 > Replace every `{{PLACEHOLDER}}` and delete this line. Keep this file short
 > enough to reload after every compaction — it is the first thing every session
 > reads, so length here is paid on every turn.
+
+**Router:** two clause sets live in sibling files, loaded on demand — `verdicts-and-claims.md`
+(this file's §9) and `state.md` (its §13 clause tail). Load one before a verdict or a state row.
 
 ---
 
@@ -244,109 +247,9 @@ archive.
 
 ## 9. Verdicts and claims
 
-- **Verdict verbs need a receipt — and the receipt must name the revision it measured.**
-  "Green", "passing", "verified", "shipped" may only be stated when the same turn contains
-  the tool output that shows it. A job name proves identity, never outcome. A receipt about
-  a TREE must name the revision it describes: a gate count or a row count is true of the
-  tree that produced it and unverifiable without the sha (issue #63).
-- **Identifiers are never hand-assembled.** Copy the full value from live
-  output — issue numbers, session UUIDs, run ids. A remembered prefix plus a
-  guessed tail is a fabrication, even when it happens to be right.
-- **No claim without a check.** Existence, absence and status all require a
-  tool call in the same turn. "I have not verified" is an acceptable answer;
-  a confident guess is not.
-- **A criterion is a claim too, and it is AUTHORED long before it is judged.** A plan
-  acceptance criterion that names a path, a gate or a file asserts that the artefact RESOLVES,
-  so the check the clause above requires is due **when the criterion is written**, not at
-  completion and not by whoever executes it days later. Resolve every name as you write it;
-  where the artefact does not exist, name the MECHANISM by the behaviour you will observe
-  rather than a filename that merely reads plausible. A name assembled from its neighbours is
-  the same fabrication as a guessed sha, and it survives longer because **nothing runs a
-  plan**, and a plan lives outside every tree the offline suite reads: a criterion naming a
-  test file that exists under **no revision** stood on a live plan for three days, its name
-  assembled from the two real artefacts beside it, and a patrol's report caught it rather
-  than any mechanical check. **No gate can uphold this and that is stated, not implied** —
-  so what upholds it is the process: the authoring lane resolves each name, and the lane
-  that meets a criterion naming an absent artefact reports it and never silently re-words
-  it (a judged acceptance is a record, and rewriting one is a backfill).
-- **A citation is resolvable by a reader who holds ONLY this document.** A reference to
-  tracked work carries its NUMBER, taken in full from the read that returned it; a reference
-  to another document NAMES that document; a bare section number resolves only inside the file
-  that holds it — which is precisely the reader an agent usually is: after a compaction, in
-  another session, or in another factory. A numberless "see above" reads as knowledge while
-  carrying none.
-- **An attribution names an ABSOLUTE revision, never a relative one.** The receipt rule above
-  governs RECEIPTS; this governs INVESTIGATION, which a probe that writes no receipt never
-  reaches. `HEAD~1` means *the parent of whatever HEAD is when the probe runs*, so in a shared
-  worktree where other lanes commit concurrently the revision it resolves is not the revision
-  the author meant, and the verdict describes a commit nobody chose. A claim about which commit
-  introduced a change is established by reading that commit's own blob (`git show <sha>:<path>`),
-  never by a relative revision, and a probe that must compare before and after resolves both
-  sides to named commits. The same binds the RECORD: a rework entry that cites a
-  relative-revision form must name the resolved absolute sha.
-- **A close row's trailer is DECLARED, never supplied.** The canonical close trailer is the
-  run of `key=value` tokens at the end of a `close` row's `detail`. `tools/ledger.py` supplies
-  only measurements it genuinely took (`cost_usd=`, `tokens_in=`, `tokens_out=`, `turns=`,
-  `duration=`) — taking a number is not a judgement. Every VERDICT in the trailer is the
-  author's, and the tool must never write one: it once appended `outcome=accepted` and
-  `gate=all-pass` for silence, so both headline rates could only ever report success (#53).
-  `rework=` joins that trailer on the same law — `rework=#N` names the rework entry the close
-  produced, `rework=none` states it produced none, and either is legitimate only when the
-  AUTHOR states it. ABSENCE stays `unstated`, never read as `none`: an unrecorded verdict is
-  UNKNOWN, never a value. The marker is AVAILABLE, not REQUIRED — most closes resolve no
-  defect, and a required field degrades to boilerplate — and nothing is backfilled.
-- **A close row's `rework=#N` is a FORWARD REFERENCE to a file, so it and the entry it names land in the SAME commit.** The token names a row of `evidence/rework.md`, not a ledger row, so nothing orders the two writes: a close row committed ahead of its entry leaves `main` RED for `tests/test_rework_declared_landed.py` until the entry lands. **No hook is owed** — a hook leg is bypassable (`--no-verify`), local-only (hooks are not cloned), and a PREVENTION where the class needs a DETECTOR. The convention is this sentence; the detector is the gate that ships with the ledger, and the residual is the audit's own LATENCY, ACCEPTED and STATED.
-- **A repair must not terminate the canonical run.** The trailer is POSITIONAL, so text
-  appended AFTER it ends the run and every trailer-scoped reader stops seeing the row's
-  declared telemetry — the repair silently REMOVES a measurement from the fleet total.
-  `tools/ledger.py repair` therefore inserts its appended text BEFORE the run, so a prose
-  note lands in the head and the run stays terminal; a `key=value` append EXTENDS the run
-  itself and is safe either way — **when its key is NEW**. An append that introduces a key
-  the run ALREADY declares is **REFUSED**, non-zero, before any write, so the ledger is
-  left byte-identical: one field carrying two values has no canonical reading, and a
-  consumer that takes the last occurrence reads the appended one while the row's own
-  declaration still stands beside it. Refusing costs nothing lawful, because repair's
-  lawful case is a row **INCOMPLETE** against a declared invariant — and an incomplete row
-  is MISSING the key, never carrying it twice. Both sides of the comparison are read
-  through the shared predicate and each is scoped to its own canonical run, so prose in the
-  head is not a declaration of the field and a prose append that merely NAMES a field is not
-  refused. Measured precedent: a repaired close row whose two appended
-  `REPAIR NOTE` sentences displaced its own canonical run, which was canonical when the row
-  was written. That row is **not** backfilled — the law above bars it — and stands as the
-  measured precedent.
-- **A predicate's SCOPE is its reader's population, and the two are stated together.** A
-  predicate that claims the box and reads one profile root answers about the profile root,
-  and its evidence must name the population it read — the count and the homes — so a
-  narrower read is visible as a narrower read rather than as a clean box. An enumeration
-  that cannot name its own population is not allowed to report HOLDS, and a home it could
-  not reach is reported as unreached, never omitted (#102).
-- **A measurement whose EITHER SIDE reads live state is a property of the INSTANT, not of the
-  revision — and naming the revision does not make it one.** It must name the instant it read, and
-  it must not be generalized into a revision property: the receipt rule above governs the case where
-  both sides are tree bytes, this governs the case where they are not. The two properties are then
-  kept APART. REPRODUCIBILITY — a committed artifact against a replay from its OWN RECORDED INPUTS —
-  is deterministic, offline, and belongs in the correctness pass. FRESHNESS — an artifact against
-  live state — is true only near the instant of the render, and it is REPORTED, never folded into
-  the correctness verdict, because a check that fails by construction carries no more information
-  than one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope
-  is its reader's population, and the two are stated together.
-
-- **A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number.**
-  A cap picked by feel is uncalibrated in both directions: too low, it kills a healthy gate and
-  reports a timeout as a verdict; too high, it hides a hung one. So each gate's cap is derived —
-  `budget_sec = margin_x × measured_sec` — with the margin, the measured runtime and the
-  ABSOLUTE revision the measurement was taken at declared together in the gate-budget manifest,
-  so the number carries its own basis and a reader can recompute it. The budget VALUES belong to
-  the process owner, never to the implementing lane. A gate with no entry uses the declared
-  default and the runner PRINTS which gates used it — a declared default with a printed
-  population is not an exempt-by-silence surface, an unprinted fallback would be. A budget
-  exhausted is UNKNOWN: never green, never a plain failure, and its recorded duration is the
-  MEASURED elapsed time, never a hardcoded zero — a timeout is a fact about a gate and must be
-  readable as one.
-
-- **A predicate that examined nothing has reported nothing, not HOLDS.** Naming a population and examining one are two properties, and the first does not carry the second: a predicate can name its population exactly and still read zero items inside it, and its clean verdict over that empty read is indistinguishable in the output from a verified one. So every predicate that reports a clean verdict over an enumerated population asserts that the enumeration was NON-EMPTY, prints the count it examined, and FAILS LOUDLY on a zero count, naming which population came back empty. A gate that examined zero items must never print the verdict of one that examined the population and found it clean. This generalises a property the suite's history-wide gates already practise; it is codified because a predicate that cannot name its own population is already barred from reporting HOLDS, and a predicate that names its population perfectly and examines nothing is the same failure one step further in.
-  The clause is **two-part**, and the second part is what keeps it from being satisfied by an exit code: a gate PRINTS the population it examined, and it is proven to BITE by a probe that makes it fail. **NON-VACUITY IS A PROPERTY OF THE PROBE, and POPULATION VISIBILITY is the property of the run.** A gate whose only evidence of working is an exit 0 over a population it does not print has not been shown to work. The loud-fail-on-zero form is right for a gate whose population is the whole history, and **wrong for a forward-only gate whose population is legitimately empty until its next instance**, where the probe is the only thing that can show the gate bites.
-- **A cited line is evidence of a FACT, never of a CAUSE.** A log line, a count or a config read can establish that something happened; it cannot establish what produced it, and a causal sentence built on top of a real observation is a separate assertion that needs its own support. A cause is established by varying it — the effect follows — or by its absence coinciding with the effect's absence, and the ruling or entry that asserts one names the disproof it rests on. The sharpest available test: **a cause that VANISHES while the effect persists at FULL RATE is not the cause.** No gate can read causation, so the upholding mechanism is a PROCESS (P29), not a gate — and the clause is the second half of the record law above: the RECORD of a defect states its cause, so the cause must be as checkable as the fact.
+**This section's clauses live in `verdicts-and-claims.md`, beside this file** — load it before
+any verdict, receipt, citation or canonicality claim. The heading stays here so the section
+number and the clause title remain reachable from this file.
 
 ---
 
@@ -421,26 +324,6 @@ factory keeps outside it, the issue board. Every other path to it is read-only.
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | this law | the process rules | `HQ` | read-only |
 
-**The ledger carries a SECOND object, and its author is not the append path.** `evidence/ledger.jsonl` has one *writer* — `tools/ledger.py append` — and two *objects*. The first is a state transition, authored by the lane that makes it. The second is a **duty receipt**: a `run` row written by the **woken lane** when a thin trigger's duty actually completes, on behalf of the duty rather than of the trigger. The distinction is load-bearing because a pacemaker's own run row records that the **trigger fired**, never that the **duty ran** — so a job can read `success` on every fire while the work it exists to produce fails every day. Nothing in the trigger's own record can close that gap; only the duty's lane can, by declaring the receipt. A lane that wakes, does the work and writes no receipt row leaves the duty **unproven**, not discharged.
-
-**A duty receipt is DECLARED, and the declaration is one whole line.** The row states `receipt_subject: <stem>` on a line of its own — anchored, so a mid-sentence mention cannot satisfy it — and the reader keys on that declaration rather than on a job name, so no job name is hardcoded and a row that declares nothing is *counted and named* as NOT JUDGED. **The declaration is the whole mechanism, so its omission is the failure it cannot see:** a row that simply omits the line is not a duty that owed nothing, and a reader that cannot tell those apart has a leg that passes by silence. A pacemaker whose duty owes a receipt therefore STATES the declaration in its own prompt, and the round is read from the row's own `last_run_at` — never from a parsed schedule, which is a second derivation of a fact the row already carries.
-
-**`attested_at` is RESULTING STATE, never the receipt.** It is a *consequence* of a completed round, and a consequence is not evidence that the round happened: fragments have carried an `attested_at` days stale against a job firing daily at `0 6`, which is exactly what an unreceipted duty looks like from the registry side. So `attested_at` prints under the label RESULTING STATE, is never consumed as the receipt, and never stands in for one.
-
-**The receipt's SUBJECT is canonical, and the reader's key is deliberately NOT widened to meet a deviation.** A receipt's subject is `<stem>-<round>`: `<stem>` is the job's own declared `receipt_subject`, and `<round>` is its own `last_run_at` UTC date. The key is a **boundary-checked prefix** — the subject must start with `<stem>-<round>`, and the character after it must not be a digit, so a different date whose subject merely extends this one's digits cannot match. That tolerance exists for **round-key variants**: an hour-bearing subject names the same round, and so does a trailing word. It is never licence to decorate: a subject that puts words BETWEEN the stem and the round does not name the round at all and is **not a receipt**, and the leg reads MISSING — loud, and true. **Do not widen the key to a fuzzy token match.** A false MISSING costs one look; a false CLEAN is silent, and this leg exists precisely because silence is the failure it cannot see. The writer is upstream of the reader: fix the convention, never the key.
-
-**A subject match is not a receipt — the row must DECLARE its completion.** A receipt carries `duty=completed`, `failed` or `skipped`, read through the shared positional reader (`tools/field_predicate.py::declared_duty`) against the domain declared beside it (`DUTY_DOMAIN`). A row whose subject matches the round and declares nothing is **not** a receipt: a leg that accepted any subject match once certified a DISPATCH record written before the round completed, and a round with no receipt at all read clean. Absent is not a value, an out-of-domain value is an ERROR, and `failed`/`skipped` are both findings. **The key is a distinct field, never `outcome=`:** a duty receipt is selection-biased — written by a lane that completed a duty — so folding it into a first-pass yield's population makes that metric structurally optimistic, one real lane failure diluting it roughly twofold. One number answering two questions is a defect in the metric, not a rounding. **The writer's half of that contract is positional too: the `duty=` token must sit inside the row's canonical terminal run — the maximal run of `=`-carrying tokens at the end of `detail` — with no `=`-free token after it, and the value is written verbatim, so a trailing period declares `completed.`, outside `DUTY_DOMAIN` and an ERROR rather than a silent pass.**
-
-**A pacemaker's redirect log is named after ITS OWN JOB, and the leg's precondition is stated rather than assumed.** The notify-receipt leg attributes a trigger's log by taking the filename's stem as a **cron job name** and looking it up among the rows this factory declares (`patrol_host_state.py`, `NOTIFY_LOG_RE`). That makes *the redirect label equals the job name* a load-bearing contract between every pacemaker prompt and the leg — and where it was written nowhere, one job carried a hand-typed label for **16 rounds** and every one of its logs landed in `retired_logs` as *history, never judged*. The leg examined **nothing** and printed the same shape as a leg that examined everything and found it clean.
-
-**A mechanism whose precondition is undocumented is a permanent silent exclusion**, and it is the mirror of the receipt clauses above: there, a declaration without its instruction is a permanent false RED; here, a mechanism without its stated precondition is a permanent false CLEAN. Both are the same failure — a contract that lives only in one side's implementation. So a pacemaker whose prompt writes a `/tmp` log **names the redirect after the job**, never after a description of its cadence, and a label that names no row is a finding rather than history. When a redirect is renamed, **the prose that justified the old label is rewritten in the same edit** — a prompt arguing for a label it no longer carries is the half-fix shape this section rules against twice.
-
-**Which pacemakers owe a receipt.** Every pacemaker whose duty is performed by a **woken lane** — because its own run row records that the trigger fired and nothing about the work. A `trigger_cmd` gate does not exempt a job: a gate is a **pre-condition** that decides whether the trigger fires, and it says nothing about whether the lane then woken did the duty. The test is not whether the duty's work is recorded *somewhere* — a woken lane's own run row usually exists — but whether the leg can **BIND** that row to *this* job's round. Without the declaration it cannot, which is exactly why the declaration is an attribution key rather than a claim that nothing else records the work. A job that declares no stem is NOT JUDGED, and is counted and named so its silence is visible. A duty whose lane writes an undated, ad-hoc subject predating this convention owes the convention going forward: the receipt carries the round.
-
-**A close and its board are coupled in four directions.** (1) A close row must name the board state it observed — gated by `tests/test_close_board_recorded.py`; the gate cannot call `gh`, so the settling lane records what it saw and the gate asserts the record. (2) A close must be preceded by its own intake and claim — gated by `tools/ledger.py verify`. (3) A closed board item must have a close row — no offline gate can reach it (a gate cannot call `gh`; `verify` visits only subjects that already have a close row), so its mechanism is a PROCESS: a standing patrol cross-reads the board against the ledger. P29 admits a process as readily as a gate. The patrol is a runner, and its legs print whether they ran. Directions (3) and (4)'s standing patrol is tools/patrol_host_state.py, invoked on the factory-triage-patrol cadence (0 */6 * * * UTC). It reads the board WHOLE — gh issue list --state all — because the reverse leg, an intake row naming no board issue, is sound only over the full board, and feeds it to board_intake_problems(..., complete_board=True). Each leg prints RAN or NOT RUN with its reason AND the population it examined, so a leg whose predicate was never written is never read as a clean one and a leg that examined nothing is never read as one that examined the population and found it clean, and the runner states the instant it read the board so every claim it makes is re-checkable. A board that cannot be read exits 2 with NO verdict: an unreadable board is not an empty one, and an empty board is not a clean one. (4) A close row's board declaration must be TRUE — the offline gate reads the ROW and never the board, so it can no more make a false declaration visible than an omitted one. Its mechanism is a second leg of the same standing patrol: it reads every post-invariant close row through the GATE's OWN token and boundary, never a re-derived parser, which sees fewer rows and goes false-green over the difference, and reports each declaration the live board contradicts, printing the population examined and the read instant beside its verdict. A subject the board has never heard of is reported too: absent and closed are different facts, and only one of them is what the row declares.
-
-A patrol claim names the time it read the board — an untimed claim about a live board cannot be re-checked. A committed board snapshot was rejected: its freshness dimension is unattributable, so a stale file would read as a board/ledger mismatch.
-
 **Authorship is not transcription.** The writer named above decides what a surface
 *says*; applying a correction already decided is **transcription**, and transcription is
 work — it goes to the implementation lane. So `ONTOLOGY.md`, `processes.md` and this law
@@ -465,237 +348,9 @@ another lane's surface. The live instance is the coverage claim in `evidence/rew
 `tests/test_rework.py`, which moves whenever any lane adds an entry, so the lane that
 breaks it is NOT the lane that owns the surface (#51, ruling n=329).
 
-**A commit message names the concern; it does not cite row numbers.** A ledger row's
-number is assigned *inside* the append lock, so it cannot be known before the append —
-and by the time the commit runs, another lane may have appended further rows. A message
-asserting row numbers is therefore a claim that can be wrong; obeying this clause removes
-the claim rather than policing it. Where a row must be cited, cite it in the ledger's own
-`detail` text — written after the append, where the real number can be read — or read it
-back before committing. This follows from the ruling that the commit is **transport, not
-identity**: the row's identity is its `n`. It is upheld **forward-only**, bounded by a
-marker commit recorded in the gate — a history-wide form would be permanently red in any
-factory where the rule landed after the habit did.
-
-**The settlement receipt is taken AFTER the row it certifies.** The `close` row is appended
-first, then `tools/ledger.py verify` runs, and the receipt cited in the row's `detail` is the
-one that covered it. Taken before the append, the receipt is structurally incapable of covering
-the artifact it certifies: `verify` reads a subject's rows as a sequence, so a run made while
-the `close` row does not yet exist has not seen the row it is cited for. This is an ORDER
-defect, never a claim about honesty — a citation taken early is not a false citation, and the
-rows that carry one stand as written.
-
-Its upholding mechanism is a gate as well as this sentence: a close row that cites a verify
-receipt must DECLARE the row count that verify measured, and that count must be at least the
-row's own number — which is exactly the statement that the verify covered the row it certifies.
-The count is read through the one shared field predicate (`tools/field_predicate.py`), so the
-field has one reader; the gate is forward-only, with its boundary declared in the invariants
-file whose example ships as `docs/ledger-invariants.example.json`, and historical rows are
-excused and printed rather than repaired.
-
-**The Law-Upholding Principle (P29):** Every codified law must be upheld by an active operational process or a deterministic mechanical gate. A rule without an upholding mechanism is dead text.
-
-**The Single Ownership Principle (P30):** Every declared process has exactly one named process owner role. Shared ownership is zero ownership.
-
-**Single-writer is a mechanism, not a habit.** An append-only surface with two
-writers is the hardest defect here to notice, because each writer looks correct
-in isolation: both read the same last row, both write `n+1`, and every count
-taken from the file is wrong from then on — in a way that looks fine.
-`tools/ledger.py` takes an exclusive lock and computes the next row number
-*inside* it, so the collision cannot happen. Ship its test with it.
-
-**One field, one predicate — the read-side mirror of the rule above.** A telemetry field
-read out of a row's `detail` has exactly ONE predicate, and it lives in
-`tools/field_predicate.py`. A module that reads such a field IMPORTS that predicate; a
-private parse of the same field is the defect this rule names, not a style preference. The
-helper was built as *one field predicate, shared by all call sites* — and the class
-recurred anyway, twice, each time at a site nobody had enumerated, and both instances were
-found by symptom (a measured over-report) rather than by a rule, because no rule was
-readable until this one. The predicate is scoped to the canonical trailer for a reason a
-repair has to state: `detail` is free prose that QUOTES trailers as evidence, so a private
-scan takes a quotation for a measurement.
-
-The gate that enforces it ships with this template as
-`tests/test_telemetry_reader_registry.py`, and it must distinguish a READER from a WRITER,
-must name the modules it permits in a stated allow-list, and must PRINT that allow-list on
-every run — an unprinted allow-list is an exempt-by-silence surface. Both halves are
-load-bearing together: the writer CONSTRUCTS the tokens it does not read, so a scan that
-cannot tell construction from reading would need an exemption for a non-defect, and an
-exemption granted to something that is not a defect is a permanent weakening. A module you
-add that builds trailers is declared in the allow-list with its reason; the list is source
-rather than factory data, because it classifies the tools the template ships.
-
-**What that buys is the SYMBOL, not the semantics.** The rule binds every reader to one
-function; it does not promise that function reads correctly, and no probe over a shared
-binding can show more than the binding. A lookalike that re-implements the predicate and is
-imported under its name satisfies an identity probe of the imported name and leaves the
-class open. Identity of the function is what is codified; correctness of the reading is the
-predicate module's own gate.
-
-**A gate whose only exits are barred is a stop with no andon cord.** A gate that reads commit *subjects* across a range can be violated by a commit already PUSHED, and then no repair is available: the commit is immutable, a revert does not remove the offending subject from the range, and re-anchoring the marker past the violation would make the marker's own stated definition false and silently convert a live violation into an excused one — the exact silent-excuse failure the exemption design forbids. Left that way the suite stays permanently RED and the next lane learns to ignore a red gate, which destroys every other gate's signal; so the defect is the EMPTY REPAIR SPACE, not the violation. Every gate of that shape therefore carries a sanctioned, VISIBLE exit: an exemption table holding the entries as FACTORY DATA in its own file and never inline in the gate, because the gate is paired byte-identically with its template copy and a factory sha must not ship to every new factory, and each entry is keyed by the FULL 40-character sha copied from live git output. An exemption is a visible debt, not forgiveness: every entry that MATCHES is printed as an `excused:` line on EVERY run, and the closing line distinguishes clean from excused, so the two are never the same output. An entry that is malformed, or that matches NO violation in the range, is a gate ERROR rather than a silent pass — an exemption list that quietly fails to load is indistinguishable from no exemptions, and a stale entry inflates the visible debt while excusing nothing. Admission is by PROOF, as everywhere in this section: an exemption is granted only where the repair space is genuinely empty, and the entry STATES that proof; an exemption nobody would defend in that output is one that gets fixed instead. And a SECOND exemption of the same shape is a PROCESS DEFECT, not an exemption — one is a debt, two mean the mechanism (running `tools/audit.py` before a commit that touches the surface) is not biting, and the remedy is a mechanism, never a third row. Instances: `docs/ledger-commit-exemptions.json` for `tests/test_ledger_commit_cites_no_rows.py`, and `docs/ledger-no-shrink-exemptions.json` for `tests/test_ledger_no_shrink.py` (#47 clause 4, ruling n=328).
-
-**A row is retired by naming it, never by deleting it.** The lock above binds the code,
-not the artifact: a writer that never calls `tools/ledger.py` takes no lock and leaves no
-trace, and once its removal is *committed* the append guard compares working against
-committed, goes self-consistent, and every gate reads green over a file that has lost
-committed history. So no row identity — the `(n, ts, event, actor, subject)` tuple a row
-is known by — is ever removed: a row that must not stand is retired by appending a row
-that names it, and the original stays. Ship the gate that walks the committed history and
-reports every commit whose diff removes a row identity, which is why the check is a set
-difference over identities and not a text search — the one measured case removes a row
-whose surviving neighbours still contain every word it carried. Its exemptions are factory
-data in `docs/ledger-no-shrink-exemptions.json`, keyed by full sha and never inline in the
-gate, and every run prints them so "clean" and "excused" are never the same output; a gate
-that examines zero commits fails loudly rather than passing vacuously.
-
-**"Retired" names two different objects, and the difference between them carries the teeth:
-a row's IDENTITY, and a FIELD VALUE the ledger cannot remove.** The clause above governs
-the first — the `(n, ts, event, actor, subject)` tuple a row is known by — and its hazard
-is a writer that bypasses the append lock, so its evidence is a set difference over
-committed history. This clause governs the second. A close row declares the revision its
-receipts describe (`head=<sha>`), and the ledger is append-only, so a token that resolves
-to nothing **cannot be removed**: the row stands exactly as written and the false value
-stands inside it. The exit is a DECLARATION in its own file —
-`docs/ledger-retirements.json` — which NAMES the value rather than excusing the row.
-**ADMISSION IS A PROOF OBLIGATION, NOT A LOOKUP:** an entry is admitted only when the
-ledger CARRIES its naming row AND that row's detail carries the false value VERBATIM. The
-naming row is what makes a retirement auditable — it is the row that says *this value was
-wrong, and here is the right one* — so a declaration whose naming row is absent, whose
-naming row does not carry the value it claims, or whose target row's canonical run does
-not declare that value at all, is a gate ERROR and never a silent pass; and an entry
-matching no unresolvable token is an error too, because it would inflate the visible debt
-while excusing nothing. The surface lives in the tree the gate judges and never inline in
-the gate, which is paired byte-identically with this template — a factory's own row
-numbers must not ship to every new factory.
-
-**The existence leg asks whether the declared object EXISTS in this repository, and its
-bound is the part a reader will overread: EXISTENCE is neither ANCESTRY nor TRUTH.** A
-declared revision that resolves is not thereby the revision the row MEASURED, and the leg
-cannot say that it is. Ancestry is refused as the predicate for a MEASURED reason rather
-than a taste: a history rewrite leaves an honest revision unreachable while its object
-survives, so an ancestry test would condemn exactly the rows a rewrite did not touch. And
-a leg that cannot judge SAYS SO: on a tree with no object database the leg reports a
-STATED inability and the run prints `NOT RUN` with its reason, never the verdict of a leg
-that examined the population and found it clean.
-
-**A retired declaration is NEITHER edited NOR excused.** It is not edited, because a
-ledger row is append-only and the one-append-path rule stands — a correction is a DECLARED
-DEVIATION, never a precedent. And it is not excused, because excusing is what the
-exemption surfaces do for a violation whose repair space is empty, while a retirement does
-something different: it names the false value, keeps the true one beside it, and stays
-visible. So the gate prints every admitted entry as a `retired:` line, beside its
-`excused:` lines and the count it examined, and the three — `clean`, `excused`, `retired`
-— are never the same output.
-
-**A row count is not an integrity check.** The ledger is read as a *sequence*: a
-subject that reaches `close` must have been filed (`intake`) before it and taken
-(`claim`) after that intake, and `verify` fails naming the subject and the missing
-leg. A ledger can be perfectly numbered and still say that something was closed
-without ever saying who took it. Exemptions are listed explicitly by subject, leg,
-date and PROOF in `EXEMPTIONS` in `tools/ledger.py`, and printed as `excused:`
-whenever one is used — so "clean" and "excused" are never the same output. An
-exemption nobody would defend in that output is one that gets fixed instead. Two
-kinds are admittable, and the boundary between them is the PROOF: a leg missing on
-a close written BEFORE the gate existed is excused by the boundary itself, while a
-leg missing on a close written AFTER it is admitted only by an external receipt —
-never by a restatement of the omission it excuses. An entry carrying no proof
-therefore excuses nothing: the omission stays a problem and the refusal names the
-entry that failed to excuse it.
-
-**A close row is refused at the write path when its subject has no preceding
-intake and claim.** `tools/ledger.py append --event close` runs the same
-sequence predicate `verify` runs — one predicate, two call sites — and exits
-non-zero, naming the subject and the missing leg, without writing anything.
-The refusal carries no exemption surface and needs none: a close appended now
-can never predate the gate. `EXEMPTIONS` governs `verify`'s reading of history
-only, and stays printed there. This does not replace `verify`: the order leg (a
-claim after its close) and any row written around the append path remain
-`verify`'s. The single-writer guarantee above is one append path, not
-tamper-proof (#98, ruling n=596).
-
-**A claim is an ACCEPTANCE, and it is stamped by the lane that takes the work — when
-it takes it, and before its first edit.** The three legs answer three questions:
-intake is Triage's leg, claim is WHO took the work, close is its completion. HQ's
-dispatch names the lane, and the lane's claim answers it; HQ never stamps the claim
-of the lane that took the work, because a claim records a taking and two actors on
-one transition is the shape this section forbids, applied to an actor rather than to
-the append path. The write-path refusal above is the BACKSTOP, not the step: it makes
-an omission impossible to reach a close SILENTLY, which is how the shape first
-appeared twice. A claim stamped after the work is a RECONSTRUCTED record: it must
-declare itself in terms, carry the token `claim=reconstructed`, and name the basis it
-rests on with the canonical marker `BASIS:` — and `verify` prints those rows beside its
-`excused:` lines together with the interval it recomputes from the row's own `ts` and
-its close row's `ts`, so clean, excused and reconstructed are never the same output.
-Forward-only: a reconstruction written before this sentence existed is not
-retrofitted (#98, ruling n=602; the interval moved from DECLARED to
-RECOMPUTED-AND-PRINTED under #115, ruling n=687).
-
-**A reconstructed claim DECLARES itself and its basis; it never asserts an interval it
-cannot control.** The token above replaced a requirement that the reconstruction take
-the close row's own `ts`, because both rows were said to be written in the one
-instant. That equality is WITHDRAWN: the claim's `ts` is its own write instant, one of
-the five `ROW_IDENTITY` fields, while the close row's `ts` belongs to whoever appends
-the close — so the second boundary is not the author's to control, and a hand-supplied
-`ts` would invite back-dating on the honour system. Measured over this factory's five
-historical reconstructions the gaps were 0s, 2s, 0s, 347s and 65s — THREE OF FIVE miss
-that equality, so a gate over it would have fired on honest rows. **A gate must test a
-property its author controls.** That fact withdraws the interval's VALUE for the same
-reason it withdrew the equality: the author controls the ACT of declaring, never the
-interval, which exists only once the close row is appended under the append lock. So
-the declaration is the two facts the author does control — the self-declaration token
-and the basis, named under the canonical marker `BASIS:` — and the interval moves from
-DECLARED to RECOMPUTED-AND-PRINTED: the reader recomputes it from the two rows' own
-`ts` values and prints it beside the row, tool-sourced on BOTH sides, with no typed
-expectation, read through the canonical trailer predicate, because one field has one
-predicate. The gate PRINTS the population it examined and is proven to BITE by a
-synthetic probe; its live population is legitimately EMPTY until the next
-reconstruction, so the loud-fail-on-zero form is the WRONG guard here. Its boundary is
-declared in `docs/ledger-invariants.json`, and the historical reconstructions are
-OUTSIDE its population: NOTHING IS BACKFILLED. The superseded ledger row stands — a row
-is retired by naming it, never by editing it. The `claim_gap` token is WITHDRAWN as a
-requirement (#115, ruling n=687) and no hand-edit of a ledger row is ever lawful — the
-one-append-path rule stands, and a correction is a DECLARED DEVIATION, never precedent.
-
-**A ledger subject names an issue or describes the work, and the form says which.** A subject that names a board issue is written `#N` — the hash, the digits, and nothing else. `#N` is the strict form every subject-keyed predicate resolves through, so a near-miss is not a malformed reference to those predicates: it is not a reference at all, and the row silently leaves their population without ever being reported as wrong. A subject that names no issue is a descriptive stem naming the work in words (`pickaxe-attribution-trap`), and a clause label extending a reference (`#31-close-receipt`) is descriptive, not a reference — a mechanism that cannot tell those two apart from a broken reference will either miss the defect or fire on the law. The number a subject names is not bound to this factory's own board: a row may cite another repository's issue, so the form is what is codified and no gate may read `#N` as naming this factory's board without saying so. The gate that upholds this is `tests/test_subject_form.py`, and the instant it governs from is declared in `docs/ledger-invariants.json` like every other ledger invariant.
-
-**Declare the writer for every surface you add.** A surface with no named writer
-is a surface that will acquire two.
-
-**An ad-hoc probe never appends to live state, and the seam that isolates it is a
-MECHANISM, not a copy.** A scratch script or throwaway harness that appends to a
-durable surface is a SECOND writer on a surface this section gives one writer, and the
-rows it leaves behind are indistinguishable from real state transitions. **Copying the
-data file isolates nothing:** the append path is bound to the TOOL's location, not to
-the data it reads, so a copy of the ledger with the tool still resolving its own
-repository root writes to the live file. So the tool exposes a redirect for every path
-an append can land in, the harness binding documents those names and the incantation
-that uses them — a name is a mechanic of one product and naming it in this law is a
-leak — and a gate proves the tool HONOURS each name the binding publishes, because a
-binding naming a redirect the tool no longer reads is a law naming a mechanism that
-does not exist. **The seam carries a stated COST:** a path outside the repository has
-no committed lineage to compare against, so the guard that makes a rewrite of live
-history loud FAILS OPEN and warns — that warning is EXPECTED on this path, not an
-error.
-
-**A lane's bindings are a SUPERSESSION CHAIN, and the live session is the newest binding within its own profile: a topic re-opened several times carries one binding per generation, and the newest is the lane. Only a match across two PROFILES is ambiguous, because there the registry cannot tell which daemon's session owns the topic; a single-profile chain is resolved by recency and the resolution is reported, never suppressed. The exit code carries the verdict: unbound and no-thread-id mean a declared lane is unreachable and exit non-zero, while a superseded chain is a live lane and does not.**
-
-`tools/registry.py` ships with this template and is where the law is mechanical: its
-`chat_id` narrowing runs BEFORE the match count, so every survivor already shares one chat
-and a set spanning two profiles is the only case left in which the registry cannot tell
-which daemon owns the topic. So `superseded` counts as RESOLVED in the exit predicate and
-carries its own counter on `resolve`'s summary line — visible without being a verdict —
-while `unbound`, `ambiguous` and `no-thread-id` keep rc=1. The fix does not delete the
-detector it was built around: the registry's gate drives both halves over synthetic
-bindings, one profile to a chain and two to `ambiguous`, because a chain-only probe would
-pass a fix that had removed the ambiguity branch entirely.
-
-**An append-only surface with no reader is a write-only memory.** Ship the read
-path with the write path — the ledger is what a state claim is checked against.
-
-**A defect fixed is not a defect learned.** `evidence/rework.md` is where a
-failure turns into a rule, a test or a gate, and the `Prevented by` column is the
-only part that changes future behaviour. `nothing yet` is a legitimate and useful
-entry: it marks the defect as still live. A log whose every entry says "be more
-careful next time" is a log that has quietly stopped working.
+**The rest of this section's clauses live in `state.md`, beside this file** — load it before
+writing any state row or touching a surface's writer. The table and the authorship split
+above stay here, beside the clauses they qualify.
 
 ---
 

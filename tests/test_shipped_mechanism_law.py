@@ -64,7 +64,9 @@ def evaluate(repo, declaration):
     what was examined, so a clean verdict is distinguishable from an empty one.
     """
     problems = []
-    law_rel = declaration.get("law")
+    declared_laws = declaration.get("law")
+    laws = [declared_laws] if isinstance(declared_laws, str) else list(declared_laws or [])
+    law_rel = laws[0] if len(laws) == 1 else laws
     entries = declaration.get("required_clauses") or []
 
     if not entries:
@@ -75,21 +77,32 @@ def evaluate(repo, declaration):
             {"entries": 0, "law": law_rel},
         )
 
-    law_path = repo / str(law_rel)
-    if not law_path.is_file():
+    if not laws:
         return (
-            [f"the declaration names the law file {law_rel!r}, which is ABSENT from this "
-             f"tree - the clause set cannot be judged, and an unreadable law is not a law "
-             f"with no missing clauses"],
+            ["the declaration names no law file - the clause set cannot be judged, and a "
+             "law that names nothing is not a law with no missing clauses"],
             {"entries": len(entries), "law": law_rel},
         )
-    law_text = law_path.read_text(encoding="utf-8")
-    if not law_text.strip():
-        return (
-            [f"the law file {law_rel!r} is EMPTY - every clause would read as missing, and "
-             f"an empty law is not a law that states nothing"],
-            {"entries": len(entries), "law": law_rel},
-        )
+
+    law_texts = []
+    for rel in laws:
+        law_path = repo / str(rel)
+        if not law_path.is_file():
+            return (
+                [f"the declaration names the law file {rel!r}, which is ABSENT from this "
+                 f"tree - the clause set cannot be judged, and an unreadable law is not a "
+                 f"law with no missing clauses"],
+                {"entries": len(entries), "law": law_rel},
+            )
+        body = law_path.read_text(encoding="utf-8")
+        if not body.strip():
+            return (
+                [f"the law file {rel!r} is EMPTY - every clause would read as missing, and "
+                 f"an empty law is not a law that states nothing"],
+                {"entries": len(entries), "law": law_rel},
+            )
+        law_texts.append(body)
+    law_text = "\n".join(law_texts)
 
     population = {
         "entries": len(entries),
@@ -142,7 +155,8 @@ def run_self_probes():
     def check(name, condition, detail=""):
         results.append((name, bool(condition), detail))
 
-    def fixture(entries, law_text="A law body.\n", mechanisms=None):
+    def fixture(entries, law_text="A law body.\n", mechanisms=None, laws=None,
+                extra_laws=None):
         """A throwaway repo with a declaration, a law and the named mechanisms."""
         root = pathlib.Path(tempfile.mkdtemp(prefix="shipped-law-"))
         (root / "docs").mkdir(parents=True, exist_ok=True)
@@ -154,7 +168,12 @@ def run_self_probes():
         law = root / "TEMPLATE" / "SKILL.md.tmpl"
         law.parent.mkdir(parents=True, exist_ok=True)
         law.write_text(law_text, encoding="utf-8")
-        declaration = {"law": "TEMPLATE/SKILL.md.tmpl", "required_clauses": entries}
+        for rel, text in (extra_laws or {}).items():
+            target = root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
+        declaration = {"law": laws if laws is not None else "TEMPLATE/SKILL.md.tmpl",
+                       "required_clauses": entries}
         return root, declaration
 
     entry = {
@@ -213,6 +232,27 @@ def run_self_probes():
         check("P7 an unreadable declaration raises rather than reading as empty", False)
     except OSError:
         check("P7 an unreadable declaration raises rather than reading as empty", True)
+
+    # P8 - `law` is a LIST: a clause stated by the SECOND named file passes. This is the
+    # board #302 shape - the template law body split, so its clause tail ships in its own
+    # file and the clause set is asserted over every file the declaration names.
+    root, decl = fixture([entry], law_text="body with no such clause.",
+                         mechanisms={"tools/thing.py": "TOKEN_A = 1\n"},
+                         laws=["TEMPLATE/SKILL.md.tmpl", "TEMPLATE/state.md.tmpl"],
+                         extra_laws={"TEMPLATE/state.md.tmpl": "A clause the law must state."})
+    problems, population = evaluate(root, decl)
+    check("P8 a clause stated by the SECOND of several named law files passes",
+          not problems and population["clauses_present"] == 1, f"problems={problems}")
+
+    # P9 - a list naming an ABSENT law file still reds, NAMING it: a multi-file law set
+    # cannot be satisfied by the files that happen to exist.
+    root, decl = fixture([entry], law_text="A clause the law must state.",
+                         mechanisms={"tools/thing.py": "TOKEN_A = 1\n"},
+                         laws=["TEMPLATE/SKILL.md.tmpl", "TEMPLATE/gone.md.tmpl"])
+    problems, _ = evaluate(root, decl)
+    check("P9 an absent member of a multi-file law set reds and NAMES it",
+          any("TEMPLATE/gone.md.tmpl" in p and "ABSENT" in p for p in problems),
+          f"problems={problems}")
 
     return results
 

@@ -25,9 +25,19 @@
     "A CLAUSE IS NAMED BY ITS PHRASE, NEVER BY A SECTION NUMBER. The two law files number",
     "their sections differently - this factory's section 11 is State, the template's is",
     "Escalation - so a section number resolves to a DIFFERENT clause in each tree (#184,",
-    "ruled on the kit's own citation law)."
+    "ruled on the kit's own citation law).",
+    "",
+    "WHY `law` IS A LIST (board #302). The clause tail of the template's law body was",
+    "extracted into `TEMPLATE/state.md.tmpl` (the State section's clause tail) and",
+    "`TEMPLATE/verdicts-and-claims.md.tmpl` (the Verdicts section), so the shipped law is",
+    "no longer ONE file. The gate asserts each clause phrase against the CONCATENATION of",
+    "the named files, so a clause reads as 'stated by the shipped law' wherever the shipped",
+    "law carries it - and a named file that is absent or empty is still a failure."
   ],
-  "law": "TEMPLATE/SKILL.md.tmpl",
+  "law": [
+    "TEMPLATE/state.md.tmpl",
+    "TEMPLATE/SKILL.md.tmpl"
+  ],
   "required_clauses": [
     {
       "mechanism": "tools/patrol_host_state.py",
