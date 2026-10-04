@@ -146,7 +146,7 @@
     }
   ],
   "substrates_owned": [
-    "/root/ai-antispam - public repo leshchenko1979/ai-antispam (canonical, remote origin; board alexeyleshchenko/ai-antispam, second remote via SSH alias github.com-alexey)",
+    "/root/ai-antispam - public repo leshchenko1979/ai-antispam (canonical, remote origin; board ALSO leshchenko1979/ai-antispam since the 2026-10-04 migration, second remote via SSH alias github.com-alexey retained for the retired account)",
     "/root/ai-antispam-outreach - private repo leshchenko1979/ai-antispam-outreach",
     "Postgres ai_spam_bot on apps - single writer outreach/lib/db.py",
     "the bot container and MAX webhook route on apps"
@@ -154,7 +154,7 @@
   "announcements": [
     {
       "id": "bot-repo-canonical-account-and-deploy-home",
-      "text": "leshchenko1979 is the CANONICAL GitHub account for this factory (owner ruling 2026-09-25), and leshchenko1979/ai-antispam is the canonical repo: it hosts the production landing page ai-antispam.ru, publishes the image (ghcr.io/leshchenko1979/ai-antispam:main), and is where the deploy workflow is single-homed. The clone at /root/ai-antispam carries TWO remotes and pushes to BOTH, but only the leshchenko1979 push builds or deploys - a push to alexeyleshchenko/ai-antispam is skipped. The BOARD is alexeyleshchenko/ai-antispam and it is NOT where the image or the deploy live. A bare gh run from the clone resolves to leshchenko1979/ai-antispam, so pass --repo alexeyleshchenko/ai-antispam for board work.",
+      "text": "leshchenko1979 is the CANONICAL GitHub account for this factory (owner ruling 2026-09-25), and leshchenko1979/ai-antispam is the canonical repo: it hosts the production landing page ai-antispam.ru, publishes the image (ghcr.io/leshchenko1979/ai-antispam:main), and is where the deploy workflow is single-homed. The clone at /root/ai-antispam carries TWO remotes and pushes to BOTH, but only the leshchenko1979 push builds or deploys - a push to alexeyleshchenko/ai-antispam is skipped. The BOARD was migrated to leshchenko1979/ai-antispam on 2026-10-04 (owner order; the 62 items were recreated and renumbered - map docs/board-migration/number-map.json), so board work now passes --repo leshchenko1979/ai-antispam, where gh holds admin. alexeyleshchenko is RETIRED and gets no new work.",
       "severity": "warning",
       "since": "2026-09-25",
       "affects": [
