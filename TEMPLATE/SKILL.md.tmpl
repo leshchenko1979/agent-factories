@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.23
+version: 0.1.24
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -322,7 +322,7 @@ factory keeps outside it, the issue board. Every other path to it is read-only.
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the measurement job | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated |
 | `processes.md` | the canonical process register | `HQ` | read-only |
-| `registry/fleet.json` and `registry/factories/<slug>.json` | what this factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` / `show` |
+| `registry/fleet.json` and `registry/factories/<slug>.json` | what this factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | this law | the process rules | `HQ` | read-only |
 
