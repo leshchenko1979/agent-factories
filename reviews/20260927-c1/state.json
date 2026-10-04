@@ -233,6 +233,13 @@
       "home": "tools/review.py cmd_close (commit 5b2fe9f)",
       "reason": null,
       "recorded_at": "2026-09-28T19:10:18Z"
+    },
+    {
+      "finding": "no gate reads a promotion's close-row declarations (promotion=/naming=/review=/vocabulary= -> 0 files)",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "Owner order 2026-10-04 (MSK 17:37): DROP, superseding the 2026-09-28T19:02:21Z routed entry above. Basis, measured 2026-10-04T14:38:24Z over evidence/ledger.jsonl (2223 rows): the population ruling n=1375 declares \u2014 promotion=<instrument> in the detail \u2014 is EMPTY. promotion= 1 hit (n=1375, the ruling describing its own mechanism); naming= and vocabulary= 1 each (n=1375); review= 2 (n=1217, n=1375). A gate over that population opens over zero rows and reads green: a manufactured pass. Its sole specimen n=1302 is a CITATION omission, not a failure \u2014 the three artifacts landed 6h45m before the close (the figure HQ recorded at n=1375). No consumer is protected: it audits the meta-factory paperwork only.",
+      "recorded_at": "2026-10-04T14:41:39Z"
     }
   ],
   "frozen_at": null,
@@ -289,5 +296,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-09-28T19:10:18Z"
+  "updated_at": "2026-10-04T14:41:39Z"
 }
