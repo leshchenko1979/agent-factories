@@ -28,43 +28,43 @@
   },
   "lenses": {
     "A": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-A.md",
+      "sha256": "cf7fe7c65544e4b282886ab414e955a60770ac01a04252075c26de54c8be23d9",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:06:52Z",
       "reason": null
     },
     "B": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-B.md",
+      "sha256": "291b879b7f0db47a5cf9a42f2f5132a4be589cfe62ddd81e2ed59ae0e9d23b65",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:06:52Z",
       "reason": null
     },
     "G": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-G.md",
+      "sha256": "7c4b1daea457c3683f7e4015f86a5c43b8e7e004b2cb55bdf74119593b6ae2b5",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:06:52Z",
       "reason": null
     },
     "J": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-J.md",
+      "sha256": "dd70e6bef8ad31786eb618a68537e420956b51062793d2f59a4b7f03219c39da",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:06:53Z",
       "reason": null
     },
     "P": {
@@ -296,5 +296,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T14:41:39Z"
+  "updated_at": "2026-10-04T21:06:53Z"
 }
