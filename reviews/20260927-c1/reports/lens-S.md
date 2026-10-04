@@ -281,3 +281,186 @@ and the exemption. §5 of the same file already solved this problem by naming to
 **(4) Remediation.** Convert the roster to topic/role names (as §5 does) and resolve the id live at
 dispatch, then delete the five entries from `docs/law-uuid-exemptions.json`. If ids must stay, add an
 expiry timestamp to the exemption so staleness becomes a gate failure rather than a note.
+
+---
+
+## Finding S-10 — MEDIUM — `README.md` carries both stale defects (the "four factories" count and raw session UUIDs) and is NOT covered by the UUID exemption
+
+**(1) File Locators:** `README.md:74` (count), `README.md:92-97` (lane table with 4 raw session ids),
+`README.md:121-124` (4 more raw chat ids), `README.md:29` and `README.md:100` ("four"/"All four").
+
+**(2) Verbatim quotes (`sed -n`).**
+
+`README.md:74`:
+> The template is extracted from four factories that run today. They are not
+
+`README.md:94-97`:
+> | `HQ` | 21 | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | Analysis, rulings, owner conversation |
+> | `Delegate` | 68 | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | Member-factory comms — dispatches to member HQs, and their answers |
+> | `Triage` | 20 | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | Intake and routing |
+> | `Surveys` | 19 | `5c99ad51-8889-40cb-b589-fa13fd673c06` | Survey and measurement work |
+
+**(3) Defect analysis.** Same two defects as S-4 (stale count) and S-9 (raw ids), reproduced in the
+README — but with a twist that makes it worse than either: `grep -c README docs/law-uuid-exemptions.json`
+→ **0**. The exemption file's population is `skills/*/SKILL.md` and `SKILL.md.tmpl` only, so if the
+README is treated as law (it is the front door — `README.md:29` sells "the four real factories … the
+receipts behind every practice"), then its four hardcoded ids are **un-exempted** raw UUIDs in law,
+which `tests/test_law_no_raw_session_uuid.py` should flag. Either the README is law (and needs its own
+exemption or a fix) or it is a doc (and the ids must go).
+
+**(4) Remediation.** Reconcile the count (drop the numeral, or say "six" with a predicate/instant), and
+decide the README's status: if law, add it to the exemption population or convert the ids to
+topic/role names; if doc, delete the raw ids at `:92-97` and `:121-124` and name the topics only.
+
+---
+
+## Finding S-11 — LOW — The shipped instrument docs carry origin-factory names into the half every new factory inherits (leak into the TEMPLATE)
+
+**(1) File Locators:** `TEMPLATE/docs/instruments/review-rotation.md:464-469` and
+`TEMPLATE/docs/instruments/open-questions.md:118`.
+
+**(2) Verbatim quotes.**
+
+`TEMPLATE/docs/instruments/review-rotation.md:464-469`:
+> | `ai-antispam` | 5/5 | absent | absent | **HELD-UNDECLARED** |
+> | `inferhub-watch` | 0/5 | absent | absent | **ABSENT** — the adoption pilot |
+> | `infra-factory` | 0/5 | absent | absent | **ABSENT** |
+> | `miidas` | 0/5 | absent | absent | **ABSENT** |
+> | `opencrabs-dev` (the donor) | 0/5 | absent | absent | **ABSENT** — its `hq.md` carve landed 2026-09-27 |
+> | `meta-factory` | 5/5 | resolves | absent | **SOURCE** — the authoring tree, not an adopter |
+
+`TEMPLATE/docs/instruments/open-questions.md:118` names `skills/opencrabs-dev/tools/state/oc-questions`.
+
+**(3) Defect analysis.** `TEMPLATE/` is the half that ships — every bootstrapped factory inherits it.
+These two instrument docs hardcode *this box's* six member factories, one of which
+(`opencrabs-dev`) is even labelled "the donor," into the delivered law. A new factory bootstrapping from
+the template inherits a census of a different fleet. This is the same class as S-2/S-3: a leak in a
+core-law surface, unprotected because the leak test (a) is not run and (b) scans only three
+`.tmpl`/`best-practices` files, not `TEMPLATE/docs/instruments/`.
+
+**(4) Remediation.** Parameterise the census table to derive from the adopting factory's own
+`registry/fleet.json` (or its local equivalent) rather than hardcoding the meta-factory's members.
+Extend the leak test's scanned file set to cover `TEMPLATE/docs/instruments/` (or state that
+instruments are out of scope and why).
+
+---
+
+## Finding S-12 — LOW — `TEMPLATE/docs/best-practices.md` names origin factories throughout, yet is on the leak test's own scanned set
+
+**(1) File Locator:** `TEMPLATE/docs/best-practices.md` — "Proven:" citations at
+`:34, 48, 62, 76, 88, 104, 151` (and more).
+
+**(2) Verbatim quotes (`grep -n "Proven:"`).**
+
+> `34:` `- *Proven:* opencrabs-dev (SKILL.md + 4 role files, mirrored to`
+> `48:` `- *Proven:* opencrabs-dev — EDITOR / SUPERVISOR / TRIAGE / TOOLSMITH, four`
+> `62:` `- *Proven:* inferhub-watch — issue law, hard, with re-triage of open issues`
+> `104:` `- *Proven:* inferhub-watch (delegation law, owner order); agent-factories (owner`
+
+**(3) Defect analysis.** `TEMPLATE/README.md:44` puts `docs/best-practices.md` *inside* the leak test's
+scanned set; the file then carries dozens of origin-factory names. So the leak test — if it were ever
+run (S-3) — would hit every one of these lines. The tension is real and unresolved: "Proven by
+<factory>" may be legitimate *evidence* prose, but the leak test makes no exception for evidence, so
+either the rule or the file is wrong. This is the historical defect `evidence/rework.md:116` records
+being fixed ("`best-practices.md` calls itself core law and was outside its scope") — and the fix is
+still unenforced.
+
+**(4) Remediation.** Decide whether "Proven by <origin factory>" citations are permitted in the
+core-law scanned set. If yes, amend the leak test's scope to exclude annotated evidence lines (and say
+so in `TEMPLATE/README.md`); if no, genericise the citations ("proven in a donor factory of this
+family"). Either way, make the decision a gate, not a judgement call.
+
+---
+
+## Finding S-13 — LOW — `docs/instruments/insights.md` exists with NO template half and its symlink points at the ROOT doc, breaking the doc-pair contract
+
+**(1) File Locators:** `docs/instruments/insights.md` (present, 38,802 B) vs.
+`skills/meta-factory/insights.md` (symlink → `../../docs/instruments/insights.md`).
+
+**(2) Verbatim / measured.**
+
+`skills/meta-factory/SKILL.md:360` (the contract):
+> ships as a doc pair (`docs/instruments/<instrument>.md` + `TEMPLATE/docs/instruments/<instrument>.md`) and reloads into this skill through a relative symlink
+
+Measured: `ls TEMPLATE/docs/instruments/` → `hygiene.md kit.md ledger.md open-questions.md pacemaker.md
+review-rotation.md template-instruments.md` (**no `insights.md`**). `ls -la skills/meta-factory/insights.md`
+→ `-> ../../docs/instruments/insights.md` (points at the ROOT doc, **not** the TEMPLATE half — unlike
+e.g. `hygiene.md`, which points at `../../TEMPLATE/docs/instruments/hygiene.md`).
+
+**(3) Defect analysis.** §360 defines a two-part contract (doc pair + symlink to the TEMPLATE half).
+`insights.md` satisfies neither: it has no TEMPLATE twin, and its symlink resolves to the root copy.
+`tests/test_docs_sync.py` checks only the template→root direction (`missing_in_root`), so a *root-only*
+file is invisible to it — the gate cannot see this break. Whether insights is genuinely factory-local
+(and should be declared so) or simply an unpaired instrument is never stated.
+
+**(4) Remediation.** Either ship `TEMPLATE/docs/instruments/insights.md` and repoint the symlink at the
+TEMPLATE half (matching `hygiene.md`), or declare `insights` factory-local in §10 and note the
+exception to the doc-pair rule. Add a reverse-direction check to `tests/test_docs_sync.py` so a
+root-only instrument is a gate failure.
+
+---
+
+## Finding S-14 — LOW — `state.md:51` opens with a stray `_ ` token (malformed markdown / unclosed emphasis)
+
+**(1) File Locator:** `skills/meta-factory/state.md:51`
+
+**(2) Verbatim quote (first bytes of the line):**
+
+> `_ **The ledger's write discipline is the instrument's own law: `docs/instruments/ledger.md` §9 — …`
+
+**(3) Defect analysis.** A lone `_` followed by a space at the start of the line is an unclosed
+emphasis marker — the residue of an edit that dropped a `> ` blockquote prefix or a `-` bullet.
+Rendered, it either opens italics that never close or emits a literal underscore. Cosmetic, but it is
+corruption in a law file whose bytes are supposed to be the authority.
+
+**(4) Remediation.** Delete the stray `_ ` (restore the intended prefix — likely `> ` or `- `).
+
+---
+
+## Finding S-15 — INFO — Lens S's own "Core Checks" cites "P25", but P25 is defined nowhere in the process register
+
+**(1) File Locator:** `docs/review-lenses.md:158`
+
+**(2) Verbatim quote (`sed -n '158p' docs/review-lenses.md`):**
+
+> 1. **P25 Isolation Enforcement:** Ensure factory-specific process rules do NOT leak into shared agent profile brain files.
+
+**(3) Defect analysis.** Measured: `grep -n "P25" docs/processes.md` → **no match** — the process
+register defines P28, P29, P1, P27, but not P25. Yet `docs/projects/hygiene-surfaces.md:70` cites
+"(P25 isolation)" as though defined. A rule referred to by an ID that has no definition is a dangling
+ontology reference: the auditor is told to enforce "P25" and cannot look it up. (This finding is
+INFO rather than a defect because the rule itself is plain in the sentence; only the ID dangles.)
+
+**(4) Remediation.** Define P25 in `docs/processes.md` (the isolation rule is real and worth
+numbering), or replace the `P25` citation with the plain rule in both `review-lenses.md` and
+`hygiene-surfaces.md`.
+
+---
+
+## Summary
+
+Fifteen findings against revision `af6d92776c1dce0159256ad100c6c0abf889e480` — **4 HIGH, 6 MEDIUM,
+4 LOW, 1 INFO**. The single most severe is **S-1**: the meta-factory's core-law file
+(`skills/meta-factory/SKILL.md:33`) cites `TEMPLATE/SKILL.md.tmpl §17` for the clause that is actually
+**§18** — git-verified at the commit (`§17 = Reporting language`, `§18 = Where this factory's rules
+live`) — so every reader who follows the pointer lands on the wrong law, and `test_law_structure.py`
+checks only heading contiguity, not citation targets. The cluster behind it is the leak class: §5's
+routing table hardcodes three member factories into core law (**S-2**), the "leak test" that would
+catch exactly that is a declared mandatory directive with **no mechanism** — and two authoritative
+files define it with different token and file sets (**S-3**) — while the shipped half itself leaks
+origin-factory names (**S-11**, **S-12**). The remaining HIGH, **S-4**, is a stale count in law ("the
+four member factories") contradicted by the six-factory registry three files away.
+
+The measurements that produced these: `git show af6d927:<path>` for every shipped-law quote (never the
+working tree); `grep -nE '^## (17|18)\.' TEMPLATE/SKILL.md.tmpl` → 409/425 (S-1);
+`cat registry/fleet.json` → 6 factories and `grep -n declared docs/factory-registry.md` → "6
+fragment(s)" (S-4); `grep -rniE 'leak|…' tests/*.py` → no leak-test gate and
+`md5sum docs/addons.md TEMPLATE/docs/addons.md` + `sed -n` on both leak-test definitions (S-3);
+`wc -lc /root/.opencrabs/profiles/ops/AGENTS.md` → 132 lines / 32,986 B and `sed -n '106p'` (S-6);
+`python3 -c '…json.load(registry/factories/meta-factory.json)…'` → 13 lanes vs the law's 5 (S-8);
+`cat docs/law-uuid-exemptions.json` → 5 entries, all `skills/meta-factory/SKILL.md`, README count 0
+(S-9, S-10); `ls TEMPLATE/docs/instruments/` vs `ls -la skills/meta-factory/insights.md` (S-13);
+`sed -n '51p' skills/meta-factory/state.md` (S-14); `grep -n P25 docs/processes.md` → no match (S-15).
+I could not measure the one thing S-9 turns on — the *liveness* of the five hardcoded session ids — because
+no offline surface reads live `session_bindings`; I measured their age (16 days) and their declared
+exemption instead, and say so in the finding.
