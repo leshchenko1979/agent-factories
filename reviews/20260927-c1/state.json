@@ -247,6 +247,874 @@
       "home": "skills/meta-factory/SKILL.md:378 + TEMPLATE/SKILL.md.tmpl:325 (commit a862d47, the dead pointer replaced by the existing verb `resolve`)",
       "reason": null,
       "recorded_at": "2026-10-04T21:45:45Z"
+    },
+    {
+      "finding": "Lens A F1 (UNSPECIFIED): P30 names two different laws; the single-ownership law is mis-cited as P30 (it is P31)",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/processes.md:35 + skills/meta-factory/state.md:87 (correct the P30 citation to P31)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:12Z"
+    },
+    {
+      "finding": "Lens A F2 (UNSPECIFIED): ONTOLOGY.md says the process register 'is not yet written' while docs/processes.md ships as the ProcessRegister",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md process-register section + docs/process-audit.md:6",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:12Z"
+    },
+    {
+      "finding": "Lens A F3 (UNSPECIFIED): Dead session uuid retired by #254 survives as a routing instruction in README and docs/addons/harness/opencrabs.md",
+      "disposition": "routed",
+      "home": "HQ \u2014 README.md:121 + docs/addons/harness/opencrabs.md:303 (+ TEMPLATE twin)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:13Z"
+    },
+    {
+      "finding": "Lens A F4 (UNSPECIFIED): ONTOLOGY.md pair-vs-twin row claims residual uses are NOT the pair relation; >=6 law-surface lines use twin for exactly it",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md:462 (pair/twin row)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:13Z"
+    },
+    {
+      "finding": "Lens A F5 (UNSPECIFIED): ONTOLOGY.md live-instances object table is stale (Score 2026-09-12 14/52; WorkUnit issues #6 to #12)",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md:359-362",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:14Z"
+    },
+    {
+      "finding": "Lens A F6 (UNSPECIFIED): TEMPLATE/roles/hq.md says 'the 11-lens review'; the catalogue and the tool are 14 lenses",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/roles/hq.md:20 (11-lens -> 14-lens)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:15Z"
+    },
+    {
+      "finding": "Lens A F7 (UNSPECIFIED): docs/growth-stages.md claims the meta-factory 'runs 8 deterministic gates'; the live registry declares 64",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/growth-stages.md:159",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:15Z"
+    },
+    {
+      "finding": "Lens A F8 (UNSPECIFIED): Lane roster duplicated in README.md and SKILL.md section 3; the README copy is stale (4 lanes, no Worker)",
+      "disposition": "routed",
+      "home": "HQ \u2014 README.md 'This project's own surface' section",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:16Z"
+    },
+    {
+      "finding": "Lens A F9 (UNSPECIFIED): Provenance sediment: dated incident narratives embedded in the canonical ontology tables",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md:462-463 + evidence/rework.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:17Z"
+    },
+    {
+      "finding": "Lens A F10 (UNSPECIFIED): SKILL.md section 11 states every instrument ships as a doc pair, which docs/instruments/insights.md refutes",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md:360",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:18Z"
+    },
+    {
+      "finding": "Lens A F11 (UNSPECIFIED): Canonical vocabulary used as law but not codified as terms: pair, Worker, Carrier, family",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md canonical terms table",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:19Z"
+    },
+    {
+      "finding": "Lens A F12 (UNSPECIFIED): Rule duplication: the single-ownership law is restated verbatim on three surfaces",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/best-practices.md P31 (dedupe the two restatements)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:20Z"
+    },
+    {
+      "finding": "Lens B F1 (HIGH): state.md is a wall of unbroken 1000-2257-char paragraphs (cognitive load / token weight)",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/state.md (split the mega-paragraphs)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:21Z"
+    },
+    {
+      "finding": "Lens B F2 (HIGH): Cache Test: ONTOLOGY.md embeds a self-census that is unreproducible and already contradicted",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md:530",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:21Z"
+    },
+    {
+      "finding": "Lens B F3 (HIGH): Cache Test: README.md carries 8 raw session UUIDs, one of them measured dead by the factory itself",
+      "disposition": "routed",
+      "home": "HQ \u2014 README.md (lane + member-HQ tables)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:22Z"
+    },
+    {
+      "finding": "Lens B F4 (MEDIUM-HIGH): Duplication-driven drift: the required_tools set differs between two law surfaces",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/methodology/04-harness-binding.md section 9.2 (single home for required_tools)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:23Z"
+    },
+    {
+      "finding": "Lens B F5 (MEDIUM): Responsibility creep: the git-commit clause is byte-identical in three role cards",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/roles/* (delete the duplicated row)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:23Z"
+    },
+    {
+      "finding": "Lens B F6 (MEDIUM): Responsibility creep: the Triage card is 2.2x the other role cards, carrying law that lives elsewhere",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/roles/triage.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:24Z"
+    },
+    {
+      "finding": "Lens B F7 (MEDIUM): Cache Test: hygiene.md hard-codes a 6-row adoption census derived from registry state",
+      "disposition": "routed",
+      "home": "the hygiene instrument lane \u2014 docs/instruments/hygiene.md:369-380",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:25Z"
+    },
+    {
+      "finding": "Lens B F8 (LOW-MEDIUM): Cache Test / stat drift: the '778 compactions / >93% retention' figure is restated in >=6 places",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/best-practices.md + docs/methodology/04-harness-binding.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:25Z"
+    },
+    {
+      "finding": "Lens B F9 (LOW): Negation Test: prohibition-first clauses that duplicate a positive already stated",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md:419 + state.md:26",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:25Z"
+    },
+    {
+      "finding": "Lens C Finding 1 (HIGH): The live law asserts a tool does not exist that is shipped in the tree; the ruling path bypasses it",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/state.md:58 (name tools/rule.py as the write path)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:26Z"
+    },
+    {
+      "finding": "Lens C Finding 2 (HIGH): A documented reproduce command that no longer reproduces, and the file contradicts itself",
+      "disposition": "routed",
+      "home": "the kit instrument lane \u2014 docs/instruments/kit.md section 9.2 / section 4.1",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:27Z"
+    },
+    {
+      "finding": "Lens C Finding 3 (MEDIUM-HIGH): The law declares a standing duty but never names its runner; the runner is invisible to every law surface",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/measurement-procedure.md section 5.2 (name tools/gate_budget_rederive.py)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:27Z"
+    },
+    {
+      "finding": "Lens C Finding 4 (MEDIUM): No tool-invocation telemetry exists for this factory's own CLI surface; the lens's error-distribution analysis is unimplementable",
+      "disposition": "routed",
+      "home": "the tool lanes owning tools/*.py (oc_log telemetry shim); or docs/review-lenses.md:77 lens-C scope",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:28Z"
+    },
+    {
+      "finding": "Lens C Finding 5 (MEDIUM): The settlement/release leg is a 3-4 step manual sequence with no unified runner, while the ruling act has one",
+      "disposition": "routed",
+      "home": "HQ \u2014 proposes tools/settle.py; name it in SKILL.md section 12",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:29Z"
+    },
+    {
+      "finding": "Lens C Finding 6 (LOW-MEDIUM): A documented cron trigger names a flag the tool does not define (--check)",
+      "disposition": "routed",
+      "home": "the proposal's owner \u2014 docs/proposals/01-cron-gated-goal-pipeline.md:113",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:29Z"
+    },
+    {
+      "finding": "Lens C Finding 7 (LOW): Two tools in tools/ are invoked by nothing: no law, no gate, no cron, no kit",
+      "disposition": "routed",
+      "home": "the tool lanes \u2014 tools/render-trap-runbook.py, tools/sigpipe_threshold.sh",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:30Z"
+    },
+    {
+      "finding": "Lens C Finding 8 (LOW): An instrument's declared file set names a repo-side half that is absent from this repo",
+      "disposition": "routed",
+      "home": "the open-questions instrument lane \u2014 docs/instruments/open-questions.md section 2",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:30Z"
+    },
+    {
+      "finding": "Lens C SCOPE-NOTE (UNSPECIFIED): Scope note: the brief's generic premises (roles/*.md, processes.md, AGENTS.md) do not exist in this repo",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "scope note, not a fix \u2014 the corpus manifest already remapped lens C",
+      "recorded_at": "2026-10-04T22:13:31Z"
+    },
+    {
+      "finding": "Lens D D-1 (UNSPECIFIED): The hygiene sweep's own population count is wrong in the shipped law doc and the tool comment ('15'/'fifteen' vs code's 16)",
+      "disposition": "routed",
+      "home": "the hygiene instrument lane \u2014 docs/instruments/hygiene.md:237 + tools/hygiene.py:435",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:31Z"
+    },
+    {
+      "finding": "Lens D D-2 (UNSPECIFIED): A committed .bak the factory's own litter rule calls a violation, invisible because the leg reads only untracked status",
+      "disposition": "routed",
+      "home": "the hygiene instrument lane \u2014 docs/projects/hygiene-surfaces.md:80 + tools/hygiene.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:32Z"
+    },
+    {
+      "finding": "Lens D D-3 (UNSPECIFIED): A dangling reference to a retired exemption file survives in a proposal",
+      "disposition": "routed",
+      "home": "the proposal's owner \u2014 docs/proposals/05-ledger-number-roots.md:28",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:32Z"
+    },
+    {
+      "finding": "Lens D D-4 (UNSPECIFIED): Evidence supersession is entirely prose-only: 16 dated artifacts across 6 families carry 0 superseded_by markers",
+      "disposition": "routed",
+      "home": "the hygiene instrument lane \u2014 docs/instruments/hygiene.md:157-159 + the six evidence families",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:33Z"
+    },
+    {
+      "finding": "Lens D D-5 (UNSPECIFIED): tools/sigpipe_threshold.sh is an ungated, unshipped one-off whose header cites paths that do not exist in this repo",
+      "disposition": "routed",
+      "home": "the tool lane owning tools/sigpipe_threshold.sh",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:34Z"
+    },
+    {
+      "finding": "Lens D D-6 (UNSPECIFIED): A second non-reproducible count in the same shipped paragraph ('five families')",
+      "disposition": "routed",
+      "home": "the hygiene instrument lane \u2014 docs/instruments/hygiene.md:243",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:35Z"
+    },
+    {
+      "finding": "Lens D D-7 (UNSPECIFIED): 494 KB of regenerable derived JSON is committed (YAGNI/bloat; KEEP, but recorded)",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "observation with no action \u2014 the report recommends NO action (gates compare against them); KEEP",
+      "recorded_at": "2026-10-04T22:13:36Z"
+    },
+    {
+      "finding": "Lens E Finding 2 (HIGH): --stdout means 'also write' in one census and 'do not write' in two others",
+      "disposition": "routed",
+      "home": "the tool lanes owning the three census tools (state the contract in docs/instruments/kit.md)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:37Z"
+    },
+    {
+      "finding": "Lens E Finding 3 (MEDIUM): hygiene.py --audit --clean deletes files while --audit says 'without removing'",
+      "disposition": "routed",
+      "home": "the hygiene tool lane \u2014 tools/hygiene.py:1466-1509",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:37Z"
+    },
+    {
+      "finding": "Lens E Finding 4 (MEDIUM): roadmap.py --cadence is a silent alias of --audit (two help texts, one code path)",
+      "disposition": "routed",
+      "home": "the roadmap tool lane \u2014 tools/roadmap.py + the cron row docs/factory-registry.md:382",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:38Z"
+    },
+    {
+      "finding": "Lens E Finding 5 (MEDIUM): Cross-script flag-name collisions: --home and --stamp each mean two unrelated things",
+      "disposition": "routed",
+      "home": "the tool lanes owning brain_metrics/compaction_rate/audit; rename per the report",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:38Z"
+    },
+    {
+      "finding": "Lens E Finding 6 (MEDIUM): A documented trigger command uses a flag hygiene.py does not define (--check)",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "duplicate of C Finding 6 (same locator and defect)",
+      "recorded_at": "2026-10-04T22:13:39Z"
+    },
+    {
+      "finding": "Lens E Finding 7 (LOW): synthesize_insights.py --audit names a caller that never calls it",
+      "disposition": "routed",
+      "home": "the tool lane owning tools/synthesize_insights.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:40Z"
+    },
+    {
+      "finding": "Lens E Finding 8 (LOW): ledger-index.py is the odd dispatch style out, and its docstring omits a verb it implements (path)",
+      "disposition": "routed",
+      "home": "the ledger tool lane \u2014 tools/ledger-index.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:40Z"
+    },
+    {
+      "finding": "Lens E SCOPE-NOTE (UNSPECIFIED): Scope/coverage note: no mapped path was absent; Finding 4's telemetry numbers come from a log outside the repo",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "scope note, not a fix \u2014 methodological caveat on Finding 4's log source",
+      "recorded_at": "2026-10-04T22:13:41Z"
+    },
+    {
+      "finding": "Lens F Finding 1 (HIGH): Shell hygiene: neither shell script sets -e; the lens law requires set -euo pipefail",
+      "disposition": "routed",
+      "home": "the tool lanes owning the two shell scripts",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:41Z"
+    },
+    {
+      "finding": "Lens F Finding 2 (HIGH): audit.py masks a failed ledger stamp with exit 0",
+      "disposition": "routed",
+      "home": "the audit tool lane \u2014 tools/audit.py:2922-2924",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:42Z"
+    },
+    {
+      "finding": "Lens F Finding 3 (HIGH): Atomic journaling: review.py writes its cycle state, report and receipt with no lock, no temp file and no fsync",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:901,1157,1169 \u2014 write via sibling temp + fsync + os.replace; fsync the index append",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:42Z"
+    },
+    {
+      "finding": "Lens F Finding 4 (MEDIUM): audit.py silently drops malformed ledger rows that ledger.py treats as fatal",
+      "disposition": "routed",
+      "home": "the audit tool lane \u2014 tools/audit.py:426,546",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:43Z"
+    },
+    {
+      "finding": "Lens F Finding 5 (MEDIUM): audit.py --json silently ignores --report / --stamp",
+      "disposition": "routed",
+      "home": "the audit tool lane \u2014 tools/audit.py:2770-2786",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:44Z"
+    },
+    {
+      "finding": "Lens F Finding 6 (MEDIUM): Exit-code collapse: no failure path in the tool surface exits a distinct non-zero code",
+      "disposition": "routed",
+      "home": "the tool lanes \u2014 define named exit constants per refusal class; or amend docs/review-lenses.md:93",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:45Z"
+    },
+    {
+      "finding": "Lens F Finding 7 (LOW): hygiene.py --clean reports the same stranded violations that fail --audit, then exits 0",
+      "disposition": "routed",
+      "home": "the hygiene tool lane \u2014 tools/hygiene.py:1602-1606",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:46Z"
+    },
+    {
+      "finding": "Lens F Finding 8 (LOW): registry_render.py writes its three state surfaces non-atomically",
+      "disposition": "routed",
+      "home": "the registry tool lane \u2014 tools/registry_render.py:1161-1163",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:46Z"
+    },
+    {
+      "finding": "Lens F SCOPE-NOTE (UNSPECIFIED): Scope notes: corpus says tests/ holds '89 pytest gate files' (measured 84, 40 pytest-style); shell-hygiene population is 2 files",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "scope notes, not fixes \u2014 premise drift that does not change the findings",
+      "recorded_at": "2026-10-04T22:13:47Z"
+    },
+    {
+      "finding": "Lens G F1 (UNSPECIFIED): A shipped role card names an 11-lens review while citing the 14-lens catalogue; the count is un-gated",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "duplicate of A F6 (same locator and defect)",
+      "recorded_at": "2026-10-04T22:13:48Z"
+    },
+    {
+      "finding": "Lens G F2 (UNSPECIFIED): A shipped role card orders an ACK that the factory's own law names as forbidden",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/roles/worker.md:14",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:48Z"
+    },
+    {
+      "finding": "Lens G F3 (UNSPECIFIED): Two law files cite another factory's tree by a repo-relative path that resolves to nothing here",
+      "disposition": "routed",
+      "home": "HQ \u2014 state.md:188; the open-questions instrument lane \u2014 open-questions.md:118",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:49Z"
+    },
+    {
+      "finding": "Lens G F4 (UNSPECIFIED): The questions-register instrument's declared set is half-absent, and its named writer lives in another factory's tree",
+      "disposition": "routed",
+      "home": "the open-questions instrument lane \u2014 docs/instruments/open-questions.md section 2",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:50Z"
+    },
+    {
+      "finding": "Lens G F5 (UNSPECIFIED): A watchdog procedure terminates on an undefined variable (*N* cycles), and its two mentions disagree in shape",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/roles/triage.md:23-24,67",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:51Z"
+    },
+    {
+      "finding": "Lens G F6 (UNSPECIFIED): Section cohesion: SKILL.md section 4 'Briefing and dispatch' also carries git-commit and worktree discipline",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md section 4",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:51Z"
+    },
+    {
+      "finding": "Lens G F7 (UNSPECIFIED): pacemaker.md section 10 claims a law home it has not taken, and the pending extraction has no exit criterion",
+      "disposition": "routed",
+      "home": "the pacemaker instrument lane \u2014 docs/instruments/pacemaker.md section 10",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:52Z"
+    },
+    {
+      "finding": "Lens G F8 (UNSPECIFIED): Dangling in-file anchor: '(Section 10 Standard)' resolves to the wrong section of its own file",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md:323",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:53Z"
+    },
+    {
+      "finding": "Lens G F9 (UNSPECIFIED): The role cards' Rail 1/2/3 jargon is undefined on the load path the cards declare",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/roles/worker.md + triage.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:54Z"
+    },
+    {
+      "finding": "Lens G F10 (UNSPECIFIED): SKILL.md section 11 states every instrument ships as a doc pair, contradicted by insights",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "duplicate of A F10 (same locator and defect)",
+      "recorded_at": "2026-10-04T22:13:55Z"
+    },
+    {
+      "finding": "Lens G F11 (UNSPECIFIED): Cross-reference off by one: insights.md cites test_instrument_census.py 'arm 6' for a check that is ARM 7",
+      "disposition": "routed",
+      "home": "the insights instrument lane \u2014 docs/instruments/insights.md:45",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:55Z"
+    },
+    {
+      "finding": "Lens G F12 (UNSPECIFIED): state.md:51 is a malformed markdown list item (leading '_' instead of '-')",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/state.md:51",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:56Z"
+    },
+    {
+      "finding": "Lens G SCOPE-FINDING (UNSPECIFIED): Scope/coverage finding: the CORPUS manifest omits TEMPLATE/roles/*.md while asserting those paths are absent",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "scope note, not a fix \u2014 add TEMPLATE/roles/*.md to Lens G's read set",
+      "recorded_at": "2026-10-04T22:13:57Z"
+    },
+    {
+      "finding": "Lens H Finding 1 (SEVERE): Timestamp ordering is non-monotonic, and no mechanism detects it (13 rows out of order; verify prints unqualified 'monotonic')",
+      "disposition": "routed",
+      "home": "the ledger instrument lane \u2014 tools/ledger.py verify + docs/instruments/ledger.md section 9.1",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:58Z"
+    },
+    {
+      "finding": "Lens H Finding 2 (HIGH): Duplicate close/claim rows leave the ledger unable to answer 'closed once or twice?'",
+      "disposition": "routed",
+      "home": "the ledger instrument lane \u2014 docs/ledger-exemptions.json + a ledger verify disposition",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:13:59Z"
+    },
+    {
+      "finding": "Lens H Finding 3 (MEDIUM): The documented lock path is not the lock the write path takes",
+      "disposition": "routed",
+      "home": "the ledger instrument lane \u2014 docs/instruments/hygiene.md:217 + tools/hygiene.py:786",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:00Z"
+    },
+    {
+      "finding": "Lens H Finding 4 (MEDIUM): The timestamp invariant exists in one law file and was dropped from its summary, with no gate in either place (P29)",
+      "disposition": "routed",
+      "home": "the ledger instrument lane \u2014 back the ts invariant with a gate (tools/ledger.py)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:01Z"
+    },
+    {
+      "finding": "Lens I F1 (HIGH): The lens briefs are generated from a SECOND, drifted copy of the lens definitions; review-lenses.md and LENS_METADATA disagree",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:74-219 (LENS_METADATA) \u2014 align names/families/scopes/checks with docs/review-lenses.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:01Z"
+    },
+    {
+      "finding": "Lens I F2 (HIGH): The 'Quote-or-No-Finding' evidence rule is unenforced: record accepts any non-empty bytes and stamps COMPLETED",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:1147 \u2014 reject a report body with no path:line locator token",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:02Z"
+    },
+    {
+      "finding": "Lens I F3 (HIGH): The freeze is bypassable: record and waive carry no is_frozen check, so a closed cycle's state.json can be mutated after close",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:1127,1194 \u2014 add the is_frozen refusal to cmd_record and cmd_waive",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:03Z"
+    },
+    {
+      "finding": "Lens I F4 (MEDIUM-HIGH): The 'UNRECEIPTED (no index line)' state is unreachable: verify reads a self-stamped boolean, never the index log",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:1482 \u2014 verify parses review-index.log, not the self-stamped receipt field",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:04Z"
+    },
+    {
+      "finding": "Lens I F5 (MEDIUM): Every emitted brief scopes the reviewer onto paths that do not exist in this repo, while dropping the one path that does",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:78 \u2014 localise LENS_METADATA scopes to this repo's paths",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:04Z"
+    },
+    {
+      "finding": "Lens I F6 (MEDIUM): review-rotation.md ships stale and self-contradictory numeric readings, including three counts of its own gate file",
+      "disposition": "routed",
+      "home": "the review-rotation instrument lane \u2014 docs/instruments/review-rotation.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:05Z"
+    },
+    {
+      "finding": "Lens I F7 (MEDIUM): Overlapping lens coverage: C and D claim the same 'uninvoked/legacy tool' finding, and C's error-code clause overlaps F",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 docs/review-lenses.md:80,93 \u2014 add an ownership boundary between lenses C/D and C/F",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:05Z"
+    },
+    {
+      "finding": "Lens I F8 (MEDIUM): The Adversarial Isolation Requirement is unenforceable: nothing records who produced a report or that it came from an isolated sub-agent",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py \u2014 add brief-id + recorded_by; or downgrade the isolation claim in docs/review-lenses.md:13",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:06Z"
+    },
+    {
+      "finding": "Lens I F9 (LOW): review.py doc drift: the Usage block and enforcement list omit codify, and two --help strings disagree on the lens set",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 tools/review.py:39 \u2014 add codify to the Usage block + enforcement list; align the two help strings",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:07Z"
+    },
+    {
+      "finding": "Lens J F1 (CRITICAL): The gate that upholds P29 is satisfied by a .md file; nine of 37 practices map only to prose",
+      "disposition": "routed",
+      "home": "HQ \u2014 tests/test_law_coverage.py (strengthen the predicate to a registered non-.md gate)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:07Z"
+    },
+    {
+      "finding": "Lens J F2 (HIGH): P26's operator-act count is law with no tool, and the gate it maps to does not implement it",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/best-practices.md P26; add tools/p26_acts.py or an audit.py leg",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:08Z"
+    },
+    {
+      "finding": "Lens J F3 (HIGH): Section 5.2's gate-budget re-derivation names no tool, though the tool exists and the cron already calls it",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/measurement-procedure.md section 5.2 (name tools/gate_budget_rederive.py)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:09Z"
+    },
+    {
+      "finding": "Lens J F4 (HIGH): Section 4.1's 'own-elapsed-slot' cadence predicate is a pure function of cron state, stated as a surveyor computation with no host",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/measurement-procedure.md section 4.1; add a cadence predicate host",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:09Z"
+    },
+    {
+      "finding": "Lens J F5 (MEDIUM): ONTOLOGY.md claims its own gate 'is run by hand' while tools/audit.py registers it in the daily suite",
+      "disposition": "routed",
+      "home": "HQ \u2014 ONTOLOGY.md:504-505",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:10Z"
+    },
+    {
+      "finding": "Lens J F6 (MEDIUM): The rubric and register admit measures are 'applied by hand', though tools/audit.py computes them",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/quality-criteria.md + docs/process-audit.md + ONTOLOGY.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:10Z"
+    },
+    {
+      "finding": "Lens J F7 (INFO): Section 5.2 declared a third trigger that was unreachable until 007d959; a law stating a mechanism that could not fire (resolved)",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "INFO, resolved \u2014 verified fixed at 007d959; no outstanding code action",
+      "recorded_at": "2026-10-04T22:14:11Z"
+    },
+    {
+      "finding": "Lens M F1 (SEVERE): The factory's own flow acceptance criterion is violated ~46x and is upheld by nothing",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/processes.md:136 (wire a gate or strike the <=30 min clause)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:12Z"
+    },
+    {
+      "finding": "Lens M F2 (SEVERE): The queue-dwell law is unmeasured, and the one tool whose docstring claims to measure it does not",
+      "disposition": "routed",
+      "home": "the tool lane owning tools/synthesize_insights.py; or delete the docstring claim",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:13Z"
+    },
+    {
+      "finding": "Lens M F3 (SEVERE): WIP stagnation is a live livelock: 27 open items past 24h, 20 re-dispatched >=2x, oldest 16.2 days",
+      "disposition": "routed",
+      "home": "the patrol/triage lanes \u2014 add a bounded re-dispatch exit; reconcile the 1.0 d threshold",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:14Z"
+    },
+    {
+      "finding": "Lens M F4 (MAJOR): The census excludes claimed units, and no leg covers 'claimed-but-silent' \u2014 Triage's >30 m duty is unmechanized",
+      "disposition": "routed",
+      "home": "the patrol lane \u2014 add a claimed-silent leg to tools/patrol_host_state.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:14Z"
+    },
+    {
+      "finding": "Lens M F5 (MAJOR): 'Batch Size Control (P11)' cites a clause that says the opposite, and the check is unmeasurable",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 docs/review-lenses.md:127 + tools/review.py:186 \u2014 correct or remove the (P11) batch-size citation",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:16Z"
+    },
+    {
+      "finding": "Lens M F6 (MINOR): The restated 'Avg lead time' figure has drifted 27% and nothing re-derives it",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/growth-stages.md:223 (drop the number or stamp its instant)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:17Z"
+    },
+    {
+      "finding": "Lens P P-1 (HIGH): The instrument's declared concept has four columns; its gates read two, so 0-token quiescence and goal convergence are ungated",
+      "disposition": "routed",
+      "home": "the pacemaker instrument lane \u2014 docs/instruments/pacemaker.md sections 1 and 4",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:18Z"
+    },
+    {
+      "finding": "Lens P P-2 (HIGH): Live state violates the instrument's own concept and the factory's own patrol is green over it",
+      "disposition": "routed",
+      "home": "the pacemaker instrument lane \u2014 docs/instruments/pacemaker.md sections 1 and 6",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:19Z"
+    },
+    {
+      "finding": "Lens P P-3 (MEDIUM): Dead Session Detection (lens-P check 3) has no mechanism anywhere in the repo",
+      "disposition": "routed",
+      "home": "the patrol lane \u2014 add a dead-session leg to tools/patrol_host_state.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:20Z"
+    },
+    {
+      "finding": "Lens P P-4 (MEDIUM): The instrument's own code citations have drifted (:91->:93, :1188->:1760)",
+      "disposition": "routed",
+      "home": "the pacemaker instrument lane \u2014 docs/instruments/pacemaker.md:105,547",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:21Z"
+    },
+    {
+      "finding": "Lens P P-5 (MEDIUM): The harness-binding methodology contradicts the cron contract and the pacemaker doc on the trigger probe",
+      "disposition": "routed",
+      "home": "HQ \u2014 docs/methodology/04-harness-binding.md:65,71",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:22Z"
+    },
+    {
+      "finding": "Lens P P-6 (LOW/MEDIUM): The instrument's 'live state' snapshot is stale in every cell, and one section 6 census claim no longer reproduces",
+      "disposition": "routed",
+      "home": "the pacemaker instrument lane \u2014 docs/instruments/pacemaker.md sections 1 and 6",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:23Z"
+    },
+    {
+      "finding": "Lens P P-7 (LOW): The only prior lens-P report is an unverifiable false positive, and no gate can catch it",
+      "disposition": "routed",
+      "home": "the review-rotation lane \u2014 re-run lens P under the receipt discipline (durable fix is P-1)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:23Z"
+    },
+    {
+      "finding": "Lens P COVERAGE-NOTE (UNSPECIFIED): Coverage note: no cron/pacemaker section exists in SKILL.md; lens P audited docs/instruments/pacemaker.md instead",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "scope note, not a fix \u2014 the operative pacemaker law lives in docs/instruments/pacemaker.md",
+      "recorded_at": "2026-10-04T22:14:24Z"
+    },
+    {
+      "finding": "Lens S S-1 (HIGH): Dangling cross-reference: the core law points at section 17 for a clause that is section 18",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md:33",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:24Z"
+    },
+    {
+      "finding": "Lens S S-2 (HIGH): The meta-factory's own section 5 routing table hardcodes three member factories into core law (leak-test class, unenforced)",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md section 5",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:25Z"
+    },
+    {
+      "finding": "Lens S S-3 (HIGH): The 'leak test' is a declared mandatory gate with NO mechanism, and two authoritative files define it inconsistently",
+      "disposition": "routed",
+      "home": "HQ \u2014 add tests/test_leak_test.py; reconcile TEMPLATE/README.md + docs/addons.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:25Z"
+    },
+    {
+      "finding": "Lens S S-4 (HIGH): Stale member count in law: 'four member factories' vs six enrolled",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md:493 (+ docs/addons.md:78,87; docs/product.md:69)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:26Z"
+    },
+    {
+      "finding": "Lens S S-5 (MEDIUM): The lens catalogue's own scope for Lens S names generic paths that do not exist in this repo (catalogue-to-corpus drift)",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 docs/review-lenses.md:156 \u2014 localise the Lens S scope to the real profile brain files",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:26Z"
+    },
+    {
+      "finding": "Lens S S-6 (MEDIUM): The one-line-pointer law (section 0) is contradicted by the live shared brain file, which carries a multi-sentence directive",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md section 0; reconcile the live ops/AGENTS.md:106",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:26Z"
+    },
+    {
+      "finding": "Lens S S-7 (MEDIUM): Section 0 says the brain pointer is 'one line ... and nothing more,' while section 9 requires it to trigger a three-part reload protocol",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md section 0 vs section 9",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:27Z"
+    },
+    {
+      "finding": "Lens S S-8 (MEDIUM): Two independent lane rosters for one factory, different membership, both claiming authority",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md section 3 vs registry/factories/meta-factory.json",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:27Z"
+    },
+    {
+      "finding": "Lens S S-9 (MEDIUM): Raw session ids hardcoded in law, under a self-declared exemption whose own note admits no gate can assert they resolve",
+      "disposition": "routed",
+      "home": "HQ \u2014 skills/meta-factory/SKILL.md section 3 + docs/law-uuid-exemptions.json",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:28Z"
+    },
+    {
+      "finding": "Lens S S-10 (MEDIUM): README.md carries both stale defects (the 'four factories' count and raw session UUIDs) and is NOT covered by the UUID exemption",
+      "disposition": "routed",
+      "home": "HQ \u2014 README.md",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:28Z"
+    },
+    {
+      "finding": "Lens S S-11 (LOW): The shipped instrument docs carry origin-factory names into the half every new factory inherits (leak into the TEMPLATE)",
+      "disposition": "routed",
+      "home": "HQ/leak-test owner \u2014 TEMPLATE/docs/instruments/*",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:29Z"
+    },
+    {
+      "finding": "Lens S S-12 (LOW): TEMPLATE/docs/best-practices.md names origin factories throughout, yet is on the leak test's own scanned set",
+      "disposition": "routed",
+      "home": "HQ \u2014 TEMPLATE/docs/best-practices.md + the leak test's scope",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:29Z"
+    },
+    {
+      "finding": "Lens S S-13 (LOW): docs/instruments/insights.md exists with NO template half and its symlink points at the ROOT doc, breaking the doc-pair contract",
+      "disposition": "routed",
+      "home": "the insights instrument lane \u2014 docs/instruments/insights.md section 10",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:30Z"
+    },
+    {
+      "finding": "Lens S S-14 (LOW): state.md:51 opens with a stray '_ ' token (malformed markdown / unclosed emphasis)",
+      "disposition": "rejected",
+      "home": null,
+      "reason": "duplicate of G F12 (same locator and defect)",
+      "recorded_at": "2026-10-04T22:14:31Z"
+    },
+    {
+      "finding": "Lens S S-15 (INFO): Lens S's own 'Core Checks' cites 'P25', but P25 is defined nowhere in the process register",
+      "disposition": "routed",
+      "home": "this lane's own surface (review instrument) \u2014 docs/review-lenses.md:158 \u2014 replace the undefined (P25) citation with the plain rule",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:31Z"
+    },
+    {
+      "finding": "Lens T T-1 (CRITICAL): Task telemetry is not session-scoped; the 'unit cost per task' is whole-factory spend over an unbounded claim window",
+      "disposition": "routed",
+      "home": "the ledger/telemetry lane \u2014 thread session_id through extract_task_telemetry",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:32Z"
+    },
+    {
+      "finding": "Lens T T-2 (HIGH): tokens_out is not output tokens; the schema exposes no output-token column",
+      "disposition": "routed",
+      "home": "the telemetry lane \u2014 tools/telemetry.py:181-191",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:33Z"
+    },
+    {
+      "finding": "Lens T T-3 (HIGH): Model right-sizing (lens check 2) has no instrument; 'model' is never read",
+      "disposition": "routed",
+      "home": "the telemetry lane \u2014 add a model-attribution leg to tools/telemetry.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:34Z"
+    },
+    {
+      "finding": "Lens T T-4 (HIGH): Prompt-cache efficiency (lens check 3) has no instrument; the substrate already records the columns",
+      "disposition": "routed",
+      "home": "the telemetry lane \u2014 add a cache-hit leg to tools/telemetry.py",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:35Z"
+    },
+    {
+      "finding": "Lens T T-5 (MEDIUM): The money metric double-counts duplicate close rows and run/close pairs",
+      "disposition": "routed",
+      "home": "the audit lane \u2014 dedupe total_cost_usd by (subject, event)",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:36Z"
+    },
+    {
+      "finding": "Lens T T-6 (MEDIUM): The measurement covers a minority of closes by construction (82 measured / 92 unavailable of 280)",
+      "disposition": "routed",
+      "home": "the telemetry lane \u2014 index messages(created_at); print coverage beside the cost figure",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:37Z"
+    },
+    {
+      "finding": "Lens T T-7 (LOW): brain-metrics leg A states two char/token ratios and implements one",
+      "disposition": "routed",
+      "home": "the brain_metrics lane \u2014 tools/brain_metrics.py:71-72",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:38Z"
+    },
+    {
+      "finding": "Lens T T-8 (LOW): The context-inflation guard (lens check 4) is disclaimed by both instruments",
+      "disposition": "routed",
+      "home": "HQ \u2014 reconcile docs/review-lenses.md:140 with the instruments' PRINTED, NEVER GATED stance",
+      "reason": null,
+      "recorded_at": "2026-10-04T22:14:38Z"
     }
   ],
   "frozen_at": null,
@@ -303,5 +1171,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T21:55:57Z"
+  "updated_at": "2026-10-04T22:14:38Z"
 }
