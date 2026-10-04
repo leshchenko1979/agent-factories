@@ -4,8 +4,8 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.2 2026-10-04** (§10: peer-lane waits)
-**Status:** design input — not law; owner has not ruled
+**Date:** 2026-10-03 · **rev.2 2026-10-04** (§10: peer-lane waits) · **rev.3 2026-10-04** (§11: adversarial-review corrections)
+**Status:** design input — not law; owner has not ruled. **rev.3 corrects falsified claims: §4.2–§4.4 and §10.4.2/.5/.6 are SUPERSEDED by §11.** The adversarial review is `docs/proposals/08-owner-gated-lane-intake.review.md`.
 **Related:** `PROP-01` (cron-gated goal pipeline), `PROP-02` (human-load governed pacing),
 `docs/addons/harness/opencrabs.md`; upstream `leshchenko1979/opencrabs` — #13 (in-flight
 failsafe), #43/#50 (notify quiet mode), #344 (durable await record), #547 (oc-questions)
@@ -320,3 +320,78 @@ rule** — because peer waits, unlike owner waits, can deadlock.*
    owner — the root block is an `owner_gate`; the peer gets an informational copy.*
 5. **Graph storage:** the wait-for edges are derivable from `(session_id, await_ref)` on the
    bindings, so no new table is needed — *Recommended: derive, do not store.*
+
+---
+
+## 11. Adversarial review — falsified claims and the corrected mechanism (rev.3)
+
+Two independent subagents on different model families reviewed rev.2 read-only; every finding
+was re-read from source by this lane before it was written down. Full report:
+`docs/proposals/08-owner-gated-lane-intake.review.md`. **§4.2–§4.4 and §10.4.2/.5/.6 as
+written are wrong and are superseded by this section.**
+
+### 11.1 The fatal: the gate keys on a flag that is `true` by construction
+
+§4.2 gated on *"mode is not `interrupt`"*. `deliver_to_session` receives only a bare
+`interrupt: bool` (`session_routes.rs:366`), and **every production producer hardcodes it
+`true`** — cron (`scheduler.rs:1035`), A2A (`a2a/handler/notify.rs:347`), the
+`session_notify` tool (`subagent/notify.rs:563`), subagent spawn (`spawn.rs:99`), background
+tasks (`background_tasks.rs:1363,1443`), restart recovery (`restart_recovery.rs:700`), quiet
+release (`quiet_delivery.rs:198`). The code says why: `#393 TRAP: this literal MUST stay
+true … keeps the mid-turn gate disarmed for EVERY mode` (`subagent/notify.rs:558-562`). The
+design conflated the **urgent tier** (a frame, `URGENT_FRAME`) with the **gate-disarm bool**.
+As written the gate parks nothing.
+
+**Correction.** Thread the **resolved `DeliveryMode`** into `deliver_to_session` and gate on
+`mode != Interrupt`. `resolve_mode` already computes it (`notify_policy.rs:151`) and the two
+notify handlers discard it before the call. Do **not** flip the literal — that re-arms the
+mid-turn gate and refuses deliveries #373 deliberately stopped refusing.
+
+### 11.2 Three more paths defeat the gate
+
+1. **The chokepoint is not single.** `deliver_or_park` calls `session_route()` directly
+   (`restart_recovery.rs:109-111`), and boot redelivery of held rows uses it
+   (`notify_queue.rs:231`). Held rows leak on restart. → Gate at the **route layer**.
+2. **State writer ≠ reader predicate.** The sweep and boot classifier key on
+   `await_at IS NOT NULL` (`session_binding.rs:330-331`, `resume.rs:2166`) and their action is
+   to **wake**; an auto-derived state either stays invisible or gets woken into the flood.
+   → One writer; a **no-wake** branch for the owner kind.
+3. **`owner-origin` is not representable** (`PushOrigin` has no owner variant, `types.rs:218`;
+   `QueuedUserMessage` carries no identity, `:311-321`). → Key the clear on the configured
+   owner id in the handler; drop the predicate from the gate.
+
+### 11.3 The clear, corrected
+
+The clear must be **correlated**, not origin-based, and must cover the surfaces the owner
+actually uses:
+
+- **Correlated signal only** — the plan approve/discard callback, the open-question answer,
+  the tapped option. An unrelated owner message is *input*, not the signal, and must not drain
+  the wave (§4.1 as written contradicted the design's own §3 rule).
+- **One hook, three surfaces** — text, callback query and reaction. Plan Approve is a
+  callback button (`flow_chrome.rs:63`, handled `agent.rs:1813`) and 👍 is a reaction
+  (`agent.rs:2431-2436`); neither is `handle_message`, so §5's "clear in `channels/*/handler.rs`"
+  misses the owner's two real approval gestures.
+- **Drain after the answer turn**, framed with a reference to the pending question — otherwise
+  "one wave replaced by another" at the answer's next tool-loop boundary.
+
+### 11.4 Other corrections
+
+| rev.2 said | Corrected |
+|---|---|
+| set the state on `suggest_options` | **never** — the tool is explicitly non-blocking/optional and has no repo handle (`suggest_options.rs:1-14`); set only on a genuine blocking question |
+| reuse `await_sweep` as-is | it consumes-then-wakes and serves telegram only (`await_sweep.rs:44,230-239,268`); add a **no-wake nudge** branch, `last_nudge_at` dedup, every channel |
+| starvation cap force-delivers the wave | key the cap on **owner non-response** — escalate to the owner; never inject the automation into the lane while the question is open |
+| `reply_to` on `session/notify` | add a **request-side** `request_id`/`correlation_id`; `reply_to` is reply-side and B cannot echo a token it never received |
+| graph edges derivable from `(session_id, await_ref)` | `await_ref` is free text (`await_external.rs:88-92`); store the peer's **session id** (validated) + the minted token in its own column |
+| cycle check at declare time | `set_await` has no transaction spanning graph-read + edge-write (`await_external.rs:150-160`); serialise declares, or detect cycles in the sweep |
+| `deliver_to_session` reads the binding | it is sync and reads only statics (`session_routes.rs:366`); specify an in-memory probe mirroring `register_turn_probe`, and its re-arm after restart |
+| `PlanStatus::Editing` | the approvable state is `PlanModeState::PostInitEditing` (`plan_files.rs:205-218`); `plan_mode_state` has a side effect — unsafe on the delivery hot path |
+
+### 11.5 What stands
+
+The problem statement, the diagnosis (idle-but-awaiting ≠ idle-and-free; the #13 gate is
+mid-turn only), the durable-binding state model, parking in `notify_queue`, and the §10.1
+framing (a peer reply is an ordinary push → correlation, not origin) are all upheld. §7's
+verification list — including its positive control — is the discipline that found the
+tautology. **§9 (boundary) and the design gate are unchanged: nothing is implemented.**
