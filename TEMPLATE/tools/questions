@@ -205,6 +205,153 @@ def questions_db_path():
     return (os.environ.get("OC_QUESTIONS_DB")
             or os.path.join(profile_home(), "opencrabs.db"))
 
+# --- Fleet identity: which factory a session's chat belongs to (#309) --------
+# The register stores a lane as a bare DISPLAY NAME, and a display name is not
+# unique across the fleet -- four factories each have a "Triage" topic. A lane's
+# identity is the PAIR (factory, lane), and the factory half is DERIVED from the
+# session's own binding, never taken from the caller -- the same reason the lane
+# name itself is resolved rather than passed (owner order 2026-09-25).
+#
+# The expectation half comes from the DECLARED fleet manifest, never from the
+# register: a gate that re-derives its expectation from the object under test is
+# self-consistent and therefore worthless. `tools/registry.py` already reads the
+# same file by the same convention (`<tree>/registry/fleet.json`, overridable
+# with OC_FLEET_MANIFEST); this reuses that convention rather than inventing a
+# second one.
+FLEET_ENV = "OC_FLEET_MANIFEST"
+
+def _fleet_manifest_candidates():
+    """Where the fleet declaration may live, in order. First hit wins.
+
+    <tree>/registry/fleet.json  the convention `tools/registry.py` uses: a member
+                                factory's own manifest sits at its repo root.
+    walk up                     the TEMPLATE lives INSIDE the fleet repo, so its
+                                own manifest is ABOVE it, not beside it.
+    <profile home>/fleet.json   a deployment whose tree carries no manifest (the
+                                vendored twin) points at the fleet's copy here.
+    """
+    override = os.environ.get(FLEET_ENV)
+    if override:
+        # The override is AUTHORITATIVE, not merely first: a fixture must be able
+        # to say "the fleet is exactly this" without the live tree leaking in.
+        yield override
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    yield os.path.join(os.path.dirname(here), "registry", "fleet.json")
+    d = here
+    for _ in range(6):
+        parent = os.path.dirname(d)
+        if not parent or parent == d:
+            break
+        d = parent
+        yield os.path.join(d, "registry", "fleet.json")
+    yield os.path.join(profile_home(), "fleet.json")
+
+def load_fleet():
+    """[(slug, chat_id_str, display_name)] from the first manifest that parses
+    with a non-empty `factories` list, else [].
+
+    Both sides are str(): sqlite returns chat_id as TEXT while the manifest
+    carries an int, and an un-normalised comparator flags EVERY row as foreign
+    (measured -- this was the instrument bug that shaped the design)."""
+    for path in _fleet_manifest_candidates():
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        records = data.get("factories") if isinstance(data, dict) else None
+        if not isinstance(records, list):
+            continue
+        fleet = []
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            slug = str(record.get("slug") or "").strip()
+            chat_id = record.get("chat_id")
+            if slug and chat_id is not None:
+                fleet.append((slug, str(chat_id),
+                              str(record.get("display_name") or slug)))
+        if fleet:
+            return fleet
+    return []
+
+def session_chat_id(session):
+    """The chat this session's binding sits in, as a string, or None."""
+    path = questions_db_path()
+    if not os.path.isfile(path):
+        return None
+    try:
+        conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = conn.execute(
+            "select chat_id from session_bindings "
+            "where session_id=? and channel='telegram'", (session,)).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    return str(row[0]) if row and row[0] is not None else None
+
+def factory_of_session(session):
+    """(slug, display_name, fleet_known) for the session's own binding.
+
+    `fleet_known` is False when NO manifest resolved at all, which the caller
+    must be able to tell apart from "the manifest is known and this chat is not
+    in it": the first means the gate cannot observe the failure class and must
+    stay INERT, the second is a positive finding. A slug of None with
+    fleet_known True is therefore NOT "unknown" -- it is "not a declared
+    factory"."""
+    fleet = load_fleet()
+    chat_id = session_chat_id(session)
+    if chat_id is not None:
+        for slug, declared_chat, display in fleet:
+            if declared_chat == chat_id:
+                return slug, display, True
+    return None, None, bool(fleet)
+
+def qualified_lane(entry, lane):
+    """The pair spelled `<factory>/<lane>` -- DERIVED at read, never stored, so
+    the 133 rows already in the register need no destructive migration."""
+    return "%s/%s" % (entry.get("id"), lane)
+
+def resolve_lane_target(lane):
+    """(entry, (rc, message)) -- the ONE set a `--lane` names.
+
+    A lane is identified by the PAIR (factory, lane): the display name alone is
+    not unique (four factories each have a "Triage"), and the old code took the
+    LAST match, so an answer was routed to whichever set happened to load last
+    -- load-order luck, not a decision. A bare name matching more than one set
+    now REFUSES and lists the qualified candidates; a qualified
+    `<factory>/<lane>` names exactly one."""
+    lane = (lane or "").strip()
+    sets = load_all_sets()
+    if "/" in lane:
+        factory, _, bare = lane.partition("/")
+        hits = [s for s in sets
+                if s.get("id") == factory and s.get("lane") == bare]
+        if len(hits) == 1:
+            return hits[0], None
+        if not hits:
+            return None, (1, "no question set for lane %r" % lane)
+        return None, (2, "lane %r names %d sets: %s. A qualified lane must name "
+                         "exactly one."
+                         % (lane, len(hits),
+                            ", ".join(sorted(qualified_lane(s, bare)
+                                             for s in hits))))
+    hits = [s for s in sets if s.get("lane") == lane]
+    if len(hits) == 1:
+        return hits[0], None
+    if not hits:
+        return None, (1, "no question set for lane %r" % lane)
+    return None, (2, "lane %r names %d sets across the fleet: %s. Pass the "
+                     "qualified lane (<factory>/<lane>)."
+                     % (lane, len(hits),
+                        ", ".join(sorted(qualified_lane(s, lane)
+                                         for s in hits))))
+
 def resolve_lane(session):
     """(lane_name, reason) -- the DISPLAY name of the session's OWN topic.
 
@@ -919,7 +1066,8 @@ def cmd_ask(argv):
         argv,
         valued=["--factory", "--session", "--questions-file", "--questions-json",
                 "--title", "--description", "--option", "--recommended",
-                "--ttl-days", "--subject", "--close-when", "--kind"],
+                "--ttl-days", "--subject", "--close-when", "--kind",
+                "--allow-foreign"],
         boolean=["--no-clarify", "--json", "--no-publish", "--multi"],
     )
     # --lane was REMOVED (owner order 2026-09-25): the lane is resolved from the
@@ -947,6 +1095,62 @@ def cmd_ask(argv):
         # drainable.
         die(2, "refusing: %s. An unbound session can never receive the answer, "
                "so a question registered against it would be stranded." % why)
+
+    # --- the cross-factory registration gate (#309) ------------------------
+    # A session bound to ANOTHER factory's chat must not be filed into this one.
+    # The lane display name is not unique across the fleet, so a foreign session
+    # reads as a plausible lane while the answer is delivered to the wrong chat.
+    # Measured 2026-09-30: `infra-factory/q9` was registered by a session whose
+    # chat belongs to opencrabs-dev, and nothing refused it.
+    own_slug, own_display, fleet_known = factory_of_session(session)
+    declared = {slug for slug, _chat, _name in load_fleet()}
+    foreign_reason = None
+    if not fleet_known:
+        # No manifest resolved, so the gate cannot observe the failure class it
+        # exists for. It stays INERT and says so, rather than firing a verdict
+        # off an instrument that cannot see. The note goes to stderr so it never
+        # pollutes the JSON on stdout.
+        sys.stderr.write(
+            "%s: note: no fleet manifest resolved (%s unset, and no "
+            "registry/fleet.json in this tree or above it); the cross-factory "
+            "registration gate is INERT for this call.\n" % (PROG, FLEET_ENV))
+    elif factory not in declared:
+        # The named set is NOT a factory the fleet declares, so there is no
+        # DECLARED chat to compare the session's binding against: the gate has
+        # no expectation to test and stays INERT, saying so.
+        #
+        # This is not a hole, and it is what keeps the gate from firing on work
+        # it cannot see. The factory key IS the set id and sets are MINTED ON
+        # DEMAND (`ask --factory <new>` creates one), so a name the fleet does
+        # not declare is a NEW set, not another factory's set -- there is no
+        # second chat whose lane could be borrowed, which is the whole defect
+        # (#309). The case the gate exists for is a set that IS declared:
+        # `--factory ai-antispam` from an opencrabs-dev session, refused below.
+        # Refusing here instead would forbid every unenrolled factory and every
+        # ad-hoc set from filing at all, which is a regression, not a gate.
+        sys.stderr.write(
+            "%s: note: %r is not a factory declared in the fleet manifest, so "
+            "the cross-factory registration gate has no declared chat to "
+            "compare this session against and is INERT for this call.\n"
+            % (PROG, factory))
+    elif own_slug is None:
+        die(2, "refusing: session %s is bound to chat %s, which is not a "
+               "factory declared in the fleet manifest. --factory %s names a "
+               "different factory, so this question would be filed under a lane "
+               "that is not the asker's, and the answer would be delivered to a "
+               "chat that did not ask." % (session, session_chat_id(session),
+                                           factory))
+    elif own_slug != factory:
+        allow = (flags.get("--allow-foreign") or "").strip()
+        if not allow:
+            die(2, "refusing: session %s belongs to factory %r, not %r. A lane "
+                   "name is not unique across the fleet, so this would file the "
+                   "question under another factory's lane and deliver the answer "
+                   "to the wrong chat. Pass --factory %s, or --allow-foreign "
+                   "\"<reason>\" to register it deliberately as a cross-factory "
+                   "ask." % (session, own_slug, factory, own_slug))
+        foreign_reason = allow
+
     questions = normalise_questions(questions_from_flags(flags))
     try:
         ttl_days = int(flags.get("--ttl-days", DEFAULT_TTL_DAYS))
@@ -1006,6 +1210,12 @@ def cmd_ask(argv):
             question["lane"] = lane
             question["session"] = session
             question["asked_at"] = now_iso()
+            if foreign_reason:
+                # A deliberate cross-factory ask is RECORDED as one, so the
+                # mismatch is visible on every later read instead of buried.
+                question["cross_factory"] = True
+                question["cross_factory_from"] = own_slug
+                question["cross_factory_reason"] = foreign_reason
             if close_when:
                 question.setdefault("close_when", close_when)
         entry["questions"].extend(questions)
@@ -1055,11 +1265,25 @@ def cmd_ask(argv):
 # list — every parked decision, OLDEST FIRST (that ordering is the instrument)
 # =============================================================================
 def cmd_list(argv):
-    _, flags = parse_flags(argv, valued=["--lane", "--session"],
+    _, flags = parse_flags(argv, valued=["--lane", "--session", "--factory"],
                            boolean=["--json", "--all", "--quiet"])
     with RegisterLock():
         data = read_register()
-    entries = data["sets"]
+    all_sets = data["sets"]
+
+    # #310: a filter that matches NOTHING must say so. Pre-fix `list --lane
+    # no-such-lane` printed "0 open question(s) across 0 lane(s)" and exited 0,
+    # which is indistinguishable from a lane that is merely empty -- so a typo
+    # read as a clean answer. Existence is judged against the WHOLE register,
+    # not the status-filtered view: a lane or factory whose questions are all
+    # closed still EXISTS, and reporting it absent would be its own wrong answer.
+    want_factory = (flags.get("--factory") or "").strip()
+    if want_factory and not any(s.get("id") == want_factory for s in all_sets):
+        die(1, "no-such-factory: %s" % want_factory)
+
+    entries = all_sets
+    if want_factory:
+        entries = [s for s in entries if s.get("id") == want_factory]
     if "--all" not in flags:
         entries = [s for s in entries if s.get("status") == "open"]
     # --session is the RETURN ADDRESS, so it must select QUESTIONS, not sets
@@ -1087,7 +1311,29 @@ def cmd_list(argv):
             lanes.setdefault(lane, []).append((entry, question))
 
     if flags.get("--lane"):
-        lanes = {k: v for k, v in lanes.items() if k == flags["--lane"]}
+        want_lane = flags["--lane"].strip()
+        # The lane's identity is the PAIR (factory, lane), so `--lane` accepts
+        # EITHER the bare display name OR the qualified `<factory>/<lane>`. A
+        # bare name that matches several lanes across the fleet is NOT an error
+        # here -- `list` is a READ, and showing every Triage lane is honest.
+        # What is an error is matching NOTHING: that is a typo, not a clean
+        # answer, so it exits non-zero and names the filter.
+        known = {(s.get("id"), q.get("lane") or s.get("lane") or "unknown")
+                 for s in all_sets for q in s.get("questions", [])}
+        if "/" in want_lane:
+            lane_factory, _, lane_bare = want_lane.partition("/")
+            if (lane_factory, lane_bare) not in known:
+                die(1, "no-such-lane: %s" % want_lane)
+            # Keep only the PAIRS whose entry is the named factory: `lanes` is
+            # grouped by the BARE name, so the same key can hold questions from
+            # several factories and dropping the key would drop the others too.
+            lanes = {k: [(e, q) for (e, q) in v if e.get("id") == lane_factory]
+                     for k, v in lanes.items() if k == lane_bare}
+            lanes = {k: v for k, v in lanes.items() if v}
+        else:
+            if not any(name == want_lane for _f, name in known):
+                die(1, "no-such-lane: %s" % want_lane)
+            lanes = {k: v for k, v in lanes.items() if k == want_lane}
 
     # Counted AFTER the filter: the header must describe what is SHOWN, not the
     # fleet. Pre-fix `list --lane X` printed the fleet total against the
@@ -1832,8 +2078,9 @@ def cmd_notify(argv):
     if set_id:
         entry = find_set_anywhere(set_id)
     else:
-        candidates = [s for s in load_all_sets() if s.get("lane") == lane]
-        entry = candidates[-1] if candidates else None
+        entry, lane_error = resolve_lane_target(lane)
+        if lane_error:
+            die(lane_error[0], lane_error[1])
     if entry is None:
         die(1, "no question set %s in the register or the archive"
             % (set_id or lane,))
@@ -3014,6 +3261,15 @@ def selftest():
     env["OPENCRABS_SESSION_ID"] = session_a
     import sqlite3 as _sqlite3
     _db = _sqlite3.connect(fixture_db)
+    # #309: a SECOND factory's chat. The gate keys on the session's OWN binding,
+    # so the fixture needs a session that is bound -- correctly -- to a chat that
+    # is NOT this factory's. Chat ids are read from a manifest below, so the
+    # expectation side is a declaration and the observation side is the binding.
+    home_chat = "-1003936827469"      # opencrabs-dev (this tool's own fleet entry)
+    foreign_chat = "-1003993000918"   # ai-antispam
+    mf_chat = "-1004497192134"        # meta-factory
+    session_foreign = "77777777-6666-5555-4444-333333333333"
+    session_mf = "55555555-4444-3333-2222-111111111111"
     _db.executescript(
         "create table session_bindings (session_id text primary key, "
         "channel text not null, chat_id text not null, thread_id integer, "
@@ -3021,17 +3277,32 @@ def selftest():
         "create table channel_messages (id text primary key, channel text not null, "
         "channel_chat_id text not null, topic_name text, created_at integer not null, "
         "thread_id text);")
-    for _sid, _tid, _name in ((session_a, 39171, "Carrier tools"),
-                              (session_b, 43993, "Governance: Ontology & RSI")):
+    for _sid, _tid, _name, _chat in (
+            (session_a, 39171, "Carrier tools", home_chat),
+            (session_b, 43993, "Governance: Ontology & RSI", home_chat),
+            (session_foreign, 39170, "Triage", foreign_chat),
+            (session_mf, 39169, "Triage", mf_chat)):
         _db.execute("insert into session_bindings (session_id,channel,chat_id,"
                     "thread_id,updated_at) values (?,?,?,?,0)",
-                    (_sid, "telegram", "-1003936827469", _tid))
+                    (_sid, "telegram", _chat, _tid))
         _db.execute("insert into channel_messages (id,channel,channel_chat_id,"
                     "topic_name,created_at,thread_id) values (?,?,?,?,?,?)",
-                    ("m-%d" % _tid, "telegram", "-1003936827469", _name, 1000,
-                     str(_tid)))
+                    ("m-%d" % _tid, "telegram", _chat, _name, 1000, str(_tid)))
     _db.commit()
     _db.close()
+    # The DECLARED expectation side, as a fixture: the override is authoritative
+    # so the live tree can never leak into the selftest's verdict.
+    _fleet = os.path.join(root, "fleet.json")
+    with open(_fleet, "w", encoding="utf-8") as _fh:
+        json.dump({"factories": [
+            {"slug": "opencrabs-dev", "display_name": "OpenCrabs Dev",
+             "chat_id": int(home_chat)},
+            {"slug": "ai-antispam", "display_name": "AI AntiSpam",
+             "chat_id": int(foreign_chat)},
+            {"slug": "meta-factory", "display_name": "Meta-Factory",
+             "chat_id": int(mf_chat)},
+        ]}, _fh)
+    env["OC_FLEET_MANIFEST"] = _fleet
     # The Node renderer resolves its bare imports against node_modules BESIDE
     # the render file, so the fixture links the real installed tree into its own
     # render dir. A symlink keeps the test from writing the live store while
@@ -5277,6 +5548,99 @@ def selftest():
         ck(proc.returncode == 2,
            "--max-attempts refuses a non-integer (rc=%d)" % proc.returncode)
 
+        # -- #309: the cross-factory registration gate ----------------------
+        rc, out, err = run("ask", "--factory", "ai-antispam", "--no-publish",
+                           "--session", session_a,
+                           "--title", "foreign?", "--description", "d")
+        ck(rc == 2 and "belongs to factory" in (err or "")
+           and "opencrabs-dev" in (err or "") and "ai-antispam" in (err or ""),
+           "ask REFUSES a session bound to another factory, naming both (rc=%d)"
+           % rc)
+        ck(get_set("ai-antispam") is None,
+           "a refused cross-factory ask writes nothing")
+
+        # The gate's BLIND SPOT, asserted rather than left to be discovered: a
+        # set name the fleet does not declare has no declared chat to compare
+        # against, so the gate is INERT there -- and it must SAY so, because an
+        # inert gate that is silent is indistinguishable from one that passed.
+        rc, out, err = run("ask", "--factory", "f-undeclared-set", "--no-publish",
+                           "--session", session_a,
+                           "--title", "ad hoc", "--description", "d")
+        ck(rc == 0 and "not a factory declared in the fleet manifest" in (err or ""),
+           "an UNDECLARED set name is INERT and says so, not refused (rc=%d)" % rc)
+        ck(get_set("f-undeclared-set") is not None,
+           "…and the ad-hoc set was minted")
+
+        rc, out, _ = run("ask", "--factory", "opencrabs-dev", "--no-publish",
+                         "--session", session_a,
+                         "--title", "mine", "--description", "d")
+        ck(rc == 0, "ask accepts a same-factory session (rc=%d)" % rc)
+
+        rc, out, _ = run("ask", "--factory", "opencrabs-dev", "--no-publish",
+                         "--allow-foreign", "S2/S5 probe from the meta lane",
+                         "--session", session_foreign,
+                         "--title", "cross", "--description", "d")
+        ck(rc == 0,
+           "ask accepts a cross-factory ask WITH --allow-foreign (rc=%d)" % rc)
+        _cf = None
+        for _q in (get_set("opencrabs-dev") or {}).get("questions", []):
+            if _q.get("title") == "cross":
+                _cf = _q
+        ck(_cf is not None and _cf.get("cross_factory") is True
+           and _cf.get("cross_factory_from") == "ai-antispam"
+           and _cf.get("cross_factory_reason"),
+           "an allowed cross-factory question is STAMPED cross_factory + reason")
+
+        # A same-factory ask into a DIFFERENT factory mints the colliding lane
+        # #309 is about: two factories, each with a "Triage" set.
+        rc, out, _ = run("ask", "--factory", "ai-antispam", "--no-publish",
+                         "--session", session_foreign,
+                         "--title", "triage-q", "--description", "d",
+                         "--option", "A", "--option", "B")
+        ck(rc == 0, "ask accepts a session in its OWN factory (rc=%d)" % rc)
+        rc, out, _ = run("ask", "--factory", "meta-factory", "--no-publish",
+                         "--session", session_mf,
+                         "--title", "triage-mf", "--description", "d",
+                         "--option", "A", "--option", "B")
+        ck(rc == 0, "ask accepts a second factory's Triage lane (rc=%d)" % rc)
+        rc, out, _ = run("answer", "ai-antispam", "q1", "0", "--no-publish")
+        ck(rc == 0, "an answer lands for the qualified-notify leg (rc=%d)" % rc)
+
+        # -- #310: list --factory, non-silent zero-match ---------------------
+        rc, out, _ = run("list", "--factory", "opencrabs-dev", "--json")
+        ck(rc == 0, "list --factory <known> is rc=0 (rc=%d)" % rc)
+        _j = json.loads(out)
+        ck(bool(_j["lanes"]) and all(q.get("set") == "opencrabs-dev"
+                                     for r in _j["lanes"]
+                                     for q in r["questions"]),
+           "list --factory shows that factory's sets only")
+
+        rc, out, err = run("list", "--factory", "nope")
+        ck(rc != 0 and "no-such-factory: nope" in (err or ""),
+           "list --factory <unknown> refuses, naming it (rc=%d)" % rc)
+
+        rc, out, err = run("list", "--lane", "no-such-lane")
+        ck(rc != 0 and "no-such-lane: no-such-lane" in (err or ""),
+           "list --lane <unknown> refuses, naming it (rc=%d)" % rc)
+
+        # -- #309: notify --lane refuses an ambiguous bare name --------------
+        rc, out, err = run("notify", "--lane", "Triage", "--dry-run")
+        ck(rc == 2 and "qualified lane" in (err or "")
+           and "ai-antispam/Triage" in (err or "")
+           and "meta-factory/Triage" in (err or ""),
+           "notify --lane <ambiguous> refuses and lists the qualified candidates "
+           "(rc=%d)" % rc)
+        rc, out, _ = run("notify", "--lane", "ai-antispam/Triage", "--dry-run")
+        ck(rc == 0,
+           "notify --lane <factory>/<lane> resolves exactly one set (rc=%d)" % rc)
+
+        # -- #310: --help on every subcommand --------------------------------
+        for _verb in ("ask", "list", "notify", "answer", "amend", "withdraw",
+                      "publish", "lint", "gc", "redeliver"):
+            rc, out, _ = run(_verb, "--help")
+            ck(rc == 0 and "the Open Questions register" in (out or ""),
+               "%s --help prints usage, rc=0 (rc=%d)" % (_verb, rc))
+
         if fails:
             print("  %d FAILED" % len(fails))
             return 1
@@ -5291,6 +5655,7 @@ USAGE = """questions — the Open Questions register (#547)
            [--questions-file F | --questions-json J |
             --title T --description D [--option O]... [--recommended N]...]
            [--ttl-days N] [--subject S] [--no-clarify] [--close-when CMD]
+           [--allow-foreign "<reason>"]
            --recommended takes ONE value on a single-select question and may be
            repeated (or comma-joined, `0,2`) on a --kind multi one, because a
            multi question can pre-check SEVERAL boxes. Two values on a single
@@ -5307,6 +5672,17 @@ USAGE = """questions — the Open Questions register (#547)
            session's own binding, so a caller cannot mislabel itself. --session
            is an override for callers outside a turn. Prints the open-question
            TOTAL and the page URL -- there is no card.
+           CROSS-FACTORY GATE: the asking session's binding is resolved to its
+           factory in registry/fleet.json, and an ask naming a DIFFERENT
+           DECLARED factory is REFUSED (rc=2) -- a lane display name is not
+           unique across the fleet, so it would file the question under another
+           factory's lane and deliver the answer to the wrong chat.
+           --allow-foreign "<reason>" registers it deliberately and stamps
+           cross_factory + the reason on each question. Two cases stay INERT and
+           say so on stderr: no fleet manifest resolved at all, and a set name
+           the fleet does not declare (a set is minted on demand, so an
+           undeclared name is a NEW set, not another factory's). A session whose
+           chat is not a declared factory is refused.
   answer   <set-id> <qid> <choice-index|clarify> [--text T] [--via card|page|cli]
            [--notify]
            recording an answer does NOT notify the asker BY DEFAULT: delivery is
@@ -5332,6 +5708,12 @@ USAGE = """questions — the Open Questions register (#547)
   notify   --set <id> | --lane <NAME> [--qid Q] [--mode turn-end|interrupt|quiet]
            [--dry-run] [--json]        the RETURN PATH: delivers the answer to
                                        the session recorded in the register.
+                                       --lane accepts a bare display name OR the
+                                       qualified `<factory>/<lane>`; a bare name
+                                       matching more than one set REFUSES and
+                                       lists the candidates (a name is not unique
+                                       across the fleet), rather than routing by
+                                       load order.
                                        With no --qid the destination is the
                                        session every answered question SHARES;
                                        if they differ it refuses and names
@@ -5359,7 +5741,12 @@ USAGE = """questions — the Open Questions register (#547)
            THIS IS THE WHOLE LEG: one verb, two callers (a human, and a cron).
            There is deliberately no run-on-boot leg -- a sweep that fires while
            the daemon is still migrating only records another failure.
-  list     [--lane NAME] [--session id] [--all] [--json] [--quiet]
+  list     [--lane NAME] [--factory KEY] [--session id] [--all] [--json] [--quiet]
+           --lane accepts a bare display name or the qualified
+           `<factory>/<lane>`; --factory scopes to one factory's sets. A filter
+           that matches NOTHING exits non-zero and names it (`no-such-factory: X`
+           / `no-such-lane: X`) rather than printing an empty list, so a typo
+           cannot read as a clean answer.
   publish  [--action URL] [--prune] [--json]
            re-renders the one shared page at its constant slug
   lint     [--json]
@@ -5372,10 +5759,48 @@ reused on every publish, never re-minted. --factory is the standing set id.
 rc: 0 ok / 1 finding-or-not-found / 2 usage / 3 state-refused / 4 store-or-IO.
 """
 
+_VERB_HEAD_RE = re.compile(r"^  ([a-z]+)\s")
+
+def _usage_trailer(lines):
+    """The shared tail of USAGE (the Store note and the rc legend), so a
+    per-verb usage keeps the exit-code contract in view."""
+    for index, line in enumerate(lines):
+        if line.startswith("Store:"):
+            return ["", *lines[index:]]
+    return []
+
+def verb_usage(verb):
+    """The USAGE section for ONE verb, plus the shared trailer (#310).
+
+    Every subcommand answers `--help` with its own usage. Pre-fix, `ask --help`
+    (and the other five) died rc=2 on "unknown flag --help", so the one flag a
+    caller reaches for first was the one that failed. Falls back to the whole
+    text when the verb has no section, so a future verb is never worse off."""
+    lines = USAGE.splitlines()
+    # The TITLE line travels with every verb's section: `ask --help` names the
+    # program it belongs to, exactly as the bare `--help` does. Without it the
+    # per-verb text is an unattributed block, and a caller cannot tell which
+    # tool answered (the selftest asserts the title is present, #310).
+    header = [lines[0], ""] if lines else []
+    start = None
+    for index, line in enumerate(lines):
+        head = _VERB_HEAD_RE.match(line)
+        if start is not None and head:
+            return "\n".join(header + lines[start:index] + _usage_trailer(lines)) + "\n"
+        if head and head.group(1) == verb:
+            start = index
+    if start is not None:
+        return "\n".join(header + lines[start:]) + "\n"
+    return USAGE
+
 def main(argv):
     oc_log_init()
     if not argv or argv[0] in ("--help", "-h", "help"):
         sys.stdout.write(USAGE)
+        return 0
+    if "--help" in argv[1:] or "-h" in argv[1:]:
+        # #310: `--help` anywhere after the verb prints THAT verb's usage, rc 0.
+        sys.stdout.write(verb_usage(argv[0]))
         return 0
     verb, rest = argv[0], argv[1:]
     if verb in ("--selftest", "selftest"):
