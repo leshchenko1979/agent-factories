@@ -395,3 +395,138 @@ mid-turn only), the durable-binding state model, parking in `notify_queue`, and 
 framing (a peer reply is an ordinary push → correlation, not origin) are all upheld. §7's
 verification list — including its positive control — is the discipline that found the
 tautology. **§9 (boundary) and the design gate are unchanged: nothing is implemented.**
+
+---
+
+## 12. Owner review (rev.4) — the add-on boundary, the re-nudge payload, and the sleeping owner
+
+Three points raised by the owner. §12.1 corrects the design; §12.2 and §12.3 answer the two
+questions, and both answers turned out to need a field and a rule the proposal did not have.
+
+### 12.1 (Q4.1) The open-questions store is an EXTERNAL ADD-ON — invert the dependency
+
+The owner's point, and it is correct. `oc-questions` is not in the harness: it is host-side
+tooling — `~/.opencrabs/profiles/ops/scripts/oc_questions_tool.py`, `oc_questions_push.sh`,
+`oc_questions_notify.py` — driven by a systemd path unit
+(`agent-factories/tools/box/oc-questions-push.path`) that mirrors rendered pages to vpn, with the
+answer backend running the CLI over ssh. **The harness has no knowledge of it**: `grep -rn
+"oc-questions" /root/opencrabs/src` returns **0 hits** (read this turn). So §4.1's bullet
+*"an open question parked (`oc-questions ask`)"* is a **harness → add-on dependency** and comes
+out. `AGENTS.md` §Agent factories already binds this shape: a factory's rules live in its own
+skill; the harness never depends on the factory.
+
+**Replacement — the harness's own generic declaration surface, which already exists.**
+`await_external` accepts `kind = owner_gate` (`src/brain/tools/await_external.rs:36`), and the
+binding setter is generic (`session_binding.rs:288` — the same three columns for every kind). The
+add-on declares its own wait through that surface. Direction is then correct: **add-on → harness
+public interface**, never the reverse.
+
+**The consequence that must be designed, not assumed.** A *tool* is callable by a lane, not by an
+external Python script. The harness already has the right pattern for this — a CLI verb that
+posts over the profile's A2A gateway: `opencrabs session notify` → `session/notify` →
+`deliver_to_session` (`src/cli/session_notify.rs:1-30`). So the declaration surface is a **CLI
+verb mirroring it**: `opencrabs session await set --session <id> --kind owner_gate --ref <id>
+[--prompt <text>]` and `… await clear`, posting to a new `session/await` A2A method. Stable,
+documented, reachable from any host tool, and the daemon stays ignorant of who calls it.
+
+Net: the harness-native **set** paths reduce to **two** —
+1. **auto** on plan `PostInitEditing` (§11.4: the approvable state, not `Editing`); and
+2. the **explicit declaration** above (which is also how the open-questions add-on, and any
+   future add-on, parks its lane).
+
+`suggest_options` stays out of both (§11.4). Nothing in the harness names `oc-questions`.
+
+### 12.2 (Q4.4) How the question resurfaces on timeout
+
+Read from the sweep as it is today:
+
+- It selects rows whose `await_at` is stale and **wakes the lane** with `AWAIT_WAKE_PROMPT`
+  (`await_sweep.rs:67-74`), consuming the record first (`:230-239`). For `awaiting_owner` that
+  wake **is** the flood — the sweep, unmodified, is a flood generator for this kind.
+- So the branch is mandatory: for `await_kind = owner_gate`, **do not wake the lane**; re-emit the
+  question to the **owner** on the bound chat (§11.4 already carries this).
+
+**The gap §4.4 hid — and it is the real answer.** The sweep has **no payload to re-emit.**
+`await_ref` is free text (`await_external.rs:88-92`) — a short identifier, not a question. The
+record is `(await_kind, await_ref, await_at)` on the binding; nothing there reconstructs what was
+asked. "Re-nudge the owner" is therefore under-specified as written: it can only say *still
+waiting*, not *re-ask*. Fix: one new optional field, **`await_prompt`** — the owner-facing
+text/card to re-send (the plan approval card, or the question text). The CLI verb in §12.1 takes
+it as `--prompt`; the plan path fills it from the plan.
+
+Best practices agree on exactly this shape: Temporal's approval reminder re-notifies with the
+**same correlation id and payload**; BPMN's boundary timer fires the escalation event **carrying
+the original message**; a support-desk SLA breach re-sends the ticket, not a blank ping.
+
+**Cadence — bounded, and it must not itself become the flood:**
+- first nudge at the patience the sweep already uses (`await_stale_secs`);
+- then geometric backoff, capped at **N nudges** — not one per tick;
+- `last_nudge_at` on the record so a tick cannot double-fire (the sweep's one-wake-boundary
+  discipline, `await_sweep.rs:132-137`, is the precedent);
+- **never** wakes the lane; the lane stays parked throughout;
+- when the budget is exhausted → §12.3 rule 5 (terminal state), not a loop.
+
+### 12.3 (Q8.2) The owner is AFK for hours — what the system should do
+
+This is the load-bearing scenario; the practices are consistent. Six rules.
+
+1. **The hold is passive and O(1).** A parked lane costs one `notify_queue` row plus one binding
+   field — no running turn, no held process, no poll. Temporal: the workflow is durable state and
+   the worker is not blocked by a sleeping human. Bulkhead: a sleeping human is not a resource
+   the system holds. Our substrate already satisfies this — the lane is *idle*, which is the
+   whole reason the #13 mid-turn gate never fired for it.
+
+2. **Do not drain the wave on wake — coalesce it into a digest.** This is what actually answers
+   the question. Fourteen pushes parking over eight hours and being delivered as fourteen turns
+   at 07:00 reproduces the flood, merely delayed — and it re-buries the very question the hold
+   existed to protect. Practice (SQS/Kafka retention + notification digesting): on clear, deliver
+   **one** summary turn — *"14 pushes were held while you were away"*, one line each, **the
+   pending question first** — and let the owner pull the rest. The seam exists: `wrap_busy_once`
+   and the `queued_message_join` coalescing path (`notify_queue.rs:85`). §4.3's "drain in arrival
+   order" is **wrong as written** and is superseded by this rule.
+
+3. **Quiet hours for the nudge.** The §12.2 re-nudge must respect the owner's active window.
+   Escalation policies (PagerDuty/Opsgenie) fire only inside on-call hours and queue to the next
+   window otherwise. So a non-urgent `owner_gate` nudge does **not** fire at 03:00 MSK — it waits
+   for the window. `interrupt` (Gatus) is the *page-the-on-call* tier and still bypasses; that
+   asymmetry is the entire reason the two tiers exist.
+
+4. **A TTL with a recorded reason — never a stale burst.** Held rows already reap at 72 h
+   (`MAX_ROW_AGE_SECS`, `notify_queue.rs:38`) and log every drop. For owner-gated holds the
+   semantic TTL is shorter: a push whose point was a 14:00 decision is usually noise at 22:00.
+   Expire with the reason recorded; never deliver an eight-hour-old burst as though it were fresh.
+
+5. **The pending decision needs a terminal state.** After the nudge budget, exactly one of:
+   - **safe default** — if the decision has one, proceed on it and record *"proceeded on default;
+     owner unresponsive since T"*;
+   - **escalate** — a secondary surface or channel;
+   - **abandon-with-record** — mark the work dropped, loudly.
+
+   Temporal models precisely this (approval timeout → auto-approve / auto-reject / escalate per
+   policy). Which applies is **per-decision**, and it is the new owner call (Q6).
+
+6. **Schedule owner-gated automation inside the owner's window** (lane-side rule, not a harness
+   change). A cron whose work needs approval should not fire at 04:00 and immediately park for
+   five hours. Daytime-bias the cadence of owner-gated lanes.
+
+**On the lane's non-gated work:** no separate rule is needed. A lane parked for eight hours is
+idle by design and loses nothing — its cron fires are **held, not dropped** — so rule 2's digest
+is what makes the wake survivable. Holding only "pushes that would bury the decision" would be a
+refinement with no measured failure behind it; leave it out.
+
+### 12.4 New open questions (rev.4)
+
+6. **Terminal state for an unanswered decision** (§12.3 rule 5): safe-default, escalate, or
+   abandon-with-record — per decision class. *Recommended: safe-default where one exists (record
+   the default taken), escalate otherwise; never silently abandon.*
+7. **The nudge window and budget** (§12.2/§12.3 rules 3–4): quiet hours in the owner's local
+   time, N nudges, and the held-row TTL for the owner-gated class. *Recommended: MSK
+   active-window only, 3 nudges with geometric backoff, TTL 24 h.*
+8. **The declaration verb** (§12.1): `opencrabs session await set|clear` over a new
+   `session/await` A2A method — confirm the name and that the gateway is the right transport, or
+   name a better one. *Recommended: as written; it mirrors `session notify` exactly.*
+
+### 12.5 Status
+
+Nothing is implemented. The design gate stands. rev.4 supersedes §4.1 (set-path list), §4.3
+(drain rule) and §4.4 (re-nudge payload) in addition to the §11 corrections.
