@@ -357,6 +357,14 @@ PAIRS = [
     # and one that took the gate without the writer would run probes that cannot pass.
     ("tools/rule.py", "TEMPLATE/tools/rule.py"),
     ("tests/test_ruling_row_recorded.py", "TEMPLATE/tests/test_ruling_row_recorded.py"),
+    # Added with its registration (board #262, ruled n=2246, dispatched n=2247). Paired for
+    # the same reason every other gate is, plus one of its own: this leg reads the LEDGER's
+    # rows and the boundary declaration, so a factory that took the runner without the file
+    # would invoke nothing, while one that took the file without the runner would carry a
+    # gate no audit ever reaches. The shipped citation gate's `SCOPE_DIRS` is UNCHANGED by
+    # this landing -- the two legs judge different populations and neither stands in for
+    # the other.
+    ("tests/test_ledger_citation_declared.py", "TEMPLATE/tests/test_ledger_citation_declared.py"),
 ]
 
 

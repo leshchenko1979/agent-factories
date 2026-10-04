@@ -691,6 +691,24 @@ REQUIRED_GATES: tuple[str, ...] = (
     # diverged 11 times, then 13 while the board-ruling leg watched. A reader does not
     # prevent; this gate is the ROW side of the pairing that `tools/rule.py` writes.
     "test_ruling_row_recorded.py",
+    # Added with its registration (board #262, ruled n=2246, dispatched n=2247). REQUIRED is
+    # the correct grain and OPTIONAL is not, for the deciding fact the entries around it
+    # state: the predicate is PURE over a tree -- it reads `evidence/ledger.jsonl`, the
+    # boundary declaration and `tools/field_predicate.py`, with no live board, no fleet
+    # manifest and no box-local fixture -- and every probe drives a synthetic tree under a
+    # temp directory, so it passes in a bootstrapped factory exactly as it does here. Its
+    # live leg SKIPS with a stated reason where the factory has declared no boundary, which
+    # is the state a factory that has not adopted the invariant is legitimately in. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the runner and keeping the file. THE MECHANISM IT GUARDS: the ledger is the
+    # one surface whose rows cite by `§N` and are never re-read out of tree, so a bare
+    # number in a row resolves against no document at all -- measured when the item was
+    # filed, 149 of 219 citations (68%) named nothing, and one of them asserted a remedy
+    # against a section of a document that holds no such thing (#184). The shipped
+    # citation gate keeps ONE population and ONE predicate and its `SCOPE_DIRS` is
+    # UNCHANGED: the ledger sits outside it by a DIRECTORY BOUNDARY, so it gets its own
+    # leg with the ledger's own gate set (`docs/instruments/ledger.md` section 5).
+    "test_ledger_citation_declared.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

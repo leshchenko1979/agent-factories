@@ -2503,6 +2503,36 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_hygiene_evidence_supersession.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_evidence_supersession.py"])
 
+    # 80. the ledger's own citation leg (board #262, ruled n=2246, dispatched n=2247).
+    #     THE MECHANISM IT GUARDS: the ledger is the one surface whose rows cite by `§N`
+    #     and are never re-read out of tree. The shipped citation gate
+    #     (`tests/test_citation_clause_titles.py`) covers `tools/`, `tests/` and their
+    #     TEMPLATE twins, and the ledger sits outside all four -- but it sits outside by a
+    #     DIRECTORY BOUNDARY, not by that gate's own reason for excluding prose, because a
+    #     ledger row numbers no sections of its own. So the shipped gate keeps ONE
+    #     population and ONE predicate and `SCOPE_DIRS` gains nothing; this leg is separate
+    #     and lives with the ledger's OWN gate set (`docs/instruments/ledger.md` section 5).
+    #     The predicate is QUOTING-AWARE and that is the load-bearing half: a row's `detail`
+    #     is free prose that QUOTES other documents, so the scan runs over the row's OWN
+    #     VOICE through the SHARED `tools/field_predicate.own_voice_text`, IMPORTED and
+    #     never re-implemented -- repeating that error in a second reader is the class
+    #     `docs/instruments/ledger.md` section 9.8 ("one field, one predicate") names.
+    #     FORWARD-ONLY: the ledger is append-only and its rows are immutable once published,
+    #     so a historical bare citation is a RECORD and not a repairable defect -- nothing
+    #     is backfilled. The boundary is declared in `docs/ledger-invariants.json` under
+    #     this gate's own name and read through `tests/ledger_boundary.py`; rows before it
+    #     print as `excused:` on every run. The run PRINTS the population it examined beside
+    #     its verdict, so a clean read is never indistinguishable from a vacuous one, and it
+    #     SKIPS with a stated reason where the factory has declared no boundary. It is
+    #     byte-paired with a TEMPLATE copy. Its MODE is declared in `registry/gates.json` in
+    #     the SAME landing. It carries NO `registry/gates.json` BUDGET ENTRY: a budget value
+    #     is the process owner's -- that manifest's authoritative writer is the measurement
+    #     duty (n=574 PART 5) -- and is never the implementing lane's to mint, so this gate
+    #     runs on the DECLARED DEFAULT and the audit prints that it did. Same grain as gate
+    #     77 above.
+    if (repo_root / "tests/test_ledger_citation_declared.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_citation_declared.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
