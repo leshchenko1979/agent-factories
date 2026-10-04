@@ -1,13 +1,13 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-04T21:46:19Z",
+  "resolved_at": "2026-10-04T22:12:22Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 69,
     "announcements": 25,
-    "jobs": 68,
+    "jobs": 67,
     "unattributed_jobs": 6
   },
   "announcements": [
@@ -1310,7 +1310,7 @@
           "session_id": "d6cfd3f7-0cd7-4e26-b9ff-2b1474be981e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-04T21:00:52Z",
+          "bound_at": "2026-10-04T22:03:31Z",
           "announcements": []
         },
         {
@@ -1759,7 +1759,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-04T20:09:03Z",
+          "bound_at": "2026-10-04T22:10:42Z",
           "announcements": []
         },
         {
@@ -1769,7 +1769,7 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-04T21:16:39Z",
+          "bound_at": "2026-10-04T22:07:31Z",
           "announcements": []
         },
         {
@@ -2062,22 +2062,6 @@
       "profile": "ops",
       "owner": "ai-antispam",
       "owner_basis": "name prefix"
-    },
-    {
-      "id": "f7d756b6-cead-412f-9291-3585ec218d13",
-      "name": "ai-antispam-62-close-gate",
-      "cron_expr": "15 3 * * *",
-      "timezone": "UTC",
-      "enabled": 0,
-      "set_goal": 0,
-      "has_goal_template": false,
-      "next_run_at": "2026-10-02T03:15:00+00:00",
-      "last_run_at": "2026-10-01T03:15:15Z",
-      "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
-      "trigger_cmd": "D=$(date -u +%Y%m%d); S=$(gh issue view 62 --repo alexeyleshchenko/ai-antispam --json state --jq .state 2>/dev/null); if [ \"$D\" -ge 20260929 ] && [ \"$S\" = \"OPEN\" ]; then echo \"due: 24h window closed, #62 still open\"; fi",
-      "profile": "ops",
-      "owner": "ai-antispam",
-      "owner_basis": "deliver_to -> lane"
     },
     {
       "id": "d2c7e157-9370-4752-a054-c853b4bb2d3c",

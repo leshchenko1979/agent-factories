@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-04T21:46:19Z",
+  "resolved_at": "2026-10-04T22:12:22Z",
   "fragments": [
     {
       "path": "/root/agent-factories/registry/factories/ai-antispam.json",
@@ -249,6 +249,12 @@
             "behind_by": 0,
             "measured_at": "2026-09-29T11:11:04Z",
             "reason": "HELD COMPLETE, GATE UNKNOWN -- the two axes disagree and this entry names both rather than claiming one. Held: all 4 declared paths byte-identical to canonical at committed HEAD 1ac6129. Gate: NOT green -- its own gate tests/test_questions.py was run at that revision by this lane on 2026-09-29T09:51Z and returned rc=1, \"the selftest exceeded 390 s -- a timeout is UNKNOWN, never a pass\"; no green verdict exists. `adopted` requires green: true (registry validate_disposition, require_green), and the frame is explicit that HELD and GREEN are independent, so adoption is deferred until the gate returns a verdict rather than declared on the axis that happens to read well. `green` is OMITTED, not false: the verdict is UNKNOWN, and false would claim a red that was never measured. behind_by 0 is a byte measurement and says nothing about the gate. What would change this entry: a quiet-box run returning a verdict -- this box carries a measured >=6x runtime variance for this gate (64.8 s quiet against >390 s under contention), and a third concurrent run would make this lane the cause of the timeout it was measuring. Predicate: md5 of each HEAD blob at the member's committed HEAD (frame S7.5 -- committed state, never a working tree) against the canonical file at origin/main b9c20d9; scope: the 4 paths declared in docs/instruments/open-questions.md S2; instant: measured_at below."
+          },
+          "review-rotation": {
+            "state": "deferred",
+            "behind_by": 4,
+            "measured_at": "2026-10-04T21:06Z",
+            "reason": "O1 disposition: DEFER with a re-entry condition. HELD 5/5 (presence, instrument census, 2026-10-04T21:06Z) with no declared leg — the member's copy is the pre-extension-surface revision, so 4 of the 5 paths diverge from canonical and none is a declared fork. PREDICATE: sha256 of each docs/instruments/review-rotation.md section-2 path against git show origin/main:<path> at the committed standard 29b7d55. SCOPE: the 5 declared paths. CLASSIFICATION: 4 divergent (tools/review.py, tests/test_review.py, docs/review-lenses.md, docs/instruments/review-rotation.md), 1 identical (docs/review-cycle.schema.json), 0 absent, 0 declared in registry/kit-exemptions.json — undeclared divergence = 4, the behind_by figure. The 4 predate the declared extension surface (f54cdea, 2026-10-03): three are byte-identical to f54cdea^, the law doc to canonical 5b2fe9f (2026-09-28). SECOND READING, stated because behind_by is validated only as an integer: against this member's OWN pin (registry/kit.json kit_version 27b79f289fef) the tree is byte-identical on all 5, so the member's own pin gate is silent — 4 is fleet-level lag, not internal drift. GREEN omitted, not false: the member's gate was not run, and its tests/test_review.py predates the #293 JANITOR, so a run in the tracked reviews/ is unsafe (it would leak test cycle dirs). RE-ENTRY CONDITION: a re-vendor to the canonical pin brings the 4 paths to byte-identity, and a green run of tests/test_review.py over the set moves this entry to state adopted, green true, behind_by 0."
           }
         }
       }
@@ -2514,7 +2520,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517]",
-      "session_updated_at": 1791150244,
+      "session_updated_at": 1791151731,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2540,7 +2546,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1791150267,
+      "session_updated_at": 1791151445,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2904,7 +2910,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Skills [chat:-1003936827469:topic:49643]",
-      "session_updated_at": 1791147764,
+      "session_updated_at": 1791150838,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2917,20 +2923,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1791149994,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 31847,
-      "updated_at": 1791144543,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Issue #234: Review Implementation Button",
-      "session_updated_at": 1791150221,
+      "session_updated_at": 1791151460,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2969,7 +2962,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1791150091,
+      "session_updated_at": 1791151770,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2982,7 +2975,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186]",
-      "session_updated_at": 1791150291,
+      "session_updated_at": 1791151842,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2995,33 +2988,7 @@
       "last_origin": "callback",
       "turn_open_at": 1791146054,
       "session_title": "Telegram: Factories / Open Questions Instrument [chat:-1004497192134:topic:4087]",
-      "session_updated_at": 1791149943,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "d6cfd3f7-0cd7-4e26-b9ff-2b1474be981e",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 5574,
-      "updated_at": 1791147652,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Telegram: Factories / Review Rotation [chat:-1004497192134:topic:5574]",
-      "session_updated_at": 1791148309,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "0ec8576a-40de-4ae3-83d1-fbd7fc7d5a78",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 11284,
-      "updated_at": 1791147652,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Factories / Notifications [chat:-1004497192134:topic:11284]",
-      "session_updated_at": 1791147976,
+      "session_updated_at": 1791151687,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3034,20 +3001,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1791148961,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 34653,
-      "updated_at": 1791148599,
-      "last_origin": "callback",
-      "turn_open_at": 1791148599,
-      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
-      "session_updated_at": 1791149458,
+      "session_updated_at": 1791150638,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3060,7 +3014,7 @@
       "last_origin": "callback",
       "turn_open_at": 1791148897,
       "session_title": "Fix #149: Cron Session Isolation",
-      "session_updated_at": 1791150209,
+      "session_updated_at": 1791151386,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3073,7 +3027,59 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Harvesting upstream PRs into OpenCrabs",
-      "session_updated_at": 1791150379,
+      "session_updated_at": 1791151931,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "0ec8576a-40de-4ae3-83d1-fbd7fc7d5a78",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 11284,
+      "updated_at": 1791151386,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Notifications [chat:-1004497192134:topic:11284]",
+      "session_updated_at": 1791151390,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "d6cfd3f7-0cd7-4e26-b9ff-2b1474be981e",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 5574,
+      "updated_at": 1791151411,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Review Rotation [chat:-1004497192134:topic:5574]",
+      "session_updated_at": 1791151623,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 34653,
+      "updated_at": 1791151651,
+      "last_origin": "callback",
+      "turn_open_at": 1791151651,
+      "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
+      "session_updated_at": 1791151658,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 31847,
+      "updated_at": 1791151842,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Issue #234: Review Implementation Button",
+      "session_updated_at": 1791151934,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3160,21 +3166,6 @@
       "next_run_at": "2026-10-05T11:30:00+00:00",
       "last_run_at": "2026-10-04T11:30:34Z",
       "trigger_cmd": "D=$(date -u +%Y%m%d); S=$(gh issue view 85 --repo leshchenko1979/ai-antispam --json state --jq .state 2>/dev/null); if [ \"$D\" -ge 20260928 ] && [ \"$S\" = \"OPEN\" ]; then echo \"due: window closed, #85 still open\"; fi",
-      "_profile": "ops"
-    },
-    {
-      "id": "f7d756b6-cead-412f-9291-3585ec218d13",
-      "name": "ai-antispam-62-close-gate",
-      "cron_expr": "15 3 * * *",
-      "timezone": "UTC",
-      "prompt": "#62 close gate — the 24h log window has closed. Verify and close, or report why not.\n\nWINDOW START (container recreate + the #62 deploy): 2026-09-28T03:03:08Z. Window ends 2026-09-29T03:03:08Z.\nFIX COMMITS: cdd5895 (the fix) and 0967949 (the guard). Deployed by run 36372057450, both jobs success.\n\nSTEP 1 — measure the window. Read rc first-hand (redirect to a file; never read a verdict through a pipe):\n\n  ssh apps 'docker inspect ai-antispam-ai-antispam-1 --format \"{{.State.StartedAt}}\"' > /tmp/oc62-start 2>&1; echo rc=$?\n  ssh apps 'docker logs --since 2026-09-28T03:03:08 ai-antispam-ai-antispam-1 2>&1 | grep -c \"Webhook processing timed out after\"' > /tmp/oc62-timeouts 2>&1; echo rc=$?\n  ssh apps 'docker logs --since 2026-09-28T03:03:08 ai-antispam-ai-antispam-1 2>&1 | grep -c \"private_handlers\"' > /tmp/oc62-private 2>&1; echo rc=$?\n  ssh apps 'docker logs --since 2026-09-28T03:03:08 ai-antispam-ai-antispam-1 2>&1 | wc -l' > /tmp/oc62-lines 2>&1; echo rc=$?\n\nCOUNTING TRAP: each record double-prints (structured logger + Python logging handler), so a bare grep -c doubles the count. State which form you are quoting.\nRE-CREATE TRAP: a container recreate TRUNCATES this log. If StartedAt is LATER than 2026-09-28T03:03:08Z the window is gone — say so plainly and re-base on the new start rather than presenting a short window as the full one.\n\nALSO measure the durable store (survives recreates), naming the predicate and the instant:\n\n  ssh apps 'C=$(docker ps --filter name=ai-antispam --format \"{{.Names}}\" | head -1); docker exec \"$C\" python3 -c \"\nimport asyncio, asyncpg, os\nasync def main():\n    pool = await asyncpg.create_pool(host=os.environ[\\\"PG_HOST\\\"], port=os.environ[\\\"PG_PORT\\\"], user=os.environ[\\\"PG_USER\\\"], password=os.environ[\\\"PG_PASSWORD\\\"], database=os.environ[\\\"PG_DB\\\"], min_size=1, max_size=2)\n    async with pool.acquire() as c:\n        print(await c.fetchrow(\\\"select count(*) n, count(*) filter (where status=\\x27decided\\x27) decided, count(*) filter (where status=\\x27failed\\x27) failed, count(*) filter (where status=\\x27pending\\x27) pending from classification_verdicts\\\"))\n    await pool.close()\nasyncio.run(main())\n\"'\n\nSTEP 2 — if the webhook-timeout count is 0 AND the log covers the window, close #62:\n\n  1. Confirm the fix is the artifact, not the push:\n     ssh apps 'docker exec ai-antispam-ai-antispam-1 md5sum /app/app/handlers/private_handlers.py'\n     It must equal the committed file's md5 (read it locally with md5sum).\n  2. CLOSE THE BOARD FIRST (the token declares what its author OBSERVED):\n     gh issue close 62 --repo alexeyleshchenko/ai-antispam --reason completed\n  3. THEN write the close row, carrying BOTH trailer tokens — board=closed and head=<sha>\n     (head= is the revision the receipts describe: 0967949; it is read from the trailing run, so a sha in prose does NOT satisfy it):\n     python3 tools/ledger.py append --event close --actor bot --subject '#62' --detail \"Closed <date>. <measurements> board=closed head=0967949\"\n  4. A successful close writes TWO rows (the close plus a run row the tool appends itself) — the extra row is the settlement receipt, not a duplicate.\n  5. Commit the ledger row, push to BOTH remotes, and verify with git ls-remote rather than the push output.\n\nSTEP 3 — if the count is NON-ZERO, do NOT close. State which of the two causes it is, with the measured numbers:\n  - the legs still do not fit the webhook budget (a budget defect, back to the code), or\n  - classifications legitimately exceeding the budget and being served from the store on redelivery (expected, not a defect).\n\nReport either outcome to the owner in the Bot topic with the numbers, and reply to HQ if the item is closed.",
-      "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
-      "enabled": 0,
-      "set_goal": 0,
-      "goal_template": null,
-      "next_run_at": "2026-10-02T03:15:00+00:00",
-      "last_run_at": "2026-10-01T03:15:15Z",
-      "trigger_cmd": "D=$(date -u +%Y%m%d); S=$(gh issue view 62 --repo alexeyleshchenko/ai-antispam --json state --jq .state 2>/dev/null); if [ \"$D\" -ge 20260929 ] && [ \"$S\" = \"OPEN\" ]; then echo \"due: 24h window closed, #62 still open\"; fi",
       "_profile": "ops"
     },
     {

@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-04T21:46:19Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-04T22:12:22Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-04T21:46:19Z` |
+| generated | live reads | resolved `2026-10-04T22:12:22Z` |
 
 ## Announcements
 
@@ -161,7 +161,6 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 |---|---|---|---|---|---|---|---|---|---|
 | `ai-antispam-43-close-gate` | ops | `5 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-05T12:05:00+00:00 | — | [ "$(date -u +%Y%m%d)" -ge 20260927 ] && /usr/local/bin/gh issue view 7… |
 | `ai-antispam-52-close-gate` | ops | `30 11 * * *` | UTC | yes | 0 | **absent** | 2026-10-05T11:30:00+00:00 | — | D=$(date -u +%Y%m%d); S=$(gh issue view 85 --repo leshchenko1979/ai-ant… |
-| `ai-antispam-62-close-gate` | ops | `15 3 * * *` | UTC | **no** | 0 | **absent** | 2026-10-02T03:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | D=$(date -u +%Y%m%d); S=$(gh issue view 62 --repo alexeyleshchenko/ai-a… |
 | `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-05T06:15:00+00:00 | — | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
 | `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-04T22:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
@@ -181,7 +180,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
-15 of 19 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
+15 of 18 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
 
 ### inferhub-watch — Inferhub watch
 
@@ -365,7 +364,7 @@ Fresh reading 2026-10-01T06:08:14Z: LEG A, the always-injected Tier 0 triple (SO
 | Factories / Pacemakers / Crons | 4223 | pacemakers | `ee5cd2f5-6c1b-41bb-b031-1150a3132fb1` | Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223] | resolved | telegram | 2026-10-02T13:45:20Z | — |
 | Factories / Instruments methodology | 4186 | methodology | `4515ea72-eb39-4a3c-9b05-a1dc02b1c977` | Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186] | resolved | telegram | 2026-10-04T20:32:42Z | — |
 | Factories / Fleet instruments | 4555 | fleet-instruments | `37e71e03-0022-4d38-9279-1687fec7a823` | Telegram: Factories / Fleet instruments [chat:-1004497192134:topic:4555] | resolved | telegram | 2026-09-27T22:00:11Z | — |
-| Factories / Review Rotation | 5574 | review-rotation | `d6cfd3f7-0cd7-4e26-b9ff-2b1474be981e` | Telegram: Factories / Review Rotation [chat:-1004497192134:topic:5574] | resolved | telegram | 2026-10-04T21:00:52Z | — |
+| Factories / Review Rotation | 5574 | review-rotation | `d6cfd3f7-0cd7-4e26-b9ff-2b1474be981e` | Telegram: Factories / Review Rotation [chat:-1004497192134:topic:5574] | resolved | telegram | 2026-10-04T22:03:31Z | — |
 | Factories / Insights | 6865 | insights | `95b14002-4541-45a5-b2a6-4294ee1104f8` | Meta-factory insights register — class + status axes | resolved | telegram | 2026-10-03T22:20:10Z | — |
 | Factories / Hygiene | 8733 | hygiene | `a2c8637c-0a24-4bbc-8097-7cff600b67e2` | Telegram: Factories / Hygiene [chat:-1004497192134:topic:8733] | resolved | telegram | 2026-10-03T13:58:45Z | — |
 
@@ -491,8 +490,8 @@ Attribution basis: deliver_to -> lane.
 | Telegram: Throttling | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-10-03T22:03:45Z | — |
 | Lifecycle: Restarts | 31683 | _unstated_ | `7e1ebbb6-68b3-478b-abc2-b697e70c2f37` | Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683] | resolved | telegram | 2026-09-29T06:44:05Z | — |
 | Core: Plan & Tasks | 31789 | _unstated_ | `462181e9-ad99-4163-bd3d-c983c48049a8` | Telegram: Opencrabs Dev Factory / Core: Plan & Tasks [chat:-1003936827469:topic:31789] | resolved | telegram | 2026-09-28T14:56:57Z | — |
-| Telegram: Rich Text | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Issue #234: Review Implementation Button | resolved | telegram | 2026-10-04T20:09:03Z | — |
-| Memory: Compaction | 34653 | _unstated_ | `cbdfde4a-b3fe-457a-817b-5113b938f12d` | Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-10-04T21:16:39Z | — |
+| Telegram: Rich Text | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Issue #234: Review Implementation Button | resolved | telegram | 2026-10-04T22:10:42Z | — |
+| Memory: Compaction | 34653 | _unstated_ | `cbdfde4a-b3fe-457a-817b-5113b938f12d` | Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-10-04T22:07:31Z | — |
 | Memory: Vectors | 36841 | _unstated_ | `212b3c83-6659-49c8-9984-0cf849f769c1` | Telegram: Opencrabs Dev Factory / Vector memory [chat:-1003936827469:topic:36841] | resolved | telegram | 2026-09-28T19:33:58Z | — |
 | OC DEV TOOLSMITH | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-10-04T19:55:58Z | — |
 | Upstream: Harvest | 39218 | _unstated_ | `4b0990b7-aff8-4744-8de5-e38e54de7693` | Harvesting upstream PRs into OpenCrabs | resolved | telegram | 2026-10-04T21:42:01Z | — |
@@ -553,7 +552,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 ## Unattributed jobs
 
-Read from the declared profile homes: 4 home(s) opened, 68 job row(s). Homes read: code-spike, family, oc348probe, ops.
+Read from the declared profile homes: 4 home(s) opened, 67 job row(s). Homes read: code-spike, family, oc348probe, ops.
 
 These rows name no known factory in their `deliver_to` and match no naming prefix. They are rendered rather than dropped: a job the registry cannot place is a finding, not an omission. Each row carries the profile home it was read from, so a row that should not be here can be found and changed without guessing which home owns it.
 
