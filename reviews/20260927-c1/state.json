@@ -68,23 +68,23 @@
       "reason": null
     },
     "P": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-P.md",
+      "sha256": "1460a1f5b100f1cab43825fa9d249c56e64857da6384279ef9c049675348e0bc",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:32:29Z",
       "reason": null
     },
     "C": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-C.md",
+      "sha256": "58441d9ae375e197f027c4ce420f83e9a708e68e43d8646bf6d0fda0ccdae7ac",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:32:28Z",
       "reason": null
     },
     "E": {
@@ -98,13 +98,13 @@
       "reason": null
     },
     "F": {
-      "status": "PENDING",
-      "report_path": null,
-      "sha256": null,
+      "status": "COMPLETED",
+      "report_path": "reviews/20260927-c1/reports/lens-F.md",
+      "sha256": "2029e1a26f8fd1067e6bf392fa01641b718f345aa7c718d016a3fb24f5bb108c",
       "verdict": null,
-      "receipt": null,
+      "receipt": "verified",
       "fallback": null,
-      "recorded_at": null,
+      "recorded_at": "2026-10-04T21:32:29Z",
       "reason": null
     },
     "D": {
@@ -296,5 +296,5 @@
       "next_action": "brief and record lens A (pending: A,B,G,J,P,C,E,F,D,H,M,T,I,S)"
     }
   ],
-  "updated_at": "2026-10-04T21:19:00Z"
+  "updated_at": "2026-10-04T21:32:29Z"
 }
