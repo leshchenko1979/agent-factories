@@ -30,8 +30,8 @@ NON-VACUITY IS ASSERTED, NOT ASSUMED. A predicate that examined nothing has repo
 not "clean". The leg exits 2 — loudly, naming which population came back empty — when it
 examined zero declared entries, so a green exit is never the verdict of a vacuous read. The
 separate PROBE half (that this leg BITES on a stale base rather than merely exiting 0) is
-driven by `tests/test_gate_budget_rederivation_leg.py`, because non-vacuity is a property of
-the probe and population visibility is a property of the run.
+driven by `tests/test_gate_registration.py`, because non-vacuity is a property of the probe
+and population visibility is a property of the run.
 
 WHAT IT WILL NOT DO. It never re-values the DEFAULT entry: what the suite does with a gate
 nobody has measured is a policy choice and is HQ's, never this leg's (n=574 PART 5). It never
@@ -63,10 +63,12 @@ from gate_budget import (  # noqa: E402
 EXIT_VACUOUS = 2
 EXIT_REFUSED = 3
 
-# The audit's own marker for "the measured sample EXHAUSTED the declared budget". The audit
-# returns this exit code with `duration_sec` MEASURED and `unknown` set, so an exhausted
-# budget is never silently killed and never silently green (#94).
-EXHAUSTED_EXIT_CODE = 124
+# THE EXHAUSTED-BUDGET MARKER. A gate whose sample exhausted its declared budget is
+# reported by the audit with `unknown` set and its `duration_sec` recorded as a LOWER
+# BOUND -- the flag `judge_gates` itself reads (#93, #226). That flag is the third
+# containment trigger, and `_audit_samples` below reads it. It is deliberately NOT an
+# exit code: 124 is the audit's own timeout path, but a gate script is free to exit 124
+# for its own reasons, so the flag is the only sound marker.
 
 
 @dataclass
@@ -95,30 +97,46 @@ class Population:
         return tuple(sorted({s.key for s in self.stale} | set(self.exhausted)))
 
 
-def _audit_samples(report_path: Path) -> tuple[dict, str]:
-    """`{gate_key: duration_sec}` for every gate the audit COMPLETED, and the report's note.
+def _audit_samples(report_path: Path) -> tuple[dict, tuple, str]:
+    """The report's COMPLETED samples, the keys it reported UNKNOWN, and the report's note.
 
-    Only COMPLETED samples are returned. An UNKNOWN result carries a MEASURED duration too,
-    but that duration is a lower bound on a run that was killed at the cap — using it as a
-    basis would derive the next budget from a clipped number and ratchet the cap DOWN, which
-    is the one direction the manifest's margin exists to prevent.
+    TWO populations, returned SEPARATELY, and the separation is the whole point (#307). A
+    COMPLETED sample is the only thing a basis may be derived from: it is a MEASUREMENT. An
+    UNKNOWN result carries a `duration_sec` too, but that number is a LOWER BOUND on a run
+    killed at the cap — using it as a basis would derive the next budget from a clipped
+    number and ratchet the cap DOWN, which is the one direction the manifest's margin exists
+    to prevent.
+
+    So an UNKNOWN gate is NOT a sample — but it IS the audit's exhausted-budget trigger, and
+    this function must hand it on rather than drop it. Collapsing the two into one set is
+    exactly the #307 defect: the trigger was computed from the surviving samples, so the only
+    gates that could satisfy it had already been filtered out and the population was empty
+    for every input, forever.
     """
     if not report_path.is_file():
-        return {}, f"no audit report at {report_path} — no fresh samples, so nothing can be applied"
+        return {}, (), f"no audit report at {report_path} — no fresh samples, so nothing can be applied"
     try:
         payload = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return {}, f"audit report at {report_path} is unreadable ({exc}) — UNKNOWN, never clean"
+        return {}, (), f"audit report at {report_path} is unreadable ({exc}) — UNKNOWN, never clean"
     samples: dict[str, float] = {}
+    exhausted: list[str] = []
     for gate in payload.get("gates") or []:
         key = gate.get("gate_key")
         duration = gate.get("duration_sec")
         if not key or not isinstance(duration, (int, float)):
             continue
         if gate.get("unknown"):
+            # Killed at its cap: no verdict was taken, so this is not a sample -- but the
+            # gate's declared budget was EXHAUSTED, which is the third trigger.
+            exhausted.append(key)
             continue
         samples[key] = max(samples.get(key, 0.0), float(duration))
-    return samples, f"{len(samples)} completed sample(s) read from {report_path.name}"
+    return (
+        samples,
+        tuple(sorted(set(exhausted))),
+        f"{len(samples)} completed sample(s) read from {report_path.name}",
+    )
 
 
 def containment_population(
@@ -168,13 +186,16 @@ def containment_population(
     samples: dict = {}
     sample_note = "no audit report given — the exhausted-budget trigger was not read"
     if audit_report is not None:
-        samples, sample_note = _audit_samples(Path(audit_report))
-        exhausted = tuple(
-            sorted(
-                key
-                for key in samples
-                if key in entries and samples.get(key, 0.0) >= budgets.gates.get(key, budgets.default_sec)
-            )
+        samples, exhausted_keys, sample_note = _audit_samples(Path(audit_report))
+        # The trigger is the audit's OWN declaration that a declared entry exhausted its
+        # budget -- the `unknown` flag -- never a comparison against the cap. It is read from
+        # the UNKNOWN population, not from the completed samples: a completed sample finished
+        # INSIDE its cap by definition, so the comparison this replaces could only ever be
+        # vacuously false (#307).
+        exhausted = tuple(key for key in exhausted_keys if key in entries)
+        sample_note += (
+            f" | exhausted-budget trigger: {len(exhausted)} declared entr"
+            f"{'y' if len(exhausted) == 1 else 'ies'} reported UNKNOWN by the audit"
         )
 
     note = budgets.stale_note
@@ -256,7 +277,15 @@ def apply_rederivation(
     for key in pop.keys:
         sample = samples.get(key)
         if not isinstance(sample, (int, float)) or sample <= 0:
-            held.append((key, "no completed sample in the audit report"))
+            if key in pop.exhausted:
+                # The trigger fired: this gate's declared budget was exhausted, so the
+                # audit's duration is a LOWER BOUND and may never seed a re-derivation.
+                # It is HELD and NAMED -- the leg refuses rather than carry a clipped number.
+                held.append(
+                    (key, "budget exhausted — the audit's duration is a lower bound, never a sample")
+                )
+            else:
+                held.append((key, "no completed sample in the audit report"))
             continue
         margin_x = margin_for(float(sample))
         entry = entries.get(key)
@@ -322,7 +351,10 @@ def render(pop: Population) -> str:
     for stale in pop.stale:
         lines.append(f"    [STALE] {stale.key} — legs {', '.join(stale.legs)}: {stale.detail}")
     for key in pop.exhausted:
-        lines.append(f"    [EXHAUSTED] {key} — its measured sample reached the declared cap")
+        lines.append(
+            f"    [EXHAUSTED] {key} — the audit reported it UNKNOWN: its declared budget was "
+            f"exhausted"
+        )
     if pop.not_examined:
         lines.append(f"    [NOT EXAMINED] {', '.join(pop.not_examined)}")
     if pop.applied:

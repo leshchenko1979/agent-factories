@@ -2198,6 +2198,71 @@ def probe_the_live_rederivation_leg_is_non_vacuous() -> None:
           "population:" in done.stdout and "in the containment set" in done.stdout,
           done.stdout[:300])
 
+# --- #307: the exhausted-budget trigger must be REACHABLE ----------------------------------
+# The leg declares THREE containment triggers: leg A (the gate's file moved), leg B (its
+# registered runner form moved), and a measured sample that EXHAUSTED the declared budget --
+# the audit reporting the gate `unknown`. The third trigger was DEAD CODE (#307): a
+# budget-exhausted gate is `unknown` by construction, and `_audit_samples` dropped every
+# unknown gate before `containment_population` computed the trigger from the surviving
+# samples. The population was empty for every input, forever, and the file's own
+# `EXHAUSTED_EXIT_CODE` constant was read by nothing.
+#
+# The two questions are genuinely different and are kept apart: an unknown gate's
+# `duration_sec` is a LOWER BOUND on a run killed at the cap, so it may never seed a
+# re-derivation basis -- but it IS the exhausted trigger, and dropping it is what made the
+# trigger unreachable. The probe is TWO-SIDED: the exhausted gate reaches the population and
+# is NAMED, and a COMPLETED sample inside its cap is not reported as exhausted.
+
+def probe_a_budget_exhausted_gate_reaches_the_trigger() -> None:
+    """#307: an `unknown` gate reaches the third trigger instead of being dropped first."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty, not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the exhausted-trigger probe repository could be built", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        manifest = _manifest(root, {
+            # Bytes held AND registration held: this entry reaches the population ONLY if the
+            # exhausted trigger reaches it, so it isolates that one leg.
+            "tests/test_same.py": _basis(base),
+            # The control, whose sample COMPLETED inside its cap.
+            "tests/test_moved.py": _basis(base),
+        })
+        report = root / "audit-report.json"
+        report.write_text(json.dumps({"gates": [
+            # The audit's kill shape: UNKNOWN, its duration a LOWER BOUND at the cap, the
+            # distinct exit code `tools/audit.py` sets on the 124 path (#93, #226).
+            {"gate_key": "tests/test_same.py", "duration_sec": 4.0, "unknown": True,
+             "duration_is_lower_bound": True, "exit_code": 124, "passed": False},
+            # The control: a completed sample, well inside its declared 4.0s cap.
+            {"gate_key": "tests/test_moved.py", "duration_sec": 0.5, "unknown": False,
+             "duration_is_lower_bound": False, "exit_code": 0, "passed": True},
+        ]}), encoding="utf-8")
+        as_json = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                            "--audit-report", str(report), "--json")
+        try:
+            payload = json.loads(as_json.stdout)
+        except ValueError:
+            payload = {}
+        check("a budget-exhausted gate REACHES the trigger and is named (#307)",
+              payload.get("exhausted") == ["tests/test_same.py"],
+              f"exhausted={payload.get('exhausted')!r} (want ['tests/test_same.py'])")
+        check("a COMPLETED sample inside its cap is NOT reported as exhausted — the control",
+              "tests/test_moved.py" not in (payload.get("exhausted") or []),
+              str(payload.get("exhausted")))
+        text = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                         "--audit-report", str(report))
+        check("the text run prints the exhausted entry as EXHAUSTED",
+              "[EXHAUSTED] tests/test_same.py" in text.stdout, text.stdout[-300:])
+        check("and the population line COUNTS it by that leg",
+              "1 by an exhausted budget" in text.stdout, text.stdout[-300:])
+
 # --- #240: a gate's own cap must sit UNDER its audit budget -------------------------------
 # A gate's OWN internal timeout and the audit's budget for it are two constants in two files,
 # and the ordering is load-bearing: the audit's budget must exceed the gate's internal cap, or
@@ -2425,6 +2490,8 @@ def main() -> int:
     print("  synthetic probes — #269: the re-derivation leg bites, and its population is printed")
     probe_the_rederivation_leg_prints_and_bites()
     probe_the_live_rederivation_leg_is_non_vacuous()
+    print("  synthetic probes — #307: a budget-exhausted gate reaches the trigger")
+    probe_a_budget_exhausted_gate_reaches_the_trigger()
 
     print("  synthetic probes — #240: a gate's own cap vs its audit budget")
     probe_a_budget_below_its_gates_own_cap_is_named()
