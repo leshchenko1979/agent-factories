@@ -2504,8 +2504,8 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_evidence_supersession.py"])
 
     # 80. the ledger's own citation leg (board #262, ruled n=2246, dispatched n=2247).
-    #     THE MECHANISM IT GUARDS: the ledger is the one surface whose rows cite by `§N`
-    #     and are never re-read out of tree. The shipped citation gate
+    #     THE MECHANISM IT GUARDS: the ledger is the one surface whose rows cite by
+    #     section number and are never re-read out of tree. The shipped citation gate
     #     (`tests/test_citation_clause_titles.py`) covers `tools/`, `tests/` and their
     #     TEMPLATE twins, and the ledger sits outside all four -- but it sits outside by a
     #     DIRECTORY BOUNDARY, not by that gate's own reason for excluding prose, because a
