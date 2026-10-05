@@ -299,7 +299,14 @@ def test_a_non_empty_board_with_a_missing_leg_is_reported() -> None:
 def test_a_clean_board_reads_clean_and_STATES_ITS_COVERAGE() -> None:
     """Non-vacuity: a green must be green over a NON-ZERO examined count."""
     issues = [_issue(1, "OPEN"), _issue(2, "OPEN"), _issue(3, "CLOSED")]
-    rows = _rows(("intake", "#1", 1), ("intake", "#2", 2), ("intake", "#3", 3), ("close", "#3", 4))
+    # The `ruling` rows are not decoration: since #332 the patrol also asserts the ROUND's
+    # own predicate (an OPEN item with an intake row and no ruling row is a miss), so a
+    # fixture that models a clean board must be a board the round has SWEPT.
+    rows = _rows(
+        ("intake", "#1", 1), ("ruling", "#1", 5),
+        ("intake", "#2", 2), ("ruling", "#2", 6),
+        ("intake", "#3", 3), ("close", "#3", 4),
+    )
     rc, out, _ = _run(issues, rows)
     assert rc == 0, f"a fully intaken board must pass, got rc={rc}\n{out}"
     assert "2 examined" in out, f"the clean verdict must name what it examined\n{out}"
@@ -760,7 +767,9 @@ def test_a_subject_absent_from_the_board_is_a_problem_not_a_silent_pass() -> Non
 def test_a_pre_invariant_close_row_is_outside_the_population() -> None:
     """The GATE's own boundary is honoured: a pre-invariant row is not judged here."""
     issues = [_issue(1, "OPEN")]
-    rows = _rows(("intake", "#1", 1)) + [
+    # The `ruling` row keeps the fixture inside the round's own population (#332): an OPEN
+    # intaken item with no ruling row is a miss, and this probe is about the close board.
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 5)) + [
         _close_row(2, "#1", _PRE_CLOSE_TS, "settled board=closed"),
     ]
     rc, out, _ = _run(issues, rows)
@@ -3163,7 +3172,11 @@ def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
         _issue_with_comments(7, "OPEN", "## DISPOSITION — a spelling nobody has used yet.\n"),
         _issue_with_comments(8, "OPEN", "## RULED — an ordinary ruling.\n"),
     ]
-    rows = _rows(("intake", "#7", 1), ("intake", "#8", 2), ("ruling", "#8", 3))
+    # `ruling` #7 is added for #332: #7 carries no ACCEPTED head, so it is the probe's own
+    # point that it reads unruled — but the ROUND's population is read from the LEDGER, and
+    # a row exists for it, so the patrol's board-unruled leg stays quiet here.
+    rows = _rows(("intake", "#7", 1), ("ruling", "#7", 4), ("intake", "#8", 2),
+                 ("ruling", "#8", 3))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
                                   predicate=RUNNER.load_predicate())
     cov = leg["coverage"]
@@ -3197,7 +3210,11 @@ def test_the_counter_counts_ISSUES_not_COMMENTS() -> None:
         _issue_with_comments(75, "OPEN", "## RULED — the ruling.\n", "## RULED — amended.\n"),
         _issue_with_comments(76, "OPEN", "no ruling here, only prose.\n"),
     ]
-    rows = _rows(("intake", "#75", 1), ("ruling", "#75", 2), ("intake", "#76", 3))
+    # `ruling` #76 is added for #332: #76 carries no ruling COMMENT (which is this probe's
+    # point), but the round's population is read from the LEDGER, so a row keeps the
+    # board-unruled leg quiet over a fixture that is about the ruling leg.
+    rows = _rows(("intake", "#75", 1), ("ruling", "#75", 2), ("intake", "#76", 3),
+                 ("ruling", "#76", 4))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=RUNNER.load_predicate())
     assert leg["coverage"]["rulings_issued"] == 1, (
         f"two ruling comments on ONE issue are ONE ruling: {leg['coverage']!r}"
@@ -3358,7 +3375,9 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         }
 
     issues = [_issue(1, "OPEN")]
-    rows = _rows(("intake", "#1", 1))
+    # The `ruling` row keeps this fixture inside the round's own population (#332), so the
+    # only NOT RUN under test is the worktree leg's.
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2))
     out, err = io.StringIO(), io.StringIO()
     rc = RUNNER.main(
         [], board_fn=lambda slug: issues, slug_fn=lambda: "owner/repo",
@@ -3409,7 +3428,9 @@ def test_the_whole_run_PRINTS_the_worktree_population_and_never_a_bare_zero() ->
     both hazard classes, the `removes: no` declaration, and the read instant.
     """
     issues = [_issue(1, "OPEN")]
-    rows = _rows(("intake", "#1", 1))
+    # `ruling` #1 keeps this fixture inside the round's own population (#332); without it
+    # the board-unruled leg REDs and this probe would pass while measuring a red run.
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2))
     rc, out, _ = _run(issues, rows)
     assert "LEG worktree — ASSERTED" in out, out
     assert "worktrees: 2 total, 1 scratch" in out, out
@@ -4026,6 +4047,152 @@ def test_the_workspace_blocked_leg_is_INJECTABLE_and_wired_by_default() -> None:
     params = inspect.signature(RUNNER.main).parameters
     assert "dirty_paths_fn" in params, sorted(params)
     assert hasattr(RUNNER, "live_dirty_paths"), "the live tree read must exist"
+
+def test_the_board_unruled_leg_BITES_and_discriminates_on_every_neighbour() -> None:
+    """#332 acceptance (a): the round's own predicate -- an OPEN item carrying an `intake`
+    row and NO `ruling` row -- is DETECTED past the threshold, and the five neighbours that
+    look like it stay quiet.
+
+    The neighbours are the whole point, because each is a live false positive a naive
+    reading ("any open item without a ruling row") would report: a fresh item is IN FLIGHT,
+    a ruled item is out of the population, a CLOSED item owes the round nothing, an item
+    with no intake row belongs to `board_intake_leg`, and a ruling stamped under a
+    DESCRIPTIVE subject governs its item through the resolver's `declared` arm. A probe
+    that supplied only the true positive would pass a leg that reported all six.
+
+    The defect this reproduces, measured 2026-10-05 (#332): #327 carried intake n=2380 at
+    12:07:20Z, was OPEN, and had no `ruling` row when the round swept at 12:50Z -- and
+    nothing went red, because no leg had this population.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [
+        _issue(921, "OPEN"),    # intaken 2 d ago, NO ruling row -> OWED
+        _issue(922, "OPEN"),    # intaken 1 h ago, no ruling row -> in flight
+        _issue(923, "OPEN"),    # intaken, and RULED (strict `#923`)
+        _issue(924, "CLOSED"),  # intaken and unruled, but the board closed it
+        _issue(925, "OPEN"),    # unruled and open, but carries NO intake row
+        _issue(926, "OPEN"),    # ruled under a DESCRIPTIVE subject, via `governs=`
+    ]
+    rows = [
+        _stall_row(21, "intake", "#921", 2, now=now),
+        _stall_row(22, "intake", "#922", 1 / 24, now=now),
+        _stall_row(23, "intake", "#923", 3, now=now),
+        _stall_row(24, "ruling", "#923", 2.9, now=now),
+        _stall_row(25, "intake", "#924", 3, now=now),
+        _stall_row(26, "close", "#924", 2.5, now=now),
+        _stall_row(27, "intake", "#926", 3, now=now),
+        _stall_row(28, "ruling", "concern-probe", 2.9, now=now,
+                   detail="governs=926"),
+    ]
+
+    leg = RUNNER.board_unruled_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "#921" in named, f"the unruled intaken item must be NAMED\n{named}"
+    for quiet in ("#922", "#923", "#924", "#925", "#926"):
+        assert quiet not in named, (
+            f"{quiet} must NOT be reported: a fresh item is in flight, a ruled one is out "
+            f"of the population, a closed one owes the round nothing, an item with no "
+            f"intake row belongs to the intake leg, and a `governs=` ruling IS a ruling"
+            f"\n{named}"
+        )
+    assert leg["coverage"]["items_owed_ruling"] == 1, leg["coverage"]
+    assert leg["coverage"]["population_unruled"] == 2, leg["coverage"]
+
+    # ... and the same fixture through the REAL `main()`: the report must carry the leg,
+    # the OWED line AND the population it was read from. A leg returning a correct dict
+    # while the render drops it is the half-fix this half exists to catch. (#925 also REDs
+    # `board-intake` here, deliberately: it is the boundary between the two legs -- an open
+    # item with NO intake row is that leg's population, not this one's.)
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
+    assert "LEG board-unruled — ASSERTED" in out, out
+    assert "#921 is OPEN on the board" in out, out
+    assert "population (OPEN, intake row, NO ruling row): 2 item(s) -- 1 past" in out, out
+    assert "board read at " in out, out
+
+def test_the_board_unruled_leg_PRINTS_an_EMPTY_population_rather_than_silence() -> None:
+    """#332 acceptance (b): a clean sweep over an EMPTY population is distinguishable from
+    a leg that examined nothing -- the population count and the board read instant are
+    PRINTED, and the run is GREEN.
+
+    This is the criterion the defect itself turns on: #327 was skipped by the round and
+    NOTHING went red, so a leg that stayed silent on an empty population would reproduce
+    the very failure it exists to detect. The discriminating control is the fixture with
+    the `ruling` row REMOVED, which fires -- driven in the arm above -- so this one proves
+    the leg's own empty read is PRINTED, not merely that it is quiet.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(931, "OPEN")]
+    rows = [
+        _stall_row(31, "intake", "#931", 5, now=now),
+        _stall_row(32, "ruling", "#931", 4.9, now=now),
+    ]
+
+    leg = RUNNER.board_unruled_leg(issues, rows, read_at=read_at)
+    assert leg["problems"] == [], leg
+    assert leg["coverage"]["population_unruled"] == 0, leg["coverage"]
+    assert leg["coverage"]["board_read_at"] == read_at, leg["coverage"]
+    assert leg["coverage"]["open_items_examined"] == 1, leg["coverage"]
+
+    rc, out, _ = _run(issues, rows)
+    assert rc == 0, f"a ruled item is not a defect, got rc={rc}\n{out}"
+    assert "LEG board-unruled — ASSERTED" in out, out
+    assert "population (OPEN, intake row, NO ruling row): 0 item(s) -- 0 past" in out, out
+    assert f"board read at {read_at}" in out, out
+
+def test_the_board_unruled_leg_PRINTS_its_threshold_with_its_basis() -> None:
+    """#332: the threshold and the basis it rests on are PRINTED on every run, never
+    carried in a reader's memory -- and the basis must NAME the round's own cadence it is
+    derived from, or the value reads as a chosen number.
+
+    Asserted on the RENDER, not on the constant: a basis declared in a module constant and
+    dropped from the report is the same failure as one never written.
+    """
+    rc, out, _ = _run([_issue(931, "OPEN")], [])
+    assert "LEG board-unruled — ASSERTED" in out, out
+    assert "past the declared threshold of 6.0 h" in out, out
+    assert "threshold basis: 6.0 h" in out, out
+    assert "HQ round cadence" in out, (
+        f"the basis must name the round's own cadence it is taken from\n{out}"
+    )
+
+def test_the_board_unruled_leg_resolves_the_RULING_namespace_and_PRINTS_an_unplaced_row() -> None:
+    """#332 + #243 clause 2: the RULING namespace is resolved through the ruling leg's own
+    three arms -- so a ruling written under a SLUG and bridged by a later row that
+    references its `n` still clears its item -- and a ruling row that resolves to NO issue
+    is LISTED, never silently dropped.
+
+    Dropping an unplaced row would report a smaller ruled set than was read, and the leg
+    would then fire on an item that is in fact ruled -- a false red no reader could
+    re-litigate. So the row is printed, and the item it fails to clear stays OWED.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(941, "OPEN"), _issue(942, "OPEN")]
+    rows = [
+        _stall_row(41, "intake", "#941", 3, now=now),
+        _stall_row(42, "ruling", "slug-probe", 2.9, now=now),
+        # the DISPATCH BRIDGE: a later row references the ruling's `n` and names the issue
+        _stall_row(43, "dispatch", "#941", 2.8, now=now, detail="Ruling n=42"),
+        _stall_row(44, "intake", "#942", 3, now=now),
+        _stall_row(45, "ruling", "another-slug-probe", 2.9, now=now),
+    ]
+
+    leg = RUNNER.board_unruled_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "#941" not in named, (
+        f"a bridged ruling IS a ruling, and its item must not be reported\n{named}"
+    )
+    assert "#942" in named, f"an unplaced ruling clears nothing\n{named}"
+    assert leg["coverage"]["resolution_arms"]["bridged"] == 1, leg["coverage"]
+    assert leg["coverage"]["rulings_unbridgeable"] == 1, leg["coverage"]
+    assert leg["coverage"]["unbridgeable_rows"][0]["n"] == 45, leg["coverage"]
+
+    rc, out, _ = _run(issues, rows)
+    assert "unbridgeable" in out, out
+    assert "bridged 1" in out, out
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

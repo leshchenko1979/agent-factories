@@ -189,6 +189,40 @@ STALL_CENSUS_THRESHOLD_BASIS = (
     "ledger 2026-10-03: the active queue's own in-flight dispatches sit at 0.02-0.05 d "
     "and fall below it."
 )
+
+# --- the board-unruled leg (#332) ----------------------------------------------------
+#
+# THE ROUND'S OWN PREDICATE, ASSERTED BY NOTHING. The meta-factory HQ round's whole job is
+# to sweep the board's population of OPEN items that carry an `intake` row and NO `ruling`
+# row, and no leg watched that class. The two neighbouring legs are blind to it BY
+# CONSTRUCTION rather than by accident: `board_intake_leg` asserts the INTAKE direction
+# (an open item must have an intake row), so an item that HAS one is never a candidate; and
+# `board_ruling_leg`'s population is "every board issue carrying a ruling COMMENT", so an
+# item with no ruling row has no ruling comment either and is outside its population too.
+# Measured 2026-10-05 (#332): #327 carried intake n=2380 at 12:07:20Z, was OPEN, and had no
+# `ruling` row when that lane's own 12:50Z round swept -- it was ruled only after the
+# predicate was re-run following a context compaction (n=2410, 13:12:34Z). The miss was
+# found by a re-run, not by an instrument, which is the #118 class (a class with no machine
+# watcher) landing on the sweep's own duty.
+#
+# WHY THE THRESHOLD IS 6.0 h, TAKEN FROM THE ROUND'S OWN CADENCE. A fresh intaken item is
+# NOT a defect: the round that owes it a ruling has not yet been due, and a leg that fired
+# on arrival would red every filing for the minutes before its ruling. The round's own
+# receipts date its cadence -- the `hq-cycle-*` receipt rows on this ledger sit at 00, 06
+# and 12 on 2026-10-05, gaps p50 5.06 h / max 6.24 h (5 rows: a thin sample, and it is the
+# round's OWN record, which is the only declaration of the cadence that exists) -- so one
+# full cadence is the shortest interval in which a healthy round has demonstrably swept the
+# item and left it unruled. Below it the item is in flight; at or above it the round has
+# passed over it. The threshold is PRINTED with this basis on every run, never carried in a
+# reader's memory.
+BOARD_UNRULED_THRESHOLD_HOURS = 6.0
+BOARD_UNRULED_THRESHOLD_BASIS = (
+    "6.0 h -- one full HQ round cadence. The round's own receipts date it: this ledger's "
+    "5 `hq-cycle-*` receipt rows (2026-10-05) sit at 00/06/12 with gaps p50 5.06 h and "
+    "max 6.24 h. A fresh intaken item is in flight below this; at or above it the round "
+    "that owes the ruling has demonstrably passed over it."
+)
+
 # The subject form `#<n>` is the ledger tool's, BOUND rather than re-derived: one field,
 # one predicate (SKILL.md section 11).
 LEDGER_TOOL = REPO / "tools" / "ledger.py"
@@ -2748,6 +2782,149 @@ def stall_census_leg(
         },
     }
 
+def board_unruled_leg(
+    issues: list[dict],
+    rows: list[dict],
+    *,
+    read_at: str,
+    threshold_hours: float = BOARD_UNRULED_THRESHOLD_HOURS,
+    predicate=None,
+) -> dict:
+    """Open board items carrying an `intake` row and NO `ruling` row, past the threshold.
+
+    THE POPULATION IS THE ROUND'S OWN PREDICATE (#332, ruled at ledger n=2425). Population
+    = board items the board calls OPEN, carrying an `intake` row, and carrying no `ruling`
+    row that resolves to them. Nothing else in the patrol watches it: the intake leg's
+    forward arm asserts the ROW side (an open item must have an intake row), and the ruling
+    leg's population is "every board issue carrying a ruling COMMENT", so an item with no
+    ruling row at all is outside both populations by construction.
+
+    ITS OWN RESOLVER (#243). Two namespaces have to be resolved to answer this leg's own
+    question, and each is BOUND to the leg that OWNS it rather than re-derived here:
+
+      * the INTAKE namespace is the intake predicate's own `intaken_numbers` -- the same
+        function `board_intake_leg` reads -- so the two legs cannot disagree about which
+        item carries an intake row (the discipline `board_closed_leg` follows for
+        `issue_reference`);
+      * the RULING namespace is `resolve_ruling_issue`, whose three arms (strict,
+        `governs=`, bridged) are the ruling leg's own vocabulary. A second copy here would
+        drift from it and let one leg call an item ruled while the other calls it unruled
+        -- a FALSE RED no reader could re-litigate.
+
+    What is leg-local is the POPULATION and the VERDICT: this function composes the two
+    namespaces into its own question, and it is the only place that question is answered.
+
+    IT DETECTS AND PRINTS; IT ACTS ON NOTHING. The remedy for an item in the population is
+    a ruling by the lane that owns the round, and this runner holds no session tool with
+    which to reach it. The red is an andon cord with a working exit, not the no-exit class.
+
+    AN EMPTY POPULATION IS PRINTED AS EMPTY, never as silence (acceptance criterion 2). The
+    population count, the OPEN-item count and the board read instant all travel in
+    `coverage` and are rendered on the leg's own line, so "examined 0, 0 problems" is
+    distinguishable from a leg that examined nothing -- which is the whole reason #332 was
+    filed: a skipped item reads clean.
+
+    A ROW THAT RESOLVES TO NO ISSUE IS PRINTED, never silently dropped (#243 clause 2). An
+    intake row with a descriptive subject names no issue and is not evidence about intake
+    in either direction, so it is COUNTED as unresolved rather than folded into the
+    population; a ruling row whose three arms all fail is LISTED, because dropping it would
+    report a smaller ruled set than was read and fire on an item that is in fact ruled.
+    """
+    predicate = predicate or load_predicate()
+
+    intaken = predicate.intaken_numbers(rows)
+    open_numbers = predicate.open_issue_numbers(issues)
+    by_n = {row.get("n"): row for row in rows if row.get("n") is not None}
+
+    ruling_rows = 0
+    ruled: set[int] = set()
+    arms = {"strict": 0, "declared": 0, "bridged": 0}
+    unbridgeable: list[dict] = []
+    for row in rows:
+        if str(row.get("event") or "") != "ruling":
+            continue
+        ruling_rows += 1
+        number, arm = resolve_ruling_issue(row, rows, predicate)
+        if number is None:
+            unbridgeable.append(
+                {"n": row.get("n"), "subject": str(row.get("subject") or "")}
+            )
+        else:
+            ruled.add(number)
+            arms[arm] = arms.get(arm, 0) + 1
+
+    intake_rows_read = sum(
+        1 for row in rows if str(row.get("event") or "") == "intake"
+    )
+
+    excused: list[str] = []
+    population: list[dict] = []
+    owed: list[dict] = []
+    for number in sorted(open_numbers):
+        if number not in intaken or number in ruled:
+            continue
+        intake_n = intaken[number]
+        stamp = str((by_n.get(intake_n) or {}).get("ts") or "")
+        try:
+            entered = reader_parse_ts(stamp)
+            now = reader_parse_ts(read_at)
+        except (ValueError, TypeError):
+            excused.append(
+                f"#{number}: the intake row n={intake_n} records an instant this leg "
+                f"cannot date ({stamp!r}), so its age cannot be measured -- NOT JUDGED"
+            )
+            continue
+        age_hours = (now - entered).total_seconds() / 3600.0
+        entry = {
+            "issue": number,
+            "intake_n": intake_n,
+            "intake_ts": stamp,
+            "age_hours": age_hours,
+            "owed": age_hours >= threshold_hours,
+        }
+        population.append(entry)
+        if entry["owed"]:
+            owed.append(entry)
+
+    population.sort(key=lambda entry: -entry["age_hours"])
+    owed.sort(key=lambda entry: -entry["age_hours"])
+
+    problems: list[str] = []
+    for entry in owed:
+        problems.append(
+            f"#{entry['issue']} is OPEN on the board and carries intake "
+            f"n={entry['intake_n']} at {entry['intake_ts']}, but the ledger holds NO "
+            f"`ruling` row resolving to it -- unruled for {entry['age_hours']:.2f} h, past "
+            f"the declared threshold of {threshold_hours:.1f} h (board read at {read_at}). "
+            f"The HQ round's own predicate selects this item, so the round has passed over "
+            f"it: rule it, or take it off the round's population on the board"
+        )
+
+    return {
+        "name": "board-unruled",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "board_items_read": len(issues),
+            "open_items_examined": len(open_numbers),
+            "intake_rows_read": intake_rows_read,
+            "intake_rows_resolved": len(intaken),
+            "ruling_rows_read": ruling_rows,
+            "rulings_resolved": len(ruled),
+            "rulings_unbridgeable": len(unbridgeable),
+            "unbridgeable_rows": unbridgeable,
+            "resolution_arms": arms,
+            "population_unruled": len(population),
+            "items_owed_ruling": len(owed),
+            "owed": [entry["issue"] for entry in owed],
+            "population": population,
+            "threshold_hours": threshold_hours,
+            "threshold_basis": BOARD_UNRULED_THRESHOLD_BASIS,
+            "board_read_at": read_at,
+        },
+    }
+
 def head_manifest(rel: str | None = None, *, repo: Path | None = None) -> tuple[str | None, str]:
     """Read the kit manifest from HEAD rather than from the working tree (issue #185).
 
@@ -3843,6 +4020,34 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "board-unruled":
+            # The population is PRINTED BESIDE THE VERDICT (acceptance criterion 2), so an
+            # empty sweep reads as "examined 0, 0 problems" rather than as silence -- which
+            # is the failure #332 records: a skipped item reads clean.
+            lines.append(
+                f"  board: {cov['board_items_read']} item(s) read, "
+                f"{cov['open_items_examined']} OPEN; intake rows read: "
+                f"{cov['intake_rows_read']} ({cov['intake_rows_resolved']} naming an "
+                f"issue); ruling rows read: {cov['ruling_rows_read']} "
+                f"({cov['rulings_resolved']} resolved to an issue "
+                f"[strict {cov['resolution_arms']['strict']}, declared "
+                f"{cov['resolution_arms']['declared']}, bridged "
+                f"{cov['resolution_arms']['bridged']}], "
+                f"{cov['rulings_unbridgeable']} unbridgeable)"
+            )
+            lines.append(
+                f"  population (OPEN, intake row, NO ruling row): "
+                f"{cov['population_unruled']} item(s) -- {cov['items_owed_ruling']} past "
+                f"the declared threshold of {cov['threshold_hours']} h"
+            )
+            for entry in cov.get("population", []):
+                lines.append(
+                    f"    #{entry['issue']} (intake n={entry['intake_n']} at "
+                    f"{entry['intake_ts']}): {entry['age_hours']:.2f} h unruled -- "
+                    f"{'OWED' if entry['owed'] else 'in flight'}"
+                )
+            lines.append(f"  threshold basis: {cov['threshold_basis']}")
+            lines.append(f"  board read at {cov['board_read_at']}")
         elif leg["name"] == "workspace-blocked":
             # A lawful exception is a VISIBLE DEBT: the governed-run population and the
             # escape-hatch count are printed BESIDE the verdict, and a NOT RUN carries its
@@ -3926,6 +4131,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     owed = sum(
         int(leg["coverage"].get("units_owed", 0)) for leg in legs
     )
+    unruled = sum(
+        int(leg["coverage"].get("items_owed_ruling", 0)) for leg in legs
+    )
     owners_declared = sum(
         int(leg["coverage"].get("owners_declared", 0)) for leg in legs
     )
@@ -3936,7 +4144,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
         f"attributed to this factory and judged, {owners_declared} declared periodic "
         f"owner(s) checked for an inbound wake, {notify} notify log(s) judged for a "
         f"receipt, and {owed} never-claimed dispatch(es) standing past the declared "
-        f"threshold"
+        f"threshold, and {unruled} OPEN item(s) standing unruled (intaken, no `ruling` row)"
     )
     return "\n".join(lines)
 
@@ -4083,6 +4291,7 @@ def main(
             "NOT RUN: every leg (board-intake, board-close, board-closed, board-ruling, "
             "cron-thinness, pacemaker-presence, notify-receipt, duty-receipt, "
             "canonicality-tier, workspace-blocked, stall-census, "
+            "board-unruled, "
             "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
@@ -4108,6 +4317,7 @@ def main(
         canonicality_leg(rows, read_at=read_at),
         workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
         stall_census_leg(issues, rows, read_at=read_at),
+        board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate),
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
         (publish_fn or publish_freshness_leg)(read_at=read_at),
