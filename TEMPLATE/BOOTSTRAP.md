@@ -263,13 +263,24 @@ paths runs the six gates, and anything left out shows up as a failure naming its
 | the hooks | `tools/hooks/commit-msg`, `tools/hooks/pre-commit` | `test_ledger_commit_cites_no_rows.py` reads `commit-msg`'s installation, so the gate cannot pass without it |
 | a gate's own dependency | `tools/audit.py`, `tools/gate_budget.py` | `test_ledger.py` imports `audit.py`; `audit.py` imports `gate_budget.py` |
 
-**Create three data surfaces, and copy two seeds:**
+**Create three data surfaces, and copy three seeds:**
 
 ```sh
 cp TEMPLATE/docs/ledger-invariants.example.json docs/ledger-invariants.json
 cp TEMPLATE/registry/fleet.example.json         registry/fleet.json
+cp TEMPLATE/registry/gate_triggers.example.json registry/gate_triggers.json
 printf 'hq\ntriage\nworker\ndelegate\nsurveys\nowner\n' > tools/actors.txt
 ```
+
+- **`registry/gate_triggers.json`** — the map that DERIVES the gates a change requires from
+  the paths it touches (#294), so a lane never hand-picks the subset that omits the gate
+  reading its own edit. Copy the example and extend it: every gate your `tools/audit.py`
+  registers must be a key, or sit on the `floor` that runs on every change, because a gate
+  the map does not name can never be selected — `tests/test_gate_triggers.py` fails on
+  exactly that gap. A path no key covers is not a gap but the SAFETY PROPERTY: the map then
+  hands over the FULL audit, run detached, rather than a subset nobody can trust. The
+  selector (`tools/gate_select.py`) reads it; `tools/hooks/pre-commit` delivers the
+  derivation at commit time.
 
 - **`tools/actors.txt`** — declare every lane the closed core set does not carry. A lane
   that cannot be declared cannot record its rows.

@@ -2533,6 +2533,35 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_ledger_citation_declared.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_citation_declared.py"])
 
+    # 81. the blast-radius gate selection (board #294, ruled n=2106, dispatched n=2109).
+    #     THE MECHANISM IT GUARDS: the law binding a commit that touches the surface used to
+    #     name a manual full-audit run, and that instruction was UNEXECUTABLE inline --
+    #     1387.9 s measured against a 600 s ceiling -- so a lane hand-picked its own subset,
+    #     and the author of a change is structurally the least likely to select the gate that
+    #     reads their own edit (#197's close, `3927d28`, RED on main for ~4 min). The remedy
+    #     is a DERIVATION from the changed paths with DEFAULT-DENY, and a derivation is only
+    #     trustworthy while its map covers every registered gate: a map that has lost a gate
+    #     selects a SILENT SUBSET, which is the very defect the derivation exists to remove.
+    #     So the gate asserts COVERAGE (every gate this file registers is a map key or sits
+    #     on the floor) and drives the default-deny branch with a synthetic uncovered path,
+    #     FAILING the instant that branch is gutted. It resolves the map through the
+    #     SELECTOR's own loader (live, then the shipped example), so a factory that copied
+    #     the example passes as this box does, and it prints the copy command rather than
+    #     passing silently where no map resolves at all. It is byte-paired with a TEMPLATE
+    #     copy. Its MODE is declared in `registry/gates.json` in the SAME landing, and the
+    #     runner here is PYTEST because the file is pytest-FORM by the definition
+    #     `tests/gate_registration.py` direction 5 uses: it carries module-level `def test_*`
+    #     AND a `__main__` guard, and such a file is judged by its RUNNER -- a script
+    #     invocation would run `main()` and leave all nine `def test_*` legs dead, which is
+    #     the measured #124 class. So the `def test_*` nodes are the legs this file runs
+    #     under the audit, and `main()` stays for the manual run. It carries
+    #     NO `registry/gates.json` BUDGET ENTRY: a budget value is the process owner's --
+    #     that manifest's authoritative writer is the measurement duty (n=574 PART 5) -- and
+    #     is never the implementing lane's to mint, so this gate runs on the DECLARED DEFAULT
+    #     and the audit prints that it did. Same grain as gates 77 and 80 above.
+    if (repo_root / "tests/test_gate_triggers.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_gate_triggers.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

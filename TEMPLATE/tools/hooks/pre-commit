@@ -64,6 +64,47 @@ Leg 3 sits OUTSIDE the shipped-kit guard, and that placement is load-bearing:
 exists in trees that carry no `TEMPLATE/` at all — exactly the trees whose registry
 the incident reddened.
 
+Leg 4 — the derived set, delivered where the law binds (#294, ruled at n=2106)
+------------------------------------------------------------------------------
+The law this leg serves used to read *"run `tools/audit.py` before a commit that
+touches the surface"*, and that instruction was UNEXECUTABLE by the lane it bound:
+`registry/gates.json` declares 1387.9 s of measured runtime and 5592.1 s of caps
+against a 600 s inline ceiling. So the lane did what an impossible instruction leaves
+it — hand-picked a subset — and the author of a change is structurally the least
+likely to select the gate that reads their own edit. That is how `#197`'s close
+(`3927d28`) landed RED on `main`: the edited law column is read by
+`tests/test_gate_registration.py` direction 4, and the hand-picked subset omitted it.
+
+The ruling's fix is to remove the author from the selection: the gate set is DERIVED
+from the changed paths (`tools/gate_select.py`), and any path no declared trigger
+covers forces the FULL audit — default-deny, so an incomplete map degrades to SLOW
+and never to SILENT.
+
+**This leg DELIVERS that derivation; it does not execute it, and the two measured
+reasons are the design rather than an omission:**
+
+  * RUNNING the derived set here would rebuild the defect. Measured on this box: a
+    change touching `TEMPLATE/` derives 26 gates / 538 s, and 252 s of that is
+    `tests/test_shipped_audit_runs.py`, which itself spawns a full audit of the
+    shipped tree. A pre-commit step that takes nine minutes is the same unexecutable
+    instruction one layer down.
+  * REFUSING on an uncovered path would teach lanes to bypass the hook. The only
+    clears would be a map edit or `git commit --no-verify`, and `--no-verify` also
+    disarms legs 1-3 — so a refusal here would trade three live refusals for one
+    advisory. What the uncovered case actually owes is a DETACHED full audit, which
+    this hook cannot run and cannot verify; saying so loudly is the honest act.
+
+So the leg is SILENT where it has nothing to say (no map resolves, or the selector is
+absent — a factory that has not adopted the map is outside this leg's population, on
+the same reasoning legs 1 and 2 skip a tree with no `TEMPLATE/`), and LOUD where the
+derivation lands in default-deny: the uncovered paths are named and the detached
+command is handed over. The BITING mechanism for the derivation is
+`tests/test_gate_triggers.py` — it fails if any registered gate is unreachable from
+the map, and its neuter probe fails the instant the default-deny branch is gutted.
+
+It reads `git diff --cached` like every other leg (P37), so it judges the PENDING
+COMMIT rather than the working tree.
+
 Why the naive hook would be worse than none
 -------------------------------------------
 Running `tests/test_template_sync.py` here would read the WORKING TREE, not the
@@ -128,6 +169,12 @@ TABLE_NAME = "PAIRS"
 KIT_ROOT_RELATIVE = "TEMPLATE"
 MANIFEST_RELATIVE = "registry/kit.json"
 GENERATOR_RELATIVE = "tools/kit_manifest.py"
+
+# LEG 4's two paths (issue #294). The selector is SHIPPED, so a factory that ported the
+# kit has it; the map is DECLARED per factory, and `load_map` falls back to the shipped
+# example, so a factory that has not written its own still resolves a derivation.
+SELECTOR_RELATIVE = "tools/gate_select.py"
+MAP_RELATIVE = "registry/gate_triggers.json"
 
 # THE ARTIFACT LEG 3 JUDGES, and the marker it must not begin with (issue #197).
 #
@@ -393,6 +440,57 @@ def touches_kit(staged: list[str]) -> bool:
         for path in staged
     )
 
+SUBSET_NOTICE = """pre-commit: {count} gate(s) read this change — DERIVED from the staged paths, not chosen (#294).
+
+    python3 tools/gate_select.py --staged --run
+
+The floor ({floor}) runs on every change. #197's close went RED on main because the author's
+hand-picked subset omitted the one gate that read the edited law column, so the set is
+derived from the paths rather than from anyone's judgement — run it before you push."""
+
+FULL_NOTICE = """pre-commit: DEFAULT-DENY — the change touches a path no declared trigger covers, so no
+subset can be trusted and the FULL audit is owed (#294).
+
+  uncovered: {uncovered}
+
+A subset here would be the author's guess, which is the defect this item removes, so the map
+degrades to SLOW rather than to SILENT. The full audit is 1387.9 s measured and this hook does
+not run it — run it DETACHED and let it finish:
+
+    python3 tools/audit.py
+
+Or declare a trigger for the path in {map} and let the derivation cover it."""
+
+def selector_notice(top: Path, staged: list[str]) -> str | None:
+    """Leg 4's reading of the staged change, or None where there is nothing to say (#294).
+
+    It reads the map and the selector and returns TEXT: it runs no gate and refuses nothing,
+    for the two measured reasons in the module docstring. `None` is the silent case, and both
+    halves of it are this hook's usual silence — no selector in this tree (never ported), or
+    no map that resolves (never adopted). A tree in that state has no derivation to deliver,
+    and a notice on every commit about an artifact the factory was never asked to create is
+    the noise that teaches lanes to ignore this hook.
+
+    The staged paths come from the INDEX, like every other leg (P37): this judges the pending
+    commit, never the working tree.
+    """
+    selector = load_module(top, SELECTOR_RELATIVE, "oc_gate_select")
+    if selector is None:
+        return None
+    mapping = selector.load_map(top)
+    if mapping is None:
+        return None
+    result = selector.select(mapping, staged)
+    if result["mode"] == "full":
+        return FULL_NOTICE.format(
+            uncovered=", ".join(result["uncovered"]),
+            map=MAP_RELATIVE,
+        )
+    return SUBSET_NOTICE.format(
+        count=len(result["gates"]),
+        floor=", ".join(mapping.get("floor", [])) or "none",
+    )
+
 def main(argv: list[str]) -> int:
     top = repo_toplevel()
     if top is None:
@@ -432,14 +530,21 @@ def main(argv: list[str]) -> int:
             )
         )
 
+    # LEG 4's reading, taken HERE so it is available to both exit paths below (#294). It
+    # neither refuses nor runs a gate; the module docstring states the two measured reasons.
+    notice = selector_notice(top, staged)
+
     # A tree without `TEMPLATE/` has no byte pairs and no shipped kit, so legs 1 and 2
     # cannot fire: there is simply nothing there to check, and saying so on every commit
     # would be noise that teaches lanes to ignore this hook. Leg 3 has ALREADY run, since
     # its class exists in those trees, so this guard covers legs 1 and 2 only and the
-    # verdict leg 3 reached is carried out through it.
+    # verdict leg 3 reached is carried out through it. Leg 4's notice is carried out too:
+    # the map and the selector live outside `TEMPLATE/`, so its class exists here as well.
     if not kit_present(top):
         for problem in problems:
             print(problem, file=sys.stderr)
+        if notice:
+            print(notice, file=sys.stderr)
         return 1 if problems else 0
 
     pairs = load_pairs(top)
@@ -479,6 +584,8 @@ def main(argv: list[str]) -> int:
 
     for problem in problems:
         print(problem, file=sys.stderr)
+    if notice:
+        print(notice, file=sys.stderr)
     return 1 if problems else 0
 
 if __name__ == "__main__":

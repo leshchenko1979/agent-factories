@@ -492,6 +492,17 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_duplicate_prose.py",
     "test_gate_fixtures_closure.py",
     "test_gate_registration.py",
+    # Added with its registration (board #294, ruling n=2106). REQUIRED is the correct
+    # grain and OPTIONAL is not, and the deciding fact is the same one the map's own
+    # default-deny states: a factory that ships the SELECTOR and the HOOK leg but drops this
+    # gate has a derivation nobody checks — the map could lose a gate, or the default-deny
+    # branch could be gutted, and every surface would still read green. It resolves the map
+    # through the SELECTOR's own loader (live, then the shipped example), so it passes in a
+    # bootstrapped factory that has copied the example exactly as it does here, and it FAILS
+    # with the copy command rather than silently where no map resolves at all. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the runner and keeping the file.
+    "test_gate_triggers.py",
     # Added with its registration (board #195, ruling n=1340). REQUIRED is the correct
     # grain: the gate's population is the audit's OWN call sites and a synthetic pair, so it
     # needs no live board, no fleet manifest and no box-local fixture — it passes in a

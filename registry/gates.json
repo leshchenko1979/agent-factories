@@ -472,6 +472,7 @@
     "tests/test_ledger_claim_preflight.py": "pytest",
     "tests/test_shipped_audit_runs.py": "script",
     "tests/test_shipped_mechanism_law.py": "script",
-    "tests/test_ledger_citation_declared.py": "pytest"
+    "tests/test_ledger_citation_declared.py": "pytest",
+    "tests/test_gate_triggers.py": "pytest"
   }
 }

@@ -115,6 +115,14 @@ PAIRS = [
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
     ("tests/test_gate_invocation_mode.py", "TEMPLATE/tests/test_gate_invocation_mode.py"),
     ("tests/test_gate_fixtures_closure.py", "TEMPLATE/tests/test_gate_fixtures_closure.py"),
+    # The blast-radius gate selector, its gate, and its map's example (#294, ruling n=2106).
+    # The selector is a TOOL, so it pairs like every other tool. The map's SHAPE ships as an
+    # example at BOTH paths on the same reasoning as `gates.example.json` below: a factory
+    # copies it to `registry/gate_triggers.json` (TEMPLATE/BOOTSTRAP.md) and then extends it
+    # with its own surfaces, so the live file is FACTORY DATA and is deliberately not paired.
+    ("tools/gate_select.py", "TEMPLATE/tools/gate_select.py"),
+    ("tests/test_gate_triggers.py", "TEMPLATE/tests/test_gate_triggers.py"),
+    ("registry/gate_triggers.example.json", "TEMPLATE/registry/gate_triggers.example.json"),
     ("tests/test_ontology.py", "TEMPLATE/tests/test_ontology.py"),
     ("tests/test_ledger.py", "TEMPLATE/tests/test_ledger.py"),
     ("tests/test_rework.py", "TEMPLATE/tests/test_rework.py"),

@@ -1,0 +1,613 @@
+{
+  "_note": "The blast-radius trigger map for tools/gate_select.py (issue #294, HQ ruling n=2106). `gates` maps a gate (as tools/audit.py registers it) to the path globs whose change REQUIRES that gate; `floor` gates run on every commit; `default` is `full`. DEFAULT-DENY is the safety property, and it is NOT the map's completeness: any changed path matching no declared glob forces the FULL gate set, so an incomplete map degrades to slow and never to silent. Globs use fnmatch semantics where `*` also crosses `/`, so over-inclusion is deliberate -- a gate listed on a path it does not read only costs time, while a gate MISSING from a path it reads is the silent miss this map exists to remove. The map is DECLARED, never the change author's hand-pick; the gate set is derived from the changed paths alone. Authored conservatively: when a gate's read set was uncertain, its globs were widened. Regenerate the shape only by editing this file's own content, never by hand-picking at commit time.",
+  "default": "full",
+  "floor": [
+    "tests/test_template_sync.py"
+  ],
+  "gates": {
+    "tests/test_audit_inflight_guard.py": [
+      "TEMPLATE/tools/audit.py",
+      "tools/audit.py"
+    ],
+    "tests/test_audit_rates.py": [
+      "ONTOLOGY.md",
+      "registry/gates.json",
+      "tests/test_audit_rates.py",
+      "tools/audit.py"
+    ],
+    "tests/test_audit_tree_condition.py": [
+      "TEMPLATE/tools/audit.py",
+      "tools/audit.py"
+    ],
+    "tests/test_audit_undefined_names.py": [
+      "TEMPLATE/tools/**",
+      "tools/**"
+    ],
+    "tests/test_binding_mechanism_exists.py": [
+      "TEMPLATE/*.tmpl",
+      "docs/**",
+      "docs/addons/**",
+      "skills/**"
+    ],
+    "tests/test_board_intake_recorded.py": [
+      "evidence/ledger.jsonl"
+    ],
+    "tests/test_brain_metrics.py": [
+      "AGENTS.md",
+      "TEMPLATE/AGENTS.md.tmpl"
+    ],
+    "tests/test_citation_clause_titles.py": [
+      "*.md",
+      "ONTOLOGY.md",
+      "TEMPLATE/**",
+      "TEMPLATE/*.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "docs/**",
+      "skills/**"
+    ],
+    "tests/test_close_board_recorded.py": [
+      "docs/close-board-exemptions.json",
+      "evidence/ledger.jsonl"
+    ],
+    "tests/test_close_row_revision.py": [
+      "TEMPLATE/tools/ledger.py",
+      "docs/ledger-retirements.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py"
+    ],
+    "tests/test_close_telemetry_provenance.py": [
+      "evidence/ledger.jsonl"
+    ],
+    "tests/test_commit_pair_hook.py": [
+      "TEMPLATE/tools/hooks/**",
+      "registry/kit.json",
+      "tests/test_template_sync.py",
+      "tools/hooks/**",
+      "tools/kit_manifest.py"
+    ],
+    "tests/test_commit_pathspec_law.py": [
+      "*.md",
+      "AGENTS.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/AGENTS.md.tmpl",
+      "TEMPLATE/roles/**",
+      "skills/**"
+    ],
+    "tests/test_commit_session_trailer.py": [
+      "TEMPLATE/tools/hooks/**",
+      "tools/hooks/**"
+    ],
+    "tests/test_criteria_count.py": [
+      "docs/quality-criteria.md"
+    ],
+    "tests/test_cron_thinness.py": [
+      "TEMPLATE/**",
+      "docs/cron*",
+      "registry/**",
+      "tools/**"
+    ],
+    "tests/test_docs_sync.py": [
+      "TEMPLATE/docs/**",
+      "docs/**"
+    ],
+    "tests/test_duplicate_prose.py": [
+      "*.md",
+      "ONTOLOGY.md",
+      "TEMPLATE/*.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "docs/**",
+      "skills/**"
+    ],
+    "tests/test_gate_fixtures_closure.py": [
+      "TEMPLATE/registry/gates.example.json",
+      "TEMPLATE/tests/**",
+      "TEMPLATE/tests/gate_registry.py",
+      "TEMPLATE/tests/test_template_sync.py",
+      "TEMPLATE/tools/**",
+      "TEMPLATE/tools/audit.py",
+      "registry/gates.example.json",
+      "registry/gates.json",
+      "tests/**",
+      "tests/gate_registry.py",
+      "tests/test_template_sync.py",
+      "tools/**",
+      "tools/audit.py"
+    ],
+    "tests/test_gate_invocation_mode.py": [
+      "TEMPLATE/registry/gates.example.json",
+      "TEMPLATE/tests/**",
+      "TEMPLATE/tests/gate_registry.py",
+      "TEMPLATE/tests/test_template_sync.py",
+      "TEMPLATE/tools/audit.py",
+      "registry/gates.example.json",
+      "registry/gates.json",
+      "tests/**",
+      "tests/gate_registry.py",
+      "tests/test_template_sync.py",
+      "tools/audit.py"
+    ],
+    "tests/test_gate_registration.py": [
+      "*.md",
+      "ONTOLOGY.md",
+      "TEMPLATE/*.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "TEMPLATE/registry/gates.example.json",
+      "TEMPLATE/tests/**",
+      "TEMPLATE/tests/gate_registry.py",
+      "TEMPLATE/tests/test_template_sync.py",
+      "TEMPLATE/tools/audit.py",
+      "docs/**",
+      "evidence/rework.md",
+      "registry/gates.example.json",
+      "registry/gates.json",
+      "skills/**",
+      "tests/**",
+      "tests/gate_registry.py",
+      "tests/test_template_sync.py",
+      "tools/audit.py"
+    ],
+    "tests/test_gate_triggers.py": [
+      "TEMPLATE/registry/gate_triggers.example.json",
+      "TEMPLATE/tests/gate_registry.py",
+      "TEMPLATE/tools/audit.py",
+      "TEMPLATE/tools/gate_select.py",
+      "registry/gate_triggers.json",
+      "tests/gate_registry.py",
+      "tests/test_gate_triggers.py",
+      "tools/audit.py",
+      "tools/gate_select.py"
+    ],
+    "tests/test_hq_delegation.py": [
+      "ONTOLOGY.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/roles/**",
+      "docs/best-practices.md",
+      "skills/**"
+    ],
+    "tests/test_hygiene_build_residue.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "tools/hygiene.py"
+    ],
+    "tests/test_hygiene_declaration_sweep.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "skills/**",
+      "tools/hygiene.py"
+    ],
+    "tests/test_hygiene_evidence_supersession.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "evidence/**",
+      "tools/hygiene.py"
+    ],
+    "tests/test_hygiene_inflight.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "evidence/ledger.jsonl",
+      "evidence/scores/**",
+      "tools/hygiene.py"
+    ],
+    "tests/test_hygiene_namespace.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "tools/hygiene.py"
+    ],
+    "tests/test_hygiene_placement.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "evidence/**",
+      "registry/**",
+      "tools/hygiene.py"
+    ],
+    "tests/test_hygiene_stale_dirs.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/hygiene-protected.json",
+      "tools/hygiene.py"
+    ],
+    "tests/test_insights_audience.py": [
+      "TEMPLATE/tools/insights.py",
+      "evidence/insights.jsonl",
+      "tools/insights.py"
+    ],
+    "tests/test_insights_author.py": [
+      "TEMPLATE/tools/insights.py",
+      "evidence/insights.jsonl",
+      "tools/insights.py"
+    ],
+    "tests/test_insights_gate_recorded.py": [
+      "evidence/insights.jsonl",
+      "evidence/ledger.jsonl"
+    ],
+    "tests/test_insights_status.py": [
+      "TEMPLATE/tools/insights.py",
+      "evidence/insights.jsonl",
+      "tools/insights.py"
+    ],
+    "tests/test_instrument_census.py": [
+      "docs/instruments/**",
+      "skills/**",
+      "tools/instrument_census.py",
+      "tools/registry.py",
+      "tools/review.py"
+    ],
+    "tests/test_kit_census.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/hooks/**",
+      "TEMPLATE/tools/kit_*.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/hooks/**",
+      "tools/kit_*.py",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_kit_deliver.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/kit_*.py",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/kit_*.py"
+    ],
+    "tests/test_kit_manifest.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/kit_*.py",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/kit_*.py",
+      "tools/kit_manifest.py"
+    ],
+    "tests/test_kit_names.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/kit_*.py",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/kit_*.py"
+    ],
+    "tests/test_kit_pin.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/kit_*.py",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/kit_*.py"
+    ],
+    "tests/test_kit_questions_homes.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/kit_*.py",
+      "TEMPLATE/tools/questions*",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/kit_*.py",
+      "tools/questions*"
+    ],
+    "tests/test_kit_surfaces.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/registry/**",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tools/kit_*.py",
+      "TEMPLATE/tools/registry*.py",
+      "docs/factory-registry.md",
+      "registry/**",
+      "registry/kit.example.json",
+      "registry/kit.json",
+      "tools/kit_*.py",
+      "tools/registry*.py"
+    ],
+    "tests/test_law_coverage.py": [
+      "*.md",
+      "ONTOLOGY.md",
+      "TEMPLATE/*.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "TEMPLATE/roles/**",
+      "docs/**",
+      "evidence/ledger.jsonl",
+      "skills/**",
+      "tools/audit.py"
+    ],
+    "tests/test_law_no_raw_session_uuid.py": [
+      "*.md",
+      "ONTOLOGY.md",
+      "TEMPLATE/*.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "docs/**",
+      "docs/law-uuid-exemptions.json",
+      "registry/**",
+      "skills/**"
+    ],
+    "tests/test_law_structure.py": [
+      "TEMPLATE/*.tmpl",
+      "skills/**"
+    ],
+    "tests/test_ledger.py": [
+      "TEMPLATE/tools/field_predicate.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "TEMPLATE/tools/rule.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "tools/field_predicate.py",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py",
+      "tools/rule.py"
+    ],
+    "tests/test_ledger_citation_declared.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "docs/ledger-invariants.json",
+      "evidence/ledger.jsonl",
+      "skills/**",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_claim_preflight.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_close_preflight.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_commit_cites_no_rows.py": [
+      "TEMPLATE/tools/hooks/**",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "docs/ledger-commit-exemptions.json",
+      "evidence/ledger.jsonl",
+      "tools/hooks/**",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_header_closure.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_identity.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "registry/factories/**",
+      "registry/fleet.json",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_index.py": [
+      "TEMPLATE/tools/ledger-index.py",
+      "evidence/.ledger-index.sqlite",
+      "evidence/ledger.jsonl",
+      "tools/ledger-index.py"
+    ],
+    "tests/test_ledger_no_shrink.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "docs/ledger-no-shrink-exemptions.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_refs_preflight.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "docs/ledger-refs-kinds.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_schema.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tests/test_ontology.py": [
+      "ONTOLOGY.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "docs/best-practices.md",
+      "evidence/factories.md",
+      "skills/**"
+    ],
+    "tests/test_patrol_host_state.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "registry/kit.json",
+      "tools/patrol_host_state.py",
+      "tools/registry*.py"
+    ],
+    "tests/test_publish.py": [
+      "TEMPLATE/tools/publish.py",
+      "evidence/publish-receipt.json",
+      "tools/publish.py"
+    ],
+    "tests/test_questions.py": [
+      "TEMPLATE/tools/questions*",
+      "tools/questions*"
+    ],
+    "tests/test_reconstructed_claim_declared.py": [
+      "TEMPLATE/tools/reconstruction.py",
+      "evidence/ledger.jsonl",
+      "tools/reconstruction.py"
+    ],
+    "tests/test_registry.py": [
+      "TEMPLATE/registry/**",
+      "TEMPLATE/tools/registry*.py",
+      "docs/factory-registry.md",
+      "registry/**",
+      "tools/registry*.py"
+    ],
+    "tests/test_registry_attest.py": [
+      "TEMPLATE/registry/**",
+      "TEMPLATE/tools/registry*.py",
+      "docs/factory-registry.md",
+      "registry/**",
+      "tools/registry*.py"
+    ],
+    "tests/test_registry_render.py": [
+      "TEMPLATE/registry/**",
+      "TEMPLATE/tools/registry*.py",
+      "docs/factory-registry.md",
+      "registry/**",
+      "tools/registry*.py"
+    ],
+    "tests/test_rework.py": [
+      "evidence/rework.md"
+    ],
+    "tests/test_rework_declared_landed.py": [
+      "evidence/rework.md"
+    ],
+    "tests/test_rework_relative_revision.py": [
+      "docs/rework-relative-revision-exemptions.json",
+      "evidence/rework.md"
+    ],
+    "tests/test_roadmap_transition.py": [
+      "TEMPLATE/tools/roadmap.py",
+      "docs/products.example.json",
+      "docs/products.json",
+      "tools/roadmap.py"
+    ],
+    "tests/test_ruling_row_recorded.py": [
+      "evidence/ledger.jsonl",
+      "tools/field_predicate.py",
+      "tools/ledger.py",
+      "tools/rule.py"
+    ],
+    "tests/test_score_artifact_sections.py": [
+      "evidence/scores/**"
+    ],
+    "tests/test_score_gate_recorded.py": [
+      "evidence/ledger.jsonl",
+      "evidence/scores/**"
+    ],
+    "tests/test_self_audit_instant.py": [
+      "TEMPLATE/processes.md.tmpl",
+      "processes.md",
+      "skills/**"
+    ],
+    "tests/test_session_bindings.py": [
+      "*.md",
+      "ONTOLOGY.md",
+      "TEMPLATE/*.md",
+      "TEMPLATE/*.tmpl",
+      "TEMPLATE/ONTOLOGY.md.tmpl",
+      "docs/**",
+      "skills/**"
+    ],
+    "tests/test_shipped_audit_runs.py": [
+      "TEMPLATE/**",
+      "TEMPLATE/tools/audit.py",
+      "tools/audit.py"
+    ],
+    "tests/test_shipped_mechanism_law.py": [
+      "TEMPLATE/**",
+      "skills/**"
+    ],
+    "tests/test_single_writer.py": [
+      "TEMPLATE/tools/ledger.py",
+      "evidence/scores/**",
+      "evidence/subprocesses/**",
+      "skills/**",
+      "tools/ledger.py"
+    ],
+    "tests/test_skill_version_contract.py": [
+      "TEMPLATE/*.tmpl",
+      "docs/ledger-invariants.json",
+      "docs/skill-version-exemptions.json",
+      "skills/**"
+    ],
+    "tests/test_subject_anchor.py": [
+      "ONTOLOGY.md",
+      "evidence/ledger.jsonl"
+    ],
+    "tests/test_subject_form.py": [
+      "ONTOLOGY.md",
+      "evidence/ledger.jsonl",
+      "skills/**"
+    ],
+    "tests/test_synthesize_insights.py": [
+      "TEMPLATE/tools/synthesize_insights.py",
+      "evidence/insights.jsonl",
+      "tools/synthesize_insights.py"
+    ],
+    "tests/test_synthesize_interface.py": [
+      "TEMPLATE/tools/synthesize_insights.py",
+      "evidence/insights.jsonl",
+      "tools/synthesize_insights.py"
+    ],
+    "tests/test_telemetry_reader_registry.py": [
+      "TEMPLATE/tools/**",
+      "docs/**",
+      "skills/**",
+      "tools/**"
+    ],
+    "tests/test_template_integrity.py": [
+      "TEMPLATE/**",
+      "tests/test_template_sync.py"
+    ],
+    "tools/hygiene.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "docs/*exemptions*.example.json",
+      "docs/*exemptions*.json",
+      "docs/hygiene-protected.json",
+      "tools/hygiene.py"
+    ],
+    "tools/ledger.py": [
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/instruments/ledger.md",
+      "docs/ledger-*.json",
+      "evidence/ledger.jsonl",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
+    "tools/roadmap.py": [
+      "TEMPLATE/docs/products.example.json",
+      "TEMPLATE/tools/roadmap.py",
+      "docs/products.example.json",
+      "docs/products.json",
+      "tools/roadmap.py"
+    ]
+  }
+}
