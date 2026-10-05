@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.51
+version: 0.1.52
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -288,6 +288,17 @@ This factory is scored against `docs/quality-criteria.md` — 19 criteria across
 | Autonomous assignment & monitoring | Triage scans open intake issues, checks claims, assigns persistent worker lanes, and runs periodic execution sweeps (P27) |
 | **The Pacemaker Requirement** | Every periodic process owner (Surveys, Triage, HQ) must have an active thin cron pacemaker waking its session UUID |
 | **The Subject Matter Consulting Gate** | Substantive consulting & diagnostic audits strictly require baseline Subject Matter Documentation (`docs/subject/` >= 2/4) |
+
+**An attribution is dated by a CONTENT WALK, never by a pickaxe.** `git log -S <string>`
+counts OCCURRENCES, not changes, so it cannot date a line-level change: a value swap
+(`0.1.0 → 0.1.1`) leaves the count unchanged and is invisible to it, and a reflow that
+re-adds an already-present line moves the count and reads as the introduction. Both produce
+a confident, wrong attribution — and the attribution is the whole value of a rework entry,
+because it names which change a reader must guard against. A rework entry's attribution is
+therefore produced by a **content walk** over the commits touching the file — bisecting the
+occurrence count, or testing the line's presence at each step — and **never** by
+`git log -S` alone; a pickaxe result is a hypothesis about where a string appeared, not a
+finding about where a change happened.
 
 The surveyed factories are measured on the same cadence. A factory's **own HQ owns its
 domain detail**; what travels back is the score and the template law it implies.

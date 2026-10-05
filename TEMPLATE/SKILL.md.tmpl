@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.25
+version: 0.1.26
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -295,6 +295,14 @@ section states only what this factory must *do* about them.
 | **A measure with no decision attached is dropped** | Dashboards are not controls; an unused number is maintenance with no payoff |
 | **Rework is counted, not felt** | `evidence/rework.md` is the numerator and the ledger's `close` rows the denominator. Both rates are recomputed each run, never recalled — a remembered rate is an impression with a decimal point |
 | **The score is a diff, not an impression** | Recorded in the repo so drift shows up as a change, not a memory |
+
+**An attribution is dated by a CONTENT WALK, never by a pickaxe.** `git log -S <string>`
+counts OCCURRENCES, not changes, so it cannot date a line-level change: a value swap leaves
+the count unchanged and is invisible to it, and a reflow that re-adds an already-present
+line reads as the introduction. An introducing-commit claim is therefore made by walking the
+commits that touch the file and diffing the content — or bisecting the occurrence count —
+never cited from a pickaxe hit alone; the pickaxe locates candidates, it does not settle
+attribution.
 
 **Scope note.** This factory measures *its own effectiveness and health* — not
 the peculiarities of the work it does. The domain detail is this factory's own
