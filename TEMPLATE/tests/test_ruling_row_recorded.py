@@ -154,7 +154,7 @@ def _declared_pairing(detail: str, fp) -> str | None:
     A thin pass-through to the shared reader's OWN home (`fp.declared_pairing`), never a
     re-implementation: the run is POSITIONAL and the value must be non-empty, and a private
     copy of either half here would let the gate read a token the write path does not (#297,
-    §11 one predicate).
+    `docs/instruments/ledger.md` §9.8 "One field, one predicate").
     """
     return fp.declared_pairing(detail)
 
