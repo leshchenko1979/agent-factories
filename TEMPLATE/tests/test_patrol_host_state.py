@@ -3145,6 +3145,39 @@ def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
     assert "the convention names '## RULED'" in out, out
     assert rc == 0, out
 
+def test_the_counter_counts_ISSUES_not_COMMENTS() -> None:
+    """#274: the counter's NAME and its PREDICATE are one fact, so they are gated together.
+
+    The defect this pins was measured on the live board: three `## RULED` comments posted in
+    ONE turn (#75/#227/#263) moved the counter from 79 to 81, because the leg increments once
+    per ISSUE carrying an accepted heading and #75 already carried one. A reader comparing two
+    runs expected +3 and went hunting for an unplaced comment that does not exist.
+
+    The name moved to match the predicate (`ruling_comments_examined` -> `rulings_issued`) and
+    the predicate STAYED per-issue. This probe is what keeps it that way: two ruling comments
+    on ONE issue, and a second issue with none, must read as ONE. If the increment ever moves
+    to per-comment the count reads 2 and this reds — which is the only thing that stops a
+    renamed counter from drifting back under a name that no longer describes it.
+    """
+    issues = [
+        # ONE issue, TWO ruling comments — the measured shape.
+        _issue_with_comments(75, "OPEN", "## RULED — the ruling.\n", "## RULED — amended.\n"),
+        _issue_with_comments(76, "OPEN", "no ruling here, only prose.\n"),
+    ]
+    rows = _rows(("intake", "#75", 1), ("ruling", "#75", 2), ("intake", "#76", 3))
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=RUNNER.load_predicate())
+    assert leg["coverage"]["rulings_issued"] == 1, (
+        f"two ruling comments on ONE issue are ONE ruling: {leg['coverage']!r}"
+    )
+    assert leg["problems"] == [], leg["problems"]
+
+    rc, out, _ = _run(issues, rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert "1 examined over 2 issue(s) read" in section, (
+        f"the printed count and the read size must both travel: {section!r}"
+    )
+    assert rc == 0, out
+
 def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> None:
     """The NON-VACUITY control for the widening, driven through the REAL leg.
 
