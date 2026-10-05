@@ -142,6 +142,7 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
     declared_claim,
+    declared_comment_id,
     declared_keys,
     declared_reclaim,
     declared_reclose,
@@ -1078,6 +1079,50 @@ def cmd_append(args: argparse.Namespace) -> int:
     # Refuse a malformed ref BEFORE the lock is taken: a write path that acquires the
     # lock and then rejects its own arguments has serialised a lane against nothing.
     refs = parse_refs(getattr(args, "ref", []) or [])
+    # A `ruling` ROW IS REFUSED AT THE WRITE PATH WHEN IT NAMES NO BOARD COMMENT (#297).
+    #
+    # A ruling is TWO acts in TWO surfaces — a board comment and a ledger `ruling` row —
+    # and until this refusal nothing bound them at the write. The class stands at SIX
+    # instances (`n=2032`, `n=2097`, `n=2100`, `n=2106`, `n=2115`, `n=2123`), each a row
+    # naming no comment, each half-recorded until a reader found it. The prevention was a
+    # CONVENTION — "a ruling is stamped with `tools/rule.py`" — with no reader on the
+    # path, and a convention that has failed six times is not a mechanism (P29).
+    #
+    # #98 (ruling `n=596`) gave the close row exactly this shape — a write-path refusal
+    # that is a PRE-CONDITION of the append, not a post-write warning — and this is the
+    # same shape one event over.
+    #
+    # THE PREDICATE IS THE SHARED ONE, through `declared_comment_id`, never a private
+    # scan: one field, one predicate (`n=405` PART 5, `n=599`). It is POSITIONAL — the
+    # canonical terminal run — because `detail` is free prose that QUOTES trailers as
+    # evidence, so a whole-detail scan would let a writer satisfy this refusal by quoting
+    # a `comment=` token while the row's own run declares none. And it is WELL-FORMED, so
+    # `comment=none` OCCUPIES the key while naming no comment and is refused for the same
+    # reason it would be a problem at the gate (#297 clause 2, one predicate two call
+    # sites).
+    #
+    # REFUSED BEFORE THE LOCK IS TAKEN, for the reason the ref refusal above states: this
+    # rejects the caller's own argument, so acquiring the lock first would serialise a
+    # lane against nothing.
+    #
+    # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state:
+    # this binds the row ABOUT TO BE WRITTEN, so it can never predate itself. History is
+    # the gate's business — `tests/test_ruling_row_recorded.py` reads the six rows above
+    # against the boundary in `docs/ledger-invariants.json` and excuses them — and
+    # EXEMPTIONS governs that reading, never this one. Nothing is backfilled: a token
+    # written today for a ruling that predates the rule would be a falsified record, not
+    # a repair.
+    if args.event == "ruling" and declared_comment_id(args.detail) is None:
+        sys.exit(
+            "ledger append refused: a `ruling` row must carry a well-formed "
+            "`comment=<id>` in its canonical terminal run — the board comment the ruling "
+            "was paired with — and this detail carries none (a `comment=` whose value is "
+            "not a run of digits names no comment either, and a `comment=` mentioned in "
+            "prose is not a declaration). A ruling is two acts in two surfaces, and a row "
+            "that names no comment is half-recorded, so no reader can pair them. Stamp it "
+            "with `tools/rule.py`, which posts the comment and writes the row carrying "
+            "its id in one invocation (#297)."
+        )
     # THE TARGET DECIDES WHICH IDENTITY LAW APPLIES, and it is decided BEFORE the
     # actor is resolved because the resolver needs to know. A `--subprocess`
     # append writes a domain sub-ledger and a redirected `OC_LEDGER_PATH` writes a

@@ -107,8 +107,11 @@ if _SKIP_REASON:
 # which invariant each date belongs to (#248, the shape `test_close_row_revision.py` uses).
 INVARIANT_KEY = "ruling_row_recorded"
 
-# The trailer key naming the paired board comment. Same key `tools/rule.py` writes.
-PAIRING_KEY = "comment"
+# The trailer key naming the paired board comment is NOT declared here — it is READ from
+# its ONE home, `tools/field_predicate.py` (#297), by the load placed immediately after
+# `_load`'s definition below. The key had two private copies (here and in `tools/rule.py`)
+# and the write path knew neither, which is exactly why it could not refuse a `ruling` row
+# that named no comment.
 
 
 def _load(name: str, path: Path):
@@ -125,6 +128,12 @@ def _load(name: str, path: Path):
     spec.loader.exec_module(module)
     return module
 
+# The pairing key, loaded from its shared home. The SAME `_load` the gate uses for its
+# siblings, so the key and its positional reader (`declared_pairing`) cannot drift from the
+# writer (`tools/rule.py`), the refuser (`tools/ledger.py append`) or this detector.
+_FIELD_PREDICATE = _load("_pairing_field_predicate", FIELD_PREDICATE)
+PAIRING_KEY = _FIELD_PREDICATE.PAIRING_KEY
+
 
 def _resolver():
     """The live leg's OWN `resolve_ruling_issue`, wrapped as `(row, rows) -> (issue, arm)`.
@@ -140,12 +149,14 @@ def _resolver():
 
 
 def _declared_pairing(detail: str, fp) -> str | None:
-    """The `comment=` value inside the detail's canonical terminal run, else None."""
-    for token in fp.trailer_tokens(detail):
-        value = fp.keyed_value(token, PAIRING_KEY)
-        if value:
-            return value
-    return None
+    """The `comment=` value inside the detail's canonical terminal run, else None.
+
+    A thin pass-through to the shared reader's OWN home (`fp.declared_pairing`), never a
+    re-implementation: the run is POSITIONAL and the value must be non-empty, and a private
+    copy of either half here would let the gate read a token the write path does not (#297,
+    §11 one predicate).
+    """
+    return fp.declared_pairing(detail)
 
 
 def ruling_pairing_problems(
@@ -164,7 +175,7 @@ def ruling_pairing_problems(
     `boundary_text` is the DECLARED instant verbatim, so an excused line quotes the date
     the factory itself declared rather than one this file carries (#248).
     """
-    fp = fp or _load("_pairing_field_predicate", FIELD_PREDICATE)
+    fp = fp or _FIELD_PREDICATE
     boundary = parse_ts(boundary_text)
     problems: list[str] = []
     excused: list[str] = []
@@ -502,10 +513,25 @@ def test_the_writer_accepts_a_canonical_body(tmp_path) -> None:
 
 def test_the_writer_is_registered_as_the_pairing_writer() -> None:
     """The tool and this gate must name the SAME trailer key, or the writer writes a
-    token the reader does not look for — a pairing that exists and is invisible."""
-    source = RULE_TOOL.read_text(encoding="utf-8")
-    assert f'PAIRING_KEY = "{PAIRING_KEY}"' in source, (
-        "tools/rule.py no longer declares the pairing key this gate reads"
+    token the reader does not look for — a pairing that exists and is invisible.
+
+    SINCE #297 THE KEY HAS ONE HOME (`tools/field_predicate.py`), so this probe asks for
+    that SHAPE rather than for a literal in the writer. Asserting a literal is present in
+    `tools/rule.py` would now PASS on the very defect the shared home removes — a private
+    copy that drifts from the reader. The writer must IMPORT it, and must not restate it.
+    """
+    writer = RULE_TOOL.read_text(encoding="utf-8")
+    assert "from field_predicate import" in writer, (
+        "tools/rule.py no longer imports from tools/field_predicate.py — the pairing "
+        "key's ONE home since #297"
+    )
+    assert f'PAIRING_KEY = "{PAIRING_KEY}"' not in writer, (
+        "tools/rule.py RESTATES the pairing key instead of importing it — a private copy "
+        "is the drift class #297 moved the key to remove"
+    )
+    home = FIELD_PREDICATE.read_text(encoding="utf-8")
+    assert f'PAIRING_KEY = "{PAIRING_KEY}"' in home, (
+        "tools/field_predicate.py no longer declares the pairing key this gate reads"
     )
 
 

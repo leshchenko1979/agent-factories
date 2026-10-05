@@ -54,6 +54,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+# The pairing key's ONE home (#297). Imported, never restated: this writer,
+# `tools/ledger.py append` (which refuses a `ruling` row carrying no well-formed
+# `comment=<id>`) and the gate `tests/test_ruling_row_recorded.py` all read the SAME key, and
+# a private copy in any of them drifts in silence — the writer would put a token on the row
+# that the reader does not look for, and the pairing would exist and be invisible. The bare
+# neighbour import is the form `tools/ledger.py` uses for the same reason: this tool runs as
+# `python3 tools/rule.py`, so `tools/` is on `sys.path`.
+from field_predicate import PAIRING_KEY
+
 REPO = Path(__file__).resolve().parent.parent
 PATROL = REPO / "tools" / "patrol_host_state.py"
 LEDGER_TOOL = REPO / "tools" / "ledger.py"
@@ -65,10 +74,12 @@ _REMOTE_RE = re.compile(r"github\.com[:/]+([^/]+)/([^/]+?)(?:\.git)?/?$")
 # The row the append prints: `n=1948 ruling #270 — …`.
 _ROW_RE = re.compile(r"\bn=(\d+)\b")
 
-# The trailer key naming the board comment this row was paired with. It sits in the row's
-# canonical terminal run (the maximal run of `=`-carrying tokens at the END of `detail`),
-# which is what makes it readable by the shared positional reader rather than by prose.
-PAIRING_KEY = "comment"
+# The trailer key naming the board comment this row was paired with — IMPORTED above from
+# its one home, `tools/field_predicate.py` (#297), and never restated here. It sits in the
+# row's canonical terminal run (the maximal run of `=`-carrying tokens at the END of
+# `detail`), which is what makes it readable by the shared positional reader rather than by
+# prose — and it is the SAME key the refuser in `tools/ledger.py` and the gate
+# `tests/test_ruling_row_recorded.py` read.
 
 
 def load_patrol():

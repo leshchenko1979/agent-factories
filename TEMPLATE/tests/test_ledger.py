@@ -1134,6 +1134,52 @@ def main() -> int:
               declared_revision(_rev_detail) == "0123456789abcdef0123456789abcdef01234567",
               _rev_detail[-90:])
 
+        print("\nthe ruling-row pairing — refused at the WRITE PATH (#297)")
+        # A `ruling` row must carry `comment=<id>` in its canonical terminal run: a ruling
+        # is two acts in two surfaces (a board comment and a ledger row) and a row naming
+        # no comment is half-recorded, so no reader can pair them. The class stood at SIX
+        # instances before this refusal existed — #98 gave the CLOSE row exactly this shape
+        # and the ruling row had none. The arms are the ruling's own discriminators: the
+        # read is POSITIONAL, so a `comment=` merely MENTIONED in prose is refused while one
+        # the run DECLARES is accepted; and the value must be a board-comment id, so
+        # `comment=none` is refused although the key is present.
+        pair_actors = Path(tmp) / "pair-actors.txt"
+        pair_actors.write_text("hq\n", encoding="utf-8")
+        pair = Path(tmp) / "pairing.jsonl"
+
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "a ruling with no pairing", actors=pair_actors)
+        check("a ruling declaring no comment is REFUSED",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and the refusal names the token it wants",
+              "comment=" in (r.stderr + r.stdout), (r.stderr or r.stdout).strip()[:160])
+        check("and it wrote NOTHING", len(rows(pair)) == 0, f"{len(rows(pair))} row(s)")
+
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "a ruling with a malformed pairing comment=none",
+                actors=pair_actors)
+        check("a ruling whose comment= is not a board-comment id is REFUSED",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "the row reports comment=123456 in prose, then keeps talking",
+                actors=pair_actors)
+        check("a comment= only MENTIONED in prose is REFUSED (the discriminator)",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and none of the three refusals wrote anything",
+              len(rows(pair)) == 0, f"{len(rows(pair))} row(s)")
+
+        # The accepting arm. Without it the probes would pass on a refusal that rejected
+        # EVERY ruling row — the one-sided shape that proves nothing about the predicate.
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "a ruling paired with its board comment.\n\ncomment=123456",
+                actors=pair_actors)
+        check("a comment= the CANONICAL RUN declares is ACCEPTED",
+              r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
+        check("and the row carries the pairing token",
+              bool(rows(pair)) and str(rows(pair)[0].get("detail", "")).endswith("comment=123456"),
+              (str(rows(pair)[0].get("detail", "")) if rows(pair) else "no row")[-40:])
+
         print("\nreconstructed claims — declared by token, printed, never collapsed")
         # The seam BOTH blocks below share: a staged COPY of the tree carrying its own
         # `docs/ledger-exemptions.json`. Defined here because the first probe that needs

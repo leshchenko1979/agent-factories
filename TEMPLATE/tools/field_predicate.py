@@ -301,6 +301,46 @@ def declared_keys(detail: str) -> list[str]:
             keys.append(key)
     return keys
 
+# The `ruling` row's `comment=<id>` field — the BOARD COMMENT the ruling was paired with.
+#
+# ONE home for the key (#297). Three readers ask for it: the writer that puts it on the row
+# (`tools/rule.py`), the refuser that will not stamp a `ruling` row without it
+# (`tools/ledger.py append`) and the gate that judges history
+# (`tests/test_ruling_row_recorded.py`). A private `PAIRING_KEY = "comment"` in any of the
+# three is the defect section 11 names rather than a style preference: two copies drift in
+# silence, and the drift lands on exactly the rows the pairing exists to make readable. It
+# lives here because this module already owns both halves of the reader the three compose —
+# `trailer_tokens` (the run is POSITIONAL, so a token quoted in prose is not a declaration)
+# and `keyed_value` (a declaration carries a NON-EMPTY value).
+PAIRING_KEY = "comment"
+
+def declared_pairing(detail: str) -> str | None:
+    """The `comment=` value `detail`'s CANONICAL TRAILER declares, else None.
+
+    RAW, not filtered for well-formedness. The gate must be able to REPORT a token that is
+    declared and malformed (`comment=none`) rather than read it as absent — the two are
+    different defects with different remedies, and collapsing them would let a malformed
+    token read as a missing one. The well-formedness test is therefore the caller's, and
+    `declared_comment_id` is the filtered read the WRITE PATH asks.
+    """
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, PAIRING_KEY)
+        if value:
+            return value
+    return None
+
+def declared_comment_id(detail: str) -> str | None:
+    """The WELL-FORMED `comment=<id>` `detail`'s canonical trailer declares, else None.
+
+    WELL-FORMED means a run of DIGITS: the value is a board comment id, and `comment=none`
+    or `comment=abc` OCCUPIES the key while naming no comment — the row is half-recorded
+    exactly as if the token were absent. This is the SAME test the gate applies
+    (`str.isdigit()`), asked here so the write path and the reader cannot disagree about
+    what a row declares (#297 clause 2, one predicate two call sites).
+    """
+    value = declared_pairing(detail)
+    return value if value and value.isdigit() else None
+
 # The close row's `head=<sha>` field — the revision its receipts describe. This is its
 # ONE canonical reader, shared by the gate that judges history and the write path that
 # refuses to create the defect, so the two cannot disagree about what a row DECLARES.
