@@ -342,6 +342,116 @@ def pacemaker_problems(rows: list[dict]) -> tuple[list[str], list[str]]:
             )
     return problems, excused
 
+# --- the #315 presence leg: every declared periodic owner owes an inbound WAKE ----------
+#
+# WHAT THIS UPHOLDS. SKILL.md section 6, the Pacemaker Requirement: *every periodic process
+# owner (Surveys, Triage, HQ) must have an active thin cron pacemaker waking its session
+# UUID*. The thinness gate above judges the SHAPE of the rows that exist; it is silent about
+# a row that does not exist at all — and that silence is what #253 measured: the
+# `factory-hq-pacemaker` row was DELETED, and nothing went RED, because a predicate over a
+# list of rows cannot see the absence of one. Restoring the row by hand fixes the symptom;
+# a run that names the missing owner is what makes the next deletion visible.
+#
+# THE DECLARATION IS INDEPENDENT AND STABLE. The expected state is read from the canonical
+# process register (`docs/processes.md`, section 3), a VERSIONED file — never from the live
+# cron table the leg judges, and never from a mutable live artifact whose movement would
+# silently invalidate the expectation while the check kept passing (rule 7). The register
+# names WHO owes a pacemaker; the cron table is asked only whether one exists.
+#
+# THE WAKE NOTION IS THE THINNESS GATE'S OWN, NOT A SECOND ONE. `row_wakes_session` reuses
+# this module's `SESSION_TARGET_PREFIX` and `WAKE_RE`, so a shape-2 row (a NULL target whose
+# prompt invokes a session notify) satisfies presence exactly as it satisfies leg (a) above.
+# A `deliver_to`-only test would call the meta-factory's own Surveys and Triage pacemakers
+# ABSENT — they wake by prompt, not by route — and would RED on healthy rows.
+
+def declared_periodic_owners(register_text: str) -> list[str]:
+    """The roles the canonical register DECLARES as process owners, deduped, in order.
+
+    The `Process Owner` column is located BY HEADER NAME, never by position: a column
+    inserted ahead of it must not silently turn the Client column into the owner set, and a
+    table without an owner column contributes nothing rather than everything. Bold markers
+    are stripped, because a register may emphasise a name without changing it.
+    """
+    owners: list[str] = []
+    column: int | None = None
+    for raw in register_text.splitlines():
+        line = raw.strip()
+        if not line.startswith("|"):
+            column = None  # a non-table line ends the current table
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if column is None:
+            for index, cell in enumerate(cells):
+                if cell.strip("* ").lower() == "process owner":
+                    column = index
+                    break
+            continue
+        if all(set(cell) <= set("-: ") for cell in cells):
+            continue  # the header separator row carries no data
+        if column < len(cells):
+            name = cells[column].strip("* ").strip()
+            if name and name not in owners:
+                owners.append(name)
+    return owners
+
+def row_wakes_session(row: dict, uuid: str) -> bool:
+    """Does `row` deliver an inbound wake to `uuid`?
+
+    Shape 1: `deliver_to == session:<uuid>` — the delivery IS the wake. A raw `oc://` target
+    is deliberately NOT a match: the harness refuses it at fire time, so the route cannot be
+    read at all and a broken row must not pass as a healthy one. Shape 2: the prompt invokes
+    a session notify naming `<uuid>`.
+    """
+    if not str(uuid).strip():
+        return False
+    want = f"{SESSION_TARGET_PREFIX}{uuid}".strip().lower()
+    target = _text(row.get("deliver_to")).strip().lower()
+    if target and target == want:
+        return True
+    prompt = _text(row.get("prompt"))
+    return bool(WAKE_RE.search(prompt)) and uuid.strip().lower() in prompt.lower()
+
+def pacemaker_presence_problems(
+    owners: list[tuple[str, str]], rows: list[dict]
+) -> tuple[list[str], list[str]]:
+    """(problems, coverage) for the declared owners against a list of cron rows.
+
+    ONE problem per owner with no inbound wake, NAMING it by role and session — a count
+    cannot be dispatched, claimed or closed, and an owner reported as a number cannot be
+    restored by anyone. `coverage` prints the examined population, so a green reads as
+    "examined N owners, 0 problems" rather than being indistinguishable from "examined
+    nothing" (rule 7: a zero is a verdict only from a working instrument).
+
+    An owner whose session cannot be resolved is REPORTED, never excused: presence cannot be
+    verified against a lane nobody can address, and an unresolvable owner is not a clean one.
+    """
+    problems: list[str] = []
+    coverage: list[str] = []
+    for role, uuid in owners:
+        if not str(uuid).strip():
+            problems.append(
+                f"{role}: declared periodic process owner whose session could not be "
+                f"resolved — presence cannot be verified, and an unresolvable owner is not "
+                f"a clean one (skill section 6: every periodic process owner owes an "
+                f"inbound wake)"
+            )
+            coverage.append(f"{role} (<unresolved>): NOT VERIFIED")
+            continue
+        waking = [r for r in rows if isinstance(r, dict) and row_wakes_session(r, uuid)]
+        if waking:
+            names = ", ".join(_text(r.get("name")) or "<unnamed row>" for r in waking)
+            coverage.append(f"{role} ({uuid}): woken by {names}")
+        else:
+            problems.append(
+                f"{role} ({uuid}): declared periodic process owner with NO inbound wake — "
+                f"no enabled cron row delivers to session:{uuid} and none invokes a session "
+                f"notify naming it, so the pacemaker layer never wakes this owner (skill "
+                f"section 6). A row that was deleted leaves no trace in the rows that "
+                f"remain, which is why this leg reads the register for what SHOULD be here."
+            )
+            coverage.append(f"{role} ({uuid}): NO WAKE")
+    return problems, coverage
+
 
 # --- probes ---
 
@@ -616,3 +726,139 @@ def test_gate_is_registered_in_the_audit() -> None:
     assert "test_cron_thinness.py" in audit, (
         "gate not registered in tools/audit.py — an unregistered gate never runs (P29)"
     )
+
+# --- presence-leg probes (#315) ------------------------------------------------------
+
+_HQ_UUID = "2646d31a-71ee-49f0-be81-9c8dc32d32fa"
+_TRIAGE_UUID = "f4c192c9-a8e9-4268-9026-ee3e4970cc8a"
+_SURVEYS_UUID = "5c99ad51-8889-40cb-b589-fa13fd673c06"
+
+def _notify_prompt(uuid: str) -> str:
+    return (
+        "Thin trigger only — do NOT execute any project work yourself. Run exactly ONE "
+        "bash command, then stop:\n\n"
+        f"nohup /usr/local/bin/opencrabs -p ops session notify {uuid} "
+        f"--text \"Run your cycle.\" --mode turn-end >/dev/null 2>&1 &"
+    )
+
+def test_a_declared_owner_with_no_wake_is_named_by_role() -> None:
+    """THE BITING PROBE. An owner the register declares, with no row waking it, is NAMED.
+
+    The row population is deliberately non-empty and carries an unrelated wake, so a clean
+    verdict cannot come from an empty read — the failure has to be found in a populated
+    table, which is exactly the #253 shape (a deleted row leaves the rest intact).
+    """
+    rows = [_row("factory-triage-patrol", _notify_prompt(_TRIAGE_UUID), None)]
+    problems, coverage = pacemaker_presence_problems([("HQ", _HQ_UUID)], rows)
+    assert len(problems) == 1, problems
+    assert "HQ" in problems[0], problems
+    assert _HQ_UUID in problems[0], problems
+    assert "NO inbound wake" in problems[0], problems
+    assert coverage == [f"HQ ({_HQ_UUID}): NO WAKE"], coverage
+
+def test_a_woken_sibling_is_clean_under_the_SAME_read() -> None:
+    """THE CONTROL. Two owners, each woken by a DIFFERENT shape, both clean.
+
+    The control is the half that proves the biting probe discriminates: the same read that
+    names an unwoken owner must clear a woken one, else the leg is a constant RED.
+    """
+    rows = [
+        _row("factory-hq-pacemaker", "", f"session:{_HQ_UUID}"),
+        _row("factory-triage-patrol", _notify_prompt(_TRIAGE_UUID), None),
+    ]
+    problems, coverage = pacemaker_presence_problems(
+        [("HQ", _HQ_UUID), ("Triage", _TRIAGE_UUID)], rows
+    )
+    assert problems == [], problems
+    assert len(coverage) == 2, coverage
+    assert "woken by factory-hq-pacemaker" in coverage[0], coverage
+    assert "woken by factory-triage-patrol" in coverage[1], coverage
+
+def test_shape_two_prompt_notify_satisfies_presence() -> None:
+    """A NULL target whose prompt invokes a session notify IS an inbound wake (shape 2).
+
+    This is the half a `deliver_to`-only test would get wrong: the meta-factory's own
+    Surveys and Triage pacemakers wake by PROMPT, so a route-only predicate would call them
+    absent and RED on healthy rows.
+    """
+    row = _row("factory-surveys-pacemaker", _notify_prompt(_SURVEYS_UUID), None)
+    assert row_wakes_session(row, _SURVEYS_UUID) is True
+    problems, _ = pacemaker_presence_problems([("Surveys", _SURVEYS_UUID)], [row])
+    assert problems == [], problems
+
+def test_a_wake_naming_ANOTHER_session_does_not_satisfy_this_owner() -> None:
+    """A notify naming a DIFFERENT uuid is not a wake for the owner under test.
+
+    The negative control for the prompt leg: presence keys on the uuid, not on the mere
+    presence of a notify — else every owner would be 'woken' by the first pacemaker row.
+    """
+    row = _row("factory-triage-patrol", _notify_prompt(_TRIAGE_UUID), None)
+    assert row_wakes_session(row, _HQ_UUID) is False
+    problems, _ = pacemaker_presence_problems([("HQ", _HQ_UUID)], [row])
+    assert len(problems) == 1, problems
+
+def test_an_unbaked_oc_target_does_NOT_satisfy_presence() -> None:
+    """A broken route is not a wake: `oc://` fails at fire time, so the owner is unwoken.
+
+    Same discipline as the thinness gate's unbaked class — accepting `oc://` here would
+    call a genuinely broken row a healthy wake and hide the next deletion behind it.
+    """
+    row = _row("factory-hq-pacemaker", "", f"oc://session/{_HQ_UUID}")
+    assert row_wakes_session(row, _HQ_UUID) is False
+    problems, _ = pacemaker_presence_problems([("HQ", _HQ_UUID)], [row])
+    assert len(problems) == 1, problems
+    assert "NO inbound wake" in problems[0], problems
+
+def test_an_unresolvable_owner_is_reported_never_excused() -> None:
+    """A declared owner with no resolvable session is a problem, not a silent skip."""
+    problems, coverage = pacemaker_presence_problems([("HQ", "")], [])
+    assert len(problems) == 1, problems
+    assert "could not be" in problems[0], problems
+    assert coverage == ["HQ (<unresolved>): NOT VERIFIED"], coverage
+
+def test_the_register_parse_locates_the_owner_column_BY_HEADER() -> None:
+    """The owner column is found by NAME, so an inserted column cannot hijack it.
+
+    A position-keyed parse would read the Client column here and return the wrong owner
+    set while still returning SOMETHING — the silent-invalidation trap rule 7 names. The
+    fixture is hermetic so the control does not move with a live file.
+    """
+    register = (
+        "| Process | Process Owner | Process Client |\n"
+        "|---|---|---|\n"
+        "| **1. Work Delivery** | HQ | Owner |\n"
+        "| **2. Rework** | Triage | HQ |\n"
+        "| **3. Measurement** | Surveys | Owner |\n"
+        "| **4. Hygiene** | HQ | Operators |\n"
+    )
+    assert declared_periodic_owners(register) == ["HQ", "Triage", "Surveys"]
+
+    shifted = (
+        "| Process | Client | Process Owner | Note |\n"
+        "|---|---|---|---|\n"
+        "| **1. Work Delivery** | Owner | HQ | x |\n"
+        "| **2. Rework** | HQ | Triage | y |\n"
+    )
+    assert declared_periodic_owners(shifted) == ["HQ", "Triage"]
+    # a table with no owner column contributes NOTHING rather than everything
+    assert declared_periodic_owners("| A | B |\n|---|---|\n| x | y |\n") == []
+
+def test_the_LIVE_register_declares_the_trio() -> None:
+    """Corroboration against the versioned register this leg reads at run time.
+
+    `docs/processes.md` is BOOTSTRAP-created factory data -- the kit ships
+    `processes.md.tmpl` -- so the tree the kit ships from carries none. Stated as a SKIP with
+    the artifact named rather than a FileNotFoundError out of that tree (#199). The parse
+    predicate itself is proven against the hermetic fixture above; this arm is corroboration
+    against the live register and has nothing to read when the register is absent.
+    """
+    register_path = REPO_ROOT / "docs" / "processes.md"
+    if not register_path.is_file():
+        print(
+            "  SKIP  no docs/processes.md in this tree (BOOTSTRAP-created: a factory writes "
+            "it, the kit ships processes.md.tmpl) -- the live corroboration arm is skipped; "
+            "the parse predicate is proven against the fixture above"
+        )
+        return
+    owners = set(declared_periodic_owners(register_path.read_text(encoding="utf-8")))
+    assert {"HQ", "Triage", "Surveys"} <= owners, owners

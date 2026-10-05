@@ -129,7 +129,7 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 
 
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
-         log_dir=None, kit_manifest=None, fleet_manifest=None):
+         log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -172,8 +172,36 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
         worktree_fn=_stub_worktree_leg,
+        presence_fn=presence_fn or _stub_presence_leg,
     )
     return rc, out.getvalue(), err.getvalue()
+
+def _stub_presence_leg(rows, homes_read, unreached, *, prefixes, read_at: str, **_kw) -> dict:
+    """A canned pacemaker-presence leg for every probe that drives `main()`.
+
+    The real leg reads the process register, the factory fragment and every profile's live
+    session bindings — none of which a board or cron probe asserts — so without this stub
+    each of those probes would judge the LIVE owners against its own synthetic rows and RED
+    for a reason it never names. The leg's own probes drive `pacemaker_presence_leg`
+    directly with injected readers, or pass a `presence_fn` of their own through `_run`.
+    """
+    return {
+        "name": "pacemaker-presence",
+        "status": "ASSERTED",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "register": "(stub)",
+            "owners_declared": 3,
+            "rows_judged": len(rows),
+            "unattributed_rows": 0,
+            "homes_read": len(homes_read),
+            "unreached_homes": list(unreached),
+            "owners": ["HQ (stub-uuid): woken by factory-probe"],
+            "resolution_notes": [],
+            "read_at": read_at,
+        },
+    }
 
 
 def _stub_worktree_leg(*, read_at: str, **_kw) -> dict:
@@ -3628,6 +3656,164 @@ def test_the_stall_census_leg_PRINTS_its_threshold_with_its_basis() -> None:
     assert "CLAIMED-but-silent" in out, (
         f"the basis must name the Triage card's own predicate it is NOT\n{out}"
     )
+
+# --- the pacemaker-presence leg (#315) -----------------------------------------------
+
+_PRESENCE_REGISTER = (
+    "| Process | Process Owner | Process Client |\n"
+    "|---|---|---|\n"
+    "| **1. Work Delivery Pipeline** | HQ | Owner |\n"
+    "| **2. Rework Prevention** | Triage | HQ |\n"
+    "| **3. Operational Measurement** | Surveys | Owner |\n"
+)
+_PRESENCE_FRAGMENT = {
+    "lanes": [
+        {"role": "hq", "thread_id": 21},
+        {"role": "triage", "thread_id": 20},
+        {"role": "surveys", "thread_id": 19},
+    ]
+}
+_PRESENCE_BINDINGS = [
+    {"thread_id": 21, "session_id": "U-HQ", "chat_id": "-100", "_profile": "ops",
+     "updated_at": 3},
+    {"thread_id": 20, "session_id": "U-TRIAGE", "chat_id": "-100", "_profile": "ops",
+     "updated_at": 3},
+    {"thread_id": 19, "session_id": "U-SURVEYS", "chat_id": "-100", "_profile": "ops",
+     "updated_at": 3},
+]
+
+class _StubRegistry:
+    """The two members `owner_sessions` uses: the factory's chat, and lane resolution."""
+    FACTORY_CHATS = {"meta-factory": -100}
+
+    def resolve_lane(self, lane, bindings, topic_names, chat_id=None):
+        for b in bindings:
+            if b.get("thread_id") == lane.get("thread_id"):
+                return {"session_id": b.get("session_id"), "status": "resolved"}
+        return {"session_id": None, "status": "unbound"}
+
+def _presence_leg(rows, *, register=_PRESENCE_REGISTER, fragment=_PRESENCE_FRAGMENT,
+                  bindings=_PRESENCE_BINDINGS, prefixes=("factory-",)):
+    return RUNNER.pacemaker_presence_leg(
+        rows, bindings, register, fragment, read_at="2026-10-05T00:00:00Z",
+        slug="meta-factory", prefixes=list(prefixes), homes_read=["probe-home"],
+        registry=_StubRegistry(),
+    )
+
+def test_the_pacemaker_presence_leg_NAMES_an_owner_with_no_wake() -> None:
+    """THE BITING PROBE. A register-declared owner with no inbound wake is NAMED.
+
+    The row population is NON-EMPTY and carries a wake for a DIFFERENT session, so a clean
+    verdict cannot come from an empty read — the failure is found in a populated table,
+    which is exactly the #253 shape (a deleted row leaves the rest intact).
+    """
+    rows = [{"name": "factory-other", "prompt": "", "deliver_to": "session:SOMEONE-ELSE"}]
+    leg = _presence_leg(rows)
+    assert leg["status"] == "ASSERTED", leg
+    assert len(leg["problems"]) == 3, leg["problems"]
+    hq = [p for p in leg["problems"] if p.startswith("HQ")]
+    assert len(hq) == 1, leg["problems"]
+    assert "U-HQ" in hq[0] and "NO inbound wake" in hq[0], hq
+    assert "HQ (U-HQ): NO WAKE" in leg["coverage"]["owners"], leg["coverage"]["owners"]
+    assert leg["coverage"]["owners_declared"] == 3, leg["coverage"]
+
+def test_the_pacemaker_presence_leg_is_QUIET_when_a_woken_sibling_is_present() -> None:
+    """THE CONTROL. The same read that names an unwoken owner must clear a woken one.
+
+    Both wake SHAPES are exercised — HQ by `deliver_to = session:<uuid>`, Triage by a
+    prompt-carried notify — so the control proves the leg is not a constant RED and that
+    the wake vocabulary is the thinness gate's own, not a `deliver_to`-only test.
+    """
+    rows = [
+        {"name": "factory-hq-pacemaker", "prompt": "", "deliver_to": "session:U-HQ"},
+        {"name": "factory-triage-patrol", "prompt": "", "deliver_to": "session:U-TRIAGE"},
+    ]
+    leg = _presence_leg(rows)
+    problems = [p for p in leg["problems"] if p.startswith(("HQ", "Triage"))]
+    assert problems == [], problems
+    owners = leg["coverage"]["owners"]
+    assert any(o.startswith("HQ (U-HQ): woken by factory-hq-pacemaker") for o in owners), owners
+    assert any(o.startswith("Triage (U-TRIAGE): woken") for o in owners), owners
+
+def test_a_presence_problem_FAILS_the_run() -> None:
+    """A problem the leg reports must reach the run's verdict, never sit in a block only."""
+    rows = [{"name": "factory-other", "prompt": "", "deliver_to": "session:SOMEONE-ELSE"}]
+    leg = _presence_leg(rows)
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"],
+                      presence_fn=lambda *a, **k: leg)
+    assert rc == 1, f"a presence problem must FAIL the run, got rc={rc}\n{out}"
+    assert "declared periodic process owner with NO inbound wake" in out, out
+
+def test_the_pacemaker_presence_leg_PRINTS_its_examined_population() -> None:
+    """A clean read over zero owners must not be indistinguishable from a verified one.
+
+    The render names the register, the owner count, the rows judged and EVERY owner with
+    its resolved session and the wake that satisfies it — the population travels with the
+    verdict (#242).
+    """
+    rows = [{"name": "factory-hq-pacemaker", "prompt": "", "deliver_to": "session:U-HQ"},
+            {"name": "factory-triage-patrol", "prompt": "", "deliver_to": "session:U-TRIAGE"},
+            {"name": "factory-measurement-daily", "prompt": "",
+             "deliver_to": "session:U-SURVEYS"}]
+    leg = _presence_leg(rows)
+    assert leg["problems"] == [], leg["problems"]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"],
+                      presence_fn=lambda *a, **k: leg)
+    assert rc == 0, out
+    assert "LEG pacemaker-presence — ASSERTED" in out, out
+    assert "3 owner(s) declared" in out, out
+    assert "population (owner — resolved session — the wake that satisfies it):" in out, out
+    assert "HQ (U-HQ): woken by factory-hq-pacemaker" in out, out
+    assert "Surveys (U-SURVEYS): woken by factory-measurement-daily" in out, out
+    assert "3 declared periodic owner(s) checked for an inbound wake" in out, out
+
+def test_the_pacemaker_presence_leg_fails_OPEN_when_the_register_is_absent() -> None:
+    """An unreadable DECLARATION is NOT RUN with its reason — never a clean read.
+
+    The expected set comes from the register; if the register cannot be read, the leg has
+    verified nothing, and a silent clean verdict here is the very failure #315 exists to
+    close (the check passing while testing nothing).
+    """
+    missing = Path(tempfile.mkdtemp(prefix="probe-no-register-")) / "processes.md"
+    leg = RUNNER.pacemaker_presence_leg(
+        [{"name": "factory-x", "prompt": "", "deliver_to": ""}], [],
+        None, None, read_at="2026-10-05T00:00:00Z", prefixes=["factory-"],
+        register_path=missing,
+    )
+    assert leg["status"] == "NOT RUN", leg
+    assert leg["problems"] == [], leg
+    assert "could not be read" in leg["coverage"]["reason"], leg["coverage"]
+    assert str(missing) in leg["coverage"]["reason"], leg["coverage"]
+    rc, out, _ = _run([], [], cron_rows=[], homes=["probe-home"], prefixes=["factory-"],
+                      presence_fn=lambda *a, **k: leg)
+    assert "LEG pacemaker-presence — NOT RUN" in out, out
+    assert "NOT RUN: the process register" in out, out
+
+def test_an_owner_with_no_resolvable_session_is_reported_never_excused() -> None:
+    """A role the fragment does not map, or a lane with no live session, is a PROBLEM.
+
+    Dropping the owner here would be the leg committing the very failure it exists to
+    catch — an owner silently excused. The CAUSE travels in the coverage notes, the
+    PROBLEM comes from the pure predicate (one source for the verdict, never two).
+    """
+    fragment = {"lanes": [{"role": "hq", "thread_id": 21}]}  # Triage/Surveys unmapped
+    leg = _presence_leg(
+        [{"name": "factory-hq-pacemaker", "prompt": "", "deliver_to": "session:U-HQ"}],
+        fragment=fragment,
+    )
+    assert len(leg["problems"]) == 2, leg["problems"]
+    assert all("could not be resolved" in p for p in leg["problems"]), leg["problems"]
+    assert any("no lane with role 'triage'" in n for n in leg["coverage"]["resolution_notes"]), \
+        leg["coverage"]["resolution_notes"]
+
+def test_the_presence_leg_is_INJECTABLE_and_wired_by_default() -> None:
+    """`presence_fn` is a real parameter, and the default is the live wiring."""
+    import inspect
+    params = inspect.signature(RUNNER.main).parameters
+    assert "presence_fn" in params, sorted(params)
+    assert hasattr(RUNNER, "live_pacemaker_presence_leg"), "the live wiring must exist"
+    assert hasattr(RUNNER, "declared_slug"), "the slug resolver must exist"
+
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

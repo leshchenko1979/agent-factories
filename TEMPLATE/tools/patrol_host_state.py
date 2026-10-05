@@ -1129,6 +1129,38 @@ def declared_prefixes(repo: Path = REPO) -> list[str]:
     return []
 
 
+def declared_slug(repo: Path = REPO) -> str:
+    """This factory's `slug`, read from the fleet manifest — or '' when undeclared.
+
+    The match is on the REPOSITORY, resolved to its git common dir, exactly as
+    `declared_prefixes` matches — so a linked worktree is this factory rather than nobody.
+    The slug is what the fragment file is named for, and the fragment is where a role is
+    mapped to a topic; a slug guessed from the git remote would be `owner/repo`, which names
+    no fragment at all.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    try:
+        manifest = registry.load_fleet_manifest()
+    except registry.FleetManifestError:
+        # AN ABSENT OR UNREADABLE MANIFEST IS A STATE, NOT A CRASH (#199's class, one surface
+        # over). The tree the kit ships carries `registry/fleet.example.json` and no manifest
+        # at all, so this resolver IS reached from the shipped tree -- and the report path it
+        # feeds must render the empty answer as NOT RUN with its reason, never raise out of
+        # `main()`. `tests/test_patrol_host_state.py`'s
+        # `test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback` is the arm that
+        # caught the traceback this guard removes.
+        return ""
+    want = git_common_dir(repo)
+    for record in manifest.get("factories", []):
+        declared = record.get("repo")
+        if not isinstance(declared, str):
+            continue
+        if want is not None and git_common_dir(Path(declared)) == want:
+            return str(record.get("slug") or "")
+        if want is None and str(Path(declared).resolve()) == str(repo.resolve()):
+            return str(record.get("slug") or "")
+    return ""
+
 def no_prefixes_leg(name: str, *, population: int, unit: str, read_at: str,
                     read_count: int) -> dict:
     """A cron-consuming leg this factory cannot attribute ANY row for — NOT RUN (#242).
@@ -1383,6 +1415,174 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
         },
     }
 
+
+# --- the pacemaker-presence leg (#315) -----------------------------------------
+#
+# SKILL.md section 6 names every periodic process owner (Surveys, Triage, HQ) as owing an
+# active thin cron pacemaker waking its session UUID. The thinness leg above judges the
+# SHAPE of the rows that EXIST; it cannot see a row that does not exist, which is exactly
+# why deleting `factory-hq-pacemaker` restored board #253 silently — a predicate over a
+# list of rows has no way to miss one that was removed.
+#
+# The declaration is INDEPENDENT of the table this leg judges: WHO owes a pacemaker is read
+# from the canonical process register (`docs/processes.md`, section 3), a versioned file,
+# while the live `cron_jobs` table is asked only whether a wake exists. A leg whose expected
+# state came from the live table would be self-consistent and would prove nothing (rule 7).
+PRESENCE_REGISTER = REPO / "docs" / "processes.md"
+FACTORY_FRAGMENT_DIR = REPO / "registry" / "factories"
+
+def owner_sessions(register_text: str, fragment: dict | None, bindings: list[dict],
+                   slug: str, *, registry=None, predicate=None
+                   ) -> tuple[list[tuple[str, str]], list[str]]:
+    """([(role, session_uuid)], notes) for the register's declared owners.
+
+    The declaration is the REGISTER's (who owes a pacemaker); the factory fragment's `lanes`
+    map a role to a topic, and the live bindings resolve that topic to a session. `notes`
+    carries the CAUSE of an unresolved owner — a role the fragment does not declare, or a
+    lane the bindings cannot place — so the coverage can say WHY, while the PROBLEM is left
+    to the pure predicate (a single source for the verdict, never two).
+
+    An owner that cannot be resolved travels as uuid "" rather than being dropped: an owner
+    dropped here would be an owner silently excused, which is the failure this leg exists to
+    catch, committed by the leg itself.
+    """
+    registry = registry or load_module("oc_registry", REGISTRY)
+    predicate = predicate or load_module("cron_thinness_predicate",
+                                         CRON_THINNESS_PREDICATE)
+    declared = predicate.declared_periodic_owners(register_text)
+    by_role: dict[str, dict] = {}
+    for lane in ((fragment or {}).get("lanes") or []):
+        role = str(lane.get("role") or "").strip().lower()
+        if role and role not in by_role:
+            by_role[role] = lane
+    chat_id = registry.FACTORY_CHATS.get(slug) if slug else None
+    owners: list[tuple[str, str]] = []
+    notes: list[str] = []
+    for name in declared:
+        key = name.strip().lower()
+        lane = by_role.get(key)
+        if lane is None:
+            owners.append((name, ""))
+            notes.append(
+                f"{name}: no lane with role {key!r} in this factory's fragment "
+                f"({slug or 'unknown slug'})"
+            )
+            continue
+        resolved = registry.resolve_lane(lane, bindings, {}, chat_id=chat_id)
+        session = str(resolved.get("session_id") or "")
+        owners.append((name, session))
+        if not session:
+            notes.append(
+                f"{name}: declared lane (thread {lane.get('thread_id')}) resolves to no "
+                f"live session — status {resolved.get('status')!r}"
+            )
+    return owners, notes
+
+def pacemaker_presence_leg(rows: list[dict], bindings: list[dict],
+                           register_text: str | None, fragment: dict | None, *,
+                           read_at: str, slug: str = "", prefixes: list[str] | None = None,
+                           homes_read: list[str] | None = None,
+                           unreached: list[str] | None = None,
+                           registry=None, predicate=None,
+                           register_path: Path | None = None,
+                           not_run_reason: str = "") -> dict:
+    """The pacemaker-presence leg: every declared periodic owner must have an inbound wake.
+
+    FAIL-OPEN, and the reason is PRINTED. An unreadable register, an unreadable cron table or
+    an unreadable binding set is NOT RUN with the reason — never a clean read, because a
+    check that could not read its input has verified nothing (#242). A leg that examined zero
+    owners prints that count beside its verdict for the same reason.
+
+    The rows judged are THIS factory's own (attributed by the manifest's declared prefixes),
+    the same population the thinness leg judges — an owner of this factory is woken by this
+    factory's pacemakers, and another factory's rows are its own concern (#101).
+    """
+    leg_name = "pacemaker-presence"
+    register_path = register_path or PRESENCE_REGISTER
+    if not_run_reason:
+        return {
+            "name": leg_name,
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": not_run_reason,
+                "register": str(register_path),
+                "owners_declared": 0,
+                "read_at": read_at,
+            },
+        }
+    if register_text is None:
+        try:
+            register_text = register_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return {
+                "name": leg_name,
+                "status": "NOT RUN",
+                "problems": [],
+                "excused": [],
+                "coverage": {
+                    "reason": (
+                        f"the process register {register_path} could not be read ({exc}), so "
+                        f"the DECLARATION of who owes a pacemaker is unavailable — a check "
+                        f"that cannot read its independent declaration verifies nothing"
+                    ),
+                    "register": str(register_path),
+                    "owners_declared": 0,
+                    "read_at": read_at,
+                },
+            }
+    predicate = predicate or load_module("cron_thinness_predicate",
+                                         CRON_THINNESS_PREDICATE)
+    owners, notes = owner_sessions(register_text, fragment, bindings, slug,
+                                   registry=registry, predicate=predicate)
+
+    if prefixes:
+        judged, unattributed = attribute_rows(rows, prefixes)
+    else:
+        judged, unattributed = list(rows), []
+    if not judged:
+        return {
+            "name": leg_name,
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": (
+                    f"no enabled cron row attributed to this factory — {len(rows)} row(s) "
+                    f"read across {len(homes_read or [])} home(s) with declared prefixes "
+                    f"{prefixes!r}, so the population came back EMPTY and presence was never "
+                    f"judged; a clean verdict over an examined-nothing read is not a verdict "
+                    f"(#242)"
+                    + (f"; homes UNREACHED: {list(unreached or [])}" if unreached else "")
+                ),
+                "register": str(register_path),
+                "owners_declared": len(owners),
+                "owners": [],
+                "unattributed_rows": len(unattributed),
+                "unreached_homes": list(unreached or []),
+                "read_at": read_at,
+            },
+        }
+
+    problems, population = predicate.pacemaker_presence_problems(owners, judged)
+    return {
+        "name": leg_name,
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "register": str(register_path),
+            "owners_declared": len(owners),
+            "rows_judged": len(judged),
+            "unattributed_rows": len(unattributed),
+            "homes_read": len(homes_read or []),
+            "unreached_homes": list(unreached or []),
+            "owners": population,
+            "resolution_notes": notes,
+            "read_at": read_at,
+        },
+    }
 
 def read_notify_receipt(text: str) -> str | None:
     """The KIND of receipt `text` carries, or None — one predicate, two accepted forms.
@@ -2997,7 +3197,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
         if leg["status"] == "NOT RUN" and leg["name"] in (
-            "cron-thinness", "notify-receipt", "duty-receipt"
+            "cron-thinness", "pacemaker-presence", "notify-receipt", "duty-receipt"
         ):
             # A leg that examined NOTHING must never render as one that examined the
             # population and found it clean (#242). Its reason is printed, and its
@@ -3379,6 +3579,25 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 for path in cov["missing_directory"]:
                     lines.append(f"    ~ {path}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "pacemaker-presence":
+            # The EXAMINED POPULATION travels with the verdict, so a clean read over zero
+            # owners is never indistinguishable from a verified one (#242). Every owner is
+            # named with its resolved session and the row that wakes it, or NONE.
+            lines.append(
+                f"  register: {cov['register']} — {cov['owners_declared']} owner(s) "
+                f"declared"
+            )
+            lines.append(
+                f"  rows judged: {cov['rows_judged']} of this factory's enabled row(s) "
+                f"({cov['unattributed_rows']} attributed to nobody), across "
+                f"{cov['homes_read']} home(s) read"
+            )
+            lines.append("  population (owner — resolved session — the wake that satisfies it):")
+            for entry in cov.get("owners", []):
+                lines.append(f"    {entry}")
+            for note in cov.get("resolution_notes", []):
+                lines.append(f"    note: {note}")
+            lines.append(f"  read at {cov['read_at']}")
         elif leg["name"] == "stall-census":
             lines.append(
                 f"  dispatch rows examined: {cov['dispatch_rows_examined']} "
@@ -3448,16 +3667,91 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     owed = sum(
         int(leg["coverage"].get("units_owed", 0)) for leg in legs
     )
+    owners_declared = sum(
+        int(leg["coverage"].get("owners_declared", 0)) for leg in legs
+    )
     lines.append(
         f"verdict: {total} problem(s) over {forward} open issue(s) examined, "
         f"{closes} close row(s) checked against the board, "
         f"{closed_items} closed item(s) checked for a close row, and {cron} cron row(s) "
-        f"attributed to this factory and judged, {notify} notify log(s) judged for a "
+        f"attributed to this factory and judged, {owners_declared} declared periodic "
+        f"owner(s) checked for an inbound wake, {notify} notify log(s) judged for a "
         f"receipt, and {owed} never-claimed dispatch(es) standing past the declared "
         f"threshold"
     )
     return "\n".join(lines)
 
+
+def live_pacemaker_presence_leg(rows: list[dict], homes_read: list[str],
+                                unreached: list[str], *,
+                                prefixes: list[str], read_at: str) -> dict:
+    """The live wiring for the presence leg: read the register, the fragment and the bindings.
+
+    EVERY read is guarded, and a read that FAILED becomes a NOT RUN with its reason rather
+    than an empty input — an unreadable declaration is not a declaration that names nobody,
+    and the two must never render the same. The fragment is read from this repo's own
+    `registry/factories/<slug>.json`, so the role→session resolution uses the same declared
+    lanes the registry itself publishes rather than a second list kept here.
+
+    The factory's slug is resolved from the fleet manifest by REPOSITORY, never from the git
+    remote: the remote reads `owner/repo`, which names no fragment.
+    """
+    slug = declared_slug()
+    if not slug:
+        return pacemaker_presence_leg(
+            rows, [], None, None, read_at=read_at, prefixes=prefixes,
+            homes_read=homes_read, unreached=unreached,
+            not_run_reason=(
+                f"this checkout resolves to no factory the fleet manifest declares, so its "
+                f"fragment — and therefore every role→lane mapping — is unknown; presence "
+                f"cannot be checked for an undeclared factory (board #242)"
+            ),
+        )
+    try:
+        register_text = PRESENCE_REGISTER.read_text(encoding="utf-8")
+    except OSError as exc:
+        return pacemaker_presence_leg(
+            rows, [], None, None, read_at=read_at, slug=slug, prefixes=prefixes,
+            homes_read=homes_read, unreached=unreached,
+            not_run_reason=(
+                f"the process register {PRESENCE_REGISTER} could not be read ({exc}) — the "
+                f"independent declaration of who owes a pacemaker is unavailable, so no "
+                f"owner could be checked and this is NOT a clean read"
+            ),
+        )
+    registry = load_module("oc_registry", REGISTRY)
+    fragment: dict | None = None
+    if slug:
+        fragment, ferr = registry.load_fragment(FACTORY_FRAGMENT_DIR / f"{slug}.json")
+        if ferr or not isinstance(fragment, dict):
+            return pacemaker_presence_leg(
+                rows, [], register_text, None, read_at=read_at, slug=slug, prefixes=prefixes,
+                homes_read=homes_read, unreached=unreached,
+                not_run_reason=(
+                    f"this factory's fragment "
+                    f"({FACTORY_FRAGMENT_DIR / f'{slug}.json'}) could not be read "
+                    f"({ferr or 'not a mapping'}) — the role→lane declaration is unavailable, "
+                    f"so no owner's session could be resolved"
+                ),
+            )
+    try:
+        bindings, berrors = registry.all_bindings()
+    except Exception as exc:  # noqa: BLE001 — any failure here is a NOT RUN, never empty
+        bindings, berrors = [], [str(exc)]
+    if berrors and not bindings:
+        return pacemaker_presence_leg(
+            rows, [], register_text, fragment, read_at=read_at, slug=slug, prefixes=prefixes,
+            homes_read=homes_read, unreached=unreached,
+            not_run_reason=(
+                f"no live session binding could be read ({'; '.join(berrors[:3])}) — every "
+                f"owner's session would be unresolved, which is a read failure and not a "
+                f"finding about the pacemakers"
+            ),
+        )
+    return pacemaker_presence_leg(
+        rows, bindings, register_text, fragment, read_at=read_at, slug=slug,
+        prefixes=prefixes, homes_read=homes_read, unreached=unreached,
+    )
 
 def main(
     argv: list[str] | None = None,
@@ -3473,6 +3767,7 @@ def main(
     predicate=None,
     publish_fn=None,
     worktree_fn=None,
+    presence_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -3495,7 +3790,13 @@ def main(
     the same reason: it shells out TWICE PER REGISTERED WORKTREE, so a probe that did not
     stub it would pay that cost on every run of every probe that drives this function --
     measured at ~10s on a box with 34 worktrees, which is a gate budget spent on state the
-    probe never asserts."""
+    probe never asserts.
+
+    The presence leg is injected for the seventh and the same practical reason: it reads the
+    process register, the factory fragment and every profile's session bindings, so a probe
+    that did not stub it would need a live box with those files in place to assert a NOT RUN
+    reason at all. `presence_fn` is handed the same cron rows, homes and prefixes the other
+    cron legs receive."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -3514,7 +3815,8 @@ def main(
         err(f"patrol host-state read: FAILED at {read_at} — {exc}")
         err(
             "NOT RUN: every leg (board-intake, board-close, board-closed, board-ruling, "
-            "cron-thinness, notify-receipt, duty-receipt, canonicality-tier, stall-census, "
+            "cron-thinness, pacemaker-presence, notify-receipt, duty-receipt, "
+            "canonicality-tier, stall-census, "
             "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
@@ -3543,6 +3845,10 @@ def main(
                       read_at=read_at),
         (publish_fn or publish_freshness_leg)(read_at=read_at),
         (worktree_fn or worktree_leg)(read_at=read_at),
+        (presence_fn or live_pacemaker_presence_leg)(
+            cron_rows, homes_read, unreached, prefixes=prefixes_fn(),
+            read_at=read_at,
+        ),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)

@@ -112,6 +112,14 @@ Rows 4–11 are the closure, and they are declared *here* rather than only expla
 census's question is *"is the instrument complete here?"* — and a closure left out of the measured
 set answers that question wrongly, which is the defect §3 describes.
 
+**#315's presence leg adds no row to this table, and the set stays eleven.** The presence half is
+carried by rows 1–3 — the runner, the predicate and the runner's wiring — which the instrument
+already declares, so no member's HELD count moves and no new path has to ship. What the presence
+leg reads beyond them is a *declaration* rather than a shipped path: `docs/processes.md` §3, a
+register the member versions in its own tree (§6 below), not a file the kit delivers. A row added
+here for a path the kit does not ship would make the census demand a TEMPLATE half that does not
+exist, so the declaration lives in §6 and this table is left alone.
+
 **Rows 10–11 were missing until a member found them.** infra-factory adopted this instrument and
 reported that its tree needed five files rather than three, naming `ledger_boundary.py` and
 `ledger_declaration.py` as the closure the boundary reader needs. Measured here: the runner loads
@@ -213,6 +221,31 @@ path to this protection, and that is a measurement rather than a preference.
 | `test_cron_thinness.py` | `gate_registry.py`, REQUIRED | required | the predicate is PURE over a list of rows and reads no live table, so it passes in a bootstrapped factory exactly as it does here — there is no `TEMPLATE` comparison or box-local fixture that would make it red |
 | `test_patrol_host_state.py` | `gate_registry.py`, REQUIRED | required | it drives the instrument's own selftest against a throwaway register in a temp directory: no live register, no fleet manifest, no box-local fixture |
 
+**The pacemaker-presence leg (#315) rides these SAME two gates — it is not a third.** The
+thinness predicate asks *"is this row a thin wake?"*; it is silent about a row that does not
+exist, and that silence is what board **#253** cost: the `factory-hq-pacemaker` row was
+**deleted**, and no run failed, because a predicate over a list of rows cannot see the absence
+of one. The presence half is therefore carried by the same pair:
+
+| leg | predicate | runner wiring |
+|---|---|---|
+| **pacemaker-presence** | `pacemaker_presence_problems` + `declared_periodic_owners` + `row_wakes_session`, in `tests/test_cron_thinness.py` | `pacemaker_presence_leg` + `owner_sessions` + `live_pacemaker_presence_leg`, in `tools/patrol_host_state.py` |
+
+**The expected set is INDEPENDENT of the table the leg judges** (frame §2 part 7, the control
+law). WHO owes a pacemaker is read from the process register (§6), a **versioned** file, while
+the live `cron_jobs` table is asked only whether a wake exists — a leg whose expectation came
+from the table it judges would be self-consistent and would prove nothing. The wake notion is
+the thinness gate's OWN (`SESSION_TARGET_PREFIX` + `WAKE_RE`), so a shape-2 row (a NULL target
+whose prompt invokes a session notify) satisfies presence exactly as it satisfies thinness leg
+(a); a `deliver_to`-only test would call the meta-factory's own Surveys and Triage pacemakers
+ABSENT and RED on healthy rows. The leg is wired into `patrol_host_state.py`'s `main()` with
+`presence_fn` injectable, so a probe drives it without a live register, fragment or binding set.
+**Its sensitivity bound is per-OWNER, and it is stated rather than implied:** the leg fires when
+an owner loses **all** its wakes, so deleting one row of several that wake the same owner is
+**not** caught — the register declares owners, not per-row pacemakers, and a row-level check has
+no stable independent declaration to read. Widening it to a per-row check is an owner decision,
+not this leg's.
+
 ## 5. The version identifier — part 4
 
 **Defined in frame §7.1 and cited here, not restated.** What this file supplies is the set the
@@ -236,6 +269,7 @@ which is the one thing `job_prefixes` exists to state.
 | surface | ships as | owner | why it must not be overwritten |
 |---|---|---|---|
 | `registry/fleet.json` → `job_prefixes` | `registry/fleet.example.json` | **the factory** | it IS the ownership declaration: the runner attributes each cron row to a factory by this field, never by the home a row sits in (measured: all twelve ai-antispam rows live in the ops home) |
+| `docs/processes.md` → §3 *The Meta-Factory Process Register* | **versioned in the tree** | **the factory** | it IS the pacemaker-presence leg's **independent declaration**: the `Process Owner` column (located by header name) names WHO owes a wake, and the presence leg reads it precisely so its expectation does not come from the `cron_jobs` table it judges. A register that dropped an owner would silently narrow the population the leg examines, so it is read on every run and never overwritten by an update |
 | `docs/ledger-invariants.json` | `docs/ledger-invariants.example.json` | **the factory** | the DECLARED duty-receipt boundary (#78 clause b): the runner's `duty_receipt_leg` reads it through the one reader, and a tree that has not declared one gets `DeclarationUnavailable` — measured in `ai-antispam`, whose gate exits **rc=1** on the absent file |
 | `registry/factories/*.json` | the adopter writes its own | **the factory** | the fragment store the attestation round reads and writes |
 | `evidence/ledger.jsonl` | created on first append | **the factory** | the duty-receipt store — the run rows that make a duty's completion provable |
@@ -295,6 +329,15 @@ instrument's probes are named, not implied:
 | `test_the_law_content_class_BITES_on_a_row_this_factory_declares` | `tests/test_patrol_host_state.py` | the embedded-law-content class bites on a row of the factory's own |
 | `test_probe_is_offline` | `tests/test_cron_thinness.py` | the predicate is pure over a list, asserted structurally |
 | `test_the_live_negative_specimen_stays_a_problem_for_the_right_reason` | `tests/test_cron_thinness.py` | a real row stays a finding, for the right reason and not by luck |
+| `test_a_declared_owner_with_no_wake_is_named_by_role` | `tests/test_cron_thinness.py` | the presence predicate BITES: an owner with no wake is NAMED by role and session, over a populated row set |
+| `test_a_woken_sibling_is_clean_under_the_SAME_read` | `tests/test_cron_thinness.py` | the control: the same read clears a woken sibling, so the leg is not a constant RED |
+| `test_shape_two_prompt_notify_satisfies_presence` | `tests/test_cron_thinness.py` | a NULL target whose prompt invokes a notify IS a wake — the half a `deliver_to`-only test gets wrong |
+| `test_a_wake_naming_ANOTHER_session_does_not_satisfy_this_owner` | `tests/test_cron_thinness.py` | the negative control for the prompt leg: presence keys on the uuid, not on a notify's mere presence |
+| `test_the_register_parse_locates_the_owner_column_BY_HEADER` | `tests/test_cron_thinness.py` | the column is found by NAME, so an inserted column cannot hijack the owner set while still returning something |
+| `test_the_pacemaker_presence_leg_NAMES_an_owner_with_no_wake` | `tests/test_patrol_host_state.py` | the RUNNER's presence leg bites over a synthetic register+fragment+rows |
+| `test_the_pacemaker_presence_leg_is_QUIET_when_a_woken_sibling_is_present` | `tests/test_patrol_host_state.py` | the runner control, under both wake shapes |
+| `test_the_pacemaker_presence_leg_PRINTS_its_examined_population` | `tests/test_patrol_host_state.py` | coverage is printed: the register, the owner count and every owner with its wake travel with the verdict |
+| `test_the_pacemaker_presence_leg_fails_OPEN_when_the_register_is_absent` | `tests/test_patrol_host_state.py` | an unreadable DECLARATION is NOT RUN with its reason, never a clean read |
 
 **The live probe is the runner itself:** `python3 tools/patrol_host_state.py` prints each leg's own
 coverage count beside its verdict. A probe that reported only its verdict would be the vacuity this
