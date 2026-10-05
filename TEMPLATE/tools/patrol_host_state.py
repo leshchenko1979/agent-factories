@@ -899,6 +899,25 @@ def ruling_comment(issue: dict) -> dict | None:
             return comment
     return None
 
+def ruling_comments(issue: dict) -> list[dict]:
+    """EVERY ruling comment the issue carries, in board order (oldest first).
+
+    `ruling_comment` answers "does this issue carry a ruling at all" and returns the first;
+    this answers "which ruling ACTS does it carry", which is what dating an instance needs.
+    An amendment posted after a ruling is a SECOND ruling act, and the leg's bound must be
+    read against the LATEST one: an issue whose first ruling predates the pairing mechanism
+    and whose amendment follows it is exactly the case where reading the first would excuse
+    a post-mechanism divergence — a false clean, the worse half of the #248 class.
+    """
+    out: list[dict] = []
+    for comment in issue.get("comments") or []:
+        if not isinstance(comment, dict):
+            continue
+        head = comment_heading(comment)
+        if head is not None and _accepted_heading(head):
+            out.append(comment)
+    return out
+
 def unmatched_heading_comments(issue: dict) -> list[str]:
     """Every heading the ruling predicate did NOT match — the clause that keeps it honest.
 
@@ -922,8 +941,158 @@ def unmatched_heading_comments(issue: dict) -> list[str]:
         out.append(head)
     return out
 
+# --- the board-ruling leg's boundary and its exemption surface (issue #334) -----------
+#
+# The leg below asserts that a ruling comment on the board has its ledger `ruling` row.
+# Until #334 it had NO boundary and NO exemption surface, so it reported a PERMANENT red:
+# 12 of its 13 live instances were ruling comments posted before the write path that pairs
+# the two acts existed, and its one post-mechanism instance had no lawful exit.
+#
+# THE BOUNDARY IS THE MECHANISM'S LANDING INSTANT, and the choice is stated because it IS
+# a choice. Two instants are candidates and they answer DIFFERENT questions:
+#
+#   * `ruling_row_recorded` (docs/ledger-invariants.json) is the instant the #270 RULING was
+#     issued, 2026-10-02T14:26:52Z, and it bounds the OFFLINE direction
+#     (`tests/test_ruling_row_recorded.py`): does a row that EXISTS name the comment it
+#     paired with? That direction judges ROW CONTENT, and a lane can satisfy it BY HAND —
+#     rows n=1949/1950/1951 carry `comment=` and were stamped 15:37Z, INSIDE the window
+#     between 14:26:52Z and the mechanism's landing.
+#   * THIS leg asks whether the row exists AT ALL, and the mechanism that makes the two acts
+#     ONE act is `tools/rule.py`, landed by commit `366353a`. Before it a ruling was a board
+#     comment with nothing on the path to stamp the row: #275's divergence is an instance of
+#     the PRE-FIX defect #270 exists to fix. Reading that as a lane's neglect is a FALSE RED;
+#     excusing it is what this bound is for.
+#
+# So the two instants are different FACTS about this factory, not two half-rules for one
+# requirement: the offline gate's bound is when the row-content rule landed, this one's is
+# when the write path could pair the acts. Both are FACTORY DATA read through the ONE reader
+# (`tests/ledger_boundary.py`), and neither instant is typed into this file — which ships,
+# byte-paired, to every member factory (#248).
+#
+# THE POPULATION IS INSENSITIVE TO AUTHOR-vs-COMMITTER: both instants sit between #275's
+# comment and #282's, so the 12/1 split is the same either way. The declaration names the
+# AUTHOR instant, the one #334 measured.
+RULING_BOUNDARY_KEY = "ruling_writer_landed"
+
+# The exemption surface — the leg's ONE lawful exit, the shape #317/#320 established.
+# FACTORY DATA in its own file, keyed by the RULING COMMENT ID this leg reads, NEVER by
+# issue number: a FUTURE ruling comment on an exempted issue is a NEW instance and cannot
+# inherit the exemption. A malformed entry, or one that matches no in-scope unruled comment,
+# is a PROBLEM — a stale exemption is visible debt, never a silent pass.
+RULING_EXEMPTIONS_PATH = REPO / "docs" / "ruling-board-exemptions.json"
+RULING_EXEMPT_DOMAIN = (
+    "a ruling comment with no paired `ruling` row whose repair NO BACKFILL bars",
+)
+
+# The UNBOUNDED scope: no bound, no refusal, every instance judged. This is the leg's PURE
+# shape, and it is what its probes pass; `main()` always passes the LIVE scope, so the bound
+# cannot be forgotten at the one call site that reads the board.
+UNBOUNDED_SCOPE = (None, "", "")
+
+def ruling_board_scope(repo: Path = REPO) -> tuple[dt.datetime | None, str, str]:
+    """The bound this leg judges against, as `(instant, text, refusal)`.
+
+    Read through the ONE boundary reader (`tests/ledger_boundary.py`), so this leg and the
+    boundary-reading gates cannot disagree about what this factory declared — one field, one
+    predicate (SKILL.md section 11).
+
+    The reader's own policy is absent SKIPS / malformed FAILS; this leg maps BOTH onto a
+    REFUSAL, and that is the duty leg's policy deliberately. For a gate an absent
+    declaration is a legitimate state (the invariant has not been adopted). For a leg that
+    would otherwise judge EVERY instance it is not: judging them all against no bound is
+    exactly the permanent red #334 removes, so a tree that declares nothing is TOLD so
+    rather than shown a clean run or an unbounded one. The distinction survives in the
+    WORDING, which is what a reader needs in order to act on it.
+    """
+    try:
+        reader = boundary_reader()
+    except Exception as exc:  # noqa: BLE001 — any load failure is the same refusal
+        return None, "", (
+            f"the boundary reader cannot be loaded from {LEDGER_BOUNDARY} ({exc}) — "
+            f"REFUSED: without it `{RULING_BOUNDARY_KEY}` cannot be read, and a leg that "
+            f"judges every ruling against a bound it could not read is the permanent-red "
+            f"behaviour #334 exists to stop"
+        )
+    try:
+        instant, text = reader.declared_boundary(repo, RULING_BOUNDARY_KEY)
+    except reader.SkipGate as exc:
+        return None, "", (
+            f"`{RULING_BOUNDARY_KEY}` is UNDECLARED in this tree ({exc}) — REFUSED: a "
+            f"ruling comment posted before the pairing mechanism could not have carried a "
+            f"row, and this tree has not declared when that mechanism landed, so no "
+            f"instance is judged rather than every instance being judged unbounded"
+        )
+    except reader.GateError as exc:
+        return None, "", (
+            f"`{RULING_BOUNDARY_KEY}` is declared in this tree but cannot be read: "
+            f"{'; '.join(str(p) for p in exc.problems)} — REFUSED: a malformed bound is a "
+            f"DEFECT, never a licence to judge unbounded"
+        )
+    return instant, text, ""
+
+def load_ruling_exemptions(path: Path | None = None) -> tuple[dict[str, dict], list[str]]:
+    """Load the factory's ruling-board exemptions, keyed by the ruling COMMENT id.
+
+    Absent or empty data means no exemptions — the shipped state of a new factory, and the
+    state this file returns to the moment the write path makes a third entry unnecessary.
+    Anything malformed is a problem, never a silent pass: an exemption list that quietly
+    fails to load is indistinguishable from no exemptions, which is the vacuous-pass shape
+    the whole leg exists to catch.
+    """
+    path = RULING_EXEMPTIONS_PATH if path is None else path
+    if not path.is_file():
+        return {}, []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, [f"{path.name}: unreadable or malformed JSON: {exc!r}"]
+    if not isinstance(data, dict):
+        return {}, [f"{path.name}: expected a JSON object with an 'exemptions' list"]
+    raw = data.get("exemptions", [])
+    if not isinstance(raw, list):
+        return {}, [f"{path.name}: 'exemptions' must be a list"]
+    out: dict[str, dict] = {}
+    problems: list[str] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            problems.append(f"{path.name}: exemption #{i} is not an object")
+            continue
+        comment = str(entry.get("comment") or "").strip()
+        if not comment:
+            problems.append(
+                f"{path.name}: exemption #{i} has no `comment` id — the key this leg reads"
+            )
+            continue
+        reason = str(entry.get("reason") or "").strip()
+        proof = str(entry.get("proof") or "").strip()
+        domain = str(entry.get("domain") or "").strip()
+        issue = entry.get("issue")
+        granted = str(entry.get("granted") or "").strip()
+        if not isinstance(issue, int) or not granted:
+            problems.append(
+                f"{path.name}: exemption {comment} must name the `issue` (an int) it was "
+                f"granted over and the `granted` date it was admitted"
+            )
+            continue
+        if not reason or not proof:
+            problems.append(
+                f"{path.name}: exemption {comment} must state both `reason` and `proof`"
+            )
+            continue
+        if domain not in RULING_EXEMPT_DOMAIN:
+            problems.append(
+                f"{path.name}: exemption {comment} declares domain {domain!r}, outside the "
+                f"declared domain {RULING_EXEMPT_DOMAIN}"
+            )
+            continue
+        if comment in out:
+            problems.append(f"{path.name}: exemption {comment} is declared twice")
+            continue
+        out[comment] = entry
+    return out, problems
+
 def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
-                     predicate=None) -> dict:
+                     predicate=None, scope=None, exemptions_path=None) -> dict:
     """The live board-ruling leg: a ruling comment with no `ruling` row is reported (#223).
 
     Population: every board issue carrying a ruling comment — derived AT RUN TIME from the
@@ -938,10 +1107,22 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
 
     NO BACKFILL, by law rather than by omission: a `ruling` row written after the fact is a
     falsified record, so a ruling that was never stamped is a FINDING the leg keeps printing,
-    not one it repairs. The population it examines is stated so tonight's instances are
-    visible as instances rather than silently passed over.
+    not one it repairs. That answers the REPAIR question; #334 added the POPULATION question
+    the leg had left open — a ruling comment posted before the pairing mechanism existed is
+    not a lane ignoring a tool, because the law cannot require a row for an obligation that
+    did not yet exist. So the population is now BOUNDED (a pre-boundary instance is COUNTED
+    and PRINTED as excused, never dropped and never a problem) and the post-boundary instance
+    whose repair NO BACKFILL bars has a lawful exit through a declared exemption surface. The
+    leg's red therefore means "a lane diverged since the mechanism", never "history exists".
+
+    `scope` is `(bound_instant, bound_text, refusal)`. It defaults to the LIVE scope read
+    through the one boundary reader; a probe passes `UNBOUNDED_SCOPE` (the leg's pure shape,
+    every instance judged) or a synthetic bound of its own. `exemptions_path` is injectable
+    for the same reason every other dependency is: a probe must not read the live file.
     """
     predicate = predicate or load_predicate()
+    bound, bound_text, bound_refusal = scope if scope is not None else ruling_board_scope()
+    exempt, exempt_problems = load_ruling_exemptions(exemptions_path)
 
     ruled: set[int] = set()
     arms = {"strict": 0, "declared": 0, "bridged": 0}
@@ -958,9 +1139,20 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             # the leg reports a smaller population than it examined (#243 clause 2).
             unbridgeable.append({"n": row.get("n"), "subject": str(row.get("subject") or "")})
 
-    problems: list[str] = []
+    problems: list[str] = list(exempt_problems)
     examined = 0
+    pre_boundary = 0
+    exempted: list[str] = []
+    matched_exemptions: set[str] = set()
+    undatable: list[int] = []
+    excused: list[str] = []
     unmatched: list[dict] = []
+    if bound_refusal:
+        # A REFUSAL is neither a skip nor a pass: NO instance is judged while the bound is
+        # unreadable, or the unbounded pre-#334 behaviour returns silently. The exemption
+        # surface is not evaluated either — a stale check run over a population that was
+        # never judged would report every entry as stale.
+        problems.append(bound_refusal)
     for issue in issues:
         number = issue.get("number")
         if not isinstance(number, int):
@@ -972,23 +1164,90 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
         # the ruled population would exclude the only population it is for.
         for head in unmatched_heading_comments(issue):
             unmatched.append({"issue": number, "head": head})
-        if ruling_comment(issue) is None:
+        comments = ruling_comments(issue)
+        if not comments:
             continue
+        # The POPULATION is counted even under a refusal: what was not judged must not read
+        # as what was not there (#242).
         examined += 1
-        if number in ruled:
+        if bound_refusal or number in ruled:
+            continue
+        # The INSTANCE is the LATEST accepted ruling comment on the issue: an amendment is a
+        # new ruling act, so reading the first would let a pre-mechanism head excuse a
+        # post-mechanism amendment. An instant this leg cannot date fails CLOSED below.
+        latest: dict | None = None
+        latest_instant: dt.datetime | None = None
+        for candidate in comments:
+            try:
+                instant = reader_parse_ts(str(candidate.get("createdAt") or ""))
+            except (ValueError, TypeError):
+                latest, latest_instant = candidate, None
+                break
+            if latest_instant is None or instant > latest_instant:
+                latest, latest_instant = candidate, instant
+        assert latest is not None
+        comment_id = str(latest.get("id") or "")
+        created = str(latest.get("createdAt") or "")
+        entry = exempt.get(comment_id)
+        if entry is not None:
+            # The lawful exit, PRINTED on every run with its reason: a debt made visible,
+            # never forgiveness.
+            matched_exemptions.add(comment_id)
+            exempted.append(comment_id)
+            excused.append(
+                f"#{number}: EXEMPTED — ruling comment {comment_id or '(no id)'} "
+                f"({created or 'instant unstated'}) is declared in "
+                f"{RULING_EXEMPTIONS_PATH.name}: {entry.get('reason')}"
+            )
+            continue
+        if bound is None:
+            # UNBOUNDED scope: the leg's pure shape, every instance judged.
+            problems.append(
+                f"#{number} carries a ruling comment on the board but the ledger holds no "
+                f"`ruling` row for it (board read at {read_at}) — the ruling's content is on "
+                f"the board, but every other row cites a ruling by `n`, and a ruling with no "
+                f"row has no `n` for a reader to resolve"
+            )
+            continue
+        if latest_instant is None:
+            # FAIL CLOSED: an instant this leg cannot date cannot be placed against the bound
+            # either, and excusing it would trade a false red for a false clean.
+            undatable.append(number)
+            problems.append(
+                f"#{number} carries a ruling comment whose `createdAt` this leg cannot date "
+                f"({created!r}), so it cannot be placed against the declared bound "
+                f"{bound_text!r} either — NOT JUDGED, and never excused as pre-boundary"
+            )
+            continue
+        if latest_instant < bound:
+            pre_boundary += 1
+            excused.append(
+                f"#{number}: the ruling comment ({created}) PREDATES the declared bound "
+                f"{bound_text} for `{RULING_BOUNDARY_KEY}`, so no row could be paired with "
+                f"it — NOT JUDGED, and NEVER backfilled"
+            )
             continue
         problems.append(
-            f"#{number} carries a ruling comment on the board but the ledger holds no "
-            f"`ruling` row for it (board read at {read_at}) — the ruling's content is on "
-            f"the board, but every other row cites a ruling by `n`, and a ruling with no "
-            f"row has no `n` for a reader to resolve"
+            f"#{number} carries a ruling comment ({created}) on the board but the ledger "
+            f"holds no `ruling` row for it, and the comment is at or after the declared "
+            f"bound {bound_text} for `{RULING_BOUNDARY_KEY}` (board read at {read_at}) — the "
+            f"pairing mechanism existed, so this is a lane that diverged from it"
         )
+    if not bound_refusal:
+        for comment_id, entry in exempt.items():
+            if comment_id in matched_exemptions:
+                continue
+            problems.append(
+                f"{RULING_EXEMPTIONS_PATH.name}: exemption {comment_id} "
+                f"(issue #{entry.get('issue', '?')}) matches NO in-scope unruled ruling "
+                f"comment — a stale exemption inflates visible debt while excusing nothing"
+            )
 
     return {
         "name": "board-ruling",
         "status": "ASSERTED",
         "problems": problems,
-        "excused": [],
+        "excused": excused,
         "coverage": {
             "rulings_issued": examined,
             "issues_read": len(issues),
@@ -1002,6 +1261,15 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "rulings_unbridgeable": len(unbridgeable),
             "resolution_arms": arms,
             "unbridgeable_rows": unbridgeable,
+            "bound": bound_text,
+            "bound_refusal": bound_refusal,
+            "bound_key": RULING_BOUNDARY_KEY,
+            "pre_boundary_rulings": pre_boundary,
+            "rulings_undatable": undatable,
+            "exemptions_path": RULING_EXEMPTIONS_PATH.name,
+            "exemptions_declared": len(exempt),
+            "exemptions_matched": sorted(matched_exemptions),
+            "rulings_exempted": exempted,
         },
     }
 
@@ -3926,12 +4194,35 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                         lines.append(f"      ... and {len(member['absent_files']) - 6} more absent")
             lines.append(f"  read at {cov['read_at'] or 'unstated'}")
         elif leg["name"] == "board-ruling":
-            lines.append(
-                f"  rulings issued on the board (openings {', '.join(cov['headings'])}): "
-                f"{cov['rulings_issued']} examined over {cov['issues_read']} "
-                f"issue(s) read, {len(leg['problems'])} problem(s) — board read at "
-                f"{cov['board_read_at']}"
-            )
+            if cov.get("bound_refusal"):
+                lines.append(
+                    f"  rulings issued on the board (openings {', '.join(cov['headings'])}): "
+                    f"{cov['rulings_issued']} examined over {cov['issues_read']} "
+                    f"issue(s) read — NOT JUDGED, the bound is refused — board read at "
+                    f"{cov['board_read_at']}"
+                )
+            else:
+                lines.append(
+                    f"  rulings issued on the board (openings {', '.join(cov['headings'])}): "
+                    f"{cov['rulings_issued']} examined over {cov['issues_read']} "
+                    f"issue(s) read, {len(leg['problems'])} problem(s) — board read at "
+                    f"{cov['board_read_at']}"
+                )
+                # The bound and the exemptions are PRINTED with their basis (#243): an
+                # exclusion that is not printed cannot be told from a miss, and the reader
+                # must see WHICH instant this run judged against, and what it excused,
+                # without opening the source.
+                lines.append(
+                    f"  bound: {cov['bound']} for `{cov['bound_key']}` — "
+                    f"{cov['pre_boundary_rulings']} ruling comment(s) earlier than it are "
+                    f"NOT JUDGED (no row could be paired before the pairing mechanism "
+                    f"existed, and NO BACKFILL bars writing one now)"
+                )
+                lines.append(
+                    f"  exemptions ({cov['exemptions_path']}): "
+                    f"{cov['exemptions_declared']} declared, "
+                    f"{len(cov['exemptions_matched'])} matched this population"
+                )
             # The clause that keeps the alternation honest (#245). The count is printed
             # BESIDE the verdict and the lines follow, so a spelling the predicate could not
             # place is visible on the run that first meets it. The canonical head is named
@@ -3946,6 +4237,14 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             for entry in cov["unmatched_heads"]:
                 lines.append(f"    ~ #{entry['issue']}: {entry['head']}")
+            # A problem counted and never itemised is a problem the operator cannot act on:
+            # the verdict line carries the count, these lines carry the instance.
+            lines.append(f"  excused: {len(leg['excused'])}")
+            lines.append(f"  problems: {len(leg['problems'])}")
+            for problem in leg["problems"]:
+                lines.append(f"    - {problem}")
+            for excuse in leg["excused"]:
+                lines.append(f"    excused: {excuse}")
         elif leg["name"] == "worktree":
             # NOT RUN carries its reason here like the other legs; ASSERTED prints the
             # population, the two hazard classes WITH THEIR PATHS, and an explicit
@@ -4236,6 +4535,8 @@ def main(
     worktree_fn=None,
     presence_fn=None,
     dirty_paths_fn=None,
+    ruling_scope_fn=None,
+    ruling_exemptions_path: Path | None = None,
     out=print,
     err=print,
 ) -> int:
@@ -4270,7 +4571,15 @@ def main(
     shells out to `git status` in the live tree, so a probe that did not stub it would be
     measuring whatever paths this checkout happens to have dirty rather than the leg's
     behaviour. `dirty_paths_fn` returns the dirty path SET; the leg cross-reads the named
-    paths against it."""
+    paths against it.
+
+    The board-ruling leg's BOUND is injected for the ninth and a reason of its own: the leg
+    is bounded by a declaration in this tree (issue #334), and a probe that could only read
+    the live declaration could not exercise a pre-boundary instance, a post-boundary one, or
+    a REFUSED bound at all -- the three behaviours the bound exists to have. `ruling_scope_fn`
+    returns the scope tuple; the live default reads this tree's declaration through the one
+    boundary reader. `ruling_exemptions_path` is injected for the same reason: a probe must
+    not have its verdict decided by whatever exemptions the live factory happens to hold."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -4303,7 +4612,11 @@ def main(
         board_intake_leg(issues, rows, predicate=predicate),
         board_close_leg(issues, rows, read_at=read_at),
         board_closed_leg(issues, rows, read_at=read_at, predicate=predicate),
-        board_ruling_leg(issues, rows, read_at=read_at, predicate=predicate),
+        board_ruling_leg(
+            issues, rows, read_at=read_at, predicate=predicate,
+            scope=(ruling_scope_fn or ruling_board_scope)(),
+            exemptions_path=ruling_exemptions_path,
+        ),
         cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
         ),

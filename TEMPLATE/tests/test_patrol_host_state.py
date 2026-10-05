@@ -85,6 +85,13 @@ RUNNER = load_runner()
 # the surface under test would be feeding its own fixtures to the next run.
 _EMPTY_LOG_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-log-"))
 
+# A path under a fresh temp dir that is deliberately NEVER created: the board-ruling leg's
+# exemption table defaults to it, so a probe that does not pass a table of its own cannot
+# have its verdict decided by the exemptions the LIVE factory happens to hold (issue #334).
+_NO_RULING_EXEMPTIONS = (
+    Path(tempfile.mkdtemp(prefix="patrol-no-exempt-")) / "ruling-board-exemptions.json"
+)
+
 
 def _issue(number: int, state: str) -> dict:
     return {"number": number, "state": state, "title": f"issue {number}",
@@ -130,7 +137,7 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
-         dirty_paths_fn=None):
+         dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -148,6 +155,18 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
 
     The kit-drift leg's two manifests are injected for the fourth time and for the same
     reason, which the probes here had been quietly living without (see `_probe_kit_pair`).
+
+    The board-ruling leg's bound and exemption table are injected for the fifth time and for
+    the sharpest version of the same reason (issue #334): the leg is now BOUNDED by a
+    declaration in this tree, so a probe that read the live declaration would be asserting
+    this factory's own history rather than the leg's behaviour — and every probe written
+    before the bound existed would silently change meaning, because an instance its fixture
+    places before 2026-10-02 would stop being judged. So the default here is the leg's
+    UNBOUNDED shape, which is exactly what those probes asserted when they were written, and
+    the exemption table defaults to a path that does not exist — no probe's verdict may be
+    decided by whatever exemptions the live factory happens to hold. A probe that asserts the
+    bound passes `ruling_scope`; one that asserts the exemption surface passes
+    `ruling_exemptions_path`.
     """
     cron_rows = [] if cron_rows is None else cron_rows
     homes = ["probe-home"] if homes is None else homes
@@ -178,6 +197,19 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # cross-read against whatever THIS checkout happens to have dirty. A probe that
         # asserts the cross-read passes a `dirty_paths_fn` of its own.
         dirty_paths_fn=dirty_paths_fn or (lambda: set()),
+        # The board-ruling leg's bound (issue #334): the leg's pure, UNBOUNDED shape is the
+        # default, so every probe written before the bound existed keeps the meaning it was
+        # written with. A probe that asserts the bound passes `ruling_scope`.
+        ruling_scope_fn=(
+            (lambda: ruling_scope) if ruling_scope is not None
+            else (lambda: RUNNER.UNBOUNDED_SCOPE)
+        ),
+        # ... and a path that does not exist, so no probe's verdict is decided by the live
+        # factory's own exemption table.
+        ruling_exemptions_path=(
+            _NO_RULING_EXEMPTIONS if ruling_exemptions_path is None
+            else ruling_exemptions_path
+        ),
     )
     return rc, out.getvalue(), err.getvalue()
 
@@ -3098,7 +3130,9 @@ def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> No
     # ...and the leg's coverage carries them, so the print is not the only reader.
     issues = [_issue_with_comments(1, "OPEN", "## RULED — a ruling.\n")]
     rows = [ruling, {"n": 902, "event": "intake", "subject": "#1", "detail": "intake"}]
-    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred,
+                                  scope=RUNNER.UNBOUNDED_SCOPE,
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
     cov = leg["coverage"]
     assert cov["rulings_unbridgeable"] == 1, cov
     assert cov["unbridgeable_rows"] == [{"n": 901, "subject": "no-issue-anywhere"}], cov
@@ -3118,11 +3152,15 @@ def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
     dispatch = {"n": 546, "event": "dispatch", "subject": "#85", "detail": "Ruling n=545"}
 
     with_bridge = RUNNER.board_ruling_leg(issues, [ruling, dispatch], read_at="probe",
-                                          predicate=pred)
+                                          predicate=pred,
+                                          scope=RUNNER.UNBOUNDED_SCOPE,
+                                          exemptions_path=_NO_RULING_EXEMPTIONS)
     assert with_bridge["problems"] == [], with_bridge["problems"]
 
     # Remove ONLY the bridge row: the same fixture must now report the false-unruled item.
-    without = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred)
+    without = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred,
+                                      scope=RUNNER.UNBOUNDED_SCOPE,
+                                      exemptions_path=_NO_RULING_EXEMPTIONS)
     assert len(without["problems"]) == 1, without["problems"]
     assert "#85 carries a ruling comment" in without["problems"][0], without["problems"]
 
@@ -3178,7 +3216,9 @@ def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
     rows = _rows(("intake", "#7", 1), ("ruling", "#7", 4), ("intake", "#8", 2),
                  ("ruling", "#8", 3))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
-                                  predicate=RUNNER.load_predicate())
+                                  predicate=RUNNER.load_predicate(),
+                                  scope=RUNNER.UNBOUNDED_SCOPE,
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
     cov = leg["coverage"]
     assert cov["unmatched_heads"] == [{"issue": 7, "head": "## DISPOSITION — a spelling nobody has used yet."}], cov["unmatched_heads"]
     assert cov["unmatched_heads_examined"] == 1, cov
@@ -3215,7 +3255,9 @@ def test_the_counter_counts_ISSUES_not_COMMENTS() -> None:
     # board-unruled leg quiet over a fixture that is about the ruling leg.
     rows = _rows(("intake", "#75", 1), ("ruling", "#75", 2), ("intake", "#76", 3),
                  ("ruling", "#76", 4))
-    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=RUNNER.load_predicate())
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=RUNNER.load_predicate(),
+                                  scope=RUNNER.UNBOUNDED_SCOPE,
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
     assert leg["coverage"]["rulings_issued"] == 1, (
         f"two ruling comments on ONE issue are ONE ruling: {leg['coverage']!r}"
     )
@@ -3241,7 +3283,9 @@ def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> Non
     issues = [_issue_with_comments(133, "OPEN", "## Amendment — the item is ruled here.\n")]
     rows = _rows(("intake", "#133", 846), ("dispatch", "#133", 847))
 
-    widened = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+    widened = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred,
+                                      scope=RUNNER.UNBOUNDED_SCOPE,
+                                      exemptions_path=_NO_RULING_EXEMPTIONS)
     assert widened["coverage"]["rulings_issued"] == 1, widened["coverage"]
     assert len(widened["problems"]) == 1, widened["problems"]
     assert "#133 carries a ruling comment" in widened["problems"][0], widened["problems"]
@@ -3249,11 +3293,278 @@ def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> Non
     saved = RUNNER.RULING_HEADINGS
     RUNNER.RULING_HEADINGS = ("## RULED", "## RULING")
     try:
-        narrowed = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
+        narrowed = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred,
+                                       scope=RUNNER.UNBOUNDED_SCOPE,
+                                       exemptions_path=_NO_RULING_EXEMPTIONS)
     finally:
         RUNNER.RULING_HEADINGS = saved
     assert narrowed["coverage"]["rulings_issued"] == 0, narrowed["coverage"]
     assert narrowed["problems"] == [], narrowed["problems"]
+
+# --- #334: the board-ruling leg's BOUND and its exemption surface ------------------
+#
+# The leg asserts that a ruling comment has its paired ledger `ruling` row. Until #334 it
+# had no bound, so 12 pre-mechanism comments were PERMANENT problems, and no exemption
+# surface, so its one post-mechanism instance had no lawful exit. Every instant below is
+# derived from THIS tree's declaration through the same reader the leg uses — never the
+# kit's literal — because this file ships byte-identical to its TEMPLATE twin and in that
+# half "this factory" is the ADOPTING MEMBER (#78 clause b).
+
+_RULING_BOUND = _tree_bound(RUNNER.RULING_BOUNDARY_KEY, "2026-10-02T18:07:38Z")
+_RULING_PRE = _plus(_RULING_BOUND, -2.0)
+_RULING_POST = _plus(_RULING_BOUND, 2.0)
+
+def _scope_at(text: str) -> tuple:
+    """A synthetic bound at `text`, in the tuple shape the leg consumes."""
+    instant = dt.datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+    return (instant, text, "")
+
+def _ruling_issue(number: int, created: str, *, body: str = "## RULED — a ruling.\n",
+                  comment_id: str | None = None, state: str = "OPEN") -> dict:
+    """A board issue carrying ONE ruling comment posted at `created`.
+
+    `state` is a parameter because two different fixtures are needed. A leg-only probe uses
+    OPEN; a probe driven through `main()` uses CLOSED, because an OPEN item carrying an
+    `intake` row and no `ruling` row is the #332 board-unruled leg's own population, and a
+    run that is red for THAT reason would make this file's assertions statements about
+    another leg.
+    """
+    issue = _issue(number, state)
+    issue["comments"] = [{
+        "id": comment_id or f"IC_probe_{number}",
+        "body": body,
+        "author": {"login": "leshchenko1979"},
+        "createdAt": created,
+    }]
+    return issue
+
+def _exemptions_file(tmp: str, *entries: dict) -> Path:
+    """A throwaway exemption table, so no probe reads the live factory's own."""
+    path = Path(tmp) / "ruling-board-exemptions.json"
+    path.write_text(json.dumps({"_note": "probe", "exemptions": list(entries)}),
+                    encoding="utf-8")
+    return path
+
+def _exemption(comment: str, issue: int, **over) -> dict:
+    entry = {
+        "comment": comment, "issue": issue, "created": _RULING_POST,
+        "granted": "2026-10-05",
+        "domain": RUNNER.RULING_EXEMPT_DOMAIN[0],
+        "reason": "probe: NO BACKFILL bars the only repair",
+        "proof": "probe: the comment exists and no `ruling` row names the issue",
+    }
+    entry.update(over)
+    return entry
+
+def test_the_ruling_bound_EXCUSES_a_pre_boundary_comment_and_JUDGES_a_post_boundary_one() -> None:
+    """Acceptance (d), as a NON-VACUITY pair: one fixture, two instants, two verdicts.
+
+    The leg's red must mean "a lane diverged since the mechanism", never "history exists".
+    The same issue and the same ledger are driven twice with the ONLY difference the ruling
+    comment's own `createdAt` — so the verdict is attributable to the bound and not to the
+    fixture, which is the shape #243's bridge control used.
+    """
+    rows = _rows(("intake", "#1", 1))
+    scope = _scope_at(_RULING_BOUND)
+
+    pre = RUNNER.board_ruling_leg([_ruling_issue(1, _RULING_PRE)], rows, read_at="probe",
+                                  scope=scope, exemptions_path=_NO_RULING_EXEMPTIONS)
+    assert pre["problems"] == [], pre["problems"]
+    # COUNTED, never dropped: a pre-boundary instance that vanished from the population
+    # would be indistinguishable from one that was never on the board (#242).
+    assert pre["coverage"]["rulings_issued"] == 1, pre["coverage"]
+    assert pre["coverage"]["pre_boundary_rulings"] == 1, pre["coverage"]
+    assert pre["coverage"]["bound"] == _RULING_BOUND, pre["coverage"]
+    assert len(pre["excused"]) == 1, pre["excused"]
+    assert "PREDATES the declared bound" in pre["excused"][0], pre["excused"]
+    assert "NEVER backfilled" in pre["excused"][0], pre["excused"]
+
+    post = RUNNER.board_ruling_leg([_ruling_issue(1, _RULING_POST)], rows, read_at="probe",
+                                   scope=scope, exemptions_path=_NO_RULING_EXEMPTIONS)
+    assert len(post["problems"]) == 1, post["problems"]
+    assert "#1 carries a ruling comment" in post["problems"][0], post["problems"]
+    assert "a lane that diverged from it" in post["problems"][0], post["problems"]
+    assert post["coverage"]["pre_boundary_rulings"] == 0, post["coverage"]
+
+def test_the_ruling_bound_reads_the_LATEST_accepted_comment_not_the_first() -> None:
+    """The false-clean control for the instance's instant.
+
+    An issue ruled BEFORE the mechanism and amended AFTER it carries two ruling acts. Dating
+    the instance by the FIRST comment would excuse the post-mechanism amendment — a false
+    clean, which is the worse half of the #248 class. The fixture is exactly that issue, and
+    the assertion is that it is JUDGED.
+    """
+    issue = _issue(7, "OPEN")
+    issue["comments"] = [
+        {"id": "IC_pre", "body": "## RULED — the original.\n",
+         "author": {"login": "leshchenko1979"}, "createdAt": _RULING_PRE},
+        {"id": "IC_post", "body": "## RULED — amended.\n",
+         "author": {"login": "leshchenko1979"}, "createdAt": _RULING_POST},
+    ]
+    leg = RUNNER.board_ruling_leg([issue], _rows(("intake", "#7", 1)), read_at="probe",
+                                  scope=_scope_at(_RULING_BOUND),
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert f"({_RULING_POST})" in leg["problems"][0], leg["problems"]
+    assert leg["coverage"]["pre_boundary_rulings"] == 0, leg["coverage"]
+
+def test_the_ruling_leg_REFUSES_rather_than_judging_UNBOUNDED() -> None:
+    """An unreadable bound is neither a skip nor a pass — and it is not the old behaviour.
+
+    A REFUSAL must judge NOTHING: judging every instance against no bound is exactly the
+    permanent red #334 removes, and silently returning to it is the failure mode this arm
+    pins. The population is still counted, so a refused run cannot read as an empty board.
+    """
+    refusal = "`ruling_writer_landed` is UNDECLARED — REFUSED: probe"
+    leg = RUNNER.board_ruling_leg([_ruling_issue(1, _RULING_POST)], _rows(("intake", "#1", 1)),
+                                  read_at="probe", scope=(None, "", refusal),
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
+    assert leg["problems"] == [refusal], leg["problems"]
+    assert leg["coverage"]["rulings_issued"] == 1, leg["coverage"]
+    assert leg["coverage"]["bound_refusal"] == refusal, leg["coverage"]
+    assert leg["excused"] == [], leg["excused"]
+
+    rc, out, _ = _run([_ruling_issue(1, _RULING_POST, state="CLOSED")],
+                      _rows(("intake", "#1", 1), ("close", "#1", 2)),
+                      ruling_scope=(None, "", refusal))
+    assert rc == 1, (rc, out[-2000:])
+    assert "NOT JUDGED, the bound is refused" in out, out[-3000:]
+
+def test_the_ruling_bound_is_FACTORY_DATA_read_through_the_ONE_reader() -> None:
+    """The instant is declared factory data, never a second constant in a shipped file.
+
+    The runner is paired byte-identically with its TEMPLATE copy, so a date written inside it
+    would judge a member tree against this factory's history — the same reason the
+    boundary-reading gates declare theirs. The grep is the whole probe: no instant of the
+    bound may appear in the runner, and the key must resolve through `tests/ledger_boundary.py`.
+    """
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+    assert "2026-10-02T18:07:38" not in source, (
+        "the bound instant is hardcoded in the leg; it belongs in docs/ledger-invariants.json")
+    assert RUNNER.RULING_BOUNDARY_KEY == "ruling_writer_landed", source
+    reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
+    try:
+        _instant, text = reader.declared_boundary(REPO, RUNNER.RULING_BOUNDARY_KEY)
+    except reader.SkipGate as exc:
+        _declared_skip("the bound is factory data", str(exc))
+        return
+    except reader.GateError as exc:
+        raise AssertionError(f"the boundary declaration is unreadable: {exc}") from exc
+    assert text == _RULING_BOUND, f"the probes and the live declaration disagree: {text}"
+
+def test_the_leg_PRINTS_the_bound_and_the_pre_boundary_count() -> None:
+    """A bound that never reaches the report is a bound nobody can audit.
+
+    Driven through `main()`, because the print is the property — an exclusion that is not
+    printed cannot be told from a miss.
+    """
+    issues = [_ruling_issue(1, _RULING_PRE, state="CLOSED")]
+    rows = _rows(("intake", "#1", 1), ("close", "#1", 2))
+    rc, out, err = _run(issues, rows, ruling_scope=_scope_at(_RULING_BOUND))
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert rc == 0, (rc, section, err)
+    assert f"bound: {_RULING_BOUND} for `ruling_writer_landed`" in section, section
+    assert "1 ruling comment(s) earlier than it are NOT JUDGED" in section, section
+    assert "excused: 1" in section, section
+    assert "PREDATES the declared bound" in section, section
+
+def test_an_exemption_EXCUSES_a_post_boundary_instance_and_is_PRINTED() -> None:
+    """The one lawful exit, and it is a VISIBLE debt rather than forgiveness.
+
+    The instance is post-boundary, so the bound cannot excuse it; the exemption table can,
+    and the run must say so on the same line it would otherwise carry the problem.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        issues = [_ruling_issue(282, _RULING_POST, comment_id="IC_probe_282",
+                                state="CLOSED")]
+        rows = _rows(("intake", "#282", 1), ("close", "#282", 2))
+        path = _exemptions_file(tmp, _exemption("IC_probe_282", 282))
+
+        leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
+                                      scope=_scope_at(_RULING_BOUND), exemptions_path=path)
+        assert leg["problems"] == [], leg["problems"]
+        assert leg["coverage"]["exemptions_declared"] == 1, leg["coverage"]
+        assert leg["coverage"]["exemptions_matched"] == ["IC_probe_282"], leg["coverage"]
+        assert len(leg["excused"]) == 1 and "EXEMPTED" in leg["excused"][0], leg["excused"]
+        assert "NO BACKFILL bars the only repair" in leg["excused"][0], leg["excused"]
+
+        rc, out, _ = _run(issues, rows, ruling_scope=_scope_at(_RULING_BOUND),
+                          ruling_exemptions_path=path)
+        section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+        assert rc == 0, (rc, section)
+        assert "exemptions (ruling-board-exemptions.json): 1 declared, 1 matched" in section, section
+        assert "EXEMPTED" in section, section
+
+def test_an_exemption_is_KEYED_on_the_comment_so_a_new_ruling_cannot_inherit_it() -> None:
+    """The key's whole point, as a NON-VACUITY control.
+
+    A ruling is a COMMENT. Exempting by issue number would let a FUTURE ruling on the same
+    issue inherit a grant made for a different act — the exact defect class this repo keeps
+    filing. Here the table names the comment, and the board carries a DIFFERENT one on the
+    same issue: the instance is judged, and the unmatched entry is reported as stale debt.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        issues = [_ruling_issue(282, _RULING_POST, comment_id="IC_probe_NEW")]
+        rows = _rows(("intake", "#282", 1))
+        path = _exemptions_file(tmp, _exemption("IC_probe_OLD", 282))
+
+        leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
+                                      scope=_scope_at(_RULING_BOUND), exemptions_path=path)
+        assert len(leg["problems"]) == 2, leg["problems"]
+        assert any("#282 carries a ruling comment" in p for p in leg["problems"]), leg["problems"]
+        assert any("matches NO in-scope unruled ruling comment" in p for p in leg["problems"]), (
+            leg["problems"])
+        assert leg["excused"] == [], leg["excused"]
+
+def test_a_MALFORMED_exemption_is_a_PROBLEM_never_a_silent_pass() -> None:
+    """Every malformed shape is reported: an entry that quietly fails to load is
+    indistinguishable from no exemptions, which is the vacuous-pass shape this leg exists
+    to catch."""
+    cases = {
+        "no comment key": {"issue": 1, "granted": "2026-10-05",
+                           "domain": RUNNER.RULING_EXEMPT_DOMAIN[0], "reason": "r", "proof": "p"},
+        "no reason": {"comment": "IC_x", "issue": 1, "granted": "2026-10-05",
+                      "domain": RUNNER.RULING_EXEMPT_DOMAIN[0], "proof": "p"},
+        "no proof": {"comment": "IC_x", "issue": 1, "granted": "2026-10-05",
+                     "domain": RUNNER.RULING_EXEMPT_DOMAIN[0], "reason": "r"},
+        "no issue": {"comment": "IC_x", "granted": "2026-10-05",
+                     "domain": RUNNER.RULING_EXEMPT_DOMAIN[0], "reason": "r", "proof": "p"},
+        "foreign domain": {"comment": "IC_x", "issue": 1, "granted": "2026-10-05",
+                           "domain": "something else", "reason": "r", "proof": "p"},
+    }
+    for label, entry in cases.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _exemptions_file(tmp, entry)
+            leg = RUNNER.board_ruling_leg([_ruling_issue(1, _RULING_POST)],
+                                          _rows(("intake", "#1", 1)), read_at="probe",
+                                          scope=_scope_at(_RULING_BOUND), exemptions_path=path)
+            assert leg["coverage"]["exemptions_declared"] == 0, (label, leg["coverage"])
+            assert leg["problems"], f"{label}: a malformed entry must be a problem"
+            assert any("ruling-board-exemptions.json" in p for p in leg["problems"]), (
+                label, leg["problems"])
+            assert leg["excused"] == [], (label, leg["excused"])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        broken = Path(tmp) / "ruling-board-exemptions.json"
+        broken.write_text("not json {{{", encoding="utf-8")
+        leg = RUNNER.board_ruling_leg([_ruling_issue(1, _RULING_POST)],
+                                      _rows(("intake", "#1", 1)), read_at="probe",
+                                      scope=_scope_at(_RULING_BOUND), exemptions_path=broken)
+        assert any("unreadable or malformed JSON" in p for p in leg["problems"]), leg["problems"]
+
+def test_an_absent_exemption_table_means_NO_exemptions_and_is_not_a_problem() -> None:
+    """A new factory ships no table at all, and that is a legitimate state, not a defect.
+
+    The counterpart to the malformed arm: absent means empty, and the leg still judges the
+    population. Without this arm a leg that reported a missing file would red every factory
+    that has never needed one.
+    """
+    leg = RUNNER.board_ruling_leg([_ruling_issue(1, _RULING_POST)], _rows(("intake", "#1", 1)),
+                                  read_at="probe", scope=_scope_at(_RULING_BOUND),
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
+    assert leg["coverage"]["exemptions_declared"] == 0, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "#1 carries a ruling comment" in leg["problems"][0], leg["problems"]
 
 # --- #220: the worktree leg — the object class the cleanliness instrument excludes ---
 
@@ -3387,6 +3698,8 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg, worktree_fn=_stub,
+        ruling_scope_fn=lambda: RUNNER.UNBOUNDED_SCOPE,
+        ruling_exemptions_path=_NO_RULING_EXEMPTIONS,
     )
     text = out.getvalue()
     assert rc == 0, text
