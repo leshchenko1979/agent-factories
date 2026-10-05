@@ -205,6 +205,20 @@ def load_exemptions(root: Path) -> tuple[dict | None, str | None]:
     box's measurements. The declaration surface is FACTORY DATA, and the fact that it made
     the `commit-msg` port cheap for one factory (measured, miidas) is why the fork is a
     declaration rather than a source edit.
+
+    THIS IS A LOADER, NEVER A JUDGE. It returns the RAW `exempt` list and admits nothing:
+    the ADMISSION PREDICATE — the filter that keeps only entries carrying a `path` (or a
+    bare string) — lives inside `undeclared_divergence()`, which is where a declaration
+    becomes honoured. So a caller that wants the DECLARED COUNT must read it off that
+    judgement (`undeclared_divergence(pin, root)["declared"]`) and must NOT count this list
+    itself: the raw list and the admitted set are different populations, and a second count
+    is the divergence docs/instruments/kit.md §6.5 forbids (F5, issue #263 — `tools/kit_census.py`
+    reported the raw `len(exempt)` and counted an entry this predicate drops).
+
+    THE PROBLEM STRING IS NOT A VERDICT ON EMPTINESS. A MISSING file and an UNREADABLE one
+    both return a non-empty problem here, so "there is no exemptions file" cannot be
+    inferred from a problem alone — a caller that tried would misread the common
+    no-declarations case as a failure. Test the file's presence on the filesystem first.
     """
     p = root / EXEMPTIONS_REL
     if not p.is_file():

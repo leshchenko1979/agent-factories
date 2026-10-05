@@ -42,6 +42,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
+import kit_pin  # noqa: E402  (the pin's ONE judgement path; insert must precede it)
 import patrol_host_state as P  # noqa: E402  (path insert must precede it)
 
 EVIDENCE = REPO / "evidence"
@@ -284,6 +285,22 @@ def pin_state(root: str) -> dict:
     fills in as members adopt, which is why the census renders it rather than describing
     the intent. A member with no pin has no figure of its own at all — the fleet figure
     below is against OUR manifest and moves when WE move.
+
+    THE COUNT IS THE PIN'S OWN JUDGEMENT, never a second reading of the file. F5 (#263) was
+    this function opening `kit-exemptions.json` itself and reporting `len(exempt)`, while
+    the judgement path (`kit_pin.undeclared_divergence`) admits only entries that carry a
+    `path` (or a bare string). An entry the pin IGNORES was still COUNTED, so a member read
+    a declaration its own gate then reds on — docs/instruments/kit.md §6.5 part 3, lawful at the
+    write path
+    and unknown at `verify`. The count now comes off the verdict's own `declared`, so ONE
+    computation serves the report and the judgement and the two cannot disagree.
+
+    UNREADABLE IS NOT ZERO, and the three states are three. A member with no pin is not
+    vendored; a member whose exemptions file is ABSENT has declared nothing (0); a member
+    whose file EXISTS but cannot be judged reads None plus a `why`. The verdict reports
+    `declared` 0 in the unreadable case too, so the `exemption_problem` it also carries is
+    what tells the two apart — dropping it would trade the over-count this fix removes for
+    an absent-vs-zero lie.
     """
     r = Path(root)
     pin = r / "registry" / "kit.json"
@@ -293,14 +310,17 @@ def pin_state(root: str) -> dict:
         out["why"] = "no registry/kit.json in the member's tree"
         return out
     if not ex.is_file():
+        # The empty state, read from the filesystem rather than inferred from a problem
+        # string: the pin admits none of a list that is not there.
         out["exemptions"] = 0
         return out
-    try:
-        d = json.loads(ex.read_text())
-        out["exemptions"] = len(d.get("exempt") or [])
-    except (OSError, json.JSONDecodeError) as exc:
+    loaded, _pin_problem = kit_pin.load_pin(pin)
+    verdict = kit_pin.undeclared_divergence(loaded if loaded is not None else {}, r)
+    if verdict.get("exemption_problem"):
         out["exemptions"] = None
-        out["why"] = f"exemptions unreadable: {exc}"
+        out["why"] = f"exemptions unreadable: {verdict['exemption_problem']}"
+    else:
+        out["exemptions"] = int(verdict.get("declared") or 0)
     return out
 
 
