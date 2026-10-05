@@ -12,3 +12,19 @@ Source: `reviews/20260927-c1/state.json` → `codification_plan` (disposition=ro
 - home / change site: `the review-rotation lane — re-run lens P under the receipt discipline (durable fix is P-1)`
 - recorded_at: 2026-10-04T22:14:23Z
 
+---
+
+**Added 2026-10-05 (re-route).** Two DOC halves, re-routed from the fleet-instruments batch whose
+`home` named a tool surface. The code half of each is the Worker lane's (`worker.md`); this is the
+`docs/review-lenses.md` alternative, and that file is authored `d6cfd3f7` (this lane).
+
+## 3. Lens C Finding 4 (MEDIUM): No tool-invocation telemetry exists for this factory's own CLI surface (doc half)
+- change site: `docs/review-lenses.md:77` (lens-C scope)
+- code half: `tools/*.py` oc_log shim → Worker
+- recorded_at: 2026-10-04T22:13:28Z
+
+## 4. Lens F Finding 6 (MEDIUM): Exit-code collapse — no failure path exits a distinct non-zero code (doc half)
+- change site: `docs/review-lenses.md:93` (exit-code convention)
+- code half: define named exit constants per refusal class → Worker
+- recorded_at: 2026-10-04T22:13:45Z
+
