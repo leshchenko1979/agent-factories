@@ -39,6 +39,162 @@ VERSION = "2.0.0"
 _VERBS = ("ask", "answer", "amend", "withdraw", "list", "publish", "lint",
           "gc", "notify", "redeliver")
 
+# =============================================================================
+# FLAG_SPEC — the ONE declaration of what each verb accepts (#709).
+#
+# Before this table every cmd_* hand-declared its flags inline, and the
+# dynamic-tool bridge (tools/state/oc_questions_tool.py) hand-maintained a
+# SECOND, independent map of the same thing. The two drifted: `list` accepts
+# --factory, the bridge's map did not carry it, so `list factory=X` returned
+# EVERY factory's questions and read as a filtered answer. A hand-kept mirror
+# of a parser is a defect generator; this table IS the parser, each handler
+# reads it, and `--schema` publishes it so the bridge derives its argv instead
+# of guessing.
+#
+# `positional` is documentation for a reader and a check for the selftest; the
+# handlers still own their own arity errors.
+# =============================================================================
+FLAG_SPEC = {
+    "ask": {
+        "valued": {
+            "factory": "--factory", "session": "--session",
+            "questions_file": "--questions-file",
+            "questions_json": "--questions-json", "title": "--title",
+            "description": "--description", "option": "--option",
+            "recommended": "--recommended", "ttl_days": "--ttl-days",
+            "subject": "--subject", "close_when": "--close-when",
+            "kind": "--kind", "allow_foreign": "--allow-foreign",
+        },
+        "boolean": {
+            "no_clarify": "--no-clarify", "json": "--json",
+            "no_publish": "--no-publish", "multi": "--multi",
+        },
+        "positional": "none",
+    },
+    "answer": {
+        "valued": {"text": "--text", "via": "--via", "by": "--by"},
+        "boolean": {
+            "json": "--json", "clarify": "--clarify",
+            "no_publish": "--no-publish", "notify": "--notify",
+        },
+        "positional": "<set-id> <qid> [choice-index]",
+    },
+    "amend": {
+        "valued": {
+            "set_id": "--set", "qid": "--qid", "title": "--title",
+            "description": "--description", "option": "--option",
+            "recommended": "--recommended", "by": "--by",
+        },
+        "boolean": {"json": "--json", "clear_options": "--clear-options"},
+        "positional": "none",
+    },
+    "withdraw": {
+        "valued": {
+            "set_id": "--set", "qid": "--qid", "text": "--text", "by": "--by",
+        },
+        "boolean": {"json": "--json", "no_publish": "--no-publish"},
+        "positional": "none",
+    },
+    "list": {
+        "valued": {
+            "lane": "--lane", "session": "--session", "factory": "--factory",
+        },
+        "boolean": {"json": "--json", "all": "--all", "quiet": "--quiet"},
+        "positional": "none",
+    },
+    "publish": {
+        # set_id is DELIBERATELY absent: the page carries every open set, and
+        # cmd_publish refuses --set by name. The bridge used to advertise
+        # set_id for publish, so a caller's `set_id` became `--set` and died
+        # rc=2 -- the schema/CLI mismatch in #709.
+        "valued": {"action": "--action"},
+        "boolean": {"json": "--json", "prune": "--prune"},
+        "positional": "none",
+    },
+    "lint": {
+        "valued": {},
+        "boolean": {"json": "--json"},
+        "positional": "none",
+    },
+    "gc": {
+        "valued": {},
+        "boolean": {
+            "json": "--json", "dry_run": "--dry-run",
+            "no_publish": "--no-publish", "archive_closed": "--archive-closed",
+        },
+        "positional": "none",
+    },
+    "notify": {
+        "valued": {
+            "set_id": "--set", "lane": "--lane", "qid": "--qid",
+            "mode": "--mode",
+        },
+        "boolean": {"json": "--json", "dry_run": "--dry-run"},
+        "positional": "[set-id]",
+    },
+    "redeliver": {
+        "valued": {"max_attempts": "--max-attempts", "mode": "--mode"},
+        "boolean": {
+            "pending": "--pending", "json": "--json", "dry_run": "--dry-run",
+        },
+        "positional": "none",
+    },
+}
+
+
+def flag_spec(verb):
+    """(valued_flags, boolean_flags) for one verb, from the ONE table (#709).
+
+    The handlers want FLAG NAMES; the bridge wants the param->flag MAP. Both
+    come from the same table -- `flag_spec` flattens it, `schema_payload`
+    publishes it whole.
+    """
+    spec = FLAG_SPEC[verb]
+    return list(spec["valued"].values()), list(spec["boolean"].values())
+
+
+# Which params arrive as POSITIONAL arguments rather than as flags, and whether
+# each is required. The CLI publishes this machine-readably so the bridge does
+# not have to parse the human `positional` string -- a hand-kept mirror of a
+# parser is the defect class #709 is about, and a positional is as much a part
+# of the contract as a flag. `answer` takes its choice as a third positional
+# when one is given; `notify` may address a set positionally.
+POSITIONAL_PARAMS = {
+    "answer": [("set_id", True), ("qid", True), ("choice", False)],
+    "notify": [("set_id", False)],
+}
+
+
+def schema_payload():
+    """The machine-readable flag schema, for the dynamic-tool bridge (#709).
+
+    `valued`/`boolean` are param->flag MAPS, not bare flag lists: the bridge
+    cannot recover `set_id` -> `--set` from a flag name alone, and guessing it
+    with a dash rule is how a caller's param goes missing. `store` is published
+    so a caller can watch the register across a call: the bridge uses it to
+    tell a timed-out write that LANDED from one that never started, instead of
+    reporting a bare failure over a settled mutation.
+    """
+    return {
+        "prog": PROG,
+        "version": VERSION,
+        "verbs": {
+            verb: {
+                "valued": dict(spec["valued"]),
+                "boolean": dict(spec["boolean"]),
+                "positional": spec["positional"],
+                "positional_params": [
+                    {"name": name, "required": required}
+                    for name, required in POSITIONAL_PARAMS.get(verb, [])
+                ],
+            }
+            for verb, spec in FLAG_SPEC.items()
+        },
+        "store": store_path(),
+        "archive": archive_path(),
+    }
+
+
 DEFAULT_TTL_DAYS = 7
 
 # The issue tracker the mechanical-closure check (C6) asks whether the thing a
@@ -1062,14 +1218,7 @@ def questions_from_flags(flags):
 # ask — register an ordered question set (the single-writer cycle)
 # =============================================================================
 def cmd_ask(argv):
-    _, flags = parse_flags(
-        argv,
-        valued=["--factory", "--session", "--questions-file", "--questions-json",
-                "--title", "--description", "--option", "--recommended",
-                "--ttl-days", "--subject", "--close-when", "--kind",
-                "--allow-foreign"],
-        boolean=["--no-clarify", "--json", "--no-publish", "--multi"],
-    )
+    _, flags = parse_flags(argv, *flag_spec("ask"))
     # --lane was REMOVED (owner order 2026-09-25): the lane is resolved from the
     # asking session's own binding, so a caller cannot mislabel itself. parse_flags
     # rejects it as an unknown flag, rc 2.
@@ -1265,8 +1414,7 @@ def cmd_ask(argv):
 # list — every parked decision, OLDEST FIRST (that ordering is the instrument)
 # =============================================================================
 def cmd_list(argv):
-    _, flags = parse_flags(argv, valued=["--lane", "--session", "--factory"],
-                           boolean=["--json", "--all", "--quiet"])
+    _, flags = parse_flags(argv, *flag_spec("list"))
     with RegisterLock():
         data = read_register()
     all_sets = data["sets"]
@@ -1418,11 +1566,7 @@ def archive_entries(data, entries):
 # answer — record an answer against ONE question (card tap or page submit)
 # =============================================================================
 def cmd_answer(argv):
-    positional, flags = parse_flags(
-        argv,
-        valued=["--text", "--via", "--by"],
-        boolean=["--json", "--clarify", "--no-publish", "--notify"],
-    )
+    positional, flags = parse_flags(argv, *flag_spec("answer"))
     if len(positional) < 2:
         die(2, "answer requires <set-id> <question-id> [choice-index|clarify]")
     set_id, qid = positional[0], positional[1]
@@ -1605,10 +1749,7 @@ def cmd_answer(argv):
 # amend edits the question and returns it to "open", so the loop closes.
 # =============================================================================
 def cmd_amend(argv):
-    _, flags = parse_flags(argv, valued=["--set", "--qid", "--title",
-                                         "--description", "--option",
-                                         "--recommended", "--by"],
-                           boolean=["--json", "--clear-options"])
+    _, flags = parse_flags(argv, *flag_spec("amend"))
     set_id = (flags.get("--set") or "").strip()
     qid = (flags.get("--qid") or "").strip()
     if not set_id or not qid:
@@ -1695,8 +1836,7 @@ def cmd_amend(argv):
 # asker cannot correct is the noise it exists to remove.
 # =============================================================================
 def cmd_withdraw(argv):
-    _, flags = parse_flags(argv, valued=["--set", "--qid", "--text", "--by"],
-                           boolean=["--json", "--no-publish"])
+    _, flags = parse_flags(argv, *flag_spec("withdraw"))
     set_id = (flags.get("--set") or "").strip()
     qid = (flags.get("--qid") or "").strip()
     if not set_id or not qid:
@@ -1750,7 +1890,7 @@ def cmd_withdraw(argv):
 # lint — the register must not carry a uuid, a secret, or a broken predicate
 # =============================================================================
 def cmd_lint(argv):
-    _, flags = parse_flags(argv, valued=[], boolean=["--json"])
+    _, flags = parse_flags(argv, *flag_spec("lint"))
     with RegisterLock():
         data = read_register()
     findings = []
@@ -1787,9 +1927,7 @@ def cmd_lint(argv):
 # gc — archive expired and fully-closed sets
 # =============================================================================
 def cmd_gc(argv):
-    _, flags = parse_flags(argv, valued=[], boolean=["--json", "--dry-run",
-                                                     "--no-publish",
-                                                     "--archive-closed"])
+    _, flags = parse_flags(argv, *flag_spec("gc"))
     now = datetime.datetime.now(datetime.timezone.utc)
     with RegisterLock():
         data = read_register()
@@ -2062,11 +2200,7 @@ def deliver_answer(set_id, qid=None, mode="turn-end", dry_run=False, entry=None)
     return result
 
 def cmd_notify(argv):
-    positional, flags = parse_flags(
-        argv,
-        valued=["--set", "--lane", "--qid", "--mode"],
-        boolean=["--json", "--dry-run"],
-    )
+    positional, flags = parse_flags(argv, *flag_spec("notify"))
     set_id = flags.get("--set") or (positional[0] if positional else None)
     lane = flags.get("--lane")
     if not set_id and not lane:
@@ -2184,11 +2318,7 @@ def pending_deliveries():
     return out, skipped
 
 def cmd_redeliver(argv):
-    positional, flags = parse_flags(
-        argv,
-        valued=["--max-attempts", "--mode"],
-        boolean=["--pending", "--json", "--dry-run"],
-    )
+    positional, flags = parse_flags(argv, *flag_spec("redeliver"))
     if positional:
         die(2, "redeliver takes no positional argument; the selector is "
                "--pending")
@@ -3204,8 +3334,7 @@ def cmd_publish(argv):
     if "--set" in argv:
         die(2, "publish does not take --set: the page carries every open set. "
                "--set addresses ONE set, and belongs to amend, withdraw and notify")
-    _, flags = parse_flags(argv, valued=["--action"],
-                           boolean=["--json", "--prune"])
+    _, flags = parse_flags(argv, *flag_spec("publish"))
     action = flags.get("--action") or "/answer"
 
     meta, pruned, metas = publish_page(action=action,
@@ -3467,6 +3596,59 @@ def selftest():
         # TOTAL, and the card/button leg is GONE (owner order 2026-09-24:
         # "the calling lane should not get a card with buttons. delete that leg
         # - the user decisions are collected via the page").
+        # #709: FLAG_SPEC is the ONE declaration of what each verb accepts, and
+        # it must cover the verb set exactly. A verb wired into a handler but
+        # missing from FLAG_SPEC (or the reverse) is the same drift class that
+        # let the bridge's hand-kept map fall behind this parser.
+        ck(set(FLAG_SPEC) == set(_VERBS),
+           "FLAG_SPEC covers _VERBS exactly (%s vs %s)"
+           % (sorted(FLAG_SPEC), sorted(_VERBS)))
+        for _verb, _spec in FLAG_SPEC.items():
+            ck(isinstance(_spec.get("valued"), dict)
+               and isinstance(_spec.get("boolean"), dict)
+               and bool(_spec.get("positional")),
+               "FLAG_SPEC[%r] declares valued/boolean param->flag maps + positional"
+               % _verb)
+            ck(not (set(_spec["valued"]) & set(_spec["boolean"])),
+               "FLAG_SPEC[%r]: no param is both valued and boolean" % _verb)
+            ck(all(isinstance(f, str) and f.startswith("--")
+                   for f in list(_spec["valued"].values())
+                   + list(_spec["boolean"].values())),
+               "FLAG_SPEC[%r]: every mapped flag is a --long-flag" % _verb)
+        # The parser each handler uses must be the published one: a handler
+        # that hand-declared its flags again would re-open the drift (#709).
+        for _verb, _spec in FLAG_SPEC.items():
+            ck(flag_spec(_verb) == (list(_spec["valued"].values()),
+                                    list(_spec["boolean"].values())),
+               "flag_spec(%r) is the flat view of FLAG_SPEC" % _verb)
+        _src = open(os.path.abspath(__file__), encoding="utf-8").read()
+        for _verb in sorted(_VERBS):
+            ck('*flag_spec("%s")' % _verb in _src,
+               "cmd_%s parses with flag_spec(%r), not an inline flag list (#709)"
+               % (_verb, _verb))
+        _pay = schema_payload()
+        ck(set(_pay["verbs"]) == set(_VERBS)
+           and _pay["store"].endswith("open.json"),
+           "--schema publishes every verb and the store path (#709)")
+        ck("set_id" not in _pay["verbs"]["publish"]["valued"]
+           and "--set" not in _pay["verbs"]["publish"]["valued"].values(),
+           "publish declares NO set_id/--set -- cmd_publish refuses it by name "
+           "(#709)")
+        ck(_pay["verbs"]["list"]["valued"].get("factory") == "--factory",
+           "list publishes factory -> --factory -- the param the bridge dropped "
+           "(#709)")
+        ck(_pay["verbs"]["amend"]["valued"].get("set_id") == "--set",
+           "the published map resolves set_id -> --set, which no dash rule can "
+           "recover (#709)")
+        ck(_pay["verbs"]["answer"]["positional_params"] == [
+               {"name": "set_id", "required": True},
+               {"name": "qid", "required": True},
+               {"name": "choice", "required": False}]
+           and _pay["verbs"]["notify"]["positional_params"] == [
+               {"name": "set_id", "required": False}]
+           and _pay["verbs"]["list"]["positional_params"] == [],
+           "--schema publishes positional_params with required-ness, so the "
+           "bridge need not parse the human `positional` string (#709)")
         ck("render" not in _VERBS,
            "the card leg is DELETED -- render is not a verb any more")
         gone = "def cmd_" + "render"
@@ -5751,6 +5933,12 @@ USAGE = """questions — the Open Questions register (#547)
            re-renders the one shared page at its constant slug
   lint     [--json]
   gc       [--dry-run] [--json]        also applies mechanical closure
+  --schema                             machine-readable flag schema (JSON) for
+                                       the dynamic-tool bridge: per verb, the
+                                       valued/boolean flags it accepts, plus
+                                       the store path. Derived from FLAG_SPEC,
+                                       the one table the handlers themselves
+                                       parse with (#709).
 
 Store: <profile home>/questions/open.json (+ archive.jsonl, pages/<slug>/).
 The PAGE is the owner surface and lives at a CONSTANT slug -- the directory is
@@ -5805,6 +5993,12 @@ def main(argv):
     verb, rest = argv[0], argv[1:]
     if verb in ("--selftest", "selftest"):
         return selftest()
+    if verb in ("--schema", "schema"):
+        # #709: the machine-readable flag schema, consumed by the dynamic-tool
+        # bridge (tools/state/oc_questions_tool.py) so it derives its argv from
+        # THIS parser instead of a hand-kept mirror that drifts.
+        print(json.dumps(schema_payload(), indent=2, ensure_ascii=False))
+        return 0
     handlers = {"ask": cmd_ask, "answer": cmd_answer, "amend": cmd_amend,
                 "withdraw": cmd_withdraw, "list": cmd_list,
                 "publish": cmd_publish, "lint": cmd_lint,
