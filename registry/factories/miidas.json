@@ -142,6 +142,17 @@
       ],
       "scope": "profile",
       "evidence": "measured 2026-10-02 \u2014 agents-old 5/5 running-healthy, apps 5/5 exited; deploy_lib.sh:36 defaults APP_HOST to agents-old (env override applied first at :21-34); .master.env:34 reads agents-old; leshchenko1979/miidas#82 MERGED 2026-09-29T08:39:31Z; miidas-claim-forward.service on apps is active + enabled."
+    },
+    {
+      "id": "miidas-boot-overlay-rewrites-providers",
+      "text": "The MIIDAS agent boot overlay replaces the ENTIRE [providers.*] block of the client config.toml on every boot and 6 h refresh, so whatever it emits IS the provider chain: a provider or fallback a peer adds to the template's provider block is silently deleted. Edit the overlay, never the template block.",
+      "severity": "warning",
+      "affects": [
+        "miidas",
+        "inferhub-watch"
+      ],
+      "evidence": "agent/runtime/lib/miidas_boot/config.py \u2014 gateway overlay finds [providers. at :203-207 and returns text[:start] + snippet + text[end:] at :250; openrouter overlay at :127-185 does the same. This deletion is what cost leshchenko1979/miidas#98 (closed 2026-10-03T19:07:29Z), where the overlay's own snippet carried enabled=false and wiped the template's working fallback. The overlay logs 'applied LLM_PROFILE=\u2026' while the file it read still shows the pre-refresh block, so during a refresh window the file and the log disagree \u2014 read the post-refresh file, not the log alone.",
+      "since": "2026-10-05T06:06:09Z"
     }
   ],
   "lanes": [
@@ -177,7 +188,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-04T06:11:52Z",
+  "attested_at": "2026-10-05T06:07:02Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

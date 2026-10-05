@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\" and :200 resolves interrupt=true to DeliveryMode::Interrupt; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 \u2014 NOT notify.rs:172, where it no longer lives (the file moved). Re-verified at attest 2026-10-04T06:18:37Z against the deployed tree: the Err is present at that line in `git show 4b3765dc4:src/brain/agent/service/notify_policy.rs`, and code leg 07b6372c4 is an ancestor of the deployed sha 4b3765dc4fe169adf7f91696d10065de3f689560 (swapped 2026-10-04T01:10:50Z) \u2014 superseding the cited 1eca6c93a\u2026 and 532e66397\u2026, neither now deployed."
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\"; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 -- NOT notify.rs:172, where it no longer lives (the file moved); interrupt resolves to DeliveryMode::Interrupt at :189 (mode string) and :201 (interrupt==Some(true)). Re-verified at attest 2026-10-05T06:11Z against the deployed tree: the Err is present at that line in git show b7470b562780ce0afd83d76d35b789647c78bd3c:src/brain/agent/service/notify_policy.rs, and code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of the deployed sha (merge-base --is-ancestor rc=0) -- superseding the cited 4b3765dc4fe169adf7f91696d10065de3f689560, which is no longer the deployed sha."
     }
   ],
   "lanes": [
@@ -296,7 +296,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-04T06:20:00Z",
+  "attested_at": "2026-10-05T06:17:00Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

@@ -36,13 +36,13 @@
       "name": "infra-triage-patrol",
       "audience": "agent",
       "entry": "cron d6119dbc-95d2-4341-aeb5-dc1c839cc9ed to the Triage lane; gate /root/vds-servers/tools/triage_preflight.py",
-      "cadence": "6-hourly (0 */6 * * *)"
+      "cadence": "6-hourly (5 */6 * * *)"
     },
     {
       "name": "infra-surveys-daily",
       "audience": "agent",
       "entry": "cron 73e9a3d0-8dfe-48db-a169-3fae3d2a0405 to the Surveys topic (thread 7)",
-      "cadence": "daily 09:00 MSK (0 9 * * *)"
+      "cadence": "daily 09:05 MSK (5 9 * * *)"
     },
     {
       "name": "infra-sender-logs-check",
@@ -215,7 +215,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-04T06:09:43Z",
+  "attested_at": "2026-10-05T06:06:16Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
