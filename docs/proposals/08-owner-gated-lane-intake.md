@@ -4,9 +4,15 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.11** 2026-10-05 — **Appendix E diagram syntax fixed**: every mermaid
-label now renders (the `;` and em-dash that mermaid's sequence parser rejects were removed from
-diagram labels; **no design content changed**). rev.10 added the **usage sequence diagrams**
+**Date:** 2026-10-03 · **rev.12** 2026-10-05 — **the read path is named**. rev.11's §4.5 said
+*"the full rows stay pullable"* — **false of the substrate**: there is no per-session read (only a
+global `all()`, `notify_queue.rs:98`), and `session_notify --status` polls the *sender's*
+in-memory receipt, not a target-side row. rev.12 adds the read half (**`rows_for_session`**), the
+render half (**`digest_for_session`**, renamed from `drain_for_session` — it never consumed), the
+**verb an agent calls** (`opencrabs session held` / `session/held` / `session_notify
+action="list"`), and the **`push_sender`** column the digest needs to render a sender at all.
+rev.11 fixed Appendix E diagram syntax (no design content changed). rev.10 added the **usage
+sequence diagrams**
 (Appendix E: one
 diagram per tool/surface). rev.9 restored the **CLI verbs and the wait graph as a first-class
 surface** (one of the proposal's main surfaces, not an afterthought), removed the Open Questions
@@ -153,6 +159,7 @@ await_external graph [--session <id>]        # read the wait-for graph
 opencrabs session await set   --session <id> --kind <k> [--target <id>] [--ref <h>] [--prompt <t>]
 opencrabs session await clear --session <id>
 opencrabs session await graph [--session <id>] [--json]
+opencrabs session held        <id> [--full] [--json]     # the READ — pull the parked rows (§4.5)
 ```
 
 posting to new A2A methods `session/await` (set/clear) and `session/await/graph` (read). This is
@@ -223,15 +230,47 @@ merely delayed, and re-buries the question the hold protected. Deliver **one** t
 
 **How information is not lost.** The digest is an **index**, not a summary, and the rows stay put.
 `notify_queue` is durable and already holds every held push (§2); the digest renders **one line
-per held row** — sender · instant · first line of the body — with the pending question first, and
-the full rows stay **pullable** by the owner. Nothing is compressed away, so nothing is lost: the
-digest changes *the order of attention*, never the *set of facts*. A model-written summary would
-paraphrase and drop; this renders, so it cannot.
+per held row** — sender/origin · instant · first line of the body — with the pending question
+first. Nothing is compressed away, so nothing is lost: the digest changes *the order of
+attention*, never the *set of facts*. A model-written summary would paraphrase and drop; this
+renders, so it cannot.
+
+**How the owner pulls the full rows — the read path this design ADDS.** *"The rows stay pullable"*
+is **not true of the substrate today**, and writing it without building the read is exactly the
+trap this paragraph closes. There is **no per-session read**: `NotifyQueueRepository` exposes only
+a global `all()` (`notify_queue.rs:98` — every surviving row, oldest first), and the tool's
+`session_notify --status` polls the **sender's** in-memory receipt (`notify_receipts.rs:15,34` — a
+`Mutex<HashMap>` keyed by the sender's `notify_id`; its own header: *"the session message queue is
+per-target … every notify queued for that target is consumed by definition"*), never a
+target-side row. So the read half is part of what this design builds, and **the verb an agent
+actually calls** is named here:
+
+- **New repo read `rows_for_session(id)`** — beside `all()`, the same SELECT with
+  `WHERE session_id = ?`, ordered `created_at ASC`. (A zero-hit name today.)
+- **New verb on three surfaces** — the digest is the **default rendering** of this same read, so
+  one path serves both:
+  - CLI `opencrabs session held <id> [--full] [--json]`
+  - A2A `session/held`
+  - tool `session_notify action="list"` — so a lane can pull on the owner's behalf
+
+  `--full` returns the rows verbatim; the default returns the one-line index. This is how a human
+  at a shell, an external agent, or the owner-through-the-lane actually pulls a row.
+
+**A field the digest needs that the row does not carry.** `NotifyQueueRow`
+(`notify_queue.rs:24-32`) is `id, session_id, context_text, display_text, origin, bg_meta,
+created_at` — **no sender, no title, no key**. `origin` is a coarse tag (`PushOrigin::tag()` →
+`session`/`subagent`/`task`/`system`/`user`) and `bg_meta.label` names a background task, but a
+**`session_notify` push carries no sender label** — it lives only inside the
+`[session-notify from=<id>]` header of `context_text`. So the digest's "sender" column requires a
+**new `push_sender` column** on `notify_queue` (written by `record`), not a header parse. One
+additive field; it is what makes "sender · instant · first line" renderable at all.
 
 **Who makes it.** The **harness drain code**, mechanically: a deterministic template over the row
-set (`drain_for_session`, §5). It is **not** a model call — a model would be lossy and
-non-repeatable, and the point is that the same rows always render the same digest. The seam
-exists (`wrap_busy_once`, the `queued_message_join` coalescing path, `notify_queue.rs:85`).
+set — `digest_for_session` (§5) is the **render** half, `rows_for_session` the **read** half, and
+neither consumes a row (the *wave* is drained into one turn; the rows stay put). It is **not** a
+model call — a model would be lossy and non-repeatable, and the point is that the same rows always
+render the same digest. The seam exists (`wrap_busy_once`, the `queued_message_join` coalescing
+path, `notify_queue.rs:85`).
 
 **Ordering.** The digest runs **after** the answer turn, framed with a reference to the question:
 *"While you were answering X, 14 pushes were held — [one line each]."*
@@ -287,9 +326,10 @@ flowchart TD
 | `db/repository/session_binding.rs` | add **`await_target`** (§4.2) beside `await_ref`; `await_prompt`, `last_nudge_at` | migration-light (await columns already exist) |
 | `brain/tools/await_external.rs` | `target` param on `set`; new **`graph`** action (§4.2) | new read path; no new state |
 | `brain/tools/plan_tool.rs`, `suggest_options.rs` | set the state for the approvable plan card, or a card the lane flagged blocking | opt-in only; must not fire on non-interactive surfaces |
-| `cli/session_notify.rs` + new `cli/session_await.rs`; A2A `session/await` + `session/await/graph` | the **declaration and query surface** (§4.2) — the main public interface | new public interface; the harness names no add-on |
+| `cli/session_notify.rs` + new `cli/session_await.rs`; A2A `session/await` + `session/await/graph` + **`session/held`** | the **declaration and query surface** (§4.2) — the main public interface | new public interface; the harness names no add-on |
 | `brain/agent/service/session_routes.rs` | new `Delivery::HeldForOwner`; gate at the **route layer**; plumb the resolved `DeliveryMode` in | the one behavioural change; unit-testable |
-| `brain/agent/service/notify_queue.rs` | `drain_for_session(id)` emitting the **digest** (§4.5); sender **`key`** + supersede-while-un-drained (§4.6) | reuses `redeliver_persisted` internals |
+| `db/repository/notify_queue.rs` | new per-session read **`rows_for_session(id)`** — the **read half** (today only a global `all()` exists, §4.5); new **`push_sender`** column written by `record` | additive read path + one column |
+| `brain/agent/service/notify_queue.rs` | **`digest_for_session(id)`** emitting the **digest** — the **render half** over `rows_for_session`, non-consuming (§4.5); sender **`key`** + supersede-while-un-drained (§4.6) | reuses `redeliver_persisted` internals |
 | `brain/tools/subagent/notify.rs` (`session_notify` tool) | optional `key` param; return the `queued`/`injected` verdict | additive |
 | `channels/*/handler.rs` + `agent.rs` (callback / reaction hooks) | clear the state on the correlated signal, on **all three** surfaces | must be the owner, not any member |
 | `channels/telegram/await_sweep.rs` | for a gated wait: nudge the **owner** (no wake), `last_nudge_at`, geometric backoff | changes sweep semantics for one kind only |
@@ -303,7 +343,7 @@ flowchart TD
 |---|---|
 | A lane wrongly marked awaiting → its automation stalls | fail open: unknown/unreadable state delivers; the state clears on the correlated signal; a TTL expires the held rows |
 | A push is held and then lost | `notify_queue` is already durable; held rows ride the existing boot redelivery; the 72 h reap logs every drop loudly |
-| The digest drops information | it is an **index** rendered mechanically over the rows, never a model summary (§4.5); the rows remain pullable |
+| The digest drops information | it is an **index** rendered mechanically over the rows, never a model summary (§4.5); the rows remain readable through the new per-session read + verb (`rows_for_session` / `session held`; §4.5) |
 | A sender's re-send rewrites history already read | replace is scoped to **un-drained** rows; after drain the same key appends (§4.6) |
 | A lane is never answered | the sweep re-nudges the owner (no-wake); a nudge budget then a terminal state (§11) |
 | An urgent alert is held | `Interrupt` bypasses the gate |
@@ -457,7 +497,7 @@ Six rules; the practices are consistent.
    reproduces the flood, merely delayed — and re-buries the very question the hold protected.
    Practice (SQS/Kafka retention + notification digesting): on clear, deliver **one** index turn —
    *"14 pushes were held while you were away"*, one line each, **the pending question first** —
-   and let the owner pull the rest (§4.5).
+   and let the owner pull the rest through the read verb the design adds (`session held`, §4.5).
 
 3. **Quiet hours for the nudge — measured, not configured.** The re-nudge must respect the owner's
    active window. Escalation policies (PagerDuty/Opsgenie) fire only inside on-call hours. So a
@@ -568,7 +608,7 @@ reader who saw an earlier revision can find where each landed.
 | `oc-questions` is an **external add-on**; the harness must not depend on it | **removed from scope** — the declaration surface is the **CLI verb → `session/await`**; direction is caller → harness, and the harness names no add-on (§4.1, §4.2) |
 | **CLI verbs are a main surface, not an afterthought** (owner, 2026-10-05) | promoted to their own section, with the **wait-graph** verbs and A2A methods (§4.2) |
 | **a harness tool to set the wait on a session id, so an external agent can follow the graph** (owner, 2026-10-05) | structured **`await_target`** + the **`graph`** action on `await_external`, and the CLI `session await graph` (§4.2) |
-| **digest: how to avoid info loss, and who makes it** (owner, 2026-10-05) | the digest is an **index rendered mechanically** by the harness drain code, never a model summary; the rows stay pullable (§4.5) |
+| **digest: how to avoid info loss, and who makes it** (owner, 2026-10-05) | the digest is an **index rendered mechanically** by the harness drain code, never a model summary; the rows are readable through the **new per-session read + verb** the design adds (`rows_for_session` / `session held`, §4.5) |
 | **a sender must be able to replace its own un-drained push** (owner, 2026-10-05) | stable **`key`** + supersede-while-un-drained; the `queued`/`injected` verdict (§4.6) |
 | **the issue goes to `opencrabs/opencrabs`** (owner, 2026-10-05) | §8 boundary + header updated |
 | **the AFK section vanished** (owner, 2026-10-05) | **restored** to first-class standing — the six rules and the owner-scoped clock (§11) |
@@ -587,7 +627,8 @@ covers `/root/opencrabs/src`) **and** confirmed against source, then re-confirme
 trusting a zero (AGENTS.md rule 7): the index answers a bare symbol well but returns "No matches"
 for an English query against a *type* — a phrasing artifact, not an absence. The proposed names
 (`HeldForOwner`, `await_target`, `await_prompt`, `last_nudge_at`, `note_owner_activity`,
-`drain_for_session`, `session/await`) return **0 hits each** — the positive check that this is
+`rows_for_session`, `digest_for_session`, `push_sender`, `held_at`, `session/held`,
+`session/await`) return **0 hits each** — the positive check that this is
 still a design, not code.
 
 ### D. Revision log
@@ -603,6 +644,8 @@ still a design, not code.
 | 8 | 2026-10-05 | streamlined — revs.3–7 folded into one design + appendix; line slips fixed |
 | **9** | **2026-10-05** | **CLI verbs + wait graph restored as a main surface; register removed from scope; AFK section restored; digest-as-index, sender-replace, issue → `opencrabs/opencrabs`** |
 | **10** | **2026-10-05** | **usage sequence diagrams added — Appendix E, one per tool/surface (await_external, CLI + A2A, plan, suggest_options, the gate, the clear, the digest, session_notify key, await_sweep, peer-lane)** |
+| **11** | **2026-10-05** | **Appendix E diagram syntax fixed — every mermaid label renders (`;` and em-dash removed from labels); no design content changed** |
+| **12** | **2026-10-05** | **§4.5's "rows stay pullable" corrected: it was false of the substrate. Adds the read half (`rows_for_session`), renames the render half (`digest_for_session`, non-consuming), names the verb an agent calls (`session held` / `session/held` / `session_notify action="list"`), and the `push_sender` column the digest needs.** |
 
 ---
 
@@ -729,20 +772,27 @@ sequenceDiagram
     Note over O,B: only the CORRELATED signal clears, an unrelated owner message is input, not the signal
 ```
 
-#### E.8 `drain_for_session` — the digest, an index (§4.5)
+#### E.8 `digest_for_session` + `rows_for_session` — the digest, an index (§4.5)
 
 ```mermaid
 sequenceDiagram
     participant C as clear hook
-    participant D as drain_for_session
+    participant D as digest_for_session
+    participant R as rows_for_session
     participant Q as notify_queue
     participant L as Lane turn
+    participant A as any agent
     C->>D: state cleared for S
-    D->>Q: read every row held by the gate
-    Q-->>D: N rows, sender and instant and first line
+    D->>R: read the rows for S
+    R->>Q: SELECT where session_id is S
+    Q-->>R: N rows with origin, push_sender, instant, first line
+    R-->>D: N rows, non-consuming
     D->>D: render ONE index, question first
-    D-->>L: one digest turn, N lines, rows stay pullable
-    Note over D,Q: an index, not a summary, nothing compressed away, so nothing lost
+    D-->>L: one digest turn, N lines
+    Note over D,Q: an index not a summary, nothing compressed away, so nothing lost
+    A->>R: session held S --full
+    R-->>A: the full rows verbatim
+    Note over A,Q: the read half this design ADDS, today only a global all() exists
 ```
 
 #### E.9 `session_notify` — a sender replaces its own un-drained push (§4.6)
