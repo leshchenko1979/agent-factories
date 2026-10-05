@@ -72,6 +72,16 @@ LOCAL_FIXES: tuple[tuple[str, str], ...] = (
         r'^\s*"actor":\s*\(?os\.environ\.get\("(?:OC_ACTOR|OPENCRABS_SESSION_ID)"',
         "actor resolution -- the executing copy honours OC_ACTOR (deliberate local fix)",
     ),
+    (
+        r"^#\s*Unified tools log",
+        "the tools-log header comment -- the shipped copy de-names the donor's own log lib, "
+        "which resolves on no host (#85)",
+    ),
+    (
+        r"^#\s*(?:`oc-questions`|the instrument's home in the)",
+        "the instrument's-home comment -- the shipped copy de-names the donor tool, whose "
+        "home this factory does not carry (#85)",
+    ),
 )
 
 DECLARED: tuple[tuple[str, str], ...] = PARAMETER_LAYER + LOCAL_FIXES
