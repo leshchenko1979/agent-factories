@@ -472,6 +472,10 @@ DECLARATION_SURFACES: tuple[
     ("rework-relative-revision-exemptions",
      "docs/rework-relative-revision-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`), which this leg cannot read offline"),
+    ("ruling-board-exemptions", "docs/ruling-board-exemptions.json", (),
+     "entries name a GITHUB RULING COMMENT id (`comment`), which this leg cannot read "
+     "offline -- the id is the exemption's whole key, so it is deliberately not a tree "
+     "path a rename could strand"),
     ("shipped-audit-skips", "docs/shipped-audit-skips.json",
      (("skips", None, DECL_PATH),), ""),
     ("shipped-mechanism-law", "docs/shipped-mechanism-law.json",

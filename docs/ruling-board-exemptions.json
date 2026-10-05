@@ -1,0 +1,14 @@
+{
+  "_note": "THIS factory's ruling-board exemptions, read by the board-ruling leg in tools/patrol_host_state.py. ONE entry, admitted 2026-10-05 with an EMPTY REPAIR SPACE, printed as an 'excused:' line on every run. It exists because the leg's declared bound (`ruling_writer_landed`, 2026-10-02T18:07:38Z) puts this comment INSIDE the population it judges, and NO BACKFILL (ledger n=1596) bars the only repair the leg could otherwise ask for. Skeleton and field rules: docs/ruling-board-exemptions.example.json.",
+  "exemptions": [
+    {
+      "comment": "IC_kwDOUWc1QM8AAAABY4d1ow",
+      "issue": 282,
+      "created": "2026-10-03T02:47:38Z",
+      "granted": "2026-10-05",
+      "domain": "a ruling comment with no paired `ruling` row whose repair NO BACKFILL bars",
+      "reason": "The ruling comment for #282 was posted at 2026-10-03T02:47:38Z — 8h40m AFTER the atomic write path landed (`tools/rule.py`, commit 366353a, 2026-10-02T18:07:38Z), so it is inside the population the leg judges rather than excused by the bound. The lane wrote the board comment and never stamped the paired `ruling` row: #282 carries `intake` (n=2002), `claim` (n=2024), `close` (n=2025) and `run` (n=2026) rows, and no `ruling` row at all. The board close itself landed 1s later, so the work was finished and recorded in every other respect — this is a half-recorded RULING, not an unrecorded close, which is why the close-board surface does not reach it. The repair space is empty: the ledger is append-only and NO BACKFILL is law (ledger n=1596 — a `ruling` row written after the fact is a falsified record, not a repair), so the row that should have been paired with the comment cannot lawfully be written now, and the leg would otherwise stay RED forever on an instance no lane can repair. The MECHANISM that would have prevented it is the write path itself, which is what #334 binds the leg to — so this entry is the debt, not the remedy.",
+      "proof": "`gh issue view 282 --repo leshchenko1979/agent-factories --json state,closedAt,comments` reads state=CLOSED, closedAt=2026-10-03T02:47:39Z, with a comment id=IC_kwDOUWc1QM8AAAABY4d1ow createdAt=2026-10-03T02:47:38Z whose body opens '## RULED — the placement leg reads the tree's own `.gitignore`'. The ledger read that shows no pairing: `evidence/ledger.jsonl` carries for subject `#282` the rows n=2002 (intake), n=2024 (claim), n=2025 (close) and n=2026 (run), and no row with event=`ruling` — so the comment exists and the row it should have paired with does not."
+    }
+  ]
+}

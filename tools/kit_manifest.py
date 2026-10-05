@@ -256,6 +256,11 @@ SEEDS = frozenset({
     # factory's own filled-in table byte-for-byte against this empty skeleton and red every
     # adopter for writing the file it is told to write.
     "TEMPLATE/docs/close-board-exemptions.example.json",
+    # The board-ruling leg's exemption table (issue #334): the same class and the same
+    # measured reason as the close-board entry above -- the leg's LOGIC is universal, its
+    # PARAMETERS are the factory's own declared debt, and this factory's filled-in table
+    # legitimately differs from the empty skeleton that ships.
+    "TEMPLATE/docs/ruling-board-exemptions.example.json",
     "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
     "TEMPLATE/docs/ledger-retirements.example.json",
     "TEMPLATE/docs/ledger-schema-exemptions.example.json",
