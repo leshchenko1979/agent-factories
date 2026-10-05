@@ -3662,6 +3662,106 @@ def test_the_stall_census_leg_PRINTS_its_threshold_with_its_basis() -> None:
         f"the basis must name the Triage card's own predicate it is NOT\n{out}"
     )
 
+def test_the_stall_census_leg_does_not_harvest_a_REPOSITORY_QUALIFIED_mention() -> None:
+    """#333 acceptance: a `#N` the prose QUALIFIES as another repository's is not a unit
+    of this board, and the harvest itself survives the guard.
+
+    The live collision this arm reproduces, measured 2026-10-05: ledger row n=186
+    (`subject "#332-D5"`, a comment on the FORK's issue) names *"fork issue #332"* in its
+    detail, while the unrelated intake row n=2421 (`subject "#332"`) makes that same
+    number RESIDENT -- so the pre-fix harvest carried `#332` out of the fork mention and
+    the patrol printed `OWED #332: dispatched 17.22 d ago` against a board item filed the
+    same day.
+
+    FOUR foreign shapes the guard must refuse are covered by the direct unit arm at the
+    bottom; this fixture covers the collision end to end AND keeps a legitimate carrier,
+    so the probe is never vacuous: a guard that dropped the whole harvest would pass the
+    `#901` half and fail the `#902` half.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [
+        _issue(901, "OPEN"),   # the colliding board item: open, never claimed
+        _issue(902, "OPEN"),   # carried by THIS board's own dispatch prose -> still OWED
+    ]
+    rows = [
+        # The colliding intake row: it makes `#901` RESIDENT without dispatching it.
+        _stall_row(1, "intake", "#901", 20, now=now, actor="triage"),
+        # The CARRIER: a fork-issue comment whose prose names "fork issue #901".
+        _stall_row(2, "dispatch", "#901-D5", 17.22, now=now, actor="triage",
+                   detail="dispatched to OpenCrabs Kanban Board HQ as comment on "
+                          "fork issue #901 (issuecomment-5727369776)"),
+        # A legitimate unit of this board, made resident by its own intake row.
+        _stall_row(3, "intake", "#902", 5, now=now, actor="triage"),
+        # A wave whose prose carries THIS board's unit -- the harvest must keep working.
+        _stall_row(4, "dispatch", "wave-2026-10-05", 3, now=now,
+                   detail="routed #902 to the Worker lane"),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #901" not in named, (
+        "a `#N` the detail QUALIFIES as another repository's (`fork issue #901`) is not a "
+        f"unit of this board, however many rows the local issue carries\n{named}"
+    )
+    assert "OWED #902" in named, (
+        "the harvest itself must SURVIVE the scope guard: a wave naming this board's own "
+        f"unit still dispatched it\n{named}"
+    )
+    assert leg["coverage"]["units_owed"] == 1, leg["coverage"]
+
+    # THE CONTROL, asserted rather than described: on THIS fixture the pre-fix predicate
+    # (`is_work_unit(token) and token in resident`, no occurrence scope) DOES admit
+    # `#901` -- the token is a strict unit and a resident subject -- so the two predicates
+    # are distinguishable here and the probe is not vacuous.
+    detail = rows[1]["detail"]
+    assert "#901" in {str(r["subject"]).strip() for r in rows}, (
+        "the collision needs a RESIDENT subject of the same number, or the fixture tests "
+        "the residency guard instead of the scope guard"
+    )
+    assert RUNNER.is_board_unit_occurrence(detail, detail.index("#901")) is False, (
+        f"the occurrence guard must refuse the fork mention in {detail!r}"
+    )
+
+    # ... and through the REAL `main()`: the render must carry the same verdict, because a
+    # leg returning a correct dict while the report drops it is the half-fix this catches.
+    rc, out, _ = _run(issues, rows)
+    assert "OWED #902" in out, out
+    assert "OWED #901" not in out, out
+
+def test_the_scope_guard_refuses_every_measured_foreign_shape() -> None:
+    """#333 acceptance, the direct arm: the four shapes the 2026-10-05 measurement found
+    on the live ledger, and the two shapes that must stay ADMITTED.
+
+    Named one by one because a guard tuned to the single reported case would pass a
+    one-shape probe: the collision is *"fork issue #332"*, but the same defect was live in
+    `inferhub-watch#115`, `alexeyleshchenko/ai-antispam#76` and
+    `leshchenko1979/opencrabs #366` -- three different spellings of "another repository".
+    The two admitted shapes are the ones a scope guard is most likely to over-reach on: a
+    UNIT LIST (`#200/#344/#12`, whose slash is a separator, not a path) and a plain
+    mention preceded by an ordinary word.
+    """
+    refused = [
+        ("dispatched as comment on fork issue #332 (issuecomment-5727369776)", "#332"),
+        ("ai-antispam 13, inferhub 4 (tracked at inferhub-watch#115, NOT routed)", "#115"),
+        ("ai-antispam -- alexeyleshchenko/ai-antispam#76, OPEN. Its board...", "#76"),
+        ("FILED: leshchenko1979/opencrabs #366 - \"restart recovery\"", "#366"),
+    ]
+    admitted = [
+        ("no claim rows exist for #31 or #32 on the ledger", "#31"),
+        ("WHY NOT COVERED BY #200/#344/#12: those cover a different failure", "#12"),
+        ("Priority unchanged: #33/#35, then #34 (n=222)", "#34"),
+        ("FINDINGS: (1) #33 unclaimed 4h10m", "#33"),
+    ]
+    for blob, token in refused:
+        assert RUNNER.is_board_unit_occurrence(blob, blob.index(token)) is False, (
+            f"{token} in {blob!r} names another repository's namespace and must be REFUSED"
+        )
+    for blob, token in admitted:
+        assert RUNNER.is_board_unit_occurrence(blob, blob.index(token)) is True, (
+            f"{token} in {blob!r} is written as a unit of THIS board and must be ADMITTED"
+        )
+
 # --- the pacemaker-presence leg (#315) -----------------------------------------------
 
 _PRESENCE_REGISTER = (

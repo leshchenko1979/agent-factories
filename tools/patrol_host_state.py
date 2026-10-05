@@ -2530,6 +2530,57 @@ def ledger_predicate():
                     pass
     return _LEDGER_PREDICATE
 
+# ---- the foreign-reference scope (#333) --------------------------------------------
+#
+# THE BOARD DECLARES THIS FACTORY'S NAMESPACE, and nothing else. A `#N` in free prose
+# names whichever repository the writer had in mind, and the ledger holds rows for
+# foreign numbers too (`#366` above). The board read cannot separate the two on its own,
+# because a foreign number can COLLIDE with a real issue of this board: measured
+# 2026-10-05, row n=186 (subject `#332-D5`, a comment on the FORK's issue) names
+# *"fork issue #332"* in its detail, and the intake row n=2421 (`subject "#332"`) made
+# that same number resident -- so the harvest carried `#332` out of the fork mention and
+# the patrol printed `OWED #332: dispatched 17.22 d ago` against a board item filed the
+# same day.
+#
+# The harvest stays: a wave's detail is where a subject-keyed census cannot look, and
+# that is the leg's whole reason for reading prose. What was MISSING is the SCOPE of an
+# OCCURRENCE, so the guard qualifies each occurrence rather than the token. A `#N` is a
+# unit of THIS board only when it is written as one:
+#
+#   * UNQUALIFIED -- the character before `#` is not a word character, so `opencrabs#504`
+#     and `leshchenko1979/miidas#99` are repository-qualified forms, not board units;
+#   * not preceded by a FOREIGN SCOPE WORD -- `fork`, `upstream`, `foreign` -- among the
+#     two words before it, which is the shape of *"fork issue #332"*;
+#   * not preceded by a REPOSITORY PATH -- a token carrying `/`, no `#` and no `.`, the
+#     shape of *"leshchenko1979/opencrabs #366"*. A token carrying `#` is a UNIT LIST
+#     (`#200/#344` and `#33/#35` list this board's own units), never a path, and a token
+#     carrying `.` is a FILE path; both are left alone.
+#
+# The word list is deliberately small and declared: it names the qualifiers this ledger
+# actually writes, and every shape the 2026-10-05 measurement found is one of the three.
+FOREIGN_SCOPE_WORDS = frozenset({"fork", "upstream", "foreign"})
+
+def is_board_unit_occurrence(blob: str, start: int) -> bool:
+    """Whether the `#N` starting at `blob[start]` is WRITTEN as a unit of this board.
+
+    The scope half of the carried-unit harvest (#333). `start` indexes the `#`, so the
+    character before it is the ATTACH test and the two words before it are the QUALIFIER
+    test. True for an unqualified occurrence -- the form a lane writes when it means one
+    of this board's units -- and False for a repository-qualified mention, which names
+    whichever repository the writer had in mind.
+    """
+    if start > 0 and blob[start - 1].isalnum():
+        # ATTACHED to a preceding word character (`opencrabs#504`, `repo#332`): a board
+        # unit is preceded by a boundary, never by a repository's name.
+        return False
+    for token in blob[:start].rstrip().split()[-2:]:
+        stripped = token.strip("*_`([<\"'|,;:.").lower()
+        if stripped in FOREIGN_SCOPE_WORDS:
+            return False
+        if "/" in stripped and "#" not in stripped and "." not in stripped:
+            return False
+    return True
+
 def stall_census_leg(
     issues: list[dict],
     rows: list[dict],
@@ -2556,7 +2607,10 @@ def stall_census_leg(
       2026-10-03: of the 14 units named only in dispatch prose, 11 have zero rows of their
       own, and of the three that do, one is CLOSED (`#6`) and one is named by a row that
       is itself a work-unit dispatch (`#262`, a cross-reference inside the `#75`
-      dispatch);
+      dispatch). The OCCURRENCE must ALSO be written as a unit of this board:
+      `is_board_unit_occurrence` refuses a repository-qualified mention, so a fork's
+      `#332` is not read as this board's `#332` however many rows the local issue
+      carries (#333);
     * a descriptive-stem dispatch naming no such unit is an OBSERVATION dispatch,
       EXPLICITLY LEGAL (ruling n=524). It is COUNTED and printed, never judged.
 
@@ -2625,9 +2679,13 @@ def stall_census_leg(
             continue
         blob = f"{row.get('detail') or ''} {row.get('refs') or ''}"
         units = {
-            token
-            for token in re.findall(r"#\d+", blob)
-            if is_unit(token) and token in resident
+            match.group(0)
+            for match in re.finditer(r"#\d+", blob)
+            if is_unit(match.group(0))
+            and match.group(0) in resident
+            # THE SCOPE (#333): the token must be WRITTEN as a unit of this board, not
+            # merely named in prose that belongs to another repository's namespace.
+            and is_board_unit_occurrence(blob, match.start())
         }
         if not units:
             observation += 1
