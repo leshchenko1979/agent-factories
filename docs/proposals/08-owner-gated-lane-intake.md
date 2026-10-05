@@ -4,10 +4,11 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.9** 2026-10-05 — **CLI verbs and the wait graph restored as a
-first-class surface** (they are one of the proposal's main surfaces, not an afterthought); the
-Open Questions register removed from scope (an external add-on that *uses* the CLI verbs, never
-part of the harness); the **AFK section restored** to first-class standing. All load-bearing
+**Date:** 2026-10-03 · **rev.10** 2026-10-05 — **usage sequence diagrams added** (Appendix E: one
+diagram per tool/surface). rev.9 restored the **CLI verbs and the wait graph as a first-class
+surface** (one of the proposal's main surfaces, not an afterthought), removed the Open Questions
+register from scope (an external add-on that *uses* the CLI verbs, never part of the harness), and
+**restored the AFK section** to first-class standing. All load-bearing
 citations re-verified at harness HEAD `717dfcd90` (2026-10-05).
 **Status:** design input — **not law**. Owner ruled 2026-10-05: **HOLD + rework** (q59);
 Q1 (q60) and Q6 (q61) answered and folded (§4.1, §9). On approval the issue is filed on
@@ -598,3 +599,205 @@ still a design, not code.
 | 7 | 2026-10-05 | owner rulings: HOLD + rework; Q1 opt-in + declaration; Q6 reversibility test |
 | 8 | 2026-10-05 | streamlined — revs.3–7 folded into one design + appendix; line slips fixed |
 | **9** | **2026-10-05** | **CLI verbs + wait graph restored as a main surface; register removed from scope; AFK section restored; digest-as-index, sender-replace, issue → `opencrabs/opencrabs`** |
+| **10** | **2026-10-05** | **usage sequence diagrams added — Appendix E, one per tool/surface (await_external, CLI + A2A, plan, suggest_options, the gate, the clear, the digest, session_notify key, await_sweep, peer-lane)** |
+
+---
+
+### E. Using the tools — sequence diagrams
+
+One diagram per tool/surface named above. Every message is a call the design already specifies;
+nothing here adds behaviour. Read them as the *usage* of §4: who calls what, and what comes back.
+
+#### E.1 `await_external` — an agent declares its own wait (§4.2)
+
+```mermaid
+sequenceDiagram
+    participant A as Agent lane
+    participant T as await_external
+    participant B as session_binding
+    A->>T: set --kind owner_gate --ref "PROP-08 approval"
+    T->>B: set_await kind=owner_gate, target=null
+    B-->>T: await_at = now
+    T-->>A: parked; this wait's root is the owner
+    Note over A,B: the lane is now IDLE, not mid-turn; the #13 mid-turn gate does not apply
+```
+
+#### E.2 `await_external graph` — read the wait-for graph (§4.2)
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant G as await_external graph
+    participant B as session_binding store
+    C->>G: graph --session A
+    G->>B: read every binding with await_at set
+    B-->>G: A to B, B to C, C is owner_gate
+    G->>G: derive nodes, edges, roots; store nothing
+    G-->>C: A to B to C to owner; ROOT = the owner
+    Note over G,B: a target resolving to no binding is a ROOT and a broken edge — a silent stall
+```
+
+#### E.3 `opencrabs session await` + `session/await` — a caller outside the loop (§4.2)
+
+```mermaid
+sequenceDiagram
+    participant X as Caller, cron or shell or add-on
+    participant CLI as opencrabs session await
+    participant A2A as session/await A2A method
+    participant B as session_binding
+    X->>CLI: set --session S --kind owner_gate --prompt "..."
+    CLI->>A2A: session/await set, session S, kind, target, ref, prompt
+    A2A->>B: set_await
+    B-->>A2A: await_at = now
+    A2A-->>CLI: ok
+    CLI-->>X: S parked
+    Note over X,B: the public interface; direction is caller to harness, and the harness names no add-on
+```
+
+#### E.4 `plan` — the approvable card sets the state (§4.1)
+
+```mermaid
+sequenceDiagram
+    participant L as Lane
+    participant P as plan tool
+    participant F as plan_files
+    participant B as session_binding
+    participant O as Owner
+    L->>P: init or edit; approvable card
+    P->>F: plan_mode_state = PostInitEditing
+    P->>B: set_await kind=owner_gate, prompt=card
+    B-->>P: parked
+    O->>P: taps Approve, plan:ok
+    P->>B: clear_await
+    P-->>L: plan proceeds
+    Note over L,B: the approvable card is one of the two named objects that SET the state
+```
+
+#### E.5 `suggest_options` — the opt-in wait flag (§4.1)
+
+```mermaid
+sequenceDiagram
+    participant L as Lane
+    participant S as suggest_options
+    participant B as session_binding
+    participant O as Owner
+    L->>S: options --wait  (OPT-IN flag)
+    S->>B: set_await kind=owner_gate, prompt=card
+    B-->>S: parked
+    S-->>L: card posted; lane idle
+    O->>S: taps an option
+    S->>B: clear_await
+    S-->>L: option delivered
+    Note over L,B: without the flag, suggest_options is non-blocking by contract and sets nothing
+```
+
+#### E.6 the gate — a push meets a parked lane (§4.3)
+
+```mermaid
+sequenceDiagram
+    participant P as Producer
+    participant R as route layer, deliver_or_park
+    participant D as deliver_to_session
+    participant B as session_binding
+    participant Q as notify_queue
+    P->>R: push for session S
+    R->>D: deliver_to_session S, mode
+    D->>B: is S awaiting?
+    B-->>D: yes
+    D->>D: mode is not Interrupt, and not the awaited signal
+    D->>Q: park durably, one row
+    D-->>R: Delivery::HeldForOwner
+    R-->>P: HELD, awaiting owner since ts
+    Note over D,Q: Interrupt bypasses; unknown state delivers — fail open
+```
+
+#### E.7 the clear — a correlated owner signal (§4.4)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant H as channel handler
+    participant C as clear hook
+    participant B as session_binding
+    O->>H: Approve tap, correlated reply, or reaction
+    H->>C: correlated signal for S
+    C->>B: clear_await S
+    B-->>C: cleared
+    Note over O,B: only the CORRELATED signal clears; an unrelated owner message is input, not the signal
+```
+
+#### E.8 `drain_for_session` — the digest, an index (§4.5)
+
+```mermaid
+sequenceDiagram
+    participant C as clear hook
+    participant D as drain_for_session
+    participant Q as notify_queue
+    participant L as Lane turn
+    C->>D: state cleared for S
+    D->>Q: read every row held by the gate
+    Q-->>D: N rows, sender and instant and first line
+    D->>D: render ONE index, question first
+    D-->>L: one digest turn; N lines; rows stay pullable
+    Note over D,Q: an index, not a summary; nothing compressed away, so nothing lost
+```
+
+#### E.9 `session_notify` — a sender replaces its own un-drained push (§4.6)
+
+```mermaid
+sequenceDiagram
+    participant S as Sender lane
+    participant N as session_notify
+    participant Q as notify_queue
+    S->>N: notify --key K, target T
+    N->>Q: row with key K, un-drained?
+    Q-->>N: yes, queued
+    N-->>S: verdict queued
+    S->>N: notify --key K again, still un-drained
+    N->>Q: supersede in place, row count unchanged
+    N-->>S: verdict queued
+    S->>N: notify --key K after T drained
+    N->>Q: append a NEW row
+    N-->>S: verdict injected
+    Note over N,Q: the key never crosses the drain boundary
+```
+
+#### E.10 `await_sweep` — the AFK nudge (§11)
+
+```mermaid
+sequenceDiagram
+    participant W as await_sweep
+    participant B as session_binding, last_nudge_at
+    participant K as owner-scoped clock
+    participant O as Owner
+    W->>B: is the gated wait past its nudge cadence?
+    B-->>W: yes
+    W->>K: how long has the OWNER been quiet?
+    alt owner quiet
+        K-->>W: quiet, so defer — no 03:00 nudge
+    else owner active
+        K-->>W: active
+        W->>O: nudge, no wake of the lane
+        W->>B: last_nudge_at = now, geometric backoff
+    end
+    Note over W,B: after the budget — escalate, or abandon-with-record; never a silent default
+```
+
+#### E.11 peer-lane wait — graph walk, cycle rule, correlated reply (§10)
+
+```mermaid
+sequenceDiagram
+    participant A as Lane A
+    participant T as await_external
+    participant G as wait-for graph
+    participant B as Lane B
+    participant O as Owner
+    A->>T: set --kind peer_lane --target B
+    T->>G: walk B to A for a cycle, wound-wait
+    G-->>T: no cycle, so record the edge A to B
+    T-->>A: parked on B
+    B->>A: reply, session_notify --request-id token
+    A->>A: token matches, so deliver and clear the wait
+    Note over B,A: a push with no matching token PARKS; only the correlated reply walks through
+    Note over A,O: if B itself awaits the owner, the sweep escalates to the ROOT and does NOT wake A
+```
