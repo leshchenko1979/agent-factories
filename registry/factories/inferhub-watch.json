@@ -40,7 +40,7 @@
     {
       "name": "inferhub-daily-report",
       "audience": "owner",
-      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b - it delivers to the HQ lane, and its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg); measured 2026-10-02 the card rendered into topic 2 as msg 4790 carrying a '(truncated)' marker (the #490 head+tail elision, working as designed), so no lane re-post is owed.",
+      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled, deliver_to session:359fe71b-c7a1-420b-b856-acfb49939a7b - it delivers to the HQ lane ONLY (mode turn-end, read from the daemon log across 09-27..10-05), never to Telegram; the cron session 31b2aefe-2e5b-4396-91e7-2ca0077e81c5 carries NO session_bindings row, so its output cannot render into the topic on its own. AMENDED 2026-10-05: the prior text claimed its body 'ALSO renders into the bound topic on its own (the 1.0.105 echo leg)' and cited msg 4790 as proof - that citation is FALSE: platform_message_id 4790 does not exist (channel_messages count 0; thread 2 spans 1..5099 with no such row) and the daily card reached NO chat between 2026-09-23 and 2026-10-04. A LANE RE-POST IS OWED each day: thread-2 cards are 3479 (09-23) then 5017 (10-04) and 5095 (10-05), all sender OpenCrabs = the lane's own telegram_send. Split the card when it exceeds the 3200-char echo cap.",
       "cadence": "daily"
     },
     {
@@ -103,7 +103,7 @@
     },
     {
       "id": "inferhub-auto-route-failure-escalation",
-      "text": "Routing through the ops fallback chain's first hop (inferhub) degrades under load, independent of the retired auto-switcher: 24h to 2026-09-27T05:08Z measured 2,852 failures of 21,242 requests (13.4%) \u2014 499 x1218, 502 x994, 429 x486, 402 x140 \u2014 concentrated on cheap iq-75-plus combo members. AMENDED 2026-10-04: the spike has abated \u2014 the last-24h daily card reads 142 failed of 9,498 (1.5%), top codes 429/402/499 \u2014 but issue #158 remains OPEN, so the escalation is live at reduced magnitude.",
+      "text": "Routing through the ops fallback chain's first hop (inferhub) degrades under load, independent of the retired auto-switcher: 24h to 2026-09-27T05:08Z measured 2,852 failures of 21,242 requests (13.4%) \u2014 499 x1218, 502 x994, 429 x486, 402 x140 \u2014 concentrated on cheap iq-75-plus combo members. AMENDED 2026-10-05: the spike continues to abate \u2014 the last-24h daily card (10-04 05:01Z -> 10-05 05:01Z) reads 24 failed of 14,683 (0.16%), top codes 429x11 / 402x4 / 499x4. That window sits entirely after the owner's 2026-10-03 ch43 priority demotion (300 -> 100), so the drop is CONSISTENT WITH it, though the card cannot establish causation. Issue #158 remains OPEN.",
       "severity": "warning",
       "since": "2026-09-27T06:36:31Z",
       "affects": [
@@ -139,7 +139,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-04T06:09:33Z",
+  "attested_at": "2026-10-05T06:06:31Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
