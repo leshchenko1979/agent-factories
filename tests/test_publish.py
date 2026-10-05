@@ -241,6 +241,96 @@ def not_on_branch_arm() -> None:
         )
 
 
+def detached_head_publishes_arm() -> None:
+    """Issue #329, ruled at ledger n=2407. The law requires every lane to work in a
+    worktree checked out at `origin/main` (SKILL section 4), so a lane's HEAD is DETACHED
+    by construction -- and the pusher refused exactly that state, which made it unusable by
+    the lanes it exists to govern. The detached HEAD resolves to the configured branch from
+    the remote-tracking ref, and the round publishes it like any other.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=GRACE * 4)
+        git(repo, "checkout", "-q", "--detach")
+        sha = commit(repo, "b.txt", when=old)
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=True)
+
+        tip_after = git(remote, "rev-parse", "refs/heads/main")
+        rec = report.get("receipt") or {}
+        check(
+            report["status"] == "published" and tip_after == sha,
+            "a DETACHED head publishes to the configured branch (the law's own lane state)",
+            f"status={report['status']} remote tip {'== HEAD' if tip_after == sha else '!= HEAD'}",
+        )
+        receipt_file = repo / "evidence" / "publish-receipt.json"
+        body = pub.read_receipt(repo)[0] if receipt_file.is_file() else None
+        check(
+            isinstance(body, dict)
+            and body.get("sha") == sha
+            and body.get("remote") == "origin"
+            and body.get("branch") == "main"
+            and body.get("instant"),
+            "a detached round still records {sha, instant, remote, branch}",
+            f"receipt={rec} body={body}",
+        )
+
+def detached_off_branch_refuses_arm() -> None:
+    """The control that makes the arm above a RESOLUTION and not a removal of the guard.
+    A detached HEAD that does NOT descend from `origin/main` -- here a feature branch that
+    has diverged from it -- has no claim to `main`: it is refused, and nothing moves.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        git(repo, "checkout", "-q", "-b", "side")
+        side_sha = commit(repo, "side.txt")
+        git(repo, "push", "-q", "origin", "side:side")
+        git(repo, "checkout", "-q", "main")
+        commit(repo, "main2.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        tip_before = git(remote, "rev-parse", "refs/heads/main")
+        git(repo, "checkout", "-q", "--detach", side_sha)
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=0, apply=True)
+
+        tip_after = git(remote, "rev-parse", "refs/heads/main")
+        check(
+            report["status"] == "not-on-branch" and tip_after == tip_before,
+            "a detached head that does NOT descend from origin/main is REFUSED, and nothing moves",
+            f"status={report['status']} reason={report['reason'][:90]}",
+        )
+
+def detached_behind_arm() -> None:
+    """A detached HEAD BEHIND `origin/main` is a STALE CHECKOUT, not an off-line commit:
+    it is still on main's line, so the pusher must NOT refuse it -- it must let the round
+    reach the fast-forward check and report DIVERGED, which names the gap. Refusing it here
+    would swap a true status for a false reason, which is what the first cut of #329 did.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        stale = commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        commit(repo, "b.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        tip_before = git(remote, "rev-parse", "refs/heads/main")
+        git(repo, "checkout", "-q", "--detach", stale)
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=0, apply=True)
+
+        tip_after = git(remote, "rev-parse", "refs/heads/main")
+        check(
+            report["status"] == "diverged" and tip_after == tip_before,
+            "a detached head BEHIND origin/main reports DIVERGED (stale checkout is on main's line, not off it)",
+            f"status={report['status']} reason={report['reason'][:90]}",
+        )
+
 def in_sync_arm() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         remote = init_bare(Path(tmp) / "remote.git")
@@ -494,6 +584,9 @@ def main() -> int:
     no_remote_arm()
     unreachable_arm()
     not_on_branch_arm()
+    detached_head_publishes_arm()
+    detached_off_branch_refuses_arm()
+    detached_behind_arm()
     in_sync_arm()
     grace_holds_arm()
     old_commit_publishes_arm()

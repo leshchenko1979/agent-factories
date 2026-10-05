@@ -228,6 +228,67 @@ def publishable(unpushed: list[dict], *, grace_secs: int, now: dt.datetime):
     return list(unpushed), []
 
 
+# --- WHICH BRANCH IS HEAD ON, when HEAD carries no symbolic ref -------------------
+#
+# The law requires every lane to work in a worktree checked out at `origin/main`
+# (SKILL section 4: the shared tree is a READ surface; a change is made in a worktree), so
+# a lane's HEAD is DETACHED by construction. A detached HEAD has no `symbolic-ref`, and the
+# refusal that read one and gave up refused the ONE state the law puts every lane in, so the
+# sanctioned pusher was unusable by the lanes it exists to govern and they pushed directly
+# (issue #329, ruled at ledger n=2407). The branch is a FACT to RESOLVE, not a fact the
+# pusher may assume:
+#
+#   * HEAD on a branch -- the symbolic ref names it, and anything but `branch` is refused,
+#     as before: a lane standing on `side` publishes `side`, never `main`.
+#   * HEAD detached -- it is on `branch`'s line iff `refs/remotes/<remote>/<branch>` and HEAD
+#     lie on the SAME line, one containing the other. AHEAD is a lane that committed on top
+#     of the base; BEHIND is a stale checkout, and the round's own fast-forward check reports
+#     that as DIVERGED -- refusing it here would pre-empt that report with a worse reason. A
+#     detached HEAD on NEITHER end -- a diverged feature branch, an unrelated commit -- has
+#     no claim to `branch` and is refused.
+#
+# WHAT THIS DOES NOT SEPARATE, stated because a guard with an unstated limit reads as a
+# guard without one: a detached HEAD standing on a DIFFERENT branch that is itself a
+# descendant of `refs/remotes/<remote>/<branch>` resolves to `branch` too. Ancestry alone
+# cannot tell the two apart, and it must not be pressed to: a lane that has already pushed
+# its own branch (`git push -u origin worker/<n>-<slug>`) and then publishes to main has
+# exactly that shape, so refusing it would rebuild #329. What the push publishes is what the
+# lane has CHECKED OUT (`HEAD:<branch>`), never a local ref that may sit elsewhere.
+def head_branch(repo: Path, remote: str, branch: str):
+    """`(name, reason)` -- the branch HEAD is on, RESOLVED rather than assumed."""
+    rc, out, _ = _git(repo, "symbolic-ref", "--short", "HEAD")
+    if rc == 0:
+        current = out.strip()
+        if current == branch:
+            return branch, ""
+        return current, (
+            f"HEAD is on {current}, not {branch} — a pusher that published another "
+            f"branch would publish work this branch never contained"
+        )
+
+    tracking = f"refs/remotes/{remote}/{branch}"
+    rc, out, _ = _git(repo, "rev-parse", "--verify", "--quiet", tracking)
+    if rc != 0 or not out.strip():
+        return "", (
+            f"HEAD is detached and {remote}/{branch} is not a ref this repository carries, "
+            f"so the detached HEAD cannot be shown to be on {branch} — fetch {remote} first"
+        )
+    # SAME LINE, not necessarily AHEAD. HEAD descending from `<remote>/<branch>` and HEAD
+    # sitting BEHIND it are both "on `branch`'s line": the second is a stale checkout, and
+    # the round's own fast-forward check reports it as DIVERGED, which is the status the
+    # ruling asks for -- refusing it here would pre-empt that report with a worse reason.
+    # What is refused HERE is a detached HEAD on NEITHER end of the line: a feature branch
+    # that has diverged from `branch`, or an unrelated commit.
+    ahead = _git(repo, "merge-base", "--is-ancestor", tracking, "HEAD")[0] == 0
+    behind = _git(repo, "merge-base", "--is-ancestor", "HEAD", tracking)[0] == 0
+    if not (ahead or behind):
+        return "", (
+            f"HEAD is detached and {remote}/{branch} is on neither end of its history — "
+            f"the checked-out commit is not on {branch}'s line, so publishing it to "
+            f"{branch} would put work on {branch} that {branch} never contained"
+        )
+    return branch, ""
+
 def publish(
     repo: Path = REPO,
     *,
@@ -260,14 +321,10 @@ def publish(
         report["reason"] = f"{remote} is not configured in this repository"
         return report
 
-    rc, out, _ = _git(repo, "symbolic-ref", "--short", "HEAD")
-    current = out.strip() if rc == 0 else ""
+    current, why = head_branch(repo, remote, branch)
     if current != branch:
         report["status"] = "not-on-branch"
-        report["reason"] = (
-            f"HEAD is on {current or 'a detached head'}, not {branch} — a pusher that "
-            f"published another branch would publish work this branch never contained"
-        )
+        report["reason"] = why
         return report
 
     tip, why = remote_tip(repo, remote, branch)
@@ -323,7 +380,11 @@ def publish(
         report["status"] = "would-publish"
         return report
 
-    rc, out, err = _git(repo, "push", remote, f"{branch}:{branch}")
+    # WHAT IS PUBLISHED IS WHAT IS CHECKED OUT. `HEAD:{branch}` is the lane's own commit
+    # whether HEAD stands on `branch` or is detached in a worktree; `{branch}:{branch}`
+    # would push a LOCAL ref that a detached worktree never moves, so the pusher would
+    # publish something other than the work it was asked to publish.
+    rc, out, err = _git(repo, "push", remote, f"HEAD:{branch}")
     if rc != 0:
         report["status"] = "push-failed"
         report["reason"] = (err or out).strip()
@@ -334,7 +395,7 @@ def publish(
     # remote actually received rather than what this round intended to send. A commit
     # landing between the two reads is the one residual race, and the reader's own
     # comparison -- remote tip against this receipt -- is what surfaces it.
-    rc2, out2, _ = _git(repo, "rev-parse", branch)
+    rc2, out2, _ = _git(repo, "rev-parse", "HEAD")
     pushed = out2.strip()
     if rc2 != 0 or not pushed:
         pushed = report["shas"][0] if report["shas"] else ""
