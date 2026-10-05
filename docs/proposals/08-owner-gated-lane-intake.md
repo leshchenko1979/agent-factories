@@ -4,8 +4,8 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.2** 2026-10-04 (§10: peer-lane waits) · **rev.3** 2026-10-04 (§11: adversarial-review corrections) · **rev.4** 2026-10-04 (§12: add-on boundary, re-nudge payload, sleeping owner) · **rev.5** 2026-10-04 (§13: off-hours measured, safe default is an ask-time test) · **rev.6** 2026-10-04 (§14: every citation re-verified through the code index)
-**Status:** design input — not law; owner has not ruled. **Supersessions:** §4.2–§4.4 and §10.4.2/.5/.6 by §11; §4.1 (set-path list), §4.3 (drain rule), §4.4 (re-nudge payload) by §12; §12.3 rule 3 (quiet window) and Q6/Q7 by §13. The adversarial review is `docs/proposals/08-owner-gated-lane-intake.review.md`.
+**Date:** 2026-10-03 · **rev.2** 2026-10-04 (§10: peer-lane waits) · **rev.3** 2026-10-04 (§11: adversarial-review corrections) · **rev.4** 2026-10-04 (§12: add-on boundary, re-nudge payload, sleeping owner) · **rev.5** 2026-10-04 (§13: off-hours measured, safe default is an ask-time test) · **rev.6** 2026-10-04 (§14: every citation re-verified through the code index) · **rev.7** 2026-10-05 (§15: owner rulings — HOLD + rework; Q1 wait-flag + per-lane declaration; Q6 reversibility test adopted)
+**Status:** design input — not law. **Owner ruled 2026-10-05: HOLD + rework** (q59); Q1 and Q6 answered — §15. **Supersessions:** §4.2–§4.4 and §10.4.2/.5/.6 by §11; §4.1 (set-path list), §4.3 (drain rule), §4.4 (re-nudge payload) by §12; §12.3 rule 3 (quiet window) and Q6/Q7 by §13; §12.1's "suggest_options stays out of both" by §15.1. The adversarial review is `docs/proposals/08-owner-gated-lane-intake.review.md`.
 **Related:** `PROP-01` (cron-gated goal pipeline), `PROP-02` (human-load governed pacing),
 `docs/addons/harness/opencrabs.md`; upstream `leshchenko1979/opencrabs` — #13 (in-flight
 failsafe), #43/#50 (notify quiet mode), #344 (durable await record), #547 (oc-questions)
@@ -434,7 +434,10 @@ Net: the harness-native **set** paths reduce to **two** —
 2. the **explicit declaration** above (which is also how the open-questions add-on, and any
    future add-on, parks its lane).
 
-`suggest_options` stays out of both (§11.4). Nothing in the harness names `oc-questions`.
+`suggest_options` does not auto-set the wait — a non-blocking card is not a blocking ask
+(§11.4) — but **§15.1 (owner ruling, 2026-10-05) reopens it as an opt-in**: a lane MAY flag a
+`suggest_options` card as blocking, and that flag is one of the explicit declarations in the
+§12.1 CLI surface. Nothing in the harness names `oc-questions`.
 
 ### 12.2 (Q4.4) How the question resurfaces on timeout
 
@@ -691,3 +694,102 @@ Every load-bearing citation is now **index-verified and source-confirmed**; the 
 corrections and the §12/§13 owner answers stand unchanged. Nothing is implemented (the six
 proposed names are absent from the tree — the positive check that the design is still a design).
 The design gate holds; Q1 (automatic vs opt-in) and the rev.5 questions remain parked.
+
+---
+
+## 15. rev.7 — the owner's rulings (2026-10-05): HOLD + rework, and the two answers
+
+The owner answered all three registered questions on 2026-10-05 (Open Questions, factory
+`opencrabs-dev`, this lane's own set). The outcome is a **HOLD**, not an approval:
+
+| qid | question | owner's answer |
+|---|---|---|
+| **q59** | Approve rev.6 and file the fork issue? | **Hold — rework the design first** (not the recommended approve) |
+| **q60** | Q1 — which lanes auto-park while awaiting the owner? | *"Suggest_options may gain the wait flag + every lane can declare its wait"* → **opt-in + a per-lane declaration** (option 1), *not* the recommended automatic-for-known-cases (option 0) |
+| **q61** | Q6 — apply a reversibility test before asking? | **Yes** — two-way doors decide+record+FYI; one-way doors ask and a timeout **escalates, never defaults**; reversible-but-notable uses lazy consensus (= option 0, §13.2 adopted verbatim) |
+
+So the rework this revision performs is: **(a)** fold Q6 into law (§15.2); **(b)** replace
+§4.1's auto-set list and §12.1's "suggest_options stays out" with the opt-in + declaration
+model (§15.1); **(c)** state plainly which questions remain open and whether they block a
+re-approval (§15.3). Nothing is implemented; the six proposed names remain absent.
+
+### 15.1 (Q1, q60) The set path is opt-in + a per-lane declaration — the auto-set list is withdrawn
+
+**The ruling.** Every lane **declares** its wait; the harness does not infer it from a turn's
+end state. `suggest_options` may carry the wait flag, and every lane can declare its wait —
+i.e. the mechanism is the §12.1 explicit-declaration CLI, extended to the one card type §12.1
+had excluded.
+
+**What this changes.** §4.1's *"Set automatically … when a turn ends on any of"* list is
+**withdrawn** as the set path. The auto-set was the source of two review defects anyway —
+M11 (auto-set on `suggest_options` is wrong by the tool's own contract, `suggest_options.rs`
+is non-blocking) and the "who is the owner / which turn-end states count" ambiguity. Under the
+ruling there is **one** declared set path — the §12.1 CLI verb, unchanged in shape:
+
+```
+opencrabs session await set --session <id> --kind <owner_gate|peer_lane> --ref <id> [--prompt <text>]
+```
+
+**What the harness may still set without a fresh declaration — and why it is not a
+contradiction.** The owner's model is "declare, don't infer"; but two turn-end states are
+*already* explicit harness objects the lane named at creation time, not inferences: a plan left
+in the approvable state (`PostInitEditing`, `plan_files.rs:208`) and an `await_external
+kind=owner_gate` call. The withdrawn thing is inference from a *generic* turn end — "the lane
+fired a card, so it must be waiting". Under the ruling:
+
+| Producer | rev.6 | rev.7 (Q1) |
+|---|---|---|
+| plan in `PostInitEditing` | auto-set | **kept** — the plan card is an explicit, named object the lane created |
+| `await_external kind=owner_gate` | auto-set | **kept** — the call names the kind at the call site |
+| `suggest_options` fired | **excluded** | **opt-in** — only when the lane flags the card blocking |
+| open question parked (`oc-questions ask`) | auto-set | **withdrawn** (§12.1: the add-on declares via the CLI, never the harness reaching into it) |
+| any other turn end | not a producer | **not a producer** — a lane that wants the hold declares it |
+
+Net effect the owner asked for: **no silent inference**. A lane that wants its automation held
+says so on the one surface that carries the declaration; a lane that says nothing is never held.
+
+**Consequence for §4.2's gate predicate.** The gate still keys on the *state*
+(`is_awaiting()`), never on the producer — so §4.2's mechanism is unchanged; only §4.1's *set*
+path narrows. This is the same writer/reader split the adversarial review already forced: one
+writer (the CLI/flag), one predicate (`is_awaiting()`), one reader path.
+
+### 15.2 (Q6, q61) The reversibility test is adopted as lane law
+
+§13.2's corrected rule is adopted **verbatim** as the lane-side law, and it is **upstream of
+the gate**: it is the load-shedding that keeps most asks from ever parking a lane.
+
+| Decision class | Test | Action | Parks the lane? |
+|---|---|---|---|
+| **Two-way door** | reversible, bounded blast radius | decide, record, **notify as FYI** | **no** |
+| **One-way door** | irreversible or unbounded | ask; on timeout **escalate / hold — never auto-proceed** | yes |
+| **Reversible, but the owner cares** | reversible, but a cost or rule he would want to weigh | **lazy consensus**: announce the default + a deadline | soft (only if T > 0) |
+
+The residual timeout default survives **only** as lazy consensus — an *announced* default with
+a deadline, never a default bolted silently onto an open question. This is exactly §13.2, now
+with the owner's word behind it; §13.2's "Revised Q6" is answered.
+
+**Where this binds.** It is **lane-side process law** (the factory's half of the §9 boundary),
+not a harness behaviour — the harness cannot know whether a question is a two-way door. It
+ships in the lane's own skill (§9: "this factory's part is the process law that follows from
+it"), together with the declaration verb.
+
+### 15.3 What remains open, and whether it blocks a re-approval
+
+The HOLD was a rework order, not a rejection of the diagnosis. Of the eight questions raised
+across §8, §12.4 and §10.5, the owner has now answered **Q1** (q60) and **Q6** (q61); **Q7**
+(off-hours) and **Q8** (declaration verb) were already resolved internally in rev.5. What is
+left, and its status:
+
+| Question | Status | Blocks re-approval? |
+|---|---|---|
+| **Q2** starvation-cap duration (§8.2) | recommendation stands: the 1800 s `quiet` cap, configurable | no — mechanism detail, decide-and-record |
+| **Q3** does `interrupt` bypass (§8.3) | recommendation stands: yes — an alert must land | no — but the one the owner should eyeball (it is the Gatus-alert exception) |
+| **Q4** held cron drained vs re-scheduled (§8.4) | superseded by §12.3 rule 2: **digest, not drain** | no |
+| **Q5** state scope per-binding vs per-session (§8.5) | per binding, matching the await record | no |
+| **Q10.5.1–5** peer-case details | recommendations stand (minted per-wait id; wound-wait; propagated deadline; owner as escalation target; derive the graph) | no — the peer case is a §10 extension |
+
+**The rework is complete at the design level**: Q1 and Q6 are folded in (§15.1–§15.2), the
+auto-set inference is withdrawn, and the remaining items are either already answered or are
+mechanism details the design decides-and-records. **The next owner interaction is a
+re-approval ask** — this revision files no fork issue (still gated on approval) and implements
+nothing (design gate).
