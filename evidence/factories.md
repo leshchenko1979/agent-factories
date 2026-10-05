@@ -10,7 +10,9 @@ view`, `git remote -v`, the ops profile config and cron DB). Receipts:
 ## 1. OpenCrabs development
 
 **Purpose.** Build, test and ship the OpenCrabs agent binary. A fork of
-`adolfousier/opencrabs` is the working repo; upstream receives PRs only.
+`opencrabs/opencrabs` is the working repo; upstream receives PRs **and binary issue
+filings** (owner order 2026-10-03 21:17Z), and the factory tracker is
+`leshchenko1979/opencrabs-dev-factory`.
 
 **Chat surface.** Telegram forum group **`Crabs Kanban Board`** (chat
 `-1003936827469`, 3 members). ~20 topics; the load-bearing ones are
@@ -22,8 +24,9 @@ view`, `git remote -v`, the ops profile config and cron DB). Receipts:
 
 | Repo | Role |
 |---|---|
-| `leshchenko1979/opencrabs` | Fork — push target, **issues home** |
-| `adolfousier/opencrabs` | Upstream — **PRs only**, never a new issue |
+| `leshchenko1979/opencrabs` | Fork — push target; **READ-ONLY** for new issues (the historical portfolio) |
+| `opencrabs/opencrabs` | Upstream — PRs, and the **binary issue tracker** |
+| `leshchenko1979/opencrabs-dev-factory` | The **factory issue tracker** — tooling, CI, release automation, process |
 | `leshchenko1979/opencrabs-skill` | The process law itself (public), synced from `~/.opencrabs/profiles/ops/skills/opencrabs-dev/` |
 | `leshchenko1979/opencrabs-dev-state` | Private off-box durability tier: ledger, journals, receipts |
 

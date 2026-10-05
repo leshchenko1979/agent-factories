@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.49
+version: 0.1.50
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -242,7 +242,11 @@ When an instrument is inadequate, name **the repository that carries the code**,
 tool that surfaced the defect, and dispatch in the same turn it is found.
 
 The harness that this meta-factory and all surveyed factories run on is produced and managed
-by the **OpenCrabs factory** (`leshchenko1979/opencrabs`, Crabs Kanban Board topic `OC DEV HQ`).
+by the **OpenCrabs factory** (Crabs Kanban Board topic `OC DEV HQ`), which works from the source
+fork `leshchenko1979/opencrabs` and files on **two trackers**: a **BINARY** defect (runtime behaviour,
+channels, providers, TUI, memory, tools) on `opencrabs/opencrabs`, and a **FACTORY** defect (tooling,
+CI, release automation, process) on `leshchenko1979/opencrabs-dev-factory` — the portfolio
+`leshchenko1979/opencrabs` is **READ-ONLY**, never an issue home (owner order 2026-10-03 21:17Z).
 The OpenCrabs factory is simultaneously one of our surveyed member factories and the fleet's
 runtime supplier. All factories act as clients to OpenCrabs: we experience runtime friction,
 telemetry gaps, and scheduling bottlenecks directly, and advise OpenCrabs HQ with concrete
@@ -250,7 +254,7 @@ feature requests and instrument specifications.
 
 | Substrate | Owner |
 |---|---|
-| OpenCrabs instruments (daemon, core tools, brain/skill loading) | **OpenCrabs Kanban Board HQ** — lane `opencrabs-dev` / `hq`, topic `OC DEV HQ` (thread 30220), resolved live at dispatch; fork issues on `leshchenko1979/opencrabs` |
+| OpenCrabs instruments (daemon, core tools, brain/skill loading) | **OpenCrabs Kanban Board HQ** — lane `opencrabs-dev` / `hq`, topic `OC DEV HQ` (thread 30220), resolved live at dispatch; **binary** issues on `opencrabs/opencrabs`, **factory** issues on `leshchenko1979/opencrabs-dev-factory`, and the portfolio `leshchenko1979/opencrabs` READ-ONLY |
 | Token provisioning, model routing, inference pricing & endpoints | **InferHub Watch HQ** — lane `inferhub-watch` / `hq`, topic `InferHub Watch: Fallback Publisher Diversity & Predictors` (thread 2), resolved live at dispatch; issues on `leshchenko1979/inferhub-watch` |
 | `tg_*` tools (`tg_get_chat_info`, `tg_mtproto`) | `leshchenko1979/fast-mcp-telegram` |
 | `telegram_send` | **OpenCrabs core** (`src/brain/tools/telegram_send.rs`) — not fast-mcp-telegram |

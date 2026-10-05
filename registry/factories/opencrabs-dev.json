@@ -18,7 +18,7 @@
       "the meta-factory registry, its surveys and its scoring surface",
       "the live daemon configuration on this box: config.toml, keys.toml and the running units",
       "member factories' own process law, repos and backlogs",
-      "upstream adolfousier/opencrabs, which receives our PRs and -- since the 2026-10-03 two-stream routing order -- our BINARY issue filings; it is not ours to administer"
+      "upstream opencrabs/opencrabs (the historical alias adolfousier/opencrabs redirects there), which receives our PRs and -- since the 2026-10-03 two-stream routing order -- our BINARY issue filings; it is not ours to administer"
     ]
   },
   "services": [
@@ -47,9 +47,9 @@
       "cadence": "per skill version bump"
     },
     {
-      "name": "Fork issue intake and triage",
+      "name": "Issue intake and triage (two-stream)",
       "audience": "agent",
-      "entry": "the Triage lane on leshchenko1979/opencrabs",
+      "entry": "the Triage lane; a BINARY issue on opencrabs/opencrabs, a FACTORY issue on leshchenko1979/opencrabs-dev-factory, and the portfolio leshchenko1979/opencrabs READ-ONLY",
       "cadence": "on request"
     },
     {
