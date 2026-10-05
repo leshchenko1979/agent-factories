@@ -110,7 +110,7 @@ Acceptance Criteria:
 | Factory | Trigger Command (`trigger_cmd`) | Trigger Condition | Target Action |
 |---|---|---|---|
 | **InferHub Watch** | `gh issue list -R leshchenko1979/inferhub-watch --label unclaimed --json number` | `non_empty` | Dispatches task goal to persistent worker `1122b15e`. |
-| **Meta-Factory** | `python3 tools/hygiene.py --check` | `exit_non_zero` | Dispatches workspace cleanup goal if stale scratch files exceed threshold. |
+| **Meta-Factory** | `python3 tools/hygiene.py --audit` | `exit_non_zero` | Dispatches workspace cleanup goal if stale scratch files exceed threshold. |
 | **Miidas** | `python3 scripts/tenant_health_probe.py` | `non_empty` | Dispatches tenant remediation goal if client bot drift is detected. |
 | **AI AntiSpam** | `python3 outreach/lib/check_new_replies.py` | `non_empty` | Dispatches outreach reply sweep goal to moderator lane. |
 
