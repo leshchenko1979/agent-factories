@@ -2021,11 +2021,11 @@ def cmd_intake(cycle_id: str, record: bool = False, live: bool = False) -> int:
 # files. Those files are injected into EVERY lane's session and live in NO repository, so no
 # repo gate can read them — their only defences were a semantic lens (by eye) and a size
 # reading that printed and gated nothing. The owner re-homed the check here (q19,
-# 2026-10-05T06:43:37Z); the spec is infra's §4
+# 2026-10-05T06:43:37Z); the spec is infra's ruling
 # (`vds-servers/docs/rulings/2026-10-02-shared-brain-gate-design.md`).
 #
 # STDLIB ONLY — this verb adds NO local import, so the instrument's declared closure stays
-# EMPTY (instrument law §3) and a member that adopts the declared file set still gets a
+# EMPTY (docs/instruments/review-rotation.md §3) and a member that adopts the declared file set still gets a
 # runnable executable. Every file is read STREAMED, line by line: the box runs a small cgroup
 # cap and MEMORY.md is ~3.3k lines, so a whole-file `read()` is the one thing this must not do.
 
