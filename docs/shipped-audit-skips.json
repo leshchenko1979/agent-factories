@@ -84,6 +84,16 @@
       "artifact": "evidence/ (BOOTSTRAP-created, BOOTSTRAP.md steps 4b/4c)",
       "marker": "# STATED SKIP: evidence/ (BOOTSTRAP-created, steps 4b/4c)",
       "reason": "the leg reads evidence/insights.jsonl and the evidence tree's supersession state, and the shipped tree carries no evidence/ at all \u2014 so the population it judges is absent rather than current"
+    },
+    "tests/test_gate_triggers.py": {
+      "artifact": "registry/gate_triggers.json (factory data; the kit ships gate_triggers.example.json)",
+      "marker": "# STATED SKIP: registry/gate_triggers.json",
+      "reason": "the map is BOOTSTRAP-created \u2014 a factory copies the shipped example to the live name \u2014 and at the SHIPPED depth neither the live name nor the example (looked up under a nested TEMPLATE/) resolves, so the five probes that read the map have no subject (#322)"
+    },
+    "tests/test_ledger.py": {
+      "artifact": "docs/ledger-invariants.json (factory data; the kit ships ledger-invariants.example.json)",
+      "marker": "# STATED SKIP: docs/ledger-invariants.json",
+      "reason": "the (e) arm drives `ledger repair`, which needs a DECLARED invariant boundary; that declaration is factory data the kit does not ship, so `repair` refuses with the boundary-unavailable reason and the arm SKIPS carrying it, while the (a)-(d) WRITE-PATH arms still run (#322)"
     }
   }
 }

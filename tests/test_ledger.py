@@ -2516,27 +2516,44 @@ def main() -> int:
         # because a `claim` row maps to none (`INVARIANT_FOR_EVENT` carries only `close`),
         # and without it the repair would be refused for "no declared invariant" instead
         # — an arm that passes for the WRONG reason.
-        seeded = rows(cv_ledger)
-        squat_n = len(seeded) + 1
-        squat_row = {"n": squat_n, "ts": "2026-09-30T00:00:00Z", "event": "claim",
-                     "actor": "worker", "subject": cv_subj3,
-                     "detail": f"claim {cv_subj3}: a legacy squat. claim={cv_subj3}"}
-        cv_ledger.write_text(
-            "\n".join(json.dumps(x) for x in seeded + [squat_row]) + "\n",
-            encoding="utf-8")
-        digest_before = hashlib.md5(cv_ledger.read_bytes()).hexdigest()
-        r = run(cv_ledger, "repair", "--actor", "worker", "--n", str(squat_n),
-                "--invariant", "close_row_revision",
-                "--append-detail", "claim=reconstructed",
-                "--note", "probe: repair must stay exactly as narrow as it was")
-        msg = (r.stdout + r.stderr).strip()
-        check("(e) repair still REFUSES a second `claim=` on a row that declares one",
-              r.returncode != 0, msg[-150:])
-        check("(e) and the refusal names the key it would re-declare",
-              "'claim'" in msg or "claim" in msg, msg[-220:])
-        check("(e) and the refused repair left the ledger BYTE-IDENTICAL",
-              hashlib.md5(cv_ledger.read_bytes()).hexdigest() == digest_before,
-              digest_before)
+        #
+        # BUT the arm DRIVES `repair`, and `repair` needs a DECLARED invariant boundary,
+        # which is FACTORY DATA: the shipped tree carries `docs/ledger-invariants.example.json`
+        # and no `docs/ledger-invariants.json`, so `repair` refuses with the
+        # boundary-unavailable reason and this arm would red as though the instrument were
+        # broken — the SAME missing declaration the repair-path block above states a skip
+        # for (#229). Read it through the ONE shared reader rather than restating a date,
+        # and SKIP with its stated reason when this tree has declared none.
+        # STATED SKIP: docs/ledger-invariants.json (factory data)
+        try:
+            ledger_boundary.declared_boundary(REPO, "close_row_revision")
+        except ledger_boundary.SkipGate as exc:
+            print(
+                f"  SKIP  (e) the repair-path arms — {exc} The (a)-(d) arms above judge "
+                "the WRITE PATH and still ran; only this arm needs the declared boundary."
+            )
+        else:
+            seeded = rows(cv_ledger)
+            squat_n = len(seeded) + 1
+            squat_row = {"n": squat_n, "ts": "2026-09-30T00:00:00Z", "event": "claim",
+                         "actor": "worker", "subject": cv_subj3,
+                         "detail": f"claim {cv_subj3}: a legacy squat. claim={cv_subj3}"}
+            cv_ledger.write_text(
+                "\n".join(json.dumps(x) for x in seeded + [squat_row]) + "\n",
+                encoding="utf-8")
+            digest_before = hashlib.md5(cv_ledger.read_bytes()).hexdigest()
+            r = run(cv_ledger, "repair", "--actor", "worker", "--n", str(squat_n),
+                    "--invariant", "close_row_revision",
+                    "--append-detail", "claim=reconstructed",
+                    "--note", "probe: repair must stay exactly as narrow as it was")
+            msg = (r.stdout + r.stderr).strip()
+            check("(e) repair still REFUSES a second `claim=` on a row that declares one",
+                  r.returncode != 0, msg[-150:])
+            check("(e) and the refusal names the key it would re-declare",
+                  "'claim'" in msg or "claim" in msg, msg[-220:])
+            check("(e) and the refused repair left the ledger BYTE-IDENTICAL",
+                  hashlib.md5(cv_ledger.read_bytes()).hexdigest() == digest_before,
+                  digest_before)
 
     check_lock_is_repo_scoped()
     check_stale_ref_refused()

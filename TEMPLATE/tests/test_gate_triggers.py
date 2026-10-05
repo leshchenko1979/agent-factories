@@ -57,6 +57,53 @@ def _selector():
     return _load("oc_gate_select_map", GATE_SELECT)
 
 
+# --- the absence contract (#199 / #322) --------------------------------------------
+# STATED SKIP: registry/gate_triggers.json (factory data)
+# THE MAP IS FACTORY DATA. The kit ships `registry/gate_triggers.example.json`, and a
+# factory copies it to the live name (TEMPLATE/BOOTSTRAP.md) — so at the SHIPPED depth
+# there is no map to resolve: `load_map` looks for the example under a nested `TEMPLATE/`,
+# which only the ROOT tree has, and the five probes below that read the map have no
+# subject. That is the #199 class — a gate that cannot pass in the tree it ships from —
+# and its remedy is the #229 shape: the absence is DECLARED, never silent. The reason is
+# stated here, and `tests/test_shipped_audit_runs.py` asserts this marker line is present.
+#
+# BOTH INVOCATION MODES MUST REACH THE GUARD (#195). The audit invokes this gate in
+# PYTEST mode, and pytest never calls `main()`, so a guard there would protect only the
+# script-mode run. `pytestmark` COLLECTS the tests and skips them (exit 0); a module-level
+# `pytest.skip` would exit 5, which the audit reads as a failure.
+def _map_skip_reason(root: Path) -> str:
+    """A stated reason when no trigger map resolves in this tree, else "".
+
+    The predicate is the SELECTOR's OWN `load_map`, never a second parse of the same
+    absence (`docs/instruments/ledger.md` §9.8 "One field, one predicate"): if the
+    instrument cannot read a map, the gate that judges the map has no subject — and the two
+    can never disagree about which map is in force. A MISSING SELECTOR is not a skip: that
+    is a defect, and it must FAIL.
+    """
+    if not GATE_SELECT.is_file():
+        return ""
+    try:
+        mapping = _selector().load_map(root)
+    except Exception:  # noqa: BLE001 — an unreadable selector is a FAIL, never a skip
+        return ""
+    if mapping is not None:
+        return ""
+    return (
+        "no gate trigger map resolves in this tree: neither "
+        f"{root / 'registry' / 'gate_triggers.json'} nor "
+        f"{root / 'TEMPLATE' / 'registry' / 'gate_triggers.example.json'} is readable. "
+        "The map is FACTORY DATA — the kit ships registry/gate_triggers.example.json and a "
+        "factory copies it to the live name — so the shipped tree has no map to judge"
+    )
+
+
+_SKIP_REASON = _map_skip_reason(REPO)
+if _SKIP_REASON:
+    import pytest as _pytest  # noqa: E402
+
+    pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
+
+
 def _live_map() -> dict:
     """The map this tree resolves, through the SELECTOR's own loader.
 
@@ -324,6 +371,12 @@ def main() -> int:
         if not relative.is_file():
             print(f"FAIL -- required artifact missing: {relative}")
             return 1
+    if _SKIP_REASON:
+        # The stated skip, for the SCRIPT face: a clean exit carrying its reason, exactly
+        # as the pytest face does through `pytestmark`. A silent 0 would be a skip whose
+        # reason has gone, which this factory counts as a defect (#199).
+        print(f"gate triggers: SKIPPED — {_SKIP_REASON}")
+        return 0
     for probe in PROBES:
         print(f"\n{probe.__name__}")
         probe()
