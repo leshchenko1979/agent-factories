@@ -121,7 +121,7 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (§5).
 | # | path (root half ↔ TEMPLATE half) | class | what it is |
 |---|---|---|---|
 | 1 | `tools/review.py` ↔ `TEMPLATE/tools/review.py` | `standalone` | **the executable** — every leg of the lifecycle |
-| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **29 collected** (`pytest --collect-only -q`) at **2026-10-03T22:35:40Z**, in the tree this doc ships in |
+| 2 | `tests/test_review.py` ↔ `TEMPLATE/tests/test_review.py` | `standalone` | **the gate** — one test per pinned behaviour; **38 collected** (`pytest --collect-only -q`) at **2026-10-05T07:56:23Z**, in the tree this doc ships in |
 | 3 | `docs/review-cycle.schema.json` ↔ `TEMPLATE/docs/review-cycle.schema.json` | `standalone` | the state schema, **emitted** by `review.py schema`, never hand-kept |
 | 4 | `docs/review-lenses.md` ↔ `TEMPLATE/docs/review-lenses.md` | `standalone` | the lens catalogue law and the Adversarial Isolation Requirement |
 | 5 | `docs/instruments/review-rotation.md` ↔ `TEMPLATE/docs/instruments/review-rotation.md` | `standalone` | this file |
@@ -165,6 +165,15 @@ it needs — and a reader should not assume it of an instrument whose closure is
 measurement and a closure nobody checked look identical in prose, so the measurement is stated with
 its predicate. If a future leg adds a local import, this section is where it is declared.
 
+**Re-measured at the brain leg (G4, §7), and still EMPTY.** The `brain` verb added for the
+mechanical brain gate reads a profile home with `pathlib` and `re` and imports **nothing new** —
+measured at that commit: **0 hits** for `^import tools`, `^from tools`, `importlib` and
+`__import__` over the executable, and the whole import block is still stdlib
+(`argparse`, `datetime`, `hashlib`, `json`, `os`, `re`, `sys`, `pathlib`, `typing`). The verb's
+INPUT — the profile's `*.md` brain files — is **read**, never imported: it lives outside the tree
+and outside the closure by construction, which is why the check could be added without moving the
+declared set.
+
 ## 4. The gate set and its registry entries
 
 **The instrument's gate is part 2 of §2** — `tests/test_review.py`, byte-paired with its `TEMPLATE/`
@@ -185,9 +194,9 @@ Measured this turn, and the two facts are different:
 
 | gate | property it holds over this instrument |
 |---|---|
-| `tests/test_review.py` | the instrument's own behaviour — the 27 named tests of §7 |
+| `tests/test_review.py` | the instrument's own behaviour — the 38 named tests of §7 |
 | `tests/test_docs_sync.py` | the doc pair — every `docs/` ↔ `TEMPLATE/docs/` pair byte-identical |
-| `tests/test_template_sync.py` | all **84** pairs, and the portability scan (0 hex literals resolving) |
+| `tests/test_template_sync.py` | all **99** pairs, and the portability scan (0 hex literals resolving) |
 | `tests/test_kit_pin.py` | the manifest pin — a member's verdict depends on **its own** pin, never ours |
 | `tests/test_kit_manifest.py` | that every shipped path carries a class and the digest matches the tree |
 
@@ -223,6 +232,13 @@ in no registry at all.)
 shipped schema is stale against `review.py schema`, so the artifact and its emitter cannot drift
 apart unnoticed. That is a *self*-check, and it is the reason part 3 is enforceable without a
 registry entry.
+
+**The gate set is UNCHANGED by the brain leg (G4, §7).** The `brain` verb's probes live in
+`tests/test_review.py` — the same gate the table above already names — so no gate was added, no
+registry entry moved, and §2's five-path declared set is untouched. The leg is a new **verb** in
+the instrument's own executable, not a new instrument, which is exactly what shape (a) bought: the
+mechanical check grew inside the file a member already adopts, rather than arriving as a second
+reader (a script + its own cron) that no member's declared set would carry.
 
 ## 5. The version identifier — part 4
 
@@ -337,9 +353,9 @@ none); neither is coined here.
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This
-instrument's probes are named, not implied — all **27** are in `tests/test_review.py`, and each is
-named for the behaviour it pins. The nine this promotion added are the ones that make the new
-mechanisms non-vacuous:
+instrument's probes are named, not implied — all **38** are in `tests/test_review.py`, and each is
+named for the behaviour it pins. The nine the first promotion added are the ones that make the
+lifecycle's new mechanisms non-vacuous:
 
 | probe | what it shows |
 |---|---|
@@ -353,14 +369,28 @@ mechanisms non-vacuous:
 | `test_codify_records_a_finding_and_refuses_a_carrier_less_one` | the WRITER: a carrier-less finding is refused at write time, the lawful form records one home (never a second log), and a FROZEN cycle refuses new findings |
 | `test_close_completed_is_refused_while_the_census_is_incomplete` | a cycle with nothing run cannot be `COMPLETED`, a waiver without a reason is a gap, and a refused close does not move the status |
 
-**The remaining eighteen pin the older surface**, and they are listed because a probe set stated as a
+**The seven the brain leg (G4) added are a second, independent set** — the mechanical half of the
+brain gate, each shown to BITE on a **hermetic fixture home** rather than the live brain (a live
+reading passes today and tests nothing):
+
+| probe | what it shows |
+|---|---|
+| `test_brain_leg_holds_on_a_hermetic_fixture` | the positive half: a clean home passes all four — including a **blockquoted** `Owns:`, the tolerant case, so the gate does not red a file that HAS a header |
+| `test_brain_leg_flags_a_size_budget_breach` | invariant 1: an `AGENTS.md` over the 500-line budget is a NAMED violation |
+| `test_brain_leg_flags_a_missing_owns_header` | invariant 2: a file with no `Owns:` in the first N lines is named, never passed silently |
+| `test_brain_leg_flags_a_dangling_pointer` | invariant 3: a `→ X.md` naming no brain or skill file is a NAMED violation |
+| `test_brain_leg_flags_a_duplicated_rule` | invariant 4: one normalised line in TWO files is the one-concept-one-home breach |
+| `test_brain_leg_resolves_a_pointer_into_a_skill_dir` | the ANTI-FALSE-POSITIVE: a `→ SKILL.md` under `skills/<skill>/` resolves, so the rule does not red the live brain on arrival for a good pointer |
+| `test_brain_leg_reports_a_missing_required_file` | a home missing one of the always-injected triple is named, never silently dropped |
+
+**The remaining twenty-two pin the older surface**, and they are listed because a probe set stated as a
 count is not a probe set stated by name: `test_review_lifecycle`, `test_schema_artifact_is_generated`,
 `test_cadence_boundary_is_anchored`, `test_cadence_reads_both_shipped_ledger_formats`,
 `test_legacy_state_is_refused_and_migrated_explicitly`, `test_close_sets_both_durations`,
 `test_verify_reports_unreceipted_lenses`, `test_intake_refuses_with_no_declarations`,
 `test_intake_is_read_only_over_member_data`, `test_intake_names_empty_and_incomplete`,
 `test_intake_refuses_a_declared_channel_that_is_absent`,
-`test_intake_receipts_validate_against_the_schema`, `test_shipped_executable_carries_no_donor_tokens`, and the five added since: `test_migration_maps_the_donor_terminal_synonym`, `test_migration_reports_values_it_cannot_map`, `test_a_migrated_record_renders_without_a_recorded_digest`, `test_the_donor_lens_key_rename_is_mapped_and_named`, `test_intake_dates_the_mandated_instant_form`.
+`test_intake_receipts_validate_against_the_schema`, `test_shipped_executable_carries_no_donor_tokens`, and the five added since: `test_migration_maps_the_donor_terminal_synonym`, `test_migration_reports_values_it_cannot_map`, `test_a_migrated_record_renders_without_a_recorded_digest`, `test_the_donor_lens_key_rename_is_mapped_and_named`, `test_intake_dates_the_mandated_instant_form`, plus four the lens-seed and janitor legs added: `test_a_declared_lens_extends_the_catalogue_without_forking_it`, `test_the_shipped_seed_declares_nothing`, `test_the_janitor_repairs_a_killed_runs_leak`, `test_the_next_run_repairs_a_killed_runs_leak`.
 
 **Two of these are structural rather than behavioural, and they are the ones a member most needs:**
 
@@ -379,8 +409,9 @@ from the tree under test — holds here by construction: `REPO_ROOT` resolves fr
 cycle the probes use is built by the probe itself under a test-local id (`test-cycle-01`,
 `test-migrate-synonym`, `test-lens-key-rename`), and no probe reads a kit or donor tree. The dates and
 tokens those fixtures carry are the donor's **shape**, reproduced as input, never a value read back
-from the donor's state. Measured: the suite returns **27 passed** in a foreign copy materialized with
-no `.git` and no history — so the verdict is a reading of the tree it runs in, which is the property
+from the donor's state. Measured: the suite returns **38 passed** in a foreign copy materialized with
+no `.git` and no history (2026-10-05, the tree this doc ships in, at the brain leg) — so the verdict
+is a reading of the tree it runs in, which is the property
 the clause exists to secure. Clauses 2 and 3 are **N/A**: there is no hand-rolled probe driver and no
 hand-rolled runner — the gate is `pytest`, which honours its readers' declared skip vocabulary
 natively.

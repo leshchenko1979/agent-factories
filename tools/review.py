@@ -2015,6 +2015,171 @@ def cmd_intake(cycle_id: str, record: bool = False, live: bool = False) -> int:
         print(f"  recorded {len(receipts)} receipt(s) in the cycle state")
     return rc
 
+# ---------------------------------------------------------------- the brain leg (G4)
+
+# The mechanical half of gap G4: four deterministic invariants over the ops profile's brain
+# files. Those files are injected into EVERY lane's session and live in NO repository, so no
+# repo gate can read them — their only defences were a semantic lens (by eye) and a size
+# reading that printed and gated nothing. The owner re-homed the check here (q19,
+# 2026-10-05T06:43:37Z); the spec is infra's §4
+# (`vds-servers/docs/rulings/2026-10-02-shared-brain-gate-design.md`).
+#
+# STDLIB ONLY — this verb adds NO local import, so the instrument's declared closure stays
+# EMPTY (instrument law §3) and a member that adopts the declared file set still gets a
+# runnable executable. Every file is read STREAMED, line by line: the box runs a small cgroup
+# cap and MEMORY.md is ~3.3k lines, so a whole-file `read()` is the one thing this must not do.
+
+BRAIN_SIZE_LIMIT = 500      # the always-loaded file's line budget, from the profile's own canon
+BRAIN_OWNS_WINDOW = 20      # lines the tolerant `Owns:` search reads
+BRAIN_DUP_MIN_LEN = 20      # normalised chars below which a line is furniture, not a rule
+BRAIN_REQUIRED = ("AGENTS.md", "SOUL.md", "USER.md")  # the always-injected triple
+
+# A pointer is a bare `X.md` name after an arrow. A PATH (`skills/x/y.md`) is a repo citation,
+# not a brain pointer, so it is out of scope by construction — the class carries no `/`.
+_BRAIN_POINTER_RE = re.compile(r"→\s*\**`?([A-Za-z0-9_.\-]+\.md)`?\**")
+# Tolerant `Owns:`: the blockquote markers are stripped before this is tried, the bold markers
+# are optional, and it must sit at line start (SOUL.md carries its own inside a blockquote).
+_BRAIN_OWNS_RE = re.compile(r"^\**\s*Owns:")
+# A line made ENTIRELY of markdown furniture (`---`, `|---|`, a fence, `>`) is not a rule —
+# and every file's table separators would otherwise read as duplicates of every other file's.
+_BRAIN_STRUCTURE_RE = re.compile(r"^[\s|*_=`>:~\-]+$")
+
+
+def _brain_lines(path: Path):
+    """Yield `(lineno, text)` for a file, STREAMED — never a whole-file `read()`."""
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        for lineno, raw in enumerate(fh, 1):
+            yield lineno, raw.rstrip("\n")
+
+
+def _brain_skill_names(home: Path) -> set:
+    """The `*.md` names sitting directly inside a skill directory under `<home>/skills/`.
+
+    A brain pointer names a sibling brain file OR a skill file — a routing table in the brain
+    sends a reader to a skill's own law file (`SKILL.md`), which lives in `skills/<skill>/`. Both
+    domains are real, so both resolve, and the rule is MECHANICAL rather than an allow-list (an
+    allow-list is what silently grows). Scope limit, stated rather than implied: one level deep
+    (`skills/*/*.md`); a pointer into a skill's own subdirectory is out of scope and reads as
+    dangling rather than being quietly excused.
+    """
+    names = set()
+    skills = home / "skills"
+    if not skills.is_dir():
+        return names
+    for entry in sorted(skills.iterdir()):
+        if not entry.is_dir():
+            continue
+        try:
+            for candidate in entry.glob("*.md"):
+                if candidate.is_file():
+                    names.add(candidate.name)
+        except OSError:
+            continue
+    return names
+
+
+def cmd_brain(home_path: str, json_out: bool = False) -> int:
+    """G4 — the four mechanical invariants over a profile's brain files.
+
+    Read-only and deterministic. `--home` is the PROFILE HOME (`~/.opencrabs/profiles/ops`),
+    never a repository: the brain lives in no repo, which is exactly why no repo gate could
+    read it. The gate therefore runs on the box, and each member runs it against its own home.
+
+    rc=0 all four hold; rc=1 one line per violation; rc=2 the home itself is unreadable.
+    """
+    home = Path(home_path).expanduser()
+    if not home.is_dir():
+        print(f"brain: home not found: {home}", file=sys.stderr)
+        return 2
+
+    files = sorted(p for p in home.glob("*.md") if p.is_file())
+    names = {p.name for p in files}
+    skill_names = _brain_skill_names(home)
+    violations = []
+
+    def flag(invariant: str, filename: str, detail: str) -> None:
+        violations.append({"invariant": invariant, "file": filename, "detail": detail})
+
+    # --- invariant 2a: the always-injected triple is PRESENT (absence reported by name) ----
+    for required in BRAIN_REQUIRED:
+        if required not in names:
+            flag("missing", required, "required brain file absent from the profile home")
+
+    line_counts = {}
+    duplicated = {}
+
+    for path in files:
+        count = 0
+        owns_seen = False
+        for lineno, line in _brain_lines(path):
+            count = lineno
+            # invariant 2b — the ownership declaration, tolerant over the first N lines
+            if not owns_seen and lineno <= BRAIN_OWNS_WINDOW:
+                if _BRAIN_OWNS_RE.match(re.sub(r"^\s*>+\s*", "", line)):
+                    owns_seen = True
+            # invariant 3 — every arrow pointer must resolve
+            for match in _BRAIN_POINTER_RE.finditer(line):
+                target = match.group(1)
+                if target == path.name or target in names or target in skill_names:
+                    continue
+                flag("dangling", path.name,
+                     f"line {lineno}: → {target} resolves to no brain or skill file")
+            # invariant 4 — collect the normalised rule lines for the cross-file pass
+            normalised = line.strip().lower()
+            if (
+                len(normalised) >= BRAIN_DUP_MIN_LEN
+                and not normalised.startswith("#")
+                and not normalised.startswith("<!--")
+                and not _BRAIN_STRUCTURE_RE.match(normalised)
+            ):
+                duplicated.setdefault(normalised, []).append((path.name, lineno))
+        line_counts[path.name] = count
+        if not owns_seen:
+            flag("owns", path.name,
+                 f"no `Owns:` header in the first {BRAIN_OWNS_WINDOW} lines")
+
+    # --- invariant 1 — the size budget on the always-loaded file --------------------------
+    agents_lines = line_counts.get("AGENTS.md")
+    if agents_lines is not None and agents_lines > BRAIN_SIZE_LIMIT:
+        flag("size", "AGENTS.md", f"{agents_lines} lines > {BRAIN_SIZE_LIMIT} budget")
+
+    # --- invariant 4 — the cross-file pass: one concept, one home -------------------------
+    # The VIOLATION is the cross-file repeat, so it is reported per FILE PAIR — a per-line
+    # report would print sixty rows for one copied block and bury the signal in its own echo.
+    pair_hits = {}
+    for normalised, hits in duplicated.items():
+        owners = sorted({name for name, _ in hits})
+        if len(owners) < 2:
+            continue
+        pair = tuple(owners)
+        entry = pair_hits.setdefault(pair, {"count": 0, "sample": normalised, "where": []})
+        entry["count"] += 1
+        entry["where"].extend(f"{name}:{lineno}" for name, lineno in hits)
+
+    for pair, entry in sorted(pair_hits.items()):
+        sample = entry["sample"]
+        preview = sample if len(sample) <= 60 else sample[:57] + "…"
+        first = entry["where"][0] if entry["where"] else ""
+        flag("duplicate", " + ".join(pair),
+             f"{entry['count']} normalised line(s) shared across files "
+             f"(first {first}: {preview})")
+
+    if json_out:
+        print(json.dumps({
+            "home": str(home),
+            "files": len(files),
+            "violations": violations,
+            "ok": not violations,
+        }, indent=2))
+    elif violations:
+        for violation in violations:
+            print(f"  {violation['invariant'].upper():9s} {violation['file']}: {violation['detail']}")
+        print(f"brain FAIL: {len(violations)} violation(s) over {len(files)} file(s) in {home}.")
+    else:
+        print(f"brain OK: size, owns, pointers and duplicates all hold "
+              f"over {len(files)} file(s) in {home}.")
+    return 1 if violations else 0
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Multi-Lens Review Engine")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
@@ -2105,6 +2270,15 @@ def main() -> int:
     p_step0.add_argument("--record", action="store_true",
                          help="Append the reading to step0_log (durable evidence)")
 
+    p_brain = subparsers.add_parser(
+        "brain", help="Mechanical brain leg (G4): four invariants over a profile's brain files"
+    )
+    p_brain.add_argument(
+        "--home", required=True,
+        help="Profile home holding the brain *.md files (e.g. ~/.opencrabs/profiles/ops)",
+    )
+    p_brain.add_argument("--json", action="store_true", help="Output as a JSON object")
+
     args = parser.parse_args()
 
     if args.subcommand == "init":
@@ -2137,6 +2311,8 @@ def main() -> int:
         return cmd_step0(args.cycle_id, args.record)
     elif args.subcommand == "codify":
         return cmd_codify(args.cycle_id, args.finding, args.disposition, args.home, args.reason)
+    elif args.subcommand == "brain":
+        return cmd_brain(args.home, json_out=args.json)
     return 1
 
 

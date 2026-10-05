@@ -1363,6 +1363,127 @@ _LOAD_AND_JANITOR_SNIPPET = (
 )
 
 
+# --------------------------------------------------------------- the brain leg (G4)
+#
+# The mechanical brain leg runs over a PROFILE HOME (`~/.opencrabs/profiles/ops`), which lives
+# in no repository — so every probe below builds its OWN home under a `TemporaryDirectory` and
+# NEVER reads the live brain. A live reading passes today and tests nothing (the disarmed-control
+# class); a hermetic fixture pair — one that HOLDS, one that VIOLATES each invariant — is what
+# shows the gate BITES. The fixture bodies are the donor's SHAPE, written here as input.
+
+_BRAIN_CMD = [sys.executable, str(REPO_ROOT / "tools" / "review.py"), "brain"]
+
+# A holding home: AGENTS.md short, every file carries an `Owns:` header (SOUL.md's inside a
+# BLOCKQUOTE, the tolerant case), AGENTS.md points at a real sibling, and no line repeats.
+_BRAIN_HOLDS = {
+    "AGENTS.md": "# AGENTS.md\n\n**Owns:** the rules\n\n→ `SOUL.md`\n",
+    "SOUL.md": "# SOUL.md\n\n> **Owns:** the voice\n",
+    "USER.md": "# USER.md\n\n**Owns:** the user\n",
+}
+
+
+def _brain_home(tmp: str, files: dict, skills: dict | None = None) -> Path:
+    """Materialise a hermetic brain home under `tmp`; return its path."""
+    home = Path(tmp) / "home"
+    home.mkdir()
+    for name, body in files.items():
+        (home / name).write_text(body, encoding="utf-8")
+    for skill_dir, filename in (skills or {}).items():
+        target = home / "skills" / skill_dir
+        target.mkdir(parents=True)
+        (target / filename).write_text("# a skill\n", encoding="utf-8")
+    return home
+
+
+def _run_brain(home: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(_BRAIN_CMD + ["--home", str(home)],
+                          cwd=REPO_ROOT, capture_output=True, text=True)
+
+
+def test_brain_leg_holds_on_a_hermetic_fixture() -> None:
+    """A clean home passes all four — and a BLOCKQUOTED `Owns:` counts as present.
+
+    This is the positive half of the fixture pair. SOUL.md's header sits inside a `> ` quote
+    (the live format is not uniform), so a gate that required a bare `**Owns:**` would red a
+    file that HAS one. The pass here is that tolerance being exercised.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        res = _run_brain(_brain_home(tmp, _BRAIN_HOLDS))
+        assert res.returncode == 0, f"a clean fixture failed: {res.stdout}{res.stderr}"
+        assert "brain OK" in res.stdout
+
+
+def test_brain_leg_flags_a_size_budget_breach() -> None:
+    """Invariant 1: the always-loaded AGENTS.md over the 500-line budget is a named violation."""
+    files = dict(_BRAIN_HOLDS)
+    files["AGENTS.md"] = "# AGENTS.md\n\n**Owns:** the rules\n" + "".join(
+        f"filler line {i}\n" for i in range(501)
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        res = _run_brain(_brain_home(tmp, files))
+        assert res.returncode == 1, res.stdout
+        assert "SIZE" in res.stdout and "AGENTS.md" in res.stdout, res.stdout
+
+
+def test_brain_leg_flags_a_missing_owns_header() -> None:
+    """Invariant 2: a file with no `Owns:` in the first N lines is named, not passed silently."""
+    files = dict(_BRAIN_HOLDS)
+    files["BASH.md"] = "# BASH.md\n\nno ownership declaration here\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        res = _run_brain(_brain_home(tmp, files))
+        assert res.returncode == 1, res.stdout
+        assert "OWNS" in res.stdout and "BASH.md" in res.stdout, res.stdout
+
+
+def test_brain_leg_flags_a_dangling_pointer() -> None:
+    """Invariant 3: a `→ X.md` naming no brain or skill file is a named violation."""
+    files = dict(_BRAIN_HOLDS)
+    files["AGENTS.md"] = "# AGENTS.md\n\n**Owns:** the rules\n\n→ `NOWHERE.md`\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        res = _run_brain(_brain_home(tmp, files))
+        assert res.returncode == 1, res.stdout
+        assert "DANGLING" in res.stdout and "NOWHERE.md" in res.stdout, res.stdout
+
+
+def test_brain_leg_flags_a_duplicated_rule() -> None:
+    """Invariant 4: one normalised line in TWO files is the one-concept-one-home breach."""
+    shared = "- **the same rule written into two files, verbatim and normalised**\n"
+    files = dict(_BRAIN_HOLDS)
+    files["AGENTS.md"] = "# AGENTS.md\n\n**Owns:** the rules\n\n" + shared
+    files["BASH.md"] = "# BASH.md\n\n**Owns:** the shell\n\n" + shared
+    with tempfile.TemporaryDirectory() as tmp:
+        res = _run_brain(_brain_home(tmp, files))
+        assert res.returncode == 1, res.stdout
+        assert "DUPLICATE" in res.stdout, res.stdout
+        assert "AGENTS.md" in res.stdout and "BASH.md" in res.stdout, res.stdout
+
+
+def test_brain_leg_resolves_a_pointer_into_a_skill_dir() -> None:
+    """A `→ SKILL.md` naming a file under `skills/<skill>/` RESOLVES — the anti-false-positive.
+
+    The brain's own routing table sends a reader to a skill's law file, which lives inside a
+    skill directory rather than at the home root. A gate that only looked at the home root
+    would red the LIVE brain on arrival for such pointers — so this arm holds the resolution
+    rule that keeps the real brain green.
+    """
+    files = dict(_BRAIN_HOLDS)
+    files["AGENTS.md"] = "# AGENTS.md\n\n**Owns:** the rules\n\n→ `SKILL.md`\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        home = _brain_home(tmp, files, skills={"some-skill": "SKILL.md"})
+        res = _run_brain(home)
+        assert res.returncode == 0, f"a skill pointer was called dangling: {res.stdout}"
+
+
+def test_brain_leg_reports_a_missing_required_file() -> None:
+    """A brain home missing one of the always-injected triple is named, never silently dropped."""
+    files = dict(_BRAIN_HOLDS)
+    del files["USER.md"]
+    with tempfile.TemporaryDirectory() as tmp:
+        res = _run_brain(_brain_home(tmp, files))
+        assert res.returncode == 1, res.stdout
+        assert "MISSING" in res.stdout and "USER.md" in res.stdout, res.stdout
+
+
 def main() -> int:
     print("Tests for the Multi-Lens Review Engine (tools/review.py / P32)")
     print(f"  python {sys.version.split()[0]}")
@@ -1417,6 +1538,13 @@ def main() -> int:
     test_close_completed_is_refused_while_the_census_is_incomplete()
     test_a_declared_lens_extends_the_catalogue_without_forking_it(Path("/tmp"))
     test_the_shipped_seed_declares_nothing()
+    test_brain_leg_holds_on_a_hermetic_fixture()
+    test_brain_leg_flags_a_size_budget_breach()
+    test_brain_leg_flags_a_missing_owns_header()
+    test_brain_leg_flags_a_dangling_pointer()
+    test_brain_leg_flags_a_duplicated_rule()
+    test_brain_leg_resolves_a_pointer_into_a_skill_dir()
+    test_brain_leg_reports_a_missing_required_file()
     print("ALL TESTS PASSED")
     return 0
 
