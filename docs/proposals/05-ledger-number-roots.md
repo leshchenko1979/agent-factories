@@ -25,8 +25,9 @@ requires `N >= the row's own n`.
 | declare `rows=` **correctly** | 14 |
 | declare `rows=` and **genuinely mismatch** | **2** |
 
-The two genuine mismatches, both in `docs/close-verify-count-exemptions.json` as
-PERMANENT DEBT:
+The two genuine mismatches, both recorded as PERMANENT DEBT in
+`docs/close-verify-count-exemptions.json` — a file retired at `aa091e7` along with the
+`rows=` gate it exempted, so this citation is historical:
 
 - **n=931** declared `rows=930` — the lane ran `append` **twice in one turn** against the
   same detail, so the receipt covered n=930 and not itself.
