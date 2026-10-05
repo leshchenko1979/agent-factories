@@ -109,14 +109,35 @@ entries — the home §4 names for an executable outside the manifest population
 absence is not a part-3 defect.** One instrument, two class homes, and this section is where the
 split is stated rather than left to be rediscovered.
 
-**The fifth is the exception, and it is the reason this row says four rather than five.**
-`tools/kit_surfaces.py` has **no** registry entry and **no** gate — `grep -c kit_surfaces
-TEMPLATE/tests/gate_registry.py` → **0** — so it is the one root-side executable whose class lives
-**nowhere**: neither in `kit.json` (outside that population) nor in `gate_registry.py` (no entry).
-That is the sharpest gap this instrument carries, it is measured and owed in full at **§4.1**, and
-it is listed as **F1** in §9.2. A reader who takes this section's rule as a blanket would stop
-looking at exactly the path that needs looking at — so the exception is stated here, where the rule
-is, rather than left to be found further down.
+**The fifth once stood outside that class, and this is the record of it rejoining.**
+`tools/kit_surfaces.py` was the one root-side executable whose class lived **nowhere** — no entry in
+`TEMPLATE/tests/gate_registry.py` and none in `kit.json` (outside that population). That was the
+sharpest gap this instrument carried, owed in full at **§4.1** and listed as **F1** in §9.2. **The
+gate has since landed**: `tests/test_kit_surfaces.py`, registered at
+`TEMPLATE/tests/gate_registry.py:863` under issue **#214**. All **five** root-side executables now
+carry a `gate_registry.py` entry and the class is uniform — the predicate is read from the tree,
+never carried as a figure that drifts. §4.1 and §7.2 keep the history of the gap and its remedy;
+this section records only that the exception is closed.
+
+### 2.2 The census tools' `--stdout` contract — print only, never write
+
+Three census tools carry `--stdout` with **opposite** write semantics (review cycle `20260927-c1`,
+Lens E Finding 2, HIGH). `tools/instrument_census.py:358` means *"also print"* — the artifact is
+written **unconditionally** (`:392`), so a reader running `… --stdout` to *"just look"* **overwrites**
+the published `evidence/instrument-census-<slug>-<date>.md`. `tools/kit_census.py:559` and
+`tools/kit_names.py:394` are the opposite: they return **before** the write, so `--stdout`
+**suppresses** the artifact. The same token has opposite side effects, and one of them is a silent
+overwrite.
+
+**The contract this instrument states once, and every census tool must honour: `--stdout` prints and
+never writes.** A run that should publish names its path (`--out <path>`, the default); a run that
+should only inspect passes `--stdout`. The artifact is a published evidence surface, and a flag whose
+meaning flips with the tool is a silent overwrite waiting for the reader who meant to look.
+
+The **code halves** are the tool owners', not this instrument's (frame §8: an instrument owner
+supplies text, and `tools/**` code is the code owner's): guarding `instrument_census.py`'s
+`write_text` call with `if not args.stdout`, and giving `kit_names.py:394` the missing `help=` so its
+help text states the contract beside the other two.
 
 ## 3. The closure — declared, never derived
 
@@ -173,21 +194,22 @@ that makes the absence a *declaration* instead of a silent skip:
 | `tests/test_kit_names.py` | OPTIONAL | *"meta-factory-only (plan 2646d31a step 10) — its POPULATION is the other trees, read through `registry/fleet.json`. A member does not sweep the fleet."* |
 | `tests/test_kit_census.py` | OPTIONAL | *"meta-factory-only (plan 2646d31a step 9) — its POPULATION is the five MEMBER repositories, read through `registry/fleet.json`."* |
 
-### 4.1 The one gate this instrument is MISSING — and it is the census instrument
+### 4.1 The one gate this instrument was MISSING — and it is the census instrument — now RESOLVED
 
-**`tools/kit_surfaces.py` has no gate, and no registry entry. Measured, not inferred:**
+**`tools/kit_surfaces.py` had no gate and no registry entry when this row was written. The gate has
+since LANDED, and the row is kept rather than deleted because the gap's history is the reason the
+gate exists.**
 
-- Predicate: `grep -c kit_surfaces TEMPLATE/tests/gate_registry.py` → **0** (rc=1).
-- Scope: both trees. No `tests/test_kit_surfaces.py` exists in either.
-- Instant: 2026-09-27T11:5xZ.
+- Then (measured 2026-09-27T11:5xZ): `grep -c kit_surfaces TEMPLATE/tests/gate_registry.py` → **0**; no `tests/test_kit_surfaces.py` in either tree.
+- Now: the gate is **`tests/test_kit_surfaces.py`**, registered at `TEMPLATE/tests/gate_registry.py:863` under issue **#214**. Its predicate is the gate itself — `python3 tests/test_kit_surfaces.py` — never a grep count, which drifts the moment the tree moves.
 
-**Why this is the sharpest gap in the tree rather than one missing file among many:** `kit_surfaces.py`
+**Why this was the sharpest gap in the tree rather than one missing file among many:** `kit_surfaces.py`
 is the census instrument that **exists because a figure was read two ways** — its own docstring reads
 *"the PREDICATE lived in prose that each reader completed differently. This file is the predicate, so
-the figure is derived."* It returns a verdict and **nothing exercises it**. Its non-vacuity probes are
+the figure is derived."* It returns a verdict and **nothing exercised it**. Its non-vacuity probes were
 never run by any gate, so a regression in its own predicates would be silent — which is frame §2
 part 8 (self-probe) missing **in the instrument that defines the census**. §7 names the gate and the
-probes; the build is owed, not implied.
+probes; the build has since landed (issue #214).
 
 ## 5. The version identifier — part 4
 
@@ -286,11 +308,12 @@ surface; §9's O-series carries what the **member** owes.
 | the pin reports a file **not in the manifest** | `TEMPLATE/tests/test_kit_pin.py` | `not-in-kit` is reported rather than folded into a match |
 | the gate leaves the live `registry/kit.json` and `tools/kit_pin.py` **unmodified** | `TEMPLATE/tests/test_kit_pin.py:191`, `:271` | the probe is read-only: it hashes both before and after |
 
-### 7.2 The probes the MISSING gate owes — named, not implied
+### 7.2 The probes the gate carries — named, not implied
 
-This is the remedy for §4.1. The gate is **`tests/test_kit_surfaces.py`**, meta-factory-only at the
-same grain as its four siblings, and its subject tool is `tools/kit_surfaces.py`. The probes it must
-carry, each written against the census's own published contract:
+This was the remedy for §4.1, and it has LANDED: the gate is **`tests/test_kit_surfaces.py`** (issue
+#214), meta-factory-only at the same grain as its four siblings, and its subject tool is
+`tools/kit_surfaces.py`. The probes it carries, each written against the census's own published
+contract:
 
 | # | probe | what it must show |
 |---|---|---|
@@ -520,7 +543,7 @@ meets a decision instead of an unknown.
 
 | # | gap | reproduce | owner of the remedy |
 |---|---|---|---|
-| **F1** | `tools/kit_surfaces.py` has **no gate** — frame §2 part 8 is missing in the instrument that defines the census | `grep -c kit_surfaces TEMPLATE/tests/gate_registry.py` → **0**; no `tests/test_kit_surfaces.py` in either tree | the gate named in §7.2; `tests/**` code, built by the code owner and reviewed by the methodology lane |
+| **F1** | **RESOLVED.** `tools/kit_surfaces.py` has **no gate** — frame §2 part 8 is missing in the instrument that defines the census | the gate has LANDED: `python3 tests/test_kit_surfaces.py`, registered at `TEMPLATE/tests/gate_registry.py:863` (issue #214) — the registered gate, never a grep count | **closed** — the gate named in §7.2 was built by the code owner and reviewed by the methodology lane |
 | **F2** | the census returns **FAIL — 2 tool(s) carry an undeclared gap** | `python3 tools/kit_surfaces.py` → `ledger-index` missing S1,S2; `subject_anchor` missing S2 | the two tools' owners; `subject_anchor` is the one the survey named, and `ledger-index` has drifted in since |
 | **F3** | `tools/kit_deliver.py` writes a pin **without checking the pin is current**, so a deliver run behind TEMPLATE's own HEAD writes a pin that is **stale on arrival** — and nothing reds, because the member's gate judges it against the pin it was **handed**, not against the kit that **exists** | `grep -cE 'stale\|current\|newer\|ahead\|behind' tools/kit_deliver.py` → **0**, rc=1; the tool reads `kit_version` (`:54`, `:59`, `:98`) and writes it (`:166`), and never compares it against the source repo's HEAD-computed version | the tool's code owner; a deliver-side guard that refuses or warns when `source_state()['kit_version']` differs from the HEAD-computed one |
 | **F4** | `tools/kit_deliver.py` **AUTHORS the member's pin** — it writes `registry/kit.json` (`:166`) even into a tree that already carries a deliberately authored, committed pin, so a transport rewrites a declaration that is the member's by frame §8 | `sed -n '160,170p' tools/kit_deliver.py` → `pin["kit_version"] = kit` then `planned["pin_path"].write_text(...)`; measured on two trees: `inferhub-watch` HEAD `db6aa904a8a1` / 118 → `6f10a14dcb5f` / 131, `vds-servers` HEAD `b0bb09cb288f` / 118 → `6f10a14dcb5f` / 131 | the tool's code owner; **refuse to write `registry/kit.json` into a tree that already carries one**, unless that member asked for the refresh |
