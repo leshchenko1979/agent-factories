@@ -390,7 +390,15 @@ def test_close_sets_both_durations(tmp_path: Path) -> None:
 
 
 def test_verify_reports_unreceipted_lenses() -> None:
-    """A COMPLETED lens with no index line is UNRECEIPTED, not clean."""
+    """A COMPLETED lens whose index line is gone is UNRECEIPTED, not clean.
+
+    The receipt is the `review-index.log` line, not the `receipt` field `record`
+    stamps in the same breath: a field the writer asserts and the reader trusts
+    is true by construction whenever the write ran, and stays true when the line
+    is deleted — so the UNRECEIPTED state was unreachable. This test DELETES THE
+    LINE and leaves the field `verified`, which is the fixture the old
+    field-reading check could not fail.
+    """
     cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
     cycle_id = "test-receipt-01"
     cycle_dir = REPO_ROOT / "reviews" / cycle_id
@@ -400,16 +408,24 @@ def test_verify_reports_unreceipted_lenses() -> None:
                                    "# Lens A\nSEVERITY: LOW\nLocator: docs/processes.md:1\n"],
                        cwd=REPO_ROOT, capture_output=True, text=True)
 
-        # Strip the receipt marker the way a lost index line would.
         state = json.loads((cycle_dir / "state.json").read_text())
-        state["lenses"]["A"]["receipt"] = None
-        (cycle_dir / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
-
         for lens in state["lenses"]:
             if lens == "A":
                 continue
             subprocess.run(cmd_base + ["waive", cycle_id, lens, "--reason", "trial"],
                            cwd=REPO_ROOT, capture_output=True, text=True)
+
+        # Positive control: with the index line present, verify PASSES.
+        res = subprocess.run(cmd_base + ["verify", cycle_id], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+
+        # Now delete the line the receipt actually lives on, leaving the field
+        # `verified` — the state the field-reading check called clean.
+        index_file = cycle_dir / "reports" / "review-index.log"
+        assert index_file.is_file(), "record wrote no index line"
+        index_file.write_text("", encoding="utf-8")
+        assert json.loads((cycle_dir / "state.json").read_text())["lenses"]["A"]["receipt"] == "verified"
 
         res = subprocess.run(cmd_base + ["verify", cycle_id], cwd=REPO_ROOT,
                              capture_output=True, text=True)

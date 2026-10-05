@@ -895,6 +895,33 @@ def _append_line_fsync(path: Path, line: str) -> None:
 def get_cycle_dir(cycle_id: str) -> Path:
     return REPO_ROOT / "reviews" / cycle_id
 
+def _receipted_digests(cycle_dir: Path) -> dict[str, set[str]]:
+    """Parse `review-index.log`: lens -> the sha256 digests it actually receipted.
+
+    This is the ONLY receipt. `record` stamps a `receipt: "verified"` field into
+    state.json as well, but a field the same command writes and verify reads back
+    is self-asserted: it is true by construction whenever record ran, and it stays
+    true when the index line is deleted. So the index log — an append-only line
+    written after the report lands — is what verify checks against, and the
+    UNRECEIPTED state is reachable exactly when the log lacks the line.
+
+    Line format is the donor's, `ts|lens|path|sha256|bytes`. A malformed line is
+    skipped, not fatal: a truncated tail is a torn write, and the digest it would
+    have carried is simply not receipted.
+    """
+    out: dict[str, set[str]] = {}
+    index_file = cycle_dir / "reports" / "review-index.log"
+    if not index_file.is_file():
+        return out
+    for line in index_file.read_text(encoding="utf-8").splitlines():
+        parts = line.split("|")
+        if len(parts) < 5:
+            continue
+        lens, sha = parts[1].strip().upper(), parts[3].strip()
+        if lens and sha:
+            out.setdefault(lens, set()).add(sha)
+    return out
+
 
 def load_state(cycle_id: str) -> dict[str, Any]:
     state_file = get_cycle_dir(cycle_id) / "state.json"
@@ -1542,6 +1569,10 @@ def cmd_verify(cycle_id: str) -> int:
         print(f"FAIL: Cycle '{cycle_id}' state.json missing.", file=sys.stderr)
         return 1
 
+    # The receipt lives in review-index.log, never in the state.json field the
+    # same command stamps — see `_receipted_digests`.
+    receipts = _receipted_digests(get_cycle_dir(cycle_id))
+
     lenses = state.get("lenses", {})
     missing: list[str] = []
     corrupted: list[str] = []
@@ -1576,8 +1607,13 @@ def cmd_verify(cycle_id: str) -> int:
         if actual_sha != info.get("sha256"):
             corrupted.append(f"{lens} (checksum mismatch)")
         # A report whose index line is absent is UNRECEIPTED: a distinct state
-        # from missing, and never a silent pass.
-        if info.get("receipt") != "verified":
+        # from missing, and never a silent pass. The check is against the log's
+        # own digest for this lens, so deleting the line — or rewriting the
+        # report after it landed — makes the state reachable. Reading the
+        # self-stamped `receipt` field instead made it unreachable: record
+        # writes `verified` in the same breath as the log line, so the field
+        # was true whenever the log was, and stayed true when the log was not.
+        if actual_sha not in receipts.get(lens, set()):
             unverified.append(lens)
 
     unlanded = codification_gaps(state.get("codification_plan"))
