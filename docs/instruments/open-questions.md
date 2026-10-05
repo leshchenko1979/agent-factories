@@ -41,6 +41,18 @@ enumerating imports**, which is what frame §1 requires of a declaration. The me
 (`skills/<skill dir>/open-questions.md`) is deliberately **not** in this set: it is the member's own
 act under frame §6.1, and the transport creates no links.
 
+**At THIS repo the set reads 2 of 4, and that reading is DECLARED rather than a gap.** Rows 1–2 are the
+DELIVERED executables: at source they exist only at their `TEMPLATE/` halves, and no root-side copy is
+owed — the CLI a caller runs is resolved by §5.1's glob under a **skill's tools root**, never from this
+tree, and no root-side `tools/questions` is tracked anywhere in this repo's history. Rows 3–4 sit at
+root because this repo is the instrument's own law home and gate home; those root copies are the
+source's own and are byte-identical to their `TEMPLATE/` halves (`tests/test_docs_sync.py` pairs the
+doc, `tests/test_template_sync.py` the gate). This repo IS the instrument's **source** —
+`tools/instrument_census.py` labels it `SOURCE`, and a source is not an adoption site — so its own tree
+is not measured as a member's would be; a member's completeness is answered by that member's own
+declared set (frame §6). Read the four rows above as the DELIVERED pair, and this paragraph as the
+answer to *"is this instrument complete HERE?"* — yes, as the source.
+
 ### 2.1 The extension surface — there is none, and §2 is the reason
 
 **This instrument has no extension surface: member subject matter lives outside it** (frame §6.5).
