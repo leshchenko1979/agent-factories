@@ -858,6 +858,38 @@ def cadence_stamp(ledger_path: str, every: int = CADENCE_DEFAULT_EVERY,
     }
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` to `path` atomically: sibling temp, fsync, os.replace.
+
+    A write that dies halfway TRUNCATES its target, and every file this module
+    journals -- the cycle state, the lens report, the index log -- is a recovery
+    point a later run reads back. So the new bytes are built beside the target
+    and swapped in with `os.replace` (atomic within a filesystem) only after
+    `fsync` has forced them to stable storage. The same shape the ledger
+    (`tools/ledger.py`) and the insights register (`tools/insights.py`) use:
+    without it a torn write is a cycle that reads as valid and is not.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+def _append_line_fsync(path: Path, line: str) -> None:
+    """Append one line and fsync it, so the receipt survives a crash.
+
+    The index log is the RECEIPT a report is verified against; an append that
+    reaches the page cache and not the disk is a receipt a power loss can take
+    back while the report it vouches for stays.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(line)
+        fh.flush()
+        os.fsync(fh.fileno())
+
 def get_cycle_dir(cycle_id: str) -> Path:
     return REPO_ROOT / "reviews" / cycle_id
 
@@ -898,9 +930,7 @@ def save_state(cycle_id: str, state: dict[str, Any], migrate: bool = False) -> i
 
     state["schema_version"] = SCHEMA_VERSION
     state["updated_at"] = _now()
-    with open(state_file, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
-        f.write("\n")
+    _atomic_write_text(state_file, json.dumps(state, indent=2) + "\n")
     return 0
 
 
@@ -1153,8 +1183,9 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
     reports_dir.mkdir(parents=True, exist_ok=True)
     report_file = reports_dir / f"lens-{lens}.md"
 
-    # Write report
-    report_file.write_text(body + "\n", encoding="utf-8")
+    # Write report -- atomically: a torn report is a cycle that reads as complete
+    # and is not, and this file is what every later verification digests.
+    _atomic_write_text(report_file, body + "\n")
 
     # Verify sha256 round-trip
     hasher = hashlib.sha256()
@@ -1166,10 +1197,10 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
     # a receipt.  The line format is the donor's, `ts|lens|path|sha256|bytes`.
     now = _now()
     index_file = reports_dir / "review-index.log"
-    with open(index_file, "a", encoding="utf-8") as f:
-        f.write(
-            f"{now}|{lens}|{report_file.relative_to(REPO_ROOT)}|{digest}|{len(body)}\n"
-        )
+    _append_line_fsync(
+        index_file,
+        f"{now}|{lens}|{report_file.relative_to(REPO_ROOT)}|{digest}|{len(body)}\n",
+    )
 
     # Update state
     state = read_state(cycle_id)
