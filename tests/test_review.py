@@ -134,7 +134,9 @@ def test_review_lifecycle(tmp_path: Path) -> None:
         assert len(state["lenses"]) == _known_lens_count()
 
         # 2. Record Lens A
-        report_text = "# Lens A Review\nVerbatim quote found in role file: 'foo'\n"
+        report_text = ("# Lens A Review\nSEVERITY: LOW\n"
+                   "Locator: TEMPLATE/roles/worker.md:1\n"
+                   "Verbatim quote found in role file: 'foo'\n")
         res = subprocess.run(
             cmd_base + ["record", cycle_id, "A", report_text],
             cwd=REPO_ROOT,
@@ -394,7 +396,8 @@ def test_verify_reports_unreceipted_lenses() -> None:
     cycle_dir = REPO_ROOT / "reviews" / cycle_id
     try:
         subprocess.run(cmd_base + ["init", cycle_id], cwd=REPO_ROOT, capture_output=True, text=True)
-        subprocess.run(cmd_base + ["record", cycle_id, "A", "# Lens A\nfinding\n"],
+        subprocess.run(cmd_base + ["record", cycle_id, "A",
+                                   "# Lens A\nSEVERITY: LOW\nLocator: docs/processes.md:1\n"],
                        cwd=REPO_ROOT, capture_output=True, text=True)
 
         # Strip the receipt marker the way a lost index line would.
@@ -719,7 +722,8 @@ def test_a_missing_closure_cannot_pass_verify() -> None:
         reports = cycle_dir / "reports"
         reports.mkdir(parents=True, exist_ok=True)
         report = reports / "lens-A.md"
-        report.write_text("A finding, legitimately recorded.\n", encoding="utf-8")
+        report.write_text("SEVERITY: LOW\nLocator: docs/processes.md:1\nA finding.\n",
+                          encoding="utf-8")
         res = subprocess.run(cmd_base + ["record", cycle_id, "A", str(report)],
                              cwd=REPO_ROOT, capture_output=True, text=True)
         assert res.returncode == 0, res.stdout + res.stderr
@@ -916,7 +920,8 @@ def _lens_clean_cycle(cycle_id: str) -> Path:
     """
     cycle_dir = _fresh_cycle(cycle_id)
     cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
-    res = subprocess.run(cmd_base + ["record", cycle_id, "A", "# Lens A\n\nA finding worth landing.\n"],
+    res = subprocess.run(cmd_base + ["record", cycle_id, "A",
+                                   "# Lens A\nSEVERITY: LOW\nLocator: docs/processes.md:1\n"],
                          cwd=REPO_ROOT, capture_output=True, text=True)
     assert res.returncode == 0, res.stdout + res.stderr
     state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
@@ -1529,6 +1534,42 @@ def _catalogue() -> tuple[dict[str, str], dict[str, str]]:
             families[lens] = label
     return names, families
 
+def test_record_refuses_a_report_with_no_evidence() -> None:
+    """Quote-or-No-Finding is enforced, and BOTH its arms stay open.
+
+    Lens I's Core Check 3 requires the rule and the brief states it, but `record`
+    accepted any non-empty bytes and stamped COMPLETED — so a content-free report
+    passed the census. The predicate has two arms and the third case below is the one
+    that must fail: demanding a locator unconditionally would force a clean lens to
+    manufacture a finding to satisfy a gate.
+    """
+    cycle_id = "test-quote-or-no-finding"
+    cycle_dir = _fresh_cycle(cycle_id)
+    cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+    try:
+        # (1) neither arm — an impression. Refused, non-zero.
+        res = subprocess.run(
+            cmd_base + ["record", cycle_id, "A", "# Lens A\nA finding worth landing.\n"],
+            cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode != 0, f"an evidence-free report was accepted: {res.stdout}"
+        assert "Quote-or-No-Finding" in res.stderr, res.stderr
+
+        # (2) the locator arm — accepted.
+        res = subprocess.run(
+            cmd_base + ["record", cycle_id, "A",
+                        "# Lens A\nSEVERITY: HIGH\nLocator: docs/processes.md:12\nquote\n"],
+            cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+
+        # (3) the no-finding arm — accepted, and it is why (1) cannot be a locator-only test.
+        res = subprocess.run(
+            cmd_base + ["record", cycle_id, "B", "# Lens B\nNo findings.\n"],
+            cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
 def test_brief_matches_the_catalogue() -> None:
     """The brief and the catalogue are one definition, and this is what holds them together.
 
@@ -1648,6 +1689,7 @@ def main() -> int:
     test_brain_leg_flags_a_duplicated_rule()
     test_brain_leg_resolves_a_pointer_into_a_skill_dir()
     test_brain_leg_reports_a_missing_required_file()
+    test_record_refuses_a_report_with_no_evidence()
     test_brief_matches_the_catalogue()
     print("ALL TESTS PASSED")
     return 0

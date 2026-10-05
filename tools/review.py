@@ -1132,11 +1132,21 @@ Praising without concrete findings is considered a failed audit.
 {meta['instructions']}
 
 ## REQUIRED FINDINGS FORMAT
-Every finding MUST include:
-1. File Locator: `path/to/file.md:line_number`
-2. Verbatim Quote: Exact code or text snippet
-3. Defect Analysis: Why this violates law, wastes tokens, or risks execution
-4. Actionable Remediation: Concrete patch or deletion proposal
+Every finding MUST include, in this order:
+1. Severity: exactly one of CRITICAL / SEVERE / HIGH / MEDIUM / LOW / INFO
+2. File Locator: `path/to/file.md:line_number`
+3. Verbatim Quote: Exact code or text snippet
+4. Defect Analysis: Why this violates law, wastes tokens, or risks execution
+5. Actionable Remediation: Concrete patch or deletion proposal
+
+The SEVERITY line is what makes findings from different lenses triageable on one key;
+without it a cross-lens sweep has to read every report in full to rank them.
+
+**Quote-or-No-Finding, and it is enforced.** A report must either carry at least one
+`path:line` locator, or declare that it found nothing — a line reading `No findings`
+(or `NONE`). `record` REFUSES a report with neither: a body that is neither a located
+finding nor an explicit clean verdict is an impression, and stamping it COMPLETED is
+the bypass this rule exists to close.
 
 Record your findings via:
   python3 tools/review.py record <cycle_id> {lens} <report_file_or_text>
@@ -1155,6 +1165,19 @@ Record your findings via:
         print(prompt_text.strip())
     return 0
 
+
+# The Quote-or-No-Finding predicate, in its two arms. The locator arm matches a path
+# carrying an extension followed by a line number (`tools/review.py:1147`,
+# `docs/x.md:20-31`); the no-finding arm matches an explicit clean verdict. Deliberately
+# NARROW: `clean` or `nothing` alone would match ordinary prose about the codebase, so
+# only the phrase that reads as a verdict counts.
+_LOCATOR_RE = re.compile(r"[\w./\-]+\.[A-Za-z0-9]+:\d+")
+_NO_FINDING_RE = re.compile(
+    r"\bno\s+(?:findings?|defects?|issues?)\b"
+    r"|\bnothing\s+to\s+report\b"
+    r"|^\s*(?:\*\*)?(?:NONE|CLEAN)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
     lens = lens.upper()
@@ -1179,6 +1202,23 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
     body = body.strip()
     if not body:
         print("Error: Report content is empty.", file=sys.stderr)
+        return 2
+
+    # Quote-or-No-Finding, enforced. Lens I's Core Check 3 requires it and the brief
+    # states it, but `record` accepted ANY non-empty bytes and stamped COMPLETED — so a
+    # content-free report passed the census, and the rule was decoration. The predicate
+    # is the rule's own two arms: a `path:line` locator, or an explicit no-findings
+    # declaration. A body with NEITHER is an impression, and an impression is not a
+    # review. Both arms are required to stay: a clean lens legitimately reports nothing,
+    # and demanding a locator from it would manufacture findings to satisfy a gate.
+    if not _LOCATOR_RE.search(body) and not _NO_FINDING_RE.search(body):
+        print(
+            "Error: report carries no evidence — neither a `path:line` locator nor an "
+            "explicit no-findings declaration.\n"
+            "  Quote-or-No-Finding: cite at least one `path/to/file.md:line`, or state "
+            "`No findings` (or `NONE`) if the lens found nothing.",
+            file=sys.stderr,
+        )
         return 2
 
     reports_dir = cycle_dir / "reports"
