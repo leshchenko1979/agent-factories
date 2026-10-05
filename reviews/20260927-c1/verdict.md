@@ -198,18 +198,25 @@
 
 | Destination owner | Findings routed |
 |---|---|
-| Meta-Factory HQ | 50 |
-| this lane's own surface (review instrument) | 26 |
-| the Ledger lane / ledger tool | 8 |
-| the Hygiene instrument / Surveys lane | 7 |
-| the telemetry owner | 5 |
-| the Pacemakers lane | 5 |
-| the Insights lane | 4 |
-| the Open Questions lane | 3 |
-| the Kit lane / Fleet instruments | 2 |
-| the meta-factory law surface | 2 |
-| the registry / Fleet instruments | 2 |
-| the Triage lane | 2 |
+| Meta-Factory HQ (its own law surfaces) | 51 |
+| this lane's own surface (review instrument) | 13 |
+| other tool lanes (census / shell scripts / insights synth) | 9 |
+| the Hygiene instrument lane | 7 |
+| the Ledger instrument lane | 5 |
+| the Pacemaker instrument lane | 5 |
+| the telemetry / brain_metrics lane | 5 |
+| the Audit tool lane | 4 |
+| the Patrol / Triage lanes | 3 |
+| a proposal's owner | 2 |
+| the Open Questions instrument lane | 2 |
+| the Insights instrument lane | 2 |
+| the Review-Rotation instrument lane | 2 |
+| the Ledger instrument lane (this cycle's close row) | 1 |
+| the promotion close-row gate (dropped — see rejected) | 1 |
+| the Kit instrument lane | 1 |
+| the Roadmap tool lane | 1 |
+| the Registry tool lane | 1 |
+| the ledger/telemetry lane (shared) | 1 |
 
 The full 132 entries, each with its carrier, are the machine-readable record in `reviews/20260927-c1/state.json` → `codification_plan`.
 
