@@ -139,6 +139,19 @@ in flight is driven by that turn **even when its arm is inert**, and why a re-ar
 steering input rather than a fix: while a plan task's completion can clear the goal, the arm
 is not durable, and the sweep says so rather than implying a durable one.
 
+**A parked disposition is a READING, and it must be re-read before it is written — cite the
+register question and its status, read THIS turn.** *"Parked on an owner decision"* is written
+by the **lane**, never by the runner, so nothing re-reads it: an item whose question was
+answered keeps reading as parked until a lane happens to look, and no leg fails while it
+stalls. The bar (#314): a lane writing *"parked on an owner decision"* **MUST read the
+questions register for that item's question in the SAME turn** and **cite the question id WITH
+its status**. An **`answered`** or **`withdrawn`** status **falsifies the parked reading on the
+spot** — the item is owed a re-dispatch, not another parked cycle. And **a parked disposition
+that cites no question id is not a disposition at all**: it is treated as **unruled** and
+re-examined, never carried forward as settled. Measured cost of skipping this: `#253` was
+classified parked for a full round after its register question had been answered, and the stall
+ran ~3.6 d past the answer.
+
 ## The rework entry
 
 `evidence/rework.md` is the factory's memory of its own mistakes. It is what
