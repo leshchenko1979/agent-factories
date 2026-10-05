@@ -27,6 +27,11 @@
     the unit to its owner through `session_notify`, or close it on the board.
   - Confirms completed tasks carry verified receipts before closing.
   - Escalates blocked or failing tasks to `HQ` or re-dispatches to an available worker.
+- **Driverless-lane reading (Rail 3).** A lane can hold every dispatch **delivered** and
+  still have no driver in the room, and no item-level predicate can see it. The sweep asks,
+  over this factory's OWN declared lanes, whether each lane carrying a dispatched-unclaimed
+  backlog has a driver; the patrol **MUST notice** a driverless lane and **MAY NOT re-arm**
+  it. The Rail 3 sweep below carries the three readings and the bar.
 - **Enforcement.** Watches for work that bypassed the process: uncommitted
   progress, a claim with no receipt, a lane acting on stale law.
 - **Rework recording.** Every closure that resolved a *defect* — something that
@@ -99,6 +104,40 @@ re-dispatch cannot reset the clock and hide a stall that has stood for a fortnig
 re-dispatched line therefore **stands in the reading**, at its original age, until a `claim`
 or a `close` lands; the prose records the re-dispatch, and the line is reported again next
 cycle.
+
+**A third reading rides the same sweep: does a DRIVER exist?** The two predicates above bind
+an ITEM — claimed-and-silent, or never-claimed. Neither asks the question a ~48 h stall turned
+on: a lane can hold every dispatch **delivered** and still have no driver in the room, and no
+item-level reading can see it (#133). A delivery receipt is not evidence of a driver, because
+a notify survives delivery but **not the target's compaction** — a dispatch from days ago is
+not in a compacted lane's context, however clean its receipt was. So this sweep asks, over
+**this factory's own declared lanes, resolved through the registry — never another factory's
+session**, whether a lane carrying a dispatched-unclaimed backlog has a driver at all.
+
+**The patrol MUST notice a driverless lane, and MAY NOT re-arm it.** Re-arming a lane's goal
+is DRIVING, and the patrol is a READER: a leg that writes goals into other lanes on a timer,
+with no owner in the loop, is the two-writer shape this factory's law forbids. So the patrol
+**detects and prints**; the re-arm stays an **ACTION by the lane whose cycle runs this sweep**
+— a human-visible act, never an automatic one — bounded (`max_turns`) and naming a bounded
+item set. An arm over the whole backlog reproduces the 2026-09-18 churn: an eleven-item goal
+whose all-or-nothing judge rejected it on turn 1 for covering one item's work.
+
+**Never re-arm a lane that is being DRIVEN — and "driven" is measured as MOTION, never as
+declared state.** Three readings, and a bare "has an active goal" test conflates them:
+
+| Reading | Predicate | Re-arm |
+|---|---|---|
+| **DRIVEN** | the evaluation is advancing (`turns_used > 0` **and** `updated_at > created_at`), **or** a turn is in flight | refused |
+| **ARMED-INERT** | `state='active'` **and** `turns_used = 0` **and** `updated_at = created_at` | permitted — an arm that has never been evaluated is not a driver |
+| **DRIVERLESS** | no active row **and** no turn in flight | permitted |
+
+A lane holding an active goal is the case this bar exists for: an active goal means a driver
+is in the room. But `state='active'` is a **DECLARED** value and is not a measurement of a
+driver. A goal is evaluated only at a turn's END, so an armed goal **cannot wake an idle
+lane** — it steers the next evaluation, it never summons one. That is why a lane whose turn is
+in flight is driven by that turn **even when its arm is inert**, and why a re-arm is a
+steering input rather than a fix: while a plan task's completion can clear the goal, the arm
+is not durable, and the sweep says so rather than implying a durable one.
 
 ## The rework entry
 
