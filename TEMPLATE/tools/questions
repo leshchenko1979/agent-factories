@@ -5835,7 +5835,7 @@ USAGE = """questions — the Open Questions register (#547)
 
   ask      --factory <KEY> [--session <id>]
            [--questions-file F | --questions-json J |
-            --title T --description D [--option O]... [--recommended N]...]
+            --title T --description D [--option O]... [--recommended <0-based-index|LABEL|LETTER>]...]
            [--ttl-days N] [--subject S] [--no-clarify] [--close-when CMD]
            [--allow-foreign "<reason>"]
            --recommended takes ONE value on a single-select question and may be
@@ -5885,7 +5885,7 @@ USAGE = """questions — the Open Questions register (#547)
   withdraw --set <id> --qid <qid> [--text REASON] [--no-publish] [--json]
            retracts a question that has become moot; the set stays open
   amend    --set <id> --qid <qid> [--title T] [--description D]
-           [--option O]... [--recommended N]... [--clear-options]
+           [--option O]... [--recommended <0-based-index|LABEL|LETTER>]... [--clear-options]
            the CLARIFY return leg: edits the question and reopens it
   notify   --set <id> | --lane <NAME> [--qid Q] [--mode turn-end|interrupt|quiet]
            [--dry-run] [--json]        the RETURN PATH: delivers the answer to
