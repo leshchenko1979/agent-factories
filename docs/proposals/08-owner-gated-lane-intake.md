@@ -4,7 +4,10 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.10** 2026-10-05 — **usage sequence diagrams added** (Appendix E: one
+**Date:** 2026-10-03 · **rev.11** 2026-10-05 — **Appendix E diagram syntax fixed**: every mermaid
+label now renders (the `;` and em-dash that mermaid's sequence parser rejects were removed from
+diagram labels; **no design content changed**). rev.10 added the **usage sequence diagrams**
+(Appendix E: one
 diagram per tool/surface). rev.9 restored the **CLI verbs and the wait graph as a first-class
 surface** (one of the proposal's main surfaces, not an afterthought), removed the Open Questions
 register from scope (an external add-on that *uses* the CLI verbs, never part of the harness), and
@@ -618,8 +621,8 @@ sequenceDiagram
     A->>T: set --kind owner_gate --ref "PROP-08 approval"
     T->>B: set_await kind=owner_gate, target=null
     B-->>T: await_at = now
-    T-->>A: parked; this wait's root is the owner
-    Note over A,B: the lane is now IDLE, not mid-turn; the #13 mid-turn gate does not apply
+    T-->>A: parked, this wait's root is the owner
+    Note over A,B: the lane is now IDLE, not mid-turn, the #13 mid-turn gate does not apply
 ```
 
 #### E.2 `await_external graph` — read the wait-for graph (§4.2)
@@ -632,9 +635,9 @@ sequenceDiagram
     C->>G: graph --session A
     G->>B: read every binding with await_at set
     B-->>G: A to B, B to C, C is owner_gate
-    G->>G: derive nodes, edges, roots; store nothing
-    G-->>C: A to B to C to owner; ROOT = the owner
-    Note over G,B: a target resolving to no binding is a ROOT and a broken edge — a silent stall
+    G->>G: derive nodes, edges, roots, store nothing
+    G-->>C: A to B to C to owner, ROOT = the owner
+    Note over G,B: a target resolving to no binding is a ROOT and a broken edge, a silent stall
 ```
 
 #### E.3 `opencrabs session await` + `session/await` — a caller outside the loop (§4.2)
@@ -651,7 +654,7 @@ sequenceDiagram
     B-->>A2A: await_at = now
     A2A-->>CLI: ok
     CLI-->>X: S parked
-    Note over X,B: the public interface; direction is caller to harness, and the harness names no add-on
+    Note over X,B: the public interface, direction is caller to harness, and the harness names no add-on
 ```
 
 #### E.4 `plan` — the approvable card sets the state (§4.1)
@@ -663,7 +666,7 @@ sequenceDiagram
     participant F as plan_files
     participant B as session_binding
     participant O as Owner
-    L->>P: init or edit; approvable card
+    L->>P: init or edit, approvable card
     P->>F: plan_mode_state = PostInitEditing
     P->>B: set_await kind=owner_gate, prompt=card
     B-->>P: parked
@@ -684,7 +687,7 @@ sequenceDiagram
     L->>S: options --wait  (OPT-IN flag)
     S->>B: set_await kind=owner_gate, prompt=card
     B-->>S: parked
-    S-->>L: card posted; lane idle
+    S-->>L: card posted, lane idle
     O->>S: taps an option
     S->>B: clear_await
     S-->>L: option delivered
@@ -708,7 +711,7 @@ sequenceDiagram
     D->>Q: park durably, one row
     D-->>R: Delivery::HeldForOwner
     R-->>P: HELD, awaiting owner since ts
-    Note over D,Q: Interrupt bypasses; unknown state delivers — fail open
+    Note over D,Q: Interrupt bypasses, unknown state delivers, fail open
 ```
 
 #### E.7 the clear — a correlated owner signal (§4.4)
@@ -723,7 +726,7 @@ sequenceDiagram
     H->>C: correlated signal for S
     C->>B: clear_await S
     B-->>C: cleared
-    Note over O,B: only the CORRELATED signal clears; an unrelated owner message is input, not the signal
+    Note over O,B: only the CORRELATED signal clears, an unrelated owner message is input, not the signal
 ```
 
 #### E.8 `drain_for_session` — the digest, an index (§4.5)
@@ -738,8 +741,8 @@ sequenceDiagram
     D->>Q: read every row held by the gate
     Q-->>D: N rows, sender and instant and first line
     D->>D: render ONE index, question first
-    D-->>L: one digest turn; N lines; rows stay pullable
-    Note over D,Q: an index, not a summary; nothing compressed away, so nothing lost
+    D-->>L: one digest turn, N lines, rows stay pullable
+    Note over D,Q: an index, not a summary, nothing compressed away, so nothing lost
 ```
 
 #### E.9 `session_notify` — a sender replaces its own un-drained push (§4.6)
@@ -774,13 +777,13 @@ sequenceDiagram
     B-->>W: yes
     W->>K: how long has the OWNER been quiet?
     alt owner quiet
-        K-->>W: quiet, so defer — no 03:00 nudge
+        K-->>W: quiet, so defer, no 03:00 nudge
     else owner active
         K-->>W: active
         W->>O: nudge, no wake of the lane
         W->>B: last_nudge_at = now, geometric backoff
     end
-    Note over W,B: after the budget — escalate, or abandon-with-record; never a silent default
+    Note over W,B: after the budget, escalate, or abandon-with-record, never a silent default
 ```
 
 #### E.11 peer-lane wait — graph walk, cycle rule, correlated reply (§10)
@@ -798,6 +801,6 @@ sequenceDiagram
     T-->>A: parked on B
     B->>A: reply, session_notify --request-id token
     A->>A: token matches, so deliver and clear the wait
-    Note over B,A: a push with no matching token PARKS; only the correlated reply walks through
+    Note over B,A: a push with no matching token PARKS, only the correlated reply walks through
     Note over A,O: if B itself awaits the owner, the sweep escalates to the ROOT and does NOT wake A
 ```
