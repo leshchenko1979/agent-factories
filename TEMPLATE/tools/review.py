@@ -1221,6 +1221,23 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
         )
         return 2
 
+    # A FROZEN cycle's inputs are historical. Both the report write and the index
+    # receipt below MUTATE the closed cycle, so the refusal must sit BEFORE them:
+    # a check placed after would leave a report and a receipt behind on a refused
+    # call. cmd_codify already carries this gate; record and waive did not, so the
+    # freeze was bypassable by the two commands that write the most.
+    state = read_state(cycle_id)
+    if not state:
+        state = _empty_state(cycle_id)
+    if is_frozen(state):
+        print(
+            f"Error: Cycle '{cycle_id}' is FROZEN "
+            f"({state.get('frozen_at') or state.get('status')}). "
+            f"A closed cycle's inputs are historical; record the report in a new cycle.",
+            file=sys.stderr,
+        )
+        return 2
+
     reports_dir = cycle_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     report_file = reports_dir / f"lens-{lens}.md"
@@ -1244,10 +1261,8 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
         f"{now}|{lens}|{report_file.relative_to(REPO_ROOT)}|{digest}|{len(body)}\n",
     )
 
-    # Update state
-    state = read_state(cycle_id)
-    if not state:
-        state = _empty_state(cycle_id)
+    # Update state — read above, before the report write, so the frozen gate
+    # precedes every mutation of the closed cycle.
     entry = dict(state["lenses"].get(lens) or {})
     entry.update({
         "status": "COMPLETED",
@@ -1276,6 +1291,14 @@ def cmd_waive(cycle_id: str, lens: str, reason: str, by: str | None = None) -> i
     state = read_state(cycle_id)
     if not state:
         print(f"Error: Cycle '{cycle_id}' not found.", file=sys.stderr)
+        return 2
+    if is_frozen(state):
+        print(
+            f"Error: Cycle '{cycle_id}' is FROZEN "
+            f"({state.get('frozen_at') or state.get('status')}). "
+            f"A closed cycle's inputs are historical; record the waiver in a new cycle.",
+            file=sys.stderr,
+        )
         return 2
 
     now = _now()

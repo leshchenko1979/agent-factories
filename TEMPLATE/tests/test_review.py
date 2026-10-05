@@ -708,6 +708,48 @@ def test_a_lens_waiver_requires_a_named_reason() -> None:
         if cycle_dir.exists():
             shutil.rmtree(cycle_dir)
 
+def test_a_frozen_cycle_refuses_record_and_waive() -> None:
+    """The freeze must bind the two commands that WRITE the cycle, not only intake.
+
+    `close` freezes a cycle, and intake already refuses a frozen one. But `record`
+    and `waive` carried no such gate, so a closed cycle's state.json could be
+    mutated afterwards — the freeze was bypassable by the two commands that write
+    the most. Both now refuse, and `record`'s refusal precedes its report write,
+    so a refused call leaves no report bytes and no index receipt behind.
+    """
+    cycle_id = "test-frozen-record-waive"
+    cycle_dir = _lens_clean_cycle(cycle_id)
+    try:
+        cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+        res = subprocess.run(cmd_base + ["close", cycle_id, "--status", "COMPLETED"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["frozen_at"], "close must freeze the cycle"
+        sha_before = state["lenses"]["A"]["sha256"]
+        report_a = cycle_dir / "reports" / "lens-A.md"
+        bytes_before = report_a.read_bytes()
+
+        res = subprocess.run(cmd_base + ["record", cycle_id, "A",
+                                         "# Lens A\nSeverity: LOW\nLocator: docs/processes.md:1\n"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout
+        assert "FROZEN" in res.stderr, res.stderr
+
+        res = subprocess.run(cmd_base + ["waive", cycle_id, "A", "--reason", "late waiver"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 2, res.stdout
+        assert "FROZEN" in res.stderr, res.stderr
+
+        # The refusal precedes every write: neither the report bytes nor the
+        # recorded digest moved.
+        assert report_a.read_bytes() == bytes_before, "a refused record rewrote the report"
+        after = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert after["lenses"]["A"]["sha256"] == sha_before
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
 def test_a_missing_closure_cannot_pass_verify() -> None:
     """A lens marked COMPLETED whose report file is gone is a BROKEN closure, not a pass.
 
@@ -1670,6 +1712,7 @@ def main() -> int:
     test_step0_recovery_reads_state_alone_and_records_durable_evidence()
     test_frozen_cycle_refuses_a_live_channel_read()
     test_a_lens_waiver_requires_a_named_reason()
+    test_a_frozen_cycle_refuses_record_and_waive()
     test_a_missing_closure_cannot_pass_verify()
     test_migration_maps_the_donor_terminal_synonym(Path("/tmp"))
     test_migration_reports_values_it_cannot_map(Path("/tmp"))
