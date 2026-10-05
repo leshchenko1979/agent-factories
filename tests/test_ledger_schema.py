@@ -506,7 +506,7 @@ def run_self_probes() -> bool:
     # it declared that pair (self-corrections of its own prior rows) and this gate returned
     # rc=1 with this probe's message. Same discipline as Probe 0, which states it reads the
     # REAL actor set: a probe must say which world it asserts in.
-    _absent = REPO / "docs" / ".oc-probe-no-authorizations.json"
+    _absent = REPO / "docs" / ".probe-no-authorizations.json"
     with _DeclarationPin(_absent):
         assert_probe(
             "unauthorized ruling actor",

@@ -214,8 +214,8 @@ Three criteria, stated **before** any analysis so that a "keep" is as defensible
 3. **Higher-fidelity** — the name states what the instrument **is** or **does**, never where it came
    from and never an abbreviation only its author recognises.
 
-**Adopted instruments DROP the `oc-` prefix** (owner ruling 2026-09-25): `questions`, not
-`oc-questions`. The prefix was carrying a fleet-generic-versus-factory-specific distinction that the
+**Adopted instruments DROP the `oc-` prefix** (owner ruling 2026-09-25): the adopted name
+is the bare noun, with the prefix not carried over. The prefix was carrying a fleet-generic-versus-factory-specific distinction that the
 **class field now carries** — a prefix is a namespace, a class is a predicate. The skill repo keeps
 its `oc-` names; the template's `tools/` uses bare nouns.
 
@@ -599,7 +599,7 @@ on the path, not a taste about a file — the live `exactly-one-or-127` refusal
 
 | tier | rule | mechanism in force | the member's part |
 |---|---|---|---|
-| **1 — centralised by construction** | exactly ONE copy; 0 or 2+ is a loud refusal, never a pick | `exactly-one-or-127` over `<CLI_ROOT>/*/oc-questions` — the fleet's strongest precedent for this order | reach the one copy |
+| **1 — centralised by construction** | exactly ONE copy; 0 or 2+ is a loud refusal, never a pick | `exactly-one-or-127` over `<CLI_ROOT>/*/questions` — the fleet's strongest precedent for this order | reach the one copy |
 | **2 — not transportable** | never copied out, because it is not ours to copy | `DELIVERED_CLASSES = ("standalone", "closure")` — `seed` absent on purpose (`tools/kit_deliver.py:48`) | hold its own law and data |
 | **3 — member-local** | a copy the member may hold; the cost is a **declared** drift surface | §6.1's adoption step and §7.2's declaration | copy it, and declare it |
 

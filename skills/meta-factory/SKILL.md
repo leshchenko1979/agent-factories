@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.50
+version: 0.1.51
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -168,7 +168,7 @@ order of 2026-09-13 (task & harvest dispatches) — so the general form is state
 **The sender's test, before pressing send:** name the state the recipient lacks, or the action
 you are asking of it. If you can name neither, write the ledger row and stop. The receipt for a
 dispatch, a wave, a freeze or a law-change is the **ledger row**, never a reply: the sender reads
-acks in one `oc-ledger events` call and counts them. A conversational receipt — *"received",
+acks in one `tools/ledger.py tail` call and counts them. A conversational receipt — *"received",
 "ack", "starting now", "confirmed", "nothing owed"* — spends the sender's tokens, interrupts a
 working lane, and puts a second surface beside a fact the first already holds. **No gate upholds
 this and that is stated, not implied** — a notify body lives in no tree the offline suite reads

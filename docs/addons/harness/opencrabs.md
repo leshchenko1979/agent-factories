@@ -28,7 +28,7 @@ the binding for that runtime instead; the
 | A lane is addressed directly | `session_notify` to the session UUID |
 | A lane can be woken for a new turn | `send_input` into a running session; `resume_agent` for a stopped one |
 | Periodic processes exist | **`cron_manage`** — scheduled jobs that run in isolated sessions |
-| A check can be a command | `bash` with a return-code contract, plus the `oc-*` tool set |
+| A check can be a command | `bash` with a return-code contract, plus the factory's own tools |
 | Work leaves a durable trace | Ledger/journal files, git-tracked |
 
 ---
@@ -271,8 +271,8 @@ processes follow the 4-step execution architecture (`PROP-01-CRON-GATED-GOAL-PIP
 ## Mechanical gates
 
 Where a check can be a command, it is a command with a documented return code.
-The harness supplies `bash` plus the `oc-*` tool family
-(`oc-ledger`, `oc-prchecks`, `oc-order-validate`, `oc-deploy`, `oc-attrib`).
+The harness supplies `bash`. The instruments a gate calls are the factory's
+own — whatever its `tools/` directory carries.
 
 Two harness-specific traps when writing gates:
 

@@ -130,10 +130,10 @@ The substantive work runs inside that persistent session, under the current law.
   it cannot execute the prompt — so the live behavioural check is the measurement run, not
   this text.
 - *Proven:* the marker form, verified live 2026-09-20 (the instant is stated because a cron
-  row is mutable) — `factory-triage-patrol`, `oc-triage-owner-digest`,
-  `ai-antispam-triage-sweep`, `ai-antispam-owner-digest` and the four other declared-thin
-  rows then in the enabled table. The two names this line carried before
-  (`inferhub-watch-hq-hourly`, `oc-triage-hourly`) match no live row today.
+  row is mutable) — a triage patrol and its owner digest, two ai-antispam sweeps and
+  their owner digests, and the four other declared-thin rows then in the enabled table.
+  The two names this line carried before (a watch pacemaker and a triage hourly) match
+  no live row today.
 - *The Pacemaker Requirement:* Every agent role that owns a periodic process (surveys,
   triage sweeps, hygiene, health checks) **must** have a scheduled pacemaker job targeting
   its persistent session UUID. Without an automated heartbeat, language models default to
@@ -158,8 +158,7 @@ table**. A unit test fails the build when the code drifts.
 Where a check can be a command, it is a command with a documented return code.
 Human judgment is reserved for the part a command cannot decide.
 
-- *Proven:* opencrabs-dev — ~30 `oc-*` tools with an rc contract
-  (`oc-ledger`, `oc-prchecks`, `oc-order-validate`, `oc-deploy`, `oc-attrib`).
+- *Proven:* opencrabs-dev — ~30 factory-owned tools with an rc contract.
 - *Prevents:* a ritual being performed "approximately" — and the same ritual
   being performed differently by each lane.
 
@@ -483,8 +482,8 @@ A factory does not rely on a human to assign work or follow up on stalled tasks.
 When an issue is created on the board, the factory assigns it to a persistent worker
 lane, establishes a claim record, and runs an automated watchdog to monitor execution.
 
-- *Proven:* opencrabs-dev (Triage assignment, worker ledger claim records, `oc-waiter-sweep`
-  monitoring active tasks, timeouts, and stale claims).
+- *Proven:* opencrabs-dev (Triage assignment, worker ledger claim records, an automated
+  watchdog monitoring active tasks, timeouts, and stale claims).
 - *Mechanism — 3 Stages:*
   1. **Automated Dispatch:** Triage scans unassigned issues on the board, performs the claim
      check (unclaimed on board, unclaimed in ledger), selects the designated persistent worker lane,

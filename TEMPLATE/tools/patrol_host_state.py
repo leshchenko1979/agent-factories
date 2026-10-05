@@ -272,7 +272,7 @@ CRON_THINNESS_PREDICATE = REPO / "tests" / "test_cron_thinness.py"
 #
 # THE PREDICATE IS AN ISO-8601 INSTANT (a date WITH a time component), and that is a
 # MEASURED choice rather than a convenience. A BARE DATE fires on the best-shaped row on
-# the box: `oc-triage-factory-patrol` says "it was 5,289 chars of pasted law on
+# the box: the box's own best-shaped row says "it was 5,289 chars of pasted law on
 # 2026-09-26, every word of which already lived in triage.md" — a historical rationale
 # EXPLAINING why its prompt is thin, and a date-only predicate reports it as a defect.
 # Measured over 40 enabled rows across 3 homes at 2026-09-27T03:4xZ: a date-only
@@ -1274,7 +1274,7 @@ def embedded_law_content(prompt: str) -> tuple[str, str]:
     different findings: an instant is drift-prone STATE and is judged, while a bare date is
     a citation of the past and is only REPORTED. Collapsing them would make the citation
     indistinguishable from the state, which is the false positive this class measured on
-    the box's own best-shaped row (`oc-triage-factory-patrol`, whose bare date sits in a
+    the box's own best-shaped row (whose bare date sits in a
     rationale explaining why its prompt is THIN).
     """
     text = prompt or ""
@@ -2744,7 +2744,7 @@ def kit_drift_leg(
 # THE EXCLUDED OBJECT CLASS. `tools/hygiene.py` derives its scratch population from the
 # repository's own directory name (`scratch_patterns_for("agent-factories")` ->
 # `/tmp/agent-factories-*`), while a lane names its worktree whatever it likes
-# (`/tmp/oc-*`, `/tmp/rr-*`, `/tmp/kit*`). So NO worktree path can ever match that glob and
+# (`/tmp/<lane>-*`, `/tmp/rr-*`, `/tmp/kit*`). So NO worktree path can ever match that glob and
 # the residue is outside the cleanliness instrument's population BY CONSTRUCTION rather than
 # by a cleanliness result — measured at the filing: 38 registered worktrees, 0 matching.
 #
@@ -2771,7 +2771,7 @@ def kit_drift_leg(
 # is not.
 #
 # THE HARM CLAUSE OF THE FILING IS FALSIFIED and the class claim stands: the specimen
-# (`/tmp/oc-fin2`'s ad2ac70) is a DEAD DUPLICATE — patch-identical to 83a2776, which is on
+# (a peer worktree's ad2ac70) is a DEAD DUPLICATE — patch-identical to 83a2776, which is on
 # origin, 14 seconds later — so this is an OBSERVABILITY gap, never a data-loss incident.
 # The leg's figures therefore REPORT residue and are deliberately NOT problems: a tree
 # holding a peer's unlanded work is the CORRECT state for that tree, and a permanently red

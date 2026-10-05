@@ -77,7 +77,7 @@ beginning `session:` — the only non-null delivery forms on this home are `sess
 
 So on this home **no enabled row yet carries the full concept**: the two gated session-wakes
 (`ai-antispam-43-close-gate`, `ai-antispam-52-close-gate`) do not set a goal, and the two
-`set_goal` rows (`oc-triage-factory-patrol`, `inferhub-hq-pacemaker`) have no gate. Six enabled
+`set_goal` rows (a triage patrol, `inferhub-hq-pacemaker`) have no gate. Six enabled
 session-wakes have no gate at all and burn a turn on every fire. This table is a snapshot of ONE
 home at ONE instant, not a fleet figure — §9 counts member **adoption of the instrument**, a
 different population, and the two must not be read as each other.

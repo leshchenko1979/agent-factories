@@ -94,6 +94,129 @@ def portability_problems() -> tuple[list[str], int, int]:
                 )
     return problems, scanned, examined
 
+
+# --- the foreign-toolchain leg (#85, ruled n=2144) --------------------------
+#
+# `portability_problems` above judges literals that RESOLVE in this repository and nowhere
+# else. This leg judges the mirror hazard: a file shipped in `TEMPLATE/` that names a
+# toolchain resolving NOWHERE -- not here, and not in the factory that copies the tree. A
+# member inheriting such a reference is handed an instruction it cannot execute, and the
+# failure is silent: the binary is absent, the law offers no fallback, and the lane either
+# improvises an equivalent by hand or stalls -- neither distinguishable from a correct
+# attempt by anyone reading the result.
+#
+# THE POPULATION IS EVERY FILE UNDER `TEMPLATE/`, not the declared pairs. A paired file is
+# where drift is *visible*; an unpaired shipped file is where it is *unread*.
+#
+# MEASURED at the ruling (HQ, first-hand): `shutil.which` returns None for all nine names
+# below -- the 40-file family lives in ONE member factory's private skill repo.
+FOREIGN_TOOLCHAIN_NAMES = (
+    "oc-ledger", "oc-prchecks", "oc-order-validate", "oc-deploy", "oc-attrib",
+    "oc-snap", "oc-drift-check", "oc-notify-fanout", "oc-wt",
+)
+
+# The PREFIX is what this leg matches. The nine names above are the MEASUREMENT, not the
+# scope: a gate keyed to a fixed list admits the next member of the family, which is how
+# the questions instrument's former prefixed name and the donor's cron job names stayed in
+# the shipped tree while the list read clean.
+FOREIGN_PREFIX = re.compile(r"\boc-[a-z][a-z0-9-]*")
+
+# DECLARED survivors: a token that LOOKS foreign and is not, with the reason it stays.
+# Every entry must be a token this repository's own code EMITS or CONSUMES, so it resolves
+# on every host by construction -- never a name that merely happens to be convenient.
+DECLARED_FOREIGN_TOKENS = {
+    "oc-cause-count": (
+        "the template's OWN stderr token: defined at tools/field_predicate.py "
+        "(CAUSE_COUNT_TOKEN), emitted by tools/hygiene.py, and asserted by "
+        "tests/test_gate_registration.py. It names no binary and resolves on every host by "
+        "construction, because the factory itself writes it."
+    ),
+    "oc-notify-fanout": (
+        "a DENY-LIST literal in tests/test_review.py, whose gate asserts donor tokens are "
+        "ABSENT from the shipped tools/review.py. A deny-list entry is the inverse of a "
+        "dependency, so removing it would weaken that gate by one token."
+    ),
+}
+
+def foreign_toolchain_problems(root: "Path | None" = None) -> "tuple[list[str], int]":
+    """`(problems, files_scanned)` over every file under `root`.
+
+    `root` is a parameter rather than a constant so the leg is PROBEABLE: the neuter probe
+    below points it at a synthetic tree, which is the only way to show the detector bites.
+    A rule that has only ever seen good input has not been shown to bite.
+    """
+    base = root if root is not None else REPO / "TEMPLATE"
+    problems: list[str] = []
+    scanned = 0
+    if not base.is_dir():
+        return problems, 0
+    for path in sorted(q for q in base.rglob("*") if q.is_file()):
+        if "__pycache__" in path.parts:
+            continue
+        scanned += 1
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue  # a binary shipped file carries no reference to read
+        try:
+            label = str(path.relative_to(REPO))
+        except ValueError:
+            label = str(path)
+        for token in sorted(set(FOREIGN_PREFIX.findall(text))):
+            if token in DECLARED_FOREIGN_TOKENS:
+                continue
+            problems.append(
+                f"{label} names `{token}` -- a toolchain that resolves on no host: it is "
+                f"not on PATH here and will not be in the factory this file ships to. "
+                f"Remove the reference, or declare it in DECLARED_FOREIGN_TOKENS with the "
+                f"reason it is not a dependency."
+            )
+    return problems, scanned
+
+def _probe_foreign_toolchain() -> list[str]:
+    """The two-sided neuter probe: the leg BITES on a foreign name, stays SILENT on a
+    declared one, and bites through the PREFIX rather than only the measured list."""
+    import tempfile
+
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "clean.md").write_text("nothing foreign here\n")
+        (root / "declared.md").write_text("oc-cause-count: 7\n")
+        got, scanned = foreign_toolchain_problems(root)
+        if scanned != 2:
+            problems.append(f"probe: expected 2 file(s) scanned, got {scanned}")
+        if got:
+            problems.append(f"probe: expected SILENCE on a declared token, got {got}")
+
+        (root / "dirty.md").write_text("run `oc-ledger sync`\n")
+        got, _ = foreign_toolchain_problems(root)
+        if len(got) != 1 or "oc-ledger" not in got[0]:
+            problems.append(f"probe: expected ONE problem naming oc-ledger, got {got}")
+
+        # The PREFIX bites, not only the nine measured names: a synthetic member of the
+        # family that is on no list must still be caught. The token is ASSEMBLED, never
+        # written whole -- this file ships in `TEMPLATE/` and is scanned by its own leg, so
+        # a literal unlisted member here would be a real finding, not a probe.
+        unlisted = "oc-" + "never-measured-thing"
+        (root / "dirty.md").write_text(f"run `{unlisted}`\n")
+        got, _ = foreign_toolchain_problems(root)
+        if len(got) != 1 or unlisted not in got[0]:
+            problems.append(
+                f"probe: the PREFIX did not bite on an unlisted member, got {got}"
+            )
+
+        # A declared token must NOT be what the prefix matched -- i.e. the declared set is a
+        # real allowlist, not a blanket mute.
+        (root / "dirty.md").write_text("oc-cause-count: 1\nand `oc-deploy ship`\n")
+        got, _ = foreign_toolchain_problems(root)
+        if len(got) != 1 or "oc-deploy" not in got[0]:
+            problems.append(
+                f"probe: a declared token muted a real one on the same file, got {got}"
+            )
+    return problems
+
+
 PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
     ("tools/ledger_declaration.py", "TEMPLATE/tools/ledger_declaration.py"),
@@ -375,7 +498,6 @@ PAIRS = [
     ("tests/test_ledger_citation_declared.py", "TEMPLATE/tests/test_ledger_citation_declared.py"),
 ]
 
-
 def main() -> int:
     drifted: list[str] = []
     for original, copy in PAIRS:
@@ -414,6 +536,34 @@ def main() -> int:
             f"ships to — use a value that resolves in neither tree."
         )
         return 1
+
+    probe = _probe_foreign_toolchain()
+    if probe:
+        print("template foreign-toolchain leg: NEUTER PROBE FAILED\n")
+        for p in probe:
+            print(f"  {p}")
+        return 1
+
+    if not (REPO / "TEMPLATE").is_dir():
+        print("foreign toolchain: no TEMPLATE/ tree -- nothing to scan")
+    else:
+        ft_problems, ft_scanned = foreign_toolchain_problems()
+        if ft_scanned == 0:
+            print(
+                "template foreign-toolchain leg ERROR: zero file(s) read, so this leg "
+                "examined nothing and cannot report a clean verdict"
+            )
+            return 1
+        if ft_problems:
+            print("template ships a foreign toolchain:\n")
+            for p in ft_problems:
+                print(f"  {p}")
+            return 1
+        print(
+            f"foreign toolchain: {ft_scanned} file(s) under TEMPLATE/ scanned, "
+            f"0 undeclared oc-* reference(s); "
+            f"{len(DECLARED_FOREIGN_TOKENS)} declared survivor token(s)"
+        )
 
     print(f"template in sync: {len(PAIRS)} pair(s) byte-identical")
     print(

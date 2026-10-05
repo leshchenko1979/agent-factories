@@ -17,7 +17,7 @@ Take it when the factory's output is **code that gets merged and released**.
 |---|---|
 | `Triage` | Intake, routing, enforcement — the load-bearing partner to `HQ` |
 | `Editor` | A lane that owns one workstream and edits code |
-| `Toolsmith` | The tooling surface (`oc-*` and equivalents) |
+| `Toolsmith` | The tooling surface (this factory's own instruments) |
 | `Carrier` | The merge and ship chain |
 
 **Gates.** Where prose would say "make sure it is correct", a command with a

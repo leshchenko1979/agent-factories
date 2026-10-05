@@ -1771,7 +1771,8 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
 
     # 43. The skill-version contract (issue #71, ruling n=455 clause 3, P29). A commit that
     #     moves a LAW FILE's body must move the skill's `version:` line in the SAME commit,
-    #     because `oc-drift-check` reads that line and a version-keyed staleness check reading
+    #     because the donor factory's version-drift check reads that line and a version-keyed
+    #     staleness check reading
     #     a field that does not move reports "no drift" for a law that changed. Measured at
     #     n=455: of the 36 commits touching the law file, 32 changed the law body without
     #     moving the version — the decoupling is the norm, not an edge case.

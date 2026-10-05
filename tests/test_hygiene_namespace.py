@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Gate: the hygiene gate only globs namespaces this factory owns.
 
-`/tmp` is shared between every factory on the host. The OpenCrabs dev tooling
-leaves its own `oc-snap-*` scratch files there by the thousand, and the first
-version of `tools/hygiene.py` globbed `/tmp/oc-*` — so our audit went RED for
+`/tmp` is shared between every factory on the host. A sibling factory
+leaves its own scratch files there by the thousand, and the first
+version of `tools/hygiene.py` globbed that sibling's prefix — so our audit went RED for
 litter we never wrote. That is a false red: the mirror of issue #28's false
 green, and just as corrosive, because a gate that cries wolf gets switched off.
 
@@ -34,7 +34,8 @@ TOOLS = REPO / "tools"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gate_fixtures import stage_tool  # noqa: E402
 
-FOREIGN_PREFIX = "oc-snap-oc-deploy-"
+FOREIGN_STEM = "foreign-tool-scratch"
+FOREIGN_PREFIX = FOREIGN_STEM + "-"
 
 
 def _load_hygiene():
@@ -62,9 +63,9 @@ def test_no_foreign_prefix_is_globbed() -> None:
     """No declared pattern may match another tool's namespace."""
     hygiene = _load_hygiene()
     for pattern in hygiene.SCRATCH_PATTERNS:
-        assert "oc-snap" not in pattern, (
-            f"{pattern!r} globs the OpenCrabs dev namespace — foreign litter "
-            f"would fail this factory's audit"
+        assert FOREIGN_STEM not in pattern, (
+            f"{pattern!r} globs a foreign namespace — litter this factory never "
+            f"wrote would fail this factory's audit"
         )
         assert pattern.startswith(f"/tmp/{REPO.name}-"), (
             f"{pattern!r} is outside this factory's owned namespace"

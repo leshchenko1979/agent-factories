@@ -575,7 +575,7 @@ def question_return_address(entry, qid):
             entry.get("lane") or "", None)
 
 # PORTED FROM THE INSTRUMENT'S HOME (#182 item 1). This function exists in
-# `oc-questions` -- the tool's home in the opencrabs-dev skill repo, where fork
+# the instrument's home in the contributing skill repo, where fork
 # #612 was fixed -- and was ABSENT from this copy, so the template shipped
 # without the fix: a `notify` with no `--qid` addressed the SET's session while
 # the body named the ASKING lane, so an answer could reach a lane that never
@@ -730,7 +730,7 @@ def set_is_closed(entry):
 
 
 # =============================================================================
-# Unified tools log (parity with tools/lib/oc-log.sh, schema per RC-CONTRACT)
+# Unified tools log (schema per RC-CONTRACT)
 # =============================================================================
 _LOG_ENABLED = False
 _LOG_ARGS = ""

@@ -102,8 +102,8 @@ from pathlib import Path
 
 # A gate may only glob a namespace this factory OWNS.
 #
-# `/tmp` is shared. Another factory's tooling writes its own prefix there — the
-# OpenCrabs dev tools leave `oc-snap-*` behind by the thousand. Globbing a
+# `/tmp` is shared. Another factory's tooling writes its own prefix there — a
+# busy sibling can leave thousands of scratch files under a prefix it owns. Globbing a
 # foreign prefix makes this gate measure someone else's litter: it goes RED for
 # work this factory did not do, the mirror of a false green and just as
 # corrosive, because a gate that cries wolf gets ignored and then reverted.

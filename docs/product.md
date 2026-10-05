@@ -133,7 +133,7 @@ once, and substituting them through the skeletons:
 | `ROLES` | Which roles exist (HQ, Triage, workers, carrier) | `HQ` only for a minimal factory |
 | `DOMAINS` | Domain topics in the middle of the spine | `Landing`, `Bot`, `Outreach` |
 | `ADDONS` | **Domain** packs to apply (bindings are separate and mandatory) | `watch` |
-| `GATES` | Commands that decide, where a command can | `oc-*` tool set, or a repo test suite |
+| `GATES` | Commands that decide, where a command can | the factory's own tools, or a repo test suite |
 
 `SURFACE` and `HARNESS` are not optional. A factory always runs on some surface
 and some harness; naming them is what keeps their mechanics in the add-on layer

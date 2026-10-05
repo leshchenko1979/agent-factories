@@ -352,7 +352,7 @@ CADENCE_DEFAULT_EVERY = 5
 
 # ... and the COUNT is a SECOND predicate, not the same one.  Read from the
 # donor's own implementation rather than inferred from its prose: in
-# `oc-ledger`'s `cmd_cadence` the boundary is the newest ANCHORED row, while
+# the donor's `cmd_cadence` the boundary is the newest ANCHORED row, while
 # the bumps are counted over rows of a DIFFERENT kind — `kind == "skill-bump"`.
 # Re-measured against the donor's live ledger (predicate: rows per kind; scope:
 # workers-ledger.json, 11 562 rows; instant 2026-09-27T15:2xZ): boundary

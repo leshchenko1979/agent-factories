@@ -208,6 +208,6 @@ Every process decomposes into **atomic subprocesses** (`atomic_subprocess`) with
 
 | Subprocess | Implementer | Input Contract | Output Contract | Primary Failure Mode | Subprocess Metric |
 |---|---|---|---|---|---|
-| **1. Scratch File Sweep** | `tools/hygiene.py` | `/tmp/oc-*` filesystem paths | List of aged scratch files ($>24$h) | Missed rogue scratch processes | Reaped item count |
+| **1. Scratch File Sweep** | `tools/hygiene.py` | `/tmp/<factory>-*` filesystem paths | List of aged scratch files ($>24$h) | Missed rogue scratch processes | Reaped item count |
 | **2. Garbage Collection** | `tools/hygiene.py` | Aged file list | Clean filesystem & reaped files | Permission error / incomplete wipe | Reaped bytes & exit code |
 | **3. Git Workspace Audit** | `tools/hygiene.py` | Working directory status | Clean tree verification receipt | Untracked clutter accumulation | Git status exit code |

@@ -1,6 +1,6 @@
-// oc-questions-render.mjs — the Open Questions page renderer (#547).
+// questions-render.mjs — the Open Questions page renderer (#547).
 //
-// VERSIONED SOURCE. tools/state/oc-questions copies this file into the build directory
+// VERSIONED SOURCE. tools/questions copies this file into the build directory
 // (write-if-different) before invoking it, because ESM resolves a bare import
 // from the IMPORTING FILE's own location and the node_modules that carries
 // @json-render lives there. Do not edit the copy under questions/build/: the

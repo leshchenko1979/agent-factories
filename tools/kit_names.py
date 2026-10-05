@@ -138,7 +138,7 @@ def fleet_trees(*, repo: Path | None = None, rel: str | None = None) -> dict[str
         if slug and repo:
             trees[slug] = Path(repo)
         # A factory's SKILL is declared separately and may sit OUTSIDE its repo. For
-        # opencrabs-dev it holds the entire `oc-*` toolkit (51 entries), so a census that
+        # opencrabs-dev it holds the entire toolkit (51 entries), so a census that
         # walked only `repo` would miss the one tree whose names this project is renaming.
         skill = f.get("skill")
         if slug and skill:

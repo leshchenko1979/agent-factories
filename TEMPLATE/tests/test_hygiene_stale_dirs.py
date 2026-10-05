@@ -228,10 +228,10 @@ def test_a_planted_outside_tree_MOVES_the_reported_number():
 
 def test_a_prunable_tree_is_ENUMERATED_by_name_with_gits_own_reason():
     reason = "gitdir file points to non-existent location"
-    leg = _leg([_record("/tmp/oc-wt-r2", prunable=reason)], reachable=set())
-    assert leg["prunable"] == ["/tmp/oc-wt-r2"], "git's own prunable flag must be read"
+    leg = _leg([_record("/tmp/foreign-wt-r2", prunable=reason)], reachable=set())
+    assert leg["prunable"] == ["/tmp/foreign-wt-r2"], "git's own prunable flag must be read"
     rendered = hygiene.render_stale_dirs(leg)
-    assert "/tmp/oc-wt-r2" in rendered and reason in rendered, (
+    assert "/tmp/foreign-wt-r2" in rendered and reason in rendered, (
         "a prunable tree is ENUMERATED BY NAME with git's reason, not merely counted -- "
         "it is the one class git itself declares rather than this leg inferring"
     )

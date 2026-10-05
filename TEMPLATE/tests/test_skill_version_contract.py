@@ -13,7 +13,7 @@ moved both, and exactly ONE — `5fcf624c`, `0.1.0` -> `0.1.1` — moved the ver
 body change. The decoupling runs BOTH ways, which is why the gate carries TWO arms.
 
 **Why the field is a contract, not a formality (n=455 clause 2).** The fleet's own
-practice settles it: `oc-drift-check` reads the version line from the canonical `SKILL.md`
+practice settles it: the donor factory's version-drift check reads the version line from the canonical `SKILL.md`
 and returns DRIFT when a lane's claimed version differs, and the skill-change notify law
 requires a reload brief on every bump. A version-keyed staleness check reading a field
 that does not move reports "no drift" for a law that changed — the exact failure the check
@@ -77,9 +77,9 @@ gate cannot know — is judged by the same rule.
 — a lane asked to acknowledge a version, and a check that DRIFTS when it has not — is NOT
 built here, because nothing on this box reads THIS skill's version today. Verified at
 n=455: a grep of the opencrabs-dev tools for `meta-factory` returns nothing, and
-`oc-drift-check` — the one tool that reads a version line — is coupled to the
-**opencrabs-dev** ledger, which it reaches through `oc-ledger roster`: another repo's ack
-store, keyed to another skill. Pointing it at this skill is not a wiring change but a
+that check — the one tool in the fleet that reads a version line — is coupled to the
+**opencrabs-dev** ledger, which it reaches through that repo's own roster verb: another
+repo's ack store, keyed to another skill. Pointing it at this skill is not a wiring change but a
 second ack store, so it is a design decision for that lane's owner rather than a
 by-product of this gate. Recorded here so the omission is a NAMED deferral and not an
 oversight: the write-side contract is enforceable on its own, and it is worth having

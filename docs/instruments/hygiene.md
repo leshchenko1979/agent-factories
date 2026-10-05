@@ -48,7 +48,7 @@ a reader who does not know them will "simplify" the tool back into one of them:*
 
 - **The namespace is OWNED, and derived rather than hardcoded.** `NAMESPACE` is the repository
   directory name, so a factory bootstrapped from this template owns its own prefix automatically. The
-  first version globbed `/tmp/oc-*` and went RED for the OpenCrabs dev tooling's litter — a **false
+  first version globbed a sibling factory's prefix and went RED for its litter — a **false
   red**, the mirror of a false green and just as corrosive, because a gate that cries wolf gets
   switched off. `--scratch-glob` adds an owned namespace; it is never a way to widen the list to a
   prefix somebody else already writes to.
@@ -330,7 +330,7 @@ as one protecting everything.
 probes are its two gates, and each bites a different failure — neither is satisfied by the other:
 
 - **`tests/test_hygiene_namespace.py`** probes the OWNERSHIP property by **planting litter under a
-  prefix this factory does not own** (`oc-snap-oc-deploy-*`) inside a throwaway directory, and
+  prefix this factory does not own** (`foreign-tool-scratch-*`) inside a throwaway directory, and
   asserting the audit neither reports nor reaps it. It also pins that the prefix is **derived, not
   hardcoded**: `NAMESPACE` must equal the repository directory name, so a fork owns its own.
 - **`tests/test_hygiene_inflight.py`** probes the CLASSIFICATION property. Its load-bearing arm runs

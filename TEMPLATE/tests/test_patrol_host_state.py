@@ -372,7 +372,7 @@ def test_the_cron_leg_RUNS_and_states_the_population_it_examined() -> None:
     rows = [
         _thin("factory-triage-patrol"),
         _thin("factory-measurement-daily", home="other-home"),
-        _thin("oc-triage-hourly-patrol", home="other-home"),
+        _thin("sibling-triage-hourly-patrol", home="other-home"),
     ]
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
                       unreached=["gone-home: no opencrabs.db"], prefixes=["factory-"])
@@ -398,7 +398,7 @@ def test_the_cron_leg_fails_LOUDLY_when_nothing_is_attributed() -> None:
     The declared prefix set is non-empty and NOTHING matches it, so the population the
     leg claims to judge came back empty — reported, never read as clean.
     """
-    rows = [_thin("oc-triage-hourly-patrol")]
+    rows = [_thin("sibling-triage-hourly-patrol")]
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
     assert rc == 1, f"an empty attributed population must FAIL LOUDLY, got rc={rc}\n{out}"
     assert "population came back EMPTY" in out, out
@@ -419,20 +419,20 @@ def test_an_unattributable_row_is_COUNTED_NAMED_and_never_judged() -> None:
     """
     rows = [
         _thin("factory-triage-patrol"),
-        _cron("oc-some-other-factory-job", deliver_to=f"session:{_SESSION_UUID}",
+        _cron("sibling-some-other-factory-job", deliver_to=f"session:{_SESSION_UUID}",
               prompt="Execute the hourly cycle and write the report.", home="other-home"),
     ]
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
                       prefixes=["factory-"])
     assert rc == 0, f"an unattributable row must not fail this factory's run\n{out}"
     assert "1 attributed to nobody" in out, out
-    assert "    unattributed: oc-some-other-factory-job (home other-home)" in out, (
+    assert "    unattributed: sibling-some-other-factory-job (home other-home)" in out, (
         f"the population read must NAME every row it could not attribute, with the home "
         f"it was read from — a count alone resolves to no object and cannot be checked "
         f"by the reader it is reported to (#126)\n{out}"
     )
     judged = [line for line in out.splitlines() if line.startswith("    - ")]
-    assert not any("oc-some-other-factory-job" in line for line in judged), (
+    assert not any("sibling-some-other-factory-job" in line for line in judged), (
         f"the leg judges its OWN rows only — an unattributable row belongs in the "
         f"population read, never in this factory's problems\n{judged}\n{out}"
     )
@@ -462,7 +462,7 @@ def test_the_law_content_class_NAMES_every_row_and_states_its_population() -> No
     """
     rows = [
         _thin("factory-triage-patrol"),
-        _thin("oc-other-factory-window",
+        _thin("sibling-other-factory-window",
               prompt=_WAKE_PROMPT + " The window from the deploy (2026-09-24T11:33:19Z) "
                                    "has passed.", home="other-home"),
     ]
@@ -476,7 +476,7 @@ def test_the_law_content_class_NAMES_every_row_and_states_its_population() -> No
         f"the population examined must be printed, so a clean verdict is distinguishable "
         f"from one that examined nothing\n{out}"
     )
-    assert "law content: oc-other-factory-window" in out, (
+    assert "law content: sibling-other-factory-window" in out, (
         f"the row must be NAMED, with the instant it embeds\n{out}"
     )
     assert "2026-09-24T11:33" in out, out
@@ -1254,7 +1254,7 @@ def test_the_retired_bucket_prints_its_POPULATION_and_its_PREDICATE() -> None:
 
 def test_a_log_nobody_here_declares_is_reported_and_never_judged() -> None:
     """Another factory's law is not this factory's to enforce (#101, ruling n=610 part 3b)."""
-    log_dir = _log_dir(**{"oc-some-other-job-20260922T000045.log": _FAILURE})
+    log_dir = _log_dir(**{"sibling-some-other-job-20260922T000045.log": _FAILURE})
     rows = [_notify_row("factory-measurement-daily")]
     leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
                                     log_dir=log_dir, read_at="2026-09-22T00:00:00Z")
@@ -1263,7 +1263,7 @@ def test_a_log_nobody_here_declares_is_reported_and_never_judged() -> None:
         f"{leg['problems']}"
     )
     assert leg["coverage"]["logs_unattributed"] == 1, leg["coverage"]
-    assert leg["coverage"]["unattributed_logs"][0]["job"] == "oc-some-other-job", leg["coverage"]
+    assert leg["coverage"]["unattributed_logs"][0]["job"] == "sibling-some-other-job", leg["coverage"]
 
 def test_a_log_that_exists_and_cannot_be_READ_is_a_problem_not_an_absence() -> None:
     """The #69 clause (e) shape: a declared surface that defeats the read is a defect.
@@ -1335,11 +1335,11 @@ def test_the_leg_shares_the_manifest_declaration_with_the_CRON_leg() -> None:
     """
     rows = [
         _notify_row("factory-mine"),
-        dict(_notify_row("oc-not-mine"), home="other-home"),
+        dict(_notify_row("sibling-not-mine"), home="other-home"),
     ]
     mine, nobody = RUNNER.attribute_rows(rows, ["factory-"])
     assert [r["name"] for r in mine] == ["factory-mine"], mine
-    assert [r["name"] for r in nobody] == ["oc-not-mine"], nobody
+    assert [r["name"] for r in nobody] == ["sibling-not-mine"], nobody
 
 
 def _home_db(path: Path, *jobs) -> None:
