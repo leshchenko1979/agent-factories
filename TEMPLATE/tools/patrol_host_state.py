@@ -894,7 +894,7 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
 
     Population: every board issue carrying a ruling comment — derived AT RUN TIME from the
     board the read returned, never a literal, so the count moves with the board and cannot
-    go stale in the code. Returned as `ruling_comments_examined` and printed beside the
+    go stale in the code. Returned as `rulings_issued` and printed beside the
     verdict, so a clean run reads as "examined N, 0 problems" rather than being
     indistinguishable from "examined nothing" — the leg that examined nothing has reported
     nothing, never a clean HOLD.
@@ -956,7 +956,7 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
         "problems": problems,
         "excused": [],
         "coverage": {
-            "ruling_comments_examined": examined,
+            "rulings_issued": examined,
             "issues_read": len(issues),
             "board_read_at": read_at,
             "headings": list(RULING_HEADINGS),
@@ -3320,8 +3320,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(f"  read at {cov['read_at'] or 'unstated'}")
         elif leg["name"] == "board-ruling":
             lines.append(
-                f"  ruling comments on the board (openings {', '.join(cov['headings'])}): "
-                f"{cov['ruling_comments_examined']} examined over {cov['issues_read']} "
+                f"  rulings issued on the board (openings {', '.join(cov['headings'])}): "
+                f"{cov['rulings_issued']} examined over {cov['issues_read']} "
                 f"issue(s) read, {len(leg['problems'])} problem(s) — board read at "
                 f"{cov['board_read_at']}"
             )

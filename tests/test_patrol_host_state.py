@@ -3159,7 +3159,7 @@ def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> Non
     rows = _rows(("intake", "#133", 846), ("dispatch", "#133", 847))
 
     widened = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
-    assert widened["coverage"]["ruling_comments_examined"] == 1, widened["coverage"]
+    assert widened["coverage"]["rulings_issued"] == 1, widened["coverage"]
     assert len(widened["problems"]) == 1, widened["problems"]
     assert "#133 carries a ruling comment" in widened["problems"][0], widened["problems"]
 
@@ -3169,7 +3169,7 @@ def test_the_widening_MOVES_an_amendment_only_issue_INTO_the_population() -> Non
         narrowed = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred)
     finally:
         RUNNER.RULING_HEADINGS = saved
-    assert narrowed["coverage"]["ruling_comments_examined"] == 0, narrowed["coverage"]
+    assert narrowed["coverage"]["rulings_issued"] == 0, narrowed["coverage"]
     assert narrowed["problems"] == [], narrowed["problems"]
 
 # --- #220: the worktree leg — the object class the cleanliness instrument excludes ---
