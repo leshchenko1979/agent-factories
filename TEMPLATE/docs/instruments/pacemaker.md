@@ -61,26 +61,25 @@ because that is what a tree census counts — but the **property** it upholds is
 above, and a member that ports the files without gating its own crons has adopted the checker and
 not the concept. An instrument is a **declared** object (frame §1), and this file is its declaration.
 
-**The concept's live state, measured 2026-09-27T12:33:45Z** (predicate: `enabled=1` rows in the
+**The concept's live state, measured 2026-10-05T21:18:44Z** (predicate: `enabled=1` rows in the
 **ops profile home only**; `gate` = `length(trigger_cmd) > 0`; `session wake` = `deliver_to`
 beginning `session:` — the only non-null delivery forms on this home are `session:<uuid>` and
 `telegram:-1003…`, verified by distinct read):
 
 | metric | rows |
 |---|---|
-| enabled | 33 |
-| with a cheap gate | 10 |
-| waking a session | 8 |
-| gate **AND** session wake | 2 |
+| enabled | 35 |
+| with a cheap gate | 11 |
+| waking a session | 7 |
+| gate **AND** session wake | 3 |
 | with `set_goal` | 2 |
 | gate **AND** session wake **AND** `set_goal` | **0** |
 
-So on this home **no enabled row yet carries the full concept**: the two gated session-wakes
-(`ai-antispam-43-close-gate`, `ai-antispam-52-close-gate`) do not set a goal, and the two
-`set_goal` rows (a triage patrol, `inferhub-hq-pacemaker`) have no gate. Six enabled
-session-wakes have no gate at all and burn a turn on every fire. This table is a snapshot of ONE
-home at ONE instant, not a fleet figure — §9 counts member **adoption of the instrument**, a
-different population, and the two must not be read as each other.
+So on this home **no enabled row yet carries the full concept**: the two `set_goal` rows
+(`inferhub-hq-pacemaker`, `factory-hq-pacemaker`) carry no gate, and four enabled session-wakes
+carry no gate at all and burn a turn on every fire. This table is a snapshot of ONE home at ONE
+instant, not a fleet figure — §9 counts member **adoption of the instrument**, a different
+population, and the two must not be read as each other.
 
 **Name:** `pacemaker` — a bare noun, per frame §4: adopted instruments drop the `oc-` prefix, because
 the class field now carries the fleet-generic-versus-factory-specific distinction the prefix used to
@@ -102,7 +101,7 @@ listed because the pair is what a member adopts, and the manifest hashes the `TE
 | 7 | `tools/registry.py` ↔ `TEMPLATE/tools/registry.py` | `standalone` | the registry read the legs share — also a CLI of its own |
 | 8 | `tests/test_board_intake_recorded.py` ↔ `TEMPLATE/tests/test_board_intake_recorded.py` | `standalone` | the board-intake predicate |
 | 9 | `tests/test_close_board_recorded.py` ↔ `TEMPLATE/tests/test_close_board_recorded.py` | `standalone` | the close-board gate |
-| 10 | `tests/ledger_boundary.py` ↔ `TEMPLATE/tests/ledger_boundary.py` | `closure` | the boundary reader the runner loads by path (`patrol_host_state.py:91`) |
+| 10 | `tests/ledger_boundary.py` ↔ `TEMPLATE/tests/ledger_boundary.py` | `closure` | the boundary reader the runner loads by path (`LEDGER_BOUNDARY` in `patrol_host_state.py`) |
 | 11 | `tools/ledger_declaration.py` ↔ `TEMPLATE/tools/ledger_declaration.py` | `closure` | imported by row 10 (`ledger_boundary.py:69`), so the runner needs it transitively |
 
 **This is the ONE table the census parses** — `tools/instrument_census.py` derives the declared set
@@ -268,7 +267,7 @@ which is the one thing `job_prefixes` exists to state.
 
 | surface | ships as | owner | why it must not be overwritten |
 |---|---|---|---|
-| `registry/fleet.json` → `job_prefixes` | `registry/fleet.example.json` | **the factory** | it IS the ownership declaration: the runner attributes each cron row to a factory by this field, never by the home a row sits in (measured: all twelve ai-antispam rows live in the ops home) |
+| `registry/fleet.json` → `job_prefixes` | `registry/fleet.example.json` | **the factory** | it IS the ownership declaration: the runner attributes each cron row to a factory by this field, never by the home a row sits in (measured 2026-10-05T21:18:44Z: all 18 ai-antispam rows live in the ops home) |
 | `docs/processes.md` → §3 *The Meta-Factory Process Register* | **versioned in the tree** | **the factory** | it IS the pacemaker-presence leg's **independent declaration**: the `Process Owner` column (located by header name) names WHO owes a wake, and the presence leg reads it precisely so its expectation does not come from the `cron_jobs` table it judges. A register that dropped an owner would silently narrow the population the leg examines, so it is read on every run and never overwritten by an update |
 | `docs/ledger-invariants.json` | `docs/ledger-invariants.example.json` | **the factory** | the DECLARED duty-receipt boundary (#78 clause b): the runner's `duty_receipt_leg` reads it through the one reader, and a tree that has not declared one gets `DeclarationUnavailable` — measured in `ai-antispam`, whose gate exits **rc=1** on the absent file |
 | `registry/factories/*.json` | the adopter writes its own | **the factory** | the fragment store the attestation round reads and writes |
@@ -587,8 +586,9 @@ degrades. A member adopting this instrument takes the FULL closure, by hand if n
    the true set is eleven. `infra-factory` adopted the instrument and reported that its tree needed
    **five files rather than three**, naming `tests/ledger_boundary.py` and `tools/ledger_declaration.py`
    as the closure the boundary reader needs. Measured here, it is right and worse than a member's
-   local note: `patrol_host_state.py:91` sets `LEDGER_BOUNDARY = REPO / "tests" / "ledger_boundary.py"`
-   and loads it by path at `:1188`, and `ledger_boundary.py:69` does `from ledger_declaration import …`.
+   local note: `LEDGER_BOUNDARY` in `patrol_host_state.py` sets `REPO / "tests" / "ledger_boundary.py"`,
+   the runner loads it by path in `_BOUNDARY_READER = load_module("ledger_boundary", LEDGER_BOUNDARY)`,
+   and `ledger_boundary.py` does `from ledger_declaration import …`.
    So a member holding rows 1–9 alone reads **HELD — complete set — while being unable to run at
    all**: the runner raises on the missing path-load. That is the exact class §3 warns about, sitting
    in the instrument's own declaration rather than in any member's tree. Both files are manifest rows of class `closure`, so the kit always shipped them;
@@ -630,8 +630,9 @@ degrades. A member adopting this instrument takes the FULL closure, by hand if n
    that must prove an absence carries a control that can FAIL*) is routed to the frame's author.
 ## 10. Where this instrument's law lives
 
-This file is the instrument's law home. The law it **takes over** is currently stated elsewhere, and
-the move is deliberately not in this commit:
+This file is the instrument's **declaration**. The law it **takes over** is still stated elsewhere,
+and the move is deliberately not in this commit. This section is therefore a **declared obligation
+with a checkable exit**, not a claim that the move has happened:
 
 | today's home | what it carries about this instrument |
 |---|---|
@@ -648,7 +649,11 @@ the move is deliberately not in this commit:
    machine-enforced in `tools/patrol_host_state.py`, so the pointer row left behind must name **the
    enforcing line**, not a prose line that a later edit can move without any gate noticing.
 
-**Skill-text authorship is HQ's, not this lane's** (frame §8: an instrument owner supplies text to the
-lane that owns a file; they do not land it there). So the extraction of §11 into this file is supplied
-to HQ, and **until it lands, SKILL.md remains the operative home and this file is its declaration and
-its citation target.** This file does not claim a move it did not make.
+**Owner of the move: HQ.** Skill-text authorship is HQ's, not this lane's (frame §8: an instrument
+owner supplies text to the lane that owns a file; they do not land it there). **Exit criterion, and
+it is checkable without reading intent:** the move has landed when the clause text is present in this
+file and `skills/meta-factory/state.md` no longer carries it. The measurable handle is the token the
+duty-receipt contract keys on — `receipt_subject`: measured 2026-10-05T21:18:44Z, `state.md` carries
+it **2×** (this file's table row above cites it once as content; this sentence is the count, not the clause). The move is done when that count in `state.md`
+reaches 0 and the text sits here. **Until then, SKILL.md remains the operative home and this file is
+its declaration and its citation target** — this file does not claim a move it did not make.
