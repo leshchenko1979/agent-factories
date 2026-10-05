@@ -129,7 +129,8 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 
 
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
-         log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None):
+         log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
+         dirty_paths_fn=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -173,6 +174,10 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         publish_fn=_stub_publish_leg,
         worktree_fn=_stub_worktree_leg,
         presence_fn=presence_fn or _stub_presence_leg,
+        # The workspace-blocked leg's tree read is stubbed by default: a probe must not
+        # cross-read against whatever THIS checkout happens to have dirty. A probe that
+        # asserts the cross-read passes a `dirty_paths_fn` of its own.
+        dirty_paths_fn=dirty_paths_fn or (lambda: set()),
     )
     return rc, out.getvalue(), err.getvalue()
 
@@ -3814,6 +3819,113 @@ def test_the_presence_leg_is_INJECTABLE_and_wired_by_default() -> None:
     assert hasattr(RUNNER, "live_pacemaker_presence_leg"), "the live wiring must exist"
     assert hasattr(RUNNER, "declared_slug"), "the slug resolver must exist"
 
+
+# ---- the workspace-blocked leg (issue #201, ruled at ledger n=2286) --------------------
+#
+# The closing invariant gained a SECOND lawful verdict, `workspace_gate=blocked-by-unowned`,
+# lawful ONLY when the row NAMES the blocking paths. A lawful exception must remain a VISIBLE
+# DEBT, so the standing patrol prints the population and cross-reads the named paths live.
+# These probes drive the leg directly (and one drives `main()`) so each property is asserted
+# rather than assumed: it BITES on the unexaminable declaration, REPORTS a cleared path, is
+# LOUD on a zero population, and never counts a mere MENTION as a declaration.
+
+def _gate_row(n, subject, paths, *, event="score", gate="blocked-by-unowned"):
+    """One governed-run row whose canonical trailer declares a workspace gate.
+
+    `paths=None` omits `blocked_paths=` entirely; `paths=[]` writes it EMPTY. Both are the
+    unexaminable shape the ruling refuses, and both must bite.
+    """
+    detail = "a governed run closed its workspace gate"
+    detail += f" workspace_gate={gate}"
+    if paths is not None:
+        detail += f" blocked_paths={','.join(paths)}"
+    return {"n": n, "event": event, "subject": subject, "detail": detail}
+
+def test_the_workspace_blocked_leg_BITES_on_a_declaration_that_names_no_paths() -> None:
+    """The unexaminable excuse is a PROBLEM, not a silent pass (the ruling's refusal)."""
+    leg = RUNNER.workspace_blocked_leg(
+        [_gate_row(1, "survey-x", None)], read_at="2026-10-05T00:00:00Z",
+        dirty_paths_fn=lambda: set(),
+    )
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["coverage"]["blocked_declarations"] == 1, leg["coverage"]
+    assert any("names NO blocking paths" in p for p in leg["problems"]), leg["problems"]
+
+def test_the_workspace_blocked_leg_BITES_on_an_EMPTY_paths_value() -> None:
+    """`blocked_paths=` with no value is a MENTION, not a declaration — it must bite too."""
+    leg = RUNNER.workspace_blocked_leg(
+        [_gate_row(2, "survey-y", [])], read_at="2026-10-05T00:00:00Z",
+        dirty_paths_fn=lambda: set(),
+    )
+    assert any("names NO blocking paths" in p for p in leg["problems"]), leg["problems"]
+
+def test_the_workspace_blocked_leg_REPORTS_a_path_no_longer_dirty() -> None:
+    """The cross-read separates the still-stranded from the settled, and never reds on the
+    settled half — a declaration true at its instant is history, not a permanent defect."""
+    leg = RUNNER.workspace_blocked_leg(
+        [_gate_row(3, "survey-z", ["evidence/a.md", "evidence/b.md"])],
+        read_at="2026-10-05T00:00:00Z",
+        dirty_paths_fn=lambda: {"evidence/a.md"},
+    )
+    assert leg["problems"] == [], leg["problems"]
+    entry = leg["coverage"]["blocked_rows"][0]
+    assert entry["still_dirty"] == ["evidence/a.md"], entry
+    assert entry["no_longer_dirty"] == ["evidence/b.md"], entry
+
+def test_the_workspace_blocked_leg_is_LOUD_on_a_zero_population() -> None:
+    """Zero blocked declarations is NOT RUN with its reason, never a clean HOLD (#242)."""
+    leg = RUNNER.workspace_blocked_leg(
+        [_gate_row(4, "survey-clean", None, gate="rc=0")],
+        read_at="2026-10-05T00:00:00Z", dirty_paths_fn=lambda: set(),
+    )
+    assert leg["status"] == "NOT RUN", leg
+    assert "zero is LOUD" in leg["coverage"]["reason"], leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+def test_the_workspace_blocked_leg_goes_NOT_RUN_when_the_tree_is_UNREADABLE() -> None:
+    """A cross-reader that cannot read the tree has corroborated nothing — never "all cleared"."""
+    def boom():
+        raise RUNNER.BoardReadError("git status exited 128: not a git repository")
+    leg = RUNNER.workspace_blocked_leg(
+        [_gate_row(5, "survey-w", ["evidence/a.md"])],
+        read_at="2026-10-05T00:00:00Z", dirty_paths_fn=boom,
+    )
+    assert leg["status"] == "NOT RUN", leg
+    assert "unreadable" in leg["coverage"]["reason"], leg["coverage"]
+
+def test_a_MENTION_of_the_blocked_token_is_not_a_declaration() -> None:
+    """The read is the POSITIONAL trailer, never a substring: a row that cites the token in
+    prose — a dispatch, a ruling, the ledger repair that appended it — is not a run, and
+    counting it would be this reader's own echo mistaken for evidence (AGENTS.md rule 7)."""
+    rows = [
+        {"n": 6, "event": "dispatch", "subject": "#201",
+         "detail": "GOAL: the verdict workspace_gate=blocked-by-unowned is lawful"},
+        {"n": 7, "event": "score", "subject": "survey-v",
+         "detail": "this run cites workspace_gate=blocked-by-unowned in prose, not as a "
+                   "trailer, so it declares nothing"},
+    ]
+    leg = RUNNER.workspace_blocked_leg(
+        rows, read_at="2026-10-05T00:00:00Z", dirty_paths_fn=lambda: set(),
+    )
+    assert leg["coverage"]["blocked_declarations"] == 0, leg["coverage"]
+    assert leg["status"] == "NOT RUN", leg
+
+def test_the_workspace_blocked_leg_is_WIRED_and_bites_through_main() -> None:
+    """End to end: a no-paths declaration in the ledger REDs the run and the leg is printed."""
+    rc, out, _ = _run(
+        [], [_gate_row(8, "survey-u", None)],
+        dirty_paths_fn=lambda: set(),
+    )
+    assert rc == 1, f"an unexaminable declaration must fail the run\n{out}"
+    assert "LEG workspace-blocked" in out, out
+    assert "NO paths named" in out, out
+
+def test_the_workspace_blocked_leg_is_INJECTABLE_and_wired_by_default() -> None:
+    """`dirty_paths_fn` is a real parameter, and the live tree read is the default."""
+    import inspect
+    params = inspect.signature(RUNNER.main).parameters
+    assert "dirty_paths_fn" in params, sorted(params)
+    assert hasattr(RUNNER, "live_dirty_paths"), "the live tree read must exist"
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

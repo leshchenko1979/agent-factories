@@ -404,12 +404,17 @@ flowchart TD
      the ledger.
    - Commit cleanly to the repository.
    - **Closing invariant — the run is not finished until the workspace gate is clean.**
-     Execute `python3 tools/hygiene.py --audit` and require **rc=0** before step 8. Any
-     re-read correction landing *after* the commit above re-opens this step: commit it and
-     re-run the gate. A gate that exists but is never invoked is dead text (P29), and the
-     run's own artifact is the first thing it must cover — a score file left uncommitted is
-     a claim the repository cannot back, and it strands the run's own Recoverability
-     receipt at the moment that receipt is written.
+     Execute `python3 tools/hygiene.py --audit` and require **rc=0** before step 8. The walk
+     is whole-tree: a run declares its OWN artifacts with `--require-committed <path>`, and a
+     path stranded by another lane is not this run's defect. When the gate is blocked by such
+     foreign paths, the run records the SECOND lawful verdict instead of forging a clean —
+     `workspace_gate=blocked-by-unowned`, lawful **only when the row NAMES the blocking
+     paths** (`blocked_paths=`); the token without the paths is an unexaminable excuse, and
+     the gate refuses it. Any re-read correction landing *after* the commit above re-opens
+     this step: commit it and re-run the gate. A gate that exists but is never invoked is dead
+     text (P29), and the run's own artifact is the first thing it must cover — a score file
+     left uncommitted is a claim the repository cannot back, and it strands the run's own
+     Recoverability receipt at the moment that receipt is written.
 
 8. **Report to Operator & Member HQs:**
    - Present summary, score movements, and fleet patterns to the Factories analysis topic.
@@ -474,9 +479,13 @@ later reader does not mistake it for a ruling.
      so the verdict is *recorded* rather than asserted, and the sha makes the row checkable
      against the repository instead of a claim about a tree that has since moved.
    - **Closing invariant — the run is not finished until the workspace gate is clean.**
-     Execute `python3 tools/hygiene.py --audit` and require **rc=0**, **scoped to the run's
-     own artifacts**: the gate answers for the files this run touched, and an unrelated
-     lane's in-flight changes are not this run's defect. Any re-read correction landing
+     Execute `python3 tools/hygiene.py --audit` and require **rc=0**. The walk is whole-tree
+     — the run-scoped form does not exist; a run declares its OWN artifacts with
+     `--require-committed <path>`, and a path stranded by another lane is not this run's
+     defect. When the gate is blocked by such foreign paths, the run records the SECOND
+     lawful verdict instead of forging a clean — `workspace_gate=blocked-by-unowned`, lawful
+     **only when the row NAMES the blocking paths** (`blocked_paths=`); the token without the
+     paths is an unexaminable excuse, and the gate refuses it. Any re-read correction landing
      *after* the commit above re-opens this step: commit it, re-run the gate, and only then
      report. A gate that exists and is never invoked is dead text (P29), and the run's own
      artifact is the first thing it must cover — an insights file left uncommitted is a

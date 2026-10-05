@@ -2322,6 +2322,178 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
         },
     }
 
+# ---- the workspace-blocked leg (issue #201, ruled at ledger n=2286) -------------------
+#
+# The closing invariant on a governed run was `require rc=0`. Ruling n=2286 admits a SECOND
+# lawful verdict -- `workspace_gate=blocked-by-unowned`, lawful ONLY when the row NAMES the
+# blocking paths -- because on a shared tree a run's own artifacts can be clean while an
+# unrelated lane's stranded paths keep `hygiene.py --audit` at rc=1. A token without its
+# paths is an unexaminable excuse, and that is the failure mode the ruling refuses.
+#
+# A lawful exception must remain a VISIBLE DEBT, and the offline score gate cannot see it:
+# that gate asserts the token was RECORDED, never that the block was real. So this leg is the
+# live cross-reader the ruling's AC4 owes (#201, re-dispatched at ledger n=1886). It:
+#   1. PRINTS the population of blocked declarations with its count, and is LOUD on a zero
+#      population -- an instrument that never sees the token cannot be told from a broken one;
+#   2. REDs on a declaration that names NO paths (the unexaminable excuse); and
+#   3. RE-READS the named paths against the live tree, reporting every path that is no longer
+#      dirty -- a declared block the live tree no longer corroborates.
+#
+# The read is the field predicate's POSITIONAL trailer, never a substring scan: rows that
+# merely MENTION the token in prose (a dispatch, a ruling, the ledger repair that appended it)
+# carry it mid-detail and are not declarations, and counting them would be this reader's own
+# echo mistaken for evidence (AGENTS.md rule 7).
+WORKSPACE_GATE_KEY = "workspace_gate"
+WORKSPACE_BLOCKED_TOKEN = "blocked-by-unowned"
+BLOCKED_PATHS_KEY = "blocked_paths"
+# The row classes that carry a governed run's closing invariant: `score` is the daily
+# survey's, `run` is the insights run's -- the two surfaces the law's closing-invariant
+# clauses address. A `dispatch` or `ruling` row that merely cites the token is not a run.
+WORKSPACE_GATE_EVENTS = ("score", "run")
+
+def live_dirty_paths(root: Path = REPO) -> set[str]:
+    """The repo-relative paths `git status --porcelain` reports as dirty, right now.
+
+    `GIT_OPTIONAL_LOCKS=0` for the reason the worktree leg states: a read-only census must
+    never refresh the index of a tree a peer lane may be mid-task on. A non-zero exit is an
+    INSTRUMENT failure, raised rather than swallowed -- a cross-reader that cannot read the
+    tree has corroborated nothing, and an empty set would read as "every path cleared", the
+    exact false-clean this leg exists to prevent.
+    """
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    proc = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain"],
+        capture_output=True, text=True, env=env, timeout=120,
+    )
+    if proc.returncode != 0:
+        raise BoardReadError(
+            f"git status in {root} exited {proc.returncode}: "
+            f"{(proc.stderr or '').strip()[:120]}"
+        )
+    dirty: set[str] = set()
+    for line in proc.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        entry = line[3:]
+        if " -> " in entry:  # a rename: the destination is the path that is dirty
+            entry = entry.split(" -> ", 1)[1]
+        dirty.add(entry.strip())
+    return dirty
+
+def workspace_blocked_leg(rows: list[dict], *, read_at: str,
+                          dirty_paths_fn=None) -> dict:
+    """Every governed run that took the `blocked-by-unowned` escape hatch, cross-read live.
+
+    Loud on a zero population (#201, #242): a run's closing invariant may lawfully be met by
+    `workspace_gate=blocked-by-unowned`, so an instrument that reports NONE cannot be told
+    from one that has stopped working -- the status is NOT RUN and the reason names the
+    counts, never a clean HOLD over an empty read.
+
+    The cross-read is REPORTED, never judged into a red: a declaration that named paths
+    stranded at ITS instant is true history even after those paths are committed, and a leg
+    that reds for ever on a settled block is the permanent-false-positive class #139 names.
+    What this leg REDS on is the UNEXAMINABLE declaration -- the token with no paths, which
+    no reader can tell from a forged clean.
+    """
+    fp = field_predicate_readers()
+    problems: list[str] = []
+    declarations: list[dict] = []
+    runs_declaring_gate = 0
+
+    for row in rows:
+        if str(row.get("event") or "") not in WORKSPACE_GATE_EVENTS:
+            continue
+        detail = str(row.get("detail") or "")
+        if WORKSPACE_GATE_KEY not in fp.declared_keys(detail):
+            continue
+        runs_declaring_gate += 1
+        gate = ""
+        paths_raw = ""
+        for token in fp.trailer_tokens(detail):
+            found = fp.keyed_value(token, WORKSPACE_GATE_KEY)
+            if found is not None:
+                gate = found
+            found = fp.keyed_value(token, BLOCKED_PATHS_KEY)
+            if found is not None:
+                paths_raw = found
+        if gate != WORKSPACE_BLOCKED_TOKEN:
+            continue
+        n = row.get("n")
+        subject = str(row.get("subject") or "")
+        paths = [p for p in paths_raw.split(",") if p]
+        if not paths:
+            problems.append(
+                f"n={n} ({subject}): workspace_gate={gate} names NO blocking paths -- an "
+                f"unexaminable excuse, and the token is lawful ONLY with {BLOCKED_PATHS_KEY}=. "
+                f"A reader cannot tell a real block from a forged clean without them (#201)"
+            )
+        declarations.append({"n": n, "subject": subject, "paths": paths})
+
+    if not declarations:
+        return {
+            "name": "workspace-blocked",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": (
+                    f"no governed run in {len(rows)} ledger row(s) declares "
+                    f"workspace_gate={WORKSPACE_BLOCKED_TOKEN}. The escape hatch is lawful, "
+                    f"so an instrument that never sees it cannot be told from one that has "
+                    f"stopped working -- a zero is LOUD, never a clean factory (#201, #242)"
+                ),
+                "rows_read": len(rows),
+                "runs_declaring_gate": runs_declaring_gate,
+                "blocked_declarations": 0,
+                "blocked_rows": [],
+                "read_at": read_at,
+            },
+        }
+
+    # The live tree is read ONCE, and only because a declaration exists to cross-read: a leg
+    # with no declaration pays no `git status`. A tree that cannot be read makes the leg
+    # NOT RUN rather than reporting every path as cleared -- the instrument failed, and a
+    # failure is not a corroboration.
+    try:
+        dirty = set((dirty_paths_fn or live_dirty_paths)())
+    except (BoardReadError, OSError, subprocess.SubprocessError) as exc:
+        return {
+            "name": "workspace-blocked",
+            "status": "NOT RUN",
+            "problems": problems,
+            "excused": [],
+            "coverage": {
+                "reason": (
+                    f"{len(declarations)} blocked declaration(s) could not be cross-read: "
+                    f"the live tree was unreadable ({exc}) -- a cross-reader that cannot "
+                    f"read the tree has corroborated nothing"
+                ),
+                "rows_read": len(rows),
+                "runs_declaring_gate": runs_declaring_gate,
+                "blocked_declarations": len(declarations),
+                "blocked_rows": declarations,
+                "read_at": read_at,
+            },
+        }
+
+    for entry in declarations:
+        entry["still_dirty"] = [p for p in entry["paths"] if p in dirty]
+        entry["no_longer_dirty"] = [p for p in entry["paths"] if p not in dirty]
+
+    return {
+        "name": "workspace-blocked",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "rows_read": len(rows),
+            "runs_declaring_gate": runs_declaring_gate,
+            "blocked_declarations": len(declarations),
+            "blocked_rows": declarations,
+            "read_at": read_at,
+        },
+    }
+
 _LEDGER_PREDICATE = None
 
 def ledger_predicate():
@@ -3613,6 +3785,35 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "workspace-blocked":
+            # A lawful exception is a VISIBLE DEBT: the governed-run population and the
+            # escape-hatch count are printed BESIDE the verdict, and a NOT RUN carries its
+            # reason rather than reading as a clean zero (#201, #242).
+            lines.append(
+                f"  governed runs declaring a workspace gate: "
+                f"{cov['runs_declaring_gate']} of {cov['rows_read']} ledger row(s) read; "
+                f"{cov['blocked_declarations']} took the "
+                f"{WORKSPACE_BLOCKED_TOKEN} escape hatch"
+            )
+            if leg["status"] == "NOT RUN":
+                lines.append(f"  NOT RUN: {cov.get('reason') or 'reason not stated'}")
+            for entry in cov.get("blocked_rows", []):
+                if not entry["paths"]:
+                    lines.append(
+                        f"    n={entry['n']} ({entry['subject']}): NO paths named -- an "
+                        f"unexaminable declaration"
+                    )
+                    continue
+                lines.append(
+                    f"    n={entry['n']} ({entry['subject']}): "
+                    f"{len(entry['still_dirty'])} still dirty, "
+                    f"{len(entry['no_longer_dirty'])} no longer dirty"
+                )
+                for path in entry["no_longer_dirty"]:
+                    lines.append(
+                        f"      no longer dirty (the live tree no longer corroborates this "
+                        f"block): {path}"
+                    )
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -3768,6 +3969,7 @@ def main(
     publish_fn=None,
     worktree_fn=None,
     presence_fn=None,
+    dirty_paths_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -3796,7 +3998,13 @@ def main(
     process register, the factory fragment and every profile's session bindings, so a probe
     that did not stub it would need a live box with those files in place to assert a NOT RUN
     reason at all. `presence_fn` is handed the same cron rows, homes and prefixes the other
-    cron legs receive."""
+    cron legs receive.
+
+    The workspace-blocked leg's tree read is injected for the eighth and the same reason: it
+    shells out to `git status` in the live tree, so a probe that did not stub it would be
+    measuring whatever paths this checkout happens to have dirty rather than the leg's
+    behaviour. `dirty_paths_fn` returns the dirty path SET; the leg cross-reads the named
+    paths against it."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -3816,7 +4024,7 @@ def main(
         err(
             "NOT RUN: every leg (board-intake, board-close, board-closed, board-ruling, "
             "cron-thinness, pacemaker-presence, notify-receipt, duty-receipt, "
-            "canonicality-tier, stall-census, "
+            "canonicality-tier, workspace-blocked, stall-census, "
             "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
@@ -3840,6 +4048,7 @@ def main(
             cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at
         ),
         canonicality_leg(rows, read_at=read_at),
+        workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
         stall_census_leg(issues, rows, read_at=read_at),
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
