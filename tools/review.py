@@ -74,146 +74,148 @@ CATALOG_LENSES = ["A", "B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I
 LENS_METADATA: dict[str, dict[str, str]] = {
     "A": {
         "name": "Redundancy, Ontology & Provenance Sediment",
-        "family": "1. DOCS & LANGUAGE",
-        "scope": "All role cards (roles/*.md), process registers (processes.md), and process law (SKILL.md).",
+        "family": "1. DOCS & LANGUAGE (Role Cards, Directives, Procedures)",
+        "scope": "Role cards (`**/roles/*.md`), the process register (`**/processes.md`), process law (`**/SKILL.md`), and instrument law docs (`docs/instruments/*.md`).",
         "instructions": (
-            "1. Find rule duplication: identical constraints stated across different files.\n"
-            "2. Enforce canonical ontology from ONTOLOGY.md; flag uncodified synonyms and aliases.\n"
-            "3. Strip provenance sediment: dates, post-mortem anecdotes, and history belong in changelogs.\n"
-            "4. Verify post-migration path sweeps: old file paths or retired CLI flags lingering in instructions.\n"
-            "5. Check numeric enumeration consistency (claimed counts vs actual definitions)."
+            "1. Rule duplication: find the same requirement or constraint stated in two different files.\n"
+            "2. One Concept = One Name: enforce the canonical terms in `ONTOLOGY.md`; flag synonyms, aliases and undefined coinages.\n"
+            "3. Provenance sediment: live rule text carries the current rule only -- incident dates, post-mortems and owner quotes belong in `evidence/rework.md`.\n"
+            "4. Post-migration path sweep: old paths, moved files and retired CLI flags must not linger as dead references.\n"
+            "5. Enumeration consistency: counts of steps, tools, gates or phases stated in prose must match their definitions."
         ),
     },
     "B": {
         "name": "LLM Efficiency, No-Op Pruning & Responsibility Creep",
-        "family": "1. DOCS & LANGUAGE",
-        "scope": "Token weight, role focus, and cognitive load across role instructions.",
+        "family": "1. DOCS & LANGUAGE (Role Cards, Directives, Procedures)",
+        "scope": "Token weight, role focus, and cognitive load across role instructions (`**/roles/*.md`, `**/SKILL.md`).",
         "instructions": (
-            "1. Check responsibility creep: role files must contain only what the executing role needs.\n"
-            "2. Apply the No-Op Test: prune sentences instructing the model to do what it does naturally.\n"
-            "3. Apply the Cache Test: document only what cannot be derived by CLI inspection.\n"
-            "4. Apply the Negation Test: replace negative prohibitions with positive boundaries.\n"
-            "5. Prune subsumed manual procedures when composite CLI tools exist."
+            "1. Responsibility creep: a role file carries only what its own role needs.\n"
+            "2. The No-Op Test: prune lines instructing the model to do what it already does naturally.\n"
+            "3. The Cache Test: do not restate CLI flags or directory listings; document only what inspection cannot reveal.\n"
+            "4. The Negation Test: replace prohibitions with positive targets and actionable boundaries.\n"
+            "5. Subsumed procedure pruning: when a composite tool ships, prune the manual plumbing it replaces.\n"
+            "6. Progressive disclosure: move lengthy references behind linked pointers, out of the primary execution loop."
         ),
     },
     "G": {
         "name": "Role File Structure & Checkable Completion",
-        "family": "1. DOCS & LANGUAGE",
-        "scope": "Cohesion, work sequence, and exit criteria within each role file.",
+        "family": "1. DOCS & LANGUAGE (Role Cards, Directives, Procedures)",
+        "scope": "Cohesion, work sequence, and exit criteria within each role file (`**/roles/*.md`, `**/SKILL.md`).",
         "instructions": (
-            "1. Section cohesion: verify one section equals one operational concern.\n"
-            "2. Checkable completion criteria: every procedure must terminate on deterministic conditions.\n"
-            "3. Load path integrity: verify role paths and recovery anchors survive compactions."
+            "1. Section cohesion: one section = one operational concern.\n"
+            "2. Checkable completion criteria: every procedure step terminates on a deterministic, checkable condition.\n"
+            "3. Load path integrity: verify moved or split sections stay reachable, and that recovery anchors point to the right files."
         ),
     },
     "J": {
         "name": "Law-to-Tool Migration (The Pure Function Test)",
-        "family": "2. MECHANICAL & PROTOCOL",
-        "scope": "The entire corpus of written factory law and directives.",
+        "family": "2. MECHANICAL & PROTOCOL (Law Migration & Dispatch)",
+        "scope": "The entire corpus of written factory law and directives (`**/processes.md`, `docs/instruments/*.md`, `docs/methodology/*.md`, `**/SKILL.md`, `**/roles/*.md`).",
         "instructions": (
-            "1. Apply the Pure Function Test: Is this decision a pure function of disk state?\n"
-            "2. Identify unwritten tool specs: rules telling agents to manually derive state.\n"
-            "3. Propose deterministic CLI scripts, hooks, or unit tests to replace prose."
+            "1. Apply the Pure Function Test: is this decision a pure function of state on disk?\n"
+            "2. Identify unwritten tool specs: rules telling agents to remember, derive or manually check state.\n"
+            "3. Propose deterministic CLI scripts, hooks, or unit tests to replace the prose.\n"
+            "4. Exclusions: irreversible human gates, approval checkpoints and client-subjective decisions stay in prose."
         ),
     },
     "P": {
         "name": "Pacemaker & Autonomous Convergence",
-        "family": "2. MECHANICAL & PROTOCOL",
-        "scope": "Cron configuration, outer heartbeat loops, and autonomous task convergence.",
+        "family": "2. MECHANICAL & PROTOCOL (Law Migration & Dispatch)",
+        "scope": "Cron configuration, outer heartbeat loops, and autonomous task convergence (`registry/`, `**/processes.md`).",
         "instructions": (
-            "1. 0-Token Quiescence (P28): verify idle cron pacemakers use trigger_cmd short-circuits.\n"
-            "2. Goal State Convergence: verify crons run against deterministic set_goal conditions.\n"
-            "3. Dead Session Detection: verify crons target live session UUIDs and bound topics."
+            "1. 0-Token Quiescence (P28): idle cron pacemakers must use `trigger_cmd` short-circuits; zero tokens billed for empty checks.\n"
+            "2. Goal State Convergence: sessions waking under automated crons run against deterministic goal conditions.\n"
+            "3. Dead Session Detection: verify crons target live session UUIDs and bound topics, never dead queues."
         ),
     },
     "C": {
         "name": "CLI Automation Gaps & Usage Analysis",
-        "family": "3. TOOLS & INTERFACES",
-        "scope": "Manual procedures and tool invocation telemetry.",
+        "family": "3. TOOLS & INTERFACES (Scripts, Commands, Gates)",
+        "scope": "Manual procedures and actual tool invocation telemetry (the ledger's rows, and `tools/`).",
         "instructions": (
-            "1. Detect recurring multi-step manual commands in role workflows.\n"
-            "2. Propose unified CLI signatures in tools/ to automate plumbing.\n"
-            "3. Analyze tool error distributions and uninvoked legacy tools."
+            "1. Automation gaps: detect recurring multi-step manual commands in role workflows that should become one CLI utility.\n"
+            "2. Usage telemetry: analyse command frequency, error-code distributions, and uninvoked legacy tools (YAGNI candidates)."
         ),
     },
     "E": {
         "name": "Interface Topology & Command Merging",
-        "family": "3. TOOLS & INTERFACES",
-        "scope": "The CLI tool surface across tools/.",
+        "family": "3. TOOLS & INTERFACES (Scripts, Commands, Gates)",
+        "scope": "The CLI tool surface across `tools/`.",
         "instructions": (
-            "1. Identify chained invocations: tool pairs always run in immediate succession.\n"
-            "2. Find duplicate interfaces: overlapping flags or verbs across different scripts.\n"
-            "3. Propose consolidated command syntax."
+            "1. Chained invocations: tool pairs or triads always run in immediate succession without an intermediate judgment gate.\n"
+            "2. Duplicate interfaces: overlapping flags or verbs performing similar lookups across different scripts."
         ),
     },
     "F": {
         "name": "Tool Implementation Quality & Exit Contracts",
-        "family": "3. TOOLS & INTERFACES",
-        "scope": "Source code of scripts in tools/ and test runners in tests/.",
+        "family": "3. TOOLS & INTERFACES (Scripts, Commands, Gates)",
+        "scope": "Source code of scripts in `tools/` and test runners in `tests/`.",
         "instructions": (
-            "1. Exit code determinism: success exits 0, failures exit distinct non-zero codes.\n"
-            "2. Shell hygiene: verify strict error trapping (set -euo pipefail) and variable quoting.\n"
-            "3. Atomic journaling: ensure state mutations write ledger entries atomically."
+            "1. Exit code determinism: success exits 0; failures exit distinct non-zero codes, with no soft error masked by 0.\n"
+            "2. Shell hygiene: enforce strict error trapping (`set -euo pipefail`), quote expansions, avoid non-portable constructs.\n"
+            "3. Atomic journaling: a state change writes its journal or ledger entry atomically, before or alongside the mutation."
         ),
     },
     "D": {
         "name": "Deletion Safety & YAGNI Pruning",
-        "family": "3. TOOLS & INTERFACES",
-        "scope": "File tree, state directories, scratch files, and legacy configurations.",
+        "family": "3. TOOLS & INTERFACES (Scripts, Commands, Gates)",
+        "scope": "File tree, state directories, scratch files, and legacy configurations (`tools/`, `tests/`, `registry/`).",
         "instructions": (
-            "1. Enumerate stale, retired, or orphaned files and test fixtures.\n"
-            "2. Perform reference counting across codebase, scripts, and docs.\n"
-            "3. Classify candidates: DELETE-SAFE (0 references), ARCHIVE, or KEEP."
+            "1. Orphan detection: enumerate stale, retired or unreferenced files, mock fixtures and temporary artifacts.\n"
+            "2. Reference counting: search codebase, scripts, crons and docs; classify each candidate DELETE-SAFE, ARCHIVE or KEEP.\n"
+            "3. Guard: 'looks stale' is a hypothesis, never a verdict -- removal requires verified zero references."
         ),
     },
     "H": {
-        "name": "Ledger Invariants & Monotonicity",
-        "family": "4. STATE, DELIVERY & FLOW",
-        "scope": "State journals, ledger.jsonl, and subprocess event streams.",
+        "name": "Ledger Health & Lifecycle Invariants",
+        "family": "4. ARTIFACTS, STATE & FLOW (Files, Ledgers, WIP)",
+        "scope": "The factory work-state store -- the ledger and the subprocess event streams beside it.",
         "instructions": (
-            "1. Verify strict monotonic row numbering and timestamp ordering.\n"
-            "2. Verify lifecycle sequence: every close has a prior claim, and every claim an intake.\n"
-            "3. Audit actor attribution and verify single-writer locking compliance."
+            "1. Lifecycle sequence: verify `intake` -> `claim` -> `close`; flag orphan claims or closes lacking intake.\n"
+            "2. Sequence monotonicity: confirm monotonic integer row numbers and monotonically advancing timestamps.\n"
+            "3. Contradiction pairs: detect conflicting event records or duplicate task identifiers.\n"
+            "4. Lesson extraction parity: incidents noted in ledger rows have codified entries in `evidence/rework.md`."
         ),
     },
     "M": {
-        "name": "Value Stream, Flow & WIP Stagnation",
-        "family": "4. STATE, DELIVERY & FLOW",
-        "scope": "Task throughput, dwell times, and batch size constraints.",
+        "name": "Value Stream, WIP Stagnation & Lead Time",
+        "family": "4. ARTIFACTS, STATE & FLOW (Files, Ledgers, WIP)",
+        "scope": "Active work items, backlog turnover, and work-in-progress (WIP) age, read from the ledger's claim and close rows.",
         "instructions": (
-            "1. Detect WIP stagnation: identify tasks parked in intake/claim for >24 hours.\n"
-            "2. Measure lead time (T_intake -> T_close) across recent work units.\n"
-            "3. Enforce single-piece flow and batch size limits (P11)."
+            "1. WIP stagnation: detect tasks parked in `intake` or `claim` without closing for >24 hours.\n"
+            "2. Lead time drift: track mean lead time (T_intake -> T_close) across cycles; flag upward trends.\n"
+            "3. Batch size control (P11): flag tasks touching >3 files or >200 lines without explicit architectural decomposition."
         ),
     },
     "T": {
         "name": "Token Economics & Cost-Per-Success",
-        "family": "5. ECONOMICS & TELEMETRY",
-        "scope": "Token consumption, model tier routing, and billing logs.",
+        "family": "5. ECONOMICS & TELEMETRY (Cost, Context, Models)",
+        "scope": "Model usage, token consumption logs, prompt caching efficiency, and operational expenditure.",
         "instructions": (
-            "1. Compute unit cost-per-successful-task (USD/task) across workflows.\n"
-            "2. Audit model right-sizing: ensure expensive reasoning models are not used for mechanical tasks.\n"
-            "3. Analyze prompt caching hit rates and context inflation."
+            "1. Unit cost analysis: compute and track cost-per-successful-task (USD/task) across workflows.\n"
+            "2. Model tier right-sizing: heavy reasoning models must not serve mechanical or deterministic tasks.\n"
+            "3. Prompt cache efficiency: audit static instruction prefixes for cache-busting dynamic timestamps.\n"
+            "4. Context inflation guard: audit turn context growth; compact or delegate before a cost-effective threshold."
         ),
     },
     "I": {
-        "name": "Meta-Review & Catalog Brief Integrity",
-        "family": "6. META-GOVERNANCE",
-        "scope": "The 14 review lenses and review machinery.",
+        "name": "Meta-Review of the Lens Catalog",
+        "family": "6. META & GOVERNANCE (Review Mechanics, Scope Cleanliness)",
+        "scope": "This catalog (`docs/review-lenses.md`) and the historical review cycle outputs it governs.",
         "instructions": (
-            "1. Audit review lenses for scope drift, overlapping coverage, or missing families.\n"
-            "2. Verify that review reports cite exact locators and verbatim quotes.\n"
-            "3. Ensure the review census mechanism (tools/review.py) remains un-bypassable."
+            "1. Scope drift: verify lens briefs match what reviewers actually evaluate.\n"
+            "2. Overlap detection: identify findings redundantly claimed by multiple lenses.\n"
+            "3. Evidence discipline: enforce Quote-or-No-Finding -- reject impressions lacking a locator and a verbatim quote."
         ),
     },
     "S": {
-        "name": "Brain Scrub & Cross-Profile Cleanliness",
-        "family": "6. META-GOVERNANCE",
-        "scope": "Shared AGENTS.md vs factory-specific skills.",
+        "name": "Brain Scrub & Profile Scope Cleanliness",
+        "family": "6. META & GOVERNANCE (Review Mechanics, Scope Cleanliness)",
+        "scope": "The agent profile's brain files under `~/.opencrabs/profiles/*/` (`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `MEMORY.md`) versus this factory's own `**/SKILL.md`.",
         "instructions": (
-            "1. Verify that AGENTS.md carries only a minimal one-line recovery anchor.\n"
-            "2. Verify zero factory-specific rules leaked into shared profile brain files.\n"
-            "3. Check that member-specific domain rules live only in their dedicated repo skills."
+            "1. P25 isolation enforcement: factory-specific process rules must not leak into shared agent profile brain files.\n"
+            "2. Pointer discipline: shared profile files carry only one-line pointers and recovery anchors back to the factory skill.\n"
+            "3. Provenance sweep: directives found in passive memory (`MEMORY.md`) are re-homed into versioned factory process files."
         ),
     },
 }

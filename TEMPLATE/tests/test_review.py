@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Tests for the Multi-Lens Review Engine (tools/review.py / P32)."""
 
+import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1484,6 +1486,107 @@ def test_brain_leg_reports_a_missing_required_file() -> None:
         assert "MISSING" in res.stdout and "USER.md" in res.stdout, res.stdout
 
 
+# ---------------------------------------------------------------- brief vs catalogue
+#
+# `docs/review-lenses.md` declares itself the canonical catalogue of the lens
+# definitions (`> **Owns:** Canonical catalog of the 14 review lenses …`), and Lens
+# I's own Core Check 1 is `Verify lens briefs match what reviewers actually evaluate`.
+# But `brief` renders `LENS_METADATA`, a SECOND in-file copy of the same definitions,
+# so the two homes could drift with nothing to catch it — and they had: when this gate
+# was written, 4 of 14 lens names, all six family labels and 10 of 14 scope strings
+# disagreed, so `brief I` told an isolated auditor a scope the catalogue does not state
+# and `brief A` pointed at `roles/*.md` and `processes.md`, neither of which exists here.
+# "Two homes for one thing is the defect promotion exists to collapse" — `tools/review.py`
+# states that as law and reproduced it inside the instrument that enforces it.
+#
+# The gate pins the pair where the catalogue is machine-readable: every core lens's
+# `### Lens X — <name>` heading and its family heading must equal what `brief <X> --json`
+# emits, and every path token in an emitted scope must resolve in this repo. The BOUND is
+# stated rather than left implied: the catalogue's Core Checks are prose and the brief's
+# instructions are a condensation of them, so checks are NOT pinned by equality here —
+# a reader can see that from the two forms and should not read this gate as proving more.
+CATALOGUE = REPO_ROOT / "docs" / "review-lenses.md"
+_FAMILY_RE = re.compile(r"^##\s+\S+\s+Family\s+(\d+):\s*(.+?)\s*$", re.M)
+_LENS_RE = re.compile(r"^###\s+Lens\s+([A-Z])\s+[—–-]\s*(.+?)\s*$", re.M)
+_PATH_TOKEN_RE = re.compile(r"`([^`]+)`")
+
+def _catalogue() -> tuple[dict[str, str], dict[str, str]]:
+    """`(name_by_lens, family_by_lens)` read from the canonical catalogue.
+
+    The family a lens sits under is not on the lens's own line: it is the nearest
+    `## Family N:` heading ABOVE it, so the text is split on those headings and each
+    block's lens ids are attributed to its own label.
+    """
+    text = CATALOGUE.read_text(encoding="utf-8")
+    names = dict(_LENS_RE.findall(text))
+    families: dict[str, str] = {}
+    for m in _FAMILY_RE.finditer(text):
+        tail = text[m.end():]
+        nxt = re.search(r"^##\s", tail, re.M)
+        body = tail[: nxt.start()] if nxt else tail
+        label = f"{int(m.group(1))}. {m.group(2)}"
+        for lens in re.findall(r"^###\s+Lens\s+([A-Z])\s+[—–-]", body, re.M):
+            families[lens] = label
+    return names, families
+
+def test_brief_matches_the_catalogue() -> None:
+    """The brief and the catalogue are one definition, and this is what holds them together.
+
+    Two legs, one pass over the core lenses: every emitted name/family must equal the
+    catalogue's, and every path token in an emitted scope must resolve in this repo
+    (`brief A` scoping an auditor onto `roles/*.md` is a brief that cannot be run, and
+    it is why the review harness had to hand-author a corpus shim to remap the paths).
+    """
+    names, families = _catalogue()
+    assert len(names) == 14, f"catalogue parsed {len(names)} lens heading(s), expected 14"
+
+    res = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tools" / "review.py"), "lenses", "--json"],
+        cwd=REPO_ROOT, capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    known = json.loads(res.stdout)["known"]
+
+    drift: list[str] = []
+    missing: list[str] = []
+    tokens_examined = 0
+    for lens in known:
+        assert lens in names, f"core lens {lens} has no `### Lens {lens}` heading in the catalogue"
+        res = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "tools" / "review.py"), "brief", lens, "--json"],
+            cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stderr
+        brief = json.loads(res.stdout)
+        if brief["name"] != names[lens]:
+            drift.append(f"{lens} name: brief={brief['name']!r} catalogue={names[lens]!r}")
+        if brief["family"] != families[lens]:
+            drift.append(f"{lens} family: brief={brief['family']!r} catalogue={families[lens]!r}")
+        for token in _PATH_TOKEN_RE.findall(brief["scope"]):
+            # A bare filename (`AGENTS.md`) is a profile brain file, which lives outside
+            # this repo by construction; a token carrying a separator is a path here.
+            if "/" not in token:
+                continue
+            tokens_examined += 1
+            if not glob.glob(os.path.expanduser(token), recursive=True):
+                missing.append(f"{lens}: {token}")
+
+    assert not drift, "brief/catalogue drift:\n  " + "\n  ".join(drift)
+
+    # The path leg is scoped to a FACTORY tree. The paired copy of this gate runs with
+    # `REPO_ROOT` = `TEMPLATE/`, which is a scaffold and not a factory — it carries
+    # `roles/`, `processes.md` and `ONTOLOGY.md` as `.tmpl` files, because a member
+    # creates the real ones at bootstrap. A token read there would be red for a tree
+    # that is not supposed to have it, so the leg takes a STATED SKIP rather than a
+    # vacuous pass: the reason is printed, and the name/family leg above has already run.
+    if not (REPO_ROOT / "ONTOLOGY.md").is_file():
+        print(f"  path leg SKIPPED: {REPO_ROOT} is the template scaffold, not a factory tree")
+        return
+
+    # The positive control: a clean `missing` over a population that was never parsed is
+    # indistinguishable from a clean one, so the count examined is asserted, not implied.
+    assert tokens_examined >= 20, (
+        f"examined only {tokens_examined} path token(s) — the parser lost its population")
+    assert not missing, "a brief scopes its auditor onto a path absent from this repo:\n  " + "\n  ".join(missing)
+
 def main() -> int:
     print("Tests for the Multi-Lens Review Engine (tools/review.py / P32)")
     print(f"  python {sys.version.split()[0]}")
@@ -1545,6 +1648,7 @@ def main() -> int:
     test_brain_leg_flags_a_duplicated_rule()
     test_brain_leg_resolves_a_pointer_into_a_skill_dir()
     test_brain_leg_reports_a_missing_required_file()
+    test_brief_matches_the_catalogue()
     print("ALL TESTS PASSED")
     return 0
 
