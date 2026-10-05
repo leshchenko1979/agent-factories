@@ -253,6 +253,13 @@
             ],
             "format": "date-time"
           },
+          "recorded_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "WHO authored the report, as declared at record time (`--by`). The Adversarial Isolation Requirement is a dispatch discipline this instrument cannot mechanically prove, so it records the author a report declares. null means the author was not declared -- it does NOT mean a lane wrote it inline."
+          },
           "reason": {
             "type": [
               "string",

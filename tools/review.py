@@ -35,12 +35,20 @@ Enforces:
      DECLARED in `docs/review-lenses.json` (shipped as an empty
      `docs/review-lenses.example.json`), which ONE reader folds into the
      catalogue.  A declaration ADDS; it never removes or redefines a core lens.
+  9. A CODIFICATION PLAN: an accepted finding must name the carrier its
+     disposition owes — `landed`/`routed` owe a `--home`, `rejected` owes a
+     `--reason` — and `codify` is the producer that enforces the carrier at
+     write time, where `verify` and `close` refuse a plan carrying an accepted
+     finding with no carrier.  Without the producer the plan was a reader over
+     a permanently-empty population, so the contract was declarable and never
+     enforced.
 
 Usage:
   python3 tools/review.py init <cycle_id>
   python3 tools/review.py brief <lens> [--json]
-  python3 tools/review.py record <cycle_id> <lens> <report_path_or_text>
+  python3 tools/review.py record <cycle_id> <lens> <report_path_or_text> [--by WHO]
   python3 tools/review.py waive <cycle_id> <lens> --reason "..." [--by WHO]
+  python3 tools/review.py codify <cycle_id> --finding "..." --disposition <landed|routed|rejected> [--home F] [--reason R]
   python3 tools/review.py status <cycle_id>
   python3 tools/review.py lenses [--json]
   python3 tools/review.py verify <cycle_id>
@@ -70,6 +78,27 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Standard 14 Lenses across 6 families:
 # Docs: A, B, G; Mechanical: J, P; Tools: C, E, F, D; State/Flow: H, M; Economics: T; Meta: I, S
 CATALOG_LENSES = ["A", "B", "G", "J", "P", "C", "E", "F", "D", "H", "M", "T", "I", "S"]
+
+def _lens_letter_help() -> str:
+    """The `--help` text for a lens argument, DERIVED from the catalogue.
+
+    Two subcommands hand-typed this string and drifted (`brief` said
+    `(A-J, P, M, T, S)`, `record` said `(A-J, S)`), so one help text named a
+    lens set the tool does not have. Deriving it from CATALOG_LENSES makes the
+    two identical by construction and impossible to disagree with the tool.
+    """
+    letters = sorted(CATALOG_LENSES)
+    runs: list[str] = []
+    i = 0
+    while i < len(letters):
+        j = i
+        while j + 1 < len(letters) and ord(letters[j + 1]) == ord(letters[j]) + 1:
+            j += 1
+        runs.append(letters[i] if j == i else f"{letters[i]}-{letters[j]}")
+        i = j + 1
+    return "Lens letter (" + ", ".join(runs) + ")"
+
+_LENS_LETTER_HELP = _lens_letter_help()
 
 LENS_METADATA: dict[str, dict[str, str]] = {
     "A": {
@@ -500,6 +529,10 @@ STATE_SCHEMA: dict[str, Any] = {
                         "description": "Set when the inline fallback ran after a second hollow report. The fallback MUST be flagged in the record.",
                     },
                     "recorded_at": {"type": ["string", "null"], "format": "date-time"},
+                    "recorded_by": {
+                        "type": ["string", "null"],
+                        "description": "WHO authored the report, as declared at record time (`--by`). The Adversarial Isolation Requirement is a dispatch discipline this instrument cannot mechanically prove, so it records the author a report declares. null means the author was not declared -- it does NOT mean a lane wrote it inline.",
+                    },
                     "reason": {"type": ["string", "null"]},
                 },
             },
@@ -629,7 +662,8 @@ def _empty_state(cycle_id: str) -> dict[str, Any]:
         "corpus": {"hash": None, "pack": None, "pack_status": "absent"},
         "lenses": {
             lens: {"status": "PENDING", "report_path": None, "sha256": None, "verdict": None,
-                   "receipt": None, "fallback": None, "recorded_at": None, "reason": None}
+                   "receipt": None, "fallback": None, "recorded_at": None,
+                   "recorded_by": None, "reason": None}
             for lens in known_lenses()
         },
         "waivers": [],
@@ -1206,7 +1240,7 @@ _NO_FINDING_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
-def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
+def cmd_record(cycle_id: str, lens: str, content_or_path: str, by: str | None = None) -> int:
     lens = lens.upper()
     if lens_metadata(lens) is None:
         print(f"Error: Lens '{lens}' not in catalog {known_lenses()}", file=sys.stderr)
@@ -1296,6 +1330,13 @@ def cmd_record(cycle_id: str, lens: str, content_or_path: str) -> int:
         "report_path": str(report_file.relative_to(REPO_ROOT)),
         "sha256": digest,
         "receipt": "verified",
+        # Provenance: WHO authored the report. The Adversarial Isolation
+        # Requirement (docs/review-lenses.md) is a DISPATCH discipline the
+        # instrument cannot mechanically prove, so it records the author a
+        # report declares rather than leaving the claim unverifiable and
+        # unrecorded (Lens I finding 8). None is itself a record: it says the
+        # author was not declared, not that a lane wrote it inline.
+        "recorded_by": (by.strip() if isinstance(by, str) and by.strip() else None),
         "recorded_at": now,
     })
     state["lenses"][lens] = entry
@@ -2323,17 +2364,19 @@ def main() -> int:
     p_lenses.add_argument("--json", action="store_true", help="Output as JSON object")
 
     p_brief = subparsers.add_parser("brief", help="Generate adversarial subagent prompt for a lens")
-    p_brief.add_argument("lens", help="Lens letter (A-J, P, M, T, S)")
+    p_brief.add_argument("lens", help=_LENS_LETTER_HELP)
     p_brief.add_argument("--json", action="store_true", help="Output as JSON object")
 
     p_record = subparsers.add_parser("record", help="Persist a lens report")
     p_record.add_argument("cycle_id", help="Cycle identifier")
-    p_record.add_argument("lens", help="Lens letter (A-J, S)")
+    p_record.add_argument("lens", help=_LENS_LETTER_HELP)
     p_record.add_argument("content", help="File path, '-' for stdin, or literal text")
+    p_record.add_argument("--by", default=None,
+                          help="Who authored the report (its provenance; recorded in state)")
 
     p_waive = subparsers.add_parser("waive", help="Explicitly waive a lens")
     p_waive.add_argument("cycle_id", help="Cycle identifier")
-    p_waive.add_argument("lens", help="Lens letter")
+    p_waive.add_argument("lens", help=_LENS_LETTER_HELP)
     p_waive.add_argument("--reason", required=True, help="Reason for waiver")
     p_waive.add_argument("--by", default=None, help="Who took the waiver decision")
 
@@ -2418,7 +2461,7 @@ def main() -> int:
     elif args.subcommand == "brief":
         return cmd_brief(args.lens, json_out=args.json)
     elif args.subcommand == "record":
-        return cmd_record(args.cycle_id, args.lens, args.content)
+        return cmd_record(args.cycle_id, args.lens, args.content, by=args.by)
     elif args.subcommand == "waive":
         return cmd_waive(args.cycle_id, args.lens, args.reason, by=args.by)
     elif args.subcommand == "lenses":

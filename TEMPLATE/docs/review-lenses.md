@@ -12,6 +12,8 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
 
 **The Adversarial Isolation Requirement:** Review lenses must be executed by **dedicated adversarial sub-agents** spawned with clean, unpolluted context windows and explicit adversarial briefs (`tools/review.py brief <LENS>`). The primary authoring lane naturally suffers from conversational self-confirmation bias; an isolated sub-agent enters without authorial baggage and is primed specifically to detect flaws, prompt bloat, and un-gated rules.
 
+**Provenance is recorded; isolation is not provable.** `record` takes `--by WHO` and stores it as `recorded_by` on the lens entry, so a report's declared author is durable state rather than an unrecorded claim. The instrument cannot mechanically prove that the declared author ran in an isolated context — that is a DISPATCH discipline the reviewer lane owes — so it records what was declared, and a `null` `recorded_by` reads as *not declared*, never as *written inline*.
+
 ---
 
 ## 🏛️ Family 1: DOCS & LANGUAGE (Role Cards, Directives, Procedures)

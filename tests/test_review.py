@@ -1628,6 +1628,78 @@ def test_record_refuses_a_report_with_no_evidence() -> None:
         if cycle_dir.exists():
             shutil.rmtree(cycle_dir)
 
+def test_record_records_the_declared_author() -> None:
+    """Provenance is durable state, and `--by` is what writes it (Lens I finding 8).
+
+    The Adversarial Isolation Requirement is a dispatch discipline the instrument
+    cannot mechanically prove, so it records the author a report DECLARES rather
+    than leaving the claim unrecorded. Absence is itself a record: no `--by`
+    yields `null`, which reads as "not declared" and never as "written inline".
+    """
+    cycle_id = "test-recorded-by"
+    cycle_dir = _fresh_cycle(cycle_id)
+    cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+    try:
+        res = subprocess.run(
+            cmd_base + ["record", cycle_id, "A",
+                        "# Lens A\nSeverity: LOW\nLocator: docs/processes.md:1\n",
+                        "--by", "subagent: lens-A auditor"],
+            cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert state["lenses"]["A"]["recorded_by"] == "subagent: lens-A auditor"
+
+        # No --by: recorded as null, not silently absent.
+        res = subprocess.run(
+            cmd_base + ["record", cycle_id, "B",
+                        "# Lens B\nNo findings.\n"],
+            cwd=REPO_ROOT, capture_output=True, text=True)
+        assert res.returncode == 0, res.stdout + res.stderr
+        state = json.loads((cycle_dir / "state.json").read_text(encoding="utf-8"))
+        assert "recorded_by" in state["lenses"]["B"], "the field is dropped, not nulled"
+        assert state["lenses"]["B"]["recorded_by"] is None
+
+        # The shipped schema DECLARES the field, so a member's validator accepts it.
+        res = subprocess.run(cmd_base + ["schema"], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        props = json.loads(res.stdout)["properties"]["lenses"]["additionalProperties"]["properties"]
+        assert "recorded_by" in props, "the schema does not declare recorded_by"
+    finally:
+        if cycle_dir.exists():
+            shutil.rmtree(cycle_dir)
+
+def test_the_lens_help_strings_do_not_drift() -> None:
+    """Two `--help` strings disagreed on the lens set; one is DERIVED now (Lens I finding 9).
+
+    `brief` said `(A-J, P, M, T, S)` and `record` said `(A-J, S)`, so one help
+    text named a lens set the tool does not have. Both read one derived constant,
+    and this asserts the derivation still matches the catalogue.
+    """
+    cmd_base = [sys.executable, str(REPO_ROOT / "tools" / "review.py")]
+    fragments: list[str] = []
+    for sub in ("brief", "record", "waive"):
+        res = subprocess.run(cmd_base + [sub, "--help"], cwd=REPO_ROOT,
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stderr
+        match = re.search(r"Lens letter \([^)]*\)", res.stdout)
+        assert match, f"`{sub} --help` carries no lens-letter help:\n{res.stdout}"
+        fragments.append(match.group(0))
+    assert len(set(fragments)) == 1, f"lens help strings disagree: {fragments}"
+
+    # And the single string names every catalog lens: strip the runs back to letters.
+    named: set[str] = set()
+    for token in fragments[0][len("Lens letter ("):-1].split(","):
+        token = token.strip()
+        if "-" in token:
+            lo, hi = token.split("-")
+            named.update(chr(c) for c in range(ord(lo), ord(hi) + 1))
+        elif token:
+            named.add(token)
+    res = subprocess.run(cmd_base + ["lenses", "--json"], cwd=REPO_ROOT,
+                         capture_output=True, text=True)
+    known = set(json.loads(res.stdout)["known"])
+    assert named == known, f"help names {sorted(named)}, catalogue knows {sorted(known)}"
+
 def test_brief_matches_the_catalogue() -> None:
     """The brief and the catalogue are one definition, and this is what holds them together.
 
@@ -1749,6 +1821,8 @@ def main() -> int:
     test_brain_leg_resolves_a_pointer_into_a_skill_dir()
     test_brain_leg_reports_a_missing_required_file()
     test_record_refuses_a_report_with_no_evidence()
+    test_record_records_the_declared_author()
+    test_the_lens_help_strings_do_not_drift()
     test_brief_matches_the_catalogue()
     print("ALL TESTS PASSED")
     return 0
