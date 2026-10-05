@@ -4,12 +4,14 @@ Owner surface: `fleet-instruments`. Lane session: `37e71e03-0022-4d38-9279-1687f
 
 Source: `reviews/20260927-c1/state.json` → `codification_plan` (disposition=routed).
 
-> **RE-ROUTED 2026-10-05.** 19 of these 20 findings name a TOOL SURFACE, not this lane. Per frame §8
-> (`docs/instruments/template-instruments.md:897`) an instrument owner does not own `tools/**` code;
-> in this factory the implementation destination is the **Worker** lane (SKILL §3). Those 19 are
-> re-routed to **Worker** (`worker.md`), with 2 doc halves to **review-rotation** (`review-rotation.md`).
-> **Retained by this lane:** entry **#1** (Lens C F2, filed **#353**) and entry **#5**'s doc half
-> (Lens E F2, `docs/instruments/kit.md` census contract, filed **#354**). Root defect: **#339**.
+> **RE-ROUTED 2026-10-05.** Of the **20** findings this lane was dispatched (the **19** below plus
+> **T-1**, added by the n=2449 correction), **19 are re-routed to Worker** (`worker.md`) — every entry
+> below except **#1**, plus T-1. Per frame §8 (`docs/instruments/template-instruments.md:897`) an
+> instrument owner does not own `tools/**` code; in this factory the implementation destination is the
+> **Worker** lane (SKILL §3). Two doc halves on `docs/review-lenses.md` go to **review-rotation**
+> (`review-rotation.md`). **Retained by this lane:** entry **#1** (Lens C F2, filed **#353**) and
+> entry **#5**'s doc half (Lens E F2, `docs/instruments/kit.md` census contract, filed **#354**).
+> Root defect: **#339**.
 
 ## 1. Lens C Finding 2 (HIGH): A documented reproduce command that no longer reproduces, and the file contradicts itself
 - home / change site: `the kit instrument lane — docs/instruments/kit.md section 9.2 / section 4.1`

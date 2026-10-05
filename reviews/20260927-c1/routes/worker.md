@@ -1,4 +1,4 @@
-# worker — 19 re-routed finding(s)
+# worker — 21 re-routed finding(s)
 
 **Re-route, 2026-10-05.** These 19 findings were first sent to `fleet-instruments`, whose `home`
 strings named a **tool surface** ("the audit tool lane", "the telemetry lane", "the tool lanes")
@@ -14,6 +14,11 @@ Lane session: `dcd8f7a9-c1e7-48c3-b184-d901dc08eac7` (Worker, thread 1271).
 Source: `reviews/20260927-c1/state.json` → `codification_plan` (disposition=routed).
 Two rows carry a DOC alternative on `docs/review-lenses.md` (authored `d6cfd3f7`, review-rotation) —
 those halves are re-routed there and noted per row.
+
+**Extended 2026-10-05 (insights lane pushback).** Entries **20–21** were re-routed here from the
+**insights** lane (`95b14002`, thread 6865), which flagged on receipt that their `home` named a tool
+surface ("the tool lane owning `tools/synthesize_insights.py`") — the same #339 class. Both change
+`tools/synthesize_insights.py`; #357's law half (the dwell targets) stays with HQ per its issue body.
 
 ## 1. Lens C Finding 4 (MEDIUM): No tool-invocation telemetry exists for this factory's own CLI surface; the lens's error-distribution analysis is unimplementable
 - change site: `tools/*.py` (oc_log telemetry shim)
@@ -94,6 +99,17 @@ those halves are re-routed there and noted per row.
 ## 19. Lens T T-7 (LOW): brain-metrics leg A states two char/token ratios and implements one
 - change site: `tools/brain_metrics.py:71-72`
 - recorded_at: 2026-10-04T22:13:52Z
+
+## 20. Lens E Finding 7 (LOW): the `--audit` help names a caller that never calls it (CI/audit.py)
+- change site: `tools/synthesize_insights.py:407` — the flag's real consumer is the weekly cron `factory-insights-weekly`, not `tools/audit.py` (which runs the test instead)
+- filed **#355**; re-routed from the insights lane 2026-10-05 (same #339 class)
+- recorded_at: 2026-10-04T22:13:39Z
+
+## 21. Lens M Finding 2 (SEVERE): the queue-dwell law is unmeasured and the synthesize tool claims to mine it
+- change site: `tools/synthesize_insights.py:255,7` — `mine_ledger_telemetry()` claims queue-dwell but does not measure it (law: `docs/methodology/02-quality-management.md:37`, `docs/processes.md:136`)
+- filed **#357**; its law half (the dwell targets) is routed to **HQ** in the issue body
+- re-routed from the insights lane 2026-10-05 (same #339 class)
+- recorded_at: 2026-10-04T22:14:11Z
 
 ---
 
