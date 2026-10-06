@@ -319,6 +319,18 @@
       "skills/**",
       "tools/audit.py"
     ],
+    "tests/test_law_mechanism_same_commit.py": [
+      "*.md",
+      "*.md.tmpl",
+      "*.tmpl",
+      "docs/**",
+      "skills/**",
+      "tests/gate_registry.py",
+      "tests/test_law_mechanism_same_commit.py",
+      "tests/test_template_sync.py",
+      "tools/audit.py",
+      "tools/hooks/**"
+    ],
     "tests/test_law_no_raw_session_uuid.py": [
       "*.md",
       "ONTOLOGY.md",

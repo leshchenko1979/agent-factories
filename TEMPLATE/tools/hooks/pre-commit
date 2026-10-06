@@ -176,6 +176,15 @@ GENERATOR_RELATIVE = "tools/kit_manifest.py"
 SELECTOR_RELATIVE = "tools/gate_select.py"
 MAP_RELATIVE = "registry/gate_triggers.json"
 
+# LEG 5's predicate (issue #48, ruled 2026-09-26). It lives in the gate file, not
+# here, because `commit-msg` loads `subject_cites_rows` from its gate for the same
+# reason: two implementations drift and the drift is silent. A law surface that
+# names a mechanism absent at this commit is refused HERE, at the only point that
+# PREVENTS rather than detects — the law and its mechanism land together or not
+# at all. It sits OUTSIDE the `TEMPLATE/` guard below, like leg 3: a bootstrapped
+# factory carries no `TEMPLATE/` and still writes law in its own skill.
+LAW_MECHANISM_RELATIVE = "tests/test_law_mechanism_same_commit.py"
+
 # THE ARTIFACT LEG 3 JUDGES, and the marker it must not begin with (issue #197).
 #
 # `docs/factory-registry.md` is FACTORY DATA (#199) rather than a shipped file, so this
@@ -244,6 +253,24 @@ Restore the artifact, or re-render it and stage the result:
     git checkout -- {relative}
     # or, when the render is genuinely stale:
     python3 tools/registry.py render && git add {relative}
+
+The index was NOT rewritten — staging is your act."""
+
+LAW_MECHANISM_REMEDY = """pre-commit: REFUSED — a law surface names a mechanism absent at this commit.
+
+  {detail}
+
+A law clause that names its upholding mechanism in prose is invisible to the P29 gate,
+which reads only the enumerated `## PN —` mapping. Measured near-miss: commit `500e1b6`
+landed law text naming a test file that did not exist, and `tools/audit.py` read HEALTHY
+throughout — the file appeared minutes later by the author's own diligence, not by any gate
+(#48). The law and its mechanism land together, or the clause is dead text from the moment
+it is committed.
+
+Stage the mechanism in this commit, or name the MECHANISM by the behaviour you will observe
+rather than a filename that merely reads plausible:
+
+    git add {example}
 
 The index was NOT rewritten — staging is your act."""
 
@@ -461,6 +488,27 @@ not run it — run it DETACHED and let it finish:
 
 Or declare a trigger for the path in {map} and let the derivation cover it."""
 
+def law_mechanism_problems(top: Path, staged: list[str]) -> list[str]:
+    """Leg 5: a law surface may not name a mechanism absent at this commit (#48).
+
+    The predicate is LOADED from the gate file, not implemented here — the same
+    one-predicate-two-call-sites discipline `commit-msg` follows for the row-number
+    clause. It fails OPEN with a warning: a hook that refuses every commit because a
+    packaging file moved blocks the factory's own repair path, and `tools/audit.py`
+    carries the same gate and fails loudly on its own. What it must never do is pass
+    SILENTLY, which is why the warning is the point.
+    """
+    module = load_module(top, LAW_MECHANISM_RELATIVE, "oc_law_mechanism")
+    if module is None:
+        print(
+            f"pre-commit: WARNING — {LAW_MECHANISM_RELATIVE} is absent, so a law surface "
+            "naming a mechanism that does not exist was NOT checked. tools/audit.py still "
+            "carries the gate.",
+            file=sys.stderr,
+        )
+        return []
+    return module.law_mechanism_problems(top, staged)
+
 def selector_notice(top: Path, staged: list[str]) -> str | None:
     """Leg 4's reading of the staged change, or None where there is nothing to say (#294).
 
@@ -528,6 +576,17 @@ def main(argv: list[str]) -> int:
                 marker=TREE_EDIT_MARKER,
                 detail="\n".join(marker_detail),
             )
+        )
+
+    # LEG 5's reading, taken HERE for the same reason leg 3's is (#48): the class it
+    # judges — a law surface naming an absent mechanism — exists in a factory that
+    # carries no `TEMPLATE/` at all, so a leg placed after the guard would be absent
+    # exactly where the law is written. It refuses; it is the PREVENTION half, and the
+    # gate it loads is the detection half that `tools/audit.py` runs.
+    for detail in law_mechanism_problems(top, staged):
+        example = detail.split("names ", 1)[-1].split(" —", 1)[0]
+        problems.append(
+            LAW_MECHANISM_REMEDY.format(detail=detail, example=example)
         )
 
     # LEG 4's reading, taken HERE so it is available to both exit paths below (#294). It

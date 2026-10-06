@@ -92,6 +92,11 @@ _NO_RULING_EXEMPTIONS = (
     Path(tempfile.mkdtemp(prefix="patrol-no-exempt-")) / "ruling-board-exemptions.json"
 )
 
+# The criterion-path leg (#48) resolves a board criterion's named paths against a TREE. The
+# default tree for a probe is EMPTY and exists, so a probe that does not supply its own tree
+# reads every named path as ABSENT — it cannot pass by accidentally finding a live file.
+_EMPTY_CRITERION_TREE = Path(tempfile.mkdtemp(prefix="patrol-empty-criterion-tree-"))
+
 
 def _issue(number: int, state: str, assignees: "list[str] | None" = None) -> dict:
     issue = {"number": number, "state": state, "title": f"issue {number}",
@@ -144,7 +149,7 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
-         delivery_scope=None, deliveries=None):
+         delivery_scope=None, deliveries=None, criterion_repo=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -227,6 +232,15 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         ),
         deliveries_fn=lambda: (
             [] if deliveries is None else deliveries, ["probe-home"], []
+        ),
+        # The criterion-path leg (#48) resolves the paths a board criterion names against a
+        # TREE, so a probe must not have its verdict decided by whether the LIVE repo holds
+        # `tools/x.py`. The default here is a directory that exists and is EMPTY, so a probe
+        # that does not inject a tree of its own cannot accidentally pass by finding a live
+        # file — it can only pass on a fixture it supplied.
+        criterion_repo_fn=(
+            (lambda: criterion_repo) if criterion_repo is not None
+            else (lambda: _EMPTY_CRITERION_TREE)
         ),
     )
     return rc, out.getvalue(), err.getvalue()
@@ -932,8 +946,10 @@ def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
 
     The read's field list is pinned WHOLE, so a field dropped from it is caught here rather
     than discovered as a silent no-op on live state: `createdAt` dates the stall-census
-    filing guard (#415), and `assignees` is what lets the OWED line tell an
-    assigned-but-unclaimed unit from an untouched one (#423).
+    filing guard (#415), `assignees` is what lets the OWED line tell an
+    assigned-but-unclaimed unit from an untouched one (#423), and `body` carries the item's
+    own statement of what it wants, which is surface 1 of the criterion-path leg's own ruling
+    — without it that leg reads only replies and is blind to the criterion (#48).
     """
     assert isinstance(RUNNER.RULING_HEADINGS, tuple) and RUNNER.RULING_HEADINGS, (
         "the headings must be a declared module tuple"
@@ -942,12 +958,13 @@ def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
         f"both headings the board carries must be declared: {RUNNER.RULING_HEADINGS}"
     )
     source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
-    assert '"number,state,title,createdAt,closedAt,comments,assignees"' in source, (
+    assert '"number,state,title,createdAt,closedAt,body,comments,assignees"' in source, (
         "the board read must ask for comments, or the leg examines nothing — and for "
         "`createdAt`, without which the stall-census filing guard (#415) cannot date an "
         "item and the guard is a silent no-op on live state — and for `assignees`, "
         "without which the OWED line renders an assigned-but-unclaimed unit identically "
-        "to one nobody has touched (#423)"
+        "to one nobody has touched (#423) — and for `body`, without which the "
+        "criterion-path leg is blind to the item's own statement of what it wants (#48)"
     )
 
 
@@ -4949,6 +4966,177 @@ def test_the_leg_RENDERS_a_store_it_never_opened_distinctly_from_one_that_held_n
     assert "deliveries: NOT READ" in out, out
     assert "deliveries read:" not in out, out
     assert "examined: 0" in out, out
+
+# --- the criterion-path leg (#48) --------------------------------------------------------
+#
+# Candidate 1 of the #48 ruling closes the LAW-surface half — a law sentence naming a
+# mechanism that does not exist — but it cannot reach two surfaces, because neither is in a
+# commit: a BOARD ISSUE BODY and a SESSION PLAN. Measured instances: `#172`'s acceptance
+# criterion named `tools/questions` (which resolves nowhere — the instrument ships only at
+# `TEMPLATE/tools/questions`); `#96`'s plan criterion named a test file that existed under no
+# revision. The patrol already reads the board, so this leg resolves the paths a criterion
+# names. Its whole population is a name that resolves to NOTHING, so a probe that only read a
+# clean board would prove nothing — the probes below supply the defect and assert the leg
+# names it.
+
+def _issue_with_body(number: int, state: str, body: str) -> dict:
+    """A board issue carrying a BODY, in the shape `gh issue list --json` returns."""
+    issue = _issue(number, state)
+    issue["body"] = body
+    return issue
+
+def _criterion_tree(*paths: str) -> Path:
+    """A throwaway tree holding exactly the named paths, so a probe decides the verdict."""
+    root = Path(tempfile.mkdtemp(prefix="criterion-tree-"))
+    for rel in paths:
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("probe\n", encoding="utf-8")
+    return root
+
+def test_the_criterion_path_leg_RESOLVES_a_named_path_and_states_its_population() -> None:
+    """The clean arm, WITH its population — `examined 0` must not render as `examined 1`."""
+    issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
+    tree = _criterion_tree("tools/probe.py")
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["name"] == "criterion-paths", leg["name"]
+    assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
+    assert leg["coverage"]["issues_read"] == 1, leg["coverage"]
+    assert leg["coverage"]["read_at"] == _CLOSE_TS, leg["coverage"]
+
+def test_the_criterion_path_leg_BITES_on_a_path_that_resolves_to_nothing() -> None:
+    """#48 acceptance (3), the NON-VACUITY probe: the defect is a criterion naming a path the
+    tree does not hold, and the finding must NAME the path, the issue AND the surface — the
+    `#148` discipline: a finding that cannot be dispatched is not a finding."""
+    issues = [_issue_with_body(96, "OPEN", "Acceptance: `tests/test_ghost.py` passes.")]
+    tree = _criterion_tree("tools/probe.py")
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    assert leg["problems"], "a criterion naming an absent path must be reported"
+    problem = leg["problems"][0]
+    assert "#96" in problem, problem
+    assert "body" in problem, problem
+    assert "`tests/test_ghost.py`" in problem, problem
+    assert _CLOSE_TS in problem, problem
+    assert "dispatch a work item" in problem, problem
+
+def test_the_criterion_path_leg_reads_the_RULING_comment_through_the_SHARED_predicate() -> None:
+    """An HQ ruling carries the numbered acceptance criteria, and it is the item's contract.
+    The read binds to the SHARED `ruling_comments` predicate, never a private copy of it —
+    the same binding the `board-ruling` leg asserts, for the same reason."""
+    issues = [_issue_with_comments(
+        172, "OPEN", "## RULED — acceptance: `tools/questions` exists.\n"
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    assert leg["problems"], "a criterion named in a ruling must be judged"
+    assert "ruling comment" in leg["problems"][0], leg["problems"][0]
+    assert "`tools/questions`" in leg["problems"][0], leg["problems"][0]
+
+def test_the_criterion_path_leg_does_NOT_judge_a_CLOSE_or_discussion_comment() -> None:
+    """A close comment narrates what happened; it obliges nothing. Measured on the live board
+    (2026-10-06): judging every comment read 1696 refs and 67 findings against 227 and 18 for
+    the two obligation surfaces — the extra 49 were chatter, not criteria."""
+    issue = _issue_with_body(55, "OPEN", "See `docs/real.md`.")
+    issue["comments"] = [
+        {"body": "## CLOSED — delivered; `tests/test_gone.py` was renamed.",
+         "author": {"login": "hq"}, "createdAt": _CLOSE_TS},
+    ]
+    tree = _criterion_tree("docs/real.md")
+    leg = RUNNER.criterion_path_leg([issue], read_at=_CLOSE_TS, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
+
+def test_the_criterion_path_leg_resolves_a_TEMPLATE_prefixed_name_as_the_shipped_twin() -> None:
+    """The law writes a shipped path with its `TEMPLATE/` prefix, and that is the path that
+    must resolve — a reader that stripped the prefix would resolve a name the law never
+    writes."""
+    issues = [_issue_with_body(
+        37, "OPEN", "Ship `TEMPLATE/docs/quality-criteria.md` beside the donor's copy."
+    )]
+    present = _criterion_tree("TEMPLATE/docs/quality-criteria.md")
+    assert RUNNER.criterion_path_leg(
+        issues, read_at=_CLOSE_TS, repo=present
+    )["problems"] == []
+    absent = _criterion_tree("docs/quality-criteria.md")
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=absent)
+    assert leg["problems"], "the `TEMPLATE/`-prefixed name must be judged as written"
+    assert "`TEMPLATE/docs/quality-criteria.md`" in leg["problems"][0], leg["problems"][0]
+
+def test_the_criterion_path_leg_does_NOT_judge_a_token_that_is_not_a_FILE() -> None:
+    """The predicate that separates a name from a lookalike, each shape measured on this
+    board: an ellipsis standing for "the docs", a DIRECTORY, a dotted ATTRIBUTE chain, a
+    transient lock file. All four read as absent mechanisms and none of them is one, and a
+    gate whose findings are mostly artefacts of its own predicate is a gate nothing can act
+    on."""
+    issues = [_issue_with_body(
+        21, "OPEN",
+        "See `docs/...`, `registry/topics/`, `tools/field_predicate.split_canonical_run` "
+        "and `evidence/.ledger.lock`; the real name is `docs/real.md`.",
+    )]
+    tree = _criterion_tree("docs/real.md")
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["refs_examined"] == 1, (
+        f"only the file-shaped name is in the population: {leg['coverage']}"
+    )
+
+def test_the_criterion_path_leg_JUDGES_a_bare_mechanism_name_with_no_extension() -> None:
+    """`tools/questions` is the ruling's OWN measured instance, and it carries no extension —
+    an executable the kit ships as a bare name. A predicate keyed only on known extensions
+    would drop exactly the instance the class was filed for."""
+    assert RUNNER.is_mechanism_path("tools/questions") is True
+    assert RUNNER.is_mechanism_path("TEMPLATE/tools/questions") is True
+    assert RUNNER.is_mechanism_path("tests/test_x.py") is True
+    assert RUNNER.is_mechanism_path("docs/...") is False
+    assert RUNNER.is_mechanism_path("registry/topics/") is False
+    assert RUNNER.is_mechanism_path("tools/a.b_c") is False
+    assert RUNNER.is_mechanism_path("evidence/.ledger.lock") is False
+
+def test_the_criterion_path_leg_EXCLUDES_a_CLOSED_item_and_PRINTS_the_exclusion() -> None:
+    """Only an OPEN item can still send a lane at a missing file — that is the whole harm
+    this class names. A closed item's obligation is discharged or abandoned, so its refs are
+    outside the population; the count is PRINTED rather than silently dropped."""
+    issues = [
+        _issue_with_body(31, "CLOSED", "Acceptance: `tests/test_ghost.py` passes."),
+        _issue_with_body(32, "OPEN", "Acceptance: `tools/probe.py` exists."),
+    ]
+    tree = _criterion_tree("tools/probe.py")
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["issues_read"] == 1, leg["coverage"]
+    assert leg["coverage"]["closed_items_excluded"] == 1, leg["coverage"]
+    assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
+
+def test_the_criterion_path_leg_is_WIRED_into_the_run_and_PRINTS_its_population() -> None:
+    """Wiring and render, asserted through `main()`: a leg built but never listed is a leg
+    that never runs, and a leg that runs but never prints its population reads as one that
+    examined everything and found it clean."""
+    issues = [_issue_with_body(172, "OPEN", "Acceptance: `tools/questions` exists.")]
+    # The `ruling` row is not decoration: an OPEN item with an intake row and no ruling row is
+    # a `board-unruled` miss, so a fixture that isolates THIS leg's verdict must be a board the
+    # round has otherwise swept clean.
+    rows = _rows(("intake", "#172", 1), ("ruling", "#172", 2))
+    rc, out, _ = _run(
+        issues, rows, criterion_repo=_criterion_tree("tools/probe.py")
+    )
+    assert "LEG criterion-paths — ASSERTED" in out, out
+    assert "1 reference(s) examined over 1 issue(s), 1 unresolved" in out, out
+    assert rc == 1, f"an unresolved criterion path must fail the run\n{out}"
+    assert "verdict: 1 problem(s)" in out, (
+        f"the criterion path must be the ONLY problem this board carries\n{out}"
+    )
+
+def test_the_criterion_path_leg_reads_a_CLEAN_board_clean_and_says_what_it_read() -> None:
+    """The complement: the leg is discriminating, not a blanket red — and its clean render
+    still carries the population it examined."""
+    issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
+    rows = _rows(("intake", "#11", 1), ("ruling", "#11", 2))
+    rc, out, _ = _run(
+        issues, rows, criterion_repo=_criterion_tree("tools/probe.py")
+    )
+    assert rc == 0, f"a resolvable criterion must not fail the run\n{out}"
+    assert "1 reference(s) examined over 1 issue(s), 0 unresolved" in out, out
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

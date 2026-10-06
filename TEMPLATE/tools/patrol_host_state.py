@@ -488,6 +488,13 @@ def fetch_board(slug: str) -> list[dict]:
     An assignee is NOT a claim — a claim is a session-derived ledger row — so this is a
     VISIBILITY field only; the OWED verdict is unchanged. Additive, and the legs that do
     not read it ignore it, so the read stays ONE call.
+
+    `body` travels with it for the third and the same reason (#48): the criterion-path leg's
+    population is the path a criterion NAMES, and an item's own statement of what it wants
+    lives in its BODY — the `comments` field carries every reply but not the item itself, so
+    a read without this field left the leg blind to surface 1 of its own ruling (`#172`'s
+    acceptance criterion was in the body). Additive, and the legs that do not read it ignore
+    it, so the read stays ONE call.
     """
     proc = subprocess.run(
         [
@@ -501,7 +508,7 @@ def fetch_board(slug: str) -> list[dict]:
             "--limit",
             "1000",
             "--json",
-            "number,state,title,createdAt,closedAt,comments,assignees",
+            "number,state,title,createdAt,closedAt,body,comments,assignees",
         ],
         capture_output=True,
         text=True,
@@ -3576,6 +3583,122 @@ def board_unruled_leg(
         },
     }
 
+# A PATH a criterion NAMES, in backticks: the shape `docs/measurement-procedure.md`,
+# `tests/test_x.py`, `tools/y.py`, `tools/questions`. A criterion names its artefact this
+# way, and the class (#48) is a name that resolves to nothing.
+CRITERION_PATH_REF = re.compile(
+    r"`((?:TEMPLATE/)?(?:tests|tools|docs|skills|evidence|registry)/[A-Za-z0-9_./-]+)`"
+)
+
+# ... but a backticked token is not a PATH merely because a mechanism directory roots it.
+# Four shapes look like one and are not, each measured on this board (2026-10-06):
+#
+#   `docs/...`                                  an ellipsis standing for "the docs"
+#   `registry/topics/`                          a DIRECTORY, and a directory is not a file
+#   `tools/field_predicate.split_canonical_run` a dotted ATTRIBUTE, not a file
+#   `evidence/.ledger.lock`                     a transient lock file, never committed
+#
+# Judging those four would have put four false findings on the board for every true one, so
+# the basename must be FILE-SHAPED: a KNOWN extension, or a bare name carrying no dot at all
+# (the `tools/questions` shape — the executable the kit ships without an extension, and the
+# ruling's own measured instance, so a bare name is judged rather than dropped).
+MECHANISM_SUFFIXES = frozenset({
+    ".py", ".md", ".json", ".jsonl", ".mjs", ".js", ".sh", ".tmpl", ".txt",
+    ".toml", ".yaml", ".yml", ".cfg", ".sql", ".html", ".css", ".rs", ".example",
+})
+
+def is_mechanism_path(ref: str) -> bool:
+    """Is this backticked token a FILE an obligation can be checked against?
+
+    The predicate is stated separately from the regex because the regex answers a different
+    question — "is this token ROOTED at a mechanism directory" — and the two were conflated
+    in the first draft, which reported a placeholder (`docs/...`), a directory
+    (`registry/topics/`) and an attribute chain (`tools/x.y`) as absent mechanisms. A gate
+    whose findings are mostly artefacts of its own predicate is a gate nothing can act on.
+    """
+    if ref.endswith("/"):
+        return False
+    base = ref.rsplit("/", 1)[-1]
+    if not base:
+        return False
+    if "." not in base:
+        return True
+    return base[base.rindex("."):] in MECHANISM_SUFFIXES
+
+def criterion_path_leg(issues: list[dict], *, read_at: str,
+                       repo: Path = REPO) -> dict:
+    """Resolve the paths a board item's CRITERIA name (#48, ruling criterion 3/4).
+
+    Candidate 1 closes the law-surface half and cannot reach two surfaces, because neither
+    is in a commit: a BOARD ISSUE BODY and a SESSION PLAN. Measured instance: `#172`'s
+    acceptance criterion named `tools/questions`, which resolves nowhere (the instrument
+    ships only at `TEMPLATE/tools/questions`); `#96`'s plan criterion named a test file that
+    existed under no revision. The patrol already reads the board, so this leg resolves the
+    paths a criterion names and reports EACH as a finding naming the path and the criterion
+    that named it — never as a bare count, so Triage can dispatch it as a work item (the
+    `#148` discipline: a finding that cannot be dispatched is not a finding).
+
+    WHICH SURFACES ARE READ, and why exactly these two. A criterion is a statement of what
+    must be true for the item to be done, and on this board it lives in two places: the
+    issue BODY (the item's own statement) and the RULING COMMENT (HQ's acceptance contract,
+    which is where the numbered criteria sit — this item's own five are one). A close
+    comment, a discussion comment and a correction block are HISTORY: they narrate what
+    happened rather than obliging anything, and judging them measured 1696 refs and 67
+    findings against 227 and 18 here — the extra 49 being chatter, not obligations. So the
+    ruling surface is read through the SHARED `ruling_comments` predicate, never a private
+    copy of it, exactly as the `board-ruling` leg binds to it.
+
+    WHICH ITEMS, and why the harm bounds it. Only an OPEN item can still send a lane at a
+    missing file, and that is the whole harm this class names: `#172`'s criterion was caught
+    because Triage read it BEFORE dispatching. A closed item's obligation is discharged or
+    abandoned and can send nobody anywhere, so the closed population is EXCLUDED and its
+    count is PRINTED rather than silently dropped.
+
+    The population is PRINTED (`refs_examined`), so a leg that read nothing does not read as
+    a leg that found everything clean. A path is judged against the tree at `read_at`, and a
+    `TEMPLATE/`-prefixed name is resolved as the shipped twin, which is how the law writes
+    it.
+    """
+    examined = 0
+    problems: list[str] = []
+    open_items = 0
+    closed_items = 0
+    for issue in issues:
+        number = issue.get("number")
+        if number is None:
+            continue
+        if issue.get("state") != "OPEN":
+            closed_items += 1
+            continue
+        open_items += 1
+        surfaces = [("body", issue.get("body") or "")]
+        for comment in ruling_comments(issue):
+            surfaces.append(("ruling comment", comment.get("body") or ""))
+        for where, text in surfaces:
+            for ref in sorted(set(CRITERION_PATH_REF.findall(text))):
+                if not is_mechanism_path(ref):
+                    continue
+                examined += 1
+                if (repo / ref).exists():
+                    continue
+                problems.append(
+                    f"issue #{number} criterion ({where}) names `{ref}` — ABSENT at "
+                    f"{read_at}; dispatch a work item naming `{ref}`"
+                )
+    return {
+        "name": "criterion-paths",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            "refs_examined": examined,
+            "issues_read": open_items,
+            "closed_items_excluded": closed_items,
+            "surfaces": ["body", "ruling comment"],
+            "read_at": read_at,
+        },
+    }
+
 def head_manifest(rel: str | None = None, *, repo: Path | None = None) -> tuple[str | None, str]:
     """Read the kit manifest from HEAD rather than from the working tree (issue #185).
 
@@ -4814,6 +4937,19 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                         f"      no longer dirty (the live tree no longer corroborates this "
                         f"block): {path}"
                     )
+        elif leg["name"] == "criterion-paths":
+            # The population is PRINTED (#48 criterion 3): "examined N, M unresolved" is
+            # never the same output as "examined 0", so a leg that read nothing does not
+            # read as one that found everything clean. The EXCLUSION is printed beside it
+            # for the same reason: a closed item's criteria are outside this leg by design,
+            # and a reader must be able to see that they were dropped rather than missed.
+            lines.append(
+                f"  criterion paths (issue body and ruling comment): "
+                f"{cov['refs_examined']} reference(s) examined over "
+                f"{cov['issues_read']} issue(s), {len(leg['problems'])} unresolved — "
+                f"{cov['closed_items_excluded']} closed item(s) outside the population — "
+                f"board read at {cov['read_at']}"
+            )
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -4977,6 +5113,7 @@ def main(
     ruling_exemptions_path: Path | None = None,
     delivery_scope_fn=None,
     deliveries_fn=None,
+    criterion_repo_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -5026,7 +5163,14 @@ def main(
     pre-boundary row, a post-boundary one, and a REFUSED bound without the live tree's
     declaration deciding its verdict; and `deliveries_fn` reads every OpenCrabs home's
     `messages` and `notify_queue` tables, so a probe that did not stub it would be measuring
-    whatever this box happens to have delivered rather than the leg's behaviour."""
+    whatever this box happens to have delivered rather than the leg's behaviour.
+
+    The criterion-path leg's TREE is injected for the eleventh and the same reason as the
+    workspace-blocked leg's `dirty_paths_fn`: the leg resolves the paths a board criterion
+    names against the tree at `read_at`, so a probe that did not inject it would be asserting
+    whether the LIVE repo happens to hold `tools/x.py` rather than the leg's behaviour.
+    `criterion_repo_fn` returns the tree root to resolve against; the live default is this
+    repository."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -5049,6 +5193,7 @@ def main(
             "canonicality-tier, workspace-blocked, stall-census, "
             "board-unruled, "
             "dispatch-delivery, "
+            "criterion-paths, "
             "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
@@ -5079,6 +5224,10 @@ def main(
         workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
         stall_census_leg(issues, rows, read_at=read_at),
         board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate),
+        criterion_path_leg(
+            issues, read_at=read_at,
+            repo=(criterion_repo_fn or (lambda: REPO))(),
+        ),
         dispatch_delivery_leg(
             rows, read_at=read_at, bound=(delivery_scope_fn or dispatch_delivery_scope)(),
             deliveries_fn=deliveries_fn,

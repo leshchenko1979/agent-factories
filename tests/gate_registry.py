@@ -489,6 +489,13 @@ REQUIRED_GATES: tuple[str, ...] = (
     # runner and keeping the file.
     "test_cron_thinness.py",
     "test_docs_sync.py",
+    # Added with its registration (board #48, ruling 2026-09-26). REQUIRED is the correct
+    # grain: the gate drives SYNTHETIC git repositories under a temp directory — the
+    # negative is proven there and never on this tree — so it reads no live board and no
+    # box-local fixture and passes in a bootstrapped factory exactly as it does here. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the runner and keeping the file.
+    "test_law_mechanism_same_commit.py",
     "test_duplicate_prose.py",
     "test_gate_fixtures_closure.py",
     "test_gate_registration.py",

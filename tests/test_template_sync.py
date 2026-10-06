@@ -275,6 +275,12 @@ PAIRS = [
     ("tests/test_law_no_raw_session_uuid.py", "TEMPLATE/tests/test_law_no_raw_session_uuid.py"),
     ("tests/test_hygiene_namespace.py", "TEMPLATE/tests/test_hygiene_namespace.py"),
     ("tests/test_docs_sync.py", "TEMPLATE/tests/test_docs_sync.py"),
+    # Added with its registration (board #48, ruling 2026-09-26). The gate drives SYNTHETIC
+    # repositories and reads no live board, so it passes in a bootstrapped factory exactly as
+    # it does here; its `wiring_problems` leg reads `tools/audit.py` and `tools/hooks/pre-commit`,
+    # both paired files, so it is only meaningful where all three ship together — a factory
+    # that took the law without the hook leg would carry a clause whose mechanism is absent.
+    ("tests/test_law_mechanism_same_commit.py", "TEMPLATE/tests/test_law_mechanism_same_commit.py"),
     ("tests/test_audit_rates.py", "TEMPLATE/tests/test_audit_rates.py"),
     # Added with its registration (issue #145): the gate drives `tools/audit.py`, which is a
     # paired file, so it is only meaningful where BOTH ship — a factory that took the tool's

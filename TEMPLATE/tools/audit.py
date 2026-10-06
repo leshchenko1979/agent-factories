@@ -1301,6 +1301,12 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_docs_sync.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_docs_sync.py"])
 
+    # 12b. Law/mechanism same-commit gate: a law surface may not name a mechanism
+    #      absent at the commit that writes it (#48). The hook refuses the commit;
+    #      this gate is the detection half and the wiring assertion.
+    if (repo_root / "tests/test_law_mechanism_same_commit.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_law_mechanism_same_commit.py"])
+
     # 13. Hygiene namespace gate: the scratch audit globs only owned prefixes
     if (repo_root / "tests/test_hygiene_namespace.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_hygiene_namespace.py"])
