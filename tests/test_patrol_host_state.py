@@ -4840,6 +4840,18 @@ def test_the_dispatch_delivery_token_is_no_narrower_than_the_artifact() -> None:
     assert not RUNNER.delivery_subject_matches("row 770 of the table", "#77")
     assert not RUNNER.delivery_subject_matches("#177 was closed", "#77")
 
+    # #425: a hex continuation is the SAME class of silent over-match. The digits of a
+    # commit sha (`423f233`) or of an identifier that continues in hex letters (`x423y`)
+    # are not a `#423` subject, and a digit-only boundary matched BOTH -- so a delivery
+    # naming an unrelated artifact cleared the leg. A longer NUMBER (`41423f5`) and a
+    # longer ALPHANUMERIC token (`B4239.log`) already failed on the digit boundary and must
+    # keep failing; a legitimate mention (`FILED as #423`) must keep passing.
+    assert not RUNNER.delivery_subject_matches("version 0.1.25 (commit 423f233)", "#423")
+    assert not RUNNER.delivery_subject_matches("the sha x423y here", "#423")
+    assert not RUNNER.delivery_subject_matches("release 41423f5 shipped", "#423")
+    assert not RUNNER.delivery_subject_matches("see B4239.log for detail", "#423")
+    assert RUNNER.delivery_subject_matches("FILED as #423", "#423")
+
 def test_the_dispatch_delivery_leg_COUNTS_pre_boundary_rows_and_never_judges_them() -> None:
     """#49: the historical population is legitimately large -- 430 live dispatch rows
     carry no verdict, and the ruling forbids backfilling them. A leg that judged them all

@@ -2402,17 +2402,19 @@ def delivery_subject_matches(text: str, subject: str) -> bool:
     carried `77`, and the confident zero that returned read as good news — worse than no
     leg at all. So the match accepts every form.
 
-    For a work unit the digits are matched with a NON-DIGIT boundary on both sides, so
-    `77` never matches inside `177` or `770` — a substring test would make the token
-    WIDER than the artifact, which is the opposite error and just as silent. For a
-    descriptive stem the whole stem is required.
+    For a work unit the digits are matched with a NON-ALPHANUMERIC boundary on both
+    sides, so `77` never matches inside `177`, `770`, a commit sha (`423f233`) or any
+    other longer identifier (`x423y`) — a digit-only guard let the last two through and
+    matched a `#423` subject against prose that named a different artifact (#425). A
+    substring test would make the token WIDER than the artifact, which is the opposite
+    error and just as silent. For a descriptive stem the whole stem is required.
     """
     s = str(subject or "").strip()
     if not s or not text:
         return False
     if len(s) > 1 and s[0] == "#" and s[1:].isdigit():
         digits = s[1:]
-        return re.search(rf"(?<!\d)#?{re.escape(digits)}(?!\d)", text) is not None
+        return re.search(rf"(?<![0-9A-Za-z])#?{re.escape(digits)}(?![0-9A-Za-z])", text) is not None
     return s in text
 
 def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
