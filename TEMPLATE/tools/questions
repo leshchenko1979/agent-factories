@@ -520,6 +520,14 @@ def resolve_lane(session):
     titles for some lanes (measured: a bound lane titled "Telegram flow card
     metrics telemetry bar #232"), so it is not a topic name.
 
+    RENAME PREFERENCE (#762): a `topic_edited` row OUTRANKS a regular message's
+    `topic_name`, because the column is an ECHO that re-teaches the ORIGINAL
+    creation name forever (a reply carries the name it was sent under), so
+    "newest non-null name" alone re-stales after every rename. This mirrors
+    src/db/repository/channel_message.rs `latest_topic_name`, the repo's own
+    resolver for the same column. Measured live: 14 bound threads disagreed
+    between the two orders (e.g. "Flood Throttling" -> "Telegram: Throttling").
+
     An unbound session returns (None, reason). The caller REFUSES, because an
     unbound session can never receive the answer: registering a question
     against it strands the question permanently.
@@ -542,7 +550,9 @@ def resolve_lane(session):
             "select topic_name from channel_messages "
             "where channel='telegram' and channel_chat_id=? "
             "and cast(thread_id as integer)=? and topic_name is not null "
-            "and topic_name<>'' order by created_at desc limit 1",
+            "and topic_name<>'' "
+            "order by (message_type = 'topic_edited') desc, created_at desc "
+            "limit 1",
             (chat_id, thread_id)).fetchone()
     except sqlite3.Error as exc:
         return None, "session DB query failed (%s)" % exc.__class__.__name__
@@ -3404,8 +3414,8 @@ def selftest():
         "channel text not null, chat_id text not null, thread_id integer, "
         "updated_at integer not null default 0);"
         "create table channel_messages (id text primary key, channel text not null, "
-        "channel_chat_id text not null, topic_name text, created_at integer not null, "
-        "thread_id text);")
+        "channel_chat_id text not null, topic_name text, message_type text, "
+        "created_at integer not null, thread_id text);")
     for _sid, _tid, _name, _chat in (
             (session_a, 39171, "Carrier tools", home_chat),
             (session_b, 43993, "Governance: Ontology & RSI", home_chat),
@@ -3417,8 +3427,41 @@ def selftest():
         _db.execute("insert into channel_messages (id,channel,channel_chat_id,"
                     "topic_name,created_at,thread_id) values (?,?,?,?,?,?)",
                     ("m-%d" % _tid, "telegram", _chat, _name, 1000, str(_tid)))
+    # #762: a RENAME fixture. session_r's thread carries a topic_edited row
+    # ("New Name") OLDER than a later regular message that re-teaches the
+    # ORIGINAL name ("Old Name") -- the exact echo that re-stales the column.
+    # resolve_lane must prefer the topic_edited row; "newest by created_at"
+    # alone returns the stale name.
+    session_r = "22222222-3333-4444-5555-666666666666"
+    _db.execute("insert into session_bindings (session_id,channel,chat_id,"
+                "thread_id,updated_at) values (?,?,?,?,0)",
+                (session_r, "telegram", home_chat, 39172))
+    for _id, _name, _type, _ts in (
+            ("r-1", "Old Name", "text", 1000),
+            ("r-2", "New Name", "topic_edited", 2000),
+            ("r-3", "Old Name", "text", 3000)):
+        _db.execute("insert into channel_messages (id,channel,channel_chat_id,"
+                    "topic_name,message_type,created_at,thread_id) "
+                    "values (?,?,?,?,?,?,?)",
+                    (_id, "telegram", home_chat, _name, _type, _ts, "39172"))
     _db.commit()
     _db.close()
+    # #762 direct leg: the rename wins over the newer stale echo. resolve_lane
+    # reads the DB through questions_db_path() from os.environ, while the
+    # fixture lives in a temp dir only the COPY `env` knows about -- so the
+    # direct call must be pointed at the fixture, then the live value restored.
+    _saved_qdb = os.environ.get("OC_QUESTIONS_DB")
+    os.environ["OC_QUESTIONS_DB"] = fixture_db
+    try:
+        _rl_name, _rl_why = resolve_lane(session_r)
+    finally:
+        if _saved_qdb is None:
+            os.environ.pop("OC_QUESTIONS_DB", None)
+        else:
+            os.environ["OC_QUESTIONS_DB"] = _saved_qdb
+    ck(_rl_name == "New Name",
+       "resolve_lane prefers the topic_edited rename over a newer stale echo "
+       "(#762): got %r (%s)" % (_rl_name, _rl_why))
     # The DECLARED expectation side, as a fixture: the override is authoritative
     # so the live tree can never leak into the selftest's verdict.
     _fleet = os.path.join(root, "fleet.json")
