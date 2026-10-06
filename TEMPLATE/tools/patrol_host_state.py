@@ -482,6 +482,12 @@ def fetch_board(slug: str) -> list[dict]:
     declares, and a read that omitted comments could not see one at all — the leg would
     examine nothing and print the verdict of a leg that examined the population. The
     field is additive and the other legs ignore it, so the read stays ONE call.
+
+    `assignees` travels with it for the same reason (#423): the stall-census OWED line
+    must not render an assigned-but-unclaimed unit identically to one nobody has touched.
+    An assignee is NOT a claim — a claim is a session-derived ledger row — so this is a
+    VISIBILITY field only; the OWED verdict is unchanged. Additive, and the legs that do
+    not read it ignore it, so the read stays ONE call.
     """
     proc = subprocess.run(
         [
@@ -495,7 +501,7 @@ def fetch_board(slug: str) -> list[dict]:
             "--limit",
             "1000",
             "--json",
-            "number,state,title,createdAt,closedAt,comments",
+            "number,state,title,createdAt,closedAt,comments,assignees",
         ],
         capture_output=True,
         text=True,
@@ -3295,6 +3301,25 @@ def stall_census_leg(
         except (ValueError, TypeError):
             continue
 
+    # THE TRACKER ASSIGNEE (#423), read from the SAME board read and keyed the same way.
+    # An assignee is NOT a claim -- a claim is a session-derived ledger row -- so this map
+    # never touches the OWED predicate. It exists so the OWED line can render an
+    # assigned-but-unclaimed unit differently from one nobody has touched: without it the
+    # two read identically, which is the visibility gap the item names. A fixture that
+    # omits `assignees` is simply absent from this map, keeping every other verdict intact.
+    board_assignees: dict[str, list[str]] = {}
+    for issue in issues:
+        number = issue.get("number")
+        if number is None:
+            continue
+        logins = [
+            str(entry.get("login"))
+            for entry in (issue.get("assignees") or [])
+            if isinstance(entry, dict) and entry.get("login")
+        ]
+        if logins:
+            board_assignees[f"#{number}"] = logins
+
     dispatch_rows = [row for row in rows if str(row.get("event") or "") == "dispatch"]
     carriers: dict[str, dict] = {}
     observation = 0
@@ -3343,7 +3368,7 @@ def stall_census_leg(
 
     problems: list[str] = []
     excused: list[str] = []
-    owed: list[tuple[str, float, str]] = []
+    owed: list[tuple[str, float, str, list[str]]] = []
     off_board = 0
     for unit, row in carriers.items():
         if unit not in open_on_board:
@@ -3365,16 +3390,27 @@ def stall_census_leg(
         if age_days < threshold_days:
             continue
         actor = str(row.get("actor") or "unstated")
-        owed.append((unit, age_days, actor))
+        owed.append((unit, age_days, actor, board_assignees.get(unit, [])))
 
     owed.sort(key=lambda item: -item[1])
-    for unit, age_days, actor in owed:
+    for unit, age_days, actor, assignees in owed:
+        # THE ASSIGNEE IS RENDERED, NEVER PREDICATED ON (#423). An assigned-but-unclaimed
+        # unit and one nobody has touched are different states, and before this the OWED
+        # line rendered them identically -- an assigned unit read as untouched. The
+        # sentence says the assignee is not a claim, because the two must not be confused:
+        # OWED stays OWED until a `claim` row exists.
+        assignee_note = ""
+        if assignees:
+            assignee_note = (
+                f" The tracker shows it ASSIGNED to {', '.join(assignees)}, but an "
+                f"assignee is not a ledger claim, so it stays OWED."
+            )
         problems.append(
             f"OWED {unit}: dispatched {age_days:.2f} d ago and NEVER CLAIMED, and the "
             f"board still carries it OPEN -- the dispatch-bearing row names "
-            f"actor={actor}. Re-dispatch it to the lane that owns it through "
-            f"`session_notify`, or close it on the board: a dispatch no lane has taken is "
-            f"work nobody is doing"
+            f"actor={actor}.{assignee_note} Re-dispatch it to the lane that owns it "
+            f"through `session_notify`, or close it on the board: a dispatch no lane has "
+            f"taken is work nobody is doing"
         )
 
     return {
@@ -3390,6 +3426,7 @@ def stall_census_leg(
             "units_in_population": len(carriers),
             "units_off_board": off_board,
             "units_owed": len(owed),
+            "units_owed_assigned": sum(1 for _, _, _, assignees in owed if assignees),
             "threshold_days": threshold_days,
             "threshold_basis": STALL_CENSUS_THRESHOLD_BASIS,
             "read_at": read_at,

@@ -93,9 +93,15 @@ _NO_RULING_EXEMPTIONS = (
 )
 
 
-def _issue(number: int, state: str) -> dict:
-    return {"number": number, "state": state, "title": f"issue {number}",
-            "closedAt": None if state == "OPEN" else "2026-09-19T00:00:00Z"}
+def _issue(number: int, state: str, assignees: "list[str] | None" = None) -> dict:
+    issue = {"number": number, "state": state, "title": f"issue {number}",
+             "closedAt": None if state == "OPEN" else "2026-09-19T00:00:00Z"}
+    # `assignees` is present ONLY when a fixture supplies one, mirroring the live `gh`
+    # read: an issue with no assignee carries `[]` there, and a fixture that omits the
+    # key must keep every other verdict intact (#423).
+    if assignees is not None:
+        issue["assignees"] = [{"login": login} for login in assignees]
+    return issue
 
 
 def _rows(*pairs) -> list[dict]:
@@ -923,6 +929,11 @@ def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
     A read without `comments` makes the leg examine NOTHING and print a clean verdict over
     it — the exact false-clean the population clause exists to stop. And a heading list
     inlined at the comparison cannot be probed or changed by a factory whose board differs.
+
+    The read's field list is pinned WHOLE, so a field dropped from it is caught here rather
+    than discovered as a silent no-op on live state: `createdAt` dates the stall-census
+    filing guard (#415), and `assignees` is what lets the OWED line tell an
+    assigned-but-unclaimed unit from an untouched one (#423).
     """
     assert isinstance(RUNNER.RULING_HEADINGS, tuple) and RUNNER.RULING_HEADINGS, (
         "the headings must be a declared module tuple"
@@ -931,10 +942,12 @@ def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
         f"both headings the board carries must be declared: {RUNNER.RULING_HEADINGS}"
     )
     source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
-    assert '"number,state,title,createdAt,closedAt,comments"' in source, (
+    assert '"number,state,title,createdAt,closedAt,comments,assignees"' in source, (
         "the board read must ask for comments, or the leg examines nothing — and for "
         "`createdAt`, without which the stall-census filing guard (#415) cannot date an "
-        "item and the guard is a silent no-op on live state"
+        "item and the guard is a silent no-op on live state — and for `assignees`, "
+        "without which the OWED line renders an assigned-but-unclaimed unit identically "
+        "to one nobody has touched (#423)"
     )
 
 
@@ -3909,6 +3922,56 @@ def test_the_stall_census_leg_BITES_and_discriminates_on_every_neighbour() -> No
     assert "OWED #901" in out, out
     assert "population: 5 dispatched unit(s) -- 1 never claimed" in out, out
     assert "read at " in out, out
+
+def test_the_stall_census_leg_PRINTS_the_tracker_assignee_and_still_reads_OWED() -> None:
+    """#423: an assigned-but-unclaimed unit is VISIBLE as assigned, and is STILL OWED.
+
+    TWO FACTS, and the second is what keeps the fix honest.
+
+    (a) An OWED unit whose board issue carries an assignee must NAME that assignee on the
+    OWED line. Before this the line rendered an assigned-but-unclaimed unit identically to
+    one nobody had touched -- the visibility gap the item names.
+
+    (b) The assignee must NOT clear the OWED verdict. An assignee is a tracker field, not a
+    session-derived `claim` row, and reading it as a taker would let an assignment silence
+    the andon cord. So the SAME fixture still reports the unit OWED, and the line says so
+    in words.
+
+    The discriminating pair is the point: the unassigned unit must NOT carry the assignee
+    sentence, or a leg that printed a constant would satisfy (a) alone.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [
+        _issue(921, "OPEN", ["leshchenko1979"]),  # assigned, still never claimed -> OWED
+        _issue(922, "OPEN"),                       # untouched -> OWED, no assignee text
+    ]
+    rows = [
+        _stall_row(1, "dispatch", "#921", 3, now=now),
+        _stall_row(2, "dispatch", "#922", 3, now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #921" in named, f"an assigned-but-unclaimed unit stays OWED\n{named}"
+    assert "ASSIGNED to leshchenko1979" in named, (
+        f"the tracker assignee must be PRINTED on the OWED line\n{named}"
+    )
+    assert "an assignee is not a ledger claim" in named, named
+    assert leg["coverage"]["units_owed"] == 2, leg["coverage"]
+    assert leg["coverage"]["units_owed_assigned"] == 1, leg["coverage"]
+
+    # ... and the UNASSIGNED unit carries no assignee sentence: a leg that printed the
+    # sentence unconditionally would pass every assertion above just as well.
+    line_922 = [ln for ln in leg["problems"] if "#922" in ln]
+    assert line_922 and "ASSIGNED to" not in line_922[0], (
+        f"an unassigned unit must not read as assigned\n{line_922}"
+    )
+
+    # ... and the same fixture through the REAL `main()`: the assignee reaches the report.
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
+    assert "ASSIGNED to leshchenko1979" in out, out
 
 def test_the_stall_census_leg_DISCHARGES_on_an_act_but_CLEARS_only_on_a_claim_or_close() -> None:
     """#308 acceptance (3): a re-dispatch DISCHARGES the lane's duty but does NOT clear the
