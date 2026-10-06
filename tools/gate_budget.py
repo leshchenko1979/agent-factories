@@ -184,6 +184,10 @@ class GateBudgets:
     # why is the honest form of "nothing reported"; an empty tuple alone is not.
     stale: tuple[StaleBudget, ...] = ()
     stale_note: str = ""
+    # The entries the sweep could not examine at all -- no `measured_at`, or one that
+    # resolves to nothing here. Kept beside the note so a machine-readable reader and the
+    # printed account carry ONE population rather than two definitions of "not examined".
+    unreached: tuple[str, ...] = ()
 
     def resolve(self, key: str | None) -> tuple[float, str]:
         """The budget for a gate key, and whether it was DECLARED or fell to the default.
@@ -315,7 +319,7 @@ def _runner_forms(repo_root: Path, commit: str) -> dict[str, tuple[str, ...]] | 
 
 def budget_staleness(
     entries: dict[str, object], repo_root: Path | None = None
-) -> tuple[tuple[StaleBudget, ...], str]:
+) -> tuple[tuple[StaleBudget, ...], str, tuple[str, ...]]:
     """Which declared bases no longer describe what runs, and the sweep's own account.
 
     THE PREDICATE, with its population and its instant. For every declared entry the
@@ -335,7 +339,10 @@ def budget_staleness(
 
     FAIL-OPEN, AND PRINTED RATHER THAN REFUSED. A revision this clone cannot resolve
     (shallow, or a rewritten history) is UNKNOWN, never clean, and it is named in the note
-    with the count it covers. Nothing here raises: a tree checked out without git must
+    with the count it covers. The keys it could not reach are RETURNED as this function's
+    third element, so a caller prints that same population in a machine-readable field by
+    reading the sweep's own answer rather than re-deriving the predicate beside it. Nothing
+    here raises: a tree checked out without git must
     still be able to read its budgets, and this module's own doctrine already carries the
     pattern -- a declared fallback with a PRINTED population is not an exempt-by-silence
     surface, while an unprinted one is.
@@ -348,7 +355,7 @@ def budget_staleness(
         return (), (
             "no declared entries — this manifest declares no per-gate basis, so there is "
             "nothing to compare against HEAD"
-        )
+        ), ()
 
     head = _resolve_commit(root, "HEAD")
     if head is None:
@@ -356,7 +363,7 @@ def budget_staleness(
             f"NOT RUN — no resolvable HEAD under {root}, so there is no revision to compare "
             f"a declared basis against. {len(entries)} declared entr"
             f"{'y' if len(entries) == 1 else 'ies'} left UNEXAMINED rather than reported clean."
-        )
+        ), tuple(sorted(entries))
 
     by_rev: dict[str, list[str]] = {}
     for key, entry in entries.items():
@@ -366,6 +373,7 @@ def budget_staleness(
 
     stale: list[StaleBudget] = []
     unresolved: list[str] = []
+    reached_keys: set[str] = set()
     reached = bytes_blind = runner_blind = 0
     for rev in sorted(by_rev):
         keys = sorted(by_rev[rev])
@@ -374,6 +382,7 @@ def budget_staleness(
             unresolved.append(f"{rev} ({len(keys)} entr{'y' if len(keys) == 1 else 'ies'})")
             continue
         reached += len(keys)
+        reached_keys.update(keys)
 
         # LEG A — the gate FILE's blob at the declared revision against its blob at HEAD.
         was = _blob_ids(root, [f"{commit}:{key}" for key in keys])
@@ -438,7 +447,11 @@ def budget_staleness(
             f" | NOTHING EXAMINED — 0 of {len(entries)} entries carried a reachable revision, "
             f"so this sweep reaches no verdict at all"
         )
-    return tuple(stale), note
+    # THE UNREACHED POPULATION, returned beside the note that names it. An entry is
+    # unreached when its `measured_at` is absent, or present and resolving to nothing here;
+    # both are "could not examine", and the field and the note must not carry two answers.
+    unreached = tuple(sorted(set(entries) - reached_keys))
+    return tuple(stale), note, unreached
 
 
 def gate_key_for_cmd(cmd: list[str], repo_root: Path) -> str | None:
@@ -721,7 +734,7 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
             )
         gates[key] = float(budget)
 
-    stale, stale_note = budget_staleness(entries, repo_root)
+    stale, stale_note, unreached = budget_staleness(entries, repo_root)
     # The load population, printed rather than refused. `default` counts as one declarer of
     # its own, because a gate that falls through to it inherits that measurement's load.
     load_declared = tuple(sorted(k for k, e in entries.items() if LOAD_KEY in e))
@@ -753,6 +766,7 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
         gates=gates,
         stale=stale,
         stale_note=stale_note,
+        unreached=unreached,
         load_declared=load_declared,
         load_note=load_note,
         loads=loads,

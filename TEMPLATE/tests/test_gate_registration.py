@@ -981,7 +981,7 @@ def probe_the_declared_basis_legs_are_resolved() -> None:
             "tests/test_same.py": _basis(base),
             "tests/test_runner_moved.py": _basis(base),
         }
-        stale, note = module.budget_staleness(entries, root)
+        stale, note, _unreached = module.budget_staleness(entries, root)
         found = {s.key: s for s in stale}
         check("a MOVED BLOB is stale on leg A",
               found.get("tests/test_moved.py") is not None
@@ -1017,7 +1017,7 @@ def probe_an_unresolvable_revision_is_reported_never_clean() -> None:
             "tests/test_same.py": _basis(base),
             "tests/test_moved.py": _basis(missing),
         }
-        stale, note = module.budget_staleness(entries, root)
+        stale, note, _unreached = module.budget_staleness(entries, root)
         check("an unresolvable measured_at is named WITH the count it covers",
               "NOT EXAMINED" in note and missing in note and "1 entry" in note,
               note.split("|")[-1].strip()[:120])
@@ -1033,7 +1033,7 @@ def probe_a_tree_without_a_resolvable_head_is_not_read_as_clean() -> None:
     module = _gate_budget_module()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)  # deliberately NOT a repository
-        stale, note = module.budget_staleness({"tests/test_same.py": _basis("HEAD")}, root)
+        stale, note, _unreached = module.budget_staleness({"tests/test_same.py": _basis("HEAD")}, root)
         check("a directory with no resolvable HEAD reports NOT RUN, not clean",
               stale == () and note.startswith("NOT RUN"), note[:120])
         check("and it names how many declared entries it left UNEXAMINED",
@@ -1542,7 +1542,7 @@ def probe_the_staleness_join_reaches_the_verdict_line(timed_out: dict) -> None:
             check("the probe repository could be built and committed", False,
                   f"base={base} head={head} — this leg could not judge")
             return
-        stale, _note = module.budget_staleness({"tests/test_moved.py": _basis(base)}, root)
+        stale, _note, _unreached = module.budget_staleness({"tests/test_moved.py": _basis(base)}, root)
         if not stale:
             check("the synthetic sweep found the moved basis this probe needs", False,
                   "the sweep reported nothing stale, so the join could not be driven")
@@ -2162,6 +2162,29 @@ def probe_the_rederivation_leg_prints_and_bites() -> None:
         check("the JSON form names the same population",
               payload.get("population") == ["tests/test_moved.py"],
               str(payload.get("population")))
+
+        # #419: ONE definition of "not examined", read from the sweep's own answer. An entry
+        # whose `measured_at` resolves to nothing here is UNREACHED — the note names it, and
+        # the machine-readable field must list that same entry rather than read clean. The
+        # two-sided control is the reached entry beside it, which must NOT appear.
+        unreachable = _manifest(root, {
+            "tests/test_moved.py": _basis(base),
+            "tests/test_unreachable.py": _basis("0" * 40),
+        })
+        un_json = _leg_proc("--manifest", str(unreachable), "--repo-root", str(root), "--json")
+        try:
+            un_payload = json.loads(un_json.stdout)
+        except ValueError:
+            un_payload = {}
+        check("#419: an unreachable basis is named in the note",
+              "NOT EXAMINED" in (un_payload.get("note") or ""),
+              str(un_payload.get("note"))[:200])
+        check("#419: and the FIELD carries the same entry, not an empty list",
+              un_payload.get("not_examined") == ["tests/test_unreachable.py"],
+              f"not_examined={un_payload.get('not_examined')!r}")
+        check("#419: the examined count excludes it, so field and note agree",
+              un_payload.get("examined") == 1 and un_payload.get("declared") == 2,
+              f"examined={un_payload.get('examined')!r} declared={un_payload.get('declared')!r}")
 
         # NON-VACUITY: a manifest declaring no basis must reach NO verdict, never a green one.
         empty = _manifest(root, {})

@@ -175,11 +175,10 @@ def containment_population(
 
     budgets = load_gate_budgets(path, root)
     stale = budgets.stale
-    not_examined = tuple(
-        key
-        for key in sorted(entries)
-        if not isinstance(entries[key], dict) or not isinstance(entries[key].get("measured_at"), str)
-    )
+    # NOT EXAMINED is read from the sweep's OWN answer, never re-derived here. An entry the
+    # sweep could not reach -- no `measured_at`, or one resolving to nothing -- is exactly
+    # the population the note names, so the field and the note carry ONE definition.
+    not_examined = budgets.unreached
     examined = len(entries) - len(not_examined)
 
     exhausted: tuple = ()
