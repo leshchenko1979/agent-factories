@@ -190,6 +190,36 @@ STALL_CENSUS_THRESHOLD_BASIS = (
     "and fall below it."
 )
 
+# --- the dispatch-delivery leg (#49, ruled at ledger n=1893) -------------------------
+#
+# A `dispatch` ROW IS A CLAIM THAT A LANE WAS TOLD, and nothing tied the row to the
+# `session_notify` that carries the brief. Measured 2026-09-18 in BOTH directions: `#41`/
+# `#42` delivered with no row, `#48` a row (n=276) with NO delivery — the row appended and
+# committed by a turn a restart killed between the append and the notify, so the ledger
+# reported a routing that had not happened. This leg is shape (3) of that item, the
+# EVIDENCE half; `tools/ledger.py`'s write-path refusal is shape (1), the SEAM half.
+#
+# THE WINDOW IS ANCHORED ON THE ROW'S OWN `ts`, and the ruling says why in terms: the
+# first census anchored on each subject's NEWEST dispatch row, so `#77`'s window opened
+# AFTER the delivery it was testing for and reported a confident miss. The bound is taken
+# from the row under test, always: `[ts - 180 s, ts + 5400 s]` — three minutes of clock
+# skew behind, ninety minutes of delivery lag ahead.
+#
+# THE TOKEN MUST BE NO NARROWER THAN THE ARTIFACT. A delivered notify may carry the bare
+# subject number (`77`), the hash-prefixed form (`#77`), or a descriptive stem. The first
+# census searched `#77` where the artifact carried `77`, and returned a zero that read as
+# good news — worse than no leg. So the match accepts every form the artifact may take.
+DELIVERY_BOUNDARY_KEY = "dispatch_delivery_declared"
+DELIVERY_WINDOW_BEFORE_SECS = 180
+DELIVERY_WINDOW_AFTER_SECS = 5400
+DELIVERY_WINDOW_BASIS = (
+    "anchored on each dispatch row's OWN ts: [ts - 180 s, ts + 5400 s] -- three minutes "
+    "of clock skew behind the stamp, ninety minutes of delivery lag ahead. Anchoring on a "
+    "subject's NEWEST row opened the window after the delivery it tested for (#77, ledger "
+    "n=1893), so the bound is always the row under test's own instant."
+)
+NOTIFY_DELIVERY_HEADER = "[session-notify from="
+
 # --- the board-unruled leg (#332) ----------------------------------------------------
 #
 # THE ROUND'S OWN PREDICATE, ASSERTED BY NOTHING. The meta-factory HQ round's whole job is
@@ -2302,6 +2332,266 @@ def duty_receipt_bound(repo: Path) -> tuple[dt.datetime | None, str, str]:
             f"bound is a DEFECT, never a licence to judge unbounded"
         )
     return instant, text, ""
+
+def dispatch_delivery_scope(repo: Path = REPO) -> tuple[dt.datetime | None, str, str]:
+    """The bound this leg judges against, as `(instant, text, refusal)`.
+
+    Read through the ONE boundary reader (`tests/ledger_boundary.py`), so this leg and the
+    boundary-reading gates cannot disagree about what this factory declared — one field,
+    one predicate (SKILL.md section 11).
+
+    THE BOUND EXISTS BECAUSE THE HISTORICAL POPULATION IS LEGITIMATELY LARGE. Measured on
+    this ledger at the mechanism's landing: 430 dispatch rows, and the delivery verdict is
+    a NEW field no historical row could carry. Judging all of them against a rule that did
+    not exist when they were written is exactly the permanent-red behaviour #334 exists to
+    stop, and the ruling forbids backfilling them. So rows BEFORE the declared boundary are
+    COUNTED and PRINTED, never judged; rows at or after it are judged.
+
+    The reader's own policy is absent SKIPS / malformed FAILS; this leg maps BOTH onto a
+    REFUSAL, for the reason the duty-receipt leg states: for a gate an absent declaration
+    is a legitimate state, but for a leg that would otherwise judge EVERY instance it is
+    not, so a tree that declares nothing is TOLD so rather than shown a clean run or an
+    unbounded one.
+    """
+    try:
+        reader = boundary_reader()
+    except Exception as exc:  # noqa: BLE001 — any load failure is the same refusal
+        return None, "", (
+            f"the boundary reader cannot be loaded from {LEDGER_BOUNDARY} ({exc}) — "
+            f"REFUSED: without it `{DELIVERY_BOUNDARY_KEY}` cannot be read, and a leg that "
+            f"judges every dispatch against a bound it could not read is the permanent-red "
+            f"behaviour #334 exists to stop"
+        )
+    try:
+        instant, text = reader.declared_boundary(repo, DELIVERY_BOUNDARY_KEY)
+    except reader.SkipGate as exc:
+        return None, "", (
+            f"`{DELIVERY_BOUNDARY_KEY}` is UNDECLARED in this tree ({exc}) — REFUSED: a "
+            f"dispatch row written before the delivery-verdict mechanism could not have "
+            f"carried a verdict, and this tree has not declared when that mechanism landed, "
+            f"so no row is judged rather than every row being judged unbounded"
+        )
+    except reader.GateError as exc:
+        return None, "", (
+            f"`{DELIVERY_BOUNDARY_KEY}` is declared in this tree but cannot be read: "
+            f"{'; '.join(str(p) for p in exc.problems)} — REFUSED: a malformed bound is a "
+            f"DEFECT, never a licence to judge unbounded"
+        )
+    return instant, text, ""
+
+def delivery_subject_matches(text: str, subject: str) -> bool:
+    """True when `text` carries `subject` in a form NO NARROWER than the artifact (#49).
+
+    A delivered notify is free prose that names the routed unit however its sender wrote
+    it: the bare number (`77`), the hash-prefixed form (`#77`), or a descriptive stem
+    (`wave-2026-10-05`). The ruling's constraint is stated in terms because the first
+    census got it wrong and the error was SILENT: it searched `#77` where the artifact
+    carried `77`, and the confident zero that returned read as good news — worse than no
+    leg at all. So the match accepts every form.
+
+    For a work unit the digits are matched with a NON-DIGIT boundary on both sides, so
+    `77` never matches inside `177` or `770` — a substring test would make the token
+    WIDER than the artifact, which is the opposite error and just as silent. For a
+    descriptive stem the whole stem is required.
+    """
+    s = str(subject or "").strip()
+    if not s or not text:
+        return False
+    if len(s) > 1 and s[0] == "#" and s[1:].isdigit():
+        digits = s[1:]
+        return re.search(rf"(?<!\d)#?{re.escape(digits)}(?!\d)", text) is not None
+    return s in text
+
+def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
+    """(deliveries, homes_read, unreached) for every delivered notify on the box.
+
+    TWO SURFACES, because a delivery exists in one of two states and both are receipts: a
+    notify that LANDED is a `messages` row the harness stamped with
+    `[session-notify from=<uuid>]`, and a notify still ACCEPTED-but-undrained is a
+    `notify_queue` row. Reading only the first would report a legitimate deferral as a
+    phantom dispatch — the opposite error to the one this leg exists to catch.
+
+    Read IN PLACE through a `mode=ro` URI, for the reason `box_cron_rows` states: copying a
+    live WAL-mode database yields stale state and leaks disk. A home that could not be read
+    is RETURNED in `unreached`, never dropped — a home that could not be read is not a home
+    with nothing in it, and the two must never render the same.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    dbs, unreached = registry.opencrabs_home_dbs(root)
+    deliveries: list[dict] = []
+    homes_read: list[str] = []
+    for db in dbs:
+        try:
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error as exc:
+            unreached.append(f"{db.parent.name}: {exc}")
+            continue
+        try:
+            landed = list(conn.execute(
+                "select session_id, coalesce(content,''), created_at from messages "
+                "where role = 'user' and content like ?",
+                (f"%{NOTIFY_DELIVERY_HEADER}%",),
+            ))
+            queued = list(conn.execute(
+                "select session_id, coalesce(display_text,'') || ' ' || "
+                "coalesce(context_text,''), created_at from notify_queue"
+            ))
+        except sqlite3.Error as exc:
+            unreached.append(f"{db.parent.name}: {exc}")
+            continue
+        finally:
+            conn.close()
+        for session, text, created in landed:
+            deliveries.append({
+                "home": db.parent.name, "session": str(session or ""),
+                "epoch": int(created or 0), "state": "landed", "text": str(text or ""),
+            })
+        for session, text, created in queued:
+            deliveries.append({
+                "home": db.parent.name, "session": str(session or ""),
+                "epoch": int(created or 0), "state": "queued", "text": str(text or ""),
+            })
+        homes_read.append(db.parent.name)
+    return deliveries, homes_read, unreached
+
+def dispatch_delivery_leg(
+    rows: list[dict],
+    *,
+    read_at: str = "",
+    bound: tuple | None = None,
+    deliveries_fn=None,
+) -> dict:
+    """The dispatch-delivery leg: did each dispatch row's routing actually go OUT?
+
+    SHAPE (3), ruled at ledger `n=1893`: a PRINTED LEG of the standing patrol, not a lane's
+    ad-hoc census. It DETECTS; it does not prevent — `tools/ledger.py`'s write-path refusal
+    is the preventing half, and the ruling is explicit that the field's PRESENCE proves a
+    verdict was RECORDED, never that it was TRUE. A reader that takes the token as proof of
+    delivery has re-derived the very error this item is about, so this leg reads the TARGET's
+    own message history instead.
+
+    FAIL OPEN, in the ruling's own words: an unreadable session store exits with NO VERDICT
+    rather than reporting clean. Three surfaces can fail that way and each is distinguished:
+    a refused bound (the tree declared nothing, or declared something unreadable), a store
+    that could not be reached at all, and a store reached only in part. The third JUDGES
+    what it read and PRINTS the homes it could not, so a partial read is never a silent one.
+
+    A ZERO MUST BE DISTINGUISHABLE FROM A BLIND LEG (acceptance criterion 3), so the
+    examined dispatch-row count is always printed: `examined 33, 0 problems` is never the
+    same output as `examined 0`.
+    """
+    window_before = dt.timedelta(seconds=DELIVERY_WINDOW_BEFORE_SECS)
+    window_after = dt.timedelta(seconds=DELIVERY_WINDOW_AFTER_SECS)
+    coverage = {
+        "bound_key": DELIVERY_BOUNDARY_KEY,
+        "bound": (bound[1] if bound else "") or "",
+        "window_basis": DELIVERY_WINDOW_BASIS,
+        "window_before_secs": DELIVERY_WINDOW_BEFORE_SECS,
+        "window_after_secs": DELIVERY_WINDOW_AFTER_SECS,
+        "dispatch_rows_read": sum(1 for r in rows if r.get("event") == "dispatch"),
+        "read_at": read_at,
+    }
+    if bound is None or bound[0] is None:
+        reason = (bound[2] if bound else "") or "no bound was supplied to this leg"
+        coverage.update({
+            "dispatch_rows_examined": 0, "dispatch_rows_pre_boundary": 0,
+            "dispatch_rows_undated": 0,
+            "deliveries_read": None, "homes_read": None, "homes_unreached": [],
+            "store_read": False,
+            "store_not_read_reason": reason,
+        })
+        return {"name": "dispatch-delivery", "status": "NOT RUN", "reason": reason,
+                "problems": [], "excused": [], "coverage": coverage}
+    boundary: dt.datetime = bound[0]
+    # THE POPULATION IS RESOLVED BEFORE THE STORE IS TOUCHED, and the order is load-bearing
+    # in BOTH directions (measured 2026-10-06 while landing this leg). The read is O(the
+    # whole box's message history) -- expensive enough that a leg scanning it BEFORE knowing
+    # whether it had anything to corroborate pays that cost to judge zero rows -- so every
+    # probe that drove `main()` paid it again: the
+    # runner's own gate went from well inside its budget to a TIMEOUT the moment this leg's
+    # boundary was declared. Resolving first is also the more honest shape: `deliveries_read`
+    # then describes a read the leg actually NEEDED, never a number collected in case it was.
+    problems: list[str] = []
+    examined = 0
+    pre_boundary = 0
+    undated = 0
+    to_judge: list[tuple[dict, dt.datetime, dt.datetime]] = []
+    for row in rows:
+        if row.get("event") != "dispatch":
+            continue
+        try:
+            ts = reader_parse_ts(str(row.get("ts") or ""))
+        except (ValueError, TypeError):
+            # An instant this leg cannot read is REPORTED as undated, never silently
+            # dropped: a row that cannot be placed against the bound is one the leg did
+            # not judge, and a population that quietly shrinks by it would read as clean.
+            undated += 1
+            continue
+        if ts < boundary:
+            pre_boundary += 1
+            continue
+        examined += 1
+        to_judge.append((row, ts - window_before, ts + window_after))
+    coverage.update({
+        "dispatch_rows_examined": examined,
+        "dispatch_rows_pre_boundary": pre_boundary,
+        "dispatch_rows_undated": undated,
+    })
+    if not to_judge:
+        # THE STORE IS NOT READ, AND THAT IS SAID. There is no post-boundary dispatch row to
+        # corroborate, so no delivery is sought -- and the render must not let `deliveries
+        # read: 0` stand for BOTH "the store held none" and "the store was never opened".
+        # Those are different facts and a reader who cannot tell them apart is reading the
+        # confident zero this leg exists to refuse.
+        coverage.update({
+            "deliveries_read": None, "homes_read": None, "homes_unreached": [],
+            "store_read": False,
+            "store_not_read_reason": (
+                f"no dispatch row at or after the bound `{DELIVERY_BOUNDARY_KEY}` "
+                f"({coverage['bound']}) to corroborate, so no delivery was sought"
+            ),
+        })
+        return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
+                "problems": [], "excused": [], "coverage": coverage}
+    deliveries, homes_read, unreached = (deliveries_fn or box_deliveries)()
+    coverage.update({
+        "store_read": True,
+        "deliveries_read": len(deliveries),
+        "homes_read": len(homes_read),
+        "homes_read_names": homes_read,
+        "homes_unreached": unreached,
+        "deliveries_by_state": {
+            state: sum(1 for d in deliveries if d["state"] == state)
+            for state in ("landed", "queued")
+        },
+    })
+    if not homes_read:
+        # NOT ONE HOME COULD BE REACHED — the store is blind, so a clean verdict here would
+        # be the "confident zero" the ruling names as worse than no leg.
+        reason = (
+            "no OpenCrabs home could be read, so no delivery could be sought — "
+            + ("; ".join(unreached) if unreached else "no home database was found")
+        )
+        return {"name": "dispatch-delivery", "status": "NOT RUN", "reason": reason,
+                "problems": [], "excused": [], "coverage": coverage}
+    for row, lo, hi in to_judge:
+        subject = str(row.get("subject") or "").strip()
+        hits = [
+            d for d in deliveries
+            if lo <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc) <= hi
+            and delivery_subject_matches(d["text"], subject)
+        ]
+        if hits:
+            continue
+        problems.append(
+            f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} records no "
+            f"delivery: no inbound notify carrying `{subject}` in the target's message "
+            f"history within [{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, "
+            f"{hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] — the row claims a lane was TOLD and "
+            f"nothing corroborates it"
+        )
+    return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
+            "problems": problems, "excused": [], "coverage": coverage}
 
 def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                      prefixes: list[str], ledger_rows: list[dict], *,
@@ -4424,6 +4714,40 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  board read at {cov['board_read_at']}")
+        elif leg["name"] == "dispatch-delivery":
+            # THE EXAMINED POPULATION IS PRINTED BESIDE THE VERDICT (acceptance criterion 3),
+            # so `examined 33, 0 problems` is never the same output as `examined 0` -- the
+            # confident zero the ruling names as worse than no leg at all.
+            lines.append(
+                f"  dispatch rows read: {cov['dispatch_rows_read']} "
+                f"({cov['dispatch_rows_pre_boundary']} before the bound "
+                f"`{cov['bound_key']}` = {cov['bound']}, not judged; "
+                f"{cov['dispatch_rows_undated']} undated); examined: "
+                f"{cov['dispatch_rows_examined']}"
+            )
+            if cov.get("store_read"):
+                lines.append(
+                    f"  deliveries read: {cov['deliveries_read']} "
+                    f"({cov.get('deliveries_by_state', {}).get('landed', 0)} landed, "
+                    f"{cov.get('deliveries_by_state', {}).get('queued', 0)} queued) across "
+                    f"{cov['homes_read']} home(s) read"
+                )
+                if cov.get("homes_unreached"):
+                    lines.append(
+                        f"  homes UNREACHED ({len(cov['homes_unreached'])}) — judged only over "
+                        f"what was read: {', '.join(cov['homes_unreached'])}"
+                    )
+            else:
+                # A STORE THAT WAS NEVER OPENED MUST NOT RENDER AS ONE THAT HELD NOTHING:
+                # `deliveries read: 0` would stand for both, and that is exactly the
+                # confident zero this leg refuses. The not-read state gets its own line and
+                # its own reason.
+                lines.append(
+                    f"  deliveries: NOT READ — "
+                    f"{cov.get('store_not_read_reason') or 'the leg judged no row'}"
+                )
+            lines.append(f"  window: {cov['window_basis']}")
+            lines.append(f"  read at {cov['read_at']}")
         elif leg["name"] == "workspace-blocked":
             # A lawful exception is a VISIBLE DEBT: the governed-run population and the
             # escape-hatch count are printed BESIDE the verdict, and a NOT RUN carries its
@@ -4614,6 +4938,8 @@ def main(
     dirty_paths_fn=None,
     ruling_scope_fn=None,
     ruling_exemptions_path: Path | None = None,
+    delivery_scope_fn=None,
+    deliveries_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -4656,7 +4982,14 @@ def main(
     a REFUSED bound at all -- the three behaviours the bound exists to have. `ruling_scope_fn`
     returns the scope tuple; the live default reads this tree's declaration through the one
     boundary reader. `ruling_exemptions_path` is injected for the same reason: a probe must
-    not have its verdict decided by whatever exemptions the live factory happens to hold."""
+    not have its verdict decided by whatever exemptions the live factory happens to hold.
+
+    The delivery leg's TWO reads are injected for the tenth and the same practical reason as
+    the ruling bound: `delivery_scope_fn` returns the bound tuple, so a probe can exercise a
+    pre-boundary row, a post-boundary one, and a REFUSED bound without the live tree's
+    declaration deciding its verdict; and `deliveries_fn` reads every OpenCrabs home's
+    `messages` and `notify_queue` tables, so a probe that did not stub it would be measuring
+    whatever this box happens to have delivered rather than the leg's behaviour."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -4678,6 +5011,7 @@ def main(
             "cron-thinness, pacemaker-presence, notify-receipt, duty-receipt, "
             "canonicality-tier, workspace-blocked, stall-census, "
             "board-unruled, "
+            "dispatch-delivery, "
             "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
@@ -4708,6 +5042,10 @@ def main(
         workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
         stall_census_leg(issues, rows, read_at=read_at),
         board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate),
+        dispatch_delivery_leg(
+            rows, read_at=read_at, bound=(delivery_scope_fn or dispatch_delivery_scope)(),
+            deliveries_fn=deliveries_fn,
+        ),
         kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at),
         (publish_fn or publish_freshness_leg)(read_at=read_at),

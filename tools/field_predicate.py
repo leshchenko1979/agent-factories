@@ -772,3 +772,47 @@ def declared_claim(detail: str) -> list[str]:
     SEE a second rather than read the first silently.
     """
     return _declared_values(detail, CLAIM_KEY)
+
+# The `dispatch` row's `delivery=<verdict>` field — the verdict the row's author RECORDED
+# for the routing the row claims (#49 shape 1, ruled at ledger n=1893).
+#
+# A `dispatch` row is a claim that a lane was TOLD, and until this field it was a claim
+# with no receipt: the row and the `session_notify` that carries the brief are two
+# independent facts, either of which can exist without the other. Measured 2026-09-18 in
+# BOTH directions — `#41`/`#42` delivered with no row, `#48` a row (n=276) with no
+# delivery — and the sharpest instance is `#48`'s, appended and committed by a turn a
+# restart killed between the append and the notify, so the ledger reported a routing that
+# had not happened.
+#
+# THE FIELD'S PRESENCE IS NOT THE DELIVERY, AND THE RULING SAYS SO ITSELF: `tools/ledger.py`
+# can require the verdict be RECORDED; it cannot verify it is TRUE. So this read is the
+# write-path SEAM and nothing more — `tools/patrol_host_state.py`'s delivery leg is the
+# EVIDENCE, and a reader that takes this token as proof of delivery has re-derived the very
+# error the field exists to catch.
+#
+# The existing convention is PROSE — 78 live dispatch rows carry the phrase
+# `delivery turn-end` mid-sentence — and it is deliberately NOT the form read here. A
+# verdict outside the canonical trailing run is a quotation: measured 2026-09-19, `n=276`
+# (the phantom row this field exists to have caught) carries the WORDS but no token, so a
+# whole-detail scan would read its prose as a declaration and admit the very row the
+# refusal is aimed at. The run is POSITIONAL, matching every other declared field.
+#
+# A LIST, for `declared_reclaim`'s reason: a row carries one token (a field with two
+# values has no canonical reading, SKILL.md section 8), and the caller must be able to SEE
+# a second rather than read the first silently. The VALUE's vocabulary is NOT fixed here —
+# the author records the verdict they took (`turn-end`, `interrupt`, `deferred`, `none`),
+# and the leg judges it against the target's own message history.
+DELIVERY_KEY = "delivery"
+
+def declared_delivery(detail: str) -> list[str]:
+    """Every `delivery` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The ONE positional read of this field, imported by the append path that refuses a
+    `dispatch` row carrying no verdict (#49 shape 1) and by the patrol leg that seeks the
+    delivery each verdict claims — a private `token.split("=")` at either would be the
+    class ruled at `n=405` PART 5: one field, one predicate.
+
+    `keyed_value` carries the well-formedness half: a bare `delivery=` names no verdict,
+    so it is not a declaration and the row is refused exactly as if the token were absent.
+    """
+    return _declared_values(detail, DELIVERY_KEY)

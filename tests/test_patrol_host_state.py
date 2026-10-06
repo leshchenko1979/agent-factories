@@ -137,7 +137,8 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
-         dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None):
+         dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
+         delivery_scope=None, deliveries=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -209,6 +210,17 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         ruling_exemptions_path=(
             _NO_RULING_EXEMPTIONS if ruling_exemptions_path is None
             else ruling_exemptions_path
+        ),
+        # The delivery leg (#49) is made INERT by default: an absent bound renders it
+        # NOT RUN with its reason and no problem, so every probe written before the leg
+        # existed keeps the meaning it was written with. A probe that asserts the leg
+        # passes `delivery_scope` (the bound tuple) and `deliveries` (the store rows).
+        delivery_scope_fn=(
+            (lambda: delivery_scope) if delivery_scope is not None
+            else (lambda: (None, "", "probe: the delivery leg is not exercised here"))
+        ),
+        deliveries_fn=lambda: (
+            [] if deliveries is None else deliveries, ["probe-home"], []
         ),
     )
     return rc, out.getvalue(), err.getvalue()
@@ -4666,6 +4678,214 @@ def test_the_board_unruled_leg_resolves_the_RULING_namespace_and_PRINTS_an_unpla
     rc, out, _ = _run(issues, rows)
     assert "unbridgeable" in out, out
     assert "bridged 1" in out, out
+
+def _delivery(instant: dt.datetime, text: str, *, state: str = "landed") -> dict:
+    """A delivered-notify row as `box_deliveries` emits it."""
+    return {"home": "probe-home", "session": "probe-session",
+            "epoch": int(instant.timestamp()), "state": state, "text": text}
+
+def test_the_dispatch_delivery_leg_BITES_and_clears_on_a_delivery() -> None:
+    """#49 acceptance (1) and (2): the leg NAMES a dispatch row with no delivery inside its
+    window, and the SAME fixture with a delivery produces no problem.
+
+    Both halves are asserted, because a leg that reported every row would pass the first
+    alone and a leg that reported none would pass the second.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(51, "dispatch", "#77", 0, now=dispatched, actor="triage")
+
+    leg = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    named = "\n".join(leg["problems"])
+    assert leg["status"] == "ASSERTED", leg
+    assert "n=51" in named and "#77" in named, f"the phantom must be NAMED\n{named}"
+    assert leg["coverage"]["dispatch_rows_examined"] == 1, leg["coverage"]
+
+    delivered = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(dispatched + dt.timedelta(seconds=60),
+                       "[session-notify from=abc]\nDISPATCH #77 to the Worker")],
+            ["probe-home"], [],
+        ),
+    )
+    assert delivered["problems"] == [], delivered["problems"]
+
+def test_the_dispatch_delivery_leg_anchors_on_the_ROWS_OWN_ts_not_the_newest_row() -> None:
+    """#49 acceptance (3): the `#77` shape, asserted directly.
+
+    A LATER row exists on the same subject, so a leg that anchored on the subject's NEWEST
+    row would open its window after the delivery it is testing for and report a confident
+    miss -- the exact error the first census made (ledger n=1893). The delivery here lands
+    60 s after the DISPATCH row and two hours BEFORE the later row, so only a
+    row-own-`ts` anchor can see it.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=3)
+    dispatch = _stall_row(61, "dispatch", "#77", 0, now=dispatched, actor="triage")
+    later = _stall_row(62, "claim", "#77", 0, now=dispatched + dt.timedelta(hours=2))
+    delivered_at = dispatched + dt.timedelta(seconds=60)
+
+    leg = RUNNER.dispatch_delivery_leg(
+        [dispatch, later], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(delivered_at, "[session-notify from=abc]\nDISPATCH #77")],
+            ["probe-home"], [],
+        ),
+    )
+    assert leg["problems"] == [], (
+        f"a newest-row anchor would miss a delivery that is inside the ROW's own window\n"
+        f"{leg['problems']}"
+    )
+
+def test_the_dispatch_delivery_token_is_no_narrower_than_the_artifact() -> None:
+    """#49 acceptance (4): a delivery carrying the BARE subject number clears a dispatch
+    written `#77`, and a WIDER token (a longer number containing 77) does not count.
+
+    The first census searched `#77` where the artifact carried `77` and returned a zero
+    that read as good news. The mirror error -- a substring test that lets `77` match
+    inside `177` -- is just as silent, so both directions are asserted.
+    """
+    assert RUNNER.delivery_subject_matches("DISPATCH 77 to the Worker", "#77")
+    assert RUNNER.delivery_subject_matches("DISPATCH #77", "#77")
+    assert RUNNER.delivery_subject_matches("wave-2026-10-05 begins", "wave-2026-10-05")
+    assert not RUNNER.delivery_subject_matches("row 177 of the table", "#77")
+    assert not RUNNER.delivery_subject_matches("row 770 of the table", "#77")
+    assert not RUNNER.delivery_subject_matches("#177 was closed", "#77")
+
+def test_the_dispatch_delivery_leg_COUNTS_pre_boundary_rows_and_never_judges_them() -> None:
+    """#49: the historical population is legitimately large -- 430 live dispatch rows
+    carry no verdict, and the ruling forbids backfilling them. A leg that judged them all
+    is the permanent red #334 exists to stop, so a pre-boundary row is COUNTED and
+    PRINTED, and the examined count is printed beside the verdict so a clean read over
+    zero rows is never mistaken for a verified one.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    old = _stall_row(71, "dispatch", "#70", 5, now=now, actor="triage")
+
+    leg = RUNNER.dispatch_delivery_leg(
+        [old], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["dispatch_rows_pre_boundary"] == 1, leg["coverage"]
+    assert leg["coverage"]["dispatch_rows_examined"] == 0, leg["coverage"]
+
+def test_the_dispatch_delivery_leg_FAILS_OPEN_on_a_refused_bound_and_a_blind_store() -> None:
+    """#49 acceptance (1): the leg fails open -- an absent bound and an unreachable store
+    each render NOT RUN with the reason, never a clean zero.
+
+    A clean verdict over a store the leg could not read is the "confident zero that reads
+    as good news" the ruling names as worse than no leg at all.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    row = _stall_row(81, "dispatch", "#80", 0, now=now, actor="triage")
+
+    refused = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=(None, "", "probe refusal"),
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    assert refused["status"] == "NOT RUN", refused
+    assert refused["problems"] == [], refused["problems"]
+    assert "probe refusal" in (refused["reason"] or ""), refused
+
+    blind = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=(now - dt.timedelta(days=1), "b", ""),
+        deliveries_fn=lambda: ([], [], ["probe-home: could not be read"]),
+    )
+    assert blind["status"] == "NOT RUN", blind
+    assert blind["problems"] == [], blind["problems"]
+    assert "could not be read" in (blind["reason"] or ""), blind
+
+def test_the_dispatch_delivery_leg_PRINTS_its_examined_population() -> None:
+    """#49 acceptance (3): `examined 1, 1 problem` must never render the same as
+    `examined 0`. Asserted on the RENDER, because a count computed and dropped from the
+    report is the same failure as one never computed.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    row = _stall_row(91, "dispatch", "#90", 0, now=now - dt.timedelta(minutes=5),
+                     actor="triage")
+    rc, out, _ = _run(
+        [], [row], delivery_scope=bound,
+        deliveries=[],
+    )
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert "examined: 1" in out, out
+    assert "read at " in out, out
+    assert rc == 1, f"a phantom dispatch is a problem, got rc={rc}\n{out}"
+
+def test_the_dispatch_delivery_leg_DEFERS_the_store_read_until_there_is_a_row_to_judge() -> None:
+    """#49: the store read is DEFERRED, and the not-read state is DISTINGUISHABLE from an
+    empty one.
+
+    TWO FACTS, and the second is the one that matters.
+
+    (a) A leg with no post-boundary dispatch row must not touch the store AT ALL. The read
+    is O(the whole box's message history) -- expensive enough that a leg scanning it before
+    knowing whether it had anything to corroborate pays that cost to judge zero rows -- so
+    every probe driving `main()` paid it again. That is
+    what turned this file's own gate from well inside its budget into a TIMEOUT the moment
+    the leg's boundary was declared. `deliveries_fn` here RAISES, so a leg that read the
+    store anyway fails by exception rather than by a number nobody thought to assert.
+
+    (b) `deliveries_read` is then None and NOT 0, because `0` would stand for both "the
+    store held no delivery" and "the store was never opened" -- the confident zero this leg
+    exists to refuse.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    old = _stall_row(72, "dispatch", "#70", 5, now=now, actor="triage")
+
+    def _explode():
+        raise AssertionError("the store must not be read when there is nothing to judge")
+
+    deferred = RUNNER.dispatch_delivery_leg(
+        [old], read_at=read_at, bound=bound, deliveries_fn=_explode,
+    )
+    assert deferred["status"] == "ASSERTED", deferred
+    assert deferred["problems"] == [], deferred["problems"]
+    assert deferred["coverage"]["store_read"] is False, deferred["coverage"]
+    assert deferred["coverage"]["deliveries_read"] is None, deferred["coverage"]
+
+    # ... and the SAME leg WITH a row to judge DOES read it, so the deferral is a deferral
+    # and not a leg that has stopped reading at all. Without this arm, a leg that never read
+    # the store would satisfy the first half just as well.
+    fresh = _stall_row(73, "dispatch", "#71", 0, now=now - dt.timedelta(minutes=5),
+                       actor="triage")
+    read = RUNNER.dispatch_delivery_leg(
+        [fresh], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    assert read["coverage"]["store_read"] is True, read["coverage"]
+    assert read["coverage"]["deliveries_read"] == 0, read["coverage"]
+
+def test_the_leg_RENDERS_a_store_it_never_opened_distinctly_from_one_that_held_nothing() -> None:
+    """#49 acceptance (3): `deliveries read: 0` must not be the render of BOTH "the store
+    held no delivery" and "the store was never opened".
+
+    Asserted on the RENDER for the same reason the examined-population probe is: a state the
+    leg records but never prints is a state no reader can act on.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    old = _stall_row(74, "dispatch", "#72", 5, now=now, actor="triage")
+    rc, out, _ = _run([], [old], delivery_scope=bound, deliveries=[])
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert "deliveries: NOT READ" in out, out
+    assert "deliveries read:" not in out, out
+    assert "examined: 0" in out, out
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

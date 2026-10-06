@@ -143,6 +143,7 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 from field_predicate import (
     declared_claim,
     declared_comment_id,
+    declared_delivery,
     declared_keys,
     declared_reclaim,
     declared_reclose,
@@ -1122,6 +1123,55 @@ def cmd_append(args: argparse.Namespace) -> int:
             "that names no comment is half-recorded, so no reader can pair them. Stamp it "
             "with `tools/rule.py`, which posts the comment and writes the row carrying "
             "its id in one invocation (#297)."
+        )
+    # A `dispatch` ROW IS REFUSED AT THE WRITE PATH WHEN ITS DETAIL CARRIES NO DELIVERY
+    # VERDICT (#49 shape 1, ruled at ledger n=1893).
+    #
+    # A `dispatch` row is a claim that a lane was TOLD, and until this seam it was a claim
+    # with no receipt: the row and the `session_notify` that carries the brief are two
+    # independent facts, and either can exist without the other. Measured 2026-09-18 in
+    # BOTH directions — `#41`/`#42` delivered with no row, and `#48` a row (n=276) with no
+    # delivery at all, appended and committed by a turn a daemon restart killed between
+    # the append and the notify. The ledger reported a routing that had not happened, and
+    # the absence was visible only in two surfaces nobody was watching.
+    #
+    # #98 (ruling n=596) gave the close row exactly this shape — a write-path refusal that
+    # is a PRE-CONDITION of the append, not a post-write warning — and #297 gave the
+    # `ruling` row the same one, one event over. This is the third.
+    #
+    # THE PREDICATE IS THE SHARED ONE, through `declared_delivery`, never a private scan:
+    # one field, one predicate (`n=405` PART 5, `n=599`). It is POSITIONAL — the canonical
+    # terminal run — and that half is measured rather than stylistic. The existing
+    # convention is PROSE (78 live dispatch rows carry `delivery turn-end` mid-sentence),
+    # and `n=276`, the phantom row this refusal exists to have caught, carries the WORDS
+    # with no token: a whole-detail scan would read that prose as a declaration and admit
+    # the very row the refusal is aimed at.
+    #
+    # THE LIMITATION IS THE RULING'S OWN AND IS NOT A FOOTNOTE: the field's presence proves
+    # a verdict was RECORDED, never that it was TRUE. This seam cannot verify delivery —
+    # `tools/patrol_host_state.py`'s delivery leg is the EVIDENCE, and a reader that takes
+    # this token as proof of delivery has re-derived the very error this item is about.
+    #
+    # REFUSED BEFORE THE LOCK IS TAKEN, for the reason the two refusals above state: this
+    # rejects the caller's own argument, so acquiring the lock first would serialise a lane
+    # against nothing.
+    #
+    # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state: this
+    # binds the row ABOUT TO BE WRITTEN, so it can never predate itself. Nothing is
+    # backfilled — 430 live dispatch rows carry no such token, and a token written today
+    # for a routing that predates the rule would be a falsified record, not a repair. The
+    # historical population is the delivery leg's business.
+    if args.event == "dispatch" and not declared_delivery(args.detail):
+        sys.exit(
+            "ledger append refused: a `dispatch` row must carry a well-formed "
+            "`delivery=<verdict>` in its canonical terminal run — the verdict its author "
+            "recorded for the routing the row claims — and this detail carries none. A "
+            "dispatch row is a claim that a lane was TOLD; a row that records no delivery "
+            "verdict is half-recorded, and nothing can pair it with the notify it asserts. "
+            "Write `delivery=<verdict>` (e.g. `delivery=turn-end` after a `session_notify` "
+            "returns, or `delivery=none` when the routing did not go out). The field's "
+            "presence proves a verdict was recorded, never that it was true — the patrol's "
+            "delivery leg is the evidence (#49)."
         )
     # THE TARGET DECIDES WHICH IDENTITY LAW APPLIES, and it is decided BEFORE the
     # actor is resolved because the resolver needs to know. A `--subprocess`

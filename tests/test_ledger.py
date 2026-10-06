@@ -627,7 +627,7 @@ def main() -> int:
         run(refs_ledger, "append", "--event", "intake", "--actor", "triage",
             "--subject", "#1", "--detail", "first")
         r2 = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
-                 "--subject", "#2", "--detail", "points at row 1",
+                 "--subject", "#2", "--detail", "points at row 1 delivery=turn-end",
                  "--ref", "row:1", "--ref", "subject:#1")
         check("a row carrying refs appends", r2.returncode == 0,
               r2.stderr.strip()[:140])
@@ -640,7 +640,8 @@ def main() -> int:
               json.dumps(sorted(got[0].keys())) if got else "")
 
         bad = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
-                  "--subject", "#3", "--detail", "dangling", "--ref", "row:999")
+                  "--subject", "#3", "--detail", "dangling delivery=turn-end",
+                  "--ref", "row:999")
         check("a dangling row ref is REFUSED at append",
               bad.returncode != 0 and "does not exist" in bad.stderr,
               bad.stderr.strip()[:160])
@@ -648,7 +649,8 @@ def main() -> int:
               f"{len(rows(refs_ledger))} row(s)")
 
         malformed = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
-                        "--subject", "#4", "--detail", "malformed", "--ref", "nope")
+                        "--subject", "#4", "--detail", "malformed delivery=turn-end",
+                        "--ref", "nope")
         check("a malformed ref is refused with the kinds named",
               malformed.returncode != 0 and "KIND:VALUE" in malformed.stderr,
               malformed.stderr.strip()[:140])
