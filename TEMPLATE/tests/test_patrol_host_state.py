@@ -2631,6 +2631,81 @@ def test_the_publish_leg_is_WIRED_into_the_runner_and_prints_its_population() ->
         assert sha in text and "cafebabe-lane" in text, text
         assert "STALE" in text, text
 
+def test_the_publish_leg_does_not_RED_a_pure_ancestor_tree_but_still_REDs_a_DIVERGENCE() -> None:
+    """#418, the hermetic fixture PAIR for the leg. The live tree exhibits ONLY the BEHIND
+    state (the shared tree is a pure ancestor of `origin/main`), so the leg cannot be shown
+    on it to tell the two shapes apart. Fixture A (pure ancestor, ahead==0) must produce NO
+    problem and print BEHIND; fixture B (ahead>0 AND behind>0) must still RED with DIVERGED.
+
+    Both halves are load-bearing: without fixture B a leg that stopped reddening EVERYTHING
+    would pass, and without fixture A the leg's old one-sided test (which red the normal
+    steady state) would pass. The leg's own population print must survive in both.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        now = dt.datetime.now(dt.timezone.utc)
+        old = now - dt.timedelta(hours=6)
+
+        # --- fixture A: pure BEHIND. The peer's commit is BACKDATED past the grace window
+        # so the tip-age arm (which fires on a tip SAMPLED while young) stays out of it.
+        remote_a, work_a = _seeded(root / "a")
+        peer = root / "a" / "peer"
+        _git(root / "a", "clone", "-q", str(remote_a), str(peer))
+        _git(peer, "config", "user.email", "probe@probe.invalid")
+        _git(peer, "config", "user.name", "probe")
+        _commit(peer, "peer.txt", when=old, trailer="peer-lane")
+        _git(peer, "push", "-q", "origin", "main:main")
+        # FETCH, so the remote tip object is LOCAL: `rev-list --count` needs it, and a
+        # behind tree normally has it (the live #418 reading was a readable `11`). Without
+        # the fetch the count reads "unreadable", which would mask the reading under test.
+        # After the fetch `work_a`'s HEAD is STILL a pure ancestor of the remote tip.
+        _git(work_a, "fetch", "-q", "origin")
+        leg_a = RUNNER.publish_freshness_leg(
+            repo=work_a, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg_a["problems"] == [], (
+            f"a pure-ancestor (BEHIND) tree must NOT be a problem: {leg_a['problems']}"
+        )
+        assert leg_a["coverage"]["behind"] is True, leg_a["coverage"]
+        assert leg_a["coverage"]["diverged"] is False, leg_a["coverage"]
+
+        text_a = RUNNER.render(
+            [leg_a], [], slug="owner/repo", read_at="2026-10-06T00:00:00Z", issues=[]
+        )
+        assert "BEHIND" in text_a, text_a
+        assert "remote tip" in text_a and "unpushed commit(s)" in text_a, (
+            f"the population print must survive: {text_a}"
+        )
+
+        # --- fixture B: genuine DIVERGENCE (ahead>0 AND behind>0). The local commit is
+        # FRESH so only the divergence arm speaks (the stale arm stays out of it).
+        remote_b, work_b = _seeded(root / "b")
+        _commit(work_b, "mine.txt", when=now - dt.timedelta(seconds=60), trailer="mine-lane")
+        peer_b = root / "b" / "peer"
+        _git(root / "b", "clone", "-q", str(remote_b), str(peer_b))
+        _git(peer_b, "config", "user.email", "probe@probe.invalid")
+        _git(peer_b, "config", "user.name", "probe")
+        _commit(peer_b, "peer.txt", when=old, trailer="peer-b-lane")
+        _git(peer_b, "push", "-q", "origin", "main:main")
+        # FETCH, so both counts are READABLE (see fixture A's note): after it `work_b` has
+        # one commit the remote lacks (ahead 1) and one it lacks (behind 1) -- a genuine
+        # divergence, not an unreadable-count fallback.
+        _git(work_b, "fetch", "-q", "origin")
+
+        leg_b = RUNNER.publish_freshness_leg(
+            repo=work_b, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert any("DIVERGED" in p for p in leg_b["problems"]), (
+            f"a genuine divergence must still RED: {leg_b['problems']}"
+        )
+        assert leg_b["coverage"]["diverged"] is True, leg_b["coverage"]
+        assert leg_b["coverage"]["behind"] is False, leg_b["coverage"]
+
+        text_b = RUNNER.render(
+            [leg_b], [], slug="owner/repo", read_at="2026-10-06T00:00:00Z", issues=[]
+        )
+        assert "DIVERGED" in text_b, text_b
+
 
 # --- the publish leg's CADENCE SIDE (issue #284) -------------------------------------
 #

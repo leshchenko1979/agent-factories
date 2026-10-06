@@ -309,8 +309,12 @@ def detached_off_branch_refuses_arm() -> None:
 def detached_behind_arm() -> None:
     """A detached HEAD BEHIND `origin/main` is a STALE CHECKOUT, not an off-line commit:
     it is still on main's line, so the pusher must NOT refuse it -- it must let the round
-    reach the fast-forward check and report DIVERGED, which names the gap. Refusing it here
+    reach the fast-forward check and report BEHIND, which names the gap. Refusing it here
     would swap a true status for a false reason, which is what the first cut of #329 did.
+
+    (#418) BEHIND, not DIVERGED: this checkout is a PURE ANCESTOR of the remote tip -- it
+    carries nothing of its own -- so it is fast-forwardable and must not be reported as a
+    conflict. The old one-sided test called it DIVERGED and red the normal steady state.
     """
     with tempfile.TemporaryDirectory() as tmp:
         remote = init_bare(Path(tmp) / "remote.git")
@@ -326,9 +330,14 @@ def detached_behind_arm() -> None:
 
         tip_after = git(remote, "rev-parse", "refs/heads/main")
         check(
-            report["status"] == "diverged" and tip_after == tip_before,
-            "a detached head BEHIND origin/main reports DIVERGED (stale checkout is on main's line, not off it)",
+            report["status"] == "behind" and tip_after == tip_before,
+            "a detached head BEHIND origin/main reports BEHIND (stale checkout is on main's line, not off it)",
             f"status={report['status']} reason={report['reason'][:90]}",
+        )
+        check(
+            report["diverged"] is None and report["behind"],
+            "a pure-ancestor checkout carries NO diverged payload, only behind",
+            f"behind={report['behind']} diverged={report['diverged']}",
         )
 
 def in_sync_arm() -> None:
@@ -524,6 +533,98 @@ def divergence_arm() -> None:
         )
 
 
+def behind_is_not_diverged_arm() -> None:
+    """#418, the hermetic fixture PAIR. The live tree exhibits ONLY the behind state (the
+    shared tree is a pure ancestor of `origin/main`), so the two statuses cannot be
+    separated on it -- this arm builds BOTH shapes in throwaway repositories and asserts
+    each gets its OWN name. Fixture B is the control that keeps fixture A from passing a
+    pusher that simply stopped reporting divergence altogether.
+
+    BEHIND: HEAD is a PURE ANCESTOR of the remote tip (ahead == 0) -- a stale read copy
+    with nothing of its own, fast-forwardable. It must NOT read DIVERGED, which is the
+    false RED that reds the normal steady state under the worktree law.
+    DIVERGED: ahead > 0 AND behind > 0 -- the only shape #146's ruling is about, still
+    reported and never resolved.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        # --- fixture A: pure BEHIND (ahead == 0) ---
+        remote_a = init_bare(root / "behind" / "remote.git")
+        repo_a = init_work(root / "behind" / "r", remote_a)
+        stale = commit(repo_a, "a.txt")
+        git(repo_a, "push", "-q", "origin", "main:main")
+        commit(repo_a, "b.txt")
+        git(repo_a, "push", "-q", "origin", "main:main")
+        tip_a = git(remote_a, "rev-parse", "refs/heads/main")
+        git(repo_a, "checkout", "-q", "--detach", stale)
+
+        report_a = pub.publish(repo_a, remote="origin", branch="main", grace_secs=0, apply=True)
+        check(
+            report_a["status"] == "behind",
+            "fixture A (pure ancestor, ahead==0) reports BEHIND, not DIVERGED",
+            f"status={report_a['status']} reason={report_a['reason'][:100]}",
+        )
+        check(
+            report_a["diverged"] is None
+            and report_a["behind"]["remote_ahead_by"] == "1",
+            "the BEHIND report carries behind.remote_ahead_by and NO diverged payload",
+            f"behind={report_a['behind']} diverged={report_a['diverged']}",
+        )
+        check(
+            git(remote_a, "rev-parse", "refs/heads/main") == tip_a,
+            "the BEHIND round moved nothing (reported, not resolved)",
+            "remote tip unchanged",
+        )
+
+        # --- fixture B: genuine DIVERGENCE (ahead > 0 AND behind > 0) ---
+        base = root / "diverged"
+        remote_b = init_bare(base / "remote.git")
+        seed_b = init_work(base / "seed", remote_b)
+        commit(seed_b, "a.txt")
+        git(seed_b, "push", "-q", "origin", "main:main")
+
+        mine = base / "mine"
+        git(base, "clone", "-q", str(remote_b), str(mine))
+        git(mine, "config", "user.email", "probe@probe.invalid")
+        git(mine, "config", "user.name", "probe")
+        commit(mine, "mine.txt")                      # local ahead by 1
+
+        theirs = base / "theirs"
+        git(base, "clone", "-q", str(remote_b), str(theirs))
+        git(theirs, "config", "user.email", "probe@probe.invalid")
+        git(theirs, "config", "user.name", "probe")
+        commit(theirs, "theirs.txt")
+        git(theirs, "push", "-q", "origin", "main:main")   # remote ahead by 1
+        # FETCH, so the remote tip object is LOCAL and the two counts are READABLE. A tree
+        # that has diverged normally has fetched -- the live #418 reading carried
+        # `remote_ahead_by: 11`, i.e. a readable count -- and `rev-list --count` needs the
+        # tip object present. Without this the counts read "unreadable", which is the
+        # conservative fallback and would mask the ahead/behind reading under test.
+        git(mine, "fetch", "-q", "origin")
+
+        head_before = head_of(mine)
+        tip_b = git(remote_b, "rev-parse", "refs/heads/main")
+        report_b = pub.publish(mine, remote="origin", branch="main", grace_secs=0, apply=True)
+        check(
+            report_b["status"] == "diverged",
+            "fixture B (ahead>0 AND behind>0) still reports DIVERGED",
+            f"status={report_b['status']}",
+        )
+        check(
+            report_b["diverged"]
+            and report_b["diverged"]["local_ahead_by"] == "1"
+            and report_b["diverged"]["remote_ahead_by"] == "1",
+            "the DIVERGED report names BOTH sides (ahead and behind)",
+            f"{report_b['diverged']}",
+        )
+        check(
+            head_of(mine) == head_before
+            and git(remote_b, "rev-parse", "refs/heads/main") == tip_b,
+            "the DIVERGED round moved nothing (reported, not resolved)",
+            "both sides unchanged",
+        )
+
 def remote_tip_is_read_from_the_remote_arm() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -593,6 +694,7 @@ def main() -> int:
     receipt_arm()
     dry_run_arm()
     divergence_arm()
+    behind_is_not_diverged_arm()
     remote_tip_is_read_from_the_remote_arm()
     report_arms()
 

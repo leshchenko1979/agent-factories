@@ -39,7 +39,7 @@ be dispatched, claimed or closed; a boolean can be none of those.
 
 Run:  python3 tools/publish.py            report only, nothing is pushed
       python3 tools/publish.py --apply    push when the grace window allows
-Exit: 0 the round ran (published, held, in sync, or reported a divergence)
+Exit: 0 the round ran (published, held, in sync, behind, or reported a divergence)
       1 the round could not be completed (no remote, unreachable, unreadable)
 """
 
@@ -213,6 +213,35 @@ def unpushed_commits(repo: Path, remote_sha: str):
     return commits, ""
 
 
+def divergence(repo: Path, tip: str):
+    """`{"state", "behind", "ahead"}` — the ONE reading that separates BEHIND from DIVERGED.
+
+    `tip` not being an ancestor of HEAD is true for BOTH a stale checkout and a genuine
+    divergence, so ancestry ALONE cannot separate them: the discriminating reading is
+    `ahead`, the commits HEAD carries that `tip` does not. `ahead == "0"` means HEAD is a
+    PURE ANCESTOR of `tip` -- a stale read copy with nothing of its own, fast-forwardable,
+    NOT a conflict. An unreadable `ahead` is treated as DIVERGED: the conservative and loud
+    direction, because we could not show HEAD is a pure ancestor and so must not claim it.
+
+    `state` is one of "ahead-or-same" (tip is an ancestor of HEAD: the normal path),
+    "behind" (pure ancestor: nothing to publish) or "diverged" (ahead > 0 AND behind > 0).
+    The pusher (`publish`) and the patrol's freshness leg BOTH call this, so they cannot
+    disagree about what BEHIND means -- the one-predicate rule (#418).
+    """
+    rc, _, _ = _git(repo, "merge-base", "--is-ancestor", tip, "HEAD")
+    if rc == 0:
+        return {"state": "ahead-or-same", "behind": "0", "ahead": None}
+    rc, behind_out, _ = _git(repo, "rev-list", "--count", f"HEAD..{tip}")
+    behind = behind_out.strip() if rc == 0 and behind_out.strip() else "an unreadable number of"
+    rc, ahead_out, _ = _git(repo, "rev-list", "--count", f"{tip}..HEAD")
+    ahead = ahead_out.strip() if rc == 0 and ahead_out.strip() else "an unreadable number of"
+    return {
+        "state": "behind" if ahead == "0" else "diverged",
+        "behind": behind,
+        "ahead": ahead,
+    }
+
+
 def publishable(unpushed: list[dict], *, grace_secs: int, now: dt.datetime):
     """`(to_publish, held)` — the grace window, tested on the NEWEST commit.
 
@@ -243,7 +272,7 @@ def publishable(unpushed: list[dict], *, grace_secs: int, now: dt.datetime):
 #   * HEAD detached -- it is on `branch`'s line iff `refs/remotes/<remote>/<branch>` and HEAD
 #     lie on the SAME line, one containing the other. AHEAD is a lane that committed on top
 #     of the base; BEHIND is a stale checkout, and the round's own fast-forward check reports
-#     that as DIVERGED -- refusing it here would pre-empt that report with a worse reason. A
+#     that as BEHIND -- refusing it here would pre-empt that report with a worse reason. A
 #     detached HEAD on NEITHER end -- a diverged feature branch, an unrelated commit -- has
 #     no claim to `branch` and is refused.
 #
@@ -275,7 +304,7 @@ def head_branch(repo: Path, remote: str, branch: str):
         )
     # SAME LINE, not necessarily AHEAD. HEAD descending from `<remote>/<branch>` and HEAD
     # sitting BEHIND it are both "on `branch`'s line": the second is a stale checkout, and
-    # the round's own fast-forward check reports it as DIVERGED, which is the status the
+    # the round's own fast-forward check reports it as BEHIND, which is the status the
     # ruling asks for -- refusing it here would pre-empt that report with a worse reason.
     # What is refused HERE is a detached HEAD on NEITHER end of the line: a feature branch
     # that has diverged from `branch`, or an unrelated commit.
@@ -313,6 +342,7 @@ def publish(
         "shas": [],
         "held": [],
         "diverged": None,
+        "behind": None,
     }
 
     rc, _, _ = _git(repo, "remote", "get-url", remote)
@@ -334,16 +364,34 @@ def publish(
         return report
     report["remote_tip"] = tip
 
-    rc, _, _ = _git(repo, "merge-base", "--is-ancestor", tip, "HEAD")
-    if rc != 0:
-        rc2, ahead, _ = _git(repo, "rev-list", "--count", f"HEAD..{tip}")
-        behind = ahead.strip() if rc2 == 0 else "an unreadable number of"
-        report["status"] = "diverged"
-        report["diverged"] = {"remote_tip": tip, "remote_ahead_by": behind}
+    # BEHIND IS NOT DIVERGED (#418). `divergence()` reads the ONE predicate that separates a
+    # stale checkout from a genuine conflict -- ancestry alone cannot -- and is SHARED with
+    # the patrol's freshness leg, so the pusher and the leg cannot disagree about what BEHIND
+    # means. Reporting a pure-ancestor checkout DIVERGED reds the normal steady state (under
+    # the worktree law the shared tree is behind `origin/main` most of the time), which is the
+    # very harm #146's own ruling warns of.
+    state = divergence(repo, tip)
+    if state["state"] == "behind":
+        report["status"] = "behind"
+        report["behind"] = {"remote_tip": tip, "remote_ahead_by": state["behind"]}
         report["reason"] = (
-            f"{remote}/{branch} is not an ancestor of HEAD — the branch has DIVERGED and "
-            f"is {behind} commit(s) behind. Reported, not resolved: this pusher does not "
-            f"fetch, merge, reconcile or rewrite."
+            f"{remote}/{branch} is ahead of HEAD, which is a PURE ANCESTOR of it "
+            f"({state['behind']} commit(s) behind, 0 ahead) — a stale checkout with nothing "
+            f"of its own to publish. Reported, not resolved: this pusher does not fetch, "
+            f"merge, reconcile or rewrite."
+        )
+        return report
+    if state["state"] == "diverged":
+        report["status"] = "diverged"
+        report["diverged"] = {
+            "remote_tip": tip,
+            "remote_ahead_by": state["behind"],
+            "local_ahead_by": state["ahead"],
+        }
+        report["reason"] = (
+            f"{remote}/{branch} is not an ancestor of HEAD — the branch has DIVERGED "
+            f"({state['ahead']} commit(s) ahead, {state['behind']} behind). Reported, not "
+            f"resolved: this pusher does not fetch, merge, reconcile or rewrite."
         )
         return report
 
@@ -424,6 +472,8 @@ def render(report: dict) -> str:
     )
     if report.get("diverged"):
         lines.append(f"  DIVERGED: {json.dumps(report['diverged'], sort_keys=True)}")
+    if report.get("behind"):
+        lines.append(f"  BEHIND: {json.dumps(report['behind'], sort_keys=True)}")
     for held in report.get("held", []):
         lines.append(
             f"  held (within the {report['grace_secs']}s window, age {held['age_secs']}s): "
@@ -462,9 +512,10 @@ def main(argv: list[str] | None = None) -> int:
         apply=args.apply,
     )
     print(json.dumps(report, indent=2, sort_keys=True) if args.json else render(report))
-    # A round that could not be completed exits non-zero. "Held" and "diverged" are
-    # COMPLETED rounds: the first is the window working and the second is the report
-    # the ruling asks for, so neither is a failure.
+    # A round that could not be completed exits non-zero. "Held", "behind" and "diverged"
+    # are COMPLETED rounds: the first is the window working, the second is a stale checkout
+    # with nothing of its own, and the third is the report the ruling asks for — none is a
+    # failure.
     return 1 if report["status"] in ("no-remote", "unreachable", "unreadable", "push-failed") else 0
 
 

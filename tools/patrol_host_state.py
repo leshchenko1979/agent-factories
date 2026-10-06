@@ -3744,6 +3744,13 @@ def publish_freshness_leg(
         "shas": [],
         "stale": [],
         "remote_tip": None,
+        # THE DIVERGENCE PARTITION (#418). `behind` is a pure-ancestor stale checkout
+        # (nothing of its own, not a problem); `diverged` is ahead>0 AND behind>0, the only
+        # shape #146's ruling is about. Both are initialized so the population print is
+        # stable and a clean round renders "behind: False, diverged: False" rather than an
+        # absent key a reader must interpret.
+        "behind": False,
+        "diverged": False,
         # THE CADENCE SIDE (issue #284). `receipt` is the pusher's own record of its last
         # push; a remote tip that is not that sha left through some OTHER path, and the
         # tip-age arm is the opportunistic half -- it only sees a tip SAMPLED while young.
@@ -3791,11 +3798,20 @@ def publish_freshness_leg(
         }
     coverage["remote_tip"] = tip
 
-    rc, _, _ = pub._git(Path(repo), "merge-base", "--is-ancestor", tip, "HEAD")
-    if rc != 0:
+    # BEHIND IS NOT DIVERGED, and this leg calls the PUSHER's own `divergence()` rather than
+    # restating a one-sided predicate (#418): the same helper `publish()` reads, so the leg
+    # and the mechanism cannot disagree about what BEHIND means. A pure-ancestor checkout
+    # (ahead == 0) is a stale read copy with nothing of its own -- reporting it would red
+    # this leg on the normal steady state, since under the worktree law the shared tree is
+    # behind `origin/main` most of the time, the very false RED #146's ruling warns of.
+    state = pub.divergence(Path(repo), tip)
+    if state["state"] == "behind":
+        coverage["behind"] = True
+    elif state["state"] == "diverged":
         problems.append(
             f"{remote}/{branch} ({tip}) is not an ancestor of HEAD -- the branch has "
-            f"DIVERGED, and the pusher reports rather than resolves by design"
+            f"DIVERGED ({state['ahead']} commit(s) ahead, {state['behind']} behind), and the "
+            f"pusher reports rather than resolves by design"
         )
         coverage["diverged"] = True
 
@@ -4151,6 +4167,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov.get('unpushed', 0)} unpushed commit(s)"
                     + (f" {', '.join(cov.get('shas') or [])}" if cov.get("shas") else "")
                 )
+                if cov.get("behind"):
+                    lines.append(
+                        "  BEHIND: HEAD is a pure ancestor of the remote tip — a stale "
+                        "checkout with nothing of its own to publish (not a divergence)"
+                    )
                 lines.append(
                     f"  residual window: {cov.get('residual_secs', 0)}s "
                     f"({cov.get('cadence_secs', 0)}s cadence + {cov.get('grace_secs', 0)}s "
