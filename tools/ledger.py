@@ -1288,6 +1288,25 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"that does not exist -- this ledger holds {_max_n} row(s), "
                         f"and a ref is a pointer to something, never a wish"
                     )
+        # A DISPATCH MUST NAME THE SESSION IT ROUTED TO (#425 clause 1, owner's q38 shape).
+        # A `session` ref is the row's TYPED POINTER at the lane it dispatched to, and it is
+        # what lets the delivery leg corroborate the row at all: that leg reads the TARGET's
+        # own message history, and a row naming no target names no history -- so a ref-less
+        # dispatch is a routing claim no instrument can follow. Refused HERE, at the write
+        # path, because a row is IMMUTABLE once pushed: a ref-less dispatch could afterwards
+        # only ever be labelled NOT JUDGED by the leg, never repaired into one that carries
+        # its target. The 19 rows that already carry a `session` ref (n=1603..2581) are the
+        # shape this makes universal; every other dispatch row is HISTORY, and history is
+        # never backfilled -- the leg prints it as NOT JUDGED rather than judging it.
+        if args.event == "dispatch":
+            if not any(kind == "session" for _ref in refs for kind in _ref):
+                sys.exit(
+                    "ledger append refused: a 'dispatch' must name the session it "
+                    "routed to as a ref of kind 'session' (--ref session:<uuid>). A "
+                    "dispatch row with no typed target is a routing claim nothing can "
+                    "corroborate: the delivery leg reads the target's own message "
+                    "history, and a row that names no target names no history (#425)"
+                )
         # A RELEASE MUST NAME THE CLAIM IT WITHDRAWS (#210, ruling n=1577). The body
         # offered a withdrawal wearing a `close`, and that shape is REFUSED: `close`
         # means COMPLETION here, its contract carrying the board state observed,

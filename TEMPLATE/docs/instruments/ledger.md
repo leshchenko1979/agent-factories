@@ -213,6 +213,12 @@ kind for a member's own object.
 - **Existence is validated INSIDE the lock**, which is the only place the check is cheap: a `row`
   ref must satisfy `n <= max`, a fact the append already holds. That kills a dangling pointer at
   the one instant it is cheap.
+- **An event may REQUIRE a kind** — the requirement is per-event, never a blanket demand that every
+  row carry a ref. A `dispatch` must name the session it routed to (`--ref session:<uuid>`), refused
+  at the write path (#425 clause 1): the row's target is what the delivery leg corroborates against,
+  and a routing claim that names no target names no message history to read — while a row is
+  immutable once pushed, so the leg could afterwards only label it **NOT JUDGED**, never repair it
+  into one that carries its target.
 - **`verify` carries the other half**, the one append cannot do: it walks every ref and reports one
   that was **valid when written and broken afterwards** (a rewrite, a truncation, a hand-edit), and
   reports an **undeclared kind** by name. It prints the population it examined beside the verdict,

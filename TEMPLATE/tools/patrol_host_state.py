@@ -2510,7 +2510,7 @@ def dispatch_delivery_leg(
         reason = (bound[2] if bound else "") or "no bound was supplied to this leg"
         coverage.update({
             "dispatch_rows_examined": 0, "dispatch_rows_pre_boundary": 0,
-            "dispatch_rows_undated": 0,
+            "dispatch_rows_undated": 0, "dispatch_rows_not_judged": 0,
             "deliveries_read": None, "homes_read": None, "homes_unreached": [],
             "store_read": False,
             "store_not_read_reason": reason,
@@ -2530,7 +2530,8 @@ def dispatch_delivery_leg(
     examined = 0
     pre_boundary = 0
     undated = 0
-    to_judge: list[tuple[dict, dt.datetime, dt.datetime]] = []
+    not_judged = 0
+    to_judge: list[tuple[dict, dt.datetime, dt.datetime, str]] = []
     for row in rows:
         if row.get("event") != "dispatch":
             continue
@@ -2545,12 +2546,26 @@ def dispatch_delivery_leg(
         if ts < boundary:
             pre_boundary += 1
             continue
+        # THE ROW'S ROUTED TARGET IS ITS TYPED `session` REF (#425 clause 1). The leg
+        # corroborates a dispatch against the TARGET's own message history, so a row that
+        # names no target names no history to read: it is NOT JUDGED -- counted and printed
+        # beside the verdict, never CLEAN and never RED, and nothing is backfilled onto it.
+        # `tools/ledger.py` refuses such a row at the write path from now on; this bucket is
+        # for the HISTORY written before that refusal, which is immutable once pushed.
+        session_ref = next(
+            (str(value) for ref in (row.get("refs") or [])
+             for kind, value in ref.items() if kind == "session"), ""
+        )
+        if not session_ref:
+            not_judged += 1
+            continue
         examined += 1
-        to_judge.append((row, ts - window_before, ts + window_after))
+        to_judge.append((row, ts - window_before, ts + window_after, session_ref))
     coverage.update({
         "dispatch_rows_examined": examined,
         "dispatch_rows_pre_boundary": pre_boundary,
         "dispatch_rows_undated": undated,
+        "dispatch_rows_not_judged": not_judged,
     })
     if not to_judge:
         # THE STORE IS NOT READ, AND THAT IS SAID. There is no post-boundary dispatch row to
@@ -2558,13 +2573,27 @@ def dispatch_delivery_leg(
         # read: 0` stand for BOTH "the store held none" and "the store was never opened".
         # Those are different facts and a reader who cannot tell them apart is reading the
         # confident zero this leg exists to refuse.
+        #
+        # TWO WAYS TO HAVE NOTHING TO JUDGE, and they are not the same fact (#425 clause 1):
+        # no post-boundary row at all, or post-boundary rows that name no target. The second
+        # is a POPULATION the leg declined to judge -- `examined: 0` over it would read as a
+        # clean sweep of rows it never looked at -- so the reason says which one it is.
+        if not_judged:
+            reason = (
+                f"{not_judged} dispatch row(s) at or after the bound "
+                f"`{DELIVERY_BOUNDARY_KEY}` ({coverage['bound']}) carry no typed "
+                f"`session` ref, so none names a routed target to corroborate against "
+                f"(#425) -- NOT JUDGED, never a clean zero"
+            )
+        else:
+            reason = (
+                f"no dispatch row at or after the bound `{DELIVERY_BOUNDARY_KEY}` "
+                f"({coverage['bound']}) to corroborate, so no delivery was sought"
+            )
         coverage.update({
             "deliveries_read": None, "homes_read": None, "homes_unreached": [],
             "store_read": False,
-            "store_not_read_reason": (
-                f"no dispatch row at or after the bound `{DELIVERY_BOUNDARY_KEY}` "
-                f"({coverage['bound']}) to corroborate, so no delivery was sought"
-            ),
+            "store_not_read_reason": reason,
         })
         return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
                 "problems": [], "excused": [], "coverage": coverage}
@@ -2589,21 +2618,28 @@ def dispatch_delivery_leg(
         )
         return {"name": "dispatch-delivery", "status": "NOT RUN", "reason": reason,
                 "problems": [], "excused": [], "coverage": coverage}
-    for row, lo, hi in to_judge:
+    for row, lo, hi, session_ref in to_judge:
         subject = str(row.get("subject") or "").strip()
+        # A MATCH MUST BE TO THE ROW'S OWN TARGET (#425 clause 1). A notify carrying the
+        # subject but addressed to a DIFFERENT lane is not corroboration of THIS dispatch --
+        # the same subject is broadcast to several lanes, so a subject-only match would clear
+        # a row whose actual target was never told. The row named its target; the delivery
+        # must name the same one.
         hits = [
             d for d in deliveries
             if lo <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc) <= hi
+            and d.get("session") == session_ref
             and delivery_subject_matches(d["text"], subject)
         ]
         if hits:
             continue
         problems.append(
-            f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} records no "
-            f"delivery: no inbound notify carrying `{subject}` in the target's message "
-            f"history within [{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, "
-            f"{hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] — the row claims a lane was TOLD and "
-            f"nothing corroborates it"
+            f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} to session "
+            f"{session_ref} records no delivery: no inbound notify carrying `{subject}` "
+            f"addressed to that target in its message history within "
+            f"[{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, "
+            f"{hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] — the row claims this lane was TOLD "
+            f"and nothing corroborates it"
         )
     return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
             "problems": problems, "excused": [], "coverage": coverage}
@@ -4884,8 +4920,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  dispatch rows read: {cov['dispatch_rows_read']} "
                 f"({cov['dispatch_rows_pre_boundary']} before the bound "
                 f"`{cov['bound_key']}` = {cov['bound']}, not judged; "
-                f"{cov['dispatch_rows_undated']} undated); examined: "
-                f"{cov['dispatch_rows_examined']}"
+                f"{cov['dispatch_rows_undated']} undated; "
+                f"{cov['dispatch_rows_not_judged']} carry no target, NOT JUDGED); "
+                f"examined: {cov['dispatch_rows_examined']}"
             )
             if cov.get("store_read"):
                 lines.append(

@@ -4759,10 +4759,22 @@ def test_the_board_unruled_leg_resolves_the_RULING_namespace_and_PRINTS_an_unpla
     assert "unbridgeable" in out, out
     assert "bridged 1" in out, out
 
-def _delivery(instant: dt.datetime, text: str, *, state: str = "landed") -> dict:
-    """A delivered-notify row as `box_deliveries` emits it."""
-    return {"home": "probe-home", "session": "probe-session",
+def _delivery(instant: dt.datetime, text: str, *, state: str = "landed",
+              session: str = "probe-session") -> dict:
+    """A delivered-notify row as `box_deliveries` emits it.
+
+    `session` is the TARGET the notify was addressed to, and it is load-bearing since #425
+    clause 1: the leg corroborates a dispatch row only against a delivery whose target IS the
+    row's own typed `session` ref, so a fixture that omitted the target would assert a leg
+    that matches on subject alone -- the exact subject-only match the clause forbids.
+    """
+    return {"home": "probe-home", "session": session,
             "epoch": int(instant.timestamp()), "state": state, "text": text}
+
+# The typed target a dispatch fixture routes to. ONE name, so a probe that intends a
+# DIFFERENT target has to say so, and a fixture cannot accidentally pass by matching on
+# subject alone.
+_PROBE_TARGET = "probe-session"
 
 def test_the_dispatch_delivery_leg_BITES_and_clears_on_a_delivery() -> None:
     """#49 acceptance (1) and (2): the leg NAMES a dispatch row with no delivery inside its
@@ -4775,7 +4787,8 @@ def test_the_dispatch_delivery_leg_BITES_and_clears_on_a_delivery() -> None:
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     bound = (now - dt.timedelta(days=1), "probe-bound", "")
     dispatched = now - dt.timedelta(hours=1)
-    row = _stall_row(51, "dispatch", "#77", 0, now=dispatched, actor="triage")
+    row = _stall_row(51, "dispatch", "#77", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
 
     leg = RUNNER.dispatch_delivery_leg(
         [row], read_at=read_at, bound=bound,
@@ -4809,7 +4822,8 @@ def test_the_dispatch_delivery_leg_anchors_on_the_ROWS_OWN_ts_not_the_newest_row
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     bound = (now - dt.timedelta(days=1), "probe-bound", "")
     dispatched = now - dt.timedelta(hours=3)
-    dispatch = _stall_row(61, "dispatch", "#77", 0, now=dispatched, actor="triage")
+    dispatch = _stall_row(61, "dispatch", "#77", 0, now=dispatched, actor="triage",
+                          refs=[{"session": _PROBE_TARGET}])
     later = _stall_row(62, "claim", "#77", 0, now=dispatched + dt.timedelta(hours=2))
     delivered_at = dispatched + dt.timedelta(seconds=60)
 
@@ -4881,7 +4895,8 @@ def test_the_dispatch_delivery_leg_FAILS_OPEN_on_a_refused_bound_and_a_blind_sto
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    row = _stall_row(81, "dispatch", "#80", 0, now=now, actor="triage")
+    row = _stall_row(81, "dispatch", "#80", 0, now=now, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
 
     refused = RUNNER.dispatch_delivery_leg(
         [row], read_at=read_at, bound=(None, "", "probe refusal"),
@@ -4907,7 +4922,7 @@ def test_the_dispatch_delivery_leg_PRINTS_its_examined_population() -> None:
     now = dt.datetime.now(dt.timezone.utc)
     bound = (now - dt.timedelta(days=1), "probe-bound", "")
     row = _stall_row(91, "dispatch", "#90", 0, now=now - dt.timedelta(minutes=5),
-                     actor="triage")
+                     actor="triage", refs=[{"session": _PROBE_TARGET}])
     rc, out, _ = _run(
         [], [row], delivery_scope=bound,
         deliveries=[],
@@ -4955,7 +4970,7 @@ def test_the_dispatch_delivery_leg_DEFERS_the_store_read_until_there_is_a_row_to
     # and not a leg that has stopped reading at all. Without this arm, a leg that never read
     # the store would satisfy the first half just as well.
     fresh = _stall_row(73, "dispatch", "#71", 0, now=now - dt.timedelta(minutes=5),
-                       actor="triage")
+                       actor="triage", refs=[{"session": _PROBE_TARGET}])
     read = RUNNER.dispatch_delivery_leg(
         [fresh], read_at=read_at, bound=bound,
         deliveries_fn=lambda: ([], ["probe-home"], []),
@@ -4978,6 +4993,86 @@ def test_the_leg_RENDERS_a_store_it_never_opened_distinctly_from_one_that_held_n
     assert "deliveries: NOT READ" in out, out
     assert "deliveries read:" not in out, out
     assert "examined: 0" in out, out
+
+def test_the_dispatch_delivery_leg_corroborates_ONLY_the_rows_OWN_target() -> None:
+    """#425 clause 1: a delivery carrying the subject but addressed to a DIFFERENT lane is
+    NOT corroboration of this dispatch row.
+
+    The same subject is broadcast to several lanes, so a subject-only match clears a row
+    whose actual target was never told -- the false-clean class. Both arms are asserted,
+    because a leg that reported every row would pass the first alone and a leg that reported
+    none would pass the second.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(52, "dispatch", "#78", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    delivered_at = dispatched + dt.timedelta(seconds=60)
+    notify = "[session-notify from=abc]\nDISPATCH #78 to the lane"
+
+    # arm 1 — the notify names the SUBJECT but is addressed to a DIFFERENT target: the row
+    # is a phantom, and the problem must NAME the target it actually routed to.
+    other = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(delivered_at, notify, session="a-different-lane")],
+            ["probe-home"], [],
+        ),
+    )
+    named = "\n".join(other["problems"])
+    assert other["status"] == "ASSERTED", other
+    assert "n=52" in named and _PROBE_TARGET in named, (
+        f"a subject match to the WRONG target must stay RED and name the real target\n{named}"
+    )
+
+    # arm 2 — the SAME delivery addressed to the ROW'S OWN target clears it. Without this
+    # arm the first would pass a leg that matched nothing at all.
+    same = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(delivered_at, notify, session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert same["problems"] == [], same["problems"]
+
+def test_the_dispatch_delivery_leg_counts_a_ref_less_row_as_NOT_JUDGED() -> None:
+    """#425 clause 1: a post-boundary dispatch row carrying no typed `session` ref is NOT
+    JUDGED -- counted and printed, never CLEAN and never RED, nothing backfilled.
+
+    The 19 rows that carry a target are the shape the write path now enforces; every row
+    written before that refusal is immutable history, so judging it would be the permanent
+    red #334 exists to stop. The bucket is asserted on BOTH the leg's coverage AND the
+    render, because a count computed and dropped from the report is the same failure as one
+    never computed -- and the zero it would otherwise show is the confident one.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    ref_less = _stall_row(101, "dispatch", "#100", 0, now=now - dt.timedelta(minutes=5),
+                          actor="triage")
+
+    leg = RUNNER.dispatch_delivery_leg(
+        [ref_less], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["problems"] == [], (
+        f"a ref-less row is NOT JUDGED, never RED\n{leg['problems']}"
+    )
+    assert leg["coverage"]["dispatch_rows_not_judged"] == 1, leg["coverage"]
+    assert leg["coverage"]["dispatch_rows_examined"] == 0, leg["coverage"]
+    # the store is not read, and the reason names the BUCKET rather than an empty window.
+    assert leg["coverage"]["store_read"] is False, leg["coverage"]
+    assert "NOT JUDGED" in (leg["coverage"]["store_not_read_reason"] or ""), leg["coverage"]
+
+    rc, out, _ = _run([], [ref_less], delivery_scope=bound, deliveries=[])
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert "1 carry no target, NOT JUDGED" in out, out
+    assert "examined: 0" in out, out
+    assert rc == 0, f"a ref-less row is not a problem, got rc={rc}\n{out}"
 
 # --- the criterion-path leg (#48) --------------------------------------------------------
 #

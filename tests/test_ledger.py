@@ -628,20 +628,27 @@ def main() -> int:
             "--subject", "#1", "--detail", "first")
         r2 = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
                  "--subject", "#2", "--detail", "points at row 1 delivery=turn-end",
-                 "--ref", "row:1", "--ref", "subject:#1")
+                 "--ref", "row:1", "--ref", "subject:#1",
+                 "--ref", "session:00000000-0000-4000-8000-000000000002")
         check("a row carrying refs appends", r2.returncode == 0,
               r2.stderr.strip()[:140])
         got = rows(refs_ledger)
         check("refs are stored as typed pointers",
-              len(got) == 2 and got[1].get("refs") == [{"row": "1"}, {"subject": "#1"}],
+              len(got) == 2 and got[1].get("refs") == [
+                  {"row": "1"}, {"subject": "#1"},
+                  {"session": "00000000-0000-4000-8000-000000000002"}],
               json.dumps(got[1].get("refs")) if len(got) > 1 else "no second row")
         check("a six-key row stays valid (the field is additive)",
               "refs" not in got[0],
               json.dumps(sorted(got[0].keys())) if got else "")
 
+        # The dispatch carries its TARGET, because #425 clause 1 refuses a dispatch without
+        # one at the write path: without it this probe would be refused for the missing
+        # target rather than for the dangling row it exists to assert.
         bad = run(refs_ledger, "append", "--event", "dispatch", "--actor", "triage",
                   "--subject", "#3", "--detail", "dangling delivery=turn-end",
-                  "--ref", "row:999")
+                  "--ref", "row:999",
+                  "--ref", "session:00000000-0000-4000-8000-000000000002")
         check("a dangling row ref is REFUSED at append",
               bad.returncode != 0 and "does not exist" in bad.stderr,
               bad.stderr.strip()[:160])
@@ -654,6 +661,37 @@ def main() -> int:
         check("a malformed ref is refused with the kinds named",
               malformed.returncode != 0 and "KIND:VALUE" in malformed.stderr,
               malformed.stderr.strip()[:140])
+
+        # --- a dispatch must NAME ITS TARGET (#425 clause 1) -------------------------
+        # The owner's q38 shape: the routed session is a TYPED ref, ENFORCED at the write
+        # path. A dispatch row with no `session` ref is a routing claim nothing can
+        # corroborate -- the delivery leg reads the TARGET's own message history, and a row
+        # that names no target names no history. Refused HERE because a row is immutable once
+        # pushed: the leg could only ever label it NOT JUDGED, never repair it. A SEPARATE
+        # ledger so the probes above keep their own row counts.
+        disp_ledger = Path(tmp) / "dispatch-target.jsonl"
+        run(disp_ledger, "append", "--event", "intake", "--actor", "triage",
+            "--subject", "#7", "--detail", "first")
+        no_target = run(disp_ledger, "append", "--event", "dispatch", "--actor", "triage",
+                        "--subject", "#7", "--detail", "delivery=turn-end")
+        check("a dispatch with NO session ref is REFUSED at append",
+              no_target.returncode != 0 and "session" in no_target.stderr,
+              no_target.stderr.strip()[:180])
+        check("the refused dispatch wrote nothing", len(rows(disp_ledger)) == 1,
+              f"{len(rows(disp_ledger))} row(s)")
+        # THE POSITIVE CONTROL: the SAME dispatch carrying its typed target appends, so the
+        # refusal above is the missing ref and not a refusal of every dispatch row.
+        targeted = run(disp_ledger, "append", "--event", "dispatch", "--actor", "triage",
+                       "--subject", "#7", "--detail", "delivery=turn-end",
+                       "--ref", "session:00000000-0000-4000-8000-000000000001")
+        check("a dispatch naming its target appends",
+              targeted.returncode == 0, targeted.stderr.strip()[:140])
+        check("the target is stored as a typed session pointer",
+              len(rows(disp_ledger)) == 2
+              and rows(disp_ledger)[1].get("refs") == [
+                  {"session": "00000000-0000-4000-8000-000000000001"}],
+              json.dumps(rows(disp_ledger)[-1].get("refs")) if len(rows(disp_ledger)) > 1
+              else "no second row")
 
         # A ref that was VALID AT APPEND and broken afterwards is visible only to the
         # verify leg -- built by hand, because no lawful write path can produce it.
