@@ -919,8 +919,10 @@ def test_the_readings_are_DECLARED_and_the_read_carries_comments() -> None:
         f"both headings the board carries must be declared: {RUNNER.RULING_HEADINGS}"
     )
     source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
-    assert '"number,state,title,closedAt,comments"' in source, (
-        "the board read must ask for comments, or the leg examines nothing"
+    assert '"number,state,title,createdAt,closedAt,comments"' in source, (
+        "the board read must ask for comments, or the leg examines nothing — and for "
+        "`createdAt`, without which the stall-census filing guard (#415) cannot date an "
+        "item and the guard is a silent no-op on live state"
     )
 
 
@@ -4095,6 +4097,89 @@ def test_the_scope_guard_refuses_every_measured_foreign_shape() -> None:
         assert RUNNER.is_board_unit_occurrence(blob, blob.index(token)) is True, (
             f"{token} in {blob!r} is written as a unit of THIS board and must be ADMITTED"
         )
+
+def test_the_stall_census_leg_refuses_a_dispatch_that_PREDATES_the_item_it_names() -> None:
+    """#415 acceptance: the harvest must not pair a FOREIGN or OLDER mention with a
+    today-filed issue.
+
+    Two doors #333's scope guard left open, both measured live 2026-10-06:
+
+    * the CARRIER bare-prose mention -- carrier `n=321` (2026-09-18) writes
+      `WHY NOT COVERED BY #200/#344/#12`, while this board minted `#344` on
+      2026-10-05, so the carrier PREDATES the item it was read as dispatching;
+    * the CROSS-NAMESPACE subject collision -- `#366`'s rows `n=433`/`n=436` are the
+      FORK's, while this board minted its own `#366` on 2026-10-05.
+
+    Both read `OWED ... 17 d ago`. The guard: a dispatch row that PREDATES the item's own
+    `createdAt` cannot be a dispatch of it. Two controls are deliberate -- `#903` is a
+    genuine stall dispatched AFTER its filing (must STAY OWED, so the guard is not an
+    over-reaching blanket), and `#904` carries NO `createdAt` (must STAY OWED, so a read
+    that omits the field keeps every other verdict intact).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    minted = (now - dt.timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    minted_older = (now - dt.timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [
+        {"number": 901, "state": "OPEN", "title": "issue 901", "closedAt": None,
+         "createdAt": minted},   # a carrier names it 17 d BEFORE the board minted it
+        {"number": 902, "state": "OPEN", "title": "issue 902", "closedAt": None,
+         "createdAt": minted},   # a foreign row carries the subject before minting
+        {"number": 903, "state": "OPEN", "title": "issue 903", "closedAt": None,
+         "createdAt": minted_older},   # a genuine stall: filed 5 d ago, dispatched 3 d ago
+        {"number": 904, "state": "OPEN", "title": "issue 904", "closedAt": None},
+    ]                            # `#904` declares NO `createdAt` -- the guard is a no-op
+    rows = [
+        _stall_row(1, "intake", "#901", 20, now=now, actor="triage"),
+        _stall_row(2, "dispatch", "wave-2026-09-18", 17, now=now, actor="delegate",
+                   detail="WHY NOT COVERED BY #200/#901/#12: those cover a different failure"),
+        _stall_row(3, "intake", "#902", 20, now=now, actor="triage"),
+        _stall_row(4, "dispatch", "#902", 17, now=now, actor="triage",
+                   detail="the fork's row, filed under the same number"),
+        _stall_row(5, "intake", "#903", 20, now=now, actor="triage"),
+        _stall_row(6, "dispatch", "#903", 3, now=now, actor="hq"),   # AFTER minting
+        _stall_row(7, "intake", "#904", 20, now=now, actor="triage"),
+        _stall_row(8, "dispatch", "#904", 5, now=now, actor="hq"),   # no createdAt -> judged
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #901" not in named, (
+        f"a carrier that PREDATES the board item it names cannot have dispatched it\n{named}"
+    )
+    assert "OWED #902" not in named, (
+        f"a subject-keyed dispatch older than the item is a foreign row, not this "
+        f"board's\n{named}"
+    )
+    assert "OWED #903" in named, (
+        f"a genuine stall dispatched AFTER its filing must STAY OWED -- the guard must not "
+        f"be an over-reaching blanket\n{named}"
+    )
+    assert "OWED #904" in named, (
+        f"a read that omits `createdAt` must keep the verdict -- the guard is a no-op, "
+        f"never a fail-closed\n{named}"
+    )
+    cov = leg["coverage"]
+    assert cov["units_rejected_pre_filing"] == 2, cov
+    assert cov["units_owed"] == 2, cov
+    assert cov["units_in_population"] == 2, cov
+
+    # THE CONTROL, asserted rather than described: the #333 SCOPE guard ADMITS the carrier
+    # mention (a unit list, `#200/#901/#12`), so what refuses it is the FILING guard and
+    # not the scope guard -- the probe is never vacuous.
+    detail = rows[1]["detail"]
+    assert RUNNER.is_board_unit_occurrence(detail, detail.index("#901")) is True, (
+        f"the scope guard ADMITS this bare carrier mention; only the filing guard refuses "
+        f"it\n{detail!r}"
+    )
+
+    # ... and through the REAL `main()`: a leg returning the right dict while the render
+    # drops it is the half-fix this catches.
+    rc, out, _ = _run(issues, rows)
+    assert "OWED #903" in out, out
+    assert "OWED #904" in out, out
+    assert "OWED #901" not in out, out
+    assert "OWED #902" not in out, out
 
 # --- the pacemaker-presence leg (#315) -----------------------------------------------
 

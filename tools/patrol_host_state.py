@@ -465,7 +465,7 @@ def fetch_board(slug: str) -> list[dict]:
             "--limit",
             "1000",
             "--json",
-            "number,state,title,closedAt,comments",
+            "number,state,title,createdAt,closedAt,comments",
         ],
         capture_output=True,
         text=True,
@@ -2950,6 +2950,23 @@ def stall_census_leg(
     """
     is_unit = ledger_predicate().is_work_unit
 
+    def precedes_filing(ts: object, created: "dt.datetime | None") -> bool:
+        """A dispatch instant that PREDATES the board item it would be read as
+        dispatching (#415) -- the door #333's scope guard left open, where a number is
+        named in prose (or carried by a foreign row) BEFORE this board minted it.
+
+        False whenever either instant is absent or undatable. That is deliberate and is
+        not a fail-open: a synthetic read that omits `createdAt` must keep every OTHER
+        verdict intact, and an instant this leg cannot read is already refused elsewhere
+        -- excusing it here would trade a false red for a false clean.
+        """
+        if created is None:
+            return False
+        try:
+            return reader_parse_ts(str(ts or "")) < created
+        except (ValueError, TypeError):
+            return False
+
     claimed: set[str] = set()
     closed: set[str] = set()
     resident: set[str] = set()
@@ -2970,14 +2987,40 @@ def stall_census_leg(
         if str(issue.get("state", "")).strip().lower() == "open":
             open_on_board.add(f"#{number}")
 
+    # THE FILING INSTANT (#415): each board item's own `createdAt`, where the read
+    # declared it. A `#N` in free prose can name a DIFFERENT repository's issue of the
+    # same number (#366), and a carrier may name a number months before THIS board
+    # minted it (#344) -- so a dispatch row that PREDATES the item it is read as
+    # dispatching cannot be a dispatch of it. A missing instant is simply absent from
+    # this map, which is what keeps every synthetic fixture's verdict unchanged.
+    board_created: dict[str, dt.datetime] = {}
+    for issue in issues:
+        number = issue.get("number")
+        if number is None:
+            continue
+        try:
+            board_created[f"#{number}"] = reader_parse_ts(
+                str(issue.get("createdAt") or "")
+            )
+        except (ValueError, TypeError):
+            continue
+
     dispatch_rows = [row for row in rows if str(row.get("event") or "") == "dispatch"]
     carriers: dict[str, dict] = {}
     observation = 0
     carried_units = 0
+    pre_filing_rejected = 0
     for row in dispatch_rows:
         subject = str(row.get("subject") or "").strip()
         if is_unit(subject):
-            carriers.setdefault(subject, row)
+            # THE FILING INSTANT (#415), the DIRECT door: a subject-keyed dispatch whose
+            # row PREDATES the board item's own `createdAt` is a cross-namespace subject
+            # collision -- the row carries another repository's issue of that number, not
+            # this board's (`#366`'s rows n=433/n=436 are the fork's).
+            if precedes_filing(row.get("ts"), board_created.get(subject)):
+                pre_filing_rejected += 1
+            else:
+                carriers.setdefault(subject, row)
             continue
         blob = f"{row.get('detail') or ''} {row.get('refs') or ''}"
         units = {
@@ -2991,6 +3034,18 @@ def stall_census_leg(
         }
         if not units:
             observation += 1
+            continue
+        # THE FILING INSTANT (#415), the CARRIER door: a carrier's prose may name a
+        # number that only LATER became this board's (`#344`'s carrier n=321, dated
+        # 2026-09-18, while the board minted `#344` on 2026-10-05). A carrier cannot have
+        # dispatched an item that did not yet exist.
+        before_filing = len(units)
+        units = {
+            unit for unit in units
+            if not precedes_filing(row.get("ts"), board_created.get(unit))
+        }
+        pre_filing_rejected += before_filing - len(units)
+        if not units:
             continue
         carried_units += len(units)
         for unit in units:
@@ -3041,6 +3096,7 @@ def stall_census_leg(
             "dispatch_rows_examined": len(dispatch_rows),
             "observation_dispatches": observation,
             "carried_units_resolved": carried_units,
+            "units_rejected_pre_filing": pre_filing_rejected,
             "units_in_population": len(carriers),
             "units_off_board": off_board,
             "units_owed": len(owed),
