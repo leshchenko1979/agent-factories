@@ -50,7 +50,7 @@ binding.
 
 ## How to use it
 
-1. Answer the [fill-in variables](../docs/product.md#fill-in-variables).
+1. Answer the [fill-in variables](BOOTSTRAP.md#fill-in-variables).
 2. Take the two **bindings** — the surface and the harness you run on. These are
    not optional: a factory always runs on something, and if it does not name it,
    it has bound it invisibly.

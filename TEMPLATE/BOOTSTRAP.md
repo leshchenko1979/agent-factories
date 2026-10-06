@@ -4,8 +4,32 @@ An ordered procedure. Each step ends with **evidence** — something read back
 from live state, not from memory. Do not proceed past a step whose evidence is
 missing.
 
-Fill the [variables](../docs/product.md#fill-in-variables) first; every
-skeleton in this directory uses them as `{{PLACEHOLDER}}`.
+Fill the [variables](#fill-in-variables) first; every skeleton in this
+directory uses them as `{{PLACEHOLDER}}`.
+
+---
+
+## Fill-in variables
+
+The template is parameterised. Bootstrapping a factory means answering these,
+once, and substituting them through the skeletons:
+
+| Variable | Meaning | Example |
+|---|---|---|
+| `FACTORY` | Short name, used in topic titles and repo names | `inferhub-watch` |
+| `PURPOSE` | One sentence: what this factory delivers | Daily probes + value ranking of InferHub routes |
+| `REPO` | The factory's own repo, owner/name | `leshchenko1979/inferhub-watch` |
+| `CHAT` | Forum group title + chat id | `Inferhub watch`, `-1004379632866` |
+| `SURFACE` / `SURFACE_SLUG` | The chat surface binding | `Telegram forums` / `telegram-forums` |
+| `HARNESS` / `HARNESS_SLUG` | The agent runtime binding | `OpenCrabs` / `opencrabs` |
+| `ROLES` | Which roles exist (HQ, Triage, workers, carrier) | `HQ` only for a minimal factory |
+| `DOMAINS` | Domain topics in the middle of the spine | `Landing`, `Bot`, `Outreach` |
+| `ADDONS` | **Domain** packs to apply (bindings are separate and mandatory) | `watch` |
+| `GATES` | Commands that decide, where a command can | the factory's own tools, or a repo test suite |
+
+`SURFACE` and `HARNESS` are not optional. A factory always runs on some surface
+and some harness; naming them is what keeps their mechanics in the add-on layer
+instead of welded through the core law.
 
 ---
 
@@ -727,7 +751,7 @@ When the lane reports, rename its topic `Done — #N <title>` and leave it in
 place. The forum is the archive.
 
 Then check the factory against the
-[success test](../docs/product.md#success-test) — in particular point 4: the
+[success test](#success-test) — in particular point 4: the
 lane must still be able to state its own process **after a compaction**, from
 its own files.
 
@@ -754,6 +778,22 @@ What travels is the number and the template law it implies.
 
 **Evidence:** the committed baseline score with its date, and the scheduled job
 that re-scores it.
+
+---
+
+## Success test
+
+The template works when a new factory, bootstrapped from it by an agent that
+has never read this repo before, can:
+
+1. state its own purpose and canonical vocabulary from its own files;
+2. receive a task as a GitHub issue and be briefed on it through a topic;
+3. close that task by renaming the topic, with the evidence in the topic;
+4. do all of the above after a context compaction, without the operator
+   re-explaining the process.
+
+Point 4 is the real test. Points 1–3 can be faked by a good session; point 4
+is what the process law is for.
 
 ---
 
