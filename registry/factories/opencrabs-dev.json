@@ -75,6 +75,17 @@
       "since": "2026-09-19",
       "review_by": "2026-12-19",
       "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\"; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 -- NOT notify.rs:172, where it no longer lives (the file moved); interrupt resolves to DeliveryMode::Interrupt at :189 (mode string) and :201 (interrupt==Some(true)). Re-verified at attest 2026-10-05T06:11Z against the deployed tree: the Err is present at that line in git show b7470b562780ce0afd83d76d35b789647c78bd3c:src/brain/agent/service/notify_policy.rs, and code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of the deployed sha (merge-base --is-ancestor rc=0) -- superseding the cited 4b3765dc4fe169adf7f91696d10065de3f689560, which is no longer the deployed sha."
+    },
+    {
+      "id": "commit-signing-live-identity-retired",
+      "text": "Commit signing is now ON box-wide: /root/.gitconfig carries gpg.format=ssh, commit.gpgsign=true, user.signingkey=/root/.ssh/id_ed25519.pub, so every repo on this box produces signed commits. /root/opencrabs additionally changed its committer identity from the retired R2-D2 (HQ) <hq@l1979.ru> to leshchenko1979@users.noreply.github.com, because a valid signature under the old address reads Unverified (reason no_user) \u2014 GitHub cannot link that address to an account. The other factories' repos use the global leshchenko@gmail.com, which IS account-linked, so their new commits read Verified.",
+      "severity": "warning",
+      "scope": "profile",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-10-05",
+      "evidence": "Probed on the fork, same key and signature, only the committer email differing: hq@l1979.ru -> verified:false reason=no_user; leshchenko1979@users.noreply.github.com -> verified:true reason=valid @2026-10-05T22:34:45Z. Cross-repo, /root/ai-antispam (leshchenko@gmail.com): commits 2026-10-05T13:58\u201314:43Z verified=false reason=unsigned, commits 2026-10-06T05:54\u201306:06Z verified=true reason=valid. Ruleset main-protection (id 13432403) carries required_signatures {} at enforcement=active."
     }
   ],
   "lanes": [
@@ -296,7 +307,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-05T06:17:00Z",
+  "attested_at": "2026-10-06T06:30:03Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",
@@ -308,7 +319,7 @@
       "state": "adopted",
       "behind_by": 0,
       "measured_at": "2026-10-01T06:16:56Z",
-      "reason": "ADOPTED, SHARED-COPY SHAPE \u2014 declared by this factory's own lane, replacing the 'deferred / PENDING the member's own declaration' entry of 2026-09-29. This factory carries NO copy of the instrument in its skill tree: 0 of the 4 declared paths, and no docs/ directory at all at committed HEAD c00947eb. It reaches the canonical instead \u2014 /root/agent-factories/docs/instruments/open-questions.md \u2014 through the reload leg the pointer names: the symlink skills/meta-factory/open-questions.md -> ../../TEMPLATE/docs/instruments/open-questions.md, verified present. The register is live and in use, not pending: this profile's questions/open.json carries q40 and q41 open. Per the canonical doc S5 \u2014 'Absent from its own tree is NOT unusable. Reaching a shared copy is a legitimate adoption shape ... never imply a gap where a decision was taken' \u2014 behind_by is 0, because nothing is owed when no in-tree copy is owed. If the writer's vocabulary reserves 'adopted' for the in-tree shape, map this to whatever value it uses for shared-copy reach; the fact to record is the shape, not the label.",
+      "reason": "ADOPTED, SHARED-COPY SHAPE \u2014 declared by this factory's own lane, replacing the 'deferred / PENDING the member's own declaration' entry of 2026-09-29. This factory carries NO copy of the instrument in its skill tree: 0 of the 4 declared paths, and no docs/ directory at all at committed HEAD c00947eb. It reaches the canonical instead \u2014 /root/agent-factories/docs/instruments/open-questions.md \u2014 through the reload leg the pointer names: the symlink skills/meta-factory/open-questions.md -> ../../TEMPLATE/docs/instruments/open-questions.md, verified present. The register is live and in use, not pending: this profile's questions/open.json carried 16 open questions at the 2026-10-06 read, 8 of them this factory's (q15, q20, q30, q31, q38, q63, q64, q65). Per the canonical doc S5 \u2014 'Absent from its own tree is NOT unusable. Reaching a shared copy is a legitimate adoption shape ... never imply a gap where a decision was taken' \u2014 behind_by is 0, because nothing is owed when no in-tree copy is owed. If the writer's vocabulary reserves 'adopted' for the in-tree shape, map this to whatever value it uses for shared-copy reach; the fact to record is the shape, not the label.",
       "green": true
     }
   }
