@@ -1,6 +1,6 @@
 # review-lenses.md — The Generic 14-Lens Factory Review Catalog
 
-> **Owns:** Canonical catalog of the 14 review lenses for periodic factory quality reviews (Duty 4+6 review rotation / **P32**).
+> **Owns:** Canonical catalog of the 14 review lenses for periodic factory quality reviews (the Duty 4+6 review rotation).
 > **Methodology Reference:** `docs/methodology/02-quality-management.md` §4.
 
 Periodic multi-lens reviews prevent process decay, law bloat, tool rot, ledger drift, and token waste.
@@ -60,7 +60,7 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
     * **T2:** A CLI script or mechanical test already exists or is the natural host.
     * **T3:** The rule currently instructs an **agent** to remember, derive, or manually check that state.
   - **Verdict:** If T1–T3 hold, the rule is an **unwritten tool specification**. Prose instructions must be migrated into a deterministic tool, hook, or unit test.
-- **Exclusions:** Irreversible human gates (P14), approval checkpoints, and client subjective decisions belong in prose/gates.
+- **Exclusions:** Irreversible human gates, approval checkpoints, and client subjective decisions belong in prose/gates.
 - **Evidence Format:** Verbatim rule quote + state read on disk + proposed tool command/test.
 
 ### Lens P — Pacemaker & Autonomous Convergence
@@ -76,10 +76,11 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
 ## 🔧 Family 3: TOOLS & INTERFACES (Scripts, Commands, Gates)
 
 ### Lens C — CLI Automation Gaps & Usage Analysis
-- **Scope:** Manual procedures and actual tool invocation telemetry (`tools.log`, ledger records).
+- **Scope:** Manual procedures and actual tool invocation telemetry (the ledger's rows and `tools/`).
 - **Core Checks:**
   1. **Automation Gaps:** Detect recurring multi-step manual commands in role workflows that should be unified into a single CLI utility.
-  2. **Usage Telemetry:** Analyze command frequency, error code distributions (tools clustering on error exits indicate broken interfaces), and uninvoked legacy tools (YAGNI deletion candidates).
+  2. **Usage Telemetry:** Analyse command frequency and error *frequency* (tools clustering on error exits indicate broken interfaces).
+- **Ownership Boundary:** Lens C owns USAGE telemetry only. Exit-code *contracts* are Lens F's (determinism), and deletion/YAGNI candidates are Lens D's (reference counting). A tool may appear in both a C and an F finding, but the finding differs — a usage pattern (C) versus a contract breach (F). A candidate surfaced by usage telemetry is handed to Lens D for the reference-count verdict; C never files a deletion finding.
 - **Evidence Format:** Proposed CLI utility signature + replaced manual steps + supporting ledger/log citations.
 
 ### Lens E — Interface Topology & Command Merging
@@ -95,6 +96,7 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
   1. **Exit Code Determinism:** Success must exit `0`. Failures must exit distinct non-zero codes. No soft errors masked by exit `0`.
   2. **Shell Hygiene:** Shell scripts must enforce strict error trapping (`set -euo pipefail`), quote variable expansions, and avoid non-portable constructs.
   3. **Atomic Journaling:** Tools performing state changes must write their journal or ledger entry atomically before or alongside the mutation.
+- **Ownership Boundary:** Lens F owns the exit-code *contract* (determinism — the codes a tool is obliged to produce). Error *frequency* and clustering across invocations are Lens C's telemetry reading. F cites a contract breach; C cites a usage pattern.
 - **Evidence Format:** Script file:line locator + defect analysis + proposed patch.
 
 ### Lens D — Deletion Safety & YAGNI Pruning
@@ -106,6 +108,7 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
      - `ARCHIVE`: Historical value; move to archive/rework record.
      - `KEEP`: Active reference found.
   3. **Guard:** "Looks stale" is a hypothesis, never a verdict. Removal requires verified zero references.
+- **Ownership Boundary:** Lens D is the SOLE owner of deletion/YAGNI findings. A candidate surfaced by another lens (e.g. Lens C's usage telemetry) is handed here for the reference-count verdict; D does not file automation-gap or usage findings.
 - **Evidence Format:** Target file path + search query used + reference verification proof.
 
 ---
@@ -126,7 +129,7 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
 - **Core Checks:**
   1. **WIP Stagnation:** Detect tasks parked in `intake` or `claim` without closing for >24 hours.
   2. **Lead Time Drift:** Track mean lead time ($T_{\text{intake}} \to T_{\text{close}}$) over successive cycles; flag upward trends indicating pipeline bottlenecks.
-  3. **Batch Size Control (P11):** Enforce small task batching. Flag tasks touching >3 files or >200 lines without explicit architectural decomposition.
+  3. **Batch Granularity:** For a closed work unit, read its landing commit's diffstat (`git show --numstat <sha>`, sha from the close row's `head=`) and flag a commit that mixes unrelated concerns across many files or hundreds of lines without an explicit decomposition step. The ledger records no file or line counts, so this check reads the COMMIT, not the row — cite the sha and its numstat totals.
 - **Evidence Format:** Task identifier + timestamp delta ($T_{\text{dwell}}$) + bottleneck diagnosis.
 
 ---
@@ -155,9 +158,9 @@ and never redefines a letter in it. Contract: `docs/instruments/review-rotation.
 - **Evidence Format:** Catalog section + observed drift/overlap pattern.
 
 ### Lens S — Brain Scrub & Profile Scope Cleanliness
-- **Scope:** External agent profile brain files (`AGENTS.md`, `SOUL.md`, `TOOLS.md`) vs. factory repos.
+- **Scope:** The agent profile's brain files under `~/.opencrabs/profiles/*/` (`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `MEMORY.md`) versus this factory's own `**/SKILL.md`.
 - **Core Checks:**
-  1. **P25 Isolation Enforcement:** Ensure factory-specific process rules do NOT leak into shared agent profile brain files.
+  1. **Isolation Enforcement:** No factory-specific process rule may leak into a shared agent profile brain file — a factory's rules live in that factory's own skill, not in the shared brain.
   2. **Pointer Discipline:** Shared profile files may carry only one-line pointers and recovery anchors back to the factory skill.
   3. **Provenance Sweep:** Verify that directives found in passive memory (`MEMORY.md`) are properly re-homed into versioned factory process files.
 - **Evidence Format:** Profile file locator + leaked factory directive + suggested clean pointer.

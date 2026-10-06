@@ -160,10 +160,11 @@ LENS_METADATA: dict[str, dict[str, str]] = {
     "C": {
         "name": "CLI Automation Gaps & Usage Analysis",
         "family": "3. TOOLS & INTERFACES (Scripts, Commands, Gates)",
-        "scope": "Manual procedures and actual tool invocation telemetry (the ledger's rows, and `tools/`).",
+        "scope": "Manual procedures and actual tool invocation telemetry (the ledger's rows and `tools/`).",
         "instructions": (
             "1. Automation gaps: detect recurring multi-step manual commands in role workflows that should become one CLI utility.\n"
-            "2. Usage telemetry: analyse command frequency, error-code distributions, and uninvoked legacy tools (YAGNI candidates)."
+            "2. Usage telemetry: analyse command frequency and error FREQUENCY (tools clustering on error exits indicate broken interfaces).\n"
+            "3. Ownership boundary: USAGE telemetry only. Exit-code CONTRACTS are Lens F's; deletion/YAGNI candidates are Lens D's -- hand a candidate to D for the reference-count verdict, never file it here."
         ),
     },
     "E": {
@@ -182,7 +183,8 @@ LENS_METADATA: dict[str, dict[str, str]] = {
         "instructions": (
             "1. Exit code determinism: success exits 0; failures exit distinct non-zero codes, with no soft error masked by 0.\n"
             "2. Shell hygiene: enforce strict error trapping (`set -euo pipefail`), quote expansions, avoid non-portable constructs.\n"
-            "3. Atomic journaling: a state change writes its journal or ledger entry atomically, before or alongside the mutation."
+            "3. Atomic journaling: a state change writes its journal or ledger entry atomically, before or alongside the mutation.\n"
+            "4. Ownership boundary: the exit-code CONTRACT (determinism). Error FREQUENCY and clustering are Lens C's telemetry reading."
         ),
     },
     "D": {
@@ -192,7 +194,8 @@ LENS_METADATA: dict[str, dict[str, str]] = {
         "instructions": (
             "1. Orphan detection: enumerate stale, retired or unreferenced files, mock fixtures and temporary artifacts.\n"
             "2. Reference counting: search codebase, scripts, crons and docs; classify each candidate DELETE-SAFE, ARCHIVE or KEEP.\n"
-            "3. Guard: 'looks stale' is a hypothesis, never a verdict -- removal requires verified zero references."
+            "3. Guard: 'looks stale' is a hypothesis, never a verdict -- removal requires verified zero references.\n"
+            "4. Ownership boundary: the SOLE owner of deletion/YAGNI findings; a candidate surfaced by another lens (e.g. Lens C's usage telemetry) is handed here for the reference-count verdict."
         ),
     },
     "H": {
@@ -213,7 +216,7 @@ LENS_METADATA: dict[str, dict[str, str]] = {
         "instructions": (
             "1. WIP stagnation: detect tasks parked in `intake` or `claim` without closing for >24 hours.\n"
             "2. Lead time drift: track mean lead time (T_intake -> T_close) across cycles; flag upward trends.\n"
-            "3. Batch size control (P11): flag tasks touching >3 files or >200 lines without explicit architectural decomposition."
+            "3. Batch granularity: read a closed unit's landing commit diffstat (`git show --numstat <sha>`, sha from the close row's `head=`) and flag a commit mixing unrelated concerns across many files or hundreds of lines without a decomposition step; the ledger stores no file/line counts, so cite the sha and its numstat totals."
         ),
     },
     "T": {
@@ -242,7 +245,7 @@ LENS_METADATA: dict[str, dict[str, str]] = {
         "family": "6. META & GOVERNANCE (Review Mechanics, Scope Cleanliness)",
         "scope": "The agent profile's brain files under `~/.opencrabs/profiles/*/` (`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `MEMORY.md`) versus this factory's own `**/SKILL.md`.",
         "instructions": (
-            "1. P25 isolation enforcement: factory-specific process rules must not leak into shared agent profile brain files.\n"
+            "1. Isolation enforcement: no factory-specific process rule may leak into a shared agent profile brain file -- a factory's rules live in that factory's own skill, not in the shared brain.\n"
             "2. Pointer discipline: shared profile files carry only one-line pointers and recovery anchors back to the factory skill.\n"
             "3. Provenance sweep: directives found in passive memory (`MEMORY.md`) are re-homed into versioned factory process files."
         ),
