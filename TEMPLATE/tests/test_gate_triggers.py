@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,7 @@ LIVE_MAP = REPO / "registry" / "gate_triggers.json"
 EXAMPLE_MAP = REPO / "TEMPLATE" / "registry" / "gate_triggers.example.json"
 AUDIT = REPO / "tools" / "audit.py"
 GATE_REGISTRY = REPO / "tests" / "gate_registry.py"
+REWORK_TABLE = REPO / "tests" / "rework_table.py"
 
 FAILURES: list[str] = []
 
@@ -353,6 +355,73 @@ def probe_the_cli_reports_the_mode() -> None:
     )
 
 
+def probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
+    """#416: `--run` must EXECUTE a gate, not die on a non-executable file.
+
+    `run_gates` ran the registered argv with NO interpreter prefix. That argv is
+    interpreter-RELATIVE -- the scan keeps only the TARGET-shaped tokens and drops the
+    `sys.executable` the audit's call sites carry -- so a script gate (`tests/x.py`, mode
+    100644) raised PermissionError and a pytest gate (`-m pytest`) raised FileNotFoundError:
+    the exact remedy the pre-commit hook prints could run no gate at all.
+
+    The probe drives `run_gates` over a HERMETIC tree whose audit registers BOTH forms, and
+    each fixture gate WRITES A MARKER. The assertion is that the gate RAN (the marker
+    exists), never merely that the call returned -- drop the prefix and nothing runs, so no
+    marker is written. The REAL `gate_registry.py` is copied in -- with the sibling it
+    imports, `rework_table.py`, so the tree stands alone rather than leaning on the runner's
+    `sys.path` -- so the parse under test is the instrument's own and never a stub.
+    """
+    module = _load("oc_gate_select_run", GATE_SELECT)
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "tools").mkdir()
+        (root / "tests").mkdir()
+        shutil.copyfile(GATE_REGISTRY, root / "tests" / "gate_registry.py")
+        shutil.copyfile(REWORK_TABLE, root / "tests" / "rework_table.py")
+        (root / "tools" / "audit.py").write_text(
+            'gates_to_run.append([sys.executable, "tests/fixture_script_gate.py"])\n'
+            'gates_to_run.append([sys.executable, "-m", "pytest", '
+            '"tests/test_fixture_gate.py"])\n',
+            encoding="utf-8",
+        )
+        script_marker = root / "script-gate-ran.txt"
+        pytest_marker = root / "pytest-gate-ran.txt"
+        (root / "tests" / "fixture_script_gate.py").write_text(
+            "import pathlib\n"
+            f"pathlib.Path({str(script_marker)!r}).write_text('ran', encoding='utf-8')\n"
+            "raise SystemExit(0)\n",
+            encoding="utf-8",
+        )
+        (root / "tests" / "test_fixture_gate.py").write_text(
+            "import pathlib\n"
+            "def test_ran() -> None:\n"
+            f"    pathlib.Path({str(pytest_marker)!r}).write_text('ran', encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        try:
+            failures = module.run_gates(
+                root, ["tests/fixture_script_gate.py", "tests/test_fixture_gate.py"]
+            )
+        except OSError as exc:
+            check(
+                "run_gates executes a gate with the interpreter prefix",
+                False,
+                f"raised {type(exc).__name__}: {exc}",
+            )
+            return
+        check("both registered forms run to rc=0", failures == [], f"failures={failures}")
+        check(
+            "the SCRIPT gate actually RAN (its marker exists)",
+            script_marker.is_file(),
+            "no marker: the script gate never executed -- the interpreter prefix is gone",
+        )
+        check(
+            "the PYTEST gate actually RAN (its marker exists)",
+            pytest_marker.is_file(),
+            "no marker: the pytest gate never executed -- the interpreter prefix is gone",
+        )
+
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -363,11 +432,12 @@ PROBES = (
     probe_the_default_deny_cannot_be_neutered,
     probe_an_unreadable_map_is_none_not_empty,
     probe_the_cli_reports_the_mode,
+    probe_the_run_mode_executes_gates_with_the_interpreter,
 )
 
 
 def main() -> int:
-    for relative in (GATE_SELECT, AUDIT, GATE_REGISTRY):
+    for relative in (GATE_SELECT, AUDIT, GATE_REGISTRY, REWORK_TABLE):
         if not relative.is_file():
             print(f"FAIL -- required artifact missing: {relative}")
             return 1
@@ -430,6 +500,9 @@ def test_probe_an_unreadable_map_is_none_not_empty() -> None:
 
 def test_probe_the_cli_reports_the_mode() -> None:
     _assert_probe(probe_the_cli_reports_the_mode)
+
+def test_probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
+    _assert_probe(probe_the_run_mode_executes_gates_with_the_interpreter)
 
 if __name__ == "__main__":
     sys.exit(main())

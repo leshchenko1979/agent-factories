@@ -155,9 +155,17 @@ def registered_commands(root: Path) -> dict[str, list[str]]:
 def run_gates(root: Path, gates: list[str]) -> list[str]:
     """Run each gate's registered argv; return the failures, each naming the gate.
 
+    The registered argv is interpreter-RELATIVE: `registered_commands` scans the audit's
+    call sites and keeps only the TARGET-shaped tokens, dropping the `sys.executable` the
+    audit prefixes every append with. The interpreter is put back HERE (#416) -- without it
+    a script gate (`tests/x.py`, mode 100644) dies with PermissionError and a pytest gate
+    (`-m pytest`) with FileNotFoundError, so the remedy the pre-commit hook prints could
+    run no gate at all.
+
     A gate with no registered argv is reported as a FAILURE rather than skipped: a
     gate the selector names but cannot run is an instrument that lies, and skipping it
-    silently is the very class this module removes.
+    silently is the very class this module removes. An argv that cannot be EXECUTED is
+    the same class, so it is reported rather than raised.
     """
     commands = registered_commands(root)
     failures: list[str] = []
@@ -166,7 +174,13 @@ def run_gates(root: Path, gates: list[str]) -> list[str]:
         if argv is None:
             failures.append(f"{gate} — no registered argv in {AUDIT_RELATIVE}")
             continue
-        proc = subprocess.run(argv, cwd=str(root), capture_output=True, text=True)
+        try:
+            proc = subprocess.run(
+                [sys.executable, *argv], cwd=str(root), capture_output=True, text=True
+            )
+        except OSError as exc:
+            failures.append(f"{gate} — could not execute: {exc}")
+            continue
         if proc.returncode != 0:
             failures.append(f"{gate} — rc={proc.returncode}")
     return failures
