@@ -837,6 +837,30 @@ re-opened subject must be re-claimed. Exemptions are listed explicitly by subjec
 PROOF in `EXEMPTIONS` inside `tools/ledger.py` and printed as `excused:` whenever one is used, so
 **"clean" and "excused" are never the same output**.
 
+**An exemption's ground states the bar that HOLDS, and a claim of ABSENCE carries its own probe.**
+An exemption exists because a required gate cannot be satisfied — so what it declares is *why*, and
+the why is a claim that must be the true one. **"No lawful path restores the token" is a MECHANICAL
+claim** — a claim that an operation cannot be performed — and a mechanical claim is exactly the
+shape a recorded attempt falsifies: `repair` reaches a pushed row and returns rc=0, so the
+statement was not merely imprecise, it was **the stronger claim and the false one**. The ground
+that holds in that class is **TRUTHFULNESS**: the row is reachable, and the only value that would
+satisfy the gate would be false, because the gate's token is a state read **at close time** and the
+row's own `ts` precedes it (the no-backfill rule above, line 1048 — a record written after the fact
+is falsified, not repaired). The two are not interchangeable: an impossibility prescribes
+*exempt and prevent the shape*, a truthfulness bar prescribes *exempt, and say the value would be
+false*.
+
+So an exemption ground that asserts an absence must carry **the recorded probe of the attempt** —
+the command, its exit code, and the effect read back — or the claim is not stated at all. This is
+`AGENTS.md` rule 7 applied to exemption grounds: **a zero is a verdict only from a working
+instrument**, and an unprobed "cannot be done" is a zero from no instrument. Where the ground has a
+**vocabulary** — the family of bars an exemption may name — the surface carries it as a **declared
+key with one lawful value** (`§9.12`), read and refused by the gate's own loader, so the falsified
+ground is **UNEXPRESSIBLE** rather than merely discouraged in prose. Measured 2026-10-07 (#437,
+ruling `n=2844`): `docs/close-board-exemptions.json` admitted three rows on "no lawful path restores
+the token", the probe returned rc=0, and the corrected surface declares `bar=no-truthful-value`
+with the loader refusing every other value — the phrase appears on **no** shipped surface.
+
 ### 9.4 A reconstructed claim declares itself and its basis, never an interval
 
 A reconstruction declares **two facts the author controls** — the self-declaration token and the

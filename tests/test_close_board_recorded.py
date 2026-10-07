@@ -24,16 +24,23 @@ The rule, in two parts:
    written today for a close that predates the rule would be a falsified record, not
    a repair.
 
-3. **A post-invariant row with an EMPTY REPAIR SPACE is exempted in FACTORY DATA, and
-   said so.** The boundary in part 2 is a TIMESTAMP, and a timestamp cannot excuse the
-   rows the rule actually catches: the first post-invariant close that omits the token
-   is PERMANENTLY RED, because the ledger is append-only, the row's identity is
-   immutable once pushed, and a gate that walks `close` rows never revisits a repaired
-   history. A gate whose only exits are barred is a stop with no andon cord, and the
-   suite would stay red until every lane learned to ignore it — destroying every other
-   gate's signal. So the exemption surface exists, and its terms are the skill's:
-   admitted ONLY where the repair space is genuinely EMPTY (the row is pushed, and
-   rewriting it is barred by the identity law); declared as FACTORY DATA in
+3. **A post-invariant row whose token NO TRUTHFUL VALUE RESTORES is exempted in FACTORY
+   DATA, and said so.** The boundary in part 2 is a TIMESTAMP, and a timestamp cannot
+   excuse the rows the rule actually catches: the first post-invariant close that omits
+   the token is PERMANENTLY RED. The bar is **TRUTHFULNESS, never an empty repair
+   space** — the two were conflated once and the file stated the stronger, FALSE one
+   (#437, ruling n=2844). The repair path is NOT barred: `tools/ledger.py repair
+   --invariant close_board_recorded --append-detail board=closed` reaches a pushed row
+   and returns rc=0. What bars it is the gate's own token, *"the board state the
+   settling lane recorded AT CLOSE TIME"* (part 1): where the board closed AFTER the
+   row was written, a `board=closed` appended today asserts a state that did not hold
+   at the row's own instant, which is the no-backfill family (part 2's own rule) — a
+   falsified record, not a repair. A gate whose only exits are barred is a stop with no
+   andon cord, and the suite would stay red until every lane learned to ignore it —
+   destroying every other gate's signal. So the exemption surface exists, and its terms
+   are the skill's: admitted ONLY where NO TRUTHFUL VALUE restores the token (the row
+   is reachable by repair, and the only value that would satisfy the gate would be
+   false); declared as FACTORY DATA in
    `docs/close-board-exemptions.json`, never inline in this file, because this file is
    paired byte-identically with `TEMPLATE/tests/test_close_board_recorded.py` and a
    factory's row number must not ship to every new factory; keyed by the row's own `n`,
@@ -125,6 +132,16 @@ _PROBE_BOUNDARY = "2026-09-18T18:00:00Z"
 # number must not live in a file that ships to every new factory.
 EXEMPTIONS_PATH = REPO / "docs" / "close-board-exemptions.json"
 BOARD_EXEMPT_DOMAIN = ("the board close happened but was not recorded in the row",)
+# The exemption's GROUND (#437, ruling n=2844). A DECLARATION KEY WITH ONE LAWFUL VALUE
+# (`docs/instruments/ledger.md` §9.12): the entry's ground is a TRUTHFULNESS bar, and this
+# surface admits no other.
+# The key exists so the falsified ground — the claim that the repair space is EMPTY, a
+# MECHANICAL claim of ABSENCE that a recorded probe falsifies (repair returns rc=0) —
+# cannot be re-stated as data. It is REQUIRED, and any other value is refused, so the
+# wrong ground is UNEXPRESSIBLE rather than merely discouraged.
+BOARD_EXEMPT_BAR_KEY = "bar"
+BOARD_EXEMPT_BAR_VALUE = "no-truthful-value"
+BOARD_EXEMPT_BARS = (BOARD_EXEMPT_BAR_VALUE,)
 
 
 def _load(name: str, path: Path):
@@ -214,6 +231,19 @@ def load_exemptions(path: Path | None = None) -> tuple[dict[int, dict], list[str
                 f"declared domain {BOARD_EXEMPT_DOMAIN}"
             )
             continue
+        # The GROUND, required and refused outside its one lawful value (#437, ruling
+        # n=2844). This is the arm that makes the falsified ground unexpressible: an entry
+        # cannot state "the repair space is empty" as data, and an entry that states NO
+        # ground is refused rather than defaulted — a missing bar is the vacuous-pass
+        # shape this gate exists to catch, one level up.
+        bar = str(entry.get(BOARD_EXEMPT_BAR_KEY) or "").strip()
+        if bar not in BOARD_EXEMPT_BARS:
+            problems.append(
+                f"{path.name}: exemption n={row_n} must declare "
+                f"`{BOARD_EXEMPT_BAR_KEY}` as one of {BOARD_EXEMPT_BARS} — its ground is "
+                f"the bar that HOLDS; got {bar!r}"
+            )
+            continue
         if row_n in out:
             problems.append(f"{path.name}: exemption n={row_n} is declared twice")
             continue
@@ -263,7 +293,7 @@ def close_board_problems(
             entry = declared[n]
             matched.add(n)
             excused.append(
-                f"n={n} ({ts}) EXEMPTED (empty repair space) — {entry.get('reason')} "
+                f"n={n} ({ts}) EXEMPTED (no truthful repair value) — {entry.get('reason')} "
                 f"[proof: {entry.get('proof')}]"
             )
             continue
@@ -465,6 +495,94 @@ def test_load_exemptions_enforces_the_declared_domain() -> None:
         )
         got, problems = load_exemptions(p)
     assert problems and "domain" in problems[0], (got, problems)
+
+def test_load_exemptions_requires_the_declared_bar() -> None:
+    """POSITIVE CONTROL (#437): an entry that states NO ground is REFUSED, by name.
+
+    The falsified ground was prose. Turning the ground into a REQUIRED key is what makes
+    it checkable — and an absent key must fail rather than default, or the surface would
+    admit the very entries whose reason nothing verifies."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "close-board-exemptions.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "exemptions": [
+                        {
+                            "n": 1,
+                            "reason": "r",
+                            "proof": "p",
+                            "domain": BOARD_EXEMPT_DOMAIN[0],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        got, problems = load_exemptions(p)
+    assert problems and not got, (got, problems)
+    assert "n=1" in problems[0] and BOARD_EXEMPT_BAR_KEY in problems[0], problems
+
+def test_load_exemptions_refuses_a_bar_outside_the_vocabulary() -> None:
+    """The falsified ground is UNEXPRESSIBLE: `bar` admits one value and refuses the rest.
+
+    An entry claiming the repair space is empty — the ground #437 falsified — must fail to
+    load, not merely be discouraged in prose. This is the arm that keeps the wrong ground
+    from being re-stated as data."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "close-board-exemptions.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "exemptions": [
+                        {
+                            "n": 1,
+                            "reason": "r",
+                            "proof": "p",
+                            "domain": BOARD_EXEMPT_DOMAIN[0],
+                            "bar": "empty-repair-space",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        got, problems = load_exemptions(p)
+    assert problems and not got, (got, problems)
+    assert "empty-repair-space" in problems[0], problems
+
+def test_load_exemptions_admits_the_declared_bar() -> None:
+    """The same entry WITH the one lawful value loads clean — the key refuses a value, not a row."""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "close-board-exemptions.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "exemptions": [
+                        {
+                            "n": 1,
+                            "reason": "r",
+                            "proof": "p",
+                            "domain": BOARD_EXEMPT_DOMAIN[0],
+                            "bar": BOARD_EXEMPT_BAR_VALUE,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        got, problems = load_exemptions(p)
+    assert not problems and 1 in got, (got, problems)
+
+def test_the_exempted_label_names_the_truthfulness_bar() -> None:
+    """The printed label states the bar that HOLDS — the ground the file now declares."""
+    rows = [
+        {"n": 2101, "ts": "2026-10-03T19:32:46Z", "event": "close", "detail": "outcome=accepted"}
+    ]
+    exempt = {2101: {"n": 2101, "reason": "r", "proof": "p"}}
+    _problems, excused = close_board_problems(rows, _PROBE_BOUNDARY, exempt=exempt)
+    assert len(excused) == 1, excused
+    assert "EXEMPTED (no truthful repair value)" in excused[0], excused
 
 # --- probes: the DECLARATION the boundary is read from (#428) ----------------------
 
