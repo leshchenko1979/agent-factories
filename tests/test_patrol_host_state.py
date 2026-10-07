@@ -5074,6 +5074,62 @@ def test_the_dispatch_delivery_leg_counts_a_ref_less_row_as_NOT_JUDGED() -> None
     assert "examined: 0" in out, out
     assert rc == 0, f"a ref-less row is not a problem, got rc={rc}\n{out}"
 
+def _messages_db(path: Path, *messages: tuple[str, str]) -> None:
+    """A throwaway OpenCrabs home holding real `messages` rows — the landed-notify read path.
+
+    `box_deliveries` consumes the header form in its SQL `like` clause, so a probe that
+    injected delivery DICTS would pass whichever header it was handed and prove nothing about
+    the predicate. This builds the SHAPE the live box has and reads it through the runner's
+    own function (#426).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "create table messages "
+        "(session_id text, role text, content text, created_at integer)"
+    )
+    conn.execute(
+        "create table notify_queue "
+        "(session_id text, display_text text, context_text text, created_at integer)"
+    )
+    stamp = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    conn.executemany(
+        "insert into messages (session_id, role, content, created_at) values (?,?,?,?)",
+        [(session, "user", text, stamp) for session, text in messages],
+    )
+    conn.commit()
+    conn.close()
+
+def test_box_deliveries_reads_BOTH_harness_header_forms() -> None:
+    """#426: the harness writes TWO landed-notify header forms, and the leg matched only one.
+
+    Measured live before the fix: four dispatch rows (n=2749-2752) read RED because their
+    notifies landed in the emoji form and the read saw none. Both forms are asserted here, so
+    the probe fails if the predicate narrows back to a single header — and a QUOTED header is
+    asserted NOT to count, so the fix cannot be a bare `notify from` substring (rule 7).
+    """
+    root = Path(tempfile.mkdtemp()) / "profiles"
+    # The live box's SHAPE: a default home beside a profile root, both read.
+    _messages_db(root.parent / "opencrabs.db")
+    _messages_db(
+        root / "ops" / "opencrabs.db",
+        ("probe-session", "📨 notify from abc12345:\nDISPATCH #77 to the Worker"),
+        ("probe-session", "[session-notify from=abc]\nDISPATCH #78 to the Worker"),
+        ("probe-session", "a report QUOTING `notify from abc` must not read as landed"),
+    )
+    deliveries, _homes_read, unreached = RUNNER.box_deliveries(root)
+    assert unreached == [], unreached
+    texts = [d["text"] for d in deliveries if d["state"] == "landed"]
+    assert any(t.startswith("📨 notify from ") for t in texts), (
+        f"the EMOJI form must read as landed\n{texts}"
+    )
+    assert any(t.startswith("[session-notify from=") for t in texts), (
+        f"the BRACKETED form must still read as landed\n{texts}"
+    )
+    assert not any("QUOTING" in t for t in texts), (
+        f"a QUOTED header is not a delivery (reader-echo class, rule 7)\n{texts}"
+    )
+
 # --- the criterion-path leg (#48) --------------------------------------------------------
 #
 # Candidate 1 of the #48 ruling closes the LAW-surface half — a law sentence naming a
