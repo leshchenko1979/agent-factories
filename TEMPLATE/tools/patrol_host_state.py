@@ -220,6 +220,19 @@ DELIVERY_WINDOW_BASIS = (
 )
 NOTIFY_DELIVERY_HEADER = "[session-notify from="
 
+# THE TWO HEADER FORMS THE HARNESS WRITES, held as a DECLARED TUPLE so a third form is a
+# one-line addition (#426). Both are REAL, measured 2026-10-07 in a live store: one session
+# held `[session-notify from=cli:Gatus]` and another `📨 notify from cbdfde4a:`. The leg read
+# only the first, so a notify that LANDED in the emoji form read as a phantom dispatch --
+# four RED rows (n=2749-2752) that were a predicate artefact, not undelivered dispatches.
+#
+# A bare substring (`notify from`) is NOT the fix: a message QUOTING a header would then read
+# as landed (the reader-echo class, AGENTS.md rule 7), so each form carries its own boundary.
+NOTIFY_DELIVERY_HEADERS = (
+    NOTIFY_DELIVERY_HEADER,
+    "📨 notify from ",
+)
+
 # --- the board-unruled leg (#332) ----------------------------------------------------
 #
 # THE ROUND'S OWN PREDICATE, ASSERTED BY NOTHING. The meta-factory HQ round's whole job is
@@ -2421,8 +2434,9 @@ def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], lis
     """(deliveries, homes_read, unreached) for every delivered notify on the box.
 
     TWO SURFACES, because a delivery exists in one of two states and both are receipts: a
-    notify that LANDED is a `messages` row the harness stamped with
-    `[session-notify from=<uuid>]`, and a notify still ACCEPTED-but-undrained is a
+    notify that LANDED is a `messages` row the harness stamped with ONE OF the header forms
+    declared in `NOTIFY_DELIVERY_HEADERS` (`[session-notify from=<uuid>]` or
+    `📨 notify from <short-id>:`), and a notify still ACCEPTED-but-undrained is a
     `notify_queue` row. Reading only the first would report a legitimate deferral as a
     phantom dispatch — the opposite error to the one this leg exists to catch.
 
@@ -2442,10 +2456,14 @@ def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], lis
             unreached.append(f"{db.parent.name}: {exc}")
             continue
         try:
+            # AN OR OVER THE DECLARED TUPLE, never a single form (#426): the harness writes
+            # both, and matching one read a drained notify as a phantom dispatch.
             landed = list(conn.execute(
                 "select session_id, coalesce(content,''), created_at from messages "
-                "where role = 'user' and content like ?",
-                (f"%{NOTIFY_DELIVERY_HEADER}%",),
+                "where role = 'user' and ("
+                + " or ".join("content like ?" for _ in NOTIFY_DELIVERY_HEADERS)
+                + ")",
+                tuple(f"%{header}%" for header in NOTIFY_DELIVERY_HEADERS),
             ))
             queued = list(conn.execute(
                 "select session_id, coalesce(display_text,'') || ' ' || "
