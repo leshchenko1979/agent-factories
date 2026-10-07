@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\"; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 -- NOT notify.rs:172, where it no longer lives (the file moved); interrupt resolves to DeliveryMode::Interrupt at :189 (mode string) and :201 (interrupt==Some(true)). Re-verified at attest 2026-10-05T06:11Z against the deployed tree: the Err is present at that line in git show b7470b562780ce0afd83d76d35b789647c78bd3c:src/brain/agent/service/notify_policy.rs, and code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of the deployed sha (merge-base --is-ancestor rc=0) -- superseding the cited 4b3765dc4fe169adf7f91696d10065de3f689560, which is no longer the deployed sha."
+      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\"; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 -- NOT notify.rs:172, where it no longer lives (the file moved); interrupt resolves to DeliveryMode::Interrupt at :189 (mode string) and :201 (interrupt==Some(true)). RE-VERIFIED 2026-10-07T06:55Z against the CURRENT deployed sha 3ea3f6195d6b9dcf31b58a1d8dc5f5747d5aac22: the Err is present at :206 in git show 3ea3f619:src/brain/agent/service/notify_policy.rs, and code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of that sha (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-05 re-verification, which cited b7470b562780ce0afd83d76d35b789647c78bd3c as the then-deployed sha -- b7470b5 remains an ancestor of 3ea3f619."
     },
     {
       "id": "commit-signing-live-identity-retired",
@@ -307,7 +307,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-06T06:30:03Z",
+  "attested_at": "2026-10-07T06:55:38Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

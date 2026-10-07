@@ -40,7 +40,7 @@
     {
       "name": "inferhub-daily-report",
       "audience": "owner",
-      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * *, enabled \u2014 AMENDED 2026-10-06: the row's deliver_to is now EMPTY (thin wake). The job carries no delivery of its own: its prompt is a thin trigger that runs ONE bash command \u2014 `opencrabs -p ops session notify 359fe71b-c7a1-420b-b856-acfb49939a7b --text \"Daily inferhub report for Alexey is due\u2026\"` \u2014 then stops, executing no project work itself and unable to send to a channel. The report ORDER therefore travels in the notify payload, which wakes the HQ lane (session 359fe71b); the LANE RE-POST IS STILL OWED each day \u2014 thread-2 cards 3479 (09-23), 5017 (10-04), 5095 (10-05), all sender OpenCrabs = the lane's own telegram_send \u2014 and the card must be split when it exceeds the 3200-char echo cap. The cron session 31b2aefe-2e5b-4396-91e7-2ca0077e81c5 carries NO session_bindings row.",
+      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * * (Europe/Moscow), enabled \u2014 THIN TRIGGER since 2026-10-05: deliver_to is NULL and the job runs exactly ONE bash command (`opencrabs -p ops session notify 359fe71b-c7a1-420b-b856-acfb49939a7b --text \u2026`), so the report order travels in the notify payload and the cron session 31b2aefe-2e5b-4396-91e7-2ca0077e81c5 (NO session_bindings row) renders nothing itself. AMENDED 2026-10-07: the prior text claimed `deliver_to session:359fe71b-\u2026` and `mode turn-end` \u2014 the live row's deliver_to is NULL (read this turn); the HQ lane still receives the card, via the payload's own notify call. A LANE RE-POST IS OWED each day (thread-2 cards 3479 \u2192 5017 \u2192 5095).",
       "cadence": "daily"
     },
     {
@@ -89,7 +89,7 @@
       "affects": [
         "profile"
       ],
-      "evidence": "`providers/ops/config.toml` `[providers.fallback] providers = [\"inferhub\"]`; `/root/.opencrabs/config.toml:203` and `profiles/family/config.toml:136` same; ops daemon `ps lstart` = `Thu Oct 1 02:57:00 2026`"
+      "evidence": "`[providers.fallback] providers = [\"inferhub\", \"openrouter\"]` \u2014 /root/.opencrabs/profiles/ops/config.toml:136, /root/.opencrabs/config.toml:203, /root/.opencrabs/profiles/family/config.toml:136 (all read 2026-10-07); ops daemon ps lstart = Thu Oct 1 02:57:00 2026"
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
@@ -103,7 +103,7 @@
     },
     {
       "id": "inferhub-auto-route-failure-escalation",
-      "text": "Routing through the ops fallback chain's first hop (inferhub) degrades under load, independent of the retired auto-switcher: 24h to 2026-09-27T05:08Z measured 2,852 failures of 21,242 requests (13.4%) \u2014 499 x1218, 502 x994, 429 x486, 402 x140 \u2014 concentrated on cheap iq-75-plus combo members. AMENDED 2026-10-06: the abatement holds \u2014 the last-24h daily card (10-05 05:04Z -> 10-06 05:04Z) reads 31 failed of 18,505 (0.17%), top codes 502x13 / 400x5 / 429x5, flat against the prior window's 24/14,683 (0.16%). Issue #158 remains OPEN.",
+      "text": "The inferhub first hop in the ops fallback chain degrades under load, independent of the retired auto-switcher: at its worst (24h to 2026-09-27T05:08Z) it measured 2,852 failures of 21,242 requests (13.4%) \u2014 499x1218, 502x994, 429x486, 402x140 \u2014 concentrated on cheap iq-75-plus combo members. That spike is RESOLVED and tracked-to-close: #158 closed 2026-10-06T12:36:24Z as COMPLETED, and the latest daily card (10-06 05:03Z -> 10-07 05:03Z) reads 41 failed of 13,149 (0.31%), top codes 429x22 / 402x14 / 499x3. The abatement is consistent with the owner's 2026-10-03 ch43 priority demotion (300 -> 100), though the card cannot establish causation.",
       "severity": "warning",
       "since": "2026-09-27T06:36:31Z",
       "affects": [
@@ -139,7 +139,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-06T06:15:48Z",
+  "attested_at": "2026-10-07T06:14:06Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

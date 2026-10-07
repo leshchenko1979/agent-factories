@@ -97,7 +97,7 @@
         "profile"
       ],
       "since": "2026-09-19",
-      "review_by": "2026-10-07",
+      "review_by": "2026-11-06",
       "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md"
     },
     {
@@ -119,7 +119,7 @@
         "profile"
       ],
       "since": "2026-09-23",
-      "review_by": "2026-10-07",
+      "review_by": "2026-11-06",
       "evidence": "9 key blocks confirmed in BOTH the repo copy and the deployed copy today (grep -c \"BEGIN OPENSSH PRIVATE KEY\" = 9 on each). Third re-exposure measured 2026-09-29: the guard added in commit 51c07f57 printed both key blocks on its refuse arm; fixed in aab431f1, proven on synthetic material (9 markers in -> 9 placeholders out, no BEGIN/END, zero base64). Intake n=265/n=267; prior re-exposures n=275 and n=285."
     },
     {
@@ -180,6 +180,18 @@
       "scope": "profile",
       "evidence": "Ledger n=966 (intake) / n=967 (ruling). Daemon log: five 'API error (502)' retries 19:41:32.728064Z-19:54:04.974683Z; tool_loop.rs:3635 'All 5 5xx retries failed, checking for fallback provider'; turn_settle Failed 19:54:06.727609Z; ConfigWatcher 'fallback chain reloaded - [inferhub, openrouter] (was [inferhub])' 20:57:14.402309Z.",
       "review_by": "2026-10-16"
+    },
+    {
+      "id": "gatus-page-can-be-silently-lost",
+      "scope": "profile",
+      "severity": "warning",
+      "text": "A Gatus alert page can be SILENTLY LOST: the relay on vpn forwards it over an SSH hop to the agents host's A2A gateway, and when that hop fails the receiver records delivered=false (transport_error) and the target lane is never woken. The owner's q16 ACCEPTS the loss, so no factory may treat a Gatus page as a guaranteed wake - verify the episode in the receiver's store or the ledger when the alert matters.",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-10-07",
+      "review_by": "2026-10-21",
+      "evidence": "Receiver GET /attempts seq 244 @ 2026-10-06T22:09:55Z: outcome=failed, delivered=false, attempts=3, rc=4 transport_error cannot reach the A2A gateway at http://127.0.0.1:18791/a2a/v1; three journal rows caller=root target=fb67ca75 exit=4 at 22:09:17/42/55Z; ledger n=1164 (subject gatus-alert-session-leg-coupled); q16 accepts."
     }
   ],
   "lanes": [
@@ -215,7 +227,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-06T06:36:24Z",
+  "attested_at": "2026-10-07T06:14:17Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
