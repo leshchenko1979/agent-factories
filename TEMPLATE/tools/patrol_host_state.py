@@ -248,14 +248,26 @@ DISPATCH_DECLARED_INSTANT_FORMS = (
 # THE OUTER BOUND ON "A DELIVERY EXISTS SOMEWHERE" (#432). The window itself is the 90-minute
 # band a delivery is EXPECTED in; this is the band in which a match counts as a delivery AT
 # ALL. It is needed because a match is a SUBJECT MENTION, not a proof of routing: measured on
-# this box at the 2026-10-07T15:36Z read, the `#432` dispatch row's own target held FORTY-SEVEN
-# messages carrying `#432` -- the oldest 18 days before the dispatch, almost all of them
+# this box at the 2026-10-07T18:05Z read, the `#432` dispatch row's own target held FORTY-NINE
+# deliveries carrying `#432` -- the oldest 19 days before the dispatch, almost all of them
 # compaction summaries quoting the lane's task list -- so an unbounded "exists elsewhere" search
 # reports a delivery for a brief that had not been sent. A brief is not delivered a day away
 # from its dispatch: the measured late-stamp slip is minutes (the specimen: 14m36s), so a day
-# either side is generous by orders of magnitude and still leaves THREE of those forty-seven
+# either side is generous by orders of magnitude and still leaves FIVE of those forty-nine
 # inside the band.
 DELIVERY_MATCH_HORIZON_SECS = 86400
+# THE SCOPE OF A DELIVERY'S HEADER (#433), in LINES, so "the header" is a DECLARED quantity
+# rather than a number hidden in a function. A dispatched notify NAMES ITS SUBJECT in its
+# opening line -- `TRIAGE DISPATCH — #428 (law: ...)`, `[factory dispatch] #432 — WORK ITEM`,
+# `DISPATCH #423 -> the Worker lane` -- while a message that merely TALKS about the subject
+# carries it in the body, hundreds of characters and many lines further down. Measured
+# 2026-10-07 on the `#428` specimen: the genuine delivery at offset 78 (line 3, the sender's
+# opening line after a blank line) and the mention that also cleared the row at offset 868
+# (line 10, a queue list). The count is the number of NON-BLANK lines
+# after the envelope that count as the header, and it is ONE because that is what every
+# measured dispatch form uses; a factory whose notices open with a two-line banner raises it
+# here rather than being read as undelivered.
+DELIVERY_HEADER_LINES = 1
 NOTIFY_DELIVERY_HEADER = "[session-notify from="
 
 # THE TWO HEADER FORMS THE HARNESS WRITES, held as a DECLARED TUPLE so a third form is a
@@ -2572,6 +2584,20 @@ def dispatch_delivery_scope(repo: Path = REPO) -> tuple[dt.datetime | None, str,
         )
     return instant, text, ""
 
+def subject_token_re(subject: str) -> "re.Pattern[str] | None":
+    """The compiled token predicate for `subject`, or None when the subject is empty.
+
+    ONE home for the boundary discipline (#49, #425): the match, the locator a verdict prints
+    and the header/body split all read the SAME pattern, so no caller can build a wider token
+    than the one that produced the verdict.
+    """
+    s = str(subject or "").strip()
+    if not s:
+        return None
+    if len(s) > 1 and s[0] == "#" and s[1:].isdigit():
+        return re.compile(rf"(?<![0-9A-Za-z])#?{re.escape(s[1:])}(?![0-9A-Za-z])")
+    return re.compile(re.escape(s))
+
 def delivery_subject_matches(text: str, subject: str) -> bool:
     """True when `text` carries `subject` in a form NO NARROWER than the artifact (#49).
 
@@ -2588,14 +2614,64 @@ def delivery_subject_matches(text: str, subject: str) -> bool:
     matched a `#423` subject against prose that named a different artifact (#425). A
     substring test would make the token WIDER than the artifact, which is the opposite
     error and just as silent. For a descriptive stem the whole stem is required.
+
+    WHAT THIS ANSWERS, AND WHAT IT DOES NOT (#433). It answers "does this text carry the
+    token"; it says NOTHING about WHERE. A delivery NAMES its subject in its header, and a
+    message that merely discusses the subject carries it in the body — so this predicate is
+    applied to the delivery's HEADER to decide corroboration and to the WHOLE text only to
+    count a MENTION. Callers that need the distinction call `delivery_header` first.
     """
-    s = str(subject or "").strip()
-    if not s or not text:
+    pattern = subject_token_re(subject)
+    if pattern is None or not text:
         return False
-    if len(s) > 1 and s[0] == "#" and s[1:].isdigit():
-        digits = s[1:]
-        return re.search(rf"(?<![0-9A-Za-z])#?{re.escape(digits)}(?![0-9A-Za-z])", text) is not None
-    return s in text
+    return pattern.search(str(text)) is not None
+
+def subject_offset(text: str, subject: str) -> tuple[int, int]:
+    """(character offset, 1-based line) of the FIRST token occurrence, else (-1, -1).
+
+    The locator a MENTION verdict prints, built from the SAME token as the match that found it
+    (#433): a locator computed from a wider token would point the reader at an occurrence other
+    than the one that was judged, which is the #425 error wearing a diagnostic's clothes.
+    """
+    pattern = subject_token_re(subject)
+    if pattern is None:
+        return (-1, -1)
+    body = str(text or "")
+    found = pattern.search(body)
+    if found is None:
+        return (-1, -1)
+    return (found.start(), body.count("\n", 0, found.start()) + 1)
+
+def delivery_header(text: str, *, lines: int = DELIVERY_HEADER_LINES) -> str:
+    """The delivery's HEADER: its opening `lines` NON-BLANK line(s), envelope prefixes skipped.
+
+    A delivered notify DECLARES its subject here — `TRIAGE DISPATCH — #428`, `[factory dispatch]
+    #432 — WORK ITEM` — and the harness's own envelope (`[session-notify from=<uuid>]`,
+    `📨 notify from <short-id>:`) is not part of what the sender wrote, so the DECLARED envelope
+    prefixes above are skipped rather than counted as a header line. The scope is ONE line by
+    declaration (`DELIVERY_HEADER_LINES`), measured from the #433 specimen's discriminator: the
+    genuine delivery carried its subject at offset 78 and the mention that also cleared the row
+    at offset 868, inside a queue list.
+
+    WHY THE SCOPE IS NOT THE WHOLE TEXT (#433). A dispatch row is cleared when its target holds
+    a delivery CARRYING THE SUBJECT — but a lane's store is full of messages that MENTION the
+    subject: compaction summaries quoting the task list, rulings quoting the row under
+    discussion, return legs listing what is queued. Measured 2026-10-07T18:05Z on the `#432`
+    dispatch row's own target: 49 deliveries carried `#432`, of which 2 named it in a header and
+    the other 47 only in a body. A whole-body match therefore clears a row whose brief was never
+    routed — the false-CLEAN twin of the false absence #432 fixed.
+    """
+    kept: list[str] = []
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if any(line.startswith(prefix) for prefix in NOTIFY_DELIVERY_HEADERS):
+            continue
+        kept.append(line)
+        if len(kept) >= max(1, int(lines)):
+            break
+    return "\n".join(kept)
 
 def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
     """(deliveries, homes_read, unreached) for every delivered notify on the box.
@@ -2738,6 +2814,8 @@ def dispatch_delivery_leg(
             "dispatch_rows_undated": 0, "dispatch_rows_not_judged": 0,
             "dispatch_rows_declared_anchor": 0,
             "subject_matches_anywhere": 0, "subject_matches_within_horizon": 0,
+            "dispatch_rows_corroborated": 0,
+            "subject_mentions_body_only": 0, "subject_mentions_body_only_within_horizon": 0,
             "deliveries_read": None, "homes_read": None, "homes_unreached": [],
             "store_read": False,
             "store_not_read_reason": reason,
@@ -2761,6 +2839,9 @@ def dispatch_delivery_leg(
     declared_anchor = 0
     matches_anywhere = 0
     matches_near = 0
+    mentions_anywhere = 0
+    mentions_near = 0
+    corroborated = 0
     to_judge: list[tuple[dict, dt.datetime, dt.datetime, dt.datetime, str, str]] = []
     for row in rows:
         if row.get("event") != "dispatch":
@@ -2886,14 +2967,26 @@ def dispatch_delivery_leg(
         # report ABSENCE from a window it chose itself. `matched` answers "does this target
         # hold this brief AT ALL"; only then is the window applied, and a match that falls
         # outside it is a WINDOW MISMATCH -- a delivery that exists -- never an absence.
-        matched = [
+        carrying = [
             d for d in deliveries
             if d.get("session") == session_ref
             and delivery_subject_matches(d["text"], subject)
         ]
+        # AND THE MATCH MUST BE IN THE DELIVERY'S HEADER (#433). A delivery NAMES the unit it
+        # routes -- `TRIAGE DISPATCH — #428`, `[factory dispatch] #432 — WORK ITEM` -- so the
+        # token belongs in its opening line; a message that merely DISCUSSES the subject
+        # carries it in the BODY, and a lane's store is full of those: compaction summaries
+        # quoting the task list, rulings quoting the row under discussion, return legs listing
+        # what is queued. Measured 2026-10-07T18:05Z on the `#432` dispatch row's own target:
+        # 49 deliveries carried `#432` while only 2 named it in a header. A whole-text match clears a
+        # row whose brief was never routed -- the false-CLEAN twin of the false absence #432
+        # fixed, and the reason a body-only match is reported as a MENTION and never counted
+        # as corroboration.
+        matched = [d for d in carrying if delivery_subject_matches(delivery_header(d["text"]), subject)]
+        mentions = [d for d in carrying if d not in matched]
         # A MATCH COUNTS AS A DELIVERY ONLY INSIDE THE HORIZON (#432). Beyond it a match is a
-        # subject MENTION -- this box's `#432` target held 47 of them at the 2026-10-07T15:36Z
-        # read, the oldest `2026-09-19T08:29:00Z`, 18 days back -- and reporting one as "a
+        # subject MENTION -- this box's `#432` target held 47 of them at the 2026-10-07T18:05Z
+        # read, the oldest `2026-09-19T08:29:00Z`, 19 days back -- and reporting one as "a
         # delivery exists" would be the false-CLEAN twin of the false absence this item is
         # about. The unbounded count is kept and printed, so the horizon's effect is visible
         # rather than silent.
@@ -2903,8 +2996,21 @@ def dispatch_delivery_leg(
             <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc)
             <= anchor + match_horizon
         ]
-        matches_anywhere += len(matched)
+        # A BODY-ONLY MENTION IS HORIZON-BOUNDED FOR THE SAME REASON (#433): an 18-day-old
+        # summary quoting the unit is not evidence that a briefing reached the target, and the
+        # MENTION verdict must not be a second way to read one as a delivery.
+        near_mentions = [
+            d for d in mentions
+            if anchor - match_horizon
+            <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc)
+            <= anchor + match_horizon
+        ]
+        matches_anywhere += len(carrying)
         matches_near += len(plausible)
+        mentions_anywhere += len(mentions)
+        mentions_near += len(near_mentions)
+        if matched:
+            corroborated += 1
         hits = [
             d for d in plausible
             if lo <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc) <= hi
@@ -2931,6 +3037,30 @@ def dispatch_delivery_leg(
                 f"MISMATCH, never an absence: do not re-dispatch on this line"
             )
             continue
+        if near_mentions:
+            # A BODY-ONLY MATCH IS A MENTION, NOT A DELIVERY (#433). Reporting it as
+            # corroboration would clear a row whose brief was never routed; reporting it as an
+            # ABSENCE would be a lie in the other direction, because the text IS there and the
+            # reader can see it. So the third verdict says exactly what was found and where --
+            # the token in the BODY, never in the header a delivery declares its subject in --
+            # and leaves the row's truth to a lane that can read the store itself.
+            first = min(near_mentions, key=lambda d: d["epoch"])
+            at = dt.datetime.fromtimestamp(first["epoch"], dt.timezone.utc)
+            off, line = subject_offset(first["text"], subject)
+            problems.append(
+                f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} to session "
+                f"{session_ref} is corroborated by NO delivery: {len(near_mentions)} message(s) "
+                f"on that target MENTION `{subject}` inside their body within the "
+                f"{int(match_horizon.total_seconds())} s horizon (earliest "
+                f"{at.strftime('%Y-%m-%dT%H:%M:%SZ')}, {first['state']}, at offset {off} on "
+                f"line {line} — never in a delivery header), and {mentions_anywhere} mention it "
+                f"anywhere in the stores. A body mention is a MENTION, not a delivery: no "
+                f"notify NAMING `{subject}` in its header reached that target inside the window "
+                f"[{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, {hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] "
+                f"({basis}), so this row reads NEITHER corroborated NOR absent — a lane "
+                f"discussing the unit is not a lane that was briefed"
+            )
+            continue
         problems.append(
             f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} to session "
             f"{session_ref} records no delivery: no inbound notify carrying `{subject}` "
@@ -2946,6 +3076,9 @@ def dispatch_delivery_leg(
     coverage.update({
         "subject_matches_anywhere": matches_anywhere,
         "subject_matches_within_horizon": matches_near,
+        "dispatch_rows_corroborated": corroborated,
+        "subject_mentions_body_only": mentions_anywhere,
+        "subject_mentions_body_only_within_horizon": mentions_near,
     })
     return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
             "problems": problems, "excused": [], "coverage": coverage}
@@ -5295,6 +5428,19 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"the {cov.get('match_horizon_secs')} s horizon of "
                     f"{cov.get('subject_matches_anywhere', 0)} anywhere in the store(s) "
                     f"(#432)"
+                )
+                # A MATCH IS SPLIT BY WHERE THE TOKEN SITS (#433): only a HEADER match
+                # corroborates a dispatch row, so the count a reader needs is not "how many
+                # messages carried the subject" but "how many NAMED it as the unit they route".
+                # Printed beside the body-only count, because the difference IS the verdict.
+                lines.append(
+                    f"  subject matches in a delivery HEADER: "
+                    f"{cov.get('dispatch_rows_corroborated', 0)} of "
+                    f"{cov['dispatch_rows_examined']} examined row(s) corroborated by a header "
+                    f"match; {cov.get('subject_mentions_body_only_within_horizon', 0)} "
+                    f"body-only mention(s) within the horizon of "
+                    f"{cov.get('subject_mentions_body_only', 0)} anywhere — a mention never "
+                    f"corroborates (#433)"
                 )
             if cov.get("store_read"):
                 lines.append(

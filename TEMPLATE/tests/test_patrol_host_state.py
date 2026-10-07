@@ -5582,6 +5582,170 @@ def test_the_render_PRINTS_the_match_counts_the_horizon_judged() -> None:
         f"anywhere in the store(s)"
     ) in out, out
 
+def test_a_BODY_only_mention_is_a_MENTION_and_NEVER_corroboration() -> None:
+    """#433: a message that DISCUSSES the subject does not clear a dispatch row.
+
+    The false-CLEAN twin of #432's false absence. A lane's store is full of messages carrying
+    the unit's token -- compaction summaries quoting the task list, rulings quoting the row
+    under discussion -- and a whole-text match lets any one of them clear a row whose brief was
+    never routed. The token belongs in the delivery's HEADER, because that is where a delivery
+    NAMES what it routes.
+
+    THREE assertions, because a fix that overshot would pass two of them: the row is NAMED, it
+    reads as a MENTION, and it does NOT read as an absence -- the text IS there, and calling it
+    "records no delivery" would be a lie in the opposite direction.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(181, "dispatch", "#91", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    leg = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(dispatched + dt.timedelta(seconds=60),
+                       "[session-notify from=abc]\nTriage cycle report\n\n"
+                       "queued for this lane: #91, #92",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    named = "\n".join(leg["problems"])
+    assert leg["coverage"]["dispatch_rows_corroborated"] == 0, leg["coverage"]
+    assert leg["coverage"]["subject_matches_anywhere"] == 1, leg["coverage"]
+    assert leg["coverage"]["subject_matches_within_horizon"] == 0, leg["coverage"]
+    assert leg["coverage"]["subject_mentions_body_only"] == 1, leg["coverage"]
+    assert "n=181" in named and "#91" in named, f"the row must be NAMED\n{named}"
+    assert "MENTION" in named, f"a body-only match reads as a MENTION\n{named}"
+    assert "corroborated by NO delivery" in named, named
+    assert "records no delivery" not in named, (
+        f"a body mention is not an absence -- the text IS there\n{named}"
+    )
+
+def test_a_HEADER_match_still_clears_the_row_when_the_body_mentions_it_too() -> None:
+    """#433, the specimen's own shape: `#428`'s dispatch row carried its subject at offset 78
+    (the header) and again at offset 868 (a queue list in the body).
+
+    A fix that scoped the match to "the first occurrence" or to "not the body" would redden
+    this row -- the one whose delivery genuinely woke the lane. The discriminator is WHERE the
+    token sits, never WHICH occurrence is found first.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(182, "dispatch", "#93", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    leg = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(dispatched + dt.timedelta(seconds=60),
+                       "[session-notify from=abc]\nTRIAGE DISPATCH — #93\n\n"
+                       "queued for this lane: #93, #94",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["dispatch_rows_corroborated"] == 1, leg["coverage"]
+    assert leg["coverage"]["subject_mentions_body_only"] == 0, leg["coverage"]
+
+def test_a_body_mention_addressed_to_a_DIFFERENT_target_is_still_an_ABSENCE() -> None:
+    """#425 clause 1, re-asserted under the #433 split: a mention on ANOTHER lane is neither
+    corroboration nor a mention OF THIS DISPATCH.
+
+    The subject is broadcast to several lanes, so a body match on a different target must stay
+    an absence -- otherwise the header fix would have widened the predicate it was meant to
+    narrow.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(183, "dispatch", "#95", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    leg = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(dispatched + dt.timedelta(seconds=60),
+                       "[session-notify from=abc]\nTriage cycle report\n\nqueued: #95",
+                       session="another-lane")],
+            ["probe-home"], [],
+        ),
+    )
+    named = "\n".join(leg["problems"])
+    assert "records no delivery" in named, named
+    assert "MENTION" not in named, f"another lane's mention is not this dispatch's\n{named}"
+    assert leg["coverage"]["subject_mentions_body_only"] == 0, leg["coverage"]
+
+def test_a_body_mention_beyond_the_horizon_is_counted_but_not_a_MENTION() -> None:
+    """#433 horizon arm: the MENTION verdict is bounded exactly as a delivery match is.
+
+    An 18-day-old compaction summary quoting the unit is not evidence that a briefing reached
+    the target, so it must not become a second route to a confident near-verdict. It is still
+    COUNTED (`..._anywhere`), because a count that vanished would be indistinguishable from a
+    store that held nothing (#116).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(184, "dispatch", "#96", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    leg = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(dispatched - dt.timedelta(days=18),
+                       "[session-notify from=abc]\nTriage cycle report\n\nqueued: #96",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    named = "\n".join(leg["problems"])
+    assert leg["coverage"]["subject_mentions_body_only"] == 1, leg["coverage"]
+    assert leg["coverage"]["subject_mentions_body_only_within_horizon"] == 0, leg["coverage"]
+    assert "records no delivery" in named, named
+    assert "MENTION" not in named, f"an 18-day-old mention is not a near-mention\n{named}"
+
+def test_delivery_header_skips_the_envelope_and_reads_the_line_the_SENDER_wrote() -> None:
+    """#433: the header is the sender's first NON-BLANK line, with the harness's envelope
+    skipped.
+
+    The envelope (`[session-notify from=<uuid>]`, `📨 notify from <short-id>:`) is added by the
+    transport, not written by the lane that routed the brief, so counting it as the header line
+    would scope the match to a line no sender controls. Both declared forms are exercised, and
+    the blank line between envelope and body is what the skip exists for.
+    """
+    assert RUNNER.delivery_header(
+        "[session-notify from=abc]\n\nTRIAGE DISPATCH — #94\nqueued: #94"
+    ) == "TRIAGE DISPATCH — #94"
+    assert RUNNER.delivery_header(
+        "📨 notify from abc123:\nDISPATCH #94 to the Worker\nbody: #94"
+    ) == "DISPATCH #94 to the Worker"
+
+def test_the_render_PRINTS_the_header_and_body_split() -> None:
+    """#433: the split is PRINTED, because it IS the verdict.
+
+    "subject matches: 1 within the horizon of 1 anywhere" was true of the #433 specimen and
+    said nothing about whether the match corroborated -- the reader needs "of the rows
+    examined, how many a HEADER match cleared" beside "how many body-only mentions were set
+    aside", or a green line cannot be told from a row cleared by a mention.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(185, "dispatch", "#97", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    mention = _delivery(dispatched + dt.timedelta(seconds=60),
+                        "[session-notify from=abc]\nTriage cycle report\n\nqueued: #97",
+                        session=_PROBE_TARGET)
+    rc, out, _ = _run([], [row], delivery_scope=bound, deliveries=[mention])
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert "subject matches in a delivery HEADER:" in out, out
+    assert "body-only mention(s)" in out, out
+
+
 def _messages_db(path: Path, *messages: tuple[str, str]) -> None:
     """A throwaway OpenCrabs home holding real `messages` rows — the landed-notify read path.
 
