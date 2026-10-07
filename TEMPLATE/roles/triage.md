@@ -11,7 +11,9 @@
 ## What Triage does
 
 - **Intake.** Turns a report, an alert or a score regression into an issue
-  with a goal, an owner and done-criteria.
+  with a goal, an owner and done-criteria. Every filing **DECLARES** its
+  `defect-key:` so the write path can intersect it against the OPEN set — see
+  *A new filing is intersected against the OPEN set at intake* below.
 - **Routing & Automated Assignment.** Scans unassigned issues, checks claims,
   selects the appropriate worker lane, and delivers the brief directly to that session
   via Rail 1 push handoff (`session_notify` with `goal` and `goal_max_turns`).
@@ -95,6 +97,43 @@ shape"*) binds a **CLAIMED** item — a lane that already holds the claim and ha
 and says nothing about a never-claimed `OWED` line. And a unit already dispatched (or
 re-dispatched) **inside the threshold window** is NOT dispatched again: a second dispatch of
 the same unit inside that window carries no state change.
+
+**A NEW FILING IS INTERSECTED AGAINST THE OPEN SET AT INTAKE — the write path refuses the
+duplicate, and the declaration is `defect-key:` (#417, ruled `n=2745`; owner answers `q34`/`q35`).**
+A filing DECLARES the **defect's** slug on a line of its own:
+
+```
+defect-key: gate-select-drops-interpreter
+```
+
+`tools/ledger.py` reads that key at `intake` and REFUSES the row when the key is already
+carried by an item with **no `close`** — the OPEN set is read from this ledger, so the check is
+offline and testable. The refusal names the open carrier and says **LINK or CLOSE**: comment on
+the open item instead of filing a second design for one defect. The key is the defect's slug,
+never the title's, because two titles for one defect differ in wording while the defect does not
+(`#319`/`#321`/`#416` are three titles for one defect).
+
+Two adjacent shapes are deliberate, and neither is a refusal: a **differently-worded** key that
+merely resembles an existing one is PRINTED as a near-duplicate candidate and the filing stands,
+because a similarity judgement wearing a gate's authority is not a thing the write path may
+decide; and a filing with **no** `defect-key:` line is OUTSIDE the intersection, because there is
+nothing to compare — that is forward-only, and backfilling a key onto a historical row would be a
+fabricated declaration rather than a repair. A key that does not match the slug shape
+(`^[a-z0-9]+(-[a-z0-9]+)*$`) is REFUSED rather than ignored, because a key that can never equal
+another row's key is a key that silently never matches, and the check would read clean over the
+very duplicate it exists to catch.
+
+**A CLOSED match is ADMITTED, but it must DECLARE the recurrence (#417, `q35`).** A defect can
+genuinely return, so a re-filing after a close is legitimate — but it must SAY SO, on a line of
+its own naming the item it re-files:
+
+```
+recurrence-of: #319
+```
+
+Without that declaration the write path refuses the filing and names the closed item. The OPEN
+set binds FIRST: an open carrier refuses the filing even when a `recurrence-of:` line is present,
+because a recurrence of an OPEN item is a duplicate by definition.
 
 **DISCHARGED is not CLEARED.** Re-dispatching an `OWED` line **discharges the duty** this
 lane owed for that line — the act is done, and its own row is the record. It does **not**

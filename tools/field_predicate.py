@@ -155,6 +155,101 @@ def declared_cause_count(text: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+DEFECT_KEY_TOKEN = "defect-key"
+"""The DECLARED intersection key a filing carries about its OWN defect (#417, ruled n=2745).
+
+One line, anchored at the start, carrying a normalised slug:
+
+    defect-key: gate-select-drops-interpreter
+
+It is the key the intake-time non-duplication check intersects against the OPEN set. It is
+the DEFECT's slug and never the title's, because two titles for one defect differ in wording
+while the defect does not — a title-derived key would miss the very re-filings the check
+exists to catch (#319/#321/#416 are three titles for one defect).
+
+ANCHOR-FIRST, like `oc-cause-count` above and for the same reason: `detail` is free prose that
+QUOTES declarations as evidence, so a token mentioned mid-sentence must not read as a
+declaration. The reader is `declared_defect_key`; the write path calls it rather than
+re-deriving the pattern, so the refusal and the gate's own probe -- which drives that same
+write path -- cannot disagree about what a row declares.
+
+The VALUE is the whole rest of the line, and it is NOT pre-filtered to a single non-space
+run: a pattern that only matched a well-formed slug would let `defect-key: Gate Select` match
+NOTHING, so a malformed key would read as no key at all — silently outside the intersection,
+which is the exact hazard `defect_key_problem` exists to refuse. Reading the raw value and
+judging it in one predicate is what keeps a malformed key loud instead of invisible.
+"""
+
+DEFECT_KEY_RE = re.compile(rf"^[ \t]*{DEFECT_KEY_TOKEN}:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
+
+# A normalised slug: lowercase alphanumerics in hyphen-separated groups. Stated as a class
+# rather than left to the reader because the check's whole value is EXACT comparison — a key
+# carrying an uppercase letter, a space or a trailing dot can never equal another row's key,
+# so a malformed key is not a near miss: it is a key that silently never matches, and the
+# check would read clean over a duplicate it was built to refuse.
+DEFECT_KEY_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+def declared_defect_key(detail: str) -> str | None:
+    """The `defect-key:` slug `detail` DECLARES, or None when it declares none.
+
+    Read ANCHOR-FIRST and by declaration alone, exactly as `declared_cause_count` is: the
+    token, then `:`, then the RAW VALUE, on a line of its own. Nothing is inferred from the
+    surrounding prose, and the value is returned as written — judging it a lawful slug is
+    `defect_key_problem`'s job, so a malformed key cannot hide by failing to match here.
+
+    The bound is stated rather than implied: a row carrying NO key returns None, and its
+    caller treats it as OUTSIDE the intersection — a keyless filing cannot collide, because
+    there is nothing to compare. That is deliberate and forward-only: the historical intakes
+    carry no key, and backfilling one would be a fabricated declaration rather than a repair.
+    """
+    m = DEFECT_KEY_RE.search(str(detail))
+    return m.group(1) if m else None
+
+def defect_key_problem(value: str) -> str | None:
+    """Why `value` is not a lawful `defect-key` slug, or None when it is one.
+
+    ONE predicate, two call sites — the write path refuses a malformed key and the gate
+    reports one, and neither re-derives the class. Without it a key such as `Gate Select` is
+    admitted and then matches nothing, so the check passes over a duplicate: the refusal is
+    what keeps the silence from reading as a clean intersection.
+    """
+    if DEFECT_KEY_SLUG_RE.fullmatch(value):
+        return None
+    return (
+        f"{value!r} is not a normalised slug — lowercase alphanumerics in hyphen-separated "
+        f"groups (e.g. `gate-select-drops-interpreter`), because the intersection is an "
+        f"EXACT comparison and a key that cannot equal another row's key never matches"
+    )
+
+RECURRENCE_OF_TOKEN = "recurrence-of"
+"""The DECLARED recurrence a filing carries when it re-files a CLOSED defect (#417, q35).
+
+One line, anchored at the start, naming the closed work unit:
+
+    recurrence-of: #319
+
+The owner's answer to q35 is **require declaration**, not print-only and not unconditional
+refusal: a recurrence is LEGITIMATE — a defect can genuinely return — so it is admitted, but
+it must SAY SO, and the declaration is what makes the second filing distinguishable from a
+duplicate that nobody checked. A `defect-key` matching a CLOSED item without this line is
+refused for the same reason an OPEN match is: at intake the two are indistinguishable, and
+the cheaper error is the one that asks the filer to declare.
+"""
+
+RECURRENCE_OF_RE = re.compile(rf"^[ \t]*{RECURRENCE_OF_TOKEN}:[ \t]*(#\d+)[ \t]*$", re.MULTILINE)
+
+def declared_recurrence_of(detail: str) -> str | None:
+    """The `recurrence-of: #N` subject `detail` DECLARES, or None when it declares none.
+
+    Read ANCHOR-FIRST, by declaration alone, and VERBATIM as `#<digits>`: the subject form is
+    the ledger's own (`#N`), never a bare integer, so `recurrence-of: 319` declares nothing —
+    the same strictness the ledger's subject column carries, for the same reason, that a bare
+    integer names an issue to a human and nothing to a machine.
+    """
+    m = RECURRENCE_OF_RE.search(str(detail))
+    return m.group(1) if m else None
+
+
 def declares_field(detail: str, key: str) -> bool:
     """True when `detail` declares `key` with a value that PARSES for that key's type.
 

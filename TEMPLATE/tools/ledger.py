@@ -103,6 +103,7 @@ infer it from a clean `verify`.
 from __future__ import annotations
 
 import argparse
+import difflib
 import fcntl
 import json
 import os
@@ -143,11 +144,14 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 from field_predicate import (
     declared_claim,
     declared_comment_id,
+    declared_defect_key,
     declared_delivery,
     declared_keys,
     declared_reclaim,
     declared_reclose,
+    declared_recurrence_of,
     declared_revision,
+    defect_key_problem,
     mentions_reclaim,
     mentions_reclose,
     declared_telemetry_provenance,
@@ -1367,6 +1371,100 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"released once; a second release is either a deliberate "
                         f"re-release, which is a new claim, or a DUPLICATE minted by "
                         f"retrying an append that had already completed (#213)"
+                    )
+        # A NEW INTAKE IS INTERSECTED AGAINST THE OPEN SET, AND A DUPLICATE IS REFUSED
+        # (#417, ruled `n=2745`; the owner's answers to `q34`/`q35`).
+        #
+        # No surface in the filing path intersected a new finding against the OPEN set, so
+        # `#321` and `#416` both re-filed `#319`'s defect -- admitted, dispatched, and closed
+        # as duplicates only afterwards, by which time a worker lane had been woken and a
+        # dispatch spent. The owner chose the INTAKE-TIME shape: the intersection happens
+        # before the intake row is stamped, keyed on a `defect-key` the filing DECLARES.
+        #
+        # THE OPEN SET IS THIS LEDGER'S OWN. A subject's lifecycle is `intake` -> `claim` ->
+        # `close`, so an OPEN item is a subject with an intake and no close, and its key is
+        # the one its own intake row declares. Reading the intersection from the ledger
+        # rather than from the board is what keeps the check OFFLINE and TESTABLE: the board
+        # is not reachable from every environment that appends, and a check needing the
+        # network cannot be driven by a hermetic fixture.
+        #
+        # THE REFUSAL IS DETERMINISTIC, AND THE SIMILARITY IS ADVISORY. An EXACT declared-key
+        # match against the OPEN set refuses; differently-worded filings the exact key does
+        # not match are PRINTED as candidates and never refuse. A heuristic that refused
+        # would be a similarity judgement wearing a gate's authority, and its
+        # false-positive rate is not a thing this write path may decide (ruling clause 4).
+        #
+        # A CLOSED match is ADMITTED, but only with a DECLARED `recurrence-of: #N` (`q35`).
+        # A recurrence is legitimate -- a defect can genuinely return -- so it is not
+        # blocked; it must SAY SO, which is what makes the second filing distinguishable
+        # from a duplicate nobody checked.
+        #
+        # A FILING WITH NO KEY IS OUTSIDE THE INTERSECTION. Every historical intake carries
+        # none, and backfilling one would be a fabricated declaration rather than a repair;
+        # a keyless filing cannot collide, because there is nothing to compare.
+        if args.event == "intake":
+            _key = declared_defect_key(args.detail)
+            if _key is not None:
+                _malformed = defect_key_problem(_key)
+                if _malformed:
+                    sys.exit(
+                        f"ledger append refused: `defect-key: {_key}` -- {_malformed}"
+                    )
+                _closed_subjects = {
+                    r.get("subject") for r in rows if r.get("event") == "close"
+                }
+                _open_keys: dict[str, list[dict]] = {}
+                _closed_keys: dict[str, list[dict]] = {}
+                for _r in rows:
+                    if _r.get("event") != "intake":
+                        continue
+                    _k = declared_defect_key(_r.get("detail") or "")
+                    if not _k:
+                        continue
+                    _bucket = (
+                        _closed_keys if _r.get("subject") in _closed_subjects else _open_keys
+                    )
+                    _bucket.setdefault(_k, []).append(_r)
+                _hit = _open_keys.get(_key)
+                if _hit:
+                    _named = ", ".join(
+                        f"{h.get('subject')} (intake n={h.get('n')})" for h in _hit
+                    )
+                    sys.exit(
+                        f"ledger append refused: `defect-key: {_key}` is already carried "
+                        f"by an OPEN item -- {_named}. A hit means LINK or CLOSE, never a "
+                        f"second design for one defect (owner order 2026-09-26 item 6(a)): "
+                        f"comment on the open item instead of filing a new one. If that "
+                        f"item is CLOSED, re-file with a declared `recurrence-of: #N` line "
+                        f"(#417, ruled n=2745)."
+                    )
+                _chit = _closed_keys.get(_key)
+                if _chit and declared_recurrence_of(args.detail) is None:
+                    _crows = ", ".join(str(h.get('subject')) for h in _chit)
+                    sys.exit(
+                        f"ledger append refused: `defect-key: {_key}` matches a CLOSED "
+                        f"item -- {_crows} -- and this filing declares no `recurrence-of: "
+                        f"#N`. A recurrence is legitimate and must be DECLARED, never "
+                        f"blocked: add a line `recurrence-of: #<closed subject>` naming "
+                        f"the item this one re-files (#417, q35)."
+                    )
+                # ADVISORY ONLY -- the near-duplicate candidates the exact key did not
+                # match. Printed to stderr so a re-filing is VISIBLE without a heuristic
+                # ever refusing one. The ratio is a POLICY CHOICE, not a law: it decides
+                # how wide the advisory net is, and nothing reads its output to refuse.
+                _candidates = sorted(
+                    _c
+                    for _c in set(_open_keys) | set(_closed_keys)
+                    if _c != _key
+                    and difflib.SequenceMatcher(None, _c, _key).ratio() >= 0.6
+                )
+                if _candidates:
+                    print(
+                        "ledger append: NEAR-DUPLICATE candidate(s) -- differently-worded "
+                        "defect-key(s) this filing does not exactly match; check whether "
+                        "one is the same defect before relying on this intake: "
+                        + ", ".join(_candidates),
+                        file=sys.stderr,
                     )
         # A close row is refused at the WRITE PATH when its subject has no
         # preceding intake and claim — the SAME predicate `verify` runs, asked

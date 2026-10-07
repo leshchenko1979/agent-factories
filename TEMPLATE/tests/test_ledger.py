@@ -605,6 +605,106 @@ def check_release_vocabulary() -> None:
                   r.returncode == 0 and "0 terminal by release, 1 open" in r.stdout,
                   r.stdout[-420:])
 
+def check_intake_duplicate_intersection() -> None:
+    """#417: a DECLARED `defect-key` is intersected against the OPEN set at intake.
+
+    The write path is the only place the intersection can be refused BEFORE a lane is
+    woken, and that is the whole point: `#321` and `#416` both re-filed `#319`'s defect,
+    were admitted, dispatched and closed as duplicates only afterwards, and each one
+    spent a dispatch and a worker wake to get there.
+    """
+    key = "gate-select-drops-interpreter"
+    print("intake non-duplication (#417) -- a declared defect-key against the OPEN set")
+    with tempfile.TemporaryDirectory() as tmp:
+        led = Path(tmp) / "dup.jsonl"
+
+        def intake(subject: str, detail: str) -> subprocess.CompletedProcess:
+            return run(led, "append", "--event", "intake", "--actor", "triage",
+                       "--subject", subject, "--detail", detail)
+
+        r = intake("#9001", f"first filing\ndefect-key: {key}")
+        check("(417a) a declared key on a fresh subject appends", r.returncode == 0,
+              r.stderr.strip()[:200])
+
+        r = intake("#9002", f"a second design for one defect\ndefect-key: {key}")
+        check("(417b) the SAME key against an OPEN item is REFUSED", r.returncode != 0,
+              f"rc={r.returncode}")
+        check("(417b) and the refusal NAMES the open carrier",
+              "-- #9001 (intake n=1)" in r.stderr, r.stderr.strip()[:260])
+        check("(417b) and it says LINK or CLOSE", "LINK or CLOSE" in r.stderr,
+              r.stderr.strip()[:260])
+        check("(417b) the refused append wrote nothing",
+              len(rows(led)) == 1, f"{len(rows(led))} row(s)")
+
+        r = intake("#9003", f"differently worded\ndefect-key: {key}r")
+        check("(417c) a NEAR-duplicate key is ADMITTED -- advisory, never a refusal",
+              r.returncode == 0, r.stderr.strip()[:200])
+        check("(417c) and the candidate is PRINTED for the filer",
+              "NEAR-DUPLICATE" in r.stderr, r.stderr.strip()[:260])
+
+        # A KEY THAT CAN NEVER MATCH IS REFUSED, NOT IGNORED. `Gate Select Drops` matches
+        # no slug, so a reader that pre-filtered to a well-formed value would report this
+        # row as KEYLESS -- outside the intersection -- and the check would read clean
+        # over the duplicate it exists to catch. The reader returns the raw value and
+        # `defect_key_problem` refuses it.
+        r = intake("#9004", "uppercase and spaces\ndefect-key: Gate Select Drops")
+        check("(417d) a MALFORMED key is REFUSED, never silently unmatched",
+              r.returncode != 0, f"rc={r.returncode}")
+        check("(417d) and the refusal names the slug shape",
+              "normalised slug" in r.stderr, r.stderr.strip()[:260])
+
+        r = intake("#9005", "a filing with no key at all")
+        check("(417e) a filing with NO key is outside the intersection (control)",
+              r.returncode == 0, r.stderr.strip()[:200])
+
+        # Close #9001 so its key moves to the CLOSED bucket.
+        run(led, "append", "--event", "claim", "--actor", "worker", "--subject", "#9001",
+            "--detail", "claim: taking it")
+        cz = run(led, "append", "--event", "close", "--actor", "worker",
+                 "--subject", "#9001",
+                 "--detail", "close: fixed board=closed head=deadbeefdeadbeef outcome=accepted")
+        check("(417f) the fixture closed #9001", cz.returncode == 0, cz.stderr.strip()[:200])
+
+        r = intake("#9006", f"it came back\ndefect-key: {key}")
+        check("(417g) a CLOSED match with NO `recurrence-of` is REFUSED",
+              r.returncode != 0, f"rc={r.returncode}")
+        check("(417g) and the refusal NAMES the closed item",
+              "-- #9001 --" in r.stderr, r.stderr.strip()[:260])
+        check("(417g) and the refusal asks for the declaration",
+              "recurrence-of" in r.stderr, r.stderr.strip()[:260])
+
+        r = intake("#9007", f"it came back\ndefect-key: {key}\nrecurrence-of: #9001")
+        check("(417h) the DECLARED recurrence is ADMITTED", r.returncode == 0,
+              r.stderr.strip()[:200])
+
+        # THE OPEN SET BINDS FIRST: #9007 is now an OPEN carrier of `key`, so a third
+        # filing is a duplicate of an OPEN item even though it declares a recurrence --
+        # a recurrence of an OPEN item is a duplicate by definition.
+        r = intake("#9008", f"a third\ndefect-key: {key}\nrecurrence-of: #9001")
+        check("(417i) an OPEN hit refuses even WITH a recurrence declared",
+              r.returncode != 0, f"rc={r.returncode}")
+        check("(417i) and it names the OPEN carrier #9007",
+              "-- #9007 (intake n=7)" in r.stderr, r.stderr.strip()[:260])
+
+    # --- the NEUTER leg: the probe is shown to BITE --------------------------------
+    # A rule that has only seen good input has not been shown to reject bad input, and a
+    # probe that cannot be made to fail is not a probe.
+    print("intake non-duplication (#417) -- the refusal is shown to BITE")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _fixture_repo(Path(tmp) / "root")
+        led = _ledger(root)
+        ok = run_in_tree(root, led, "append", "--event", "intake", "--actor", "triage",
+                         "--subject", "#1", "--detail", f"first\ndefect-key: {key}")
+        check("(417j) the fixture's own tool admits the first filing",
+              ok.returncode == 0, ok.stderr.strip()[:200])
+        _stage_mutant(root, "        if _hit:", "        if False:")
+        mut = run_in_tree(root, led, "append", "--event", "intake", "--actor", "triage",
+                          "--subject", "#2", "--detail", f"second\ndefect-key: {key}")
+        check("(417j) with the OPEN leg NEUTERED the same filing is ADMITTED",
+              mut.returncode == 0,
+              f"rc={mut.returncode} -- the probe does not bite: {mut.stderr.strip()[:160]}")
+
+
 def main() -> int:
     print("registration — an unregistered gate never runs (P29)")
     check_registered_in_the_audit()
@@ -2600,6 +2700,7 @@ def main() -> int:
     check_fail_open_needs_no_remote()
     check_unread_ref_is_refused()
     check_worktree_fork_refused()
+    check_intake_duplicate_intersection()
     check_release_vocabulary()
 
     print()
