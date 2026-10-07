@@ -2595,6 +2595,39 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
             [sys.executable, "-m", "pytest", "tests/test_score_artifact_measurable.py"]
         )
 
+    # 83. declared-boundary census (board #431, ruling n=2799, dispatched n=2793).
+    #     THE MECHANISM IT GUARDS: the census that should have caught the #428 class cannot
+    #     be the obvious one. A sweep for the MARKER a gate carries (`grep INVARIANT_LANDED`)
+    #     enumerates its population by the very name it is checking, so a boundary spelled
+    #     anything else is invisible -- and that self-selection IS the defect: six such
+    #     literals lived in five byte-paired gates until #428, and a SEVENTH was written
+    #     while #428 sat open, under a different name that no marker sweep would ever have
+    #     matched. This gate enumerates its population by WHAT a module READS -- an
+    #     `evidence/` path fragment, or the `ledger_boundary` seam that centralises those
+    #     paths (post-#428 a gate carries no `evidence/` literal at all, so the seam is the
+    #     signal that survives) -- and within that population REPORTS a MODULE-LEVEL
+    #     date-like constant consumed by a scope that is not a probe. A boundary that JUDGES
+    #     live data is reached from the judging scopes (`main`, `evaluate`, the predicates);
+    #     a fixture boundary is reached only from probes and tree-builders, which is where a
+    #     literal belongs. The predicate reads module-level constants and never inline
+    #     literals, and says so: measured over the live tree (2026-10-07), 53 inline
+    #     date-like literals sit in non-probe scopes and every one is fixture data, so an
+    #     inline sweep would red the audit on its first run while reporting nothing true.
+    #     It PRINTS its population, the constants examined and the defects, so a clean run
+    #     and an unexamined one are never the same output (#116), and it carries a POSITIVE,
+    #     a SEAM, a NEGATIVE and a MARKER-ONLY control so a predicate that has only seen
+    #     clean input is never taken as one that bites. REQUIRED, not OPTIONAL: it reads
+    #     SOURCE and never `evidence/`, so it runs identically in a bootstrapped factory and
+    #     in the TEMPLATE tree -- which is also why its population rule cannot be a bare
+    #     `twin.exists()`. It is byte-paired with a TEMPLATE copy. Its runner is SCRIPT: the
+    #     file carries a `__main__` guard and no module-level `def test_*` leg, so a pytest
+    #     collection would gather nothing and read as a pass. Its MODE is declared in
+    #     `registry/gates.json` in the SAME landing; it carries NO budget entry -- a budget
+    #     value is the process owner's, never the implementing lane's (n=574 PART 5) -- so it
+    #     runs on the DECLARED DEFAULT and the audit prints that it did. Same grain as gate 81.
+    if (repo_root / "tests/test_declared_boundary_census.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_declared_boundary_census.py"])
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared

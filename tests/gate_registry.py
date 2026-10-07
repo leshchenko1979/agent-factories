@@ -488,6 +488,17 @@ REQUIRED_GATES: tuple[str, ...] = (
     # with a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
     # runner and keeping the file.
     "test_cron_thinness.py",
+    # Added with its registration (board #431, ruling n=2799, dispatched n=2793). REQUIRED is
+    # the correct grain and OPTIONAL is not: the predicate reads SOURCE and never `evidence/`,
+    # so it examines a bootstrapped factory's own modules exactly as it examines this tree's,
+    # and it passes there on the same rule -- which is also why its population rule is not a
+    # bare `twin.exists()`. It is byte-paired with a TEMPLATE copy, so the manifest grain is
+    # what keeps a factory from dropping the runner and keeping the file. THE MECHANISM IT
+    # GUARDS is the one that let six hardcoded boundaries hide in five gates and a seventh be
+    # written while the fix for them was open: a census that enumerates its population by the
+    # MARKER it is hunting sees only the spellings it already knows. This one enumerates by
+    # what a module READS.
+    "test_declared_boundary_census.py",
     "test_docs_sync.py",
     # Added with its registration (board #48, ruling 2026-09-26). REQUIRED is the correct
     # grain: the gate drives SYNTHETIC git repositories under a temp directory — the

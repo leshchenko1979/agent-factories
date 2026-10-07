@@ -87,6 +87,10 @@
       "registry/**",
       "tools/**"
     ],
+    "tests/test_declared_boundary_census.py": [
+      "TEMPLATE/tests/**",
+      "tests/**"
+    ],
     "tests/test_docs_sync.py": [
       "TEMPLATE/docs/**",
       "docs/**"

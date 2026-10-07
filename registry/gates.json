@@ -408,6 +408,7 @@
     "tests/test_commit_session_trailer.py": "script",
     "tests/test_criteria_count.py": "script",
     "tests/test_cron_thinness.py": "pytest",
+    "tests/test_declared_boundary_census.py": "script",
     "tests/test_docs_sync.py": "script",
     "tests/test_duplicate_prose.py": "script",
     "tests/test_gate_fixtures_closure.py": "pytest",

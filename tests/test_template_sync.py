@@ -503,6 +503,17 @@ PAIRS = [
     # this landing -- the two legs judge different populations and neither stands in for
     # the other.
     ("tests/test_ledger_citation_declared.py", "TEMPLATE/tests/test_ledger_citation_declared.py"),
+    # Added with its registration (board #431, ruling n=2799, dispatched n=2793). Paired for
+    # the reason that makes a CENSUS portable rather than for the manifest grain alone: it
+    # reads SOURCE and never `evidence/`, so a bootstrapped factory runs the same predicate
+    # over its OWN modules, and two factories' censuses stay comparable only while the
+    # predicate is one file. That property is also why the entry is load-bearing in the
+    # direction a `twin.exists()` check cannot cover: this gate's own population rule asks
+    # whether a module has a TEMPLATE twin, so a copy that drifted would judge a population
+    # the other tree never saw — the pairing test is what keeps the two halves answering the
+    # same question. Without this entry the gate would exist in both trees with nothing
+    # enforcing that they stay identical.
+    ("tests/test_declared_boundary_census.py", "TEMPLATE/tests/test_declared_boundary_census.py"),
 ]
 
 def main() -> int:
