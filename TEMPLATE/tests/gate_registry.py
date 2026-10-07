@@ -632,6 +632,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     # gate would let a factory drop the runner and keep the file.
     "test_registry_render.py",
     "test_roadmap_transition.py",
+    # Added with its registration (board #430, ruling n=2777). REQUIRED is the correct grain
+    # and OPTIONAL is not: its requirement is declared by `docs/measurement-procedure.md`,
+    # which the kit ships, and its LIVE population is this factory's `evidence/scores/` -- a
+    # bootstrapped factory has none, so it checks nothing and SAYS SO rather than reding, and
+    # its procedure-coupling leg asserts `docs/measurement-procedure.md` §5.3's own clause markers wherever the procedure is
+    # present. Its predicate and its probes are pure over synthetic text. It is byte-paired
+    # with a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
+    # runner and keeping the file. THE MECHANISM IT GUARDS: `docs/measurement-procedure.md` §5.3's mandatory measurable-count
+    # disclosure landed with NO gate reading it -- the sibling `test_score_artifact_sections.py`
+    # asserts the family view's PRESENCE and cannot read its arithmetic -- so a mean computed
+    # over a reduced population was indistinguishable from one computed over the whole family.
+    "test_score_artifact_measurable.py",
     "test_score_artifact_sections.py",
     "test_score_gate_recorded.py",
     "test_single_writer.py",

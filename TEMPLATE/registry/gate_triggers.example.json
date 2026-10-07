@@ -526,6 +526,24 @@
       "tools/ledger.py",
       "tools/rule.py"
     ],
+    "tests/test_score_artifact_measurable.py": [
+      "evidence/scores/**",
+      "docs/measurement-procedure.md",
+      "TEMPLATE/docs/measurement-procedure.md",
+      "tests/test_score_artifact_measurable.py",
+      "TEMPLATE/tests/test_score_artifact_measurable.py",
+      "tests/gate_registry.py",
+      "TEMPLATE/tests/gate_registry.py",
+      "tools/audit.py",
+      "TEMPLATE/tools/audit.py",
+      "registry/gates.json",
+      "registry/gate_triggers.json",
+      "registry/gate_triggers.example.json",
+      "TEMPLATE/registry/gate_triggers.example.json",
+      "registry/kit.json",
+      "registry/kit.example.json",
+      "TEMPLATE/registry/kit.example.json"
+    ],
     "tests/test_score_artifact_sections.py": [
       "evidence/scores/**"
     ],

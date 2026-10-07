@@ -2569,6 +2569,32 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     if (repo_root / "tests/test_gate_triggers.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_gate_triggers.py"])
 
+    # 82. score-artifact measurable count (board #430, ruling n=2777, dispatched n=2778).
+    #     THE MECHANISM IT GUARDS: `docs/measurement-procedure.md` §5.3 -- ruled 2026-10-07
+    #     (board #421, ruling n=2747) -- requires every family figure in the run's
+    #     `### Family-level fleet view` to print its measurable count beside it, so a mean
+    #     computed over a reduced population is never indistinguishable from one computed
+    #     over the whole family. It landed with NO gate reading it: its sibling gate 30 above
+    #     (same origin #69) asserts the family view's PRESENCE and cannot read its arithmetic,
+    #     and the docs-twin gate keeps the two procedure copies identical without asserting
+    #     the clause is there at all -- so the disclosure requirement was prose a later edit
+    #     could drop silently. Forward-only from 2026-10-07, with the landing round's own
+    #     artifact excused and PRINTED rather than repaired: it still prints Output's mean
+    #     over all 18 cells, and a disclosure reconstructed after the fact would be fabricated
+    #     provenance rather than a measurement. The requirement is COUPLED to the procedure --
+    #     the gate asserts `docs/measurement-procedure.md` §5.3's own clause markers appear in it -- because a gate whose
+    #     requirement is stated nowhere enforces a rule nobody was told. It is byte-paired
+    #     with a TEMPLATE copy. Its runner is PYTEST for the same measured reason as gate 81:
+    #     the file carries module-level `def test_*` legs AND a `__main__` guard, so a script
+    #     invocation would run `main()` and leave every leg dead (#124). It carries NO
+    #     `registry/gates.json` BUDGET ENTRY -- a budget value is the process owner's, never
+    #     the implementing lane's (n=574 PART 5) -- so it runs on the DECLARED DEFAULT and
+    #     the audit prints that it did.
+    if (repo_root / "tests/test_score_artifact_measurable.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_score_artifact_measurable.py"]
+        )
+
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and
     # `budget_source` is what lets the audit PRINT which gates used it: a declared
