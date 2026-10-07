@@ -55,13 +55,23 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-from ledger_boundary import evidence_skip_reason as _evidence_skip_reason  # noqa: E402
-from ledger_boundary import module_skip as _module_skip  # noqa: E402
+from ledger_boundary import (  # noqa: E402
+    GateError,
+    SkipGate,
+    boundary_and_rows,
+    evidence_skip_reason as _evidence_skip_reason,
+    module_skip as _module_skip,
+    population_skip_reason,
+    post_boundary_rows,
+    synthetic_tree,
+)
 
 import datetime as dt
 import json
 import re
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -76,12 +86,18 @@ if _SKIP_REASON:
 
     pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
 
-LEDGER = REPO / "evidence" / "ledger.jsonl"
+# The boundary is FACTORY DATA (#428), declared in `docs/ledger-invariants.json` under this
+# key and read through `tests/ledger_boundary.py` — never a literal here. This file is paired
+# byte-identically with TEMPLATE/tests/test_board_intake_recorded.py, so a date written inside
+# it would ship to every member and be read against the MEMBER's ledger, where the day this
+# gate landed means nothing. An ABSENT declaration skips with its reason; a MALFORMED one
+# FAILS, because a broken declaration must not hide behind the same output as none at all.
+INVARIANT_KEY = "board_intake_recorded"
 
-# The day the intake requirement became mechanically gated — the day this gate
-# landed. Subjects whose ledger activity predates it are excused, because their
-# intake row cannot be written now without backfilling a record that never was.
-INVARIANT_LANDED = "2026-09-19T00:00:00Z"
+# The PROBES' own boundary — a fixture, never the factory's declaration. It sits between the
+# probe rows' `2026-09-12T11:09:57Z` and `2026-09-19T10:00:00Z` timestamps so both arms of
+# every predicate probe stay reachable.
+_PROBE_BOUNDARY = "2026-09-19T00:00:00Z"
 
 # An issue reference, and nothing else. `#12a` and `# 12` are not references.
 ISSUE_SUBJECT = re.compile(r"^#(\d+)$")
@@ -146,6 +162,7 @@ def subjects_acted_without_intake(rows: list[dict]) -> list[str]:
 def board_intake_coverage(
     issues: list[dict],
     rows: list[dict],
+    boundary_text: str,
     complete_board: bool = True,
 ) -> dict[str, object]:
     """What each leg actually examined, so neither can be read as the other.
@@ -169,13 +186,13 @@ def board_intake_coverage(
         "reverse_leg": "asserted over the FULL board" if complete_board
         else "SKIPPED — partial board list, so the reverse direction is not sound",
         "offline_subjects_examined": len(subjects_acted_without_intake(rows)),
-        "excused_boundary": INVARIANT_LANDED,
+        "excused_boundary": boundary_text,
     }
 
 def board_intake_problems(
     issues: list[dict],
     rows: list[dict],
-    exempt_before: str = INVARIANT_LANDED,
+    exempt_before: str | None,
     complete_board: bool = True,
 ) -> tuple[list[str], list[str]]:
     """Return (problems, excused) for a board issue list against a ledger.
@@ -183,8 +200,14 @@ def board_intake_problems(
     `issues` is the board as `gh issue list --json number,state` returns it; `rows`
     is the ledger. The two are never merged — the whole point is that they are two
     records and can disagree.
+
+    `exempt_before` is the boundary the offline arm excuses against. `None` means the
+    tree DECLARED none, and that arm is then NOT JUDGED with its reason rather than
+    judged against a boundary nobody wrote down — the same policy `tests/ledger_boundary.py`
+    applies to every other boundary-reading gate (#428). The two board arms need no
+    boundary and are judged either way.
     """
-    boundary = _parse_ts(exempt_before)
+    boundary = None if exempt_before is None else _parse_ts(exempt_before)
     problems: list[str] = []
     excused: list[str] = []
 
@@ -232,20 +255,17 @@ def board_intake_problems(
             f"subject {subject} (first row n={n} at {ts}) carries a claim or a "
             f"close but no intake row of its own"
         )
-        if when < boundary:
+        if boundary is None:
+            excused.append(
+                f"{line} — NOT JUDGED: this tree declares no boundary for the gate, so "
+                f"no subject is judged by date"
+            )
+        elif when < boundary:
             excused.append(f"{line} — predates the gate ({exempt_before})")
         else:
             problems.append(line)
 
     return problems, excused
-
-def _load_rows() -> list[dict]:
-    rows: list[dict] = []
-    for line in LEDGER.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line:
-            rows.append(json.loads(line))
-    return rows
 
 def _row(event: str, subject: str, n: int, ts: str) -> dict:
     return {"n": n, "ts": ts, "event": event, "actor": "hq", "subject": subject,
@@ -260,34 +280,31 @@ def test_live_ledger_records_its_subjects_as_intakes() -> None:
     out of it — the forward leg has nothing to check and the reverse leg is not
     sound over an empty list. What remains is the leg the suite can settle offline.
     """
-    rows = _load_rows()
-    problems, excused = board_intake_problems([], rows, complete_board=False)
+    status, reason, problems, excused, checked = evaluate(REPO)
     for line in excused:
         print(f"  excused: {line}")
-    if problems:
+    if status == "skip":
+        print(f"  SKIP: {reason}")
+        pytest.skip(reason)
+    if status == "fail":
         raise AssertionError(
             "a subject carrying a claim or a close with no intake row of its own:\n  "
             + "\n  ".join(problems)
         )
-    coverage = board_intake_coverage([], rows, complete_board=False)
     print(
         f"board-intake gate (ledger leg): "
-        f"offline leg examined {coverage['offline_subjects_examined']} subject(s) "
-        f"carrying a claim or a close with no intake row; "
-        f"forward examined {coverage['forward_issues_examined']} open issue(s) "
-        f"(no board in this offline run); "
-        f"reverse examined {coverage['reverse_intake_rows_examined']} intake row(s), "
-        f"and {coverage['reverse_leg']}; "
-        f"{len(excused)} excused (pre-gate, boundary {coverage['excused_boundary']}) — "
-        f"the board legs are probed synthetically here and run for real by the "
-        f"host-side runner"
+        f"offline leg examined {checked} subject(s) carrying a claim or a close with "
+        f"no intake row; forward examined 0 open issue(s) (no board in this offline "
+        f"run); reverse examined 0 intake row(s) and is SKIPPED over an empty list; "
+        f"{len(excused)} excused (pre-gate) — the board legs are probed synthetically "
+        f"here and run for real by the host-side runner"
     )
 
 # --- probes: the predicate must reject bad input, not only accept good -----------
 
 def test_an_open_issue_with_no_intake_row_is_reported() -> None:
     problems, excused = board_intake_problems(
-        [{"number": 57, "state": "OPEN"}], [], complete_board=False
+        [{"number": 57, "state": "OPEN"}], [], _PROBE_BOUNDARY, complete_board=False
     )
     assert problems and not excused, (problems, excused)
     assert "#57" in problems[0]
@@ -295,7 +312,7 @@ def test_an_open_issue_with_no_intake_row_is_reported() -> None:
 def test_a_closed_issue_with_no_intake_row_is_not_forward_fired() -> None:
     """The forward direction is sound over `--state open` and nowhere else."""
     problems, excused = board_intake_problems(
-        [{"number": 9, "state": "CLOSED"}], [], complete_board=False
+        [{"number": 9, "state": "CLOSED"}], [], _PROBE_BOUNDARY, complete_board=False
     )
     assert not problems and not excused, (problems, excused)
 
@@ -303,7 +320,7 @@ def test_an_intake_row_with_no_issue_is_reported_over_the_full_board() -> None:
     rows = [_row("intake", "#1", 1, "2026-09-19T00:00:01Z"),
             _row("intake", "#99", 2, "2026-09-19T00:00:02Z")]
     problems, _excused = board_intake_problems(
-        [{"number": 1, "state": "open"}], rows, complete_board=True
+        [{"number": 1, "state": "open"}], rows, _PROBE_BOUNDARY, complete_board=True
     )
     assert len(problems) == 1 and "#99" in problems[0], problems
 
@@ -312,25 +329,25 @@ def test_a_partial_board_skips_the_reverse_direction() -> None:
     rows = [_row("intake", "#1", 1, "2026-09-19T00:00:01Z"),
             _row("intake", "#99", 2, "2026-09-19T00:00:02Z")]
     problems, excused = board_intake_problems(
-        [{"number": 1, "state": "open"}], rows, complete_board=False
+        [{"number": 1, "state": "open"}], rows, _PROBE_BOUNDARY, complete_board=False
     )
     assert not problems and not excused, (problems, excused)
 
 def test_a_descriptive_subject_never_fires_the_reverse_direction() -> None:
     """A law change is not an issue reference, in either direction."""
     rows = [_row("intake", "methodology-agent-failure-taxonomy", 1, "2026-09-19T00:00:01Z")]
-    problems, excused = board_intake_problems([], rows, complete_board=True)
+    problems, excused = board_intake_problems([], rows, _PROBE_BOUNDARY, complete_board=True)
     assert not problems and not excused, (problems, excused)
 
 def test_a_pre_gate_subject_with_no_intake_row_is_excused_not_failed() -> None:
     rows = [_row("close", "#8", 7, "2026-09-12T11:09:57Z")]
-    problems, excused = board_intake_problems([], rows, complete_board=False)
+    problems, excused = board_intake_problems([], rows, _PROBE_BOUNDARY, complete_board=False)
     assert not problems and len(excused) == 1, (problems, excused)
     assert "#8" in excused[0]
 
 def test_a_post_gate_subject_with_no_intake_row_is_reported() -> None:
     rows = [_row("close", "#77", 9, "2026-09-19T10:00:00Z")]
-    problems, excused = board_intake_problems([], rows, complete_board=False)
+    problems, excused = board_intake_problems([], rows, _PROBE_BOUNDARY, complete_board=False)
     assert problems and not excused, (problems, excused)
     assert "#77" in problems[0]
 
@@ -346,7 +363,7 @@ def test_the_forward_and_reverse_counts_are_printed_separately() -> None:
     rows = [_row("intake", "#1", 1, "2026-09-19T00:00:01Z"),
             _row("intake", "#99", 2, "2026-09-19T00:00:02Z")]
     issues = [{"number": 1, "state": "open"}, {"number": 2, "state": "CLOSED"}]
-    problems, _excused = board_intake_problems(issues, rows, complete_board=True)
+    problems, _excused = board_intake_problems(issues, rows, _PROBE_BOUNDARY, complete_board=True)
     assert len(problems) == 1 and "#99" in problems[0], problems
     assert len(open_issue_numbers(issues)) == 1, "forward leg examined the closed issue"
     assert len(intaken_numbers(rows)) == 2, "reverse leg examined the intake rows"
@@ -357,8 +374,8 @@ def test_the_coverage_reports_each_direction_under_its_own_predicate() -> None:
             _row("intake", "#99", 2, "2026-09-19T00:00:02Z")]
     issues = [{"number": 1, "state": "open"}, {"number": 2, "state": "CLOSED"},
               {"number": 3, "state": "closed"}]
-    full = board_intake_coverage(issues, rows, complete_board=True)
-    partial = board_intake_coverage(issues, rows, complete_board=False)
+    full = board_intake_coverage(issues, rows, _PROBE_BOUNDARY, complete_board=True)
+    partial = board_intake_coverage(issues, rows, _PROBE_BOUNDARY, complete_board=False)
     assert full["forward_issues_examined"] == 1, full
     assert full["reverse_intake_rows_examined"] == 2, full
     assert "asserted" in str(full["reverse_leg"]), full
@@ -379,8 +396,8 @@ def test_the_offline_denominator_counts_what_the_verdict_judged() -> None:
     rows = [_row("close", "#8", 7, "2026-09-12T11:09:57Z"),
             _row("intake", "#77", 8, "2026-09-19T09:00:00Z"),
             _row("close", "#77", 9, "2026-09-19T10:00:00Z")]
-    problems, excused = board_intake_problems([], rows, complete_board=False)
-    coverage = board_intake_coverage([], rows, complete_board=False)
+    problems, excused = board_intake_problems([], rows, _PROBE_BOUNDARY, complete_board=False)
+    coverage = board_intake_coverage([], rows, _PROBE_BOUNDARY, complete_board=False)
     assert len(problems) + len(excused) == 1, (problems, excused)
     assert coverage["offline_subjects_examined"] == 1, coverage
 
@@ -400,7 +417,7 @@ def test_the_offline_denominator_is_non_zero_on_the_live_ledger() -> None:
     anchor is therefore the population the leg WALKS, which survives repair, and not the
     defect it counts, which repair erases.
     """
-    rows = _load_rows()
+    boundary, boundary_text, rows = _declared(REPO)
     walked = [
         row for row in rows
         if row.get("event") in ("claim", "close")
@@ -412,8 +429,116 @@ def test_the_offline_denominator_is_non_zero_on_the_live_ledger() -> None:
         "is indistinguishable from a verified one (acceptance 2 of #116)"
     )
     examined = subjects_acted_without_intake(rows)
-    coverage = board_intake_coverage([], rows, complete_board=False)
+    coverage = board_intake_coverage([], rows, boundary_text, complete_board=False)
     assert coverage["offline_subjects_examined"] == len(examined), coverage
+
+# --- the declared boundary, and the probe-able core ------------------------------
+
+def _declared(repo: Path) -> tuple[dt.datetime, str, list[dict]]:
+    """`(boundary, declared-text, rows)` or a pytest SKIP naming the reason.
+
+    The declaration is FACTORY DATA and never ships, so its ABSENCE is a stated skip — the
+    state every bootstrapped factory is in until it adopts the invariant. A MALFORMED
+    declaration is an ASSERTION ERROR: a broken declaration must not hide behind the same
+    output as none at all.
+    """
+    try:
+        return boundary_and_rows(repo, INVARIANT_KEY)
+    except SkipGate as exc:
+        pytest.skip(str(exc))
+    except GateError as exc:
+        raise AssertionError("; ".join(exc.problems)) from exc
+
+def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
+    """`(status, reason, problems, excused, checked)` over `repo` — the probe-able core.
+
+    `status` is `"pass"`, `"skip"` or `"fail"`. A real problem outranks a skip: the
+    population guard runs only on an otherwise-clean ledger, so a defect is never hidden
+    behind "there was nothing to judge".
+    """
+    try:
+        boundary, boundary_text, rows = boundary_and_rows(repo, INVARIANT_KEY)
+    except SkipGate as exc:
+        return "skip", str(exc), [], [], 0
+    except GateError as exc:
+        return "fail", "", list(exc.problems), [], 0
+
+    problems, excused = board_intake_problems([], rows, boundary_text, complete_board=False)
+    if problems:
+        return "fail", "", problems, excused, 0
+
+    reason = population_skip_reason(post_boundary_rows(rows, boundary), boundary_text)
+    if reason:
+        return "skip", reason, [], excused, 0
+    return "pass", "", [], excused, len(subjects_acted_without_intake(rows))
+
+# --- probes: the DECLARATION the boundary is read from (#428) ----------------------
+
+def test_probe_a_tree_with_no_declared_boundary_skips_with_a_stated_reason(
+    tmp_path: Path,
+) -> None:
+    """The declaration is FACTORY DATA and does not ship, so its absence is the state every
+    bootstrapped factory is in — a STATED skip, never a red and never a silent pass. This is
+    the arm that keeps the shipped `TEMPLATE/` tree green (#78, #76's class)."""
+    tree = synthetic_tree(
+        tmp_path / "no-declaration",
+        rows=[_row("close", "#1", 1, "2026-09-19T10:00:00Z")],
+    )
+    status, reason, problems, _, _ = evaluate(tree)
+    assert status == "skip", (status, reason, problems)
+    assert "ledger-invariants" in reason, reason
+
+def test_probe_a_declaration_without_this_key_skips_and_names_it(tmp_path: Path) -> None:
+    """A factory that adopted SOME invariant but not this one is the same state, and the
+    skip names the KEY so a reader can tell which invariant is unadopted."""
+    tree = synthetic_tree(
+        tmp_path / "other-key",
+        rows=[_row("close", "#1", 1, "2026-09-19T10:00:00Z")],
+        invariants={"some_other_gate": "2026-09-19T00:00:00Z"},
+    )
+    status, reason, problems, _, _ = evaluate(tree)
+    assert status == "skip", (status, reason, problems)
+    assert INVARIANT_KEY in reason, reason
+
+def test_probe_a_declared_boundary_with_a_bad_row_still_fails(tmp_path: Path) -> None:
+    """The declaration MOVES the boundary; it never excuses the population. A post-boundary
+    subject carrying a close with no intake row is still RED."""
+    tree = synthetic_tree(
+        tmp_path / "bad-row",
+        rows=[_row("close", "#77", 9, "2026-09-19T10:00:00Z")],
+        invariants={INVARIANT_KEY: "2026-09-19T00:00:00Z"},
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert any("#77" in p for p in problems), problems
+
+def test_probe_an_unreadable_declared_boundary_fails(tmp_path: Path) -> None:
+    """A factory that DECLARED a boundary and cannot read it is a FAILURE, not a skip:
+    skipping would hide a broken declaration behind the same output as none at all."""
+    tree = synthetic_tree(
+        tmp_path / "bad-declaration",
+        rows=[_row("close", "#1", 1, "2026-09-19T10:00:00Z")],
+        invariants={INVARIANT_KEY: "yesterday"},
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert problems, status
+
+def _needs_fixtures(fn: object) -> bool:
+    """True when `fn` declares a parameter pytest would supply — `tmp_path` and friends.
+
+    `main()` calls each probe with no arguments, so a probe taking a fixture cannot run in
+    script mode. Filtering by ARITY rather than by a name list keeps this correct when a
+    probe is added: a stale name list makes the gate CRASH, which is neither a pass nor a
+    stated skip.
+    """
+    import inspect
+
+    return any(
+        p.default is inspect.Parameter.empty
+        and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        for p in inspect.signature(fn).parameters.values()
+    )
 
 def main() -> int:
     # THE SHIPPED TREE IS NOT A FACTORY (#199). Its `evidence/` is BOOTSTRAP-created, so both
@@ -424,8 +549,13 @@ def main() -> int:
     if _skip:
         print(f"board-intake gate: SKIPPED — {_skip}")
         return 0
-    checks = [value for name, value in sorted(globals().items())
-              if name.startswith("test_") and callable(value)]
+    checks = [
+        value
+        for name, value in sorted(globals().items())
+        if name.startswith("test_")
+        and callable(value)
+        and not _needs_fixtures(value)
+    ]
     failures: list[str] = []
     for check in checks:
         name = check.__name__
@@ -434,6 +564,8 @@ def main() -> int:
         except AssertionError as exc:
             failures.append(f"{name}: {exc}")
             print(f"  FAIL  {name} — {exc}")
+        except pytest.skip.Exception as exc:
+            print(f"  SKIP  {name} — {exc}")
         else:
             print(f"  PASS  {name}")
     print()

@@ -67,7 +67,18 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ledger_boundary import evidence_skip_reason, module_skip  # noqa: E402
+from ledger_boundary import (  # noqa: E402
+    GateError,
+    SkipGate,
+    boundary_and_rows,
+    evidence_skip_reason,
+    module_skip,
+    population_skip_reason,
+    post_boundary_rows,
+    synthetic_tree,
+)
+
+import pytest  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -82,13 +93,21 @@ if _SKIP_REASON:
 
     pytestmark = _pytest.mark.skipif(True, reason=_SKIP_REASON)
 
-LEDGER = REPO / "evidence" / "ledger.jsonl"
-
-# The commit that landed the step-6 board-close requirement in docs/processes.md.
-# Rows written before this moment predate the rule and are excused; rows at or after
-# it must carry the token. Nothing before it is backfilled.
-INVARIANT_LANDED = "2026-09-18T18:04:24Z"  # commit d6c9d55
+# The boundary is FACTORY DATA (#428), declared in `docs/ledger-invariants.json` under this
+# key and read through `tests/ledger_boundary.py`. It is NOT a literal here: this file is
+# paired byte-identically with TEMPLATE/tests/test_close_board_recorded.py, so a date
+# written inside it ships to every member and is read against the MEMBER's ledger, where
+# this factory's commit history means nothing. An ABSENT declaration skips with its reason
+# — the state every bootstrapped factory is in until it adopts the invariant; a MALFORMED
+# one FAILS, because a broken declaration must not hide behind the same output as none.
+INVARIANT_KEY = "close_board_recorded"
 BOARD_TOKEN = "board=closed"
+
+# The PROBES' own boundary — a fixture, never the factory's declaration. It sits between
+# the probe rows' `17:00` and `19:00` timestamps so both arms are reachable, and it is
+# deliberately NOT the commit instant: a probe asserts the PREDICATE, and a predicate
+# pinned to this factory's history asserts nothing about a member's.
+_PROBE_BOUNDARY = "2026-09-18T18:00:00Z"
 
 # The exemption surface (docstring part 3). FACTORY DATA, never source: this file is paired
 # byte-identically with TEMPLATE/tests/test_close_board_recorded.py, so a factory's own row
@@ -170,7 +189,7 @@ def load_exemptions(path: Path | None = None) -> tuple[dict[int, dict], list[str
 
 def close_board_problems(
     rows: list[dict],
-    exempt_before: str = INVARIANT_LANDED,
+    exempt_before: str,
     exempt: dict[int, dict] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Return (problems, excused) for the `close` rows of a ledger.
@@ -238,47 +257,51 @@ def close_board_problems(
     return problems, excused
 
 
-def _load_rows() -> list[dict]:
-    rows: list[dict] = []
-    for line in LEDGER.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line:
-            rows.append(json.loads(line))
-    return rows
+def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
+    """`(status, reason, problems, excused, checked)` over `repo` — the probe-able core.
+
+    `status` is `"pass"`, `"skip"` or `"fail"`. A real problem outranks a skip: the
+    population guard runs only on an otherwise-clean ledger, so a defect is never hidden
+    behind "there was nothing to judge".
+    """
+    try:
+        boundary, boundary_text, rows = boundary_and_rows(repo, INVARIANT_KEY)
+    except SkipGate as exc:
+        return "skip", str(exc), [], [], 0
+    except GateError as exc:
+        return "fail", "", list(exc.problems), [], 0
+
+    exempt, exempt_problems = load_exemptions(repo / "docs" / "close-board-exemptions.json")
+    problems, excused = close_board_problems(rows, boundary_text, exempt)
+    if exempt_problems or problems:
+        return "fail", "", list(exempt_problems) + list(problems), excused, 0
+
+    population = post_boundary_rows(rows, boundary, "close")
+    reason = population_skip_reason(population, boundary_text, "close")
+    if reason:
+        return "skip", reason, [], excused, 0
+    checked = sum(1 for r in population if BOARD_TOKEN in str(r.get("detail") or ""))
+    return "pass", "", [], excused, checked
 
 
 # --- live gate -------------------------------------------------------------------
 
 
 def test_live_ledger_records_the_board_close() -> None:
-    rows = _load_rows()
-    exempt, exempt_problems = load_exemptions()
-    problems, excused = close_board_problems(rows, exempt=exempt)
+    status, reason, problems, excused, checked = evaluate(REPO)
     for line in excused:
         print(f"  excused: {line}")
-    if exempt_problems:
+    if status == "skip":
+        print(f"  SKIP: {reason}")
+        pytest.skip(reason)
+    if status == "fail":
         raise AssertionError(
-            f"{EXEMPTIONS_PATH.name} could not be read as factory data:\n  "
-            + "\n  ".join(exempt_problems)
-        )
-    if problems:
-        raise AssertionError(
-            "close rows written after the step-6 board-close requirement must carry "
+            "close rows written after the declared boundary must carry "
             f"{BOARD_TOKEN}:\n  " + "\n  ".join(problems)
         )
-    post_invariant = [
-        r
-        for r in rows
-        if r.get("event") == "close"
-        and _parse_ts(r.get("ts", "")) >= _parse_ts(INVARIANT_LANDED)
-    ]
-    checked = sum(
-        1 for r in post_invariant if BOARD_TOKEN in str(r.get("detail") or "")
-    )
     print(
-        f"board-close gate: {checked} post-invariant close row(s) carry {BOARD_TOKEN}, "
-        f"{len(exempt)} exempted as factory data, "
-        f"{len(excused)} excused in total (pre-invariant + exempted)"
+        f"board-close gate: {checked} post-boundary close row(s) carry {BOARD_TOKEN}, "
+        f"{len(excused)} excused in total (pre-boundary + exempted)"
     )
 
 
@@ -289,7 +312,7 @@ def test_a_post_invariant_close_without_the_token_is_rejected() -> None:
     rows = [
         {"n": 1, "ts": "2026-09-18T19:00:00Z", "event": "close", "detail": "outcome=accepted"}
     ]
-    problems, excused = close_board_problems(rows)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY)
     assert problems and not excused, (problems, excused)
     assert BOARD_TOKEN in problems[0]
 
@@ -298,7 +321,7 @@ def test_a_pre_invariant_close_is_excused_not_failed() -> None:
     rows = [
         {"n": 2, "ts": "2026-09-18T17:00:00Z", "event": "close", "detail": "outcome=accepted"}
     ]
-    problems, excused = close_board_problems(rows)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY)
     assert not problems and excused, (problems, excused)
 
 
@@ -307,7 +330,7 @@ def test_a_token_that_does_not_say_closed_is_rejected() -> None:
     rows = [
         {"n": 3, "ts": "2026-09-18T19:00:00Z", "event": "close", "detail": "board=open"}
     ]
-    problems, _excused = close_board_problems(rows)
+    problems, _excused = close_board_problems(rows, _PROBE_BOUNDARY)
     assert problems, "a board=open close row was accepted"
     assert "contradicts itself" in problems[0]
 
@@ -321,7 +344,7 @@ def test_a_post_invariant_close_with_the_token_passes() -> None:
             "detail": f"outcome=accepted {BOARD_TOKEN} gate=18-of-18-pass",
         }
     ]
-    problems, excused = close_board_problems(rows)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY)
     assert not problems and not excused, (problems, excused)
 
 
@@ -331,14 +354,14 @@ def test_non_close_rows_are_outside_the_population() -> None:
         {"n": 5, "ts": "2026-09-18T19:00:00Z", "event": "claim", "detail": "no token here"},
         {"n": 6, "ts": "2026-09-18T19:00:00Z", "event": "run", "detail": "no token here"},
     ]
-    problems, excused = close_board_problems(rows)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY)
     assert not problems and not excused, (problems, excused)
 
 
 def test_an_unparseable_ts_is_a_problem_not_an_excuse() -> None:
     """A row whose timestamp cannot be read cannot be excused by it either."""
     rows = [{"n": 7, "ts": "not-a-time", "event": "close", "detail": "board=closed"}]
-    problems, excused = close_board_problems(rows)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY)
     assert problems and not excused, (problems, excused)
 
 
@@ -354,7 +377,7 @@ def test_an_exempted_row_is_excused_and_printed() -> None:
             "proof": "gh issue view 197 reads CLOSED at 2026-10-03T19:35:54Z",
         }
     }
-    problems, excused = close_board_problems(rows, exempt=exempt)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY, exempt=exempt)
     assert not problems, problems
     assert len(excused) == 1 and "EXEMPTED" in excused[0], excused
     assert "gh issue view 197" in excused[0], excused
@@ -363,7 +386,7 @@ def test_an_exemption_that_matches_nothing_is_an_error() -> None:
     """A stale exemption excuses nothing while inflating the visible debt."""
     rows = [{"n": 2101, "ts": "2026-10-03T19:32:46Z", "event": "close", "detail": "board=closed"}]
     exempt = {999: {"n": 999, "reason": "stale", "proof": "none"}}
-    problems, excused = close_board_problems(rows, exempt=exempt)
+    problems, excused = close_board_problems(rows, _PROBE_BOUNDARY, exempt=exempt)
     assert problems and "matches NO" in problems[0], problems
     assert not excused, excused
 
@@ -373,7 +396,7 @@ def test_an_exemption_cannot_excuse_a_future_close() -> None:
         {"n": 2200, "ts": "2026-10-04T00:00:00Z", "event": "close", "detail": "outcome=accepted"}
     ]
     exempt = {2101: {"n": 2101, "reason": "the rows of 2026-10-03", "proof": "p"}}
-    problems, _excused = close_board_problems(rows, exempt=exempt)
+    problems, _excused = close_board_problems(rows, _PROBE_BOUNDARY, exempt=exempt)
     assert any("missing board=closed" in p for p in problems), problems
     assert any("matches NO" in p for p in problems), problems
 
@@ -381,7 +404,7 @@ def test_an_exempted_row_that_gained_the_token_is_stale() -> None:
     """An exemption whose row now carries the token excuses nothing and must be removed."""
     rows = [{"n": 2101, "ts": "2026-10-03T19:32:46Z", "event": "close", "detail": "board=closed"}]
     exempt = {2101: {"n": 2101, "reason": "no longer needed", "proof": "p"}}
-    problems, _excused = close_board_problems(rows, exempt=exempt)
+    problems, _excused = close_board_problems(rows, _PROBE_BOUNDARY, exempt=exempt)
     assert any("matches NO" in p for p in problems), problems
 
 def test_load_exemptions_absent_means_none() -> None:
@@ -409,6 +432,67 @@ def test_load_exemptions_enforces_the_declared_domain() -> None:
         got, problems = load_exemptions(p)
     assert problems and "domain" in problems[0], (got, problems)
 
+# --- probes: the DECLARATION the boundary is read from (#428) ----------------------
+
+def test_probe_a_tree_with_no_declared_boundary_skips_with_a_stated_reason(
+    tmp_path: Path,
+) -> None:
+    """The declaration is FACTORY DATA and does not ship, so its absence is the state every
+    bootstrapped factory is in — a STATED skip, never a red and never a silent pass. This
+    is the arm that keeps the shipped `TEMPLATE/` tree green (#78, #76's class)."""
+    tree = synthetic_tree(
+        tmp_path / "no-declaration",
+        rows=[
+            {"n": 1, "ts": "2026-09-18T19:00:00Z", "event": "close", "detail": "board=closed"}
+        ],
+    )
+    status, reason, problems, _, _ = evaluate(tree)
+    assert status == "skip", (status, reason, problems)
+    assert "ledger-invariants" in reason, reason
+
+def test_probe_a_declaration_without_this_key_skips_and_names_it(tmp_path: Path) -> None:
+    """A factory that has adopted SOME invariant but not this one is the same state: the
+    skip names the KEY, so a reader can tell which invariant is unadopted."""
+    tree = synthetic_tree(
+        tmp_path / "other-key",
+        rows=[
+            {"n": 1, "ts": "2026-09-18T19:00:00Z", "event": "close", "detail": "board=closed"}
+        ],
+        invariants={"some_other_gate": "2026-09-18T18:00:00Z"},
+    )
+    status, reason, problems, _, _ = evaluate(tree)
+    assert status == "skip", (status, reason, problems)
+    assert INVARIANT_KEY in reason, reason
+
+def test_probe_a_declared_boundary_with_a_bad_row_still_fails(tmp_path: Path) -> None:
+    """The declaration MOVES the boundary; it never excuses the population. A row at or
+    after the declared instant that omits the token is still RED — the guard is the
+    predicate, not the fixture."""
+    tree = synthetic_tree(
+        tmp_path / "bad-row",
+        rows=[
+            {"n": 1, "ts": "2026-09-18T19:00:00Z", "event": "close", "detail": "outcome=accepted"}
+        ],
+        invariants={INVARIANT_KEY: "2026-09-18T18:00:00Z"},
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert any(BOARD_TOKEN in p for p in problems), problems
+
+def test_probe_an_unreadable_declared_boundary_fails(tmp_path: Path) -> None:
+    """A factory that DECLARED a boundary and cannot read it is a FAILURE, not a skip:
+    skipping would hide a broken declaration behind the same output as none at all."""
+    tree = synthetic_tree(
+        tmp_path / "bad-declaration",
+        rows=[
+            {"n": 1, "ts": "2026-09-18T19:00:00Z", "event": "close", "detail": "board=closed"}
+        ],
+        invariants={INVARIANT_KEY: "yesterday"},
+    )
+    status, _, problems, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert problems, status
+
 def test_gate_is_registered_in_the_audit() -> None:
     audit = (REPO / "tools" / "audit.py").read_text(encoding="utf-8")
     assert "test_close_board_recorded.py" in audit, (
@@ -422,15 +506,16 @@ def main() -> int:
     # is absent. Without this arm the gate died with FileNotFoundError in the tree it ships
     # from -- a CRASH, not a verdict, which is neither a pass nor a stated skip. The reason is
     # printed and names the artifact, so a reader can tell "nothing to judge yet" from "clean".
-    skip = evidence_skip_reason(REPO)
-    if skip:
-        print(f"close-board gate: SKIPPED — {skip}")
+    status, reason, problems, excused, checked = evaluate(REPO)
+    for line in excused:
+        print(f"  excused: {line}")
+    if status == "skip":
+        print(f"close-board gate: SKIPPED — {reason}")
         return 0
-    try:
-        test_live_ledger_records_the_board_close()
-    except AssertionError as exc:
-        print(f"close-board gate failed:\n{exc}", file=sys.stderr)
+    if status == "fail":
+        print("close-board gate failed:\n  " + "\n  ".join(problems), file=sys.stderr)
         return 1
+    print(f"board-close gate: {checked} post-boundary close row(s) carry {BOARD_TOKEN}")
     return 0
 
 

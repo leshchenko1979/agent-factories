@@ -29,7 +29,7 @@ THE MECHANICS THE GATE ASSERTS
    restated — so a round that dropped the excluded cell from its denominator reds rather
    than silently re-basing every published percentage.
 4. Forward-only, with an EXCLUSIVE boundary. An artifact dated at or before
-   `INVARIANT_LANDED` is EXCUSED AND PRINTED, never repaired — the landing round's own
+   the declared boundary is EXCUSED AND PRINTED, never repaired — the landing round's own
    artifact is already written, and a disclosure reconstructed after the fact would be
    fabricated provenance rather than a measurement.
 5. The requirement is COUPLED to the procedure: the gate asserts `docs/measurement-procedure.md` §5.3's own clause
@@ -54,16 +54,34 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ledger_boundary import (  # noqa: E402
+    GateError,
+    SkipGate,
+    declared_boundary,
+)
+
 REPO = Path(__file__).resolve().parent.parent
 SCORES = REPO / "evidence" / "scores"
 PROCEDURE = REPO / "docs" / "measurement-procedure.md"
 
-# The day this requirement lands, read from `docs/measurement-procedure.md` §5.3's own ruling (board #421, 2026-10-07).
-# EXCLUSIVE: an artifact dated strictly after this day must comply. The landing round's
-# own artifact is already written and is never backfilled — and the #430 dispatch names
-# it: `evidence/scores/2026-10-07.md` still prints Output's family mean over all 18
-# cells, so requiring it there would demand a rewritten record rather than a repair.
-INVARIANT_LANDED = dt.date(2026, 10, 7)
+# The boundary is FACTORY DATA (#428), declared in `docs/ledger-invariants.json` under this
+# key and read through `tests/ledger_boundary.py` — never a literal here. This file is paired
+# byte-identically with TEMPLATE/tests/test_score_artifact_measurable.py, so a date written
+# inside it would ship to every member and be read against the MEMBER's scores directory,
+# where the day this law landed means nothing. An ABSENT declaration skips with its reason;
+# a MALFORMED one FAILS.
+#
+# The declared value is EXCLUSIVE, and its provenance is the ruling recorded at
+# `docs/measurement-procedure.md §5.3` (board #421): the landing round's own artifact is
+# already written and is never backfilled — `evidence/scores/2026-10-07.md` still prints Output's family mean over
+# all 18 cells, so requiring it there would demand a rewritten record rather than a repair.
+INVARIANT_KEY = "score_artifact_measurable"
+
+# The PROBES' own boundary — a fixture, never the factory's declaration.
+_PROBE_BOUNDARY = dt.date(2026, 10, 7)
 
 # `docs/measurement-procedure.md` §5.3's own clause markers, which is what couples the requirement to the procedure. Read
 # from `docs/measurement-procedure.md`, never restated in a second home: a gate whose
@@ -225,6 +243,26 @@ def artifacts() -> list[tuple[dt.date, Path]]:
     return out
 
 
+def declared_day(repo: Path, key: str) -> dt.date:
+    """The declared boundary `key` names, as a DATE, or `SkipGate`/`GateError`.
+
+    The declaration is FACTORY DATA and never ships, so its ABSENCE is a stated skip — the
+    state every bootstrapped factory is in until it adopts the invariant. A MALFORMED
+    declaration is a `GateError`: a broken declaration must not hide behind the same output
+    as none at all. The artifact names are dated (`YYYY-MM-DD.md`), so the boundary is
+    compared as a DATE — the declaration's time of day carries no meaning here.
+    """
+    return declared_boundary(repo, key)[0].date()
+
+def _declared_day_or_skip(repo: Path, key: str) -> dt.date:
+    """`declared_day`, with the two declaration outcomes mapped onto pytest."""
+    try:
+        return declared_day(repo, key)
+    except SkipGate as exc:
+        pytest.skip(str(exc))
+    except GateError as exc:
+        raise AssertionError("; ".join(exc.problems)) from exc
+
 def declared() -> bool:
     """The requirement is declared by the procedure; without it there is nothing to assert."""
     return PROCEDURE.is_file()
@@ -298,10 +336,11 @@ def test_pre_boundary_artifacts_are_excused_not_required() -> None:
     has none of this factory's — with this factory's own landing-day artifact named as the
     concrete case where it is present.
     """
+    landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
     found = artifacts()
     present = {path.name for _day, path in found}
-    excused = {path.name for day, path in found if day <= INVARIANT_LANDED}
-    checked = {path.name for day, path in found if day > INVARIANT_LANDED}
+    excused = {path.name for day, path in found if day <= landed}
+    checked = {path.name for day, path in found if day > landed}
     assert excused | checked == present
     assert not (excused & checked)
     if "2026-10-07.md" in present:
@@ -311,9 +350,10 @@ def test_pre_boundary_artifacts_are_excused_not_required() -> None:
 def test_post_boundary_artifacts_disclose_their_measurable_count() -> None:
     if not declared():
         return
+    landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
     problems: list[str] = []
     for day, path in artifacts():
-        if day <= INVARIANT_LANDED:
+        if day <= landed:
             continue
         missing = missing_disclosure(path.read_text(encoding="utf-8"))
         if missing:
@@ -324,11 +364,12 @@ def test_post_boundary_artifacts_disclose_their_measurable_count() -> None:
 def test_post_boundary_artifacts_keep_the_declared_denominators() -> None:
     if not declared():
         return
+    landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
     factory_max = declared_maximum()
     factories = factory_count()
     problems: list[str] = []
     for day, path in artifacts():
-        if day <= INVARIANT_LANDED:
+        if day <= landed:
             continue
         for problem in denominator_problems(
             path.read_text(encoding="utf-8"), factory_max, factories
@@ -336,6 +377,45 @@ def test_post_boundary_artifacts_keep_the_declared_denominators() -> None:
             problems.append(f"{path.name}: {problem}")
     assert problems == [], "\n".join(problems)
 
+
+# --- probes: the DECLARATION the boundary is read from (#428) ------------------
+
+def test_probe_a_tree_with_no_declared_boundary_skips_with_a_stated_reason() -> None:
+    """The declaration is FACTORY DATA and does not ship, so its absence is the state every
+    bootstrapped factory is in — a STATED skip, never a red and never a silent pass. This is
+    the arm that keeps the shipped `TEMPLATE/` tree green (#78, #76's class)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp)
+        with pytest.raises(SkipGate) as excinfo:
+            declared_day(bare, INVARIANT_KEY)
+    assert "ledger-invariants" in str(excinfo.value), excinfo.value
+
+def test_probe_a_declaration_without_this_key_skips_and_names_it() -> None:
+    """A factory that adopted SOME invariant but not this one is the same state, and the
+    skip names the KEY so a reader can tell which invariant is unadopted."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp)
+        (bare / "docs").mkdir()
+        (bare / "docs" / "ledger-invariants.json").write_text(
+            json.dumps({"invariants": {"some_other_gate": "2026-01-01T00:00:00Z"}}),
+            encoding="utf-8",
+        )
+        with pytest.raises(SkipGate) as excinfo:
+            declared_day(bare, INVARIANT_KEY)
+    assert INVARIANT_KEY in str(excinfo.value), excinfo.value
+
+def test_probe_an_unreadable_declared_boundary_fails() -> None:
+    """A factory that DECLARED a boundary and cannot read it is a FAILURE, not a skip:
+    skipping would hide a broken declaration behind the same output as none at all."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp)
+        (bare / "docs").mkdir()
+        (bare / "docs" / "ledger-invariants.json").write_text(
+            json.dumps({"invariants": {INVARIANT_KEY: "yesterday"}}), encoding="utf-8"
+        )
+        with pytest.raises(GateError) as excinfo:
+            declared_day(bare, INVARIANT_KEY)
+    assert excinfo.value.problems, excinfo.value
 
 def test_a_factory_without_the_procedure_declares_nothing() -> None:
     """The undeclared path passes and says why — a bootstrapped factory's own case.
@@ -370,7 +450,7 @@ def test_main_reds_on_a_post_boundary_artifact_with_no_count() -> None:
         with tempfile.TemporaryDirectory() as tmp:
             scores = Path(tmp) / "scores"
             scores.mkdir()
-            day = INVARIANT_LANDED + dt.timedelta(days=1)
+            day = _declared_day_or_skip(REPO, INVARIANT_KEY) + dt.timedelta(days=1)
             artifact = scores / f"{day.isoformat()}.md"
             artifact.write_text(
                 "### Family-level fleet view\n\n"
@@ -402,12 +482,23 @@ def main() -> int:
         )
         return 0
 
+    try:
+        landed = declared_day(REPO, INVARIANT_KEY)
+    except SkipGate as exc:
+        print(f"score-artifact measurable gate: SKIPPED — {exc}")
+        return 0
+    except GateError as exc:
+        print("score-artifact measurable gate failed:", file=sys.stderr)
+        for problem in exc.problems:
+            print(f"  {problem}", file=sys.stderr)
+        return 1
+
     excused: list[str] = []
     checked: list[str] = []
     problems: list[str] = []
 
     for day, path in artifacts():
-        if day <= INVARIANT_LANDED:
+        if day <= landed:
             excused.append(path.name)
             continue
         checked.append(path.name)

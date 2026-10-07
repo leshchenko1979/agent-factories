@@ -14,7 +14,7 @@ Three parts, the shape `tests/test_score_gate_recorded.py` already uses.
    artifact can probe it: a rule that has only ever seen good input has not been
    shown to reject bad input.
 2. **A forward-only requirement with a boundary.** An artifact dated strictly
-   AFTER `INVARIANT_LANDED` must carry every required section. The boundary is
+   AFTER the declared boundary must carry every required section. The boundary is
    EXCLUSIVE because the artifact for the day the invariant lands is already
    written, and a section reconstructed after the fact is fabricated provenance —
    the same no-backfill law as the close trailer's. Pre-boundary artifacts are
@@ -49,30 +49,50 @@ Exit: 0 clean or fully excused, non-zero on any post-boundary artifact missing a
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 import sys
 import tempfile
 from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ledger_boundary import (  # noqa: E402
+    GateError,
+    SkipGate,
+    declared_boundary,
+    population_skip_reason,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 SCORES = REPO / "evidence" / "scores"
 PROCEDURE = REPO / "docs" / "measurement-procedure.md"
 CRITERIA = REPO / "docs" / "quality-criteria.md"
 
-# The day this requirement lands. The boundary is EXCLUSIVE: an artifact dated
-# strictly after this day must comply; this day's artifact and earlier are excused,
-# because the landing day's artifact is already written and is never backfilled.
-INVARIANT_LANDED = dt.date(2026, 9, 19)
+# The boundaries are FACTORY DATA (#428), declared in `docs/ledger-invariants.json` under
+# these keys and read through `tests/ledger_boundary.py` — never literals here. This file is
+# paired byte-identically with TEMPLATE/tests/test_score_artifact_sections.py, so a date
+# written inside it would ship to every member and be read against the MEMBER's scores
+# directory, where the day this law landed means nothing. An ABSENT declaration skips with
+# its reason; a MALFORMED one FAILS.
+INVARIANT_KEY = "score_artifact_sections"
+BAND_KEY = "score_artifact_band"
 
-# The day the maturity-band requirement lands, for the leg added by issue #154.
-# EXCLUSIVE on the same terms, and placed a day earlier than the section boundary
-# for a measured reason: the artifacts at 2026-09-22, -23 and -24 carry real band
-# mismatches (Miidas 60/76 and InferHub Watch 58/76 both labelled "Scalable"),
-# they predate the law, and a band rewritten into a dated artifact would be a
-# falsified record rather than a repair -- so they are EXCUSED AND PRINTED, never
-# repaired. 2026-09-25 is the first artifact written under the law and is the
-# brief's own acceptance case, so it is CHECKED rather than excused.
-BAND_LANDED = dt.date(2026, 9, 24)
+# The PROBES' own boundaries — fixtures, never the factory's declaration. Both are EXCLUSIVE
+# on the same terms the law states, and they are placed on the dates the probe fixtures were
+# built around so both arms of every probe stay reachable.
+#
+# The band boundary sits a day earlier than the section boundary for a measured reason, and
+# that reason is the PROVENANCE of the value this factory declares under `score_artifact_band`
+# — it belongs beside the fixture that exercises it, not in a second constant: the artifacts
+# at 2026-09-22, -23 and -24 carry real band mismatches (Miidas 60/76 and InferHub Watch 58/76
+# both labelled "Scalable"), they predate the law, and a band rewritten into a dated artifact
+# would be a falsified record rather than a repair — so they are EXCUSED AND PRINTED, never
+# repaired. 2026-09-25 is the first artifact written under the law and is the brief's own
+# acceptance case, so it is CHECKED rather than excused.
+_PROBE_SECTION_BOUNDARY = dt.date(2026, 9, 19)
+_PROBE_BAND_BOUNDARY = dt.date(2026, 9, 24)
 
 _ARTIFACT_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})\.md$")
 
@@ -309,12 +329,15 @@ def band_problems(
             problems.append(f"{name}: labelled {band}, but {pct}% is {expected}")
     return problems
 
-def band_leg() -> tuple[list[str], list[str], list[str], bool]:
+def band_leg(band_landed: dt.date) -> tuple[list[str], list[str], list[str], bool]:
     """`(excused, checked, problems, declared)` over the live tree.
 
     `declared` is False when the factory ships no rubric: nothing is asserted, and
     the caller says so rather than printing a clean verdict over a population that
     was never named.
+
+    `band_landed` is the DECLARED boundary (#428), passed in rather than read from a
+    module constant so the probes can drive the predicate with their own fixture date.
     """
     bands, max_score, problems = read_bands(CRITERIA)
     if not bands and max_score is None and not problems:
@@ -323,7 +346,7 @@ def band_leg() -> tuple[list[str], list[str], list[str], bool]:
     checked: list[str] = []
     found: list[str] = list(problems)
     for day, path in artifacts():
-        if day <= BAND_LANDED:
+        if day <= band_landed:
             excused.append(path.name)
             continue
         checked.append(path.name)
@@ -560,7 +583,7 @@ def test_the_band_boundary_excuses_the_pre_law_artifacts() -> None:
     as the concrete case: 09-22/-23/-24 carry real mismatches and are excused,
     while 09-25 -- the first written under the law -- is CHECKED.
     """
-    excused, checked, _problems, declared_here = band_leg()
+    excused, checked, _problems, declared_here = band_leg(_declared_day_or_skip(REPO, BAND_KEY))
     if not declared_here:
         return
     assert set(excused) | set(checked) == {p.name for _d, p in artifacts()}
@@ -574,12 +597,48 @@ def test_the_band_boundary_excuses_the_pre_law_artifacts() -> None:
             assert name in checked, f"{name} is written under the band law and is checked"
 
 def test_the_live_band_population_is_clean() -> None:
-    """The live check is non-vacuous and green -- the brief's own acceptance case."""
-    _excused, checked, problems, declared_here = band_leg()
+    """The live check is non-vacuous and green -- the brief's own acceptance case.
+
+    An EMPTY post-boundary population is a STATED SKIP, not a clean zero and not a red:
+    the shipped `TEMPLATE/` tree carries no `evidence/scores/` at all, so `assert checked`
+    was a permanent red in the very tree this gate ships from. The reason names the
+    boundary and the population, so "nothing to judge yet" never prints as "clean" (#78
+    clause c, #116).
+    """
+    band_landed = _declared_day_or_skip(REPO, BAND_KEY)
+    _excused, checked, problems, declared_here = band_leg(band_landed)
     if not declared_here:
         return
-    assert checked, "the band leg must examine a population, not report a clean zero"
+    reason = _population_reason(checked, band_landed, "band-checked artifact")
+    if reason:
+        pytest.skip(reason)
     assert problems == [], "\n".join(problems)
+
+def declared_day(repo: Path, key: str) -> dt.date:
+    """The declared boundary `key` names, as a DATE, or `SkipGate`/`GateError`.
+
+    The declaration is FACTORY DATA and never ships, so its ABSENCE is a stated skip — the
+    state every bootstrapped factory is in until it adopts the invariant. A MALFORMED
+    declaration is a `GateError`: a broken declaration must not hide behind the same output
+    as none at all. The artifact names are dated (`YYYY-MM-DD.md`), so the boundary is
+    compared as a DATE — the declaration's time of day carries no meaning here.
+    """
+    return declared_boundary(repo, key)[0].date()
+
+def _declared_day_or_skip(repo: Path, key: str) -> dt.date:
+    """`declared_day`, with the two declaration outcomes mapped onto pytest."""
+    try:
+        return declared_day(repo, key)
+    except SkipGate as exc:
+        pytest.skip(str(exc))
+    except GateError as exc:
+        raise AssertionError("; ".join(exc.problems)) from exc
+
+def _population_reason(population: list[str], boundary: dt.date, what: str) -> str:
+    """The stated skip reason when a post-boundary population is empty, else ""."""
+    if population:
+        return ""
+    return population_skip_reason([], f"the declared boundary {boundary.isoformat()}", what) or ""
 
 def declared() -> bool:
     """Whether this factory declares required sections at all.
@@ -611,10 +670,11 @@ def test_pre_boundary_artifacts_are_excused_not_required() -> None:
     factory has none of this factory's — with this factory's own landing-day pair
     named as the concrete case where they are present.
     """
+    section_landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
     found = artifacts()
     present = {path.name for _day, path in found}
-    excused = {path.name for day, path in found if day <= INVARIANT_LANDED}
-    checked = {path.name for day, path in found if day > INVARIANT_LANDED}
+    excused = {path.name for day, path in found if day <= section_landed}
+    checked = {path.name for day, path in found if day > section_landed}
     assert excused | checked == present
     assert not (excused & checked)
     for name in ("2026-09-19.md", "2026-09-18.md"):
@@ -625,15 +685,113 @@ def test_pre_boundary_artifacts_are_excused_not_required() -> None:
 def test_post_boundary_artifacts_carry_every_required_section() -> None:
     if not declared():
         return
+    section_landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
     problems: list[str] = []
     for day, path in artifacts():
-        if day <= INVARIANT_LANDED:
+        if day <= section_landed:
             continue
         missing = missing_sections(path.read_text(encoding="utf-8"))
         if missing:
             problems.append(f"{path.name}: missing {', '.join(missing)}")
     assert problems == [], "\n".join(problems)
 
+
+# --- probes: the DECLARATION the boundaries are read from (#428) ------------------
+
+def test_probe_a_tree_with_no_declared_boundary_skips_with_a_stated_reason() -> None:
+    """The declaration is FACTORY DATA and does not ship, so its absence is the state every
+    bootstrapped factory is in — a STATED skip, never a red and never a silent pass. This is
+    the arm that keeps the shipped `TEMPLATE/` tree green (#78, #76's class)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp)
+        (bare / "evidence").mkdir()
+        with pytest.raises(SkipGate) as excinfo:
+            declared_day(bare, INVARIANT_KEY)
+    assert "ledger-invariants" in str(excinfo.value), excinfo.value
+
+def test_probe_a_declaration_without_this_key_skips_and_names_it() -> None:
+    """A factory that adopted SOME invariant but not this one is the same state, and the
+    skip names the KEY so a reader can tell which invariant is unadopted."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp)
+        (bare / "docs").mkdir()
+        (bare / "docs" / "ledger-invariants.json").write_text(
+            json.dumps({"invariants": {"some_other_gate": "2026-01-01T00:00:00Z"}}),
+            encoding="utf-8",
+        )
+        with pytest.raises(SkipGate) as excinfo:
+            declared_day(bare, INVARIANT_KEY)
+    assert INVARIANT_KEY in str(excinfo.value), excinfo.value
+
+def test_probe_an_unreadable_declared_boundary_fails() -> None:
+    """A factory that DECLARED a boundary and cannot read it is a FAILURE, not a skip:
+    skipping would hide a broken declaration behind the same output as none at all."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = Path(tmp)
+        (bare / "docs").mkdir()
+        (bare / "docs" / "ledger-invariants.json").write_text(
+            json.dumps({"invariants": {INVARIANT_KEY: "yesterday"}}), encoding="utf-8"
+        )
+        with pytest.raises(GateError) as excinfo:
+            declared_day(bare, INVARIANT_KEY)
+    assert excinfo.value.problems, excinfo.value
+
+def test_probe_a_declared_boundary_still_judges_the_population(tmp_path: Path) -> None:
+    """The declaration MOVES the boundary; it never excuses the population.
+
+    The SAME artifact — dated one day past the boundary passed in — is CHECKED, and a
+    band-less scorecard still bites. Without this arm the declaration could be read as a
+    licence to excuse everything, which is the shape the boundary exists to prevent.
+    """
+    global SCORES, CRITERIA
+    saved_scores, saved_criteria = SCORES, CRITERIA
+    try:
+        scores = tmp_path / "scores"
+        scores.mkdir()
+        criteria = tmp_path / "quality-criteria.md"
+        criteria.write_text(CRITERIA.read_text(encoding="utf-8"), encoding="utf-8")
+        (scores / "2026-09-25.md").write_text(
+            "# a scorecard stating a score and NO band\n\n"
+            "### 1. Something — 60 / 76 (78.9%)\n",
+            encoding="utf-8",
+        )
+        SCORES, CRITERIA = scores, criteria
+        excused, checked, problems, declared_here = band_leg(_PROBE_BAND_BOUNDARY)
+        assert declared_here, (excused, checked, problems)
+        assert checked == ["2026-09-25.md"], (excused, checked, problems)
+        assert problems, "a post-boundary artifact with no band must still bite"
+    finally:
+        SCORES, CRITERIA = saved_scores, saved_criteria
+    assert SCORES == saved_scores and CRITERIA == saved_criteria
+
+def test_probe_a_declared_boundary_moves_the_band_population(tmp_path: Path) -> None:
+    """The declaration MOVES the boundary; it never excuses the population.
+
+    ONE artifact, ONE tree, two declared boundaries: dated after the early one it is
+    CHECKED and bites, dated before the late one it is EXCUSED and does not. Both arms go
+    through `band_leg` itself — a probe asserting the date comparison alone would pass
+    while the leg ignored the boundary it was handed.
+    """
+    global SCORES, CRITERIA
+    saved_scores, saved_criteria = SCORES, CRITERIA
+    try:
+        scores = tmp_path / "scores"
+        scores.mkdir()
+        criteria = tmp_path / "quality-criteria.md"
+        criteria.write_text(CRITERIA.read_text(encoding="utf-8"), encoding="utf-8")
+        (scores / "2026-09-25.md").write_text(
+            "# a scorecard stating a score and NO band\n\n"
+            "### 1. Something — 60 / 76 (78.9%)\n",
+            encoding="utf-8",
+        )
+        SCORES, CRITERIA = scores, criteria
+        early_excused, early_checked, early_problems, _ = band_leg(dt.date(2026, 9, 24))
+        late_excused, late_checked, late_problems, _ = band_leg(dt.date(2026, 9, 26))
+    finally:
+        SCORES, CRITERIA = saved_scores, saved_criteria
+    assert early_excused == [] and early_checked == ["2026-09-25.md"], early_checked
+    assert late_checked == [] and late_excused == ["2026-09-25.md"], late_excused
+    assert early_problems and not late_problems, (early_problems, late_problems)
 
 def test_a_factory_without_the_procedure_declares_nothing() -> None:
     """The undeclared path passes and says why — this is the template's own case.
@@ -669,12 +827,24 @@ def main() -> int:
             f"nothing to assert"
         )
         return 0
+    try:
+        section_landed = declared_day(REPO, INVARIANT_KEY)
+        band_landed = declared_day(REPO, BAND_KEY)
+    except SkipGate as exc:
+        print(f"score-artifact sections gate: SKIPPED — {exc}")
+        return 0
+    except GateError as exc:
+        print("score-artifact sections gate failed:", file=sys.stderr)
+        for problem in exc.problems:
+            print(f"  {problem}", file=sys.stderr)
+        return 1
+
     excused: list[str] = []
     checked: list[str] = []
     problems: list[str] = []
 
     for day, path in artifacts():
-        if day <= INVARIANT_LANDED:
+        if day <= section_landed:
             excused.append(path.name)
             continue
         checked.append(path.name)
@@ -688,7 +858,7 @@ def main() -> int:
     # The maturity band leg (issue #154). It reports its OWN population, because a
     # clean verdict over a population that was never named is indistinguishable
     # from one that examined nothing (P29).
-    band_excused, band_checked, band_found, band_declared = band_leg()
+    band_excused, band_checked, band_found, band_declared = band_leg(band_landed)
     if not band_declared:
         print(
             f"no {CRITERIA.relative_to(REPO)} — no maturity band law is declared; "

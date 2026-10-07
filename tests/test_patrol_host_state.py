@@ -29,7 +29,7 @@ having, each with a probe that would fail on the shape it forbids:
 5. **A close row's board declaration is checked against the board** (#117). The offline
    close-board gate asserts the token was RECORDED; nothing asserted the recorded state was
    TRUE, so a close row could declare a board close that never happened and read clean. The
-   leg binds to that gate's own `BOARD_TOKEN` and `INVARIANT_LANDED` rather than re-deriving
+   leg binds to that gate's own `BOARD_TOKEN` and `INVARIANT_KEY` rather than re-deriving
    them — a trailer-only read sees 40 of the 52 post-invariant rows, so a re-derived leg
    would judge 12 rows fewer and go false-green over them.
 
@@ -149,7 +149,8 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
-         delivery_scope=None, deliveries=None, criterion_repo=None):
+         delivery_scope=None, deliveries=None, criterion_repo=None,
+         board_scope=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -242,6 +243,13 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
             (lambda: criterion_repo) if criterion_repo is not None
             else (lambda: _EMPTY_CRITERION_TREE)
         ),
+        # The three BOARD legs' bounds (#428) are injected for the same reason the ruling
+        # bound is: each judges a HISTORICAL population against a bound this tree declares,
+        # and in the half of this byte-paired file that SHIPS no declaration exists. The
+        # default reads whatever this tree declares and falls back to the kit's literal, so
+        # every probe written before the conversion keeps its meaning; a probe that asserts
+        # a pre-boundary, post-boundary, NOT RUN or REFUSED bound passes its own.
+        board_scope_fn=(board_scope if board_scope is not None else _board_scope),
     )
     return rc, out.getvalue(), err.getvalue()
 
@@ -735,22 +743,117 @@ def _close_row(n: int, subject: str, ts: str, detail: str) -> dict:
 
 
 def test_the_leg_binds_to_the_gate_own_constant_not_a_private_copy() -> None:
-    """One field, one predicate: the leg reads the GATE's token and boundary.
+    """One field, one predicate: the leg reads the GATE's token and its DECLARED bound key.
 
     A private copy would be self-consistent on both sides and the drift would be
-    invisible — the class this factory has already ruled (n=405 clause 5, n=599).
+    invisible — the class this factory has already ruled (n=405 clause 5, n=599). The
+    instant itself is FACTORY DATA (#428), so what the leg binds to is the gate's
+    `INVARIANT_KEY`; the value is read from this tree's declaration through the one
+    reader, and a tree that declares none is a NOT RUN rather than a red.
     """
     assert RUNNER.CLOSE_BOARD_GATE == REPO / "tests" / "test_close_board_recorded.py", (
         f"the leg must bind to the close-board gate, not {RUNNER.CLOSE_BOARD_GATE}"
     )
     gate = RUNNER.load_close_board_gate()
     assert gate.BOARD_TOKEN == "board=closed", gate.BOARD_TOKEN
-    # The ANCHOR is this tree's own instant: the gate ships `standalone` precisely so a
-    # factory can carry its own, so a member that does is not a defect. The probe asserts
-    # the leg reaches the gate's constant and that the constant is a well-formed instant.
-    anchor = gate.INVARIANT_LANDED
-    assert anchor and anchor.endswith("Z") and len(anchor) == 20, anchor
+    assert gate.INVARIANT_KEY == "close_board_recorded", gate.INVARIANT_KEY
+    # The leg reaches the DECLARATION through the reader, and the reader's answer is
+    # either a well-formed instant or a stated absence — never a third, silent state.
+    text, refusal, skip_reason = RUNNER.declared_leg_boundary(REPO, gate.INVARIANT_KEY)
+    if refusal:
+        raise AssertionError(f"the bound is declared but unreadable: {refusal}")
+    if not skip_reason:
+        assert text.endswith("Z") and len(text) == 20, text
 
+
+def test_a_tree_with_NO_declared_bound_does_not_judge_the_bound_dependent_legs() -> None:
+    """#428 acceptance, the SKIP arm: absent factory data is a stated NOT RUN, never a red.
+
+    A boundary is factory data, and the shipped half of this byte-identical pair declares
+    none — the state every bootstrapped factory is in until it adopts the invariant. So an
+    absent bound must not redden the run, and it must not silently pass either: both legs
+    say which they are and why, and the intake leg still judges the two arms that ask no
+    question about when a rule landed.
+    """
+    # The `ruling` row is not decoration: since #332 the patrol also asserts the ROUND's
+    # own predicate, so a fixture that models a clean board must be a board it has SWEPT.
+    # The `claim` for #7 is the OFFLINE arm's population — a subject acted on with no
+    # intake row of its own — so the arm that needs the bound is actually exercised.
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2), ("claim", "#7", 3))
+
+    def _undeclared(_repo, key):
+        return "", "", f"`{key}` is UNDECLARED in this tree — NOT JUDGED: probe"
+
+    rc, out, _ = _run(issues, rows, board_scope=_undeclared)
+    assert rc == 0, f"an absent bound is factory data, not a defect, got rc={rc}\n{out}"
+    assert "LEG board-close — NOT RUN" in out, out
+    assert "LEG board-closed — NOT RUN" in out, out
+    assert "`close_board_recorded` is UNDECLARED in this tree" in out, out
+    # The intake leg's bound-independent arms are STILL judged: what was not judged must
+    # never read as what was not there (#242).
+    assert "LEG board-intake — ASSERTED" in out, out
+    assert "1 examined" in out, out
+    # ... and the bound-dependent arm says it was not judged, rather than reporting zero.
+    assert "declares no boundary for the gate" in out, out
+
+def test_a_MALFORMED_declared_bound_REFUSES_the_board_legs() -> None:
+    """#428 acceptance, the FAIL arm: a declared-but-unreadable bound is a DEFECT.
+
+    The reader's policy is absent SKIPS / malformed FAILS, and the leg maps that onto
+    NOT RUN versus REFUSED. A malformed declaration hiding behind the same output as none
+    at all is the failure this arm exists to catch, so the run must be RED and must name
+    the key it could not read.
+    """
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2))
+
+    def _malformed(_repo, key):
+        return "", f"`{key}` is declared but cannot be read: not an instant — REFUSED: probe", ""
+
+    rc, out, _ = _run(issues, rows, board_scope=_malformed)
+    assert rc == 1, f"a malformed bound is a defect, got rc={rc}\n{out}"
+    assert "LEG board-close — REFUSED" in out, out
+    assert "LEG board-closed — REFUSED" in out, out
+    assert "LEG board-intake — REFUSED" in out, out
+    assert "`close_board_recorded` is declared but cannot be read" in out, out
+
+def test_declared_leg_boundary_MAPS_the_readers_three_outcomes() -> None:
+    """#428 acceptance: the leg's own reader is DRIVEN, not assumed.
+
+    The two probes above hand the leg a `board_scope`, so they exercise the leg's handling
+    of a scope's ANSWER and never `declared_leg_boundary`'s own mapping. Measured while
+    writing this: a mutant that re-typed the instant in the SKIP arm, and a mutant that
+    downgraded a malformed declaration to a skip, both left those two probes GREEN — the
+    mapping between the reader's two exceptions and the leg's NOT RUN / REFUSED was the
+    one path in the change with no probe behind it. This drives the reader itself against
+    the three trees `ledger_boundary.synthetic_tree` builds, so each outcome has a probe
+    that fails on the shape it forbids.
+    """
+    reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
+    key = "close_board_recorded"
+
+    # (1) Nothing declared: the state every bootstrapped factory is in. NOT a defect.
+    undeclared = reader.synthetic_tree(_scratch(), rows=[])
+    text, refusal, skip_reason = RUNNER.declared_leg_boundary(undeclared, key)
+    assert (text, refusal) == ("", ""), (text, refusal)
+    assert "UNDECLARED" in skip_reason and key in skip_reason, skip_reason
+    assert "NOT JUDGED" in skip_reason, skip_reason
+
+    # (2) Declared and unreadable: a DEFECT, and it must never render as (1).
+    malformed = reader.synthetic_tree(_scratch(), rows=[],
+                                      invariants={key: "not an instant"})
+    text, refusal, skip_reason = RUNNER.declared_leg_boundary(malformed, key)
+    assert (text, skip_reason) == ("", ""), (text, skip_reason)
+    assert "REFUSED" in refusal and key in refusal, refusal
+    assert "cannot be read" in refusal, refusal
+
+    # (3) Declared and readable: the text is the FACTORY's, not one this file carries.
+    declared = reader.synthetic_tree(_scratch(), rows=[],
+                                     invariants={key: "2026-01-02T03:04:05Z"})
+    text, refusal, skip_reason = RUNNER.declared_leg_boundary(declared, key)
+    assert (refusal, skip_reason) == ("", ""), (refusal, skip_reason)
+    assert text == "2026-01-02T03:04:05Z", text
 
 def test_a_false_board_declaration_is_reported_and_fails_the_run() -> None:
     """#117 acceptance: a close row declaring board=closed for an OPEN issue is a problem.
@@ -842,6 +945,35 @@ def test_a_pre_invariant_close_row_is_outside_the_population() -> None:
         f"a pre-invariant close row must not enter the population\n{out}"
     )
 
+
+def test_the_bound_is_DECLARED_DATA_and_moves_the_population() -> None:
+    """#428 acceptance: the same fixture, two bounds, two populations.
+
+    This is the arm that catches a hardcoded boundary. A row at `_CLOSE_TS` is judged
+    against the declared bound and excluded against a later one — so if the leg ever went
+    back to carrying its own literal, ONE of these two runs would disagree with the bound
+    it was handed, and the probe would say so.
+    """
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 5)) + [
+        _close_row(2, "#1", _CLOSE_TS, "settled board=closed"),
+    ]
+    declared = _close_anchor()
+
+    def _later(_repo, key):
+        return _plus(declared, 24.0), "", ""
+
+    rc_early, out_early, _ = _run(issues, rows)
+    assert rc_early == 1, out_early
+    assert "1 close row(s) checked" in out_early, out_early
+    assert "declares board=closed for #1" in out_early, out_early
+
+    # The SAME row, one day past a later bound: outside the population, so not judged.
+    rc_late, out_late, _ = _run(issues, rows, board_scope=_later)
+    assert rc_late == 0, out_late
+    assert "0 close row(s) checked" in out_late, (
+        f"the bound the leg was HANDED must decide the population\n{out_late}"
+    )
 
 # --- #223: the board-ruling leg --------------------------------------------------
 
@@ -1688,11 +1820,34 @@ def _tree_bound(key: str, fallback: str) -> str:
 
 
 def _close_anchor() -> str:
-    """The close-board gate's own anchor, as this tree carries it."""
-    try:
-        return RUNNER.load_close_board_gate().INVARIANT_LANDED
-    except Exception:  # noqa: BLE001 — the leg reports a gate it cannot load; the fixture
-        return "2026-09-18T18:04:24Z"  # only needs a well-formed instant to order against.
+    """The close-board gate's own anchor, as this tree declares it.
+
+    Read through the same reader the leg uses (#428): the gate no longer carries the
+    instant as a constant, because a boundary is factory data and this file ships into
+    every member tree. The literal is only the fallback that keeps the probes runnable
+    before adoption, and it is the same value the kit ships in the example declaration.
+    """
+    return _tree_bound("close_board_recorded", "2026-09-18T18:04:24Z")
+
+# The three board legs' bounds (#428). Same rule as the duty bound above: the instant is
+# read from THIS tree's declaration through the reader the legs themselves use, with the
+# kit's literal only as the pre-adoption fallback. A probe pinned to the kit's literal
+# would exercise the leg against a date no member need share.
+_BOARD_BOUNDS = {
+    "board_intake_recorded": "2026-09-19T00:00:00Z",
+    "close_board_recorded": "2026-09-18T18:04:24Z",
+}
+
+def _board_scope(repo, key: str) -> tuple[str, str, str]:
+    """The bound THIS tree declares for `key`, or the kit's literal when it declares none.
+
+    The default for every probe that drives `main()`: it keeps the meaning those probes
+    were written with in BOTH halves of this byte-identical pair — the adopting tree
+    reads its own declaration, the shipped half falls back to the kit's literal — while a
+    probe that asserts a pre-boundary, post-boundary, NOT RUN or REFUSED bound passes a
+    `board_scope` of its own.
+    """
+    return _tree_bound(key, _BOARD_BOUNDS.get(key, "")), "", ""
 
 
 _DUTY_BOUND = _tree_bound(RUNNER.DUTY_RECEIPT_BOUNDARY_KEY, "2026-09-25T07:01:07Z")

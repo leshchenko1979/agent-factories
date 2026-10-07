@@ -46,8 +46,8 @@ Six things it does deliberately:
 - **Checks the close rows' board declarations against the board it already read**
   (#117). The offline gate asserts the token was RECORDED; this leg asserts the
   recorded state was TRUE, reading the rows through the gate's own `BOARD_TOKEN`
-  and `INVARIANT_LANDED` so the two surfaces cannot drift into two definitions of
-  one field. Freshness stays REPORTED — the read instant travels with the count and
+  and its DECLARED bound (`INVARIANT_KEY`, resolved through the one boundary reader)
+  so the two surfaces cannot drift into two definitions of one field. Freshness stays REPORTED — the read instant travels with the count and
   is never folded into the verdict, because a check that fails by construction
   carries no more information than one that cannot fail.
 
@@ -319,9 +319,9 @@ BOOTSTRAP_NAMED = (
 )
 
 # The close-board gate (#44) OWNS the definition of a close row's board
-# declaration — its whole-detail token scan (`BOARD_TOKEN`) and its invariant
-# boundary (`INVARIANT_LANDED`). The board-close leg below BINDS to both rather
-# than re-deriving them: a canonical-trailer read (`trailer_tokens` in
+# declaration — its whole-detail token scan (`BOARD_TOKEN`) and the KEY its invariant
+# boundary is declared under (`INVARIANT_KEY`). The board-close leg below BINDS to both
+# rather than re-deriving them: a canonical-trailer read (`trailer_tokens` in
 # tools/field_predicate.py) sees only 40 of the 52 post-invariant rows, because 12
 # carry the token OUTSIDE the trailing `=`-run — so a leg that re-derived the read
 # would judge 12 rows fewer than the gate and go green over them. One field, one
@@ -548,13 +548,52 @@ def load_rows(path: Path = LEDGER) -> list[dict]:
     return rows
 
 
-def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None) -> dict:
-    """The live board-intake leg, with its own coverage beside its verdict."""
+def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None,
+                     bound=None) -> dict:
+    """The live board-intake leg, with its own coverage beside its verdict.
+
+    The BOUND is read through the ONE reader (`tests/ledger_boundary.py`), never carried
+    as a literal — see `declared_leg_boundary` for why a boundary is factory data.
+
+    ONLY THE OFFLINE ARM IS BOUND-DEPENDENT. The forward arm compares the board's OPEN
+    items to the intake rows and the reverse arm compares the intake rows to the board;
+    neither asks when a rule landed. The third arm — a subject carrying a `claim` or a
+    `close` with no intake row — excuses anything that predates the gate, so it is the one
+    that needs the bound. An undeclared bound therefore leaves the two answerable arms
+    JUDGED and reports the third as NOT JUDGED with its reason, rather than sinking a leg
+    whose majority needs no bound at all. A declared-but-unreadable bound is a DEFECT and
+    refuses the leg outright.
+
+    `bound` is injectable for the reason every other dependency is: a probe must be able
+    to drive a pre-boundary instance, a post-boundary one, and a refused bound without the
+    live tree's declaration deciding its verdict.
+    """
     predicate = predicate or load_predicate()
+    key = predicate.INVARIANT_KEY
+    text, refusal, skip_reason = (bound or declared_leg_boundary)(REPO, key)
+    if refusal:
+        # The two bound-independent arms are still measured: what was not judged must not
+        # read as what was not there (#242).
+        coverage = predicate.board_intake_coverage(
+            issues, rows, "", complete_board=True
+        )
+        coverage.update({"bound_key": key, "bound_refusal": refusal, "bound_reason": ""})
+        return {
+            "name": "board-intake",
+            "status": "REFUSED",
+            "problems": [refusal],
+            "excused": [],
+            "coverage": dict(coverage),
+        }
     problems, excused = predicate.board_intake_problems(
-        issues, rows, complete_board=True
+        issues, rows, text or None, complete_board=True
     )
-    coverage = predicate.board_intake_coverage(issues, rows, complete_board=True)
+    coverage = predicate.board_intake_coverage(
+        issues, rows, text, complete_board=True
+    )
+    coverage.update({"bound_key": key, "bound_refusal": "", "bound_reason": skip_reason})
+    if skip_reason:
+        excused = list(excused) + [skip_reason]
     return {
         "name": "board-intake",
         "status": "ASSERTED",
@@ -565,7 +604,7 @@ def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None) -> di
 
 
 def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
-                    read_at: str, predicate=None) -> dict:
+                    read_at: str, predicate=None, bound=None) -> dict:
     """The live board-close leg: every close row's board declaration checked (#117).
 
     Population: post-invariant close rows carrying the GATE's own token whose subject
@@ -579,10 +618,34 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
     indistinguishable from "examined nothing". The read instant travels with it:
     freshness is a property of the INSTANT and is REPORTED, never folded into the
     correctness verdict.
+
+    The BOUND is read through the ONE reader, from the declaration the GATE itself reads
+    (`gate.INVARIANT_KEY`) — never a second copy of the instant, which would go stale
+    silently (n=405 clause 5, n=599). A declared-but-unreadable bound REFUSES the leg; an
+    UNDECLARED one is a NOT RUN with its reason, because this leg's whole population is
+    bound-dependent and judging it unbounded is exactly what the bound exists to stop.
+    `bound` is injectable so a probe can drive either arm.
     """
     gate = gate or load_close_board_gate()
     predicate = predicate or load_predicate()
-    token, boundary = gate.BOARD_TOKEN, gate.INVARIANT_LANDED
+    token, key = gate.BOARD_TOKEN, gate.INVARIANT_KEY
+    boundary, refusal, skip_reason = (bound or declared_leg_boundary)(REPO, key)
+    if refusal or skip_reason:
+        return {
+            "name": "board-close",
+            "status": "REFUSED" if refusal else "NOT RUN",
+            "problems": [refusal] if refusal else [],
+            "excused": [],
+            "coverage": {
+                "close_rows_examined": 0,
+                "board_read_at": read_at,
+                "declaration_token": token,
+                "invariant_boundary": boundary,
+                "bound_key": key,
+                "bound_refusal": refusal,
+                "reason": refusal or skip_reason,
+            },
+        }
     bound = gate._parse_ts(boundary)
 
     board_numbers = {
@@ -643,6 +706,7 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
             "board_read_at": read_at,
             "declaration_token": token,
             "invariant_boundary": boundary,
+            "bound_key": key,
         },
     }
 
@@ -657,9 +721,10 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
 # mentions, and that asymmetry is the whole defect. Measured at ledger n=1876: 233 closed
 # board items, 3 post-boundary and carrying no close row (#143, #172, #227).
 #
-# THE BOUNDARY IS READ, NEVER RE-TYPED. It is the close-board gate's own INVARIANT_LANDED,
-# loaded from that gate — a second copy of an instant is a copy that goes stale silently,
-# and a guard that re-types the value it guards has already stopped guarding.
+# THE BOUNDARY IS READ, NEVER RE-TYPED. It is the instant declared under the close-board
+# gate's own `INVARIANT_KEY`, resolved through the one boundary reader (`#428`) — a second
+# copy of an instant is a copy that goes stale silently, and a guard that re-types the
+# value it guards has already stopped guarding.
 #
 # WHAT THIS LEG DOES NOT DO. It does not decide whether the missing row is a DEFECT or a
 # QUESTION, because for direction (3) that question does not arise: ruling n=496 clause
@@ -671,7 +736,7 @@ def board_close_leg(issues: list[dict], rows: list[dict], *, gate=None,
 # NOT RUN, NOT SILENT: an unreadable board never reaches this leg — `main` exits 2 before
 # any leg is built — so the leg cannot report a clean sweep over a board it never read.
 def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
-                     read_at: str, predicate=None) -> dict:
+                     read_at: str, predicate=None, bound=None) -> dict:
     """The live board-closed leg: a post-boundary CLOSED item with NO close row (#75).
 
     Population: board items whose state is `closed` AND whose `closedAt` is at or after
@@ -687,11 +752,30 @@ def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
     """
     gate = gate or load_close_board_gate()
     predicate = predicate or load_predicate()
-    token, boundary = gate.BOARD_TOKEN, gate.INVARIANT_LANDED
+    token, key = gate.BOARD_TOKEN, gate.INVARIANT_KEY
+    boundary, refusal, skip_reason = (bound or declared_leg_boundary)(REPO, key)
+    if refusal or skip_reason:
+        return {
+            "name": "board-closed",
+            "status": "REFUSED" if refusal else "NOT RUN",
+            "problems": [refusal] if refusal else [],
+            "excused": [],
+            "coverage": {
+                "closed_items_examined": 0,
+                "pre_boundary_closed_items": 0,
+                "board_read_at": read_at,
+                "declaration_token": token,
+                "invariant_boundary": boundary,
+                "bound_key": key,
+                "bound_refusal": refusal,
+                "reason": refusal or skip_reason,
+                "items_without_close_row": [],
+            },
+        }
     try:
-        bound = gate._parse_ts(boundary)
+        bound_ts = gate._parse_ts(boundary)
     except (ValueError, TypeError):
-        bound = None
+        bound_ts = None
 
     # The close-row namespace, resolved the way `board_close_leg` resolves it -- the same
     # strict `#N` reference, so the two legs cannot disagree about which subject a row
@@ -719,7 +803,7 @@ def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
             closed_at = gate._parse_ts(item.get("closedAt"))
         except (ValueError, TypeError):
             closed_at = None
-        if closed_at is None or bound is None or closed_at < bound:
+        if closed_at is None or bound_ts is None or closed_at < bound_ts:
             # A close that PREDATES the invariant is outside this population: the law
             # cannot require a row for an obligation that did not yet exist, and the
             # offline gate excuses those rows the same way. Counted, never dropped.
@@ -747,6 +831,7 @@ def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
             "board_read_at": read_at,
             "declaration_token": token,
             "invariant_boundary": boundary,
+            "bound_key": key,
             "items_without_close_row": missing,
         },
     }
@@ -2317,6 +2402,50 @@ def boundary_reader():
     if _BOUNDARY_READER is None:
         _BOUNDARY_READER = load_module("ledger_boundary", LEDGER_BOUNDARY)
     return _BOUNDARY_READER
+
+
+def declared_leg_boundary(repo: Path, key: str) -> tuple[str, str, str]:
+    """A board leg's forward bound, read through the ONE boundary reader (#428).
+
+    Returns `(text, refusal, skip_reason)`. Exactly one of the three is populated: the
+    DECLARED text, a REFUSAL (a bound is declared but cannot be read — a DEFECT), or a
+    skip reason (this tree has declared nothing).
+
+    WHY THIS IS READ AND NOT CARRIED. The three board legs judge a HISTORICAL population,
+    and the bound is what keeps them off the history that predates the rule. That bound is
+    FACTORY DATA — one member's history is not another's — while this file ships
+    byte-identical into every member tree, so a literal here asserts one member's instant
+    against another's (#78 clause b).
+
+    The reader's own policy is absent SKIPS / malformed FAILS; this maps it onto
+    "not judged, and TOLD so" versus "REFUSED", and never onto "judge everything" — the
+    unbounded read the bound exists to stop. The two are kept apart in the WORDING,
+    because that is what a reader acts on.
+    """
+    try:
+        reader = boundary_reader()
+    except Exception as exc:  # noqa: BLE001 — any load failure is the same refusal
+        return "", (
+            f"the boundary reader cannot be loaded from {LEDGER_BOUNDARY} ({exc}) — "
+            f"REFUSED: without it `{key}` cannot be read, and a leg that judges a "
+            f"historical population against a bound it could not read is the unbounded "
+            f"behaviour the bound exists to stop"
+        ), ""
+    try:
+        _instant, text = reader.declared_boundary(repo, key)
+    except reader.SkipGate as exc:
+        return "", "", (
+            f"`{key}` is UNDECLARED in this tree ({exc}) — NOT JUDGED: the bound is "
+            f"factory data, and judging a whole history against a bound that was never "
+            f"declared is the unbounded read the bound exists to stop"
+        )
+    except reader.GateError as exc:
+        return "", (
+            f"`{key}` is declared in this tree but cannot be read: "
+            f"{'; '.join(str(p) for p in exc.problems)} — REFUSED: a malformed bound is a "
+            f"DEFECT, never a licence to judge unbounded"
+        ), ""
+    return text, "", ""
 
 
 def duty_receipt_bound(repo: Path) -> tuple[dt.datetime | None, str, str]:
@@ -4496,23 +4625,37 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append("")
             continue
         if leg["name"] == "board-close":
-            lines.append(
-                f"  close rows (declaring {cov['declaration_token']}, at or after "
-                f"{cov['invariant_boundary']}): {cov['close_rows_examined']} examined, "
-                f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
-            )
+            if leg["status"] != "ASSERTED":
+                # A NOT RUN / REFUSED bound is neither a pass nor a silence: the leg says
+                # which it is and why, so a reader can act on it. The population line is
+                # not printed because there is no population — the bound that defines it
+                # could not be read.
+                lines.append(
+                    f"  {leg['status']}: {cov.get('reason') or 'reason not stated'}"
+                )
+            else:
+                lines.append(
+                    f"  close rows (declaring {cov['declaration_token']}, at or after "
+                    f"{cov['invariant_boundary']}): {cov['close_rows_examined']} examined, "
+                    f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
+                )
         elif leg["name"] == "board-closed":
             # Direction (3). The population is the BOARD's, so the line names the board
             # read instant and the boundary it was taken against; the PRE-BOUNDARY count
             # is printed too, because an exclusion that is not printed cannot be told
             # from a miss. A closed item with no close row is DRIFT by ruling n=496
             # clause (5) — this leg asks no completeness question of its population.
-            lines.append(
-                f"  closed items (at or after {cov['invariant_boundary']}, "
-                f"{cov['pre_boundary_closed_items']} earlier close(s) excluded as "
-                f"pre-invariant): {cov['closed_items_examined']} examined, "
-                f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
-            )
+            if leg["status"] != "ASSERTED":
+                lines.append(
+                    f"  {leg['status']}: {cov.get('reason') or 'reason not stated'}"
+                )
+            else:
+                lines.append(
+                    f"  closed items (at or after {cov['invariant_boundary']}, "
+                    f"{cov['pre_boundary_closed_items']} earlier close(s) excluded as "
+                    f"pre-invariant): {cov['closed_items_examined']} examined, "
+                    f"{len(leg['problems'])} problem(s) — board read at {cov['board_read_at']}"
+                )
         elif leg["name"] == "cron-thinness":
             lines.append(
                 f"  rows: {cov['rows_read']} enabled read across {cov['homes_read']} "
@@ -5204,6 +5347,7 @@ def main(
     delivery_scope_fn=None,
     deliveries_fn=None,
     criterion_repo_fn=None,
+    board_scope_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -5260,7 +5404,17 @@ def main(
     names against the tree at `read_at`, so a probe that did not inject it would be asserting
     whether the LIVE repo happens to hold `tools/x.py` rather than the leg's behaviour.
     `criterion_repo_fn` returns the tree root to resolve against; the live default is this
-    repository."""
+    repository.
+
+    The three BOARD legs' bounds are injected for the twelfth and the last of the same
+    reason: each judges a HISTORICAL population against a bound this tree declares, so a
+    probe that could only read the live declaration could not exercise a pre-boundary
+    instance, a post-boundary one, or a NOT RUN / REFUSED bound at all — and in the
+    half of this byte-paired file that ships, no declaration exists, so a probe reading
+    the live tree would assert an ADOPTING member's history rather than the leg's
+    behaviour. `board_scope_fn(repo, key)` returns `(text, refusal, skip_reason)`; the live
+    default reads this tree's declaration through the one boundary reader.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
     args = parser.parse_args(argv)
@@ -5291,10 +5445,12 @@ def main(
         return 2
 
     cron_rows, homes_read, unreached = cron_rows_fn()
+    board_bound = board_scope_fn or declared_leg_boundary
     legs = [
-        board_intake_leg(issues, rows, predicate=predicate),
-        board_close_leg(issues, rows, read_at=read_at),
-        board_closed_leg(issues, rows, read_at=read_at, predicate=predicate),
+        board_intake_leg(issues, rows, predicate=predicate, bound=board_bound),
+        board_close_leg(issues, rows, read_at=read_at, bound=board_bound),
+        board_closed_leg(issues, rows, read_at=read_at, predicate=predicate,
+                         bound=board_bound),
         board_ruling_leg(
             issues, rows, read_at=read_at, predicate=predicate,
             scope=(ruling_scope_fn or ruling_board_scope)(),
