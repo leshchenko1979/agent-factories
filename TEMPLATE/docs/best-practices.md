@@ -832,6 +832,65 @@ rather than asserting it.
 
 ---
 
+## P38 — A value about an artifact is read from the artifact, never from a stand-in that resembles it
+
+A tool, a row or a report often needs a value that already exists somewhere — the
+argv a gate is registered with, the Subject a rework entry carries, the
+reachability of a repair path. That value is obtainable by two routes: read it
+from the artifact that OWNS it, or compute it from something that stands beside
+the artifact and usually agrees. The second route is cheaper — a source file is a
+plain read, an inference costs nothing — and it looks right, so nothing surfaces
+until the two diverge. When they do, the wrong value is the hardest kind to see:
+it is plausible, it is internally consistent, and every surface downstream of it
+keeps working.
+
+- *Proven:* meta-factory, three instances measured on one day (2026-10-07), each
+  filed by a different lane and each reproduced before it was ruled.
+  1. **#436** — `tools/gate_select.py` rebuilt each gate's argv from the audit's
+     SOURCE TEXT (the quoted literals in `tools/audit.py`), never from its LIVE
+     registration list. The rebuilt argv truncated (`--namespace` with no value)
+     and died rc=2 on a tree where the gate itself passes rc=0: the selector and
+     the audit disagreed about one gate, and only the selector was wrong.
+  2. **#438** — the #433 close row (`n=2829`) composed `rework=#433` from the
+     row's OWN SUBJECT rather than reading the rework entry's `Subject` column. No
+     entry with Subject `#433` existed, so the declaration named a landing nobody
+     made, and `tests/test_rework_declared_landed.py` went RED at HEAD.
+  3. **#437** — `docs/close-board-exemptions.json` asserted "no lawful path
+     restores the token" from INFERENCE. The path existed:
+     `tools/ledger.py repair --n 2811 --invariant close_board_recorded
+     --append-detail board=closed` → rc=0, which made the gate's own exemption
+     stale. The stated ground was an impossibility a probe falsified.
+- *Mechanism:*
+  1. **Name the artifact, and read it.** Before a value is produced, the artifact
+     that OWNS it is named — the live registration list, the entry's own column,
+     the path itself — and the value is read from there. A projection of the
+     artifact (its source text, a sample of its form, an expectation of what it
+     must be) is a stand-in, and the stand-in is the defect, not a shortcut.
+  2. **A claim of ABSENCE is a probe, not an inference.** "No lawful path exists",
+     "unreachable", "cannot be restored" is a measurement of the artifact's own
+     behaviour, run and reported — never a conclusion drawn from the shape of the
+     thing that would use it. An unrun probe reports UNKNOWN, never a negative.
+  3. **A receipt is not enough; the receipt must be OF the artifact.** This is
+     where P38 sits beside P17 rather than inside it. P17 requires a same-turn
+     tool result, and a defect of this class can satisfy P17 completely — the tool
+     ran, the result is real — while the value it produced came from a stand-in.
+     P17 governs whether a receipt exists; P38 governs what the receipt is a
+     receipt of. One defect can pass P17 and fail P38 in the same breath.
+  4. **Gate it (P29).** Where the two routes can be compared, a gate compares
+     them: the argv a selector rebuilds against the argv the audit actually runs
+     (`tests/test_gate_registration.py`); the declaration a close row carries
+     against the Subject its entry landed
+     (`tests/test_rework_declared_landed.py`); and the trailer field every
+     consumer needs read through ONE positional predicate rather than re-derived
+     per reader (`tools/field_predicate.py`).
+- *Prevents:* a selector that disagrees with the thing it selects; a declaration
+  that names a landing nobody made; an exemption justified by an impossibility
+  nobody tested; and the class's common tell — a wrong value that is cheaper to
+  obtain than the right one, and therefore survives every review that does not
+  compare the two.
+
+---
+
 ## The minimum viable factory
 
 If you are standing up factory number five, this is the smallest set that

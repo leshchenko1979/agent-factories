@@ -98,6 +98,14 @@ PRACTICE_GATES: dict[str, list[str]] = {
     # the generator paired with the gate that compares its output. All five ship in
     # TEMPLATE/, so the mapping holds in a bootstrapped factory.
     "P37": ["tests/test_commit_pair_hook.py", "tools/hooks/pre-commit", "tools/patrol_host_state.py", "tests/test_patrol_host_state.py", "tools/registry_render.py"],  # A commit check reads the index; a live-state check says so
+    # P38's three targets are the DETECTORS and the shared read, not a single shared
+    # gate: `tests/test_gate_registration.py` compares the argv a selector rebuilds
+    # against the argv the audit actually runs (#436), `tests/test_rework_declared_landed.py`
+    # resolves a close row's declaration against the Subject its entry landed (#438), and
+    # `tools/field_predicate.py` is the ONE positional read of a trailer field, so a
+    # consumer reads the artifact rather than re-deriving it per reader. All three ship in
+    # TEMPLATE/, so the mapping holds in a bootstrapped factory (P36).
+    "P38": ["tools/field_predicate.py", "tests/test_rework_declared_landed.py", "tests/test_gate_registration.py"],  # Read the artifact, never a stand-in that resembles it
 }
 
 
