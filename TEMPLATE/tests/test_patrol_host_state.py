@@ -2217,6 +2217,65 @@ def test_an_unreachable_member_is_reported_never_silently_skipped() -> None:
         assert any("no member repository was reachable" in p for p in leg["problems"]), \
             leg["problems"]
 
+def test_an_UNREADABLE_member_root_is_recorded_unreachable_never_raised() -> None:
+    """#429: a member root the box cannot READ is UNREACHABLE, not a traceback.
+
+    `Path.is_dir()` answers False for a root that is ABSENT, but it RE-RAISES when a
+    PARENT of the root denies traversal, because EACCES is not among the errors pathlib
+    ignores. So a member repo under a mode-700 home -- a CI runner's `/root` -- raised
+    straight out of `kit_drift_leg`, on the very leg whose job is to record that the member
+    could not be read, and took the whole sweep with it.
+
+    Measured in inferhub-watch run 37587867752, head 569088a, job `validate`, Python
+    3.12.14: `PermissionError: [Errno 13] Permission denied: '/root/inferhub-watch'` at
+    `pathlib.py:840`, raised from the member's own `kit_drift_leg` line 1556 -- the
+    byte-identical `if not root.is_dir():` this probe now guards.
+
+    The failure is DRIVEN, never simulated with a permission bit, for the reason the
+    notify-receipt leg states at its own read-failure probe: this gate runs as root on this
+    box, so a `chmod 000` parent is traversed happily and the probe would pass for the
+    wrong reason. A second, independent reason applies here: this box's Python is 3.14,
+    where `is_dir` delegates to `os.path.isdir` and swallows the error -- so only a DRIVEN
+    raise exercises the code path the member's Python takes.
+
+    A missing root and an unreadable one are the same class with DIFFERENT remedies (a
+    stale fleet entry versus a permissions problem on the member's box), so the reason is
+    asserted to reach the RENDER, which is a second surface.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        mpath, fpath = _synthetic_kit(root, files={"tools/a.py": b"a"}, members={})
+        fleet = json.loads(fpath.read_text())
+        guarded = root / "unreadable"
+        fleet["factories"].append({"slug": "locked", "repo": str(guarded)})
+        fpath.write_text(json.dumps(fleet), encoding="utf-8")
+
+        real_is_dir = Path.is_dir
+
+        def denying_is_dir(self, *args, **kwargs):
+            if self == guarded:
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_is_dir(self, *args, **kwargs)
+
+        with mock.patch.object(Path, "is_dir", denying_is_dir):
+            leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
+            text = RUNNER.render([leg], [], slug="owner/repo", read_at="probe", issues=[])
+
+        cov = leg["coverage"]
+        assert cov["members_unreachable"] == ["locked"], cov["members_unreachable"]
+        assert cov["members_reachable"] == 0, cov["members_reachable"]
+        member = cov["members"][0]
+        assert member["reachable"] is False, member
+        assert "PermissionError" in member["reason"], (
+            f"the reason must NAME the failure class -- an unreadable root and an absent "
+            f"one share the UNREACHABLE verdict but not the remedy: {member}"
+        )
+        assert "UNREACHABLE" in text and "PermissionError" in text, (
+            f"the reason must reach the RENDER, which is a second surface:\n{text}"
+        )
+        assert any("no member repository was reachable" in p for p in leg["problems"]), \
+            leg["problems"]
+
 def test_the_meta_factory_is_excluded_from_its_own_drift_sweep() -> None:
     """This factory IS the template source: comparing it against its own manifest would
     report every file identical and inflate the totals with a tautology."""

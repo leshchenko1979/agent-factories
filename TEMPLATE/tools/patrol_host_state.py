@@ -3797,6 +3797,30 @@ def head_manifest(rel: str | None = None, *, repo: Path | None = None) -> tuple[
         return None, lines[-1] if lines else f"git show HEAD:./{rel} failed"
     return proc.stdout, ""
 
+def member_root_probe(root: Path) -> tuple[bool, str]:
+    """Whether a member's root is a readable directory, and WHY NOT when it is not.
+
+    `Path.is_dir()` answers False for a root that is ABSENT, but it RE-RAISES when a
+    PARENT of the root denies traversal, because EACCES is not among the errors pathlib
+    ignores (#429). A member repo under a mode-700 home — a CI runner's `/root` — therefore
+    raised straight out of `kit_drift_leg`, on the very leg whose job is to record that the
+    member could not be read, and took the whole sweep with it. Measured in
+    inferhub-watch run 37587867752 (Python 3.12.14, `pathlib.py:840`).
+
+    A missing root and an unreadable one are BOTH unreachable, and both are recorded. The
+    reason is what tells them apart, and they have different remedies: a stale `repo` in
+    the fleet manifest versus a permissions problem on the member's box.
+
+    The read is a PROBE, so the caller never sees the exception — an instrument that
+    crashes on the input it exists to describe reports nothing about it.
+    """
+    try:
+        if root.is_dir():
+            return True, ""
+    except OSError as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    return False, ""
+
 def kit_drift_leg(
     *,
     manifest_path: Path | None = None,
@@ -3905,8 +3929,10 @@ def kit_drift_leg(
             # This factory IS the template source: comparing it against its own manifest
             # would report 106 identical cells and inflate every total with a tautology.
             continue
-        if not root.is_dir():
+        is_reachable, why = member_root_probe(root)
+        if not is_reachable:
             members.append({"slug": slug, "root": str(root), "reachable": False,
+                            "reason": why,
                             "same": 0, "DIFF": 0, "ABSENT": 0, "diff_files": [], "absent_files": []})
             continue
         same = diff = absent = 0
@@ -4765,7 +4791,14 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
                 for member in cov.get("members", []):
                     if not member["reachable"]:
-                        lines.append(f"    {member['slug']}: UNREACHABLE ({member['root']})")
+                        # The reason is printed because a missing root and an unreadable one
+                        # are the same class and DIFFERENT remedies (#429): a stale fleet
+                        # entry versus a permissions problem on the member's box. A bare
+                        # UNREACHABLE tells the reader which, but not why.
+                        why = member.get("reason") or "absent from this box"
+                        lines.append(
+                            f"    {member['slug']}: UNREACHABLE ({member['root']}) — {why}"
+                        )
                         continue
                     lines.append(
                         f"    {member['slug']}: same={member['same']} DIFF={member['DIFF']} "
