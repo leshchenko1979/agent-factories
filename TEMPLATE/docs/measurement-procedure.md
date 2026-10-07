@@ -566,6 +566,34 @@ Surveys) re-derived the two bases killed in that day's round on exactly the two 
 (leg A + budget exhaustion), using the manifest's own margin law and stating `load_at_measure`.
 What was missing was not the mechanism but the DECLARATION: the procedure, the cron table and the
 board each carried no re-derivation step, which is what let the class recur un-cleared (#269).
+## 5.3 The UNMEASURABLE mechanics — a cell that cannot be measured leaves the family mean, and nothing else
+
+Ruled 2026-10-07 (board `#421`, ruling at ledger `n=2747`), on the O3 cost criterion whose
+instrument has been silent since `2026-10-02T00:23:29Z`. A cell is **UNMEASURABLE** when its
+input does not exist for the round — not a low score, and not a zero. A metric with no fresh
+input must never present a carried value as a live one.
+
+**1. The cell leaves the FAMILY MEAN, and nothing else.** The family mean is computed over the
+family's **measurable** cells only. Output's mean over all 18 cells reads **2.611**; over its
+**12 measurable** cells it reads **3.167**. A frozen carried value is never averaged in.
+
+**2. Every denominator is UNCHANGED.** The per-factory denominator stays **76** (19 criteria × 4),
+and the fleet total stays **456** (6 factories × 76). An UNMEASURABLE cell contributes **0** to
+the totals — it is neither scored nor removed — so **no published percentage re-bases**, and a
+round-over-round jump stays attributable to factory behaviour rather than to a moved denominator.
+That is the property the *"score is a diff, not an impression"* requirement rests on, and it is
+why the NARROW reading was chosen over one that would re-base every percentage.
+
+**3. The disclosure is MANDATORY, and the exclusion is never silent.** Every family figure prints
+its measurable count beside it — *"3.167 over 12 of 18 cells"* — so a mean computed over a reduced
+population is never indistinguishable from one computed over the whole family. An excluded cell
+with no printed count is a silent re-base wearing the old denominator.
+
+**4. Forward-only.** The round's cells stand exactly as produced; nothing already published is
+rewritten. These mechanics bind from the round that adopts them.
+
+---
+
 
 ---
 
