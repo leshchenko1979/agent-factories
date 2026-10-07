@@ -36,6 +36,7 @@ EXAMPLE_MAP = REPO / "TEMPLATE" / "registry" / "gate_triggers.example.json"
 AUDIT = REPO / "tools" / "audit.py"
 GATE_REGISTRY = REPO / "tests" / "gate_registry.py"
 REWORK_TABLE = REPO / "tests" / "rework_table.py"
+GATE_BUDGET = REPO / "tools" / "gate_budget.py"
 
 FAILURES: list[str] = []
 
@@ -355,6 +356,29 @@ def probe_the_cli_reports_the_mode() -> None:
     )
 
 
+# The hermetic tree's audit, in the SHAPE `gate_select` reads since #436: a MODULE, not a
+# text body. It mirrors the real audit's two obligations -- the interpreter is part of every
+# registered argv, and the gate list is exposed through `registered_gates(repo_root)` -- and
+# it re-exports the REAL `gate_key_for_cmd` from the copied `gate_budget.py` instead of
+# re-implementing it, so the key law has one home even inside a fixture.
+FIXTURE_AUDIT = (
+    "from __future__ import annotations\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "sys.path.insert(0, str(Path(__file__).resolve().parent))\n"
+    "from gate_budget import gate_key_for_cmd  # noqa: E402\n"
+    "\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/fixture_script_gate.py"])\n'
+    "gates_to_run.append(\n"
+    '    [sys.executable, "-m", "pytest", "tests/test_fixture_gate.py"]\n'
+    ")\n"
+    "\n"
+    "def registered_gates(repo_root):\n"
+    "    return [cmd for cmd in gates_to_run if gate_key_for_cmd(cmd, repo_root)]\n"
+)
+
 def probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
     """#416: `--run` must EXECUTE a gate, not die on a non-executable file.
 
@@ -367,23 +391,23 @@ def probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
     The probe drives `run_gates` over a HERMETIC tree whose audit registers BOTH forms, and
     each fixture gate WRITES A MARKER. The assertion is that the gate RAN (the marker
     exists), never merely that the call returned -- drop the prefix and nothing runs, so no
-    marker is written. The REAL `gate_registry.py` is copied in -- with the sibling it
-    imports, `rework_table.py`, so the tree stands alone rather than leaning on the runner's
-    `sys.path` -- so the parse under test is the instrument's own and never a stub.
+    marker is written.
+
+    THE FIXTURE AUDIT IS A MODULE, because #436 changed what the selector reads. Until then
+    it re-parsed the audit's SOURCE for quoted literals, so a bare two-line body with no
+    `gates_to_run = []` and no import was enough to drive it -- and that same literals-only
+    projection is what truncated the hygiene gate to a bare `--namespace`. The selector now
+    EXECUTES the audit and reads its own `registered_gates`, so the fixture has to be a real
+    module, and `gate_key_for_cmd` is imported from the REAL `gate_budget.py` rather than
+    re-stubbed: a fixture re-implementing the key law would be a second source for it.
     """
     module = _load("oc_gate_select_run", GATE_SELECT)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "tools").mkdir()
         (root / "tests").mkdir()
-        shutil.copyfile(GATE_REGISTRY, root / "tests" / "gate_registry.py")
-        shutil.copyfile(REWORK_TABLE, root / "tests" / "rework_table.py")
-        (root / "tools" / "audit.py").write_text(
-            'gates_to_run.append([sys.executable, "tests/fixture_script_gate.py"])\n'
-            'gates_to_run.append([sys.executable, "-m", "pytest", '
-            '"tests/test_fixture_gate.py"])\n',
-            encoding="utf-8",
-        )
+        shutil.copyfile(GATE_BUDGET, root / "tools" / "gate_budget.py")
+        (root / "tools" / "audit.py").write_text(FIXTURE_AUDIT, encoding="utf-8")
         script_marker = root / "script-gate-ran.txt"
         pytest_marker = root / "pytest-gate-ran.txt"
         (root / "tests" / "fixture_script_gate.py").write_text(
@@ -437,7 +461,7 @@ PROBES = (
 
 
 def main() -> int:
-    for relative in (GATE_SELECT, AUDIT, GATE_REGISTRY, REWORK_TABLE):
+    for relative in (GATE_SELECT, AUDIT, GATE_REGISTRY, REWORK_TABLE, GATE_BUDGET):
         if not relative.is_file():
             print(f"FAIL -- required artifact missing: {relative}")
             return 1

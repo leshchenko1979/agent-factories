@@ -87,9 +87,10 @@ predicate reads the argv of each `gates_to_run.append(...)`.
 Two scope statements the predicate carries, because it is wrong without them
 ----------------------------------------------------------------------------
 (i)  **A `tests/`-scoped parse does not cover the whole run list.** Three entries are TOOL
-     invocations (`tools/ledger.py verify`, `tools/hygiene.py --audit`,
-     `tools/roadmap.py --audit`) that no test-file predicate can see. They are counted and
-     named in the report so the coverage gap is stated, never implied away.
+     invocations (`tools/ledger.py verify`, `tools/hygiene.py --audit --namespace
+     hygiene_namespace(repo_root)`, `tools/roadmap.py --audit`) that no test-file predicate
+     can see. They are counted and named in the report so the coverage gap is stated, never
+     implied away.
 
 (ii) **The OPENER is matched, never the whole file.** A whole-file search for "gate" picks
      up `tests/test_review.py` (a comment) and `tests/test_telemetry.py` (a data field) —
@@ -130,9 +131,26 @@ DECLARATION_WORD = "gate"
 # reverse direction then reports it as a registered gate that stays silent.
 _OPENING = re.compile(r'^\s*(?:#!.*\n)?\s*(?:[rR][bB]?|[bB][rR]?|[uU])?"""(?P<first>[^\n]*)')
 
-# Every append in the audit is a single line with no nested parenthesis, so the argv is
-# taken to the first `)`.
-_APPEND = re.compile(r"gates_to_run\.append\((?P<argv>[^)]*)\)")
+# The append's argv runs to the paren that BALANCES its own opening `(`. The old
+# `[^)]*` stopped at the FIRST `)`, and a nested call is not hypothetical: the hygiene
+# gate's append carries `hygiene_namespace(repo_root)` inside its argv list, so the scan
+# handed the projection `tools/hygiene.py --audit --namespace` -- a truncated argv that
+# reads as a complete, runnable invocation. That is the whole of #436 clause 3: a
+# registration that cannot run its target must not read like one that runs it.
+# Measured 2026-10-07 over tools/audit.py: 90 append sites, exactly ONE nested (depth 1,
+# `hygiene_namespace(repo_root)`); the multi-line sites are paren-flat, so ONE level of
+# nesting closes the gap. `(?:[^()]|\([^()]*\))*` spans newlines and tolerates that level.
+#
+# THE TRUNCATION HAD TWO CUTS, AND THE REGEX WAS ONLY THE FIRST. Reaching the closing paren
+# is necessary and NOT sufficient: the projection then took `" ".join(quoted_literals)`, and
+# a COMPUTED argument carries no quotes, so `hygiene_namespace(repo_root)` was dropped a
+# SECOND time and the very same `tools/hygiene.py --audit --namespace` came back. A wider
+# scan cannot repair a lossy join, so the argv is now rendered from the list literal's own
+# ELEMENTS (`_argv_tokens`): string literals bare, and everything else — `sys.executable`,
+# `hygiene_namespace(repo_root)` — as an explicit placeholder `<expr>`. The placeholder is
+# the point: this projection is a DECLARED FORM for the report and the budget sweep, never
+# a runnable command line, and the command that RUNS is the audit's own live list.
+_APPEND = re.compile(r"gates_to_run\.append\((?P<argv>(?:[^()]|\([^()]*\))*)\)")
 _QUOTED = re.compile(r'"([^"]+)"')
 
 PREDICATE = (
@@ -146,7 +164,9 @@ PREDICATE = (
 TOOL_INVOCATION_NOTE = (
     "a tests/-scoped parse covers the tests/ entries of the run list only; tool "
     "invocations (tools/*.py) are outside any test-file predicate and are named in the "
-    "report so the gap is stated"
+    "report so the gap is stated — and each is rendered as a DECLARED FORM, a computed "
+    "argument appearing as the placeholder `<expr>` rather than as text that reads like a "
+    "command anyone could run"
 )
 
 OPENER_ONLY_NOTE = (
@@ -230,15 +250,90 @@ def declared_gates(tests_dir: Path) -> list[tuple[Path, str]]:
             found.append((path, first))
     return found
 
-def registration_entries(audit_text: str) -> list[dict]:
-    """Every `gates_to_run.append(...)`, with BOTH projections read from ONE scan.
+def _argv_tokens(argv_source: str) -> list[str]:
+    """The append's argv as a DECLARED FORM: literals bare, everything else a placeholder.
 
-    An append's argv carries two facts: the TARGET it registers and the RUNNER it
-    registers it under. `registered_entries` kept only the first and DISCARDED the
-    second, so a registration that cannot run its target read exactly like one that runs
-    it — the reason direction 4 exists (#107(d), HQ ruling n=639 Part 2). Both
-    projections come from this single scan: a second `_APPEND` scan would be the same
-    defect one level down.
+    Two facts must hold at once, and `" ".join(quoted_literals)` held only one:
+
+      * downstream consumers SPLIT this value back into argv tokens
+        (`gate_budget.gate_key_for_cmd(argv.split(), ...)`), so it has to stay a
+        whitespace-separated token list with the quotes REMOVED; and
+      * an element that is NOT a string literal carries no quotes, so a literals-only join
+        DROPS it, and `tools/hygiene.py --audit --namespace` came back reading like a
+        complete, runnable command line while being a truncation of one — a registration
+        that cannot run its target must not read like one that runs it.
+
+    So the list literal is split at its own TOP-LEVEL commas and each element is rendered
+    as the value it denotes, with a DELIBERATE asymmetry between the two kinds:
+
+      * a string LITERAL renders BARE — it is exactly what runs; and
+      * anything else renders as an explicit PLACEHOLDER, `<expr>`, because its value is
+        computed at run time and no text can state it.
+
+    The asymmetry IS the contract: this is a DECLARED FORM, never a runnable command. Paste
+    `<sys.executable> tools/hygiene.py --audit --namespace <hygiene_namespace(repo_root)>`
+    into a shell and the `<` is a literal token, not a redirect — an error, which is the
+    honest reading. The command that RUNS is the audit's own live list
+    (`tools/audit.py::registered_gates`); this projection exists for the report and the
+    budget sweep. `gate_key_for_cmd` skips a placeholder for the same reason it skips
+    `sys.executable`: it does not resolve to a file under the root.
+
+    BOUND: the carrier is a space-joined string, so an element whose own text contains
+    whitespace could not round-trip through `split()`. No registration in this tree has one
+    (measured 2026-10-07 over all 90 append sites: 0), and the token count is what the
+    consumers read.
+    """
+    text = argv_source.strip()
+    if text.startswith("["):
+        text = text[1:]
+    if text.endswith("]"):
+        text = text[:-1]
+    elements: list[str] = []
+    depth = 0
+    quote = ""
+    current = ""
+    for ch in text:
+        if quote:
+            current += ch
+            if ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            current += ch
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            elements.append(current)
+            current = ""
+            continue
+        current += ch
+    elements.append(current)
+
+    tokens: list[str] = []
+    for element in elements:
+        token = " ".join(element.split())
+        if not token:
+            continue
+        if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'":
+            tokens.append(token[1:-1])
+        else:
+            tokens.append(f"<{token}>")
+    return tokens
+
+def registration_entries(audit_text: str) -> list[dict]:
+    """Every `gates_to_run.append(...)`, with ALL projections read from ONE scan.
+
+    An append's argv carries three facts: the TARGET it registers, the RUNNER it
+    registers it under, and the ARGUMENTS it passes. `registered_entries` kept only the
+    first and DISCARDED the second, so a registration that cannot run its target read
+    exactly like one that runs it — the reason direction 4 exists (#107(d), HQ ruling
+    n=639 Part 2). The third was dropped by the argv's own projection, which is #436
+    clause 3. Every projection comes from this single scan: a second `_APPEND` scan would
+    be the same defect one level down.
     """
     entries: list[dict] = []
     for match in _APPEND.finditer(audit_text):
@@ -253,7 +348,7 @@ def registration_entries(audit_text: str) -> list[dict]:
                 "name": Path(target).name,
                 "kind": "tests" if target.startswith("tests/") else "tool",
                 "runner": _runner_of(quoted),
-                "argv": " ".join(quoted),
+                "argv": " ".join(_argv_tokens(argv)),
             }
         )
     return entries

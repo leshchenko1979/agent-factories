@@ -1223,14 +1223,26 @@ def acquire_run_lock(*, wait: bool = False, lock_path: Path | None = None) -> An
         return None
     return handle
 
-def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], GateBudgets]:
-    """Execute all discovered mechanical gates, and return the budgets they resolved against.
+def registered_gates(repo_root: Path) -> list[list[str]]:
+    """The argv of every mechanical gate this audit runs, in declaration order.
 
-    The budgets come back WITH the results because the manifest's declared revisions are
-    swept as they are read (#125, ruling n=786), and that sweep's account has to reach a
-    printer. Returning it here costs one tuple and keeps the read at ONE call site: a
-    second `load_gate_budgets()` in `main()` would re-read a file that may have changed
-    under it, so the caps and the sweep could describe two different manifests.
+    This is the ONE home for "which gates does the audit run, and how is each invoked".
+    `execute_mechanical_gates` reads it and runs it; `tools/gate_select.py` reads it and
+    runs the SUBSET a change selects. Both callers therefore share a single projection, and
+    neither can disagree with the other about how a gate is invoked (#436).
+
+    Before #436 the selector did not read this at all. It re-derived each argv by re-parsing
+    the audit's SOURCE TEXT through `tests/gate_registry.registration_entries`, which keeps
+    only the string LITERALS of an append call. An argument the audit COMPUTES is not a
+    literal and survived the scan as nothing: `--namespace hygiene_namespace(repo_root)`
+    came back as a bare `--namespace`, argparse exited 2 ("expected one argument"), and the
+    selector reported a RED on a gate the audit itself runs green. A projection of the audit
+    is not the audit -- the same class as #178/#415 -- and the remedy is to stop projecting.
+
+    The list is built by APPENDING, in the order the gates must run, and each entry is
+    guarded by the existence of the file it invokes, so a bootstrapped factory runs the
+    subset it ships and a missing gate is absent rather than fatal. The interpreter is
+    included here, exactly once, so no caller has to re-add it (#416).
     """
     gates_to_run: list[list[str]] = []
 
@@ -2627,6 +2639,20 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     #     runs on the DECLARED DEFAULT and the audit prints that it did. Same grain as gate 81.
     if (repo_root / "tests/test_declared_boundary_census.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_declared_boundary_census.py"])
+
+    return gates_to_run
+
+
+def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], GateBudgets]:
+    """Execute all discovered mechanical gates, and return the budgets they resolved against.
+
+    The budgets come back WITH the results because the manifest's declared revisions are
+    swept as they are read (#125, ruling n=786), and that sweep's account has to reach a
+    printer. Returning it here costs one tuple and keeps the read at ONE call site: a
+    second `load_gate_budgets()` in `main()` would re-read a file that may have changed
+    under it, so the caps and the sweep could describe two different manifests.
+    """
+    gates_to_run = registered_gates(repo_root)
 
     # The budgets are read ONCE for the whole suite and resolved PER GATE. A gate
     # with no manifest entry is NOT an error -- it runs on the declared default, and

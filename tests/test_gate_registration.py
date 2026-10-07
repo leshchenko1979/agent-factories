@@ -340,6 +340,25 @@ def probe_the_report_states_the_tool_gap() -> None:
           "tool" in TOOL_INVOCATION_NOTE and "tests/" in TOOL_INVOCATION_NOTE,
           TOOL_INVOCATION_NOTE[:70])
 
+def probe_the_live_tool_invocations_are_never_truncated() -> None:
+    """The live tree corroborates it: no tool invocation reads as a command the audit omits.
+
+    The fixture above is the control; this reads the real registration the audit runs, so the
+    defect #436 clause 3 names — `tools/hygiene.py` reported as a bare `--namespace` — is
+    caught on the artifact that produced it and not only on a synthetic lookalike.
+    """
+    _, report = gate_registration_problems(TESTS_DIR, AUDIT)
+    hygiene = [a for a in report["tool_invocations"] if "hygiene.py" in a]
+    check("clause 3 — the live hygiene invocation carries its COMPUTED namespace",
+          len(hygiene) == 1 and "<hygiene_namespace(repo_root)>" in hygiene[0],
+          str(hygiene)[:90])
+    check("clause 3 — no live tool invocation ends at a bare `--namespace`",
+          all(not a.rstrip().endswith("--namespace") for a in report["tool_invocations"]),
+          str(report["tool_invocations"])[:120])
+    check("clause 3 — every live tool invocation is a DECLARED FORM, never a command line",
+          all("<sys.executable>" in a.split() for a in report["tool_invocations"]),
+          str(report["tool_invocations"])[:120])
+
 def _naive_declared_names(tests_dir: Path) -> set[str]:
     """A deliberately INDEPENDENT re-scan, used to cross-check the resolver's own reader.
 
@@ -795,6 +814,38 @@ def probe_a_tool_invocation_carries_no_target_shape() -> None:
         check("direction 5 — a tool invocation is reported as carrying no target shape",
               problems == [] and any("tool invocation" in f for f in report["forms"]),
               str(report["forms"])[:90])
+
+def probe_a_computed_argument_survives_the_projection() -> None:
+    """#436 clause 3: the argv is a DECLARED FORM — literals bare, non-literals placeheld.
+
+    The projection had TWO truncations and the regex was only the first. `" ".join(quoted)`
+    drops every argument the audit COMPUTES, because a computed argument carries no quotes:
+    `hygiene_namespace(repo_root)` vanished and `tools/hygiene.py --audit --namespace` came
+    back reading like a complete, runnable command line. This probe pins the SECOND cut on a
+    FIXTURE, so it fails on the lossy form however wide the scan gets — the live registration
+    below is CORROBORATION, never the control.
+
+    The ORDERED form is a placeholder, not raw source: an element that is not a string
+    literal is rendered `<expr>`, so the projection cannot be mistaken for a command anyone
+    can run.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tests, audit = _synthetic_tree(
+            Path(tmp), {},
+            "gates_to_run.append(\n"
+            '    [sys.executable, "tools/hygiene.py", "--audit",\n'
+            '     "--namespace", hygiene_namespace(repo_root)]\n'
+            ")\n",
+        )
+        entry = registration_entries(audit.read_text(encoding="utf-8"))[0]
+        check("clause 3 — a non-literal argument is rendered as an explicit PLACEHOLDER",
+              "<hygiene_namespace(repo_root)>" in entry["argv"], entry["argv"])
+        check("clause 3 — the interpreter is a placeholder too, never a bare token",
+              "<sys.executable>" in entry["argv"].split(), entry["argv"])
+        check("clause 3 — the truncated literal-only form is never produced",
+              entry["argv"] != "tools/hygiene.py --audit --namespace", entry["argv"])
+        check("clause 3 — the value is still a token list, so `split()` keeps the target",
+              "tools/hygiene.py" in entry["argv"].split(), entry["argv"])
 
 def probe_registered_entries_is_a_projection_of_one_scan() -> None:
     """DRY, mechanically: a second `_APPEND` scan is the same defect one level down."""
@@ -2452,6 +2503,7 @@ def main() -> int:
     probe_the_runner_is_read_from_argv_not_guessed_from_the_target()
     probe_an_absent_target_is_skipped_and_named_not_double_reported()
     probe_a_tool_invocation_carries_no_target_shape()
+    probe_a_computed_argument_survives_the_projection()
     probe_registered_entries_is_a_projection_of_one_scan()
     probe_a_target_whose_name_contains_pytest_is_not_misread_as_the_runner()
     probe_the_runner_form_predicate_states_its_one_way_bound()
@@ -2459,6 +2511,7 @@ def main() -> int:
     probe_the_scan_is_not_vacuous()
     probe_the_resolver_reads_the_live_declaration()
     probe_the_report_states_the_tool_gap()
+    probe_the_live_tool_invocations_are_never_truncated()
     probe_a_string_prefixed_opener_is_read()
     probe_the_predicate_is_stated_with_its_count()
     probe_the_live_tree_is_clean()

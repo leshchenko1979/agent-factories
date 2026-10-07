@@ -31,7 +31,6 @@ from pathlib import Path
 MAP_RELATIVE = "registry/gate_triggers.json"
 MAP_EXAMPLE_RELATIVE = "TEMPLATE/registry/gate_triggers.example.json"
 AUDIT_RELATIVE = "tools/audit.py"
-GATE_REGISTRY_RELATIVE = "tests/gate_registry.py"
 DEFAULT = "full"
 
 
@@ -123,7 +122,16 @@ def changed_paths_range(root: Path, rev_range: str) -> list[str] | None:
 
 
 def _load_module(root: Path, relative: str, name: str):
-    """Import a module by path — the pattern the pre-commit hook already uses."""
+    """Import a module by path — the pattern the pre-commit hook already uses.
+
+    The module is registered in `sys.modules` BEFORE `exec_module`, and that is
+    load-bearing rather than tidy (#436). `tools/audit.py` carries a module-level
+    `@dataclass`, and on Python 3.14 `dataclasses` resolves the defining module through
+    `sys.modules[cls.__module__]`; an unregistered module makes that lookup return `None`
+    and the decorator dies with `AttributeError: 'NoneType' object has no attribute
+    '__dict__'` before a single gate is read. Measured on 3.14.6: loading `tools/audit.py`
+    without the registration fails exactly so, and succeeds with it.
+    """
     source = root / relative
     if not source.is_file():
         return None
@@ -131,36 +139,56 @@ def _load_module(root: Path, relative: str, name: str):
     if spec is None or spec.loader is None:
         return None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
     return module
 
 
 def registered_commands(root: Path) -> dict[str, list[str]]:
-    """`{gate target: argv}` read from the audit's own registration.
+    """`{gate key: argv}` read from the audit's OWN registration — the live list (#436).
 
-    The argv comes from `tests/gate_registry.registration_entries` — the SAME scan
-    `tests/test_gate_registration.py` and `tests/test_gate_invocation_mode.py` read —
-    so the selector cannot disagree with the audit about how a gate is invoked.
+    The argv comes from `tools/audit.py::registered_gates`, the very list
+    `execute_mechanical_gates` runs, so the selector and the audit cannot disagree about
+    which gates exist or how each is invoked. Until #436 the selector did not read the
+    audit at all: it re-derived each argv by re-parsing the audit's SOURCE TEXT through
+    `tests/gate_registry.registration_entries`, which keeps only the string LITERALS of an
+    append call. An argument the audit COMPUTES is not a literal, so it survived the scan
+    as nothing — `--namespace hygiene_namespace(repo_root)` arrived as a bare
+    `--namespace`, argparse exited 2 ("expected one argument"), and the selector reported
+    RED on a gate the audit runs green. A projection of the audit is not the audit; the
+    remedy is to stop projecting.
+
+    The key is the audit's own `gate_key_for_cmd` — the manifest's key derivation, imported
+    there from `tools/gate_budget.py` — never a second parse of the argv. The argv returned
+    is COMPLETE, interpreter included, because it is the audit's own list (#416's
+    interpreter re-insertion is no longer needed and is gone with the projection).
     """
-    registry = _load_module(root, GATE_REGISTRY_RELATIVE, "oc_gate_registry")
-    audit = root / AUDIT_RELATIVE
-    if registry is None or not audit.is_file():
+    audit = _load_module(root, AUDIT_RELATIVE, "oc_audit")
+    if audit is None:
         return {}
     commands: dict[str, list[str]] = {}
-    for entry in registry.registration_entries(audit.read_text(encoding="utf-8")):
-        commands.setdefault(entry["target"], entry["argv"].split())
+    for cmd in audit.registered_gates(root):
+        key = audit.gate_key_for_cmd(cmd, root)
+        if key is None:
+            continue
+        commands.setdefault(key, list(cmd))
     return commands
 
 
 def run_gates(root: Path, gates: list[str]) -> list[str]:
     """Run each gate's registered argv; return the failures, each naming the gate.
 
-    The registered argv is interpreter-RELATIVE: `registered_commands` scans the audit's
-    call sites and keeps only the TARGET-shaped tokens, dropping the `sys.executable` the
-    audit prefixes every append with. The interpreter is put back HERE (#416) -- without it
-    a script gate (`tests/x.py`, mode 100644) dies with PermissionError and a pytest gate
-    (`-m pytest`) with FileNotFoundError, so the remedy the pre-commit hook prints could
-    run no gate at all.
+    The argv is the audit's own, interpreter included (#436), so it is executed VERBATIM —
+    no interpreter is prepended and no token is dropped. Until #436 the argv was
+    interpreter-RELATIVE, because the text scan kept only the TARGET-shaped literals and
+    dropped the `sys.executable` the audit prefixes every append with; the interpreter was
+    re-inserted here (#416) so a script gate (`tests/x.py`, mode 100644) did not die with
+    PermissionError and a pytest gate (`-m pytest`) with FileNotFoundError. Reading the live
+    list removes both the drop and the re-insertion.
 
     A gate with no registered argv is reported as a FAILURE rather than skipped: a
     gate the selector names but cannot run is an instrument that lies, and skipping it
@@ -176,7 +204,7 @@ def run_gates(root: Path, gates: list[str]) -> list[str]:
             continue
         try:
             proc = subprocess.run(
-                [sys.executable, *argv], cwd=str(root), capture_output=True, text=True
+                list(argv), cwd=str(root), capture_output=True, text=True
             )
         except OSError as exc:
             failures.append(f"{gate} — could not execute: {exc}")
