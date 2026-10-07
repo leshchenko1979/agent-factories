@@ -199,25 +199,63 @@ STALL_CENSUS_THRESHOLD_BASIS = (
 # reported a routing that had not happened. This leg is shape (3) of that item, the
 # EVIDENCE half; `tools/ledger.py`'s write-path refusal is shape (1), the SEAM half.
 #
-# THE WINDOW IS ANCHORED ON THE ROW'S OWN `ts`, and the ruling says why in terms: the
+# THE WINDOW IS ANCHORED ON THE ROW UNDER TEST, and the ruling says why in terms: the
 # first census anchored on each subject's NEWEST dispatch row, so `#77`'s window opened
 # AFTER the delivery it was testing for and reported a confident miss. The bound is taken
-# from the row under test, always: `[ts - 180 s, ts + 5400 s]` — three minutes of clock
-# skew behind, ninety minutes of delivery lag ahead.
+# from the row under test, always.
+#
+# ... AND THE ROW'S `ts` IS AN UPPER BOUND ON ITS DISPATCH, NOT THE INSTANT ITSELF (#432).
+# A row's `ts` is a WRITE instant (`tools/ledger.py::now_iso()` at append), so a lane that
+# stamps its dispatch row LATER than it dispatched -- a batched ledger write -- postdates the
+# dispatch, and the window's backward bound then lands AFTER a genuine delivery. Measured
+# 2026-10-07: row `n=2787` (`#428`) carries `ts 12:26:04Z` while its own detail declares
+# `resolved_at 2026-10-07T12:11:46Z`, and the notify landed at `12:11:28Z` -- 11m36s before
+# the window the leg chose, reported as "records no delivery" for a delivery that woke the
+# very lane that ruled the item. Where the row's own detail DECLARES its dispatch instant the
+# anchor is the EARLIER of the two, which widens the search backward and can only turn a
+# false RED into a clean one.
 #
 # THE TOKEN MUST BE NO NARROWER THAN THE ARTIFACT. A delivered notify may carry the bare
 # subject number (`77`), the hash-prefixed form (`#77`), or a descriptive stem. The first
 # census searched `#77` where the artifact carried `77`, and returned a zero that read as
 # good news — worse than no leg. So the match accepts every form the artifact may take.
+#
+# AND THE LEG CARRIES TWO VERDICTS, NOT ONE (#432). "No delivery exists" and "a delivery
+# exists but outside the window the leg chose" are different facts, and reporting both as
+# "records no delivery" is a FALSE ABSENCE -- the condition that recurs and sends a reader
+# off to re-dispatch an item the target already holds. So a match found ANYWHERE in the store
+# is reported as a WINDOW MISMATCH, naming the delivery's own instant; only a store carrying
+# no match at all reads as the absence.
 DELIVERY_BOUNDARY_KEY = "dispatch_delivery_declared"
 DELIVERY_WINDOW_BEFORE_SECS = 180
 DELIVERY_WINDOW_AFTER_SECS = 5400
 DELIVERY_WINDOW_BASIS = (
-    "anchored on each dispatch row's OWN ts: [ts - 180 s, ts + 5400 s] -- three minutes "
-    "of clock skew behind the stamp, ninety minutes of delivery lag ahead. Anchoring on a "
-    "subject's NEWEST row opened the window after the delivery it tested for (#77, ledger "
-    "n=1893), so the bound is always the row under test's own instant."
+    "anchored on each dispatch row's OWN instant: [anchor - 180 s, anchor + 5400 s] -- three "
+    "minutes of clock skew behind the stamp, ninety minutes of delivery lag ahead. The anchor "
+    "is the row's `ts` (a WRITE instant) or the earlier instant its own detail DECLARES, "
+    "whichever is earlier (#432). Anchoring on a subject's NEWEST row opened the window after "
+    "the delivery it tested for (#77, ledger n=1893), so the bound is always the row under "
+    "test's own instant."
 )
+# THE ROW'S OWN DECLARED DISPATCH INSTANT (#432), held as a DECLARED TUPLE of (form, regex)
+# pairs so a further declaration form is a one-line addition -- the same shape
+# `NOTIFY_DELIVERY_HEADERS` uses for the header forms (#426). The forms are NOT a licence to
+# parse free prose loosely: each names the token AND its value, so a row whose detail merely
+# MENTIONS an instant (a quoted window, another row's stamp) declares nothing.
+DISPATCH_DECLARED_INSTANT_FORMS = (
+    ("resolved_at", re.compile(r"\bresolved_at\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)")),
+)
+# THE OUTER BOUND ON "A DELIVERY EXISTS SOMEWHERE" (#432). The window itself is the 90-minute
+# band a delivery is EXPECTED in; this is the band in which a match counts as a delivery AT
+# ALL. It is needed because a match is a SUBJECT MENTION, not a proof of routing: measured on
+# this box at the 2026-10-07T15:36Z read, the `#432` dispatch row's own target held FORTY-SEVEN
+# messages carrying `#432` -- the oldest 18 days before the dispatch, almost all of them
+# compaction summaries quoting the lane's task list -- so an unbounded "exists elsewhere" search
+# reports a delivery for a brief that had not been sent. A brief is not delivered a day away
+# from its dispatch: the measured late-stamp slip is minutes (the specimen: 14m36s), so a day
+# either side is generous by orders of magnitude and still leaves THREE of those forty-seven
+# inside the band.
+DELIVERY_MATCH_HORIZON_SECS = 86400
 NOTIFY_DELIVERY_HEADER = "[session-notify from="
 
 # THE TWO HEADER FORMS THE HARNESS WRITES, held as a DECLARED TUPLE so a third form is a
@@ -2616,6 +2654,37 @@ def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], lis
         homes_read.append(db.parent.name)
     return deliveries, homes_read, unreached
 
+def declared_dispatch_instant(row: dict) -> tuple[dt.datetime | None, str]:
+    """The instant a dispatch row's OWN detail declares, as `(instant, form)`, else `(None, "")`.
+
+    The row's `ts` is a WRITE instant (`tools/ledger.py::now_iso()` at append), so a batched
+    ledger write stamps the row AFTER the dispatch it records and the window's backward bound
+    then lands after a genuine delivery (#432, measured: row `n=2787`, `ts 12:26:04Z`, notify
+    landed `12:11:28Z`, detail declares `resolved_at 2026-10-07T12:11:46Z`). A declared instant
+    is the row's own statement of WHEN it dispatched, so it beats the write stamp.
+
+    ONLY A NAMED FORM COUNTS. The detail is free prose, and 146 of this ledger's 458 dispatch
+    rows carry SOME ISO instant in it -- a window, a neighbour's stamp, a read instant. Matching
+    a bare ISO string would anchor windows on whatever instant a row happened to quote, so each
+    form pairs a TOKEN with its value. An unparseable value declares nothing and raises nothing:
+    a malformed declaration is not a licence to judge unbounded, it is simply no declaration.
+
+    EARLIER WINS AT THE CALL SITE. The caller takes `min(ts, declared)`, so a detail naming an
+    instant AFTER the write stamp cannot pull the window forward over a delivery that landed.
+    """
+    detail = str(row.get("detail") or "")
+    if not detail:
+        return None, ""
+    for form, pattern in DISPATCH_DECLARED_INSTANT_FORMS:
+        match = pattern.search(detail)
+        if not match:
+            continue
+        try:
+            return reader_parse_ts(match.group(1)), form
+        except (ValueError, TypeError):
+            return None, ""
+    return None, ""
+
 def dispatch_delivery_leg(
     rows: list[dict],
     *,
@@ -2641,15 +2710,24 @@ def dispatch_delivery_leg(
     A ZERO MUST BE DISTINGUISHABLE FROM A BLIND LEG (acceptance criterion 3), so the
     examined dispatch-row count is always printed: `examined 33, 0 problems` is never the
     same output as `examined 0`.
+
+    TWO VERDICTS, NOT ONE (#432). "No delivery exists" and "a delivery exists but outside the
+    window this leg chose" are different facts, and the leg carried ONE verdict for both --
+    reporting the second as "records no delivery", which is a FALSE ABSENCE that sends a
+    reader off to re-dispatch an item the target already holds. So a match is taken WITHOUT
+    the window first: a target holding the brief somewhere is a WINDOW MISMATCH naming the
+    delivery's own instant, and only a store holding no match at all reads as the absence.
     """
     window_before = dt.timedelta(seconds=DELIVERY_WINDOW_BEFORE_SECS)
     window_after = dt.timedelta(seconds=DELIVERY_WINDOW_AFTER_SECS)
+    match_horizon = dt.timedelta(seconds=DELIVERY_MATCH_HORIZON_SECS)
     coverage = {
         "bound_key": DELIVERY_BOUNDARY_KEY,
         "bound": (bound[1] if bound else "") or "",
         "window_basis": DELIVERY_WINDOW_BASIS,
         "window_before_secs": DELIVERY_WINDOW_BEFORE_SECS,
         "window_after_secs": DELIVERY_WINDOW_AFTER_SECS,
+        "match_horizon_secs": DELIVERY_MATCH_HORIZON_SECS,
         "dispatch_rows_read": sum(1 for r in rows if r.get("event") == "dispatch"),
         "read_at": read_at,
     }
@@ -2658,6 +2736,8 @@ def dispatch_delivery_leg(
         coverage.update({
             "dispatch_rows_examined": 0, "dispatch_rows_pre_boundary": 0,
             "dispatch_rows_undated": 0, "dispatch_rows_not_judged": 0,
+            "dispatch_rows_declared_anchor": 0,
+            "subject_matches_anywhere": 0, "subject_matches_within_horizon": 0,
             "deliveries_read": None, "homes_read": None, "homes_unreached": [],
             "store_read": False,
             "store_not_read_reason": reason,
@@ -2678,7 +2758,10 @@ def dispatch_delivery_leg(
     pre_boundary = 0
     undated = 0
     not_judged = 0
-    to_judge: list[tuple[dict, dt.datetime, dt.datetime, str]] = []
+    declared_anchor = 0
+    matches_anywhere = 0
+    matches_near = 0
+    to_judge: list[tuple[dict, dt.datetime, dt.datetime, dt.datetime, str, str]] = []
     for row in rows:
         if row.get("event") != "dispatch":
             continue
@@ -2706,13 +2789,39 @@ def dispatch_delivery_leg(
         if not session_ref:
             not_judged += 1
             continue
+        # THE ANCHOR IS THE EARLIER OF THE ROW'S WRITE STAMP AND THE INSTANT IT DECLARES
+        # (#432). `ts` is when the ROW was written, which is an upper bound on when the
+        # dispatch happened -- a batched write stamps it late, and a window built from it then
+        # opens AFTER a genuine delivery. A declared instant is the row's own statement of the
+        # dispatch, so the earlier of the two is the honest backward bound; it can only widen
+        # the search, never narrow it, so it cannot manufacture a clean verdict.
+        declared, declared_form = declared_dispatch_instant(row)
+        # EARLIER WINS, and a declaration LATER than the write stamp is not used at all: it
+        # would pull the backward bound forward, which is the false-absence direction. The
+        # count is of rows whose anchor actually CAME from the declaration, never of rows that
+        # merely carry one -- a number that counted presence would print an anchor claim for a
+        # window it did not build.
+        uses_declaration = declared is not None and declared < ts
+        anchor = declared if uses_declaration else ts
+        if uses_declaration:
+            declared_anchor += 1
+        basis = (
+            f"anchored on the row's declared `{declared_form}` "
+            f"{declared.strftime('%Y-%m-%dT%H:%M:%SZ')} (earlier than its write stamp "
+            f"{ts.strftime('%Y-%m-%dT%H:%M:%SZ')}, #432)"
+            if uses_declaration else
+            f"anchored on the row's write stamp {ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        )
         examined += 1
-        to_judge.append((row, ts - window_before, ts + window_after, session_ref))
+        to_judge.append(
+            (row, anchor, anchor - window_before, anchor + window_after, session_ref, basis)
+        )
     coverage.update({
         "dispatch_rows_examined": examined,
         "dispatch_rows_pre_boundary": pre_boundary,
         "dispatch_rows_undated": undated,
         "dispatch_rows_not_judged": not_judged,
+        "dispatch_rows_declared_anchor": declared_anchor,
     })
     if not to_judge:
         # THE STORE IS NOT READ, AND THAT IS SAID. There is no post-boundary dispatch row to
@@ -2765,29 +2874,79 @@ def dispatch_delivery_leg(
         )
         return {"name": "dispatch-delivery", "status": "NOT RUN", "reason": reason,
                 "problems": [], "excused": [], "coverage": coverage}
-    for row, lo, hi, session_ref in to_judge:
+    for row, anchor, lo, hi, session_ref, basis in to_judge:
         subject = str(row.get("subject") or "").strip()
         # A MATCH MUST BE TO THE ROW'S OWN TARGET (#425 clause 1). A notify carrying the
         # subject but addressed to a DIFFERENT lane is not corroboration of THIS dispatch --
         # the same subject is broadcast to several lanes, so a subject-only match would clear
         # a row whose actual target was never told. The row named its target; the delivery
         # must name the same one.
-        hits = [
+        #
+        # THE MATCH IS TAKEN WITHOUT THE WINDOW FIRST (#432), because the leg must never
+        # report ABSENCE from a window it chose itself. `matched` answers "does this target
+        # hold this brief AT ALL"; only then is the window applied, and a match that falls
+        # outside it is a WINDOW MISMATCH -- a delivery that exists -- never an absence.
+        matched = [
             d for d in deliveries
-            if lo <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc) <= hi
-            and d.get("session") == session_ref
+            if d.get("session") == session_ref
             and delivery_subject_matches(d["text"], subject)
         ]
+        # A MATCH COUNTS AS A DELIVERY ONLY INSIDE THE HORIZON (#432). Beyond it a match is a
+        # subject MENTION -- this box's `#432` target held 47 of them at the 2026-10-07T15:36Z
+        # read, the oldest `2026-09-19T08:29:00Z`, 18 days back -- and reporting one as "a
+        # delivery exists" would be the false-CLEAN twin of the false absence this item is
+        # about. The unbounded count is kept and printed, so the horizon's effect is visible
+        # rather than silent.
+        plausible = [
+            d for d in matched
+            if anchor - match_horizon
+            <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc)
+            <= anchor + match_horizon
+        ]
+        matches_anywhere += len(matched)
+        matches_near += len(plausible)
+        hits = [
+            d for d in plausible
+            if lo <= dt.datetime.fromtimestamp(d["epoch"], dt.timezone.utc) <= hi
+        ]
         if hits:
+            continue
+        if plausible:
+            # TWO CONDITIONS, TWO VERDICTS (#432). The specimen that produced this clause is
+            # row `n=2787` (`#428`): its window opened `12:23:04Z`, its notify landed
+            # `12:11:28Z`, and the leg read "records no delivery" for a delivery that woke the
+            # very lane that ruled the item -- sending a reader off to re-dispatch an item the
+            # target already held. The reader is told WHICH instant the delivery carries and
+            # which window judged it, so the mismatch is a fact they can act on rather than a
+            # false absence they must disprove.
+            outside = min(plausible, key=lambda d: d["epoch"])
+            at = dt.datetime.fromtimestamp(outside["epoch"], dt.timezone.utc)
+            problems.append(
+                f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} to session "
+                f"{session_ref} carries a delivery OUTSIDE the window this leg judged: a "
+                f"notify carrying `{subject}` addressed to that target landed "
+                f"{at.strftime('%Y-%m-%dT%H:%M:%SZ')} ({outside['state']}), and the window "
+                f"[{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, {hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] "
+                f"({basis}) does not contain it — a DELIVERY EXISTS, so this is a WINDOW "
+                f"MISMATCH, never an absence: do not re-dispatch on this line"
+            )
             continue
         problems.append(
             f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} to session "
             f"{session_ref} records no delivery: no inbound notify carrying `{subject}` "
-            f"addressed to that target in its message history within "
-            f"[{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, "
-            f"{hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] — the row claims this lane was TOLD "
-            f"and nothing corroborates it"
+            f"addressed to that target appears in ANY of the "
+            f"{coverage.get('deliveries_read')} delivery(ies) read from the box's stores — "
+            f"the window judged was "
+            f"[{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, {hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] "
+            f"({basis}) — the row claims this lane was TOLD and nothing corroborates it"
         )
+    # THE MATCH COUNTS ARE STORED AFTER THE LOOP, never before it: they are accumulated
+    # inside it, and a coverage snapshot taken ahead of the loop would print `0 anywhere`
+    # for a store that held forty-six -- a blind zero wearing the shape of a clean one.
+    coverage.update({
+        "subject_matches_anywhere": matches_anywhere,
+        "subject_matches_within_horizon": matches_near,
+    })
     return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
             "problems": problems, "excused": [], "coverage": coverage}
 
@@ -5118,6 +5277,25 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['dispatch_rows_not_judged']} carry no target, NOT JUDGED); "
                 f"examined: {cov['dispatch_rows_examined']}"
             )
+            # THE ANCHOR IS PRINTED (#432): a window built from a row's WRITE stamp and one
+            # built from an instant the row DECLARES are different judgements, and a reader
+            # who cannot tell which was used cannot tell a clean sweep from a narrow window.
+            lines.append(
+                f"  window anchors: {cov.get('dispatch_rows_declared_anchor', 0)} of "
+                f"{cov['dispatch_rows_examined']} examined row(s) anchored on an instant the "
+                f"row itself DECLARES, the rest on the row's write stamp (#432)"
+            )
+            # THE MATCH COUNTS ARE PRINTED TOO, because the horizon SILENTLY decides whether a
+            # subject mention is a delivery: `3 of 47` tells a reader that 44 messages carried
+            # the subject and were not counted, which is the difference between a narrow
+            # predicate and a blind one (#116).
+            if cov.get("store_read"):
+                lines.append(
+                    f"  subject matches: {cov.get('subject_matches_within_horizon', 0)} within "
+                    f"the {cov.get('match_horizon_secs')} s horizon of "
+                    f"{cov.get('subject_matches_anywhere', 0)} anywhere in the store(s) "
+                    f"(#432)"
+                )
             if cov.get("store_read"):
                 lines.append(
                     f"  deliveries read: {cov['deliveries_read']} "

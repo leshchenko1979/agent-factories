@@ -5288,6 +5288,300 @@ def test_the_dispatch_delivery_leg_counts_a_ref_less_row_as_NOT_JUDGED() -> None
     assert "examined: 0" in out, out
     assert rc == 0, f"a ref-less row is not a problem, got rc={rc}\n{out}"
 
+def _late_stamp_row(n: int, *, now: dt.datetime, subject: str = "#77",
+                    declared: dt.datetime | None = None, days_ago: float = 1 / 24.0) -> dict:
+    """A dispatch row whose `ts` is a WRITE instant LATER than the instant it declares (#432).
+
+    The live specimen this shape is taken from: row `n=2787` (`#428`) carries
+    `ts 2026-10-07T12:26:04Z` -- a batched ledger write -- while its own detail declares
+    `resolved_at 2026-10-07T12:11:46Z`, and the notify it records landed at `12:11:28Z`. One
+    fixture, because a window built from `ts` alone misses that delivery by 11m36s while a
+    window built from the declaration contains it.
+    """
+    detail = "DISPATCH to the probe lane, resolved LIVE this turn"
+    if declared is not None:
+        detail += f" (resolved_at {declared.strftime('%Y-%m-%dT%H:%M:%SZ')})"
+    return _stall_row(n, "dispatch", subject, days_ago, now=now, actor="triage",
+                      detail=detail, refs=[{"session": _PROBE_TARGET}])
+
+def test_the_dispatch_delivery_leg_reads_a_LATE_STAMP_by_the_instant_the_row_DECLARES() -> None:
+    """#432, the specimen. A row's `ts` is a WRITE instant, so a batched ledger write stamps it
+    AFTER the dispatch it records and a window built from it opens after a genuine delivery.
+
+    BOTH ARMS, because either alone proves nothing: the row WITH its declared instant clears
+    the delivery, and the SAME row with the declaration stripped reports a window mismatch --
+    so the declaration is measured to be the thing that clears it, not a leg that stopped
+    judging. The declared instant is 1 h before the write stamp and the notify lands on it.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    declared = now - dt.timedelta(hours=2)
+    # `ts` = now - 1 h; the delivery sits on the DECLARED instant, 1 h before the write stamp
+    # and 57 min before the window a `ts`-only anchor would open.
+    declared_row = _late_stamp_row(111, now=now, declared=declared)
+    deliveries = lambda: (
+        [_delivery(declared, "[session-notify from=abc]\nDISPATCH #77 to the lane",
+                   session=_PROBE_TARGET)],
+        ["probe-home"], [],
+    )
+
+    cleared = RUNNER.dispatch_delivery_leg(
+        [declared_row], read_at=read_at, bound=bound, deliveries_fn=deliveries,
+    )
+    assert cleared["problems"] == [], (
+        f"the row's own declared instant must anchor the window (#432)\n{cleared['problems']}"
+    )
+    assert cleared["coverage"]["dispatch_rows_declared_anchor"] == 1, cleared["coverage"]
+    assert cleared["coverage"]["dispatch_rows_examined"] == 1, cleared["coverage"]
+
+    # ... AND THE DECLARATION IS WHAT CLEARS IT. The same fixture with the declaration removed
+    # keeps the same `ts`, the same delivery and the same target, so a leg that cleared the
+    # first arm by matching nothing at all would fail here.
+    stripped = _late_stamp_row(112, now=now, declared=None)
+    mismatch = RUNNER.dispatch_delivery_leg(
+        [stripped], read_at=read_at, bound=bound, deliveries_fn=deliveries,
+    )
+    assert mismatch["coverage"]["dispatch_rows_declared_anchor"] == 0, mismatch["coverage"]
+    assert mismatch["problems"], "without the declaration the delivery falls outside the window"
+    assert "WINDOW MISMATCH" in mismatch["problems"][0], mismatch["problems"]
+
+def test_the_dispatch_delivery_leg_reports_a_WINDOW_MISMATCH_never_an_ABSENCE() -> None:
+    """#432, the class. The leg carried ONE verdict for TWO conditions, so a delivery that
+    exists but falls outside the window the leg chose read as "records no delivery" -- a FALSE
+    ABSENCE that sends a reader off to re-dispatch an item the target already holds.
+
+    A match is taken WITHOUT the window first, so the two conditions are distinguishable. The
+    mismatch verdict must NAME the delivery's own instant and the window that judged it, and
+    must NOT carry the absence's words -- a reader who greps for the absence text must not find
+    it on a row whose delivery is sitting in the store.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(121, "dispatch", "#79", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    # 2 h after the write stamp: past the 5400 s forward bound, so the window cannot hold it.
+    landed_at = dispatched + dt.timedelta(hours=2)
+
+    leg = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(landed_at, "[session-notify from=abc]\nDISPATCH #79 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["problems"], "a delivery outside the window is still a finding"
+    problem = leg["problems"][0]
+    assert "WINDOW MISMATCH" in problem, problem
+    assert "records no delivery" not in problem, (
+        f"a delivery that EXISTS must never read as an absence\n{problem}"
+    )
+    assert landed_at.strftime("%Y-%m-%dT%H:%M:%SZ") in problem, (
+        f"the mismatch must name the delivery's own instant\n{problem}"
+    )
+    assert "do not re-dispatch" in problem, problem
+
+    # ... AND A TRUE ABSENCE STILL READS AS ONE, or the fix would have bought the mismatch
+    # verdict by never reporting the absence it exists to catch.
+    absent = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    assert absent["problems"], absent
+    assert "records no delivery" in absent["problems"][0], absent["problems"]
+    assert "WINDOW MISMATCH" not in absent["problems"][0], absent["problems"]
+
+    # ... AND A DELIVERY ADDRESSED TO ANOTHER LANE IS STILL AN ABSENCE, not a mismatch: the
+    # match is on the ROW'S OWN target (#425 clause 1), so a broadcast that never reached this
+    # row's target must not be read as "it exists, just elsewhere".
+    elsewhere = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(landed_at, "[session-notify from=abc]\nDISPATCH #79 to the lane",
+                       session="a-different-lane")],
+            ["probe-home"], [],
+        ),
+    )
+    assert "records no delivery" in elsewhere["problems"][0], elsewhere["problems"]
+    assert "WINDOW MISMATCH" not in elsewhere["problems"][0], elsewhere["problems"]
+
+def test_declared_dispatch_instant_reads_only_a_NAMED_form() -> None:
+    """#432: the row's `detail` is FREE PROSE, so a bare ISO instant is not a declaration.
+
+    Measured on this ledger: 146 of 458 dispatch rows carry SOME ISO instant in their detail --
+    a window, a neighbour's row stamp, a read instant. A reader that took any ISO string would
+    anchor windows on whatever instant a row happened to quote, which is the `#425` class of
+    predicate-wider-than-the-artifact. So each form pairs a TOKEN with its value, a value that
+    does not parse declares nothing (and raises nothing: a malformed declaration is no
+    declaration, never a licence to judge unbounded), and the EARLIER of the two wins.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    declared = (now - dt.timedelta(hours=2)).replace(microsecond=0)
+    iso = declared.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # A named form declares ...
+    instant, form = RUNNER.declared_dispatch_instant(
+        {"detail": f"routed LIVE this turn (resolved_at {iso})."}
+    )
+    assert instant == declared and form == "resolved_at", (instant, form)
+
+    # ... a bare ISO instant does NOT ...
+    assert RUNNER.declared_dispatch_instant(
+        {"detail": f"the window was [{iso}, later]"}
+    ) == (None, "")
+    # ... nor does a mention of the token with no value, nor a value that cannot be parsed ...
+    assert RUNNER.declared_dispatch_instant(
+        {"detail": "resolved_at was not recorded"}
+    ) == (None, "")
+    assert RUNNER.declared_dispatch_instant(
+        {"detail": "resolved_at 2026-13-45T99:99:99Z"}
+    ) == (None, "")
+    # ... nor an empty or absent detail.
+    assert RUNNER.declared_dispatch_instant({"detail": ""}) == (None, "")
+    assert RUNNER.declared_dispatch_instant({}) == (None, "")
+
+    # EARLIER WINS: a declaration AFTER the write stamp cannot pull the window forward, so the
+    # leg keeps the write stamp as the anchor and the later instant is simply not used.
+    now2 = dt.datetime.now(dt.timezone.utc)
+    read_at = now2.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now2 - dt.timedelta(days=1), "probe-bound", "")
+    forward = _stall_row(
+        131, "dispatch", "#81", 1 / 24.0, now=now2, actor="triage",
+        detail=f"resolved_at {(now2 + dt.timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        refs=[{"session": _PROBE_TARGET}],
+    )
+    leg = RUNNER.dispatch_delivery_leg(
+        [forward], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: ([], ["probe-home"], []),
+    )
+    assert leg["coverage"]["dispatch_rows_declared_anchor"] == 0, (
+        f"a declaration AFTER the write stamp must not become the anchor\n{leg['coverage']}"
+    )
+
+def test_the_render_PRINTS_the_anchor_each_window_was_built_from() -> None:
+    """#432: a window built from a row's WRITE stamp and one built from an instant the row
+    DECLARES are different judgements. A reader who cannot tell which was used cannot tell a
+    clean sweep from a narrow window, so the anchor counts are printed beside the verdict --
+    the same discipline as the examined population (acceptance criterion 3, #116).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    declared = now - dt.timedelta(hours=2)
+    row = _late_stamp_row(141, now=now, declared=declared)
+    rc, out, _ = _run([], [row], delivery_scope=bound, deliveries=[])
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert "window anchors: 1 of 1 examined row(s) anchored on an instant the row itself DECLARES" in out, out
+    # ... and the window line states which anchor was used, not just the count.
+    assert "anchored on the row's declared `resolved_at`" in out, out
+
+def test_the_match_HORIZON_keeps_an_OLD_mention_from_reading_as_a_DELIVERY() -> None:
+    """#432: the horizon separates a DELIVERY from a subject MENTION, and both arms are needed.
+
+    Measured on this ledger at the 2026-10-07T15:36Z read: the `#432` target held **47**
+    messages carrying the subject, the oldest `2026-09-19T08:29:00Z` -- 18 days before the
+    read -- and only **3** within 24 h. Without a horizon, the first of those 47 reads as "a
+    delivery EXISTS, just outside the window", which is the false-CLEAN twin of the false
+    absence this item is about: a leg that answered "it was delivered, only not then" for
+    every stale mention would clear a row whose notify was never sent. So a match outside the
+    horizon is NOT a delivery, and a true absence is still reported as one.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(151, "dispatch", "#83", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+
+    # ARM 1 -- an 18-day-old mention to the SAME target carrying the SAME subject is not a
+    # delivery: it is a stale broadcast, and the row still records no delivery of THIS brief.
+    stale_at = dispatched - dt.timedelta(days=18)
+    stale = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(stale_at, "[session-notify from=abc]\nDISPATCH #83 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert stale["coverage"]["subject_matches_anywhere"] == 1, stale["coverage"]
+    assert stale["coverage"]["subject_matches_within_horizon"] == 0, stale["coverage"]
+    assert stale["problems"], "a mention outside the horizon is not a delivery"
+    assert "records no delivery" in stale["problems"][0], stale["problems"]
+    assert "WINDOW MISMATCH" not in stale["problems"][0], (
+        f"an 18-day-old mention must never read as a delivery\n{stale['problems']}"
+    )
+
+    # ARM 2 -- the SAME row with the mention 2 h after the write stamp is INSIDE the horizon
+    # and outside the 5400 s window, so it is a WINDOW MISMATCH. Same subject, same target,
+    # same fixture: only the age moved, so the horizon is measured to be the discriminator.
+    near_at = dispatched + dt.timedelta(hours=2)
+    near = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(near_at, "[session-notify from=abc]\nDISPATCH #83 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert near["coverage"]["subject_matches_anywhere"] == 1, near["coverage"]
+    assert near["coverage"]["subject_matches_within_horizon"] == 1, near["coverage"]
+    assert "WINDOW MISMATCH" in near["problems"][0], near["problems"]
+
+    # ... AND THE HORIZON IS BOUNDED, not merely present: a mention 1 s inside it is a
+    # delivery and one 1 s outside it is not, so a leg that ignored the bound entirely would
+    # fail the pair above while a leg that used ANY bound would still have to pass this one.
+    horizon = RUNNER.DELIVERY_MATCH_HORIZON_SECS
+    just_in = dispatched + dt.timedelta(seconds=horizon - 1)
+    just_out = dispatched + dt.timedelta(seconds=horizon + 1)
+    inside = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(just_in, "[session-notify from=abc]\nDISPATCH #83 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    outside = RUNNER.dispatch_delivery_leg(
+        [row], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(just_out, "[session-notify from=abc]\nDISPATCH #83 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert inside["coverage"]["subject_matches_within_horizon"] == 1, inside["coverage"]
+    assert "WINDOW MISMATCH" in inside["problems"][0], inside["problems"]
+    assert outside["coverage"]["subject_matches_within_horizon"] == 0, outside["coverage"]
+    assert "records no delivery" in outside["problems"][0], outside["problems"]
+
+def test_the_render_PRINTS_the_match_counts_the_horizon_judged() -> None:
+    """#432: the horizon decides silently whether a mention is a delivery, so its effect is
+    PRINTED -- `N within the horizon of M anywhere` -- and the reader can see how many
+    mentions were set aside. A count that appears only when the horizon clears everything is a
+    number a reader cannot distinguish from a store that held nothing (#116, criterion 3).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(161, "dispatch", "#85", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    stale = _delivery(dispatched - dt.timedelta(days=18),
+                      "[session-notify from=abc]\nDISPATCH #85 to the lane",
+                      session=_PROBE_TARGET)
+    near = _delivery(dispatched + dt.timedelta(hours=2),
+                     "[session-notify from=abc]\nDISPATCH #85 to the lane",
+                     session=_PROBE_TARGET)
+    rc, out, _ = _run([], [row], delivery_scope=bound, deliveries=[stale, near])
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert (
+        f"subject matches: 1 within the {RUNNER.DELIVERY_MATCH_HORIZON_SECS} s horizon of 2 "
+        f"anywhere in the store(s)"
+    ) in out, out
+
 def _messages_db(path: Path, *messages: tuple[str, str]) -> None:
     """A throwaway OpenCrabs home holding real `messages` rows — the landed-notify read path.
 
