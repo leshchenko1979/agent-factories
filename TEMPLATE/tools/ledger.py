@@ -142,6 +142,7 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # same bare-neighbour import and for the same reason: `stage_tool`'s closure walker resolves
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
+    declared_board_closed,
     declared_claim,
     declared_comment_id,
     declared_defect_key,
@@ -279,10 +280,20 @@ def parse_refs(values: list[str]) -> list[dict]:
     return refs
 
 # Which declared invariant's boundary governs a correction to a row of each event. Only
-# `close` has one: `close_row_revision` is the sole declared invariant constraining a row's
-# DETAIL. An event with no entry is REFUSED rather than repaired under some other
-# invariant's boundary — a boundary that does not govern the row cannot make a correction
-# lawful, it only makes it look lawful (#87).
+# `close` has one: `close_row_revision`, the boundary below which a close row's `head=`
+# revision need not be declared. An event with no entry is REFUSED rather than repaired
+# under some other invariant's boundary — a boundary that does not govern the row cannot
+# make a correction lawful, it only makes it look lawful (#87).
+#
+# THIS MAP IS 1:1 AND THAT IS WHY #435 DOES NOT GO THROUGH IT. It previously read
+# "`close_row_revision` is the sole declared invariant constraining a row's DETAIL" — a
+# claim #435 FALSIFIES: `close_board_recorded` now constrains a close row's detail too, via
+# the `board=closed` refusal below. The map could not absorb it, because an event maps to
+# exactly ONE invariant and `close` is taken; folding the two together would also give the
+# board rule a REPAIR BOUNDARY it must not have (a close appended now can never predate it,
+# so the rule reaches every row this path can write — clause 5 of #435). The board refusal
+# is therefore keyed on the EVENT DIRECTLY, beside the `head=` refusal and on the same
+# footing, and this map keeps governing REPAIR alone.
 INVARIANT_FOR_EVENT = {"close": "close_row_revision"}
 # Overridable so the gate can be tested against a throwaway ledger. Tests that
 # write the real state surface are how a probe becomes permanent corruption.
@@ -1698,6 +1709,50 @@ def cmd_append(args: argparse.Namespace) -> int:
                     "canonical trailer — the revision its receipts describe — and this "
                     "detail declares none. The token is read from the trailing run, so a "
                     "revision mentioned in prose does not satisfy it (#187)."
+                )
+            # AND THE ROW MUST DECLARE ITS BOARD LEG, IN THE RUN, BEFORE IT IS IMMUTABLE
+            # (#434 ruled; built as #435). Until this refusal existed, `grep -n 'board='
+            # tools/ledger.py` returned NOTHING: a close row could be appended and pushed
+            # with no `board=<state>` declaration at all, and the omission surfaced only in
+            # `tests/test_close_board_recorded.py` — AFTER the row was written, where the
+            # repair space is empty. Three post-boundary rows shipped that way (`n=2101`
+            # #197, `n=2104` #267, `n=2811` #431 at 2026-10-07T17:47:29Z with the board
+            # close landing 44 s later at 17:48:13Z), each a RECORDING miss whose only exit
+            # was the exemption table. A fourth of that shape is barred outright, and what
+            # bars it is this refusal: a mechanism that stops the omission at the WRITE
+            # path, so no exemption is owed.
+            #
+            # KEYED ON THE EVENT DIRECTLY, never through INVARIANT_FOR_EVENT above. That
+            # map is 1:1 and `close` is already taken by `close_row_revision`; the board
+            # rule has no REPAIR boundary and must not be given one (clause 5 of #435), so
+            # folding it in would both collide and mis-license a repair under a boundary
+            # that does not govern it. It sits here, beside the `head=` refusal and on the
+            # same footing: two declared fields a close row owes.
+            #
+            # THE PREDICATE IS THE CANONICAL RUN (`declared_board_closed`), never a
+            # whole-detail scan — and the two scopes differ BY DESIGN, not by oversight.
+            # The GATE reads HISTORY, where a whole-detail scan is CORRECT: measured
+            # 2026-10-07T18:59:10Z, 16 of the 298 post-boundary close rows carry
+            # `board=closed` in their detail but declare no board token in their canonical
+            # run (`n=303`, `315`, `327`, `341`, `368`, `370`, `372`, `374`, `1065`, `1077`,
+            # `1083`, `1091`, `1126`, `1183`, `1258`, `1260` — the last three being the same
+            # rows the `head=` comment above names as prose-only), so a positional read
+            # there would false-RED them. The WRITER is judged on its OWN run, exactly as
+            # `declared_revision` is for `head=`: a writer must not satisfy this refusal by
+            # quoting `board=closed` in prose, or the refusal would certify a row the gate
+            # will still flag.
+            #
+            # NO BOUNDARY READ, for the reason the `head=` refusal above and the sequence
+            # leg state: a close appended NOW can never predate the boundary, so the rule
+            # reaches every row this path can write. History is the gate's business, and
+            # EXEMPTIONS govern the gate's reading of it. REFUSE, NEVER REWRITE: the detail
+            # is left untouched and the exit is non-zero.
+            if args.event == "close" and not declared_board_closed(args.detail):
+                sys.exit(
+                    "ledger append refused: a close row must declare board=closed in its "
+                    "canonical trailer — the board leg the close settles — and this "
+                    "detail declares none. The token is read from the trailing run, so a "
+                    "board=closed mentioned in prose does not satisfy it (#434)."
                 )
         detail = args.detail
         if args.event == "close":

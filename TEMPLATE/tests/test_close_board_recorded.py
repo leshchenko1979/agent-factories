@@ -61,6 +61,7 @@ Exit: 0 clean or fully excused, non-zero on any post-invariant close without the
 from __future__ import annotations
 
 import datetime as dt
+import importlib.util
 import json
 import sys
 import tempfile
@@ -81,6 +82,7 @@ from ledger_boundary import (  # noqa: E402
 import pytest  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
+FIELD_PREDICATE = REPO / "tools" / "field_predicate.py"
 
 # BOTH INVOCATION MODES MUST REACH THE GUARD (#199). The audit invokes this gate in pytest
 # mode and pytest never calls `main()`, so a guard there protects only the script-mode run —
@@ -101,7 +103,16 @@ if _SKIP_REASON:
 # — the state every bootstrapped factory is in until it adopts the invariant; a MALFORMED
 # one FAILS, because a broken declaration must not hide behind the same output as none.
 INVARIANT_KEY = "close_board_recorded"
-BOARD_TOKEN = "board=closed"
+
+# The board token is NOT declared here — it is READ from its ONE home,
+# `tools/field_predicate.py` (#297), by the load placed immediately after `_load`'s
+# definition below. The WRITE PATH now refuses a close row that declares no `board=closed`
+# in its canonical run (#434/#435), and the refuser and this gate must agree on the token
+# character for character: a private copy here would let the writer accept a spelling the
+# gate then flags, or worse, let this gate stop checking the token the writer enforces.
+# The `_load`-by-path form is the same one `tests/test_ruling_row_recorded.py` uses for
+# `PAIRING_KEY`, and for the same reason: this file is vendored into factories whose
+# layout above it differs (#171).
 
 # The PROBES' own boundary — a fixture, never the factory's declaration. It sits between
 # the probe rows' `17:00` and `19:00` timestamps so both arms are reachable, and it is
@@ -114,6 +125,29 @@ _PROBE_BOUNDARY = "2026-09-18T18:00:00Z"
 # number must not live in a file that ships to every new factory.
 EXEMPTIONS_PATH = REPO / "docs" / "close-board-exemptions.json"
 BOARD_EXEMPT_DOMAIN = ("the board close happened but was not recorded in the row",)
+
+
+def _load(name: str, path: Path):
+    """Load a sibling module BY PATH.
+
+    By path rather than by import: this file is vendored into factories where the layout
+    above it differs, which is the reason `tools/patrol_host_state.py` loads its own
+    siblings this way (#171).
+    """
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+# The token, composed from its shared home. The SAME `_load` the sibling gate uses, so the
+# key and its positional reader (`declared_board_closed`) cannot drift from the refuser in
+# `tools/ledger.py append` or from this detector.
+_FIELD_PREDICATE = _load("_close_board_field_predicate", FIELD_PREDICATE)
+BOARD_KEY = _FIELD_PREDICATE.BOARD_KEY
+BOARD_CLOSED = _FIELD_PREDICATE.BOARD_CLOSED
+BOARD_TOKEN = f"{BOARD_KEY}={BOARD_CLOSED}"
 
 
 def _parse_ts(value: str) -> dt.datetime:

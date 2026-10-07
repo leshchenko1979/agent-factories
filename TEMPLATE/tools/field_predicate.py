@@ -475,6 +475,64 @@ def declared_revision(detail: str, min_chars: int = REVISION_MIN_CHARS) -> str |
             return sha
     return None
 
+# The close row's `board=<state>` field — the BOARD state the settling lane recorded at
+# close time, ruled into the write path by #434 and built as #435.
+#
+# WHY IT EXISTS. `tests/test_close_board_recorded.py` demands this token on every close row
+# and is REQUIRED, so it ships to every factory. Until this refusal existed NOTHING at the
+# write path asked for it: `grep -n 'board=' tools/ledger.py` returned nothing, and three
+# post-boundary instances shipped — `n=2101` (#197), `n=2104` (#267) and `n=2811` (#431,
+# 2026-10-07T17:47:29Z). Each time the board close DID happen (`n=2811`: the board read
+# CLOSED at 2026-10-07T17:48:13Z, 44 s after the row), so each is a RECORDING miss whose
+# repair space is EMPTY — the row is pushed, and the ledger is append-only. The gate's own
+# doctrine bars a third exemption row and names the remedy instead: a mechanism that stops
+# the omission at the write path. This is that mechanism's reader.
+#
+# ONE HOME for the accepted value (#297, the `PAIRING_KEY` precedent). Three surfaces ask
+# for it — the writer that must put it on the row, the refuser that will not stamp a close
+# without it, and the gate that judges history. A private `"closed"` literal in any of the
+# three drifts in silence, and the drift lands on exactly the rows the token exists to make
+# readable.
+#
+# THE SCOPE SPLIT IS DELIBERATE, and it is the one thing a reader of the gate could get
+# wrong. The gate scans the WHOLE `detail` (its `_has_board_token`, measured 2026-10-03:
+# 26 post-invariant rows carry `board=closed` outside their terminal run — mid-prose, or
+# with punctuation attached — so a positional read would false-RED a quarter of its
+# population). That is correct THERE because the gate reads HISTORY. The WRITER is judged
+# on its OWN canonical run, exactly as `declared_revision` does for `head=`: a lane must
+# not satisfy this refusal by QUOTING the token in prose, and the three live `head=` rows
+# that split the two readings (`n=1077`, `n=1083`, `n=1091`) are the same hazard one field
+# over. So this function reads `trailer_tokens` and never the whole detail.
+BOARD_KEY = "board"
+BOARD_CLOSED = "closed"
+
+def declared_board(detail: str) -> str | None:
+    """The `board=<state>` value `detail`'s CANONICAL TRAILER declares, else None.
+
+    RAW, not filtered for the accepted value — the same split `declared_pairing` makes and
+    for the same reason: a token that is DECLARED and wrong (`board=open`) is a different
+    defect from one that is ABSENT, with a different remedy, and collapsing them would let a
+    self-contradicting row read as an unrecorded one. `declared_board_closed` is the filtered
+    read the WRITE PATH asks; callers judging history ask this one and classify the value
+    themselves against `BOARD_CLOSED`.
+    """
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, BOARD_KEY)
+        if value:
+            return value
+    return None
+
+def declared_board_closed(detail: str) -> bool:
+    """True when `detail`'s canonical trailer declares `board=closed`.
+
+    The WRITE PATH's predicate, and the filtered half of the pair above: the refusal asks
+    whether the row DECLARED THE ACCEPTED VALUE, not merely whether the key is occupied.
+    `board=open` therefore does not satisfy it, which is the point — a close that records the
+    board as still open is the self-contradiction the gate already refuses, and a write path
+    that accepted the bare key would let it through.
+    """
+    return declared_board(detail) == BOARD_CLOSED
+
 # The close trailer's `rework` field — the disposition a close DECLARES. Its domain is
 # exactly two canonical values, ruled at ledger `n=386` clause 3 (reusing #53 clauses
 # 3/4): `rework=#N` names the rework entry THIS close produced, and `rework=none`

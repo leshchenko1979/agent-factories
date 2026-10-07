@@ -1,5 +1,5 @@
 {
-  "_note": "THIS factory's close-board exemptions, read by tests/test_close_board_recorded.py. Two entries, both admitted 2026-10-03 with an EMPTY REPAIR SPACE, and both printed as an 'excused:' line on every run. They exist because this gate is REQUIRED and ships to every factory, has no repair path for a pushed row, and a permanently-RED suite is how every other gate's signal is lost. Skeleton and field rules: docs/close-board-exemptions.example.json.",
+  "_note": "THIS factory's close-board exemptions, read by tests/test_close_board_recorded.py. Three entries, each admitted with an EMPTY REPAIR SPACE and each printed as an 'excused:' line on every run. They exist because this gate is REQUIRED and ships to every factory, has no repair path for a pushed row, and a permanently-RED suite is how every other gate's signal is lost. The THIRD is barred outright: it commissioned #435, the write-path refusal in `tools/ledger.py append` that rejects a `close` row declaring no `board=closed` in its canonical run, so no fourth of this shape can be written at all. The three entries here are history the mechanism cannot reach — pushed identity, append-only ledger — and they are the debt the mechanism retires. Skeleton and field rules: docs/close-board-exemptions.example.json.",
   "exemptions": [
     {
       "n": 2101,
@@ -18,6 +18,15 @@
       "domain": "the board close happened but was not recorded in the row",
       "reason": "The close row for #267 was written and pushed in commit 7a69c4fc1407b5ffe5452b02fdc86bdeb6415fcb without the `board=closed` token; the board close itself happened 24 s later. Same empty repair space as n=2101 — pushed identity, append-only ledger, and a gate that reads `close` rows rather than the committed lineage. The cause is the same mechanism gap, and this row's own `REPORTED, NOT FIXED — THE MECHANISM GAP` paragraph is where it is measured: the subset is chosen by the change's own author, who is structurally the least likely to pick the gate that reads their own edit.",
       "proof": "`gh issue view 267 --repo leshchenko1979/agent-factories --json state,closedAt` reads state=CLOSED, closedAt=2026-10-03T19:48:45Z — the board close happened, 24 s after the row was written. The row's trailer carries head=0e8b7f7065e942f786239e56a9be857d1e6b9c83."
+    },
+    {
+      "n": 2811,
+      "subject": "#431",
+      "ts": "2026-10-07T17:47:29Z",
+      "granted": "2026-10-07",
+      "domain": "the board close happened but was not recorded in the row",
+      "reason": "The close row for #431 was written and pushed in commit adde8ca7 without the `board=closed` token; the board close itself happened 44 s later. Same empty repair space as n=2101 and n=2104 — pushed identity, append-only ledger, and a gate that reads `close` rows rather than the committed lineage — so no lawful path restores the token and the gate stays RED forever. This is the THIRD of the shape, and the doctrine says a third is barred rather than excused: it commissioned #435, the write-path refusal that now makes `tools/ledger.py append` reject a `close` row declaring no `board=closed` in its canonical run. The entry is admitted ONLY bundled in the same commit as that mechanism (the n=405 precedent), so the debt and its remedy are inseparable.",
+      "proof": "`gh issue view 431 --repo leshchenko1979/agent-factories --json state,closedAt` reads state=CLOSED, closedAt=2026-10-07T17:48:13Z — the board close happened, 44 s after the row was written. The row's trailer carries head=adde8ca7."
     }
   ]
 }

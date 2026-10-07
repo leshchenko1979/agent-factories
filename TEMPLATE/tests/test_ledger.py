@@ -1223,7 +1223,7 @@ def main() -> int:
         # accepted. Both arms are required — a permissive refusal, satisfiable by quoting any
         # hex-shaped token, would pass a one-sided probe here and accept a row whose revision
         # the existence leg never resolves. Three live rows are exactly that shape.
-        from field_predicate import declared_revision  # the shared predicate, one field one read
+        from field_predicate import declared_board_closed, declared_revision  # the shared predicates, one field one read
         rev_actors = Path(tmp) / "rev-actors.txt"
         rev_actors.write_text("worker\n", encoding="utf-8")
         # A throwaway telemetry source, for the reason the #88 block states: a probe that
@@ -1261,7 +1261,8 @@ def main() -> int:
         # every close row — the one-sided shape that proves nothing about the predicate.
         r = run(rev, "append", "--event", "close", "--actor", "worker", "--subject", "#187",
                 "--detail", "Closed with its receipts. "
-                            "head=0123456789abcdef0123456789abcdef01234567",
+                            "head=0123456789abcdef0123456789abcdef01234567 "
+                            "board=closed",
                 actors=rev_actors, extra_env=rev_env)
         check("a revision the CANONICAL RUN declares is ACCEPTED",
               r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
@@ -1273,6 +1274,65 @@ def main() -> int:
         check("and the row carries it in the run, beside the telemetry the tool appended",
               declared_revision(_rev_detail) == "0123456789abcdef0123456789abcdef01234567",
               _rev_detail[-90:])
+
+        print("\nthe close row's BOARD leg — refused at the WRITE PATH (#434/#435)")
+        # A `close` row must carry `board=closed` in its canonical terminal run, and the
+        # refusal mirrors the `head=` one directly above. Before it existed, `grep -n
+        # 'board=' tools/ledger.py` returned NOTHING: a close row could be appended and
+        # pushed with no board declaration at all, and the omission surfaced only in
+        # `tests/test_close_board_recorded.py` — after the row was immutable. Three rows
+        # shipped that way (`n=2101`, `n=2104`, `n=2811`), each exiting only through the
+        # exemption table; a fourth is barred by this refusal.
+        #
+        # THE ARMS ARE THE SAME THREE THE `head=` BLOCK USES, because the two refusals share
+        # one shape and one failure mode. The read is POSITIONAL, so a `board=closed`
+        # QUOTED in prose is refused while one the run DECLARES is accepted — and the
+        # quoting arm is not hypothetical here: measured 2026-10-07T18:59:10Z, 16 of the
+        # 298 post-boundary close rows carry `board=closed` in their detail but declare no
+        # board token in their canonical run, so a whole-detail reader would have certified
+        # rows this gate still flags.
+        board_actors = Path(tmp) / "board-actors.txt"
+        board_actors.write_text("worker\n", encoding="utf-8")
+        board_db = seed_telemetry_db(Path(tmp) / "board-telemetry.db")
+        board_env = {"OPENCRABS_DB_PATH": str(board_db)}
+        board = Path(tmp) / "board.jsonl"
+        write_ledger(board, ("intake", "#434"), ("claim", "#434"))
+        before_board = hashlib.md5(board.read_bytes()).hexdigest()
+
+        r = run(board, "append", "--event", "close", "--actor", "worker", "--subject", "#434",
+                "--detail", "Closed with its receipts. "
+                            "head=0123456789abcdef0123456789abcdef01234567",
+                actors=board_actors, extra_env=board_env)
+        check("a close declaring no board leg is REFUSED",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and the refusal names the token it wants",
+              "board=closed" in (r.stderr + r.stdout), (r.stderr or r.stdout).strip()[:160])
+        check("and it wrote NOTHING — the ledger is byte-identical by md5",
+              hashlib.md5(board.read_bytes()).hexdigest() == before_board,
+              f"{len(rows(board))} row(s)")
+
+        r = run(board, "append", "--event", "close", "--actor", "worker", "--subject", "#434",
+                "--detail", "Closed. The board=closed marker was observed at close time. "
+                            "head=0123456789abcdef0123456789abcdef01234567",
+                actors=board_actors, extra_env=board_env)
+        check("a board leg only QUOTED in prose is REFUSED (the discriminator)",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and that refusal wrote nothing either",
+              hashlib.md5(board.read_bytes()).hexdigest() == before_board,
+              f"{len(rows(board))} row(s)")
+
+        # The accepting arm. Without it the probe would pass on a refusal that rejected
+        # every close row — the one-sided shape that proves nothing about the predicate.
+        r = run(board, "append", "--event", "close", "--actor", "worker", "--subject", "#434",
+                "--detail", "Closed with its receipts. "
+                            "head=0123456789abcdef0123456789abcdef01234567 board=closed",
+                actors=board_actors, extra_env=board_env)
+        check("a board leg the CANONICAL RUN declares is ACCEPTED",
+              r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
+        _board_detail = close_row(board).get("detail", "")
+        check("and the row carries it in the run, read through the SHARED predicate",
+              declared_board_closed(_board_detail),
+              _board_detail[-90:])
 
         print("\nthe ruling-row pairing — refused at the WRITE PATH (#297)")
         # A `ruling` row must carry `comment=<id>` in its canonical terminal run: a ruling
@@ -2031,7 +2091,7 @@ def main() -> int:
             "--detail",
             "Closed. The writer tested whether tokens_out= was absent before appending, "
             "and cost_usd= was read from the same sentence. "
-            "head=0123456789abcdef0123456789abcdef01234567",
+            "head=0123456789abcdef0123456789abcdef01234567 board=closed",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)},
         )
         check("a close row whose prose mentions the keys is accepted",
@@ -2050,7 +2110,8 @@ def main() -> int:
         write_ledger(stated, ("intake", "#88"), ("claim", "#88"))
         run(stated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The author stated turns=7 and cost_usd=9.99 before the "
-                        "append. head=0123456789abcdef0123456789abcdef01234567",
+                        "append. head=0123456789abcdef0123456789abcdef01234567 "
+                        "board=closed",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
         detail = close_row(stated).get("detail", "")
         check("a DECLARED measurement is not duplicated",
@@ -2072,7 +2133,7 @@ def main() -> int:
         write_ledger(punctuated, ("intake", "#88"), ("claim", "#88"))
         run(punctuated, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The author stated turns=7. "
-                        "head=0123456789abcdef0123456789abcdef01234567",
+                        "head=0123456789abcdef0123456789abcdef01234567 board=closed",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
         detail = close_row(punctuated).get("detail", "")
         check("a punctuated stated value does not suppress the append (pinned boundary)",
@@ -2095,7 +2156,7 @@ def main() -> int:
         write_ledger(quoted, ("intake", "#88"), ("claim", "#88"))
         run(quoted, "append", "--event", "close", "--actor", "worker", "--subject", "#88",
             "--detail", "Closed. The quoted trailer read turns=36' before the repair. "
-                        "head=0123456789abcdef0123456789abcdef01234567",
+                        "head=0123456789abcdef0123456789abcdef01234567 board=closed",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(db)})
         detail = close_row(quoted).get("detail", "")
         check("a quoted unparseable value does not suppress the measurement",
@@ -2152,7 +2213,7 @@ def main() -> int:
         r = run(
             silent, "append", "--event", "close", "--actor", "worker", "--subject", "#89",
             "--detail", "Closed with no telemetry inside the window. "
-                        "head=0123456789abcdef0123456789abcdef01234567",
+                        "head=0123456789abcdef0123456789abcdef01234567 board=closed",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
         )
         check("a close row whose window yielded nothing is accepted",
@@ -2173,7 +2234,7 @@ def main() -> int:
         run(
             stated, "append", "--event", "close", "--actor", "worker", "--subject", "#90",
             "--detail", "Closed. The author stated duration=42s before the append. "
-                        "head=0123456789abcdef0123456789abcdef01234567",
+                        "head=0123456789abcdef0123456789abcdef01234567 board=closed",
             actors=actors, extra_env={"OPENCRABS_DB_PATH": str(empty_db)},
         )
         detail = close_row(stated).get("detail", "")
@@ -2249,7 +2310,7 @@ def main() -> int:
         # below would then be proving the wrong thing.
         r = absent_run("append", "--event", "close", "--actor", "worker",
                        "--subject", "#91", "--detail", "Closed with the extractor present. "
-                       "head=0123456789abcdef0123456789abcdef01234567")
+                       "head=0123456789abcdef0123456789abcdef01234567 board=closed")
         detail = close_row(absent_ledger).get("detail", "")
         check("extractor present: the row does not claim it was unavailable",
               r.returncode == 0 and "telemetry=unavailable" not in detail, detail[-90:])
@@ -2269,7 +2330,7 @@ def main() -> int:
         )
         r = absent_run("append", "--event", "close", "--actor", "worker",
                        "--subject", "#91", "--detail", "Closed with no extractor at all. "
-                       "head=0123456789abcdef0123456789abcdef01234567")
+                       "head=0123456789abcdef0123456789abcdef01234567 board=closed")
         detail = close_row(absent_ledger).get("detail", "")
         check("an unimportable extractor is stated, never silent",
               r.returncode == 0 and "telemetry=unavailable" in detail, detail[-90:])
