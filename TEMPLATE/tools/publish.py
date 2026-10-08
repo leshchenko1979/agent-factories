@@ -17,9 +17,16 @@ Three bounds, each from the ruling, each load-bearing:
   window is tested on the NEWEST unpushed commit — a fast-forward push publishes
   everything up to the tip, so testing the oldest would publish a younger commit
   sitting above it.
-- **FAST-FORWARD ONLY; DIVERGENCE REPORTED, NEVER RESOLVED.** When the remote tip
-  is not an ancestor of ours this prints the divergence and stops. It does not
-  fetch, merge, reconcile or rewrite.
+- **FETCH, THEN FAST-FORWARD; DIVERGENCE REPORTED, NEVER RESOLVED.** Before its push
+  the pusher SYNCS: it fetches, then fast-forwards its own checkout to the remote tip
+  (`git merge --ff-only`). The no-fetch bound this bullet USED TO DECLARE is amended by
+  the owner's own answer (q36 -> (a), ledger n=2746), and the amendment is the point:
+  the cron pusher runs from a shared tree that lanes advance past, so a pusher that
+  never fetched read a cache and reported the normal steady state forever. `--ff-only`
+  is the load-bearing half AND the amendment's limit: a merely-behind tree advances
+  silently, while a GENUINE divergence refuses loudly and the round publishes nothing.
+  A fetch is not a rewrite and an ff-only merge is a fast-forward, so neither is one of
+  the three verbs bound 2 forbids.
 - **NO FORCED PUSH AND NO HISTORY REWRITE.** The bound is written here because it
   belongs written down, and it appears in NO executable line: the gate strips the
   docstring and the comments and asserts both tokens are absent from what remains.
@@ -37,10 +44,12 @@ REPORTING IS NOT A BOOLEAN
 Every round prints its count and its shas. A count can be re-checked and a sha can
 be dispatched, claimed or closed; a boolean can be none of those.
 
-Run:  python3 tools/publish.py            report only, nothing is pushed
-      python3 tools/publish.py --apply    push when the grace window allows
+Run:  python3 tools/publish.py            report only, nothing is pushed or synced
+      python3 tools/publish.py --apply    sync (fetch + fast-forward), then push when
+                                          the grace window allows
 Exit: 0 the round ran (published, held, in sync, behind, or reported a divergence)
-      1 the round could not be completed (no remote, unreachable, unreadable)
+      1 the round could not be completed (no remote, unreachable, unreadable, a refused
+        fast-forward, or a failed push)
 """
 
 from __future__ import annotations
@@ -241,6 +250,86 @@ def divergence(repo: Path, tip: str):
         "ahead": ahead,
     }
 
+# --- THE SYNC: fetch, then fast-forward (#418 PART 2, owner q36 -> (a), ledger n=2746) ---
+#
+# The cron pusher runs from a FIXED PATH -- the shared tree -- and lanes publish from their
+# own worktrees, which advance `origin/main` past it. So the shared tree is routinely BEHIND,
+# and a pusher that never fetched read a cache and reported that normal steady state forever.
+# The owner's answer is shape (a): fetch, `merge --ff-only`, then push.
+#
+# The two halves do different work and are ONE act. The FETCH is what makes the local view
+# current at all. The `--ff-only` MERGE is the load-bearing half: a merely-behind tree
+# advances silently, while a GENUINE divergence refuses -- loudly, and the round publishes
+# nothing. A fetch is not a rewrite and an ff-only merge is a fast-forward, so neither is one
+# of the three verbs #146 bound 2 forbids; `--ff-only` is what keeps it that way.
+#
+# TWO REFUSALS, TWO REMEDIES, and the round must not confuse them. A GENUINE DIVERGENCE is a
+# HISTORY fact: the remote tip is not an ancestor of HEAD, so nothing can be fast-forwarded.
+# A BLOCKED fast-forward is a WORKING-TREE fact: history fast-forwards cleanly, but local
+# modifications sit on paths the incoming commits touch, so git refuses to overwrite them.
+# The first is `diverged`; the second must NAME its paths, because its remedy is a peer's
+# in-flight edit, not a reconciliation.
+
+def blocking_paths(repo: Path, tip: str):
+    """The locally-modified paths an incoming fast-forward would overwrite, SORTED.
+
+    COMPUTED, never scraped out of git's refusal message: that wording is not a contract,
+    and a reader that parses it goes quiet the day it changes. Two reads define the answer
+    and it is their intersection -- what the working tree has modified against HEAD
+    (tracked) plus what it holds untracked, against what the incoming commits touch. An
+    untracked file is included because git refuses to overwrite one just the same.
+    """
+    rc, tracked_out, _ = _git(repo, "diff", "--name-only", "HEAD")
+    if rc != 0:
+        return []
+    rc, untracked_out, _ = _git(repo, "ls-files", "--others", "--exclude-standard")
+    untracked = untracked_out if rc == 0 else ""
+    rc, incoming_out, _ = _git(repo, "diff", "--name-only", "HEAD", tip)
+    if rc != 0:
+        return []
+    local = {
+        line.strip()
+        for line in (tracked_out + "\n" + untracked).splitlines()
+        if line.strip()
+    }
+    incoming = {line.strip() for line in incoming_out.splitlines() if line.strip()}
+    return sorted(local & incoming)
+
+def sync_remote(repo: Path, remote: str, branch: str):
+    """`{"ok", "reason", "blocking", "before", "after"}` -- fetch, then fast-forward.
+
+    One round of the owner's shape (a). `ok` is True only when the fetch ran AND the
+    fast-forward was accepted -- an already-level or already-ahead checkout is accepted
+    too, which git calls "Already up to date". On refusal the caller must read `blocking`:
+    a NON-EMPTY list means the fast-forward was blocked by the working tree; an EMPTY one
+    beside a still-behind tree means git refused for a reason this reading did not model,
+    which the caller must treat as a divergence rather than as a clean sync.
+    """
+    result = {"ok": False, "stage": "", "reason": "", "blocking": [], "before": "", "after": ""}
+    rc, out, _ = _git(repo, "rev-parse", "HEAD")
+    if rc == 0:
+        result["before"] = out.strip()
+    rc, out, err = _git(repo, "fetch", remote, branch)
+    if rc != 0:
+        result["stage"] = "fetch"
+        result["reason"] = (err or out).strip() or f"git fetch exited {rc}"
+        return result
+    rc, out, err = _git(repo, "merge", "--ff-only", f"{remote}/{branch}")
+    result["stage"] = "merge"
+    if rc == 0:
+        rc, out, _ = _git(repo, "rev-parse", "HEAD")
+        result["ok"] = True
+        if rc == 0:
+            result["after"] = out.strip()
+        return result
+    result["reason"] = (err or out).strip() or f"git merge --ff-only exited {rc}"
+    rc, tip_out, _ = _git(repo, "rev-parse", f"{remote}/{branch}")
+    if rc == 0 and tip_out.strip():
+        tip = tip_out.strip()
+        if divergence(repo, tip)["state"] == "behind":
+            result["blocking"] = blocking_paths(repo, tip)
+    return result
+
 
 # --- IS THE ROW READABLE YET? (issue #441, ruled at ledger n=2907) -----------------
 #
@@ -407,6 +496,7 @@ def publish(
         "held": [],
         "diverged": None,
         "behind": None,
+        "sync": None,
     }
 
     rc, _, _ = _git(repo, "remote", "get-url", remote)
@@ -428,6 +518,57 @@ def publish(
         return report
     report["remote_tip"] = tip
 
+    # --- THE SYNC (#418 PART 2, owner q36 -> (a), ledger n=2746) --------------------------
+    # The cron pusher runs from a FIXED PATH -- the shared tree -- and lanes publish from
+    # their own worktrees, which advance `origin/main` past it. So the shared tree is
+    # routinely BEHIND, and the no-fetch bound this round used to honour left it reading a
+    # cache and reporting that normal steady state forever. A PUBLISHING round therefore
+    # syncs first: fetch, then fast-forward.
+    #
+    # UNDER `--apply` ONLY. A report-only round (`python3 tools/publish.py`, no flag) is a
+    # READ -- the patrol's freshness leg reads this module's predicates on the same shared
+    # tree -- and a read that fast-forwarded would mutate the surface it was inspecting. The
+    # sync is part of PUBLISHING, so it rides the flag that publishes.
+    #
+    # ORDER IS LOAD-BEARING: the sync runs BEFORE the classification below, because after it
+    # a merely-behind checkout is LEVEL with the tip and reads "ahead-or-same". That is the
+    # whole point -- it advances silently and then publishes its own commits, instead of
+    # reading BEHIND forever. A genuine divergence is untouched: `--ff-only` cannot
+    # fast-forward it, so it still refuses and is still REPORTED rather than resolved.
+    if apply:
+        synced = sync_remote(repo, remote, branch)
+        report["sync"] = {
+            "ok": synced["ok"],
+            "stage": synced["stage"],
+            "before": synced["before"],
+            "after": synced["after"],
+            "blocking": synced["blocking"],
+            "reason": synced["reason"],
+        }
+        if not synced["ok"]:
+            if synced["stage"] == "fetch":
+                report["status"] = "unreachable"
+                report["reason"] = (
+                    f"{remote}/{branch} could not be fetched, so this round could not sync "
+                    f"before publishing: {synced['reason']}"
+                )
+                return report
+            if synced["blocking"]:
+                report["status"] = "ff-blocked"
+                report["reason"] = (
+                    f"{remote}/{branch} carries commits this checkout could fast-forward "
+                    f"to, but the fast-forward is BLOCKED by local modifications on "
+                    f"{len(synced['blocking'])} path(s) it would overwrite "
+                    f"({', '.join(synced['blocking'])}). Reported at {report['read_at']}, "
+                    f"not resolved: publishing from a tree whose own edits sit on those "
+                    f"paths would clobber a peer's in-flight work. The next round publishes "
+                    f"once those paths are clear."
+                )
+                return report
+            # An EMPTY blocking list beside a refused merge is a HISTORY fact, not a
+            # working-tree one -- a genuine divergence -- and the classification below names
+            # it. That is the honest read, and it keeps the two refusals distinct.
+
     # BEHIND IS NOT DIVERGED (#418). `divergence()` reads the ONE predicate that separates a
     # stale checkout from a genuine conflict -- ancestry alone cannot -- and is SHARED with
     # the patrol's freshness leg, so the pusher and the leg cannot disagree about what BEHIND
@@ -441,8 +582,14 @@ def publish(
         report["reason"] = (
             f"{remote}/{branch} is ahead of HEAD, which is a PURE ANCESTOR of it "
             f"({state['behind']} commit(s) behind, 0 ahead) — a stale checkout with nothing "
-            f"of its own to publish. Reported, not resolved: this pusher does not fetch, "
-            f"merge, reconcile or rewrite."
+            f"of its own to publish, so nothing is stranded. "
+            + (
+                "This round ran with --apply, so the sync above should have advanced HEAD to "
+                "the tip; that it did not is what the sync payload explains."
+                if apply else
+                "A report-only round reads and does not sync, so run with --apply to advance "
+                "this checkout to the tip."
+            )
         )
         return report
     if state["state"] == "diverged":
@@ -454,8 +601,15 @@ def publish(
         }
         report["reason"] = (
             f"{remote}/{branch} is not an ancestor of HEAD — the branch has DIVERGED "
-            f"({state['ahead']} commit(s) ahead, {state['behind']} behind). Reported, not "
-            f"resolved: this pusher does not fetch, merge, reconcile or rewrite."
+            f"({state['ahead']} commit(s) ahead, {state['behind']} behind). "
+            + (
+                "The sync's fast-forward refused it and this round publishes nothing — a "
+                "genuine divergence is reported, never resolved, and this pusher never "
+                "rewrites published history."
+                if apply else
+                "Reported, not resolved: this pusher never rewrites published history, and a "
+                "report-only round does not sync either."
+            )
         )
         return report
 
@@ -534,6 +688,18 @@ def render(report: dict) -> str:
         f"  unpushed: {report['count']} commit(s)"
         + (f" {', '.join(report['shas'])}" if report["shas"] else "")
     )
+    syn = report.get("sync")
+    if syn:
+        if syn.get("ok"):
+            before, after = syn.get("before", ""), syn.get("after", "")
+            if before and after and before != after:
+                lines.append(f"  SYNC: fast-forwarded HEAD {before[:12]} -> {after[:12]}")
+            else:
+                lines.append(f"  SYNC: already level at {(after or before)[:12]}")
+        else:
+            lines.append(f"  SYNC: {syn.get('stage', '?')} refused — {syn.get('reason', '')[:120]}")
+            if syn.get("blocking"):
+                lines.append(f"    blocking path(s): {', '.join(syn['blocking'])}")
     if report.get("diverged"):
         lines.append(f"  DIVERGED: {json.dumps(report['diverged'], sort_keys=True)}")
     if report.get("behind"):
@@ -580,7 +746,9 @@ def main(argv: list[str] | None = None) -> int:
     # are COMPLETED rounds: the first is the window working, the second is a stale checkout
     # with nothing of its own, and the third is the report the ruling asks for — none is a
     # failure.
-    return 1 if report["status"] in ("no-remote", "unreachable", "unreadable", "push-failed") else 0
+    return 1 if report["status"] in (
+        "no-remote", "unreachable", "unreadable", "push-failed", "ff-blocked",
+    ) else 0
 
 
 if __name__ == "__main__":

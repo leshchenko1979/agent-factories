@@ -112,6 +112,35 @@ def head_of(repo: Path) -> str:
 def ahead(repo: Path, remote_ref: str = "origin/main") -> int:
     return int(git(repo, "rev-list", "--count", f"{remote_ref}..HEAD"))
 
+def sync_of(report: dict) -> dict:
+    """The round's `sync` payload, or an EMPTY dict when the round carried none.
+
+    A missing payload must FAIL a check, not raise: if the sync is ever removed the arms
+    below have to report a clean FAIL, and `report["sync"]["ok"]` on a `None` would instead
+    crash the whole gate at the first arm that reads it."""
+    return report.get("sync") or {}
+
+def write_commit(repo: Path, name: str, content: str) -> str:
+    """Commit `name` with EXPLICIT content, so a second commit on the same path is a real
+    change rather than an empty one -- `commit()` always writes `f"{name}\\n"`, which makes
+    two commits of the same path a no-op and would quietly hollow out a fixture that needs
+    the remote to genuinely advance."""
+    path = repo / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", f"probe: {name}")
+    return head_of(repo)
+
+def configured_clone(root: Path, remote: Path, name: str) -> Path:
+    """A clone of `remote` with a committer identity set, so the fixture can advance the
+    remote from a SECOND checkout the way the live shared tree is advanced by lanes."""
+    dest = root / name
+    git(root, "clone", "-q", str(remote), str(dest))
+    git(dest, "config", "user.email", "probe@probe.invalid")
+    git(dest, "config", "user.name", "probe")
+    return dest
+
 
 # --- pure predicates -----------------------------------------------------------------
 
@@ -326,18 +355,41 @@ def detached_behind_arm() -> None:
         tip_before = git(remote, "rev-parse", "refs/heads/main")
         git(repo, "checkout", "-q", "--detach", stale)
 
-        report = pub.publish(repo, remote="origin", branch="main", grace_secs=0, apply=True)
-
-        tip_after = git(remote, "rev-parse", "refs/heads/main")
+        # REPORT-ONLY is a READ and does not sync (#418 PART 2): the patrol's freshness leg
+        # reads this module's predicates on the same tree, and a read that fast-forwarded
+        # would mutate the surface it was inspecting.
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=0)
         check(
-            report["status"] == "behind" and tip_after == tip_before,
-            "a detached head BEHIND origin/main reports BEHIND (stale checkout is on main's line, not off it)",
+            report["status"] == "behind"
+            and head_of(repo) == stale
+            and git(remote, "rev-parse", "refs/heads/main") == tip_before,
+            "a report-only round on a behind checkout reports BEHIND and moves nothing",
             f"status={report['status']} reason={report['reason'][:90]}",
         )
         check(
             report["diverged"] is None and report["behind"],
             "a pure-ancestor checkout carries NO diverged payload, only behind",
             f"behind={report['behind']} diverged={report['diverged']}",
+        )
+
+        # WITH --apply the same checkout SYNCS FIRST (#418 PART 2, owner q36 -> (a)): the
+        # fast-forward advances HEAD to the tip, so the round no longer reads BEHIND at all.
+        # The checkout has nothing of its own, so the round publishes nothing and the remote
+        # tip is untouched -- advancing the LOCAL checkout is not publishing.
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=0, apply=True)
+        tip_after = git(remote, "rev-parse", "refs/heads/main")
+        check(
+            report["status"] == "in-sync"
+            and sync_of(report).get("ok")
+            and sync_of(report).get("before") == stale
+            and sync_of(report).get("after") == tip_before,
+            "with --apply a behind checkout fast-forwards to the tip, then reports in-sync",
+            f"status={report['status']} sync={sync_of(report)}",
+        )
+        check(
+            head_of(repo) == tip_before and tip_after == tip_before,
+            "the fast-forward advances the CHECKOUT, never the remote tip",
+            f"HEAD={'== tip' if head_of(repo) == tip_before else '!= tip'} remote={'moved' if tip_after != tip_before else 'unchanged'}",
         )
 
 def in_sync_arm() -> None:
@@ -559,7 +611,8 @@ def behind_is_not_diverged_arm() -> None:
         tip_a = git(remote_a, "rev-parse", "refs/heads/main")
         git(repo_a, "checkout", "-q", "--detach", stale)
 
-        report_a = pub.publish(repo_a, remote="origin", branch="main", grace_secs=0, apply=True)
+        # The CLASSIFICATION is read report-only: a read must not sync (#418 PART 2).
+        report_a = pub.publish(repo_a, remote="origin", branch="main", grace_secs=0)
         check(
             report_a["status"] == "behind",
             "fixture A (pure ancestor, ahead==0) reports BEHIND, not DIVERGED",
@@ -574,6 +627,25 @@ def behind_is_not_diverged_arm() -> None:
         check(
             git(remote_a, "rev-parse", "refs/heads/main") == tip_a,
             "the BEHIND round moved nothing (reported, not resolved)",
+            "remote tip unchanged",
+        )
+
+        # THE PART-2 CONTROL (#418 PART 2): the SAME behind checkout, now publishing. The
+        # sync fast-forwards it to the tip FIRST, so it no longer reads BEHIND -- the false
+        # RED the leg suffered on the normal steady state is gone. This is the arm a
+        # pusher that only reports (and never syncs) FAILS, which is what makes the pair
+        # above a finding rather than a tautology.
+        report_a2 = pub.publish(repo_a, remote="origin", branch="main", grace_secs=0, apply=True)
+        check(
+            report_a2["status"] == "in-sync"
+            and sync_of(report_a2).get("ok")
+            and head_of(repo_a) == tip_a,
+            "the same behind checkout, with --apply, syncs to the tip and stops reading BEHIND",
+            f"status={report_a2['status']} sync={report_a2['sync']} HEAD={'== tip' if head_of(repo_a) == tip_a else '!= tip'}",
+        )
+        check(
+            git(remote_a, "rev-parse", "refs/heads/main") == tip_a,
+            "syncing a behind checkout publishes nothing (it had nothing of its own)",
             "remote tip unchanged",
         )
 
@@ -623,6 +695,135 @@ def behind_is_not_diverged_arm() -> None:
             and git(remote_b, "rev-parse", "refs/heads/main") == tip_b,
             "the DIVERGED round moved nothing (reported, not resolved)",
             "both sides unchanged",
+        )
+
+def sync_then_publish_arm() -> None:
+    """#418 PART 2, the ACCEPTANCE fixture (i): a tree BEHIND the remote SYNCS (fetch +
+    fast-forward) and, on top of the fresh tip, publishes its OWN commit.
+
+    The shared tree the cron pusher runs from is a PURE ANCESTOR of `origin/main` most of the
+    time (lanes publish from their own worktrees), so before this change it read a stale
+    cache forever. Two legs, the change and its control:
+      - WITH the sync: the behind tree fast-forwards to the tip, and a commit made on the
+        fresh tip publishes normally.
+      - WITHOUT it (a report-only round does not sync): the same tree stays behind, so the
+        commit it then makes sits ahead AND behind -- a genuine divergence -- and the round
+        publishes NOTHING. That contrast is what makes the first leg a finding rather than a
+        tautology.
+    """
+    for label, sync_first in (("with the sync", True), ("committing while behind (no sync)", False)):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            remote = init_bare(root / "remote.git")
+            seed = init_work(root / "seed", remote)
+            commit(seed, "a.txt")
+            git(seed, "push", "-q", "origin", "main:main")
+            base = head_of(seed)
+
+            tree = configured_clone(root, remote, "tree")
+
+            # A LANE advances `origin/main` past the shared tree, as the worktree law says it
+            # does -- so the tree is now a PURE ANCESTOR (behind, nothing of its own).
+            lane = configured_clone(root, remote, "lane")
+            write_commit(lane, "b.txt", "b\n")
+            git(lane, "push", "-q", "origin", "main:main")
+            tip = git(remote, "rev-parse", "refs/heads/main")
+
+            # The shared repository's checkouts SHARE one object store (the lane worktrees
+            # are worktrees of it), so the remote tip object is present locally even while
+            # HEAD sits behind it. A fetch supplies it in the fixture; it is not the sync --
+            # the sync is the fast-forward, and it is what the two legs below differ on.
+            git(tree, "fetch", "-q", "origin")
+
+            if sync_first:
+                first = pub.publish(tree, remote="origin", branch="main", grace_secs=0, apply=True)
+                synced_to_tip = head_of(tree) == tip
+                check(
+                    first["status"] == "in-sync"
+                    and sync_of(first).get("ok")
+                    and sync_of(first).get("before") == base
+                    and sync_of(first).get("after") == tip
+                    and synced_to_tip,
+                    f"[{label}] a BEHIND tree fast-forwards to the remote tip",
+                    f"status={first['status']} sync={sync_of(first)}",
+                )
+
+            # The tree commits its OWN work -- the ledger rows a shared tree carries.
+            mine = write_commit(tree, "c.txt", "c\n")
+
+            second = pub.publish(tree, remote="origin", branch="main", grace_secs=0, apply=True)
+            tip_after = git(remote, "rev-parse", "refs/heads/main")
+            if sync_first:
+                check(
+                    second["status"] == "published" and tip_after == mine,
+                    f"[{label}] the tree's own commit, on the fresh tip, PUBLISHES",
+                    f"status={second['status']} remote tip {'== HEAD' if tip_after == mine else '!= HEAD'}",
+                )
+            else:
+                check(
+                    second["status"] == "diverged" and tip_after == tip,
+                    f"[{label}] a tree that commits BEFORE syncing is ahead AND behind, so it publishes NOTHING",
+                    f"status={second['status']} remote tip {'moved' if tip_after != tip else 'unchanged'}",
+                )
+
+def sync_blocked_by_a_dirty_tree_arm() -> None:
+    """#418 PART 2, the n=2936 CONSTRAINT: the pusher runs from the SHARED tree, a READ
+    surface that carries other lanes' uncommitted edits. `merge --ff-only` REFUSES when the
+    incoming commits touch a locally-modified path, and the pusher must NOT clobber a peer's
+    in-flight work: it REPORTS the blocking paths and the read instant, and publishes nothing.
+
+    The control clears the local edit and re-runs: the SAME history then fast-forwards
+    cleanly, so the block was the WORKING TREE, not the history -- which is exactly what
+    separates a blocked fast-forward from a genuine divergence.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        seed = init_work(root / "seed", remote)
+        write_commit(seed, "x.txt", "base\n")
+        git(seed, "push", "-q", "origin", "main:main")
+
+        tree = configured_clone(root, remote, "tree")
+        lane = configured_clone(root, remote, "lane")
+        write_commit(lane, "x.txt", "lane advance\n")
+        git(lane, "push", "-q", "origin", "main:main")
+        tip = git(remote, "rev-parse", "refs/heads/main")
+
+        # A peer's in-flight edit, UNCOMMITTED, on a path the incoming commit touches.
+        (tree / "x.txt").write_text("peer in-flight edit\n", encoding="utf-8")
+
+        report = pub.publish(tree, remote="origin", branch="main", grace_secs=0, apply=True)
+        tip_after = git(remote, "rev-parse", "refs/heads/main")
+        kept = (tree / "x.txt").read_text(encoding="utf-8") == "peer in-flight edit\n"
+
+        check(
+            report["status"] == "ff-blocked",
+            "a dirty tree that blocks the fast-forward reports ff-blocked, not diverged",
+            f"status={report['status']} reason={report['reason'][:140]}",
+        )
+        check(
+            sync_of(report).get("blocking") == ["x.txt"],
+            "the round NAMES the blocking path(s)",
+            f"blocking={sync_of(report).get('blocking')}",
+        )
+        check(
+            bool(report["read_at"]) and report["read_at"] in report["reason"],
+            "the round carries the READ INSTANT it observed the block at",
+            f"read_at={report['read_at']}",
+        )
+        check(
+            tip_after == tip and kept,
+            "the block publishes nothing AND does not clobber the peer's edit",
+            f"remote={'moved' if tip_after != tip else 'unchanged'} peer edit {'kept' if kept else 'OVERWRITTEN'}",
+        )
+
+        # THE CONTROL: clear the peer's edit; the SAME history now fast-forwards cleanly.
+        git(tree, "checkout", "-q", "--", "x.txt")
+        again = pub.publish(tree, remote="origin", branch="main", grace_secs=0, apply=True)
+        check(
+            again["status"] == "in-sync" and head_of(tree) == tip,
+            "clearing the local edit lets the SAME history fast-forward -- the block was the tree, not the history",
+            f"status={again['status']} HEAD={'== tip' if head_of(tree) == tip else '!= tip'}",
         )
 
 def remote_tip_is_read_from_the_remote_arm() -> None:
@@ -695,6 +896,8 @@ def main() -> int:
     dry_run_arm()
     divergence_arm()
     behind_is_not_diverged_arm()
+    sync_then_publish_arm()
+    sync_blocked_by_a_dirty_tree_arm()
     remote_tip_is_read_from_the_remote_arm()
     report_arms()
 
