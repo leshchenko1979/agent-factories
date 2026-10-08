@@ -1372,6 +1372,28 @@ def _split_status_line(line: str) -> tuple[str, str]:
         path = path[1:-1]
     return status_code, path
 
+def _deleted_age_minutes(full: str, now: float) -> int | None:
+    """Age, in minutes, of a path that is GONE from the working tree (#447).
+
+    A deleted path has no mtime, so the age is read from its nearest EXISTING
+    ancestor directory: deleting an entry stamps the directory that held it, so
+    `git rm` across N files stamps each file's directory as it goes. The estimate
+    can only come out too YOUNG (a sibling entry changed since), which errs toward
+    ADVISORY — the safe direction in a shared tree, where a false RED on a peer's
+    in-flight deletion is the very defect this discriminates. `None` when no
+    ancestor is readable; the caller treats that as the pre-#447 behaviour.
+    """
+    probe = os.path.dirname(full)
+    while probe and not os.path.isdir(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        probe = parent
+    try:
+        return int((now - os.path.getmtime(probe)) / 60)
+    except OSError:
+        return None
+
 def inspect_git_working_tree(
     repo_dir: str | None = None, now: float | None = None
 ) -> tuple[list[str], list[str], list[str]]:
@@ -1423,9 +1445,28 @@ def inspect_git_working_tree(
         try:
             age_min = int((now - os.path.getmtime(full)) / 60)
         except OSError:
-            # Deleted from the working tree: nothing can be in flight about a file
-            # that is gone, and a deleted tracked file left uncommitted is stranded.
-            violations.append(f"[{status_code}] {path} (missing from the working tree)")
+            # The path is GONE from the working tree: git reports a deleted tracked
+            # file as ` D` (unstaged) or `D ` (staged). Its own mtime is unavailable,
+            # so the age is read from the nearest existing ancestor directory and the
+            # SAME grace discriminator applies as for every other dirty path (#447).
+            # The old branch called any deletion a violation at ANY age, conflating
+            # "the content is not being edited" with "the change is not being made":
+            # a lane that has run `git rm` across N files and is verifying before
+            # committing is exactly in flight, and the audit went RED on it — the #38
+            # race, re-introduced for this one class of change.
+            age_min = _deleted_age_minutes(full, now)
+            if age_min is None:
+                violations.append(
+                    f"[{status_code}] {path} (deleted from the working tree, age unknown)"
+                )
+            elif age_min >= GRACE_MINUTES:
+                violations.append(
+                    f"[{status_code}] {path} (deleted from the working tree, aged {age_min}m)"
+                )
+            else:
+                advisories.append(
+                    f"[{status_code}] {path} (deleted {age_min}m ago — possibly a lane's work in flight)"
+                )
             continue
 
         if status_code == "??":

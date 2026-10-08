@@ -16,7 +16,9 @@ git offers — and this gate holds that classification still:
   * a dirty path younger than the grace window is an **advisory** (printed, rc=0);
   * the same path older than the window is a **violation** (rc=1);
   * litter (`.bak` `.tmp` `.log` `.orig`) is a violation at any age;
-  * `--require-committed <path>` is a violation with no grace at all.
+  * `--require-committed <path>` is a violation with no grace at all;
+  * a **DELETED** tracked file is judged by the same window, its age read from the
+    nearest existing ancestor directory — a deleted path has no mtime (#447).
 
 **The window is the only lever, and this gate proves it.** #38's done-criteria
 ask for both "a lane mid-task does not fail the audit" and "a genuinely stranded
@@ -243,3 +245,87 @@ def test_the_window_is_the_only_lever() -> None:
         assert "untouched for 0m or more" in strict.stderr, (
             f"the audit does not state the window it judged on:\n{strict.stderr}"
         )
+
+def test_a_deleted_tracked_file_within_the_window_is_an_advisory() -> None:
+    """#447 case (a): a lane mid-`git rm` must not turn the audit RED.
+
+    Measured live 2026-10-08 on miidas: a peer lane had run `git rm` across 30
+    stale `landing/` files and was verifying before committing. The audit read
+    `AUDIT_RC=1 · DEGRADED`, naming every deleted path as "(missing from the
+    working tree)" — the #38 race, re-introduced for the deletion class because
+    the classifier's `except OSError` branch bypassed the age discriminator the
+    rest of the tool applies. Two minutes later, once that lane committed, the
+    same tree read GREEN.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _make_repo(Path(tmp))
+        _git(repo, "rm", "-q", "README.md")
+
+        res = _audit(repo)
+        assert res.returncode == 0, (
+            "a fresh `git rm` (a lane verifying before commit) failed the audit — "
+            f"#447 is re-opened:\n{res.stdout}{res.stderr}"
+        )
+        assert "README.md" in res.stderr, (
+            "the deleted path was not reported at all — silence is not the fix; an "
+            f"advisory must still be printed:\n{res.stderr}"
+        )
+        assert "deleted" in res.stderr, (
+            f"the advisory does not say the path was deleted:\n{res.stderr}"
+        )
+
+def test_a_stranded_deletion_still_fails() -> None:
+    """#447 case (b): a deletion older than the window is still a violation.
+
+    The window is the only lever, exactly as #38 ruled for modified files: the
+    same deletion reads advisory at the default window and a violation once the
+    window has passed. A deleted path has no mtime, so the fixture backdates the
+    directory that held it — the deletion's age is read from the nearest existing
+    ancestor directory.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _make_repo(Path(tmp))
+        _git(repo, "rm", "-q", "README.md")
+        _age_minutes(repo, DEFAULT_GRACE_MINUTES + 120)
+
+        res = _audit(repo)
+        assert res.returncode == 1, (
+            "a deletion older than the grace window passed the audit — the deletion "
+            f"class is exempt from the window:\n{res.stdout}{res.stderr}"
+        )
+        assert "README.md" in res.stderr, (
+            f"the stranded deletion is not named:\n{res.stderr}"
+        )
+        assert "deleted from the working tree" in res.stderr, (
+            f"the violation does not state the deletion it judged:\n{res.stderr}"
+        )
+
+def test_a_deleted_subtree_is_aged_by_its_nearest_existing_ancestor() -> None:
+    """#447: `git rm -r <dir>` leaves the deleted files with no parent either.
+
+    The immediate parent is gone too, so an implementation that reads only
+    `os.path.dirname(full)` gets OSError a second time and reports "age unknown" —
+    a violation at any age, which is the defect wearing a new message. The age must
+    come from the nearest EXISTING ancestor. This fixture removes a whole directory
+    and proves both arms still hold.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = _make_repo(Path(tmp))
+        _git(repo, "rm", "-r", "-q", "tests")
+
+        fresh = _audit(repo)
+        assert fresh.returncode == 0, (
+            "a fresh `git rm -r` of a whole directory failed the audit — the age "
+            f"walk does not survive a removed parent:\n{fresh.stdout}{fresh.stderr}"
+        )
+        assert "tests/test_baseline.py" in fresh.stderr, (
+            f"the deleted path was not named:\n{fresh.stderr}"
+        )
+
+        _age_minutes(repo, DEFAULT_GRACE_MINUTES + 120)
+        stranded = _audit(repo)
+        assert stranded.returncode == 1, (
+            "a whole-directory deletion older than the window passed the audit:\n"
+            f"{stranded.stdout}{stranded.stderr}"
+        )
+
