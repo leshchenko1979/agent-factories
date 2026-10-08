@@ -351,3 +351,226 @@ def test_probe_a_quoted_trailer_does_not_count_as_a_run(tmp_path, monkeypatch):
         f"a QUOTED turns= must not count as a run: expected 2, got {high[0].occurrences}"
     )
 
+
+# ---- #273: the DECLARED CONSUMER MAP ---------------------------------------------------
+#
+# Three of the classifier's six categories reached no insight branch. The pattern->insight
+# wiring was a chain of `if`/`elif` over two of them, so `schema_drift`, `vocabulary_leak`
+# and `cadence_pacemaker_stall` were mined, counted and silently dropped -- and the same was
+# true of the ledger-telemetry miner's `yield_drop` and `high_turn_convergence`, which are
+# not classifier keys at all. The dispositive case is `schema_drift`: a full FrictionPattern
+# was AUTHORED for it and never read, which is a stopped port rather than a decision.
+#
+# The wiring is a declaration now, and these probes are what make it a GATE rather than a
+# comment: the map must be exhaustive over every emittable category, every declared consumer
+# must resolve to a real insight, and each of those two legs is shown to BITE.
+
+def _rework_table(rows: list[tuple[str, str, str]]) -> str:
+    """A rework table carrying `(defect, root_cause, prevented_by)` triples.
+
+    Built rather than copied so a probe can drive the classifier into a bucket the LIVE
+    table may not currently feed -- the same reason the dedup probe varies the file rather
+    than the tree: on the live table an arm and its control can be indistinguishable.
+    """
+    lines = [
+        "| Date | Source | Defect | Root cause | Resolution | Prevented by | Subject |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for defect, cause, prevented in rows:
+        lines.append(f"| 2026-10-08 | probe | {defect} | {cause} | probe | {prevented} | #273 |")
+    return "\n".join(lines) + "\n"
+
+def test_the_declared_consumer_map_is_EXHAUSTIVE_and_every_consumer_RESOLVES():
+    """#273 clause 1: every emittable category names a consumer, and every consumer exists.
+
+    The gate reads the ONE invariant the run prints and the audit reads, so the class is
+    loud on all three surfaces rather than only in this file. Both legs are asserted
+    separately here because they fail for different reasons: an undeclared category is a
+    stopped port, a declared consumer absent from the catalogue is a dead pointer.
+    """
+    import synthesize_insights as S
+
+    assert S.consumer_map_problems() == [], (
+        "the declared consumer map must be exhaustive and every consumer must resolve: "
+        f"{S.consumer_map_problems()}"
+    )
+
+    # The declaration is not a parallel list: `synthesize_insights()` READS it, so a
+    # category added to the classifier cannot quietly acquire a default branch again.
+    for category, _ in S.CATEGORY_KEYS:
+        assert category in S.CONSUMER_MAP, category
+    for category in S.LEDGER_TELEMETRY_CATEGORIES:
+        assert category in S.CONSUMER_MAP, category
+    assert S.GENERIC_CATEGORY in S.CONSUMER_MAP
+    for category, consumer in S.CONSUMER_MAP.items():
+        assert consumer == S.CLASSIFICATION_ONLY or consumer in S.INSIGHT_CATALOGUE, (
+            category, consumer
+        )
+
+def test_probe_a_consumer_less_category_is_a_RED_not_a_silent_drop(tmp_path):
+    """#273's gate PROVEN TO BITE: add a category with no declaration and the invariant fires.
+
+    A gate that only asserts `problems == []` on the live tree cannot show it would catch
+    the defect it exists for -- the live map is correct today, so both the right predicate
+    and a broken one read empty. The fixture is a SOURCE FILE carrying a `category=`
+    literal the map does not declare, which is exactly how a new bucket appears in this
+    tool, and the CONTROL is the same file with a declared literal: it must stay clean, or
+    the probe would be red for every input and prove nothing.
+    """
+    import synthesize_insights as S
+
+    control = tmp_path / "declared_miner.py"
+    control.write_text(
+        'def f():\n'
+        '    return FrictionPattern(source="evidence/rework.md", category="schema_drift")\n',
+        encoding="utf-8",
+    )
+    assert S.emitted_category_literals(source=control) == {"schema_drift"}
+    assert S.consumer_map_problems(source=control) == [], (
+        "the control must be clean, or this probe is red for every input"
+    )
+
+    bite = tmp_path / "undeclared_miner.py"
+    bite.write_text(
+        'def f():\n'
+        '    return FrictionPattern(source="evidence/rework.md", '
+        'category="a_bucket_nobody_consumes")\n',
+        encoding="utf-8",
+    )
+    assert "a_bucket_nobody_consumes" in S.emitted_category_literals(source=bite)
+    problems = S.consumer_map_problems(source=bite)
+    assert problems, "an undeclared category must be a PROBLEM, not a silent drop"
+    assert any("a_bucket_nobody_consumes" in p for p in problems), problems
+
+def test_probe_a_dead_consumer_pointer_is_a_RED(monkeypatch):
+    """#273 clause 1, second leg: a declared consumer that resolves to nothing.
+
+    The first leg catches a category with no declaration; this one catches a declaration
+    pointing at an insight id that does not exist. They are separate failures and a map can
+    hold either alone -- a gate over only one of them reports the other as sound.
+    """
+    import synthesize_insights as S
+
+    monkeypatch.setitem(S.CONSUMER_MAP, "schema_drift", "an-insight-that-does-not-exist")
+    problems = S.consumer_map_problems()
+    assert any("an-insight-that-does-not-exist" in p for p in problems), problems
+    assert any("schema_drift" in p for p in problems), problems
+
+def test_probe_the_three_orphan_categories_reach_an_insight():
+    """#273 clause 2: the three former orphans resolve, and `generic` is DECLARED off.
+
+    `None` from `consumer_insight()` is the DECLARED classification-only marker, so an
+    undeclared category must RAISE rather than return it: a default of "skip" is precisely
+    how three categories stayed invisible, since a bucket read and dropped and a bucket
+    never read produce the same silence.
+    """
+    import synthesize_insights as S
+
+    for category, expected_id in [
+        ("schema_drift", "ledger-event-schema-contract"),
+        ("vocabulary_leak", "controlled-vocabulary-alignment"),
+        ("cadence_pacemaker_stall", "cadence-watchdog-deadman"),
+        ("yield_drop", "first-pass-yield-jidoka"),
+        ("high_turn_convergence", "inner-convergence-bounds"),
+    ]:
+        insight = S.consumer_insight(category)
+        assert insight is not None, f"{category} reached no insight -- the stopped port is back"
+        assert insight.id == expected_id, (category, insight.id)
+
+    assert S.consumer_insight(S.GENERIC_CATEGORY) is None, (
+        "generic is classification-only BY DECLARATION, not by a missing branch"
+    )
+
+    try:
+        S.consumer_insight("never_declared_bucket")
+    except KeyError as exc:
+        assert "never_declared_bucket" in str(exc), exc
+    else:
+        raise AssertionError(
+            "an undeclared category must RAISE, never return None -- None is the declared "
+            "classification-only marker and a shared default is the silent drop (#273)"
+        )
+
+def test_probe_the_miner_authors_a_pattern_for_every_declared_non_generic_category(
+    tmp_path, monkeypatch
+):
+    """#273 clause 2, end to end: the port is WIRED, not merely declared.
+
+    Driven from a FIXTURE table that routes two rows each into `vocabulary_leak` and
+    `cadence_pacemaker_stall`, because the live table's counts are history: an entry being
+    resolved would drop a bucket under the two-defect threshold and red a live-driven probe
+    on correct prose. The control half is the assertion that ONLY those two categories
+    fired, so a fixture that leaked into an earlier key cannot pass by accident.
+    """
+    import synthesize_insights as S
+
+    table = tmp_path / "rework.md"
+    table.write_text(
+        _rework_table([
+            ("one concept acquired two names", "a lane coined a synonym for the declared term", "nothing yet"),
+            ("the register listed two spellings", "a synonym entered the vocabulary", "nothing yet"),
+            ("the watchdog cron stopped firing", "its cadence was never declared", "nothing yet"),
+            ("no run appeared for three days", "the pacemaker cadence had stalled", "nothing yet"),
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(S, "REWORK_PATH", table)
+
+    entries = S.classify_rework_entries()
+    assert len(entries) == 4, entries
+    assert {e["category"] for e in entries} == {"vocabulary_leak", "cadence_pacemaker_stall"}, (
+        "the fixture must route into exactly the two buckets under test: "
+        f"{[(e['category'], e['key']) for e in entries]}"
+    )
+
+    patterns = S.mine_rework_defects()
+    by_category = {p.category: p for p in patterns}
+    for category in ("vocabulary_leak", "cadence_pacemaker_stall"):
+        assert category in by_category, (
+            f"{category} cleared the threshold and reached NO FrictionPattern -- the port "
+            f"is declared but not wired: {sorted(by_category)}"
+        )
+        assert by_category[category].occurrences == 2, by_category[category]
+        assert by_category[category].literature_grounding
+        assert by_category[category].suggested_mechanism
+
+def test_probe_a_thresholded_category_with_no_authored_pattern_RAISES(tmp_path, monkeypatch):
+    """#273's stopped-port guard, PROVEN TO BITE.
+
+    `schema_drift` was counted, was in the bucket dict, and reached no branch -- so the
+    bucket a reader saw and the patterns the tool emitted disagreed with no signal anywhere.
+    A category that clears the threshold with no authored pattern now RAISES, and the
+    fixture drives a category the live classifier cannot produce (added to CATEGORY_KEYS
+    for this probe only), because the guard exists for the category that does not exist yet.
+    """
+    import synthesize_insights as S
+
+    table = tmp_path / "rework.md"
+    table.write_text(
+        _rework_table([
+            ("a widget went missing", "the widget registry was stale", "nothing yet"),
+            ("another widget stalled", "widget bookkeeping drifted", "nothing yet"),
+        ]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(S, "REWORK_PATH", table)
+    monkeypatch.setattr(
+        S, "CATEGORY_KEYS", S.CATEGORY_KEYS + (("brand_new_bucket", ("widget",)),)
+    )
+
+    entries = S.classify_rework_entries()
+    assert {e["category"] for e in entries} == {"brand_new_bucket"}, entries
+
+    try:
+        S.mine_rework_defects()
+    except KeyError as exc:
+        # The MESSAGE is asserted, not only the type: an older shape raised a bare
+        # `KeyError('brand_new_bucket')` from the bucket dict, so a type-only assertion is
+        # satisfied by the very code this guard replaced and would prove nothing.
+        assert "NO FrictionPattern is authored" in str(exc), exc
+        assert "brand_new_bucket" in str(exc), exc
+    else:
+        raise AssertionError(
+            "a thresholded category with no authored FrictionPattern must RAISE: counting a "
+            "bucket and dropping it silently is the defect #273 closed"
+        )

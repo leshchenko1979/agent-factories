@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import sys
 from dataclasses import asdict, dataclass
@@ -68,6 +69,128 @@ CATEGORY_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("cadence_pacemaker_stall", ("cadence", "cron", "pacemaker")),
 )
 
+# ---- THE DECLARED CONSUMER MAP (#273, ruled at ledger n=1969) ---------------------------
+#
+# Three of the classifier's six categories reached no insight branch. The pattern->insight
+# wiring was a chain of `if`/`elif` over TWO of them, so `schema_drift`, `vocabulary_leak`
+# and `cadence_pacemaker_stall` were mined, counted and silently dropped. `schema_drift` is
+# the dispositive case: `mine_rework_defects()` authors a full FrictionPattern for it --
+# description, literature grounding and suggested mechanism included -- so a category whose
+# mechanism was WRITTEN and never read is a stopped port, not a deliberate
+# classification-only key. The same test catches two more the ruling did not have to name,
+# because they are not classifier keys at all: the ledger-telemetry miner emits `yield_drop`
+# and `high_turn_convergence`, and NEITHER reached a branch either.
+#
+# The wiring is a DECLARATION now, not a chain. Every category this tool can emit names, in
+# ONE place, either the insight id it feeds or the explicit marker `classification-only`.
+# `synthesize_insights()` reads the map, so a category cannot be added without someone
+# deciding IN WRITING what consumes it -- and `consumer_map_problems()` is the invariant,
+# read by the gate and printed by the run, so a forgotten declaration is a RED rather than a
+# bucket that quietly reaches nothing (#143/#194: a bucket examined and dropped reads
+# exactly like a clean run).
+CLASSIFICATION_ONLY = "classification-only"
+
+# The categories the LEDGER-TELEMETRY miner can emit. They come from the ledger's own
+# telemetry, never from a rework entry's text, so they are NOT classifier keys and cannot
+# appear in CATEGORY_KEYS -- but they reach the consumer map like any other pattern
+# category, and an undeclared one is the same stopped port one level over.
+LEDGER_TELEMETRY_CATEGORIES: tuple[str, ...] = ("yield_drop", "high_turn_convergence")
+
+# The classifier's no-key-fired bucket. `classify_defect()` returns it and
+# `classify_rework_entries()` reports it, but no miner builds a pattern from it -- it is the
+# ABSENCE of a classification, so there is nothing for a consumer to read.
+GENERIC_CATEGORY = "generic"
+
+# The catalogue: insight id -> the insight it builds. Keyed by id and declared ONCE, so the
+# map's entries can be CHECKED against it -- an id resolving to nothing is a dead pointer,
+# which is the same defect one level up.
+INSIGHT_CATALOGUE: dict[str, SynthesizedInsight] = {
+    "single-writer-concurrency-guarantee": SynthesizedInsight(
+        id="single-writer-concurrency-guarantee",
+        topic="Single-Writer File Locking vs Conversational Coordination",
+        stage="stage-2",
+        naive_assumption="Autonomous agents collaborating in the same repo will naturally sequence their writes without file corruption.",
+        empirical_reality="Multi-agent and background cron processes experience silent race conditions and split state without kernel-level locking.",
+        mechanism="Enforce exclusive fcntl.flock on state files with automated single-writer concurrency unit tests.",
+        literature="ACID Transactions & Mutex Locking (Lamport, 1978; Gray, 1981)",
+        confidence=0.98,
+    ),
+    "self-contained-skill-packaging": SynthesizedInsight(
+        id="self-contained-skill-packaging",
+        topic="Skill & Role Card Symlink Resolution across Runtime Profiles",
+        stage="stage-1",
+        naive_assumption="Harness skill loaders will recursively find role files across separate project directories.",
+        empirical_reality="Profile-scoped skill directories require explicit symlinks or bundled roles during factory bootstrap.",
+        mechanism="Codify symlink verification into BOOTSTRAP.md and add deterministic audit gate in audit.py.",
+        literature="Component-Based Architecture & Bounded Contexts (Evans, 2003)",
+        confidence=0.95,
+    ),
+    "ledger-event-schema-contract": SynthesizedInsight(
+        id="ledger-event-schema-contract",
+        topic="Strict Event Contracts for a Row's Declared Fields",
+        stage="stage-2",
+        naive_assumption="Free prose in a row's detail cell carries the same information as a declared, machine-checkable shape.",
+        empirical_reality="Unstructured details drift: a field appears in one lane's rows and not another's, and every reader that must parse the prose re-derives the schema for itself.",
+        mechanism="Mechanical schema validators over the event detail, with a declared field set per event kind.",
+        literature="Strict Contract Interfaces (Meyer, 1988; Schema-First Design)",
+        confidence=0.93,
+    ),
+    "controlled-vocabulary-alignment": SynthesizedInsight(
+        id="controlled-vocabulary-alignment",
+        topic="Controlled Vocabulary & Synonym Leakage across Agent-authored Records",
+        stage="stage-1",
+        naive_assumption="Independent lanes describing the same mechanism will converge on the same term for it.",
+        empirical_reality="They do not: one concept acquires several names, and a reader keyed on one of them reports the others as absent -- a predicate artefact, not a finding.",
+        mechanism="One term table per concept, checked by a gate, so a synonym is a RED rather than a silent second name.",
+        literature="Controlled Vocabularies & Ontology Alignment (Gruber, 1993; SKOS)",
+        confidence=0.90,
+    ),
+    "cadence-watchdog-deadman": SynthesizedInsight(
+        id="cadence-watchdog-deadman",
+        topic="Cadence Watchdogs & Pacemaker Stall Detection",
+        stage="stage-2",
+        naive_assumption="A scheduled job that stops running announces itself, because its outputs simply stop appearing.",
+        empirical_reality="An absent output is indistinguishable from a quiet period: a stalled pacemaker and a healthy one both write nothing, and the silence is only visible against a declared expected cadence.",
+        mechanism="A declared expected cadence per job plus a watchdog that REDs on a missing run past its own interval.",
+        literature="Watchdog Timers & Fail-Stop Systems (Kopetz, 1997)",
+        confidence=0.92,
+    ),
+    "first-pass-yield-jidoka": SynthesizedInsight(
+        id="first-pass-yield-jidoka",
+        topic="First-Pass Yield as the Factory's Stop-the-Line Signal",
+        stage="stage-2",
+        naive_assumption="Rework is absorbed invisibly, so a falling first-pass yield is only a throughput question.",
+        empirical_reality="A yield drop is the earliest mechanical evidence that the feedforward constraint is wrong, and it arrives before any individual failure is filed.",
+        mechanism="Compute one yield from one implementation and stop the line on it, rather than inspecting defects one at a time.",
+        literature="First-Time Yield & Jidoka (Ohno, 1988; Toyota Production System)",
+        confidence=0.94,
+    ),
+    "inner-convergence-bounds": SynthesizedInsight(
+        id="inner-convergence-bounds",
+        topic="Inner Convergence Bounds for a Task Loop",
+        stage="stage-3",
+        naive_assumption="A task loop converges as soon as the work is correct, so turn count measures nothing.",
+        empirical_reality="Runs needing more than three turns are reading a binary verdict and re-deriving the same failure, which is a feedback-bandwidth problem rather than a task-size one.",
+        mechanism="Feed fine-grained error deltas from a multi-criteria judge instead of a binary pass/fail.",
+        literature="Inner Convergence Bounds (Ralph Goal Loop; Requisite Variety)",
+        confidence=0.88,
+    ),
+}
+
+# THE MAP. One entry per category the tool can emit; the value is the insight id it feeds,
+# or `classification-only` where the category is deliberately not converted -- and that
+# marker is a DECISION a reader can audit, which a missing branch never was.
+CONSUMER_MAP: dict[str, str] = {
+    "concurrency_locking": "single-writer-concurrency-guarantee",
+    "symlink_role_resolution": "self-contained-skill-packaging",
+    "schema_drift": "ledger-event-schema-contract",
+    "vocabulary_leak": "controlled-vocabulary-alignment",
+    "cadence_pacemaker_stall": "cadence-watchdog-deadman",
+    "yield_drop": "first-pass-yield-jidoka",
+    "high_turn_convergence": "inner-convergence-bounds",
+    GENERIC_CATEGORY: CLASSIFICATION_ONLY,
+}
+
 
 def classify_defect(text: str) -> tuple[str, str | None]:
     """`(category, the key that fired)` for a rework entry's own text — first match wins.
@@ -114,6 +237,127 @@ def key_fires(key: str, text: str) -> bool:
         if found == 0 or not text[found - 1].isalnum():
             return True
         start = found + 1
+
+
+def consumer_insight(category: str) -> SynthesizedInsight | None:
+    """The insight `category` feeds, or None where it is DECLARED classification-only.
+
+    Raises KeyError, naming the missing declaration, for a category the map does not carry
+    and for a declared id that resolves to no catalogue entry. A default of "skip" is
+    exactly how three categories stayed invisible: an unread bucket and a bucket read and
+    dropped produce the same silence, and neither leaves a trace in the output.
+    """
+    try:
+        consumer = CONSUMER_MAP[category]
+    except KeyError:
+        raise KeyError(
+            f"category {category!r} has NO declared consumer in CONSUMER_MAP (#273) -- every "
+            f"category this tool can emit must name the insight it feeds or the explicit "
+            f"marker {CLASSIFICATION_ONLY!r}"
+        ) from None
+    if consumer == CLASSIFICATION_ONLY:
+        return None
+    try:
+        return INSIGHT_CATALOGUE[consumer]
+    except KeyError:
+        raise KeyError(
+            f"category {category!r} declares consumer {consumer!r}, which is NOT in "
+            f"INSIGHT_CATALOGUE -- a declared consumer must resolve to a real insight (#273)"
+        ) from None
+
+
+def emitted_category_literals(source: Path | None = None) -> set[str]:
+    """Every string LITERAL this tool passes as `category=` when it builds a pattern.
+
+    Parsed from the AST rather than scanned as text. The classifier's own categories reach
+    the miner through a VARIABLE, so the literals are exactly the ones a hand-kept list
+    forgets -- the ledger-telemetry miner's two -- and a text scan would additionally match
+    this function's own source and this module's prose. Paired with CATEGORY_KEYS in
+    `consumer_map_problems()`, the union is every category the tool can emit, so a NEW
+    literal category in a miner is a RED until it is declared.
+    """
+    path = Path(source) if source else Path(__file__).resolve()
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg != "category":
+                continue
+            value = keyword.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                found.add(value.value)
+    return found
+
+
+def consumer_map_problems(source: Path | None = None) -> list[str]:
+    """Every way the declared consumer map can be wrong, as PROBLEM strings (#273).
+
+    ONE home for the invariant: the gate (`tests/test_synthesize_insights.py`) asserts this
+    is empty, the probe beside it adds a consumer-less category and asserts it is NOT, and
+    `main()` prints it -- so a category reaching no consumer is loud on all three surfaces.
+    Empty list = the map is sound.
+    """
+    problems: list[str] = []
+    emittable = (
+        {category for category, _ in CATEGORY_KEYS}
+        | set(LEDGER_TELEMETRY_CATEGORIES)
+        | emitted_category_literals(source)
+        | {GENERIC_CATEGORY}
+    )
+    for category in sorted(emittable):
+        if category not in CONSUMER_MAP:
+            problems.append(
+                f"category {category!r} can be emitted and declares NO consumer in "
+                f"CONSUMER_MAP -- name the insight it feeds or the explicit marker "
+                f"{CLASSIFICATION_ONLY!r} (#273)"
+            )
+    for category, consumer in CONSUMER_MAP.items():
+        if consumer == CLASSIFICATION_ONLY:
+            continue
+        if consumer not in INSIGHT_CATALOGUE:
+            problems.append(
+                f"category {category!r} declares consumer {consumer!r}, which is NOT in "
+                f"INSIGHT_CATALOGUE -- a declared consumer must resolve to a real insight "
+                f"(#273)"
+            )
+    return problems
+
+
+def consumer_population(patterns: list[FrictionPattern]) -> list[dict]:
+    """The per-category population this run EXAMINED, each with its declared consumer.
+
+    #143/#194 class: a bucket examined and silently dropped reads exactly like a clean run.
+    Every category the run saw is listed with its count and its consumer, in declaration
+    order, and a category the run saw that the map does not name is printed as UNDECLARED
+    rather than omitted -- the print is the population, not a summary of it.
+    """
+    counts: dict[str, int] = {}
+    occurrences: dict[str, int] = {}
+    for pattern in patterns:
+        counts[pattern.category] = counts.get(pattern.category, 0) + 1
+        occurrences[pattern.category] = occurrences.get(pattern.category, 0) + pattern.occurrences
+    rows = [
+        {
+            "category": category,
+            "patterns": counts.get(category, 0),
+            "occurrences": occurrences.get(category, 0),
+            "consumer": consumer,
+        }
+        for category, consumer in CONSUMER_MAP.items()
+    ]
+    for category in sorted(counts):
+        if category not in CONSUMER_MAP:
+            rows.append(
+                {
+                    "category": category,
+                    "patterns": counts[category],
+                    "occurrences": occurrences[category],
+                    "consumer": "UNDECLARED",
+                }
+            )
+    return rows
 
 
 def persisted_insight_ids() -> set[str]:
@@ -207,14 +451,15 @@ def mine_rework_defects() -> list[FrictionPattern]:
 
     # Category buckets, filled from the classifier's own output so the bucket a pattern
     # counts and the key that put it there cannot disagree.
+    #
+    # DERIVED from the key list, never hand-kept (#273). A second hard-coded list is the
+    # same defect one level down: it drifts from `CATEGORY_KEYS`, and a new key then dies
+    # at the dict lookup with a bare `KeyError('new_bucket')` -- an error that says nothing
+    # about the real question, which is whether a pattern is authored for it.
     categories: dict[str, list[str]] = {
-        "concurrency_locking": [],
-        "symlink_role_resolution": [],
-        "schema_drift": [],
-        "vocabulary_leak": [],
-        "cadence_pacemaker_stall": [],
-        "generic": [],
+        category: [] for category, _ in CATEGORY_KEYS
     }
+    categories[GENERIC_CATEGORY] = []
     for entry in classify_rework_entries():
         categories[entry["category"]].append(entry["defect"])
 
@@ -247,6 +492,38 @@ def mine_rework_defects() -> list[FrictionPattern]:
                     literature_grounding="Strict Contract Interfaces (Meyer, 1988; Schema-First Design)",
                     suggested_mechanism="Mechanical schema validators (test_ledger_schema.py)."
                 ))
+            elif cat == "vocabulary_leak":
+                patterns.append(FrictionPattern(
+                    source="evidence/rework.md",
+                    category=cat,
+                    description=f"Terms leaking between role vocabularies, or off-register synonyms ({len(items)} defects).",
+                    occurrences=len(items),
+                    literature_grounding="Controlled Vocabulary & Ontology Discipline (ISO 25964; Domain-Driven Design ubiquitous language)",
+                    suggested_mechanism="A declared term register with a lint leg that fails on an undeclared synonym (test_vocabulary_register.py)."
+                ))
+            elif cat == "cadence_pacemaker_stall":
+                patterns.append(FrictionPattern(
+                    source="evidence/rework.md",
+                    category=cat,
+                    description=f"Pacemakers or crons that stopped firing without anyone noticing ({len(items)} defects).",
+                    occurrences=len(items),
+                    literature_grounding="Deadman Switch & Watchdog Timers (heartbeat liveness detection)",
+                    suggested_mechanism="A last-fired timestamp per cron with a staleness leg that reports a silent cadence (test_cadence_liveness.py)."
+                ))
+            elif CONSUMER_MAP.get(cat) == CLASSIFICATION_ONLY:
+                # Declared classification-only: counted, and deliberately not consumed. The
+                # declaration IS the trace, so this is not a stopped port (#273).
+                continue
+            else:
+                # A category that fires often enough to be a pattern but has no authored
+                # description here is a STOPPED PORT, not a bucket to skip: `schema_drift`
+                # was counted, was in this dict, and reached no branch for exactly this
+                # reason (#273). Say so loudly instead of returning a shorter list.
+                raise KeyError(
+                    f"category {cat!r} cleared the {len(items)}-defect threshold in "
+                    f"mine_rework_defects() but NO FrictionPattern is authored for it -- "
+                    f"author one, or the cluster is counted and then silently dropped (#273)"
+                )
 
     return patterns
 
@@ -333,30 +610,13 @@ def synthesize_insights() -> list[SynthesizedInsight]:
 
     insights: list[SynthesizedInsight] = []
 
-    # Map patterns to canonical insights
+    # Map patterns to their DECLARED consumer (#273). The map is READ, never re-derived as a
+    # chain of `if`/`elif`: the chain is what silently dropped three of six categories, and
+    # `consumer_insight()` REFUSES an undeclared category rather than skipping it.
     for p in all_patterns:
-        if p.category == "concurrency_locking":
-            insights.append(SynthesizedInsight(
-                id="single-writer-concurrency-guarantee",
-                topic="Single-Writer File Locking vs Conversational Coordination",
-                stage="stage-2",
-                naive_assumption="Autonomous agents collaborating in the same repo will naturally sequence their writes without file corruption.",
-                empirical_reality="Multi-agent and background cron processes experience silent race conditions and split state without kernel-level locking.",
-                mechanism="Enforce exclusive fcntl.flock on state files with automated single-writer concurrency unit tests.",
-                literature="ACID Transactions & Mutex Locking (Lamport, 1978; Gray, 1981)",
-                confidence=0.98,
-            ))
-        elif p.category == "symlink_role_resolution":
-            insights.append(SynthesizedInsight(
-                id="self-contained-skill-packaging",
-                topic="Skill & Role Card Symlink Resolution across Runtime Profiles",
-                stage="stage-1",
-                naive_assumption="Harness skill loaders will recursively find role files across separate project directories.",
-                empirical_reality="Profile-scoped skill directories require explicit symlinks or bundled roles during factory bootstrap.",
-                mechanism="Codify symlink verification into BOOTSTRAP.md and add deterministic audit gate in audit.py.",
-                literature="Component-Based Architecture & Bounded Contexts (Evans, 2003)",
-                confidence=0.95,
-            ))
+        insight = consumer_insight(p.category)
+        if insight is not None:
+            insights.append(insight)
 
     # Add canonical architectural insights if not ALREADY PERSISTED (#166).
     #
@@ -412,6 +672,13 @@ def main() -> int:
     ledger_patterns = mine_ledger_telemetry()
     insights = synthesize_insights()
 
+    # THE POPULATION AND THE INVARIANT (#273). Both are computed on EVERY run, so a bucket
+    # that reached no consumer and a category declared with no consumer are visible whether
+    # or not anyone remembers to look -- the class the ruling names (#143/#194).
+    population = consumer_population(rework_patterns + ledger_patterns)
+    map_problems = consumer_map_problems()
+    dropped = [row for row in population if row["consumer"] == CLASSIFICATION_ONLY]
+
     # The FIRING TOKEN per rework entry (#168). A bucket count says how many entries landed
     # in a bucket, never WHY, and the why is what separates a real match from a word that
     # merely contains the key — `block` and `clock` both contained `lock`, and `trace` and
@@ -424,13 +691,25 @@ def main() -> int:
             "friction_patterns": [asdict(p) for p in (rework_patterns + ledger_patterns)],
             "synthesized_insights": [asdict(i) for i in insights],
             "rework_classification": classification,
-            "healthy": True,
+            # The declared consumer map, its per-category population, and the invariant's
+            # own verdict (#273) -- a JSON reader must be able to tell a category that fed
+            # nothing BY DECLARATION from one that fed nothing by omission.
+            "consumer_map": population,
+            "consumer_map_problems": map_problems,
+            "classification_only": {"declared": len(dropped), "of": len(population)},
+            "healthy": not map_problems,
         }
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
 
     if args.audit:
-        print(f"Insight synthesis clean: {len(rework_patterns) + len(ledger_patterns)} friction patterns, {len(insights)} insights synthesized.")
+        print(
+            f"Insight synthesis clean: {len(rework_patterns) + len(ledger_patterns)} friction "
+            f"patterns, {len(insights)} insights synthesized, "
+            f"classification-only: {len(dropped)} of {len(population)} declared categor(ies)."
+        )
+        for problem in map_problems:
+            print(f"PROBLEM: {problem}")
         return 0
 
     print("## Autonomous Telemetry Mining & Insight Synthesis\n")
@@ -456,6 +735,24 @@ def main() -> int:
         print(f"- **[{p.category}]** {p.description} (Occurrences: {p.occurrences})")
         print(f"  *Literature Grounding:* {p.literature_grounding}")
         print(f"  *Suggested Mechanism:* {p.suggested_mechanism}\n")
+
+    print("### Declared Consumer Map - what each category feeds (#273)\n")
+    print(
+        "Every category this run can emit declares, in ONE place, the insight it feeds or "
+        "the explicit marker `classification-only`. A bucket examined and dropped reads "
+        "exactly like a clean run, so the map is PRINTED with its own counts.\n"
+    )
+    for row in population:
+        print(
+            f"- **{row['category']}**: {row['patterns']} pattern(s), "
+            f"{row['occurrences']} occurrence(s) -> {row['consumer']}"
+        )
+    print(
+        f"\nclassification-only: {len(dropped)} of {len(population)} entries "
+        f"({', '.join(row['category'] for row in dropped) or 'none'})\n"
+    )
+    for problem in map_problems:
+        print(f"**PROBLEM:** {problem}\n")
 
     print(f"### Synthesized Architectural Insights ({len(insights)})\n")
     for i in insights:
