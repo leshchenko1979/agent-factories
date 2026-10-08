@@ -119,8 +119,8 @@
       "affects": [
         "profile"
       ],
-      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 23 divergences from it in registry/kit-exemptions.json. Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 31 carried paths judged, 1 factory-class path excluded by class, 23 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
-      "evidence": "Measured 2026-10-07 by the miidas HQ lane: python3 tests/test_kit_pin_member.py rc=0, 'PASS \u2014 31 carried path(s) judged; 23 fork(s) declared; 0 undeclared divergence'. The count moved 19 -> 23 on 2026-10-06 (#103), when the four role-card forks \u2014 roles/hq.md, roles/triage.md, roles/worker.md, roles/carrier.md \u2014 were declared; before that declaration the same gate read RED (rc=1, 4 undeclared). Pin version 6ab591c618ec, 128 paths declared."
+      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 23 divergences from it in registry/kit-exemptions.json (19 original, plus the four role-card forks \u2014 roles/hq.md, roles/triage.md, roles/worker.md, roles/carrier.md \u2014 added 2026-10-06 under #103). Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 31 carried paths judged, 1 factory-class path excluded by class, 23 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
+      "evidence": "Measured 2026-10-08 by the miidas lane: python3 tests/test_kit_pin_member.py rc=0, 'judged 31 carried path(s); 1 factory-class path(s) excluded by class; 23 declared exempt'; 0 undeclared divergence. Pin version 6ab591c618ec, 128 paths declared. The 23 = 19 original + the four role-card forks declared 2026-10-06 (#103)."
     },
     {
       "id": "miidas-slot-volume-git-config-carries-remote-credential",
@@ -188,7 +188,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-07T07:01:43Z",
+  "attested_at": "2026-10-08T06:10:17Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

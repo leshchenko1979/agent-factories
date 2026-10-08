@@ -100,16 +100,6 @@
         "infra-factory"
       ],
       "evidence": "Commit 452b08c8 in leshchenko1979/servers (2026-09-17) - the `since` is that commit's instant, the moment the literals landed; it is the one date I can stand behind and I am NOT inventing a second. New-API half committed in inferhub-watch 5fb4f2f (2026-09-17T01:08:46Z). Liveness measured 2026-09-24/25 digest-only: root token sha256_8 de0d7f4c authenticates id=1/role=100; INITIAL_ROOT_ACCESS_TOKEN first-32 -> HTTP 200, full 48 -> 401; INITIAL_ROOT_PASSWORD -> POST /api/user/login HTTP 200; SQL_DSN password sha256_8 d5bae8c3 == PGPASSWORD in /root/.inferhub_pg.env. Re-measured 2026-09-25: the two inferhub-watch literals are STILL present (sha256_8 de0d7f4c, both files). Config.Entrypoint=[/new-api] Cmd=[] closes the re-seed question structurally (PID 1 IS the binary; nothing can re-read those env names at boot). Scanned by digest only; no value printed, none on any command line."
-    },
-    {
-      "id": "inferhub-auto-route-failure-escalation",
-      "text": "The inferhub first hop in the ops fallback chain degrades under load, independent of the retired auto-switcher: at its worst (24h to 2026-09-27T05:08Z) it measured 2,852 failures of 21,242 requests (13.4%) \u2014 499x1218, 502x994, 429x486, 402x140 \u2014 concentrated on cheap iq-75-plus combo members. That spike is RESOLVED and tracked-to-close: #158 closed 2026-10-06T12:36:24Z as COMPLETED, and the latest daily card (10-06 05:03Z -> 10-07 05:03Z) reads 41 failed of 13,149 (0.31%), top codes 429x22 / 402x14 / 499x3. The abatement is consistent with the owner's 2026-10-03 ch43 priority demotion (300 -> 100), though the card cannot establish causation.",
-      "severity": "warning",
-      "since": "2026-09-27T06:36:31Z",
-      "affects": [
-        "profile"
-      ],
-      "evidence": "leshchenko1979/inferhub-watch#158; usage_logs non-probe 24h window; new-api and OpenCrabs daemon logs"
     }
   ],
   "lanes": [
@@ -139,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-07T06:14:06Z",
+  "attested_at": "2026-10-08T06:06:28Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
