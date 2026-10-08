@@ -723,6 +723,12 @@ the remedy is **protocol, not mechanism**:
 - **The unpublished sibling re-appends at the next free `n`**, and owes **no** `re-minted-from`
   declaration: the lost copy was never published, and declaring it would imply a published row moved,
   which is the one thing §9.6 forbids.
+- **A re-minted row is RE-DERIVED against the new instants, never copied from the discarded row.**
+  The re-append mints a FRESH `ts` — the append instant — so every clause that relates an instant to
+  another (*"X preceded Y"*, *"stamped before this notify"*, *"the row above"*) is a claim about the
+  OLD `ts` until it is re-read. The narrative may be carried over; **every instant and every
+  instant-relation in it may not.** A clause that was true of the discarded row and false of the
+  re-minted one is a **FALSE RECORD** — indistinguishable from a verified one once published.
 - **A fork where BOTH sides are PUBLISHED is DECIDED, and it is never the case above: the removal is
   UNLAWFUL, and the repair is an append-only RECONCILIATION ROW.** The re-mint freedom does not reach
   it — a row a peer can observe has an identity, and moving that row removes the identity from the
