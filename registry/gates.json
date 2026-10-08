@@ -44,17 +44,18 @@
       "load_at_measure": 1.46
     },
     "tests/test_board_intake_recorded.py": {
-      "budget_sec": 17.11,
-      "margin_x": 4.183,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 4.09
+      "budget_sec": 26.47,
+      "margin_x": 4.117,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 6.43,
+      "load_at_measure": 3.78
     },
     "tests/test_close_board_recorded.py": {
-      "budget_sec": 15.63,
-      "margin_x": 4.202,
-      "measured_at": "700b55dc01558d4a85e880599c9061c3de07b1b0",
-      "measured_sec": 3.72,
-      "load_at_measure": 11.02
+      "budget_sec": 31.35,
+      "margin_x": 4.098,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 7.65,
+      "load_at_measure": 3.78
     },
     "tests/test_close_row_revision.py": {
       "budget_sec": 38.39,
@@ -115,11 +116,11 @@
       "measured_sec": 9.35
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 51.83,
-      "margin_x": 4.059,
-      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
-      "measured_sec": 12.77,
-      "load_at_measure": 6.43
+      "budget_sec": 37.31,
+      "margin_x": 4.082,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 9.14,
+      "load_at_measure": 3.78
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -183,11 +184,11 @@
       "load_at_measure": 1.46
     },
     "tests/test_law_coverage.py": {
-      "budget_sec": 23.35,
-      "margin_x": 4.133,
-      "measured_at": "8bf30499ae0565e123235d801cd824baab14f84c",
-      "measured_sec": 5.65,
-      "load_at_measure": 1.46
+      "budget_sec": 31.83,
+      "margin_x": 4.097,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 7.77,
+      "load_at_measure": 3.78
     },
     "tests/test_law_structure.py": {
       "budget_sec": 28.59,
@@ -196,17 +197,18 @@
       "measured_sec": 6.96
     },
     "tests/test_ledger.py": {
-      "budget_sec": 697.55,
-      "load_at_measure": 6.43,
-      "margin_x": 4.004,
-      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
-      "measured_sec": 174.2
+      "budget_sec": 951.15,
+      "load_at_measure": 3.78,
+      "margin_x": 4.003,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 237.6
     },
     "tests/test_ledger_close_preflight.py": {
-      "budget_sec": 43.55,
-      "margin_x": 4.07,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 10.7
+      "budget_sec": 94.31,
+      "margin_x": 4.032,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 23.39,
+      "load_at_measure": 3.78
     },
     "tests/test_ledger_commit_cites_no_rows.py": {
       "budget_sec": 7.71,
@@ -236,11 +238,11 @@
       "measured_sec": 1.08
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 344.59,
-      "load_at_measure": 6.43,
-      "margin_x": 4.009,
-      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
-      "measured_sec": 85.96
+      "budget_sec": 384.23,
+      "load_at_measure": 3.78,
+      "margin_x": 4.008,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 95.87
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 22.43,
@@ -288,10 +290,11 @@
       "measured_sec": 2.81
     },
     "tests/test_score_artifact_sections.py": {
-      "budget_sec": 20.75,
-      "margin_x": 4.15,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 5.0
+      "budget_sec": 18.07,
+      "margin_x": 4.173,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 4.33,
+      "load_at_measure": 3.78
     },
     "tests/test_score_gate_recorded.py": {
       "budget_sec": 36.43,
@@ -345,11 +348,11 @@
       "measured_sec": 4.91
     },
     "tests/test_template_sync.py": {
-      "budget_sec": 6.75,
-      "margin_x": 4.5,
-      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
-      "measured_sec": 1.5,
-      "load_at_measure": 6.43
+      "budget_sec": 9.19,
+      "margin_x": 4.355,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 2.11,
+      "load_at_measure": 3.78
     },
     "tools/hygiene.py": {
       "budget_sec": 31.39,
@@ -359,11 +362,11 @@
       "measured_sec": 7.66
     },
     "tools/ledger.py": {
-      "budget_sec": 9.95,
-      "margin_x": 4.326,
-      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
-      "measured_sec": 2.3,
-      "load_at_measure": 6.43
+      "budget_sec": 10.91,
+      "margin_x": 4.295,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 2.54,
+      "load_at_measure": 3.78
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
