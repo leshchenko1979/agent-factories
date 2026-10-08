@@ -3663,12 +3663,129 @@ def is_board_unit_occurrence(blob: str, start: int) -> bool:
             return False
     return True
 
+# THE PARK TOKEN (#331 clause 1): `park:owner:<question>`, declared in a work unit's OWN
+# ledger row. HQ's C1 scope ruling (n=2884) fixes the shape at ONE -- the register is the
+# only sanctioned blocked-on-you channel (docs/instruments/open-questions.md section 3), so
+# the token names a REGISTER QUESTION and nothing else. A unit waiting on a board memo has
+# no truthful token; `park:owner:memo:<issue>#<comment>` is REFUSED, and #301/#312/#313 wait
+# on q39 once it is minted.
+#
+# IT IS READ FROM THE ROWS, NOT FROM A TABLE, and the deciding evidence is the live ledger:
+# Triage's own park rows for #317/#320 (n=2881/n=2882) carry the token as the LAST LINE of
+# their `detail`, and each says in as many words that "this row is the declared park HQ's C1
+# defines". A table this tree edits would never see them, so the declaration the census has
+# to honour is the one already written.
+#
+# THE TOKEN MUST STAND ALONE ON A LINE OF ITS OWN. The correction row beside those two
+# (n=2883) QUOTES the token shape in prose while carrying no token itself -- it names
+# `park:owner:q30` and `park:owner:q39` mid-sentence and closes "THIS ROW CARRIES NO PARK
+# TOKEN". A reader that matched the substring would park #301 on the very mis-citation that
+# row exists to withdraw, so a declaration is a line of its own and a mention is not.
+PARK_TOKEN_RE = re.compile(r"^park:owner:(q\d+)$")
+PARK_TOKEN_PREFIX = "park:owner:"
+
+
+def declared_parks(
+    rows: list[dict], is_unit, precedes_filing=None
+) -> tuple[dict[str, tuple[str, dict]], list[str]]:
+    """Read every `park:owner:<question>` declaration off the units' own ledger rows.
+
+    Returns `{unit: (question_id, row)}` holding the NEWEST declaration per unit, plus
+    problem strings. The declaring ROW travels with the question because the census must be
+    able to print which row declared the park -- a park no reader can trace to a row is a
+    claim, not a declaration.
+
+    A LINE THAT TRIES TO DECLARE AND CANNOT BE READ IS A PROBLEM, never a silent pass: the
+    factory believes it parked something the census cannot see, and the census would then go
+    on reporting that unit OWED -- a defect in the declaration wearing the shape of a finding
+    about the unit. The ONE shape is `park:owner:qN`, the id being a register question (HQ
+    n=2884); the refused `memo:` form, a bare `<question>` placeholder and an empty id all
+    land here. A member factory whose register mints a different id shape gets a visible
+    problem rather than a silent non-park -- that is the honest direction, and it is a law
+    question to settle, not one for this reader to guess at.
+
+    A unit whose rows name two DIFFERENT questions is not adjudicated: the newest declaration
+    wins and the PARKED line names the question and row it read, so a re-park (one question
+    answered, another standing) is a traceable act rather than a silent overwrite.
+    """
+    declarations: dict[str, list[tuple[str, dict]]] = {}
+    problems: list[str] = []
+    for row in rows:
+        subject = str(row.get("subject") or "").strip()
+        if not is_unit(subject):
+            continue
+        if precedes_filing is not None and precedes_filing(row.get("ts"), subject):
+            continue
+        for line in str(row.get("detail") or "").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith(PARK_TOKEN_PREFIX):
+                continue
+            match = PARK_TOKEN_RE.match(stripped)
+            if not match:
+                problems.append(
+                    f"row n={row.get('n')} ({subject}) declares a park in a shape this leg "
+                    f"cannot read: {stripped!r} -- the ONE shape is `park:owner:<question>` "
+                    f"with a register question id (qN). The refused `memo:` form, a "
+                    f"`<placeholder>` standing in for an id, or a prose line that merely "
+                    f"STARTS with the prefix all land here: reword it, or make the "
+                    f"declaration a line of its own (#331, HQ n=2884)"
+                )
+                continue
+            declarations.setdefault(subject, []).append((match.group(1), row))
+    parks: dict[str, tuple[str, dict]] = {}
+    for unit, items in declarations.items():
+        items.sort(key=lambda item: _ledger_row_order(item[1]))
+        parks[unit] = items[-1]
+    return parks, problems
+
+def _ledger_row_order(row: dict) -> tuple:
+    """A dispatch row's append order: its `n` where the read declares one, else its stamp.
+
+    `n` first because it IS the append order and a stamp can be backdated; the stamp is the
+    fallback for a read that carries no `n`, which is every synthetic fixture and any member
+    factory whose ledger reader does not number its rows. Comparing the pair is what keeps
+    the ordering TOTAL rather than partial, so "the newest declaration" is a defined answer
+    for any pair of rows rather than only for rows that happen to carry both fields.
+    """
+    n = row.get("n")
+    return (n if isinstance(n, int) else -1, str(row.get("ts") or ""))
+
+def stall_lane_names() -> dict[str, str]:
+    """Live session id -> lane name, from the box's own session bindings (#331 clause 2).
+
+    The OWED line must name the LANE a dispatch was ADDRESSED to, and a dispatch row
+    declares that lane as a session id. Turning an id into a name is the registry's job, so
+    this reads the SAME binding rows the registry leg reads -- `all_bindings()` -- and derives
+    each name from the bound session's own title, the one read that needs no declaration to be
+    present in a member factory that adopted this kit without one.
+
+    A read that fails returns an EMPTY map rather than raising. The stall-census verdict is
+    about stalled UNITS, and a binding store this read could not open must not decide it: an
+    empty map makes every addressee UNRESOLVED, which the OWED line states in words -- the
+    honest direction, and never the author printed in the addressee's slot.
+    """
+    try:
+        registry = load_module("oc_registry", REGISTRY)
+        bindings, _errors = registry.all_bindings()
+    except Exception:
+        return {}
+    names: dict[str, str] = {}
+    for row in bindings:
+        session_id = str(row.get("session_id") or "")
+        if not session_id or session_id in names:
+            continue
+        name, _canonical = registry.lane_name_from_title(row.get("session_title"))
+        if name:
+            names[session_id] = name
+    return names
+
 def stall_census_leg(
     issues: list[dict],
     rows: list[dict],
     *,
     read_at: str,
     threshold_days: float = STALL_CENSUS_THRESHOLD_DAYS,
+    lane_names_fn=None,
 ) -> dict:
     """Every unit dispatched and NEVER claimed, past the declared threshold.
 
@@ -3727,6 +3844,38 @@ def stall_census_leg(
     clear. These lines are this factory's own, and the lane the patrol wakes -- Triage --
     can clear every one of them by re-dispatching the unit or closing it on the board. The
     red is an andon cord with a working exit, not the no-exit class #139 names.
+
+    A PARKED UNIT IS NOT A FINDING (#331 clause 1). This factory can DECLARE a work unit
+    parked on something outside its own reach -- an owner question above all -- and the
+    declaration is a `park:owner:<question>` token standing alone on a line of that unit's
+    OWN ledger row. The unit then reads PARKED instead of OWED, leaves the `units_owed`
+    total, and its exclusion is PRINTED beside the verdict. It is read from the rows rather
+    than from a table this tree edits because the rows are where the declaration already
+    lives: Triage's park rows for #317/#320 (n=2881/n=2882) carry the token as their last
+    line, and a table would never have seen them.
+
+    A PARK IS SUPERSEDED BY A LATER DISPATCH, and that guard is the whole reason the
+    declaration can be trusted as a state rather than a permanent gag. An append-only ledger
+    keeps every park row forever, so a unit re-dispatched after its park would otherwise stay
+    silently held out of the census for good; a dispatch-bearing row NEWER than the declaring
+    row puts the unit back in play, and the supersession is PRINTED so the stale declaration
+    is visible rather than merely obeyed. A row that tries to declare and cannot be read (the
+    refused `memo:` shape, a `<placeholder>` for an id, a prose line that merely starts with
+    the prefix) is a PROBLEM, never a silent pass: a declaration the census cannot see is
+    indistinguishable from no declaration, and it re-arms the very line the park was written
+    to stop -- a defect in the declaration wearing the shape of a finding about the unit.
+
+    THE OWED LINE NAMES THE ADDRESSEE, NEVER THE AUTHOR (#331 clause 2). It used to print
+    `actor={actor}` -- the author of the dispatch-bearing row, which for a re-dispatch is
+    whoever ran the census, usually Triage, never the lane the work belongs to -- beside the
+    advice to "re-dispatch it to the lane that owns it". An author printed in that slot reads
+    as an assignment, which is worse than an empty one. The addressee is the unit's MOST
+    RECENT DECLARED ROUTING: a typed `session` ref, the same declaration the dispatch-delivery
+    leg corroborates against, resolved to a lane name through the box's own session bindings.
+    A later row that declares none does not erase an earlier declaration -- silence is not a
+    re-routing -- so the search runs newest-first and stops at the first declaration. Where no
+    row declares a target, or the declaration resolves to no lane name this read knows, the
+    line SAYS SO in words; it never falls back to the author.
     """
     is_unit = ledger_predicate().is_work_unit
 
@@ -3746,6 +3895,11 @@ def stall_census_leg(
             return reader_parse_ts(str(ts or "")) < created
         except (ValueError, TypeError):
             return False
+
+    # THE DECLARED PARKS (#331 clause 1), read ONCE, off the units' OWN rows. Read HERE,
+    # after `precedes_filing`, because a park row that predates the board item's own filing
+    # is a cross-namespace subject collision (#415) and not a declaration about this unit.
+    parks, park_problems = declared_parks(rows, is_unit, precedes_filing)
 
     claimed: set[str] = set()
     closed: set[str] = set()
@@ -3806,6 +3960,37 @@ def stall_census_leg(
 
     dispatch_rows = [row for row in rows if str(row.get("event") or "") == "dispatch"]
     carriers: dict[str, dict] = {}
+    # THE DECLARED ROUTING (#331 clause 2), per unit: the NEWEST dispatch-bearing row that
+    # declares a typed `session` target, and how many dispatch-bearing rows the unit has at
+    # all. Both are read off EVERY dispatch-bearing row rather than off the one `carriers`
+    # holds, because the two questions differ: `carriers` keeps the EARLIEST row, which is
+    # what the age is measured from (#308), while the addressee is where the work was LAST
+    # sent. A later row that declares no target does NOT erase an earlier declaration --
+    # silence is not a re-routing -- so the map keeps the newest row that actually declares.
+    declared_refs: dict[str, tuple[str, dict]] = {}
+    dispatch_counts: dict[str, int] = {}
+    # THE NEWEST DISPATCH-BEARING ROW, per unit, kept for the PARK SUPERSESSION test alone
+    # (#331 clause 1): a park is a state read off the rows, and the ledger keeps every row
+    # forever, so a unit re-dispatched AFTER its park would stay silently held out of the
+    # census for good. A dispatch newer than the declaring row puts the unit back in play.
+    newest_dispatch: dict[str, dict] = {}
+
+    def declare(unit: str, row: dict) -> None:
+        """Record one dispatch-bearing row against the unit it dispatched."""
+        dispatch_counts[unit] = dispatch_counts.get(unit, 0) + 1
+        held_row = newest_dispatch.get(unit)
+        if held_row is None or _ledger_row_order(row) >= _ledger_row_order(held_row):
+            newest_dispatch[unit] = row
+        session_ref = next(
+            (str(value) for ref in (row.get("refs") or [])
+             for kind, value in ref.items() if kind == "session"), ""
+        )
+        if not session_ref:
+            return
+        held = declared_refs.get(unit)
+        if held is None or _ledger_row_order(row) >= _ledger_row_order(held[1]):
+            declared_refs[unit] = (session_ref, row)
+
     observation = 0
     carried_units = 0
     pre_filing_rejected = 0
@@ -3820,6 +4005,7 @@ def stall_census_leg(
                 pre_filing_rejected += 1
             else:
                 carriers.setdefault(subject, row)
+                declare(subject, row)
             continue
         blob = f"{row.get('detail') or ''} {row.get('refs') or ''}"
         units = {
@@ -3849,10 +4035,14 @@ def stall_census_leg(
         carried_units += len(units)
         for unit in units:
             carriers.setdefault(unit, row)
+            declare(unit, row)
 
-    problems: list[str] = []
+    problems: list[str] = list(park_problems)
     excused: list[str] = []
-    owed: list[tuple[str, float, str, list[str]]] = []
+    owed: list[dict] = []
+    parked: list[str] = []
+    parked_units: set[str] = set()
+    park_superseded: list[str] = []
     off_board = 0
     for unit, row in carriers.items():
         if unit not in open_on_board:
@@ -3873,28 +4063,117 @@ def stall_census_leg(
         age_days = (now - fired).total_seconds() / 86400.0
         if age_days < threshold_days:
             continue
-        actor = str(row.get("actor") or "unstated")
-        owed.append((unit, age_days, actor, board_assignees.get(unit, [])))
+        # THE PARK STATE (#331 clause 1). The unit reaches the OWED predicate and a declared
+        # park holds it: it reads PARKED, it is NOT a finding, and it leaves the owed total.
+        # The park is checked HERE, after the age test, so the declaration can only ever
+        # REMOVE a line the census would otherwise report -- never add one, and never change
+        # the age of a line it does not hold.
+        park = parks.get(unit)
+        if park is not None:
+            question, park_row = park
+            superseding = newest_dispatch.get(unit)
+            if (
+                superseding is not None
+                and _ledger_row_order(superseding) > _ledger_row_order(park_row)
+            ):
+                # SUPERSEDED, and printed rather than obeyed: the ledger keeps every park row
+                # forever, so a unit put back in play by a LATER dispatch would otherwise stay
+                # held out of the census for good, and the stale declaration would read as a
+                # live park. The line stays OWED; the note says why the declaration no longer
+                # holds.
+                park_superseded.append(
+                    f"{unit} declares park:owner:{question} at row n={park_row.get('n')}, but "
+                    f"a LATER dispatch-bearing row n={superseding.get('n')} puts it back in "
+                    f"play -- the park is SUPERSEDED, so the unit stays OWED (#331)"
+                )
+            else:
+                parked_units.add(unit)
+                parked.append(
+                    f"PARKED {unit}: dispatched {age_days:.2f} d ago and NEVER CLAIMED, but "
+                    f"this factory DECLARED it parked on {question} at row "
+                    f"n={park_row.get('n')} -- not a finding, and EXCLUDED from the owed "
+                    f"total (#331)."
+                )
+                continue
+        declared = declared_refs.get(unit)
+        owed.append({
+            "unit": unit,
+            "age_days": age_days,
+            "assignees": board_assignees.get(unit, []),
+            "session_ref": declared[0] if declared else "",
+            "ref_row_n": declared[1].get("n") if declared else None,
+            "dispatch_rows": dispatch_counts.get(unit, 1),
+        })
 
-    owed.sort(key=lambda item: -item[1])
-    for unit, age_days, actor, assignees in owed:
+    # A PARK DECLARED FOR A UNIT THAT IS NOT OWED IS PRINTED, never silently ignored: a
+    # declaration that matches no OWED line is indistinguishable from a typo'd subject, and a
+    # declaration that quietly does nothing is the same failure an unreadable one is. The
+    # legitimate reasons are named so the note reads as an observation rather than a defect:
+    # the unit may be claimed, closed, off this board, or no longer past the threshold.
+    park_notes = [
+        f"{unit} declares park:owner:{question} at row n={row.get('n')}, but matched NO OWED "
+        f"line this read -- the unit is claimed, closed, off this board, or no longer stalled; "
+        f"if none of those hold, the declaration names the wrong subject (#331)"
+        for unit, (question, row) in parks.items()
+        if unit not in parked_units
+    ] + park_superseded
+
+    # THE ADDRESSEE'S NAMES ARE RESOLVED ONCE, and only when there is a line to put them on:
+    # the live read walks every profile's session bindings, so a census with nothing owed
+    # pays nothing for it. A resolver that raises leaves the map EMPTY, which makes every
+    # addressee UNRESOLVED -- stated in words on the line -- rather than deciding the verdict.
+    lane_names: dict[str, str] = {}
+    if owed and lane_names_fn is not None:
+        try:
+            lane_names = dict(lane_names_fn() or {})
+        except Exception:
+            lane_names = {}
+
+    owed.sort(key=lambda entry: -entry["age_days"])
+    addressees_resolved = 0
+    for entry in owed:
+        unit = entry["unit"]
         # THE ASSIGNEE IS RENDERED, NEVER PREDICATED ON (#423). An assigned-but-unclaimed
         # unit and one nobody has touched are different states, and before this the OWED
         # line rendered them identically -- an assigned unit read as untouched. The
         # sentence says the assignee is not a claim, because the two must not be confused:
         # OWED stays OWED until a `claim` row exists.
         assignee_note = ""
-        if assignees:
+        if entry["assignees"]:
             assignee_note = (
-                f" The tracker shows it ASSIGNED to {', '.join(assignees)}, but an "
-                f"assignee is not a ledger claim, so it stays OWED."
+                f" The tracker shows it ASSIGNED to {', '.join(entry['assignees'])}, but "
+                f"an assignee is not a ledger claim, so it stays OWED."
+            )
+        # THE ADDRESSEE, NOT THE ACTOR (#331 clause 2). The slot names the LANE the dispatch
+        # was handed to; where nothing resolves it says so. The row's AUTHOR is deliberately
+        # NOT printed here -- an author in this slot reads as an assignment, which is worse
+        # than an empty one, and for a census re-dispatch the author is only whoever ran the
+        # census.
+        session_ref = entry["session_ref"]
+        name = lane_names.get(session_ref) if session_ref else None
+        if session_ref and name:
+            addressees_resolved += 1
+            addressee_note = (
+                f"the routing standing at read time (row n={entry['ref_row_n']}) was "
+                f"ADDRESSED to {name}"
+            )
+        elif session_ref:
+            addressee_note = (
+                f"NO ADDRESSEE RESOLVES: its most recent declared routing (row "
+                f"n={entry['ref_row_n']}) names a typed `session` target this read cannot "
+                f"turn into a lane name (#331)"
+            )
+        else:
+            addressee_note = (
+                f"NO ADDRESSEE RESOLVES: none of its {entry['dispatch_rows']} "
+                f"dispatch-bearing row(s) declares a typed `session` target, so the lane "
+                f"the work was handed to is UNSTATED (#331)"
             )
         problems.append(
-            f"OWED {unit}: dispatched {age_days:.2f} d ago and NEVER CLAIMED, and the "
-            f"board still carries it OPEN -- the dispatch-bearing row names "
-            f"actor={actor}.{assignee_note} Re-dispatch it to the lane that owns it "
-            f"through `session_notify`, or close it on the board: a dispatch no lane has "
-            f"taken is work nobody is doing"
+            f"OWED {unit}: dispatched {entry['age_days']:.2f} d ago and NEVER CLAIMED, "
+            f"and the board still carries it OPEN -- {addressee_note}.{assignee_note} "
+            f"Re-dispatch it to the lane that owns it through `session_notify`, or close "
+            f"it on the board: a dispatch no lane has taken is work nobody is doing"
         )
 
     return {
@@ -3910,7 +4189,22 @@ def stall_census_leg(
             "units_in_population": len(carriers),
             "units_off_board": off_board,
             "units_owed": len(owed),
-            "units_owed_assigned": sum(1 for _, _, _, assignees in owed if assignees),
+            "units_owed_assigned": sum(1 for entry in owed if entry["assignees"]),
+            # THE PARK EXCLUSION TRAVELS WITH THE VERDICT (#331 clause 1): a reader who sees
+            # `units_owed: 15` and a census of 17 dispatched units must be able to read WHY,
+            # and `units_parked` beside `parks_declared` is that answer. A park that was
+            # declared and then SUPERSEDED is counted in neither -- it is named in `parks`,
+            # where a reader meets the declaration and the dispatch that lifted it.
+            "parks_declared": len(parks),
+            "units_parked": len(parked_units),
+            "units_park_superseded": len(park_superseded),
+            "parks": parked + park_notes,
+            # THE ADDRESSEE COVERAGE (#331 clause 2): how many OWED lines could name the lane
+            # the work was handed to. A line that names none says so in words; this pair is
+            # the count, so a read where NOTHING resolved is not mistaken for one where the
+            # question was never asked.
+            "addressees_resolved": addressees_resolved,
+            "addressees_unresolved": len(owed) - addressees_resolved,
             "threshold_days": threshold_days,
             "threshold_basis": STALL_CENSUS_THRESHOLD_BASIS,
             "read_at": read_at,
@@ -5368,6 +5662,30 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['units_owed']} never claimed past the declared threshold of "
                 f"{cov['threshold_days']} d"
             )
+            # THE PARK EXCLUSION IS PRINTED BESIDE THE VERDICT (#331 clause 1), never left
+            # to be inferred from a total that is smaller than the population: a reader who
+            # cannot see WHY a dispatched unit left the owed count cannot tell a declared
+            # park from a dropped unit. The line prints even at zero, so a leg that read no
+            # declarations is distinguishable from one whose declarations it could not see.
+            lines.append(
+                f"  parks (park:owner:<question> on the unit's own rows): "
+                f"{cov['parks_declared']} declared, {cov['units_parked']} OWED unit(s) held "
+                f"PARKED and EXCLUDED from the owed total"
+                + (
+                    f", {cov['units_park_superseded']} SUPERSEDED by a later dispatch"
+                    if cov["units_park_superseded"]
+                    else ""
+                )
+            )
+            for note in cov.get("parks", []):
+                lines.append(f"    {note}")
+            # ... and the ADDRESSEE coverage (#331 clause 2), so a run where NOTHING
+            # resolved is not read as a run that never asked.
+            lines.append(
+                f"  addressee: {cov['addressees_resolved']} of {cov['units_owed']} OWED "
+                f"unit(s) name the lane the work was handed to; "
+                f"{cov['addressees_unresolved']} declare none"
+            )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  read at {cov['read_at']}")
         elif leg["name"] == "board-unruled":
@@ -5672,6 +5990,7 @@ def main(
     deliveries_fn=None,
     criterion_repo_fn=None,
     board_scope_fn=None,
+    lane_names_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -5738,6 +6057,13 @@ def main(
     the live tree would assert an ADOPTING member's history rather than the leg's
     behaviour. `board_scope_fn(repo, key)` returns `(text, refusal, skip_reason)`; the live
     default reads this tree's declaration through the one boundary reader.
+
+    The stall-census leg's SECOND read is injected for the thirteenth and the same reason
+    again (#331): a park is declared on the unit's OWN rows, so it needs no separate
+    injection -- the probe's own rows ARE the declaration -- while `lane_names_fn` resolves a
+    dispatch row's typed `session` target to a lane name, reading every profile's live
+    session bindings, so a probe that did not inject it would be asserting whichever lanes
+    THIS box happens to have bound.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
@@ -5792,7 +6118,10 @@ def main(
         ),
         canonicality_leg(rows, read_at=read_at),
         workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
-        stall_census_leg(issues, rows, read_at=read_at),
+        stall_census_leg(
+            issues, rows, read_at=read_at,
+            lane_names_fn=lane_names_fn or stall_lane_names,
+        ),
         board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate),
         criterion_path_leg(
             issues, read_at=read_at,

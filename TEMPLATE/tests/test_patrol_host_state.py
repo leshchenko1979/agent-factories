@@ -92,6 +92,12 @@ _NO_RULING_EXEMPTIONS = (
     Path(tempfile.mkdtemp(prefix="patrol-no-exempt-")) / "ruling-board-exemptions.json"
 )
 
+# The stall-census leg's park clause (#331) needs NO injection point, and that is the point:
+# a park is declared by a `park:owner:<question>` line on the unit's OWN ledger row, so the
+# rows a probe already passes ARE the declaration. A probe that declares no park therefore
+# reads none, and every probe written before the clause existed keeps its meaning without
+# being touched — there is no live table a probe could accidentally read.
+
 # The criterion-path leg (#48) resolves a board criterion's named paths against a TREE. The
 # default tree for a probe is EMPTY and exists, so a probe that does not supply its own tree
 # reads every named path as ABSENT — it cannot pass by accidentally finding a live file.
@@ -150,7 +156,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
-         board_scope=None):
+         board_scope=None, lane_names_fn=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -250,6 +256,12 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # every probe written before the conversion keeps its meaning; a probe that asserts
         # a pre-boundary, post-boundary, NOT RUN or REFUSED bound passes its own.
         board_scope_fn=(board_scope if board_scope is not None else _board_scope),
+        # The stall-census leg's ONE read (#331 clause 2) is injected for the same reason as
+        # every other declaration here: the default `lane_names_fn` resolves NO session id, so
+        # an addressee can only resolve in a probe that supplied its own binding map — never
+        # from whichever lanes this box happens to have bound. The park clause (clause 1)
+        # needs no injection: it reads the unit's own rows, which the probe already supplies.
+        lane_names_fn=lane_names_fn or (lambda: {}),
     )
     return rc, out.getvalue(), err.getvalue()
 
@@ -4203,6 +4215,258 @@ def test_the_stall_census_leg_PRINTS_the_tracker_assignee_and_still_reads_OWED()
     rc, out, _ = _run(issues, rows)
     assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
     assert "ASSIGNED to leshchenko1979" in out, out
+
+def _park_row(n, unit, days_ago, token=None, *, now, mention=None):
+    """A ledger row that DECLARES a park on `unit` (#331 clause 1).
+
+    The token stands ALONE on the last line, which is the shape the live declarations use --
+    Triage's rows n=2881/n=2882 carry `park:owner:q30` exactly so -- and the shape the reader
+    requires. `mention` writes a sentence that QUOTES a token without declaring one, and
+    `token` is left free-form so a probe can write the REFUSED forms as well as the accepted
+    one: the live row that withdrew #301's park (n=2883) quotes two tokens mid-sentence and
+    closes "THIS ROW CARRIES NO PARK TOKEN".
+    """
+    body = f"CENSUS DISPOSITION -- {unit} is PARKED AT THE OWNER DESIGN GATE.\n\n"
+    if mention:
+        body += f"{mention}\n\n"
+    if token:
+        body += token
+    return _stall_row(n, "run", unit, days_ago, now=now, detail=body.rstrip())
+
+def test_the_stall_census_leg_holds_a_DECLARED_PARK_out_of_the_owed_total() -> None:
+    """#331 clause 1, two-sided: a unit whose OWN row declares `park:owner:<question>` reads
+    PARKED, is not a finding, and leaves the owed total -- and the SAME rows with the
+    declaration line removed still read OWED, so the park is measured as the thing that
+    cleared it.
+
+    The declaration is read off the ROWS rather than off a table this tree edits, and the live
+    ledger is the reason: Triage's park rows for #317/#320 (n=2881/n=2882) carry the token as
+    their last line and each says in as many words that "this row is the declared park HQ's C1
+    defines". A table would never have seen them, so the live need would have gone unmet.
+
+    The live need is #317/#320 -- and #301/#312/#313 on q39 -- units dispatched to a lane that
+    lawfully cannot take them, parked on an owner question, re-reported as findings every day
+    that question stays open.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(931, "OPEN"), _issue(932, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#931", 5, now=now),
+        _park_row(2, "#931", 4, "park:owner:q32", now=now),   # declared -> PARKED
+        _stall_row(3, "dispatch", "#932", 5, now=now),        # undeclared -> stays OWED
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #931" not in named, (
+        f"a DECLARED park holds the line out of the OWED findings -- a parked line is not a "
+        f"finding\n{named}"
+    )
+    parked = "\n".join(leg["coverage"]["parks"])
+    assert "PARKED #931" in parked, leg["coverage"]["parks"]
+    # The QUESTION and the DECLARING ROW both travel with the verdict: a park a reader cannot
+    # trace to the row that declared it is a claim, not a declaration.
+    assert "parked on q32" in parked and "row n=2" in parked, leg["coverage"]["parks"]
+    assert "OWED #932" in named, (
+        f"the undeclared neighbour must STILL be owed, or a leg that cleared the whole "
+        f"population would satisfy the assertions above\n{named}"
+    )
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 1, cov
+    assert cov["parks_declared"] == 1, cov
+    assert cov["units_parked"] == 1, cov
+    assert cov["units_park_superseded"] == 0, cov
+
+    # THE TWO-SIDED HALF: the SAME fixture WITHOUT the declaring row reads #931 OWED, so the
+    # park -- and nothing else -- is what moved it. A probe that asserted only the parked read
+    # would pass a leg that reported nothing owed at all.
+    bare_rows = [row for row in rows if row["n"] != 2]
+    bare = RUNNER.stall_census_leg(issues, bare_rows, read_at=read_at)
+    assert "OWED #931" in "\n".join(bare["problems"]), bare["problems"]
+    assert bare["coverage"]["units_owed"] == 2, bare["coverage"]
+    assert bare["coverage"]["units_parked"] == 0, bare["coverage"]
+    assert bare["coverage"]["parks_declared"] == 0, bare["coverage"]
+
+    # ... and the render half: the exclusion is PRINTED BESIDE THE VERDICT, so a reader who
+    # sees an owed total smaller than the population can tell a declared park from a dropped
+    # unit.
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"the undeclared neighbour is still OWED, got rc={rc}\n{out}"
+    assert "1 declared, 1 OWED unit(s) held PARKED and EXCLUDED from the owed total" in out, out
+    assert "PARKED #931" in out, out
+    assert "not a finding" in out, out
+
+def test_the_stall_census_leg_reads_a_park_ONLY_from_a_standalone_token() -> None:
+    """#331 clause 1, the READ discipline, two-sided: a declaration is a LINE OF ITS OWN, and
+    a token quoted inside a sentence is a MENTION.
+
+    This is not a hypothetical. The row that WITHDREW #301's park (n=2883) quotes
+    `park:owner:q30` and `park:owner:q39` mid-sentence while carrying no token of its own, and
+    closes "THIS ROW CARRIES NO PARK TOKEN". A reader that matched the substring would park
+    #301 on the very mis-citation that row exists to withdraw -- the false positive would be
+    the exact defect the correction was written to repair.
+
+    The four units below are discriminated by SHAPE ALONE, and the last one is the control
+    that keeps this from being a blanket refusal: the mention and the two refused forms stay
+    OWED with a PROBLEM naming them, the standalone `park:owner:qN` is the only one that
+    holds. HQ's C1 scope ruling (n=2884) fixes the shape at ONE -- the register is the only
+    sanctioned blocked-on-you channel -- so the `memo:` form and a `<placeholder>` standing in
+    for an id are refused loudly rather than silently parking nothing.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(n, "OPEN") for n in (951, 952, 953, 954)]
+    rows = [
+        _stall_row(1, "dispatch", "#951", 5, now=now),
+        _park_row(2, "#951", 4, now=now,
+                  mention="n=2878 declared park:owner:q30 for it; this row WITHDRAWS that as "
+                          "a MIS-CITATION and CARRIES NO PARK TOKEN of its own"),
+        _stall_row(3, "dispatch", "#952", 5, now=now),
+        _park_row(4, "#952", 4, "park:owner:memo:#301", now=now),
+        _stall_row(5, "dispatch", "#953", 5, now=now),
+        _park_row(6, "#953", 4, "park:owner:<question>", now=now),
+        _stall_row(7, "dispatch", "#954", 5, now=now),
+        _park_row(8, "#954", 4, "park:owner:q39", now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    for quiet in ("#951", "#952", "#953"):
+        assert f"OWED {quiet}" in named, (
+            f"{quiet} must stay OWED: a mention is not a declaration, and a declaration in a "
+            f"refused shape cannot be read as one\n{named}"
+        )
+    assert "OWED #954" not in named, (
+        f"the standalone declaration is the CONTROL -- if it did not hold, the probe above "
+        f"would pass a reader that parks nothing at all\n{named}"
+    )
+    # ... and the two refused shapes are PROBLEMS, each naming the row and the ONE lawful
+    # shape: a declaration the census cannot see re-arms the very line it was written to hold.
+    assert "cannot read" in named and "memo:#301" in named, named
+    assert "park:owner:<question>" in named, named
+    assert "row n=4" in named and "row n=6" in named, named
+
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 3, cov
+    assert cov["parks_declared"] == 1, cov
+    assert cov["units_parked"] == 1, cov
+    assert "PARKED #954" in "\n".join(cov["parks"]), cov["parks"]
+
+    # A park declared for a unit the census does NOT report owed is PRINTED as a note, never
+    # dropped: a declaration that matches no OWED line is indistinguishable from a declaration
+    # aimed at the wrong subject, and it is the same silence the refusals above exist to stop.
+    extra = rows + [_park_row(9, "#955", 4, "park:owner:q39", now=now)]
+    leg2 = RUNNER.stall_census_leg(issues, extra, read_at=read_at)
+    notes = "\n".join(leg2["coverage"]["parks"])
+    assert "#955" in notes and "matched NO OWED line" in notes, leg2["coverage"]["parks"]
+    assert leg2["coverage"]["units_parked"] == 1, leg2["coverage"]
+
+def test_the_stall_census_leg_SUPERSEDES_a_park_a_LATER_dispatch_lifted() -> None:
+    """#331 clause 1, the STATE half: a park holds until a LATER dispatch puts the unit back
+    in play, and the supersession is PRINTED rather than obeyed.
+
+    Without this guard the clause would be a permanent gag rather than a state. The ledger
+    keeps every park row forever, so a unit parked once and re-dispatched a week later would
+    stay silently held out of the census for good -- and nothing in the report would say why.
+    The two units below carry the SAME two rows in OPPOSITE order, which is the property under
+    test: order alone decides whether the declaration still holds.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(961, "OPEN"), _issue(962, "OPEN")]
+    rows = [
+        # #961: parked FIRST, then re-dispatched -- the park is stale and the unit is OWED.
+        _park_row(1, "#961", 5, "park:owner:q33", now=now),
+        _stall_row(2, "dispatch", "#961", 4, now=now),
+        # #962: dispatched FIRST, parked after -- the declaration is the newest act.
+        _stall_row(3, "dispatch", "#962", 5, now=now),
+        _park_row(4, "#962", 4, "park:owner:q33", now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #961" in named, (
+        f"a dispatch NEWER than the park puts the unit back in play\n{named}"
+    )
+    assert "OWED #962" not in named, named
+    notes = "\n".join(leg["coverage"]["parks"])
+    assert "PARKED #962" in notes, leg["coverage"]["parks"]
+    assert "#961" in notes and "SUPERSEDED" in notes, (
+        f"the stale declaration is PRINTED, not merely obeyed: a reader must be able to see "
+        f"that a park was declared and then lifted\n{notes}"
+    )
+    assert "row n=2" in notes and "row n=1" in notes, notes
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 1, cov
+    assert cov["units_parked"] == 1, cov
+    assert cov["parks_declared"] == 2, cov
+    assert cov["units_park_superseded"] == 1, cov
+
+def test_the_stall_census_leg_names_the_ADDRESSEE_and_never_the_AUTHOR() -> None:
+    """#331 clause 2, two-sided: the OWED line names the LANE the dispatch was handed to, and
+    a unit whose dispatch declares no target SAYS SO rather than printing the row's author.
+
+    The defect this replaces: the line printed `actor={actor}` -- the author of the
+    dispatch-bearing row, which for a census re-dispatch is whoever RAN the census, usually
+    Triage, and never the lane the work belongs to -- directly beside the advice to
+    "re-dispatch it to the lane that owns it". An author in that slot reads as an assignment,
+    which is worse than an empty one.
+
+    Three arms, each of which a wrong implementation fails. #941 is AUTHORED by `hq` and
+    ADDRESSED to the Ledger lane by a typed `session` ref the resolver maps to `Ledger`, so a
+    leg that printed the author fails. #942 declares a session the resolver does NOT know, and
+    #943 declares no target at all -- so a leg that silently fell back to the author, or
+    silently printed nothing, fails on those too.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    ledger_session = "11111111-2222-3333-4444-555555555555"
+    issues = [_issue(941, "OPEN"), _issue(942, "OPEN"), _issue(943, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#941", 5, now=now, actor="hq",
+                   refs=[{"session": ledger_session}]),
+        _stall_row(2, "dispatch", "#942", 5, now=now, actor="hq",
+                   refs=[{"session": "99999999-0000-0000-0000-000000000000"}]),
+        _stall_row(3, "dispatch", "#943", 5, now=now, actor="hq"),
+    ]
+    names = {ledger_session: "Ledger"}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    line_941 = [ln for ln in leg["problems"] if "#941" in ln][0]
+    assert "ADDRESSED to Ledger" in line_941, line_941
+    assert "actor=hq" not in line_941, (
+        f"the AUTHOR must never stand in the addressee's slot -- it reads as an "
+        f"assignment\n{line_941}"
+    )
+    for unit in ("#942", "#943"):
+        line = [ln for ln in leg["problems"] if unit in ln][0]
+        assert "NO ADDRESSEE RESOLVES" in line, (
+            f"{unit} declares no resolvable target and the line must SAY SO, never fall back "
+            f"to the author\n{line}"
+        )
+        assert "actor=hq" not in line, line
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 3, cov
+    assert cov["addressees_resolved"] == 1, cov
+    assert cov["addressees_unresolved"] == 2, cov
+
+    # THE TWO-SIDED HALF: with a resolver that knows NOTHING, the same row cannot name a lane,
+    # so "ADDRESSED to Ledger" is a statement about the RESOLUTION and not a constant the leg
+    # prints. This is also the shape a member factory without a binding store sees.
+    blind = RUNNER.stall_census_leg(issues, rows, read_at=read_at, lane_names_fn=lambda: {})
+    assert "ADDRESSED to Ledger" not in "\n".join(blind["problems"]), blind["problems"]
+    assert blind["coverage"]["addressees_resolved"] == 0, blind["coverage"]
+
+    # ... and the render half: the addressee and its coverage reach the report, and `actor=`
+    # is nowhere on it.
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
+    assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
+    assert "ADDRESSED to Ledger" in out, out
+    assert "addressee: 1 of 3 OWED unit(s) name the lane the work was handed to; " \
+           "2 declare none" in out, out
+    assert "actor=hq" not in out, out
 
 def test_the_stall_census_leg_DISCHARGES_on_an_act_but_CLEARS_only_on_a_claim_or_close() -> None:
     """#308 acceptance (3): a re-dispatch DISCHARGES the lane's duty but does NOT clear the
