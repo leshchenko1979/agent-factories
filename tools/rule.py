@@ -47,6 +47,7 @@ Exit: 0 paired (both surfaces), 1 a leg failed (neither surface), 2 refused befo
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import importlib.util
 import re
 import subprocess
@@ -66,6 +67,11 @@ from field_predicate import PAIRING_KEY
 REPO = Path(__file__).resolve().parent.parent
 PATROL = REPO / "tools" / "patrol_host_state.py"
 LEDGER_TOOL = REPO / "tools" / "ledger.py"
+# The publication predicate's OWN home (#441). `tools/publish.py` already owns the remote
+# tip, the grace window and the pusher's bounds; asking it "is row N readable from the
+# remote yet?" keeps ONE predicate for one question rather than a second implementation
+# here that would drift from the pusher the moment either moved.
+PUBLISH_TOOL = REPO / "tools" / "publish.py"
 
 # `gh issue comment` prints the comment's own URL, whose fragment carries its id.
 _COMMENT_URL_RE = re.compile(r"#issuecomment-(\d+)")
@@ -96,6 +102,150 @@ def load_patrol():
     spec.loader.exec_module(module)
     return module
 
+
+def load_publish():
+    """The publication predicate's OWN home, loaded by PATH (#441).
+
+    Imported rather than restated for the reason `load_patrol` gives one screen up: a second
+    implementation of "is this row readable from the remote" would answer differently from
+    the pusher the moment either moved, and the divergence would be silent.
+    """
+    spec = importlib.util.spec_from_file_location("_rule_publish", PUBLISH_TOOL)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise SystemExit(f"rule: cannot load {PUBLISH_TOOL} — the publication predicate's home")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+# --- the citation state (issue #441, ruled at ledger n=2907) ---------------------------
+#
+# A ruling body NAMES ledger rows -- "Intake row: `n=2906`", "rows n=2900-2905" -- and the
+# body is posted to the PUBLIC BOARD while the rows it names are, BY CONSTRUCTION, not yet
+# readable: this tool stamps the ruling row in the same invocation, and a row committed this
+# turn cannot be published this turn (the pusher holds a commit younger than its 900s grace
+# window -- #146/n=1168, scoped by #284/e133c87d).
+#
+# Measured 2026-10-08: two ruling comments named `n=2900-2905` on the public board from
+# 06:40:46Z while the commit carrying those rows was not authored until 06:48:39Z and not
+# published until 07:09:08Z -- ~28 minutes in which the citation was public and its referent
+# existed nowhere a reader could go.
+#
+# Of the three remedies the ruling offers, the DEFERRED comment is refused because it breaks
+# this tool's atomicity (the comment and the row are ONE act, and a comment waiting on a push
+# is a third state the two-surface contract has no place for), and the PRE-PUBLISH step is
+# refused because a ruling path that pushes is the direct-push anti-pattern #329 removed. The
+# third -- an explicit statement of the state -- is what this does.
+CITED_ROW_RE = re.compile(r"\bn=(\d+)(?:\s*[\u2013\u2014-]\s*(\d+))?")
+CITED_RANGE_MAX = 500
+
+def cited_rows(body: str) -> list[int]:
+    """The ledger rows a ruling body NAMES, in order of appearance, deduplicated.
+
+    Two shapes, because the bodies use two: a single `n=2906` (`Intake row: n=2906`) and an
+    inclusive range `n=2900-2905`. The range form is not a nicety — it is what the incident
+    this note exists for actually said, and a reader that expanded only the first endpoint
+    would have declared 2900 unreachable and stayed silent about 2901-2905, i.e. exactly the
+    silent-partial-citation defect the ruling is about. A range wider than
+    `CITED_RANGE_MAX` is NOT expanded: it is almost certainly a typo or a non-row use of the
+    token, and inflating it into hundreds of numbers would make the note unreadable rather
+    than more honest.
+
+    It is deliberately NOT the shared positional predicate: that reader answers what a row's
+    canonical trailer DECLARES, while this asks what a ruling body MENTIONS — different
+    questions over different text.
+    """
+    seen: list[int] = []
+    for match in CITED_ROW_RE.finditer(body):
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else start
+        span = range(start, end + 1) if start <= end <= start + CITED_RANGE_MAX else (start,)
+        for row in span:
+            if row not in seen:
+                seen.append(row)
+    return seen
+
+def read_publication(rows: list[int], *, remote: str | None = None, branch: str | None = None, runner=None) -> dict:
+    """The publication state of `rows`, read from the REMOTE's ledger.
+
+    The FETCH is what makes the local tracking ref the remote's tip; without it the ref is a
+    cache and the verdict would report the fact in doubt -- the rule `tools/publish.py` states
+    at its own top. A FAILED fetch does not abort the ruling (this tool's job is to STATE the
+    state, not to require the network), but it is carried into the note, because a stale read
+    and a fresh one must never render alike.
+    """
+    run = runner or _run
+    pub = load_publish()
+    remote = remote or pub.DEFAULT_REMOTE
+    branch = branch or pub.DEFAULT_BRANCH
+    fetched = run(["git", "-C", str(REPO), "fetch", remote, branch]).returncode == 0
+    state = pub.unpublished_rows(REPO, rows, ref=pub.DEFAULT_TRACKING_REF)
+    state["fetched"] = fetched
+    return state
+
+def citation_note(rows: list[int], state: dict, instant: str) -> str:
+    """The acknowledgement appended to the ruling body before it is posted AND stamped.
+
+    ALWAYS emitted, never only in the bad case: "these rows are readable", "these rows are
+    not", and "this ruling names no rows" are three different facts, and a note that appears
+    only when something is wrong makes its ABSENCE ambiguous between the other two -- the
+    `remote_tip` rule again, where "I could not ask" must never render as "there is nothing to
+    ask about".
+    """
+    where = f"`{state['ref']}`"
+    if not state.get("fetched"):
+        where += " — the fetch FAILED, so this read is a possibly-stale cache"
+    if not rows:
+        body = "This ruling names no ledger row, so there is no citation to reach."
+    elif state.get("reason"):
+        body = (
+            f"The publication of the rows named above could NOT be read: {state['reason']} — "
+            f"treat them as possibly unreadable and verify before following them."
+        )
+    elif not state.get("unpublished"):
+        body = "Every ledger row named above is readable from the remote."
+    else:
+        listed = ", ".join(f"`n={row}`" for row in state["unpublished"])
+        body = (
+            f"This ruling names ledger rows that are **NOT YET READABLE from the remote**: "
+            f"{listed}. A reader following those citations reaches nothing until the commit "
+            f"carrying them is published — the pusher holds a commit younger than its 900s "
+            f"grace window, so this is the designed ordering and not a delay anyone should "
+            f"wait on. They become readable when `origin/main`'s `evidence/ledger.jsonl` "
+            f"carries them."
+        )
+    return f"\n\n---\n\n**Citation state (read {instant}, {where}).** {body}\n"
+
+def _now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def citation_acknowledgement(row: str, cited: list[int], state: dict) -> str:
+    """The one-line acknowledgement `main()` prints after a PAIRED stamp (#441, property 2).
+
+    Two facts, because the ruling names two: the row THIS invocation stamped is not readable
+    either -- it was appended to the working tree and cannot be published until its commit
+    clears the pusher's grace window -- and the rows the ruling body CITED are readable or
+    not. The stamped row is stated first: it is the one a reader reaches by following this
+    tool's own output.
+    """
+    lines = [
+        f"n={row} is NOT YET READABLE from `{state['ref']}` — it was appended to the working "
+        f"tree this invocation; publish the commit carrying it before citing it."
+        if row != "?"
+        else "the stamped row's number could NOT be read from the append output, so its "
+             "publication is unstated — read it from the ledger tail."
+    ]
+    if not cited:
+        lines.append("the ruling body names no ledger row, so it cites nothing unreachable.")
+    elif state.get("reason"):
+        lines.append(f"the cited rows could NOT be checked: {state['reason']}")
+    elif state.get("unpublished"):
+        listed = ", ".join(f"n={r}" for r in state["unpublished"])
+        lines.append(f"cited and NOT readable from `{state['ref']}`: {listed} (stated in the body).")
+    else:
+        lines.append(f"every cited row is readable from `{state['ref']}` (stated in the body).")
+    if not state.get("fetched"):
+        lines.append("the fetch FAILED, so the cited-row read is a possibly-stale cache.")
+    return " ".join(lines)
 
 def head_problem(body: str, patrol) -> str | None:
     """Why `body` may not be posted as a ruling, or None when it may.
@@ -208,22 +358,33 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         # HERMETIC: the dry run touches neither surface AND resolves nothing external --
-        # no `gh`, no `git remote`. A validation step that itself needs the network is a
-        # step that can fail for reasons the operator did not ask about, and this gate's
-        # probes run it inside a bare test tree.
+        # no `gh`, no `git remote`, and (since #441) no fetch either. A validation step that
+        # itself needs the network is a step that can fail for reasons the operator did not
+        # ask about, and this gate's probes run it inside a bare test tree.
         where = args.repo or "the origin remote"
         print(
             f"rule: DRY RUN — would post a {patrol.RULING_CANONICAL_HEADING!r} comment on "
             f"{where}#{args.issue} and stamp `ruling` for '#{args.issue}' carrying "
-            f"{PAIRING_KEY}=<id>; wrote NOTHING"
+            f"{PAIRING_KEY}=<id>; wrote NOTHING\n"
+            f"  citation state NOT resolved (hermetic): the live run would name the "
+            f"publication of the {len(cited_rows(body))} ledger row(s) this body mentions"
         )
         return 0
 
     repo = resolve_repo(args.repo)
 
+    # ---- the citation state (#441, ruled at n=2907) --------------------------------
+    #
+    # Resolved BEFORE either surface is touched, because the note is part of BOTH: the posted
+    # comment and the stamped row carry the same text, so a reader who reaches either one
+    # learns whether the rows it names were readable at the instant it was written.
+    cited = cited_rows(body)
+    state = read_publication(cited)
+    posted_body = body + citation_note(cited, state, _now_iso())
+
     # ---- leg 1: the board comment -------------------------------------------------
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as handle:
-        handle.write(body)
+        handle.write(posted_body)
         body_path = handle.name
     posted = _run(
         ["gh", "issue", "comment", str(args.issue), "--repo", repo, "--body-file", body_path]
@@ -252,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     appended = _run(
         [sys.executable, str(LEDGER_TOOL), "append",
          "--event", "ruling", "--subject", f"#{args.issue}",
-         "--detail", build_detail(body, comment_id)]
+         "--detail", build_detail(posted_body, comment_id)]
     )
     if appended.returncode != 0:
         rolled_back = delete_comment(repo, comment_id)
@@ -275,7 +436,8 @@ def main(argv: list[str] | None = None) -> int:
         f"rule: PAIRED — {repo}#{args.issue}\n"
         f"  comment: https://github.com/{repo}/issues/{args.issue}"
         f"#issuecomment-{comment_id}\n"
-        f"  row:     n={row} ({PAIRING_KEY}={comment_id})"
+        f"  row:     n={row} ({PAIRING_KEY}={comment_id})\n"
+        f"  {citation_acknowledgement(row, cited, state)}"
     )
     return 0
 

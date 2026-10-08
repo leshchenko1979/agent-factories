@@ -242,6 +242,70 @@ def divergence(repo: Path, tip: str):
     }
 
 
+# --- IS THE ROW READABLE YET? (issue #441, ruled at ledger n=2907) -----------------
+#
+# A ledger row is a CITATION TARGET: a board ruling comment, a peer row, a report and a
+# notify all name `n=<N>`. Until #441 nothing asked whether the row a citation names could
+# be REACHED by the reader who followed it. The measured instance: ruling comments named
+# `n=2900-2905` on the public board from 06:40:46Z while the commit carrying those rows was
+# not authored until 06:48:39Z and not published until 07:09:08Z -- ~28 minutes in which
+# the citation was public and its referent existed nowhere a reader could go.
+#
+# The cause is a DESIGNED bound, not neglect: the pusher holds a commit younger than its
+# 900s grace window (#146/n=1168, scoped by #284/e133c87d), so a lane that commits, cites
+# and pushes in one turn CANNOT publish same-turn. So the remedy is never "push faster" --
+# that re-creates the direct-push anti-pattern #329 removed. It is to STATE the publication
+# of whatever a durable surface names, and to gate the citing act on that state.
+#
+# THE PREDICATE IS THE REMOTE'S OWN LEDGER, NOT A COMMIT'S ANCESTRY. "Is commit X pushed?"
+# answers a question about a COMMIT; a reader following `n=2905` needs the ROW, and a row is
+# readable exactly when the remote's `evidence/ledger.jsonl` carries it. The two agree in
+# the ordinary case and can disagree after a revert or a repair -- and it is readability
+# that a citation claims.
+LEDGER_REL = Path("evidence") / "ledger.jsonl"
+# The LOCAL tracking ref, for callers that cannot reach the network (the offline gate). It
+# is a CACHE, updated only by a fetch, so a reader that uses it MUST state that bound beside
+# its verdict -- the same rule `remote_tip` refuses to violate silently one screen up.
+DEFAULT_TRACKING_REF = "refs/remotes/origin/main"
+
+def ledger_rows_at(repo: Path, ref: str):
+    """`(rows, reason)` -- the row numbers the ledger blob at `ref` carries."""
+    rc, out, err = _git(repo, "show", f"{ref}:{LEDGER_REL.as_posix()}")
+    if rc != 0:
+        return None, (err or out).strip() or f"git show {ref}:{LEDGER_REL} exited {rc}"
+    rows: set[int] = set()
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            return None, f"the ledger blob at {ref} carries a line that is not JSON"
+        if isinstance(row, dict) and isinstance(row.get("n"), int):
+            rows.add(row["n"])
+    return rows, ""
+
+def unpublished_rows(repo: Path, rows, *, ref: str = DEFAULT_TRACKING_REF):
+    """Which of `rows` a reader could NOT reach in the ledger at `ref`.
+
+    Returns `{"ref", "checked", "unpublished", "reason"}`. An unreadable blob is reported
+    as a REASON rather than folded into an empty `unpublished`: "I could not ask" and
+    "everything is published" are different facts and must never render alike (the
+    `remote_tip` rule, one function up). A caller that cannot read the blob must therefore
+    treat `reason` as a finding, never as a clean result.
+    """
+    wanted = sorted({int(row) for row in rows})
+    published, why = ledger_rows_at(repo, ref)
+    if published is None:
+        return {"ref": ref, "checked": len(wanted), "unpublished": wanted, "reason": why}
+    return {
+        "ref": ref,
+        "checked": len(wanted),
+        "unpublished": [row for row in wanted if row not in published],
+        "reason": "",
+    }
+
 def publishable(unpushed: list[dict], *, grace_secs: int, now: dt.datetime):
     """`(to_publish, held)` — the grace window, tested on the NEWEST commit.
 

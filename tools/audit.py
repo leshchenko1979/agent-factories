@@ -2640,6 +2640,43 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_declared_boundary_census.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_declared_boundary_census.py"])
 
+    # 84. the citation-publication gate (board #441, ruled n=2907, dispatched n=2909).
+    #     THE MECHANISM IT GUARDS: a ruling is ONE act in TWO surfaces -- a comment on the
+    #     PUBLIC board and a `ruling` row stamped by the same invocation -- so the row is by
+    #     construction in the WORKING TREE at the instant the comment becomes public, and a
+    #     commit authored this turn cannot be published this turn (the pusher holds every
+    #     commit younger than its 900s grace window, #146/n=1168 scoped by #284/e133c87d --
+    #     a window this gate does NOT touch). Measured 2026-10-08: two ruling comments named
+    #     `n=2900-2905` on the public board from 06:40:46Z while the commit carrying those
+    #     rows was not authored until 06:48:39Z and not published until 07:09:08Z -- ~28
+    #     minutes in which a public citation named rows reachable nowhere. The remedy is the
+    #     third of the three the ruling offers and the only one that preserves the act's
+    #     atomicity: the writer RESOLVES the publication of the rows its body names, against
+    #     the tracking ref, and STATES the result in the text both surfaces carry.
+    #     WHAT IT PROVES that nothing else can: the predicate is TWO-SIDED on a real
+    #     repository (a row in the worktree ledger and absent from the tracking ref is
+    #     UNPUBLISHED, and the same row reads published once its commit is pushed -- one
+    #     side alone is satisfied by a predicate stuck on one answer), an UNREADABLE blob is
+    #     a `reason` and never a clean empty (so "I could not ask" cannot render as
+    #     "everything is reachable"), a RANGE (`n=2900-2905`) expands to every row it names
+    #     (expanding only the first endpoint is the silent-partial-citation defect the
+    #     incident itself demonstrated), the acknowledgement NAMES each unreachable row, and
+    #     the writer is WIRED to the predicate before it touches either surface -- a
+    #     predicate nothing calls is dead text (P29). It carries TWO MUTATION CONTROLS: the
+    #     predicate neutered to always answer "published" and the note's listing removed,
+    #     each of which must make its arm DISAPPEAR -- a probe that has only ever seen the
+    #     good build has not been shown to bite. REQUIRED, not OPTIONAL: it drives synthetic
+    #     repositories under a temp dir -- no live board, no fleet manifest, no box-local
+    #     fixture -- so it passes in a bootstrapped factory exactly as it does here. It is
+    #     byte-paired with a TEMPLATE copy. Its runner is SCRIPT: the file carries a
+    #     `__main__` guard and no module-level `def test_*` leg, so a pytest collection
+    #     would gather nothing and read as a pass. It carries NO budget entry -- a budget
+    #     value is the process owner's, never the implementing lane's (n=574 PART 5) -- so
+    #     it runs on the DECLARED DEFAULT and the audit prints that it did. Same grain as
+    #     gates 81 and 83.
+    if (repo_root / "tests/test_citation_published.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_citation_published.py"])
+
     return gates_to_run
 
 

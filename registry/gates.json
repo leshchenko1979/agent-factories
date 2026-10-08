@@ -403,6 +403,7 @@
     "tests/test_board_intake_recorded.py": "pytest",
     "tests/test_brain_metrics.py": "script",
     "tests/test_citation_clause_titles.py": "script",
+    "tests/test_citation_published.py": "script",
     "tests/test_close_board_recorded.py": "pytest",
     "tests/test_close_row_revision.py": "pytest",
     "tests/test_close_telemetry_provenance.py": "pytest",

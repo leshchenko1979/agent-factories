@@ -46,6 +46,13 @@
       "docs/**",
       "skills/**"
     ],
+    "tests/test_citation_published.py": [
+      "TEMPLATE/tools/publish.py",
+      "TEMPLATE/tools/rule.py",
+      "evidence/ledger.jsonl",
+      "tools/publish.py",
+      "tools/rule.py"
+    ],
     "tests/test_close_board_recorded.py": [
       "docs/close-board-exemptions.json",
       "evidence/ledger.jsonl"

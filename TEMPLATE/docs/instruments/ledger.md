@@ -374,7 +374,7 @@ not broken before it has migrated.
 
 ## 5. The gate set
 
-Seven gates uphold this instrument. Per the frame's §5, a review is a **close condition**, not a step,
+Eight gates uphold this instrument. Per the frame's §5, a review is a **close condition**, not a step,
 and a gate lands with the first promotion rather than ahead of the population it judges.
 
 | gate | upholds |
@@ -386,6 +386,7 @@ and a gate lands with the first promotion rather than ahead of the population it
 | `tests/test_ledger_close_preflight.py` | a close's preconditions at the write path |
 | `tests/test_ledger_index.py` | the derived index's own rule — a rebuild AGREES WITH A PLAIN SCAN |
 | `tests/test_ledger_citation_declared.py` | a `§N` written into a row NAMES the document it cites — judged over the row's OWN VOICE, so a quotation is not read as an assertion |
+| `tests/test_citation_published.py` | a citation is not PUBLISHED before the commit carrying its row is — the predicate is two-sided on a real repository, an unreadable blob is a REASON, and the writer states the state in both surfaces |
 
 `tests/test_ledger_commit_cites_no_rows.py` and `tests/test_ledger_identity.py` ride the same
 family. A gate that refuses what the instrument lawfully writes is worse than no gate: measured
@@ -1271,6 +1272,56 @@ Upheld by `tests/test_ledger_citation_declared.py` — a governed row carrying a
 PROBLEM; the same citation with its document named reads CLEAN; a pre-boundary row reads EXCUSED; and
 a tree that declares no boundary reads SKIP with its reason. The run PRINTS the population it
 examined beside its verdict, so a clean read is never indistinguishable from a vacuous one.
+
+### 9.15 A citation is not PUBLISHED before the commit carrying its row is
+
+**A ruling NAMES ledger rows in a text that is public before those rows are readable, and the gap is
+structural rather than accidental.** A ruling is ONE act in TWO surfaces: a comment on the board and a
+`ruling` row stamped by the same invocation. The row therefore exists only in the WORKING TREE at the
+instant the comment becomes public, and it stays that way for a while — the pusher holds every commit
+younger than its 900 s grace window (`#146`/`n=1168`, scoped by `#284`/`e133c87d`). That window is
+correct and nothing here shortens it: a pusher that published a fresh commit immediately would
+manufacture the published-then-amended divergence this factory has already paid for once.
+
+**Measured 2026-10-08, and the shape of the incident is the load-bearing half.** Two ruling comments
+named `n=2900-2905` on the public board from `06:40:46Z`, while the commit carrying those rows was not
+AUTHORED until `06:48:39Z` and not PUBLISHED until `07:09:08Z` — roughly 28 minutes in which a public
+citation named rows that existed nowhere a reader could go. The citation was a RANGE, which is why the
+reader expands ranges: a note that declared only the first endpoint unreachable and stayed silent
+about `2901-2905` would have reproduced the defect it exists to remove, one row narrower.
+
+**The remedy is an explicit STATEMENT of the state, and the other two options were refused for stated
+reasons.** Of the three the ruling offers, a DEFERRED comment is refused because it breaks the act's
+atomicity — the comment and the row are one act, and a comment waiting on a push is a third state the
+two-surface contract has no place for — and a PRE-PUBLISH step is refused because a ruling path that
+pushes is the direct-push anti-pattern `#329` removed. What remains, and what is implemented, is that
+the writer resolves the publication of the rows its body names against the tracking ref and states the
+result **in the text both surfaces carry**: the comment and the row hold the same text, so a reader who
+reaches either one learns whether the rows it cites were readable at the instant it was written.
+
+**Three states, three sentences, and the note is emitted in ALL of them.** "These rows are readable",
+"these rows are not", and "this ruling names no row" are three different facts; a note that appeared
+only in the bad case would make its ABSENCE ambiguous between the other two. The same discipline
+governs the read itself: an UNREADABLE ledger blob is reported as a `reason` and never folded into an
+empty `unpublished`, because *"I could not ask"* and *"everything is reachable"* must not render alike
+— the rule the pusher's own `remote_tip` states one screen away. A failed FETCH is carried into the
+note for the same reason: a possibly-stale cache read must not render as a fresh one.
+
+**The acknowledgement is not a second gate and does not replace one.** It states a fact about an
+instant; it does not refuse the act, because refusing would mean either holding the ruling (atomicity,
+above) or pushing it (the anti-pattern, above). What makes the statement checkable is the OFFLINE
+gate, and what that gate proves is the predicate's two-sidedness — a row in the worktree ledger and
+absent from the tracking ref reads UNPUBLISHED, and the SAME row reads published once its commit is
+pushed. One side alone is satisfied by a predicate stuck on one answer, which is why both are driven,
+and why the file carries mutation controls that must make each arm DISAPPEAR.
+
+Upheld by `tests/test_citation_published.py` — a synthetic repository with a real bare remote, a row
+in the worktree ledger and absent from the tracking ref reads UNPUBLISHED; the same row after the push
+reads published; an unreadable blob reads a REASON; a range expands to every row it names; the note
+NAMES each unreachable row and states its ref and its instant; and the writer is WIRED to the
+predicate before it touches either surface. The two mutation controls (the predicate neutered to
+always answer "published", the note's listing removed) must each make their arm vanish — a probe that
+has only ever seen the good build has not been shown to bite.
 
 ---
 

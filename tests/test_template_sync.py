@@ -495,6 +495,13 @@ PAIRS = [
     # and one that took the gate without the writer would run probes that cannot pass.
     ("tools/rule.py", "TEMPLATE/tools/rule.py"),
     ("tests/test_ruling_row_recorded.py", "TEMPLATE/tests/test_ruling_row_recorded.py"),
+    # Added with its registration (issue #441, ruled n=2907, dispatched n=2909). Paired for
+    # the reason every gate is, plus this one's own: the gate drives the publication
+    # predicate in `tools/publish.py` AND the writer `tools/rule.py`, and all three ship
+    # whole. A factory that took the writer without the predicate would cite rows it cannot
+    # check, and one that took the gate without either would run probes that cannot pass --
+    # the #107 class, which is exactly why the copies are held here.
+    ("tests/test_citation_published.py", "TEMPLATE/tests/test_citation_published.py"),
     # Added with its registration (board #262, ruled n=2246, dispatched n=2247). Paired for
     # the same reason every other gate is, plus one of its own: this leg reads the LEDGER's
     # rows and the boundary declaration, so a factory that took the runner without the file

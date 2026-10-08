@@ -691,6 +691,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ontology.py",
     "test_patrol_host_state.py",
     "test_citation_clause_titles.py",
+    # Added with its registration (board #441, ruled n=2907, dispatched n=2909). REQUIRED is
+    # the correct grain: the gate drives SYNTHETIC repositories under a temp directory — a
+    # bare remote, a work repo, a tracking ref — so it reads no live board, no fleet
+    # manifest and no box-local fixture, and it passes in a bootstrapped factory exactly as
+    # it does here. It is byte-paired with a TEMPLATE copy, so the manifest grain is what
+    # keeps a factory from dropping the runner and keeping the file. THE MECHANISM IT
+    # GUARDS is the ORDERING of the ruling act: the writer stamps a `ruling` row and posts
+    # the paired board comment in one invocation, so the comment is public while the row it
+    # names is still in the working tree — and the pusher's 900s window means it stays so.
+    # A factory that dropped this runner would publish citations to rows no reader can
+    # reach, which is exactly the state this gate makes loud.
+    "test_citation_published.py",
     # Added with its registration (board #184, ruling n=1231). REQUIRED is the correct
     # grain: the gate's live leg reads a TREE and its seven probes drive synthetic text,
     # so it needs no live board, no fleet manifest and no box-local fixture, and it passes
