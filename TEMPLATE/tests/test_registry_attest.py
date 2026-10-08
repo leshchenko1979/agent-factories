@@ -420,8 +420,96 @@ def test_the_predicate_rejects_a_brief_carrying_a_literal_session_id():
     assert _brief_names_the_route(baked) is False, baked[-700:]
 
 # --------------------------------------------------------------------------------------
-# #259, clause 3 — the collection leg DECLARES its population.
+# #439 — the brief names the READ SOURCE, not only the read action.
 # --------------------------------------------------------------------------------------
+
+# The prohibition is a PHRASE, not a vibe: the brief must say in words that a shared
+# working tree is not the source. Matched with a regex so the wording can be reflowed
+# ("never a shared working tree" / "never from a shared working tree") without disarming
+# the arm — the thing being pinned is that the prohibition EXISTS, not its sentence.
+READ_SOURCE_PROHIBITION = re.compile(r"never (?:from )?a shared working tree")
+
+def _brief_names_the_read_source(text: str) -> bool:
+    """#439 — Q1 must name WHERE to read the fragment, not only THAT to read it.
+
+    The shipped brief said "Read it back before answering" and named no source, so the
+    natural path a lane takes is the shared clone, whose working tree is FROZEN. Two
+    fragments read from it in the 2026-10-08 round were three days stale, and a
+    write-back patch built from that image would have REVERTED a correct line another
+    lane had already landed — the stale read corrupts a write, not only an answer.
+
+    Three tokens, because each is load-bearing and any one of them missing leaves the
+    defect reachable: the REVISION (`origin/main`), the COMMAND that reads it
+    (`git show origin/main:`), and the PROHIBITION that rules out the shared tree.
+    """
+    lowered = text.lower()
+    if "origin/main" not in lowered:
+        return False
+    if "git show origin/main:" not in lowered:
+        return False
+    if not READ_SOURCE_PROHIBITION.search(lowered):
+        return False
+    return True
+
+def test_the_brief_names_the_read_source_and_not_only_the_read_action():
+    """The product of #439: Q1 says where to read, and rules out the stale surface."""
+    text = _rendered_brief()
+    assert _brief_names_the_read_source(text) is True, text[:900]
+
+def test_a_brief_with_the_read_source_struck_out_fails_the_same_predicate():
+    """MUTATION CONTROL — the predicate must BITE, or the arm above proves nothing.
+
+    The same failure mode the route arm guards against: an arm that formats the string
+    it just asserted on re-reads its own text. So the source is struck out of a copy of
+    the shipped brief and the predicate must return False.
+    """
+    text = _rendered_brief()
+    neutered = "\n".join(
+        line for line in text.splitlines() if "origin/main" not in line
+    )
+    assert "origin/main" not in neutered, "the neutering did not remove the source"
+    assert _brief_names_the_read_source(neutered) is False, neutered[:900]
+
+def test_the_predicate_rejects_the_pre_fix_wording():
+    """The predicate is only worth having if it rejects the text that CAUSED #439.
+
+    That sentence — the read action with no source — is what shipped, and it is what a
+    lane answered from the frozen clone against.
+    """
+    pre_fix = "QUESTION 1 — YOUR FRAGMENT. Read it back before answering."
+    assert _brief_names_the_read_source(pre_fix) is False, pre_fix
+
+# --------------------------------------------------------------------------------------
+# #440(c) — Q3(b) reads the orphan set OFF THE RENDER instead of asking lanes to recall.
+# --------------------------------------------------------------------------------------
+
+def _brief_reads_the_orphan_set_off_the_render(text: str) -> bool:
+    """#440(c) — the orphan question must point at the COMPUTED set.
+
+    Q3(b) asked every lane to remember the cron rows it could not attribute. The
+    remembered list was four rows long and wrong in both directions for weeks: it named
+    `538-probe-boundary-delivery`, already attributed to `opencrabs-dev` by `deliver_to`,
+    and it never once named `tamara_accounting_sync` — the one ENABLED unattributed job
+    on the box. `registry/index.json` computes `counts.unattributed_jobs` on every
+    render, so the brief points there.
+    """
+    lowered = text.lower()
+    return "counts.unattributed_jobs" in lowered and "registry/index.json" in lowered
+
+def test_the_brief_reads_the_orphan_set_off_the_render():
+    """The product of #440(c): the set is COMPUTED, not remembered."""
+    text = _rendered_brief()
+    assert _brief_reads_the_orphan_set_off_the_render(text) is True, text[-1200:]
+
+def test_the_orphan_set_arm_bites_when_the_pointer_is_struck_out():
+    """MUTATION CONTROL for the arm above."""
+    text = _rendered_brief()
+    neutered = "\n".join(
+        line for line in text.splitlines() if "counts.unattributed_jobs" not in line
+    )
+    assert "counts.unattributed_jobs" not in neutered, "the neutering did not apply"
+    assert _brief_reads_the_orphan_set_off_the_render(neutered) is False, neutered[-1200:]
+
 
 def _target(slug: str, session: str) -> dict:
     return {

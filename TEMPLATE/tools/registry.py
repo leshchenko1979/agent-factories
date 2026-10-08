@@ -977,6 +977,16 @@ def check_sqlite3_present() -> tuple[bool, str]:
 def profile_db_glob() -> list[Path]:
     """The per-profile daemon DBs, or a refusal when the root was never declared.
 
+    THE PROFILE CENSUS — one of two, and they do not cover the same homes (#440).
+    This one reads `PROFILE_ROOT`'s profiles and NOTHING ELSE. The default home
+    (`PROFILE_ROOT.parent / "opencrabs.db"`) is deliberately OUTSIDE it: a job
+    living there is not unattributed-but-present, it is absent from this
+    population, and the attribution predicate cannot see it at all. Its owner is
+    `opencrabs_home_dbs`, which the box-wide 6 h floor reads; enrolling a factory
+    whose jobs live in the default home would therefore not attribute them.
+    `unattributable` and `unread` are two different verdicts about two different
+    populations, and a reader must not take one for the other.
+
     A `Path("").glob("*/opencrabs.db")` returns the empty list, so an undeclared
     profile root would make every predicate built on this read `no DB, nothing to
     check` and PASS — the exact shape of a check that cannot fail. Returning the
@@ -1343,6 +1353,15 @@ def check_job_naming_prefix() -> tuple[bool, str]:
     read, jobs read, factories resolved, jobs unattributed) because a predicate
     that examined nothing has reported nothing, not HOLDS (SKILL.md §Verdicts and claims): a zero-job read
     FAILS rather than passing.
+
+    THIS IS THE PROFILE CENSUS, NOT THE BOX CENSUS (#440). It reads
+    `profile_dbs()` -> `profile_db_glob()`, which covers `PROFILE_ROOT`'s profiles
+    only; the DEFAULT home is outside it, and so is any job living there. The
+    box-wide census is `opencrabs_home_dbs`, which the 6 h floor leg reads and
+    which DOES include the default home. Neither leg subsumes the other, so a
+    reader asking "is this job accounted for?" must say WHICH census answered:
+    this verdict is silent about the default home by construction, and that
+    silence is scope, not a clean bill.
     """
     try:
         dbs = profile_dbs()

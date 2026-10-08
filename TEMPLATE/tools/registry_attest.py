@@ -39,6 +39,18 @@ therefore names `session_notify` and points at the notify's own `from` header. N
 written into the text: the header is the live source, so nothing in the brief can go
 stale, and the tool's own rule against a declared session id still holds.
 
+**The brief names the READ SOURCE, not only the read action.** #439, the missing twin of
+the paragraph above: the brief said "Read it back before answering" and named no source,
+so the natural path a lane takes is the shared clone, whose working tree is FROZEN —
+measured 2026-10-08 at 143 commits behind, with two fragments read from it three days
+stale. The trap is not only a wrong answer: a write-back patch built from that image
+would have REVERTED a correct line another lane had already landed, so the stale read
+corrupts a write as well as an answer. Q1 therefore names the committed bytes at
+`origin/main` (`git fetch` then `git show origin/main:registry/factories/<slug>.json`) or
+a worktree checked out there, and says plainly that a shared working tree is not it. The
+text IS the mechanism here — nothing else gates it — so a probe asserts the source is
+named, and a mutation control proves that probe bites.
+
 **The brief's essentials live in its HEAD, because the classic leg elides the MIDDLE.**
 The brief is longer than the classic transport's cap, and the cap is tail-preserving: it
 keeps `head = inner*2/3` and `tail = inner-head_len` and drops what is between them (#267,
@@ -108,7 +120,10 @@ answer left there is a gap in the round rather than an answer to it.
 THREE QUESTIONS — all three need an answer. Each one is spelled out in full below.
 
 QUESTION 1 — YOUR FRAGMENT. Confirm `registry/factories/{slug}.json` unchanged, or send
-back ONLY the fields that changed, as JSON. Read it back before answering.
+back ONLY the fields that changed, as JSON. Read it from the COMMITTED bytes at
+`origin/main` — `git fetch` then `git show origin/main:registry/factories/{slug}.json`,
+or a worktree checked out there — never a shared working tree, which rots by days.
+Read it back before answering.
 
 QUESTION 2 — YOUR ANNOUNCEMENTS. For each entry in your fragment's `announcements`:
 STILL HOLDS, or EXPIRED (say why), or AMENDED (send the new text). An empty list is the
@@ -117,9 +132,11 @@ never a bare string; `evidence` is REQUIRED when severity is warning or critical
 
 QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. (a) PREFIX — the `job_prefixes` entry
 your `registry/fleet.json` record declares, and whether it still matches how you name your
-jobs. (b) ORPHANS — any cron row you cannot attribute to your own factory: name the job,
-the profile home you read it from, and what you saw. "None seen" is a complete answer, and
-never disable, delete, edit or repace a job attributed to another factory.
+jobs. (b) ORPHANS — the set is COMPUTED, not remembered: read `counts.unattributed_jobs`
+in `registry/index.json` at `origin/main`. If you have seen a job the render does NOT name
+there, name it, the profile home you read it from, and what you saw. "None seen" is a
+complete answer, and never disable, delete, edit or repace a job attributed to another
+factory.
 
 If every answer is "unchanged", reply CONFIRMED and that is a complete answer.
 
@@ -132,6 +149,19 @@ it still describes you. Three questions, and all three need an answer.
 
 QUESTION 1 — YOUR FRAGMENT. Confirm it unchanged, or amend it.
   registry/factories/{slug}.json
+  Read it from the COMMITTED bytes at `origin/main`, never from a shared working tree.
+  The shared clone on this box is a FROZEN image: it was measured 143 commits behind,
+  and two fragments read from it were three days stale. The trap is not only a wrong
+  answer — a write-back patch built from the stale image REVERTS a correct line another
+  lane has already landed. So, before answering:
+
+      git fetch origin main
+      git show origin/main:registry/factories/{slug}.json
+
+  A worktree checked out at `origin/main` is equivalent and is the better surface if you
+  need to edit. Reading a path out of your own working copy is NOT equivalent unless you
+  have fetched: that copy answers with whatever it was last synced to.
+
   Read it back before answering. If it still describes the factory — purpose, zone
   (what you own / what you do not own), services, substrates — answer CONFIRMED and
   it gets a fresh attested_at. If anything has moved, send back ONLY the fields that
@@ -193,7 +223,17 @@ QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. Confirm the prefix, report wh
   the prefixes are the only reason a job on a shared box can be attributed to its owner at
   all. Two answers, both short:
     (a) PREFIX — your declared prefix, and whether it still matches how you name your jobs.
-    (b) ORPHANS — any cron row you have seen that you cannot attribute to your own factory.
+    (b) ORPHANS — the set is COMPUTED, not remembered. `registry/index.json` carries
+        `counts.unattributed_jobs`, and its `jobs` array names each row with
+        `owner: null`; read that at `origin/main` and report from it. A remembered list
+        drifts: the one returned every round for weeks was four rows long and wrong in
+        both directions — it named a job already attributed, and missed the one live
+        unattributed job on the box.
+        TWO CENSUSES, TWO POPULATIONS. The ATTRIBUTION leg reads the declared profiles
+        only; the box-wide floor leg also reads the DEFAULT home. So a job living in the
+        default home is outside the attribution population by construction —
+        "unattributable" and "unread" are not the same word, and neither is a licence to
+        touch the row.
         The cron table is shared and has no single owner, so the rule is: never disable,
         delete, edit or repace a job attributed to another factory, and report a job you
         cannot attribute instead of touching it. Name the job, the profile home you read it
