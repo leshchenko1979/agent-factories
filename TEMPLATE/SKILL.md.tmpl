@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.26
+version: 0.1.27
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -128,6 +128,12 @@ expected, and the named place the lane reports into.
 Before dispatching any work to a lane, check whether it is already claimed —
 grep the board and the ledger for an open claim on that issue. Dispatching an
 issue that is already held is the most common coordination defect.
+
+**A dispatch notify names the unit it routes in its opening non-blank line.** The patrol reads
+the delivery's header — `DELIVERY_HEADER_LINES = 1` in `tools/patrol_host_state.py` — to learn
+which unit a notify is about, so a dispatch that names its subject only in the body is invisible
+to the leg that checks it: the reader keys on the one line a delivery DECLARES itself on, and it
+is deliberately NOT widened (#433). Writer-side twin of #433.
 
 Work goes **sender → owner of the resource**, directly. No relay hops: a lane
 does not re-send or forward work to a third lane.

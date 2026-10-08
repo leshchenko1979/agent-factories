@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.52
+version: 0.1.53
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -176,6 +176,12 @@ this and that is stated, not implied** — a notify body lives in no tree the of
 governs what is sent from here, and it does not narrow the notifies that DO earn their interrupt,
 because a dispatch, a return leg, a correction, a finding or an ask carries a state change or an
 ask by construction.
+
+**A dispatch notify names the unit it routes in its opening non-blank line.** The patrol reads
+the delivery's header — `DELIVERY_HEADER_LINES = 1` in `tools/patrol_host_state.py` — to learn
+which unit a notify is about, so a dispatch that names its subject only in the body is invisible
+to the leg that checks it: the reader keys on the one line a delivery DECLARES itself on, and it
+is deliberately NOT widened (#433). Writer-side twin of #433.
 
 Before dispatching work to any lane, check it is not already claimed.
 

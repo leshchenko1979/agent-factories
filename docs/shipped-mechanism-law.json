@@ -73,6 +73,13 @@
       "token": "NOT JUDGED",
       "clause": "Which pacemakers owe a receipt",
       "why": "The clause states that a job declaring no stem is NOT JUDGED and is counted and named so its silence is visible, and that the declaration is an ATTRIBUTION KEY rather than a claim that nothing else records the work. Without it a member reads a NOT JUDGED row as a pass."
+    },
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "dispatch_delivery_leg",
+      "token": "DELIVERY_HEADER_LINES",
+      "clause": "A dispatch notify names the unit it routes in its opening non-blank line",
+      "why": "dispatch_delivery_leg reads a delivery's header through delivery_header(), whose scan is bounded by DELIVERY_HEADER_LINES = 1: it keys on the ONE line a delivery DECLARES itself on, measured from the #433 specimen's discriminator and deliberately NOT widened (widening it re-opened #433). That makes `the unit is named in the opening non-blank line` a load-bearing contract between every dispatch notify and the leg, and it was stated nowhere: the mechanism ships into every kit (TEMPLATE/tools/patrol_host_state.py is byte-identical to root) while its precondition was undocumented - the #170 class. A dispatch that names its subject only in the body is invisible to the leg, which is the reader-side defect #433 fixed and this is its writer-side twin."
     }
   ]
 }
