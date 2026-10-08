@@ -425,17 +425,27 @@ def budget_staleness(
                 evidence.append(runner_moved[key])
             stale.append(StaleBudget(key=key, legs=tuple(legs), detail="; ".join(evidence)))
 
+    # THE ONE RENDERING OF THE NOT-EXAMINED POPULATION, computed BEFORE the note that names
+    # it. An entry is unreached when its `measured_at` is absent, OR present and resolving to
+    # nothing here; the clause below names that WHOLE set by gate key, so the note and the
+    # machine-readable field carry ONE answer (#419) and the sweep prints it ONCE (#442). A
+    # clause naming only the unresolvable REVISIONS would name a subset while the field named
+    # the whole set -- exactly the disagreement #419 closed.
+    unreached = tuple(sorted(set(entries) - reached_keys))
     plural = "y" if len(entries) == 1 else "ies"
     note = (
         f"{len(stale)} of {len(entries)} declared entr{plural} no longer describe what runs "
         f"— the gate's own blob and its registered argv, compared against HEAD {head[:12]}"
     )
-    if unresolved:
+    if unreached:
         note += (
-            " | NOT EXAMINED — measured_at resolves to nothing here for "
-            + ", ".join(unresolved)
-            + "; a basis whose revision is unreachable is UNKNOWN, never clean"
+            f" | NOT EXAMINED — {len(unreached)} entr"
+            f"{'y' if len(unreached) == 1 else 'ies'} carry no reachable `measured_at` here "
+            f"({', '.join(unreached)})"
         )
+        if unresolved:
+            note += f"; measured_at resolves to nothing for {', '.join(unresolved)}"
+        note += "; a basis whose revision is unreachable is UNKNOWN, never clean"
     if bytes_blind or runner_blind:
         note += (
             f" | leg A did not answer for {bytes_blind} entr"
@@ -447,10 +457,8 @@ def budget_staleness(
             f" | NOTHING EXAMINED — 0 of {len(entries)} entries carried a reachable revision, "
             f"so this sweep reaches no verdict at all"
         )
-    # THE UNREACHED POPULATION, returned beside the note that names it. An entry is
-    # unreached when its `measured_at` is absent, or present and resolving to nothing here;
-    # both are "could not examine", and the field and the note must not carry two answers.
-    unreached = tuple(sorted(set(entries) - reached_keys))
+    # `unreached` was computed ABOVE, before the note that names it, so the note and this
+    # returned field carry the SAME population by construction.
     return tuple(stale), note, unreached
 
 

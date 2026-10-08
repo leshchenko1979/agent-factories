@@ -175,9 +175,11 @@ def containment_population(
 
     budgets = load_gate_budgets(path, root)
     stale = budgets.stale
-    # NOT EXAMINED is read from the sweep's OWN answer, never re-derived here. An entry the
-    # sweep could not reach -- no `measured_at`, or one resolving to nothing -- is exactly
-    # the population the note names, so the field and the note carry ONE definition.
+    # NOT EXAMINED is read from the sweep's OWN answer, never re-derived here -- and never
+    # re-rendered either. An entry the sweep could not reach -- no `measured_at`, or one
+    # resolving to nothing -- is exactly the population `budgets.stale_note` ALREADY names by
+    # key (#419: one definition), so the field below carries it and this leg appends NO clause
+    # of its own (#442: one rendering, not three).
     not_examined = budgets.unreached
     examined = len(entries) - len(not_examined)
 
@@ -197,14 +199,9 @@ def containment_population(
             f"{'y' if len(exhausted) == 1 else 'ies'} reported UNKNOWN by the audit"
         )
 
+    # The note is the sweep's OWN account, carried VERBATIM: it already names the
+    # not-examined population once, by key, so this leg appends nothing to it (#442).
     note = budgets.stale_note
-    if not_examined:
-        note += (
-            f" | NOT EXAMINED — {len(not_examined)} declared entr"
-            f"{'y' if len(not_examined) == 1 else 'ies'} carry no reachable `measured_at` here "
-            f"({', '.join(not_examined)}); a basis whose revision is unreachable is UNKNOWN, "
-            f"never clean"
-        )
 
     return Population(
         declared=len(entries),
@@ -354,8 +351,9 @@ def render(pop: Population) -> str:
             f"    [EXHAUSTED] {key} — the audit reported it UNKNOWN: its declared budget was "
             f"exhausted"
         )
-    if pop.not_examined:
-        lines.append(f"    [NOT EXAMINED] {', '.join(pop.not_examined)}")
+    # The not-examined population is named by `pop.note` -- the sweep's own clause, carried
+    # into the note above -- so this body prints it no further: one population, one rendering
+    # (#442). The FIELD `pop.not_examined` still carries it for machine readers.
     if pop.applied:
         lines.append(f"  APPLIED {len(pop.applied)}: {', '.join(pop.applied)}")
     for key, why in pop.held:

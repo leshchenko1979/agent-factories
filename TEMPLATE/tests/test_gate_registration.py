@@ -2272,6 +2272,105 @@ def probe_the_live_rederivation_leg_is_non_vacuous() -> None:
           "population:" in done.stdout and "in the containment set" in done.stdout,
           done.stdout[:300])
 
+# --- #442: ONE population, ONE rendering ---------------------------------------------------
+# The leg rendered the NOT EXAMINED population THREE times in one output: a TIMESTAMP-form
+# clause carried in from `budgets.stale_note`, a KEY-form clause the leg appended beside it,
+# and a KEY-form body line in `render()`. The two clauses named the same keys in the same
+# order, and the carried clause named only the unresolvable REVISIONS -- a SUBSET of the
+# field's population. So the collapse had to WIDEN the carried clause to the whole `unreached`
+# set (else #419's field/note agreement would break) and DROP the other two.
+#
+# THE PROBE IS A COUNT, and it is TWO-SIDED: the unreachable entry is named EXACTLY ONCE in
+# the text run, the reached control is named not at all, and the JSON field still carries the
+# entry. The MUTATION CONTROL re-adds the dropped clause to a COPY of the leg beside it and
+# shows the count go to 2 -- without it, a probe asserting "== 1" has only ever seen the good
+# build and has not been shown to bite.
+
+def probe_the_not_examined_population_is_rendered_once() -> None:
+    """#442: the not-examined set is named once, in one form, by the emitting path."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty, not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the #442 probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        manifest = _manifest(root, {
+            "tests/test_same.py": _basis(base),              # reached — the two-sided control
+            "tests/test_unreachable.py": _basis("0" * 40),   # unreached — the population
+        })
+        text = _leg_proc("--manifest", str(manifest), "--repo-root", str(root))
+        check("#442: the text run exits 0", text.returncode == 0,
+              f"rc={text.returncode}: {text.stdout[-300:]}")
+        check("#442: the unreachable entry is NAMED in the note",
+              "NOT EXAMINED" in text.stdout and "tests/test_unreachable.py" in text.stdout,
+              text.stdout[:400])
+        check("#442: and the population is RENDERED EXACTLY ONCE",
+              text.stdout.count("NOT EXAMINED") == 1,
+              f"count={text.stdout.count('NOT EXAMINED')}:\n{text.stdout[:600]}")
+        check("#442: the reached control is NOT named — the two-sided arm",
+              "tests/test_same.py" not in text.stdout, text.stdout[:400])
+
+        as_json = _leg_proc("--manifest", str(manifest), "--repo-root", str(root), "--json")
+        try:
+            payload = json.loads(as_json.stdout)
+        except ValueError:
+            payload = {}
+        check("#442: the FIELD still carries the entry for machine readers",
+              payload.get("not_examined") == ["tests/test_unreachable.py"],
+              f"not_examined={payload.get('not_examined')!r}")
+        check("#442: and the note inside the JSON payload names it too",
+              "NOT EXAMINED" in (payload.get("note") or ""),
+              str(payload.get("note"))[:200])
+
+        # THE NEGATIVE ARM: a fully-reached population names NOTHING as not examined, so a
+        # clause that fired unconditionally would go RED here. Its own file, because
+        # `_manifest` always writes `root/gates.json` — a second call would CLOBBER the
+        # two-entry manifest the mutation control below still needs.
+        clean = root / "gates-clean.json"
+        clean.write_text(
+            json.dumps({"default": {"budget_sec": 120.0},
+                        "gates": {"tests/test_same.py": _basis(base)}}),
+            encoding="utf-8",
+        )
+        clean_run = _leg_proc("--manifest", str(clean), "--repo-root", str(root))
+        check("#442: a fully-reached population prints NO not-examined clause",
+              "NOT EXAMINED" not in clean_run.stdout, clean_run.stdout[:400])
+
+        # THE MUTATION CONTROL: re-add the clause the collapse removed, to a COPY of the leg
+        # beside it (its `REPO_ROOT`-relative imports still resolve), and show the count go to
+        # 2. Unlinked in `finally` so a run leaves no residue.
+        mutant = REPO / "tools" / "_mutant_gate_budget_rederive.py"
+        src = leg.read_text(encoding="utf-8")
+        anchor = "    note = budgets.stale_note\n"
+        injection = (
+            anchor
+            + "    if not_examined:\n"
+            + "        note += (' | NOT EXAMINED — ' + ', '.join(not_examined))\n"
+        )
+        if anchor not in src:
+            check("#442: the mutation anchor is present in the leg", False,
+                  "the clause anchor moved — the mutation control could not judge")
+            return
+        try:
+            mutant.write_text(src.replace(anchor, injection, 1), encoding="utf-8")
+            mrun = subprocess.run(
+                [sys.executable, str(mutant), "--manifest", str(manifest),
+                 "--repo-root", str(root)],
+                capture_output=True, text=True, timeout=300,
+            )
+            check("#442 MUTATION: a re-added second clause makes the count 2 — the probe BITES",
+                  mrun.stdout.count("NOT EXAMINED") == 2,
+                  f"count={mrun.stdout.count('NOT EXAMINED')} rc={mrun.returncode}\n"
+                  f"stdout={mrun.stdout[:400]}\nstderr={mrun.stderr[-600:]}")
+        finally:
+            mutant.unlink(missing_ok=True)
+
 # --- #307: the exhausted-budget trigger must be REACHABLE ----------------------------------
 # The leg declares THREE containment triggers: leg A (the gate's file moved), leg B (its
 # registered runner form moved), and a measured sample that EXHAUSTED the declared budget --
@@ -2566,6 +2665,8 @@ def main() -> int:
     print("  synthetic probes — #269: the re-derivation leg bites, and its population is printed")
     probe_the_rederivation_leg_prints_and_bites()
     probe_the_live_rederivation_leg_is_non_vacuous()
+    print("  synthetic probes — #442: the not-examined population is rendered once")
+    probe_the_not_examined_population_is_rendered_once()
     print("  synthetic probes — #307: a budget-exhausted gate reaches the trigger")
     probe_a_budget_exhausted_gate_reaches_the_trigger()
 
