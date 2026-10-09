@@ -4681,8 +4681,53 @@ def is_mechanism_path(ref: str) -> bool:
         return True
     return base[base.rindex("."):] in MECHANISM_SUFFIXES
 
+def committed_tree_rev(repo: Path, rev: str = "HEAD") -> tuple[str | None, str]:
+    """Resolve `rev` to a COMMIT in `repo`, or the reason it cannot be read (#450, template-instruments.md §7.5).
+
+    Returns `(sha, why)`: `why` is empty only when `sha` is a commit. A tree that cannot be
+    read and a tree that holds nothing are different facts, and a leg that conflated them
+    would report a broken checkout as a board full of missing files — the confident zero,
+    inverted. `--verify --quiet` keeps a non-repo and a missing revision on the same
+    non-zero path so the caller gets a reason rather than a traceback.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git rev-parse {rev} could not run in {repo}: {exc}"
+    sha = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not sha:
+        detail = (proc.stderr or "").strip().splitlines()
+        return None, (f"`{repo}` resolves no commit at {rev}"
+                      + (f" ({detail[-1]})" if detail else ""))
+    return sha, ""
+
+def committed_path_present(ref: str, *, repo: Path, rev: str) -> tuple[bool, str]:
+    """Whether the COMMITTED tree at `rev` holds `ref`, and WHY NOT when the probe failed.
+
+    The read is `git cat-file -e <rev>:<ref>` — the tree the commit records, never the
+    working tree a checkout happens to hold (`template-instruments.md:776` §7.5). `cat-file
+    -e` answers for TREES as well as blobs, so a name that resolves to a directory reads
+    present exactly as `Path.exists()` read it, and this change moves the SURFACE without
+    moving the population.
+
+    `why` is non-empty only when the probe could not run at all. That is a different fact
+    from a path absent from the commit, and the caller must not read one as the other: the
+    first is an instrument failure, the second is the finding this leg exists to report.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "-e", f"{rev}:{ref}"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"git cat-file -e {rev}:{ref} could not run: {exc}"
+    return proc.returncode == 0, ""
+
 def criterion_path_leg(issues: list[dict], *, read_at: str,
-                       repo: Path = REPO) -> dict:
+                       repo: Path = REPO, rev: str = "HEAD") -> dict:
     """Resolve the paths a board item's CRITERIA name (#48, ruling criterion 3/4).
 
     Candidate 1 closes the law-surface half and cannot reach two surfaces, because neither
@@ -4711,12 +4756,40 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
     count is PRINTED rather than silently dropped.
 
     The population is PRINTED (`refs_examined`), so a leg that read nothing does not read as
-    a leg that found everything clean. A path is judged against the tree at `read_at`, and a
-    `TEMPLATE/`-prefixed name is resolved as the shipped twin, which is how the law writes
-    it.
+    a leg that found everything clean. A path is judged against the COMMITTED TREE at the
+    reading revision, never the working tree (#450, template-instruments.md §7.5): a criterion naming a path that
+    exists only on someone's disk — a gitignored receipt, an untracked scratch file — is
+    unresolvable for EVERY reader, and that is what makes the verdict reproducible. The
+    consequence is stated rather than hidden: since #445 moved the publish receipt to the
+    git common dir, the refs naming `evidence/publish-receipt.json` read unresolved in every
+    checkout, and that is TRUE — the path is not in the repository. A `TEMPLATE/`-prefixed
+    name is resolved as the shipped twin, which is how the law writes it.
+
+    A tree that cannot be read is NOT RUN with its reason, never a clean sweep: an
+    instrument that failed has judged nothing, and reading every path ABSENT because git
+    could not run would put a board's worth of false findings on the record.
     """
+    commit, why = committed_tree_rev(repo, rev)
+    if commit is None:
+        return {
+            "name": "criterion-paths",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": (
+                    f"the reading revision could not be resolved, so no criterion path was "
+                    f"judged: {why} — a path is judged against the COMMITTED tree (#450, "
+                    f"template-instruments.md §7.5), and a tree that cannot be read has judged nothing"
+                ),
+                "repo": str(repo),
+                "rev": rev,
+                "read_at": read_at,
+            },
+        }
     examined = 0
     problems: list[str] = []
+    unreadable: list[str] = []
     open_items = 0
     closed_items = 0
     for issue in issues:
@@ -4735,12 +4808,38 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
                 if not is_mechanism_path(ref):
                     continue
                 examined += 1
-                if (repo / ref).exists():
+                present, why = committed_path_present(ref, repo=repo, rev=commit)
+                if why:
+                    unreadable.append(f"`{ref}`: {why}")
+                    continue
+                if present:
                     continue
                 problems.append(
                     f"issue #{number} criterion ({where}) names `{ref}` — ABSENT at "
                     f"{read_at}; dispatch a work item naming `{ref}`"
                 )
+    if unreadable:
+        # A PARTIAL READ IS NOT A MEASUREMENT (template-instruments.md §7.5): if any path could not be probed, the
+        # leg's count is a figure no reader can reproduce, so the whole verdict is NOT RUN
+        # over the reason rather than a short population wearing a clean one's name.
+        return {
+            "name": "criterion-paths",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": (
+                    f"{len(unreadable)} of {examined} reference(s) could not be probed "
+                    f"against the reading commit {commit[:12]}: "
+                    f"{'; '.join(unreadable[:3])}"
+                ),
+                "repo": str(repo),
+                "rev": rev,
+                "read_rev": commit,
+                "refs_examined": examined,
+                "read_at": read_at,
+            },
+        }
     return {
         "name": "criterion-paths",
         "status": "ASSERTED",
@@ -4752,6 +4851,9 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
             "closed_items_excluded": closed_items,
             "surfaces": ["body", "ruling comment"],
             "read_at": read_at,
+            # The revision the verdict is reproducible from (template-instruments.md §7.5): a reader re-derives the
+            # same set from this commit alone, whatever their own checkout holds on disk.
+            "read_rev": commit,
         },
     }
 
@@ -6179,12 +6281,21 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # read as one that found everything clean. The EXCLUSION is printed beside it
             # for the same reason: a closed item's criteria are outside this leg by design,
             # and a reader must be able to see that they were dropped rather than missed.
+            # A NOT RUN carries its reason: an unreadable tree is not a clean board (#450).
+            if leg["status"] == "NOT RUN":
+                lines.append(f"  NOT RUN: {cov.get('reason') or 'reason not stated'}")
+                lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+                lines.append(f"  excused: {len(leg['excused'])}")
+                lines.append(f"  problems: {len(leg['problems'])}")
+                lines.append("")
+                continue
             lines.append(
                 f"  criterion paths (issue body and ruling comment): "
                 f"{cov['refs_examined']} reference(s) examined over "
                 f"{cov['issues_read']} issue(s), {len(leg['problems'])} unresolved — "
                 f"{cov['closed_items_excluded']} closed item(s) outside the population — "
-                f"board read at {cov['read_at']}"
+                f"board read at {cov['read_at']}, judged against the tree at "
+                f"{cov.get('read_rev') or 'an unrecorded revision'}"
             )
         else:
             lines.append(

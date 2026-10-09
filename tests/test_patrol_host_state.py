@@ -98,10 +98,24 @@ _NO_RULING_EXEMPTIONS = (
 # reads none, and every probe written before the clause existed keeps its meaning without
 # being touched — there is no live table a probe could accidentally read.
 
-# The criterion-path leg (#48) resolves a board criterion's named paths against a TREE. The
-# default tree for a probe is EMPTY and exists, so a probe that does not supply its own tree
-# reads every named path as ABSENT — it cannot pass by accidentally finding a live file.
-_EMPTY_CRITERION_TREE = Path(tempfile.mkdtemp(prefix="patrol-empty-criterion-tree-"))
+# The criterion-path leg (#48) resolves a board criterion's named paths against the TREE AT
+# THE READING REVISION (#450, template-instruments.md §7.5) — never a working tree, which moves under the reader and
+# puts a peer's in-flight file into the verdict. The default for a probe is therefore an
+# EMPTY REPOSITORY: a probe that supplies no tree of its own reads every named path as
+# ABSENT, so it cannot pass by accidentally finding a live file — and it cannot read as NOT
+# RUN either, which a plain directory would now be, since a directory has no commit to read.
+_EMPTY_CRITERION_TREE: Path | None = None
+
+def _empty_criterion_tree() -> Path:
+    """The empty repository a probe that supplies no tree of its own reads (#450).
+
+    Built on FIRST USE rather than at import, so a box without git fails the probes that
+    need a repository rather than the whole file at collection time.
+    """
+    global _EMPTY_CRITERION_TREE
+    if _EMPTY_CRITERION_TREE is None:
+        _EMPTY_CRITERION_TREE = _criterion_tree()
+    return _EMPTY_CRITERION_TREE
 
 
 def _issue(number: int, state: str, assignees: "list[str] | None" = None) -> dict:
@@ -246,14 +260,15 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         deliveries_fn=lambda: (
             [] if deliveries is None else deliveries, ["probe-home"], []
         ),
-        # The criterion-path leg (#48) resolves the paths a board criterion names against a
-        # TREE, so a probe must not have its verdict decided by whether the LIVE repo holds
-        # `tools/x.py`. The default here is a directory that exists and is EMPTY, so a probe
-        # that does not inject a tree of its own cannot accidentally pass by finding a live
-        # file — it can only pass on a fixture it supplied.
+        # The criterion-path leg (#48) resolves the paths a board criterion names against the
+        # TREE AT THE READING REVISION (#450, template-instruments.md §7.5), so a probe must not have its verdict
+        # decided by whether the LIVE repo holds `tools/x.py`. The default here is an empty
+        # REPOSITORY — it exists, it resolves a commit, and its commit holds nothing — so a
+        # probe that does not inject a tree of its own cannot accidentally pass by finding a
+        # live file, and cannot read as NOT RUN either.
         criterion_repo_fn=(
             (lambda: criterion_repo) if criterion_repo is not None
-            else (lambda: _EMPTY_CRITERION_TREE)
+            else _empty_criterion_tree
         ),
         # The three BOARD legs' bounds (#428) are injected for the same reason the ruling
         # bound is: each judges a HISTORICAL population against a bound this tree declares,
@@ -6387,14 +6402,52 @@ def _issue_with_body(number: int, state: str, body: str) -> dict:
     issue["body"] = body
     return issue
 
+def _git_init(root: Path) -> Path:
+    """`root` as a real repository with its OWN identity, never the box's (#450)."""
+    root.mkdir(parents=True, exist_ok=True)
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "probe@example.invalid")
+    _git(root, "config", "user.name", "probe")
+    return root
+
+
 def _criterion_tree(*paths: str) -> Path:
-    """A throwaway tree holding exactly the named paths, so a probe decides the verdict."""
-    root = Path(tempfile.mkdtemp(prefix="criterion-tree-"))
+    """A throwaway REPOSITORY holding exactly the named paths IN ITS COMMITTED TREE.
+
+    It must be a repository, not a directory holding files (#450): the leg reads the tree at
+    the reading REVISION, so a fixture that merely wrote files would prove nothing about the
+    verdict a reader reproduces — and a plain directory would now read NOT RUN, turning
+    every probe in this block into an instrument failure. The paths are COMMITTED, so the
+    commit is the one thing that decides.
+    """
+    root = _git_init(Path(tempfile.mkdtemp(prefix="criterion-tree-")))
     for rel in paths:
         target = root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("probe\n", encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "--allow-empty", "-m", "probe tree")
     return root
+
+
+def _criterion_tree_pair(*paths: str) -> tuple[Path, Path]:
+    """TWO checkouts of ONE repository, both holding the named paths in their COMMITTED tree.
+
+    The pair is what makes reader-independence provable (#450 acceptance): the checkouts
+    share a commit, so any difference in their verdicts can only come from something
+    OUTSIDE that commit — which is exactly the working-tree leak the defect reports.
+    """
+    root = Path(tempfile.mkdtemp(prefix="criterion-pair-"))
+    main = _git_init(root / "main")
+    for rel in paths:
+        target = main / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("probe\n", encoding="utf-8")
+    _git(main, "add", "-A")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "probe tree")
+    linked = root / "linked"
+    _git(main, "worktree", "add", "-q", str(linked))
+    return main, linked
 
 def test_the_criterion_path_leg_RESOLVES_a_named_path_and_states_its_population() -> None:
     """The clean arm, WITH its population — `examined 0` must not render as `examined 1`."""
@@ -6539,6 +6592,73 @@ def test_the_criterion_path_leg_reads_a_CLEAN_board_clean_and_says_what_it_read(
     )
     assert rc == 0, f"a resolvable criterion must not fail the run\n{out}"
     assert "1 reference(s) examined over 1 issue(s), 0 unresolved" in out, out
+
+
+def test_the_criterion_path_leg_reads_the_COMMIT_never_the_WORKING_TREE() -> None:
+    """#450 acceptance: two checkouts of ONE repository, the same board, the same commit —
+    and one of them carries an UNTRACKED `evidence/publish-receipt.json` on disk.
+
+    The verdicts must be IDENTICAL. Reproduced on the live board at `ea882c48`: 18
+    unresolved with the receipt present against 21 without, and the 3-ref delta was exactly
+    the publish-receipt refs — the reader's own working tree deciding the verdict. The
+    consequence is EXPECTED, not suppressed: since #445 moved the receipt to the git common
+    dir, the path is in no commit, so BOTH checkouts name it.
+    """
+    issues = [_issue_with_body(
+        11, "OPEN", "Acceptance: `evidence/publish-receipt.json` is written by the pusher."
+    )]
+    reader, sibling = _criterion_tree_pair("docs/real.md")
+    receipt = reader / "evidence" / "publish-receipt.json"
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    receipt.write_text('{"sha": "probe"}\n', encoding="utf-8")
+    with_receipt = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=reader)
+    without = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=sibling)
+    assert with_receipt["problems"] == without["problems"], (
+        "a working-tree file must not move the verdict\n"
+        f"with: {with_receipt['problems']}\nwithout: {without['problems']}"
+    )
+    assert with_receipt["problems"], (
+        "the path is in NO commit, so both checkouts must name it — a clean verdict here "
+        "would mean the leg read the disk"
+    )
+    assert with_receipt["coverage"]["read_rev"] == without["coverage"]["read_rev"], (
+        "the two checkouts share a commit, so they must read the SAME revision"
+    )
+
+
+def test_the_criterion_path_leg_is_NOT_RUN_when_the_revision_cannot_be_RESOLVED() -> None:
+    """A reader that cannot resolve the reading revision says so — never a clean sweep.
+
+    `examined 0` and "every named path resolves" are the same render when the instrument
+    never ran, and telling them apart is what template-instruments.md §7.5 exists for. A plain directory has no
+    commit to read, so it is NOT RUN over its reason rather than a board's worth of paths
+    read ABSENT because git could not run.
+    """
+    issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
+    plain = Path(tempfile.mkdtemp(prefix="criterion-notrepo-"))
+    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=plain)
+    assert leg["status"] == "NOT RUN", leg["status"]
+    assert leg["problems"] == [], leg["problems"]
+    assert "could not be resolved" in leg["coverage"]["reason"], leg["coverage"]
+    # And it must RENDER as NOT RUN, not as a clean leg: the status is printed, not inferred.
+    rows = _rows(("intake", "#11", 1), ("ruling", "#11", 2))
+    rc, out, _ = _run(issues, rows, criterion_repo=plain)
+    assert "NOT RUN:" in out, out
+
+
+def test_the_criterion_path_leg_PRINTS_the_revision_it_read() -> None:
+    """The revision is part of the verdict: "0 unresolved" is a claim about a COMMIT, and a
+    reader who cannot see WHICH commit cannot reproduce it (#450's honesty half, template-instruments.md §7.5)."""
+    issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
+    rows = _rows(("intake", "#11", 1), ("ruling", "#11", 2))
+    tree = _criterion_tree("tools/probe.py")
+    rc, out, _ = _run(issues, rows, criterion_repo=tree)
+    assert rc == 0, out
+    assert "judged against the tree at" in out, out
+    head, _why = RUNNER.committed_tree_rev(tree)
+    assert head and head[:12] in out, (
+        f"the render must name the commit it read ({head})\n{out}"
+    )
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
