@@ -3188,6 +3188,60 @@ def test_a_PUSHER_made_push_reads_GOVERNED_from_a_SIBLING_worktree() -> None:
             leg["coverage"]["receipt"]
         )
 
+def test_a_STALE_checkout_local_receipt_does_not_mislead_the_leg() -> None:
+    """#445 acceptance, the STALE half of the fixture pair.
+
+    The sibling arm covers the checkout that holds NO record. This one plants the OLD
+    shape's leftover -- a checkout-local `evidence/publish-receipt.json` naming a sha the
+    remote tip does NOT match -- in the READING checkout, and asserts the leg still reads
+    the ONE per-repository record and reports the tip GOVERNED. It is the false positive
+    itself: before #445 the leg read that stale file and named the lane that had pushed
+    correctly.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        pub = _pusher()
+        now = dt.datetime.now(dt.timezone.utc)
+        old = now - dt.timedelta(seconds=RUNNER.PUBLISH_GRACE_SECS * 4)
+
+        sha = _commit(work, "b.txt", when=old, trailer="gov-lane")
+        report = pub.publish(
+            work, remote="origin", branch="main",
+            grace_secs=RUNNER.PUBLISH_GRACE_SECS, apply=True,
+        )
+        assert report["status"] == "published" and report["receipt"]["sha"] == sha, report
+
+        sibling = _sibling(work, root, "sibling")
+        # The leftover: a stale record in the OLD, checkout-local location.
+        stale_dir = sibling / "evidence"
+        stale_dir.mkdir(parents=True, exist_ok=True)
+        (stale_dir / "publish-receipt.json").write_text(
+            json.dumps({
+                "sha": "0" * 40,
+                "instant": "2026-01-01T00:00:00Z",
+                "remote": "origin",
+                "branch": "main",
+            }) + "\n",
+            encoding="utf-8",
+        )
+
+        leg = RUNNER.publish_freshness_leg(
+            repo=sibling, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg["problems"] == [], (
+            f"a stale checkout-local receipt must not make a governed push read "
+            f"UNGOVERNED: {leg['problems']}"
+        )
+        assert leg["coverage"]["receipt"] is not None, leg["coverage"]["receipt_reason"]
+        assert leg["coverage"]["receipt"]["sha"] == sha, (
+            "the leg must read the per-repository record, not the stale local file"
+        )
+        assert leg["coverage"]["receipt_mismatch"] is None
+        assert leg["coverage"]["receipt_path"] == str(pub.receipt_path(work)), (
+            leg["coverage"]["receipt_path"]
+        )
+
 def test_the_publish_leg_flags_a_YOUNG_tip_no_receipt_can_explain() -> None:
     """Leg (c)(3), the cheap arm. The pusher HOLDS a commit younger than its grace window,
     so a tip that young cannot have left through it -- and this arm speaks when there is no
