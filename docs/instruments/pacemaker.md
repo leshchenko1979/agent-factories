@@ -315,6 +315,39 @@ between a declaration and an extension. The member's duty here is **cited, never
 §6.5, and that frame's own scope): O1's migrate-or-declare-or-defer disposition for a copy it already
 holds, and O4's duty to declare what its instrument accepts — or to state why it has none.
 
+### 6.2 The one-time sweep of the legacy receipt — and why it is not a `.gitignore` line
+
+**The receipt row above describes where the record lives NOW. It does not reach the copies already
+on disk**, and that gap is what #452 measured: the migration to the common dir moved the WRITER, so
+every checkout that had already pushed kept the pre-#445 `evidence/publish-receipt.json` behind.
+Nothing creates it any more and nothing declares it, so the placement leg reads it as a **true
+mismatch** — a JSON file in `evidence/`, a directory that admits only markdown and jsonl. Measured
+2026-10-09: present in four of six checkouts, absent in the two that had never pushed.
+
+Two halves, and only the first is automatic:
+
+1. **The pusher sweeps the checkout it pushes from.** On a successful push, `tools/publish.py`
+   removes `<repo>/evidence/publish-receipt.json` if it is there — **INERT when absent** (one stat),
+   so a member that never carried the path pays nothing and its round reports no removal. This is
+   what makes the instrument's existing promise true over the carried-over population too: no
+   checkout-local receipt survives a push.
+2. **A checkout that will never push again is STRUCTURALLY UNREACHABLE by that leg** — it runs
+   wherever a push runs, and there is no push. That population is what the **one-time sweep** is
+   for. It is run ONCE per repository, by hand, after which half 1 holds it:
+
+   ```
+   git -C <repo> worktree list --porcelain | awk '/^worktree /{print $2}' \
+     | while read -r wt; do rm -f "$wt/evidence/publish-receipt.json"; done
+   ```
+
+   `worktree list` is the reachability route: it names every checkout of the repository, so one run
+   covers them all rather than one per checkout. `rm -f` is inert on a checkout that never had one.
+
+**NOT a `.gitignore` line, and the difference is not stylistic.** Declaring the path would put it OUT
+of the placement population — printed by name as ignored, and therefore never reported — which is an
+allowlist wearing gitignore's clothes, suppressing a finding that is true (`tools/hygiene.py:783-784`).
+The remedy is to remove the file, never to teach the reader to stop seeing it.
+
 ## 7. Self-probe and non-vacuity — part 8
 
 **A gate that has only seen good input has not been shown to bite** (frame §2, part 8). This

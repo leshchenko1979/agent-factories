@@ -38,7 +38,9 @@ from __future__ import annotations
 
 import ast
 import datetime as dt
+import importlib.util
 import io
+import json
 import os
 import subprocess
 import sys
@@ -141,6 +143,21 @@ def configured_clone(root: Path, remote: Path, name: str) -> Path:
     git(dest, "config", "user.name", "probe")
     return dest
 
+
+def _placement(root: Path) -> dict:
+    """The placement leg, read from the TOOL that owns it (#452).
+
+    Never re-implemented here: a second copy of the predicate would let this gate pass
+    while the shipped leg still read the orphan as clean, which is the defect the arm
+    exists to catch."""
+    spec = importlib.util.spec_from_file_location(
+        "hygiene_placement_for_publish_gate", REPO / "tools" / "hygiene.py"
+    )
+    assert spec and spec.loader, "cannot load tools/hygiene.py"
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.placement_leg(root)
 
 # --- pure predicates -----------------------------------------------------------------
 
@@ -585,6 +602,117 @@ def receipt_is_shared_across_worktrees_arm() -> None:
             f"wt_local={(wt / 'evidence' / 'publish-receipt.json').exists()}",
         )
 
+def legacy_receipt_orphan_arm() -> None:
+    """Issue #452: the next push REMOVES the pre-#445 checkout-local receipt.
+
+    #445 moved the record into the repository's git common dir, but every checkout that had
+    already pushed kept the OLD `evidence/publish-receipt.json` behind. Nothing creates it
+    any more and nothing declares it, so the placement leg reads it as a TRUE mismatch --
+    a JSON file in a directory that admits only markdown and jsonl.
+
+    Two halves, and the second is the discriminating one: the arm is not allowed to pass by
+    having planted something the leg would ignore anyway. The SAME planted orphan is shown
+    to be READ as a mismatch before the push, and GONE after it -- so a leg that reported
+    the orphan regardless, or a pusher that never removed it, fails here.
+    """
+    legacy_rel = pub.LEGACY_RECEIPT_REL
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+
+        # exactly what the pre-#445 pusher left in a checkout that had already pushed
+        orphan = repo / legacy_rel
+        orphan.parent.mkdir(parents=True, exist_ok=True)
+        orphan.write_text('{"sha": "deadbeef"}\n', encoding="utf-8")
+        check(
+            orphan.is_file(),
+            "the fixture plants the legacy receipt where the pre-#445 pusher left it",
+            f"path={orphan}",
+        )
+
+        # THE CONTROL: the leg READS the planted orphan as a mismatch. Without this the
+        # arm below would also pass if the leg never looked at `evidence/` at all.
+        before = _placement(repo)
+        check(
+            any(m["path"] == str(legacy_rel) for m in before["mismatches"]),
+            "the planted legacy receipt IS read as a placement mismatch (the control)",
+            f"mismatches={[m['path'] for m in before['mismatches']]}",
+        )
+
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=GRACE * 4)
+        sha = commit(repo, "b.txt", when=old)
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=True)
+        leg = report.get("legacy_receipt") or {}
+
+        check(
+            report["status"] == "published",
+            "the round pushed, so the removal ran on a real publish path",
+            f"status={report['status']} sha={sha}",
+        )
+        check(
+            not orphan.exists(),
+            "a successful push REMOVES the legacy checkout-local receipt",
+            f"exists={orphan.exists()} reported={leg}",
+        )
+        check(
+            leg.get("path") == str(orphan) and not leg.get("reason"),
+            "the round REPORTS the removal by name",
+            f"legacy_receipt={leg}",
+        )
+
+        # the #445 record is untouched: the removal is of the LEGACY path only
+        receipt = pub.receipt_path(repo)
+        check(
+            receipt is not None and receipt.is_file() and receipt != orphan,
+            "the common-dir receipt still stands after the legacy one is removed",
+            f"receipt={receipt} legacy={orphan}",
+        )
+
+        # and the leg now reads clean on the same tree that was RED a moment ago
+        after = _placement(repo)
+        check(
+            after["mismatches"] == [],
+            "the placement leg reads clean once the push has swept the orphan",
+            f"mismatches={[m['path'] for m in after['mismatches']]}",
+        )
+
+    # THE INERT HALF: a checkout with NO orphan pays nothing and reports nothing. The
+    # removal is a single stat, so a member factory that never carried the path sees no
+    # change -- and a report that named a removal here would be naming a file it never had.
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=GRACE * 4)
+        commit(repo, "b.txt", when=old)
+
+        clean_report = pub.publish(
+            repo, remote="origin", branch="main", grace_secs=GRACE, apply=True
+        )
+        clean_leg = clean_report.get("legacy_receipt") or {}
+        check(
+            clean_report["status"] == "published"
+            and clean_leg.get("path") is None
+            and not clean_leg.get("reason")
+            and not (repo / legacy_rel).exists(),
+            "a checkout with no legacy receipt reports NOTHING (the inert half)",
+            f"status={clean_report['status']} legacy_receipt={clean_leg}",
+        )
+
+        # a removal that FAILED is REPORTED, never silently swallowed: an orphan that is a
+        # directory is not a file, so the pusher leaves it standing and says why
+        stubborn = repo / legacy_rel
+        stubborn.mkdir(parents=True, exist_ok=True)
+        stuck = pub.remove_legacy_receipt(repo)
+        check(
+            stuck[0] is None and stubborn.is_dir(),
+            "a legacy path that cannot be removed is left standing, never forced",
+            f"result={stuck} exists={stubborn.is_dir()}",
+        )
+
 def dry_run_arm() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         remote = init_bare(Path(tmp) / "remote.git")
@@ -961,6 +1089,7 @@ def main() -> int:
     old_commit_publishes_arm()
     receipt_arm()
     receipt_is_shared_across_worktrees_arm()
+    legacy_receipt_orphan_arm()
     dry_run_arm()
     divergence_arm()
     behind_is_not_diverged_arm()

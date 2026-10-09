@@ -193,6 +193,41 @@ def read_receipt(repo: Path):
         return None, f"the receipt at {path} names no sha"
     return body, ""
 
+# --- the LEGACY receipt: removed on publish, never declared (#452) ----------------
+#
+# Before `#445` the pusher wrote its receipt INSIDE the repo, at
+# `evidence/publish-receipt.json`. The migration moved the record to the git common dir and
+# deleted BOTH that constant and its `.gitignore` declaration, so every checkout that pushed
+# before the migration keeps a file NOTHING CREATES and NOTHING DECLARES -- and the placement
+# leg reads it as a TRUE mismatch (`evidence/` admits markdown and jsonl; a `.json` there is a
+# genuine violation, so the remedy is not to silence the gate).
+#
+# The pusher owns the receipt's lifecycle and this was its own artifact, so the pusher removes
+# it -- INERT where no orphan exists (one stat), so a member factory that never carried the
+# path pays nothing. A checkout that will never push again is reached by the documented sweep
+# instead (docs/instruments/pacemaker.md), because this leg is structurally blind to it.
+#
+# NOT declared in `.gitignore`: nothing creates the path any more, so a declaration would make
+# the placement leg print "the repo creates it; it does not track it" about a path the repo
+# stopped creating -- an allowlist wearing gitignore's clothes, which suppresses a true
+# finding (tools/hygiene.py:783-784).
+LEGACY_RECEIPT_REL = Path("evidence") / RECEIPT_NAME
+
+def remove_legacy_receipt(repo: Path):
+    """Delete the pre-#445 checkout-local receipt. `(path, reason)`; INERT when absent.
+
+    Only leg 1 of the remedy, and the only one that heals a checkout AUTOMATICALLY: it runs
+    wherever a push runs. It cannot reach a checkout that will never push again, which is
+    what the documented sweep is for.
+    """
+    path = Path(repo) / LEGACY_RECEIPT_REL
+    try:
+        if not path.is_file():
+            return None, ""
+        path.unlink()
+    except OSError as exc:
+        return None, f"the legacy receipt at {path} could not be removed: {exc}"
+    return path, ""
 
 def commit_info(repo: Path, sha: str):
     """`(info, reason)` for ONE commit -- its instant, its lane trailer and its subject.
@@ -707,6 +742,17 @@ def publish(
         "path": None if path is None else str(path),
         "reason": problem,
     }
+
+    # THE LEGACY ORPHAN (#452). The migration left a pre-#445 checkout-local receipt behind
+    # in every checkout that had pushed, and nothing creates or declares it any more, so the
+    # placement leg reads it as a true mismatch. Removing it here makes the existing promise
+    # -- no checkout-local receipt survives a push -- true over the CARRIED-OVER population
+    # too, not only over a freshly initialized repo. INERT when absent: one stat.
+    legacy_path, legacy_problem = remove_legacy_receipt(repo)
+    report["legacy_receipt"] = {
+        "path": None if legacy_path is None else str(legacy_path),
+        "reason": legacy_problem,
+    }
     return report
 
 
@@ -749,6 +795,16 @@ def render(report: dict) -> str:
             lines.append(f"  receipt: NOT WRITTEN — {rec['reason']}")
         else:
             lines.append(f"  receipt: {rec['path']} records {rec['sha']}")
+    # PRINTED only when there was something to remove: a checkout with no orphan says
+    # nothing, which is what INERT means on the ordinary round.
+    if report.get("legacy_receipt"):
+        leg = report["legacy_receipt"]
+        if leg.get("reason"):
+            lines.append(f"  legacy receipt: NOT REMOVED — {leg['reason']}")
+        elif leg.get("path"):
+            lines.append(
+                f"  legacy receipt: REMOVED {leg['path']} (pre-#445; nothing creates it)"
+            )
     if report.get("reason"):
         lines.append(f"  {report['reason']}")
     return "\n".join(lines)
