@@ -322,7 +322,8 @@ on disk**, and that gap is what #452 measured: the migration to the common dir m
 every checkout that had already pushed kept the pre-#445 `evidence/publish-receipt.json` behind.
 Nothing creates it any more and nothing declares it, so the placement leg reads it as a **true
 mismatch** — a JSON file in `evidence/`, a directory that admits only markdown and jsonl. Measured
-2026-10-09: present in four of six checkouts, absent in the two that had never pushed.
+2026-10-09: a six-checkout sample found four carrying it; a census over the repository's own
+`git worktree list --porcelain` found **29 of its 143 checkouts** — every one that had pushed.
 
 Two halves, and only the first is automatic:
 
