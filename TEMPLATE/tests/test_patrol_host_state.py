@@ -3142,6 +3142,52 @@ def test_the_receipt_is_SHARED_across_worktrees_of_one_repository() -> None:
         assert leg_a["coverage"]["receipt"]["origin_checkout"] == str(work.resolve())
         assert leg_b["coverage"]["receipt"]["origin_checkout"] == str(work.resolve())
 
+def test_a_PUSHER_made_push_reads_GOVERNED_from_a_SIBLING_worktree() -> None:
+    """#445 acceptance, driven by a REAL pusher push rather than a hand-written receipt.
+
+    The arm above writes the record through `write_receipt` directly; this one runs the
+    PUSHER -- `publish(..., apply=True)` -- so the receipt read is the one the tool itself
+    writes on a round it published, and then reads the leg from a SIBLING worktree that
+    holds no record of its own. Before #445 that sibling read `no receipt recorded` (the
+    measured false negative) or a stale checkout-local receipt (the measured false positive
+    that named the lane which had pushed correctly); now it reads the one per-repository
+    record and reports the tip as GOVERNED.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        pub = _pusher()
+        now = dt.datetime.now(dt.timezone.utc)
+        old = now - dt.timedelta(seconds=RUNNER.PUBLISH_GRACE_SECS * 4)
+
+        sha = _commit(work, "b.txt", when=old, trailer="gov-lane")
+        report = pub.publish(
+            work, remote="origin", branch="main",
+            grace_secs=RUNNER.PUBLISH_GRACE_SECS, apply=True,
+        )
+        assert report["status"] == "published" and report["receipt"]["sha"] == sha, report
+
+        sibling = _sibling(work, root, "sibling")
+        leg = RUNNER.publish_freshness_leg(
+            repo=sibling, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg["problems"] == [], (
+            f"a push the pusher ITSELF made must read governed from a sibling worktree: "
+            f"{leg['problems']}"
+        )
+        # The DISCRIMINATING assertion. Against the old checkout-local shape the sibling
+        # reads no receipt at all, so `problems` is ALSO empty -- the false negative is
+        # silent -- and only a read of the record itself separates the two shapes.
+        assert leg["coverage"]["receipt"] is not None, (
+            "the sibling must READ the record the pusher wrote in the OTHER checkout, not "
+            f"report it absent (receipt_reason={leg['coverage']['receipt_reason']!r})"
+        )
+        assert leg["coverage"]["receipt"]["sha"] == sha
+        assert leg["coverage"]["receipt_mismatch"] is None
+        assert leg["coverage"]["receipt"]["origin_checkout"] == str(work.resolve()), (
+            leg["coverage"]["receipt"]
+        )
+
 def test_the_publish_leg_flags_a_YOUNG_tip_no_receipt_can_explain() -> None:
     """Leg (c)(3), the cheap arm. The pusher HOLDS a commit younger than its grace window,
     so a tip that young cannot have left through it -- and this arm speaks when there is no
