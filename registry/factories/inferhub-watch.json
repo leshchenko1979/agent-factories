@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-08T06:06:28Z",
+  "attested_at": "2026-10-09T06:17:21Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
@@ -140,10 +140,10 @@
     },
     "ledger": {
       "state": "partial",
-      "green": false,
-      "behind_by": 4,
-      "measured_at": "2026-10-05T12:53Z",
-      "reason": "8 of 15 held, 7 absent (the index pair, the main gate tests/test_ledger.py, the identity gate, the shared closure tests/gate_fixtures.py, the DECLINED commit-citation gate, and docs/instruments/ledger.md); behind_by 4 names the present-but-lagging set tools/ledger.py / tests/ledger_boundary.py / tests/test_ledger_close_preflight.py / tests/test_ledger_schema.py. The schema gate moved again at 10bf86e+e99ddee (behind_by 3 -> 4) and was NOT re-vendored because the seam is a coupled set: the new cases call validate_row_schema(event_types=...), my copy's signature carries no event_types and the tree has zero occurrences of it, so a lone re-vendor would TypeError rather than grade. green false because tests/test_ledger_close_preflight.py is red here. measured_at is the census instant this row was transcribed at; the member's own measurement instant was relayed with a redacted minute and is deliberately not restated."
+      "green": true,
+      "behind_by": 5,
+      "measured_at": "2026-10-09T06:11Z",
+      "reason": "RE-MEASURED 2026-10-09; supersedes the 2026-10-05 row (8 of 15 held, green false, behind_by 4). HELD 9/15 (was 8/15 \u2014 tests/gate_fixtures.py is now present). behind_by 5 = present-but-byte-divergent from origin/main's TEMPLATE half: tools/ledger.py (149,954 vs 164,937 B), tools/field_predicate.py (42,395 vs 53,982), tests/test_ledger_schema.py (41,369 vs 57,237), tests/test_ledger_no_shrink.py (25,820 vs 47,828), tests/test_ledger_close_preflight.py (12,320 vs 12,392). green TRUE: every held gate exits 0 here \u2014 test_ledger_close_preflight.py 7 passed, tests/ledger_boundary.py rc=0, tests/test_ledger_schema.py rc=0 (1020 rows audited), tests/test_ledger_no_shrink.py rc=0 (553 commits, 1 excused owner removal 6346798). Absent 6: tools/ledger-index.py, tests/test_ledger.py, tests/test_ledger_identity.py, tests/test_ledger_commit_cites_no_rows.py, tests/test_ledger_index.py, docs/instruments/ledger.md. Census cross-check: tools/instrument_census.py ledger at 2026-10-09T06:09:57Z reads inferhub-watch 9/15, absent, partial\u00b7green=false (that green=false is the stale DECLARED value this amendment replaces)."
     },
     "open-questions": {
       "state": "deferred",

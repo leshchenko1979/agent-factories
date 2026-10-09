@@ -11,7 +11,7 @@
       "the opencrabs-dev skill set: SKILL.md, the five role files (editor, hq, triage, toolsmith, harvest), fleet-directives.md and the runbooks -- NARROWED BY FIVE OWNER-APPROVED CARVE-OUTS: the Toolsmith lane owns tools/ CODE; the Triage lane owns AFFINITY_KEYWORDS and lane repurposing; Duty-4/6 finding remediation ships without the design gate; harvesting needs no design gate; and per-instrument law files under /root/agent-factories/docs/instruments/ are authored by each instrument's own owner, with the superseded fleet-directives.md copy reduced to a [LANE] pointer",
       "the workers-ledger and skill-version consensus",
       "the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory",
-      "the factory's two issue trackers: the fork board leshchenko1979/opencrabs (PRs and legacy issues; READ-ONLY for new issues) and the factory tracker leshchenko1979/opencrabs-dev-factory"
+      "the factory's three issue streams \u2014 BINARY defects on upstream opencrabs/opencrabs, FACTORY issues on leshchenko1979/opencrabs-dev-factory, and FORK-ONLY defects (surface exists only in our fork, discriminated by the fork-only boundary register #761 and the census FORK_ONLY_SURFACE predicate) on the fork board leshchenko1979/opencrabs"
     ],
     "does_not_own": [
       "the fast-mcp-telegram substrate and its tg_* tool family",
@@ -49,7 +49,7 @@
     {
       "name": "Issue intake and triage (two-stream)",
       "audience": "agent",
-      "entry": "the Triage lane; a BINARY issue on opencrabs/opencrabs, a FACTORY issue on leshchenko1979/opencrabs-dev-factory, and the portfolio leshchenko1979/opencrabs READ-ONLY",
+      "entry": "the Triage lane; a BINARY issue on opencrabs/opencrabs, a FACTORY issue on leshchenko1979/opencrabs-dev-factory, and a FORK-ONLY defect (surface exists only in our fork) on the fork board leshchenko1979/opencrabs",
       "cadence": "on request"
     },
     {
@@ -68,7 +68,7 @@
       "id": "notify-now-mode-retired",
       "scope": "profile",
       "severity": "warning",
-      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict means the target is mid-turn; never re-send on it.",
+      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict does NOT mean the target is mid-turn \u2014 a mid-turn target returns `queued_pending_drain`. The unconfirmed verdict means the probe read the target idle and no wake was seen inside the 10s cap, so it cannot distinguish 'queued, will drain' from 'folded into a turn-settle window and never re-armed' (opencrabs/opencrabs#2003: in the settle window the probe reads idle while the turn is still finishing, the notice joins the settling turn, and no wake is re-armed \u2014 measured 5m41s undrained). Never re-send on the verdict alone: re-check the target's own store first.",
       "affects": [
         "profile"
       ],
@@ -307,7 +307,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-08T06:09:44Z",
+  "attested_at": "2026-10-09T06:08:00Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

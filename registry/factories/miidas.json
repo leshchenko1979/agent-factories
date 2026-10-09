@@ -7,9 +7,9 @@
   "purpose": "MIIDAS is an ecosystem of applied business AI for Russian SMB owners \u2014 dedicated Telegram AI executive assistants provisioned as per-client managed agent containers, plus the platform that mints, binds and bills them.",
   "zone": {
     "owns": [
-      "/root/miidas platform repo (agent, landing, manager, cdp components) and its deploys to agents-old (89.125.120.5:52676); the apps copy is retained as the rollback",
+      "/root/miidas platform repo (agent, manager, cdp components; landing/ is RETIRED in this repo, retained only as the claim contract landing/cgi/claim.sh and its test landing/tests/test_claim.sh) and its deploys to agents-old (89.125.120.5:52676); the apps copy is retained as the rollback",
       "leshchenko1979/miidas and leshchenko1979/miidas-template",
-      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces: agents-old holds both (5 running containers, 1 volume), apps holds the volume namespace only (1 orphaned volume, 0 containers) as of 2026-10-04T06:11Z",
+      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces: agents-old holds both (6 running containers, 2 volumes), apps holds the volume namespace only (1 orphaned volume, 0 containers) as of 2026-10-09T06:07:21Z",
       "the Miidas Factory Telegram chat (-1003996392908) and its topics",
       "/root/miidas/SKILL.md \u2014 the live skill path is a symlink to it, so the repo file is the single writer",
       "cron miidas-hq-daily-trigger",
@@ -50,10 +50,10 @@
       "cadence": "always-on, one per bound slot"
     },
     {
-      "name": "miidas landing",
+      "name": "miidas landing (miidas.ru)",
       "audience": "owner",
-      "entry": "./landing/deploy.sh",
-      "cadence": "request-driven (nginx on miidas.l1979.ru)"
+      "entry": "leshchenko1979/miidas-landing \u2014 its own GitHub Pages workflow. ./landing/deploy.sh in THIS repo is a refuse stub (exit 2): the miidas-landing container was decommissioned in ca66d93 (2026-09-17, owner) and nothing here deploys the site",
+      "cadence": "request-driven (GitHub Pages)"
     },
     {
       "name": "miidas-hq-daily-trigger",
@@ -72,7 +72,7 @@
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. agents-old holds 5 RUNNING containers and 1 volume matching ^miidas_ (miidas_maple-c23a-data); apps holds 1 such volume and 0 containers. Read 2026-10-04T06:11Z.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. agents-old holds 6 RUNNING containers and 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_linden-6c4a-data); apps holds 1 such volume and 0 containers. Read 2026-10-09T06:07:21Z.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -105,7 +105,7 @@
       "id": "miidas-platform-compose-is-repo-written",
       "scope": "profile",
       "severity": "warning",
-      "text": "The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:33, landing/deploy.sh:27 and deploy-all.sh:36 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable \u2014 use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.",
+      "text": "The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:49 and deploy-all.sh:35 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. (landing/deploy.sh:27 was a third call site until landing/ was retired in #108 \u2014 that script is now a refuse stub.) That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable \u2014 use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.",
       "affects": [
         "profile"
       ],
@@ -119,8 +119,8 @@
       "affects": [
         "profile"
       ],
-      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 23 divergences from it in registry/kit-exemptions.json (19 original, plus the four role-card forks \u2014 roles/hq.md, roles/triage.md, roles/worker.md, roles/carrier.md \u2014 added 2026-10-06 under #103). Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 31 carried paths judged, 1 factory-class path excluded by class, 23 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
-      "evidence": "Measured 2026-10-08 by the miidas lane: python3 tests/test_kit_pin_member.py rc=0, 'judged 31 carried path(s); 1 factory-class path(s) excluded by class; 23 declared exempt'; 0 undeclared divergence. Pin version 6ab591c618ec, 128 paths declared. The 23 = 19 original + the four role-card forks declared 2026-10-06 (#103)."
+      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 23 divergences from it in registry/kit-exemptions.json (21 disposition b, 2 disposition c). Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 31 carried paths judged, 1 factory-class path excluded by class, 23 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
+      "evidence": "Measured 2026-10-09 by the miidas lane: python3 tests/test_kit_pin_member.py rc=0, 'judged 31 carried path(s); 1 factory-class path(s) excluded by class; 23 declared exempt'; 0 undeclared divergence. Pin version 6ab591c618ec, 128 paths declared."
     },
     {
       "id": "miidas-slot-volume-git-config-carries-remote-credential",
@@ -188,7 +188,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-08T06:10:17Z",
+  "attested_at": "2026-10-09T06:07:49Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

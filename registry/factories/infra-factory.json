@@ -142,7 +142,7 @@
         "profile"
       ],
       "scope": "profile",
-      "evidence": "journalctl --user -u opencrabs-ops, 2026-10-01 00:00Z-06:11Z: 4 Started events, 0 code=dumped. Caps read 2026-10-01T06:34Z: MemoryHigh=MemoryMax=2147483648, MemorySwapMax=2684354560 (drop-ins 10-oompolicy, 20-memory, 30-cores). The 1536 MiB pair this entry originally carried sat below the daemon's real footprint and was raised on 2026-09-30/10-01 (ledger n=855/856), after four kills 19:25:11Z / 20:27:42Z / 20:50:09Z / 21:28:14Z. Crash class: leshchenko1979/opencrabs#638. The earliest read of the new value I hold is 2026-10-01, so the change is not dated earlier than that.",
+      "evidence": "journalctl --user -u opencrabs-ops, 2026-10-01 00:00Z-06:11Z: 4 Started events, 0 code=dumped. Caps read 2026-10-01T06:34Z: MemoryHigh=MemoryMax=2147483648, MemorySwapMax=2684354560 (drop-ins 10-oompolicy, 20-memory, 30-cores, 40-killmode-reaper.conf). The 1536 MiB pair this entry originally carried sat below the daemon's real footprint and was raised on 2026-09-30/10-01 (ledger n=855/856), after four kills 19:25:11Z / 20:27:42Z / 20:50:09Z / 21:28:14Z. Crash class: leshchenko1979/opencrabs#638. The earliest read of the new value I hold is 2026-10-01, so the change is not dated earlier than that.",
       "review_by": "2026-10-11",
       "since": "2026-09-27T06:13:19Z"
     },
@@ -192,6 +192,16 @@
       "since": "2026-10-07",
       "review_by": "2026-10-21",
       "evidence": "Receiver GET /attempts seq 244 @ 2026-10-06T22:09:55Z: outcome=failed, delivered=false, attempts=3, rc=4 transport_error cannot reach the A2A gateway at http://127.0.0.1:18791/a2a/v1; three journal rows caller=root target=fb67ca75 exit=4 at 22:09:17/42/55Z; ledger n=1164 (subject gatus-alert-session-leg-coupled); q16 accepts."
+    },
+    {
+      "id": "opencrabs-home-unmanaged-growth",
+      "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-09: /root/.opencrabs 13G, profiles/ops 8.4G (opencrabs.db 3.0G, backups 2.5G, logs 967M, memory 885M), the dev repo 717M of which .git is 652M (926 loose objects = 566 MiB loose vs 74 MiB packed).",
+      "severity": "info",
+      "since": "2026-10-09",
+      "affects": [
+        "profile"
+      ],
+      "evidence": "ledger n=1161 (2026-10-06 q22 dig, at which /root/.opencrabs measured 16G); re-measured on agents 2026-10-09"
     }
   ],
   "lanes": [
@@ -227,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-08T06:12:59Z",
+  "attested_at": "2026-10-09T06:06:45Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
