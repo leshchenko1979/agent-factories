@@ -245,6 +245,15 @@
       "tools/registry.py",
       "tools/review.py"
     ],
+    "tests/test_issue_routing_surfaces.py": [
+      "TEMPLATE/SKILL.md.tmpl",
+      "TEMPLATE/tests/test_issue_routing_surfaces.py",
+      "docs/factory-registry.md",
+      "evidence/factories.md",
+      "registry/**",
+      "skills/**",
+      "tests/test_issue_routing_surfaces.py"
+    ],
     "tests/test_kit_census.py": [
       "TEMPLATE/**",
       "TEMPLATE/registry/kit.example.json",

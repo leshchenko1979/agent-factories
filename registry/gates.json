@@ -432,6 +432,7 @@
     "tests/test_insights_gate_recorded.py": "pytest",
     "tests/test_insights_status.py": "pytest",
     "tests/test_instrument_census.py": "script",
+    "tests/test_issue_routing_surfaces.py": "script",
     "tests/test_kit_census.py": "script",
     "tests/test_kit_deliver.py": "script",
     "tests/test_kit_manifest.py": "script",

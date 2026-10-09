@@ -2677,6 +2677,29 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_citation_published.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_citation_published.py"])
 
+    # GATE 85 -- issue routing surfaces (board #454, ruling n=3024). The owner order of
+    #     2026-10-09 retired the issue-routing discriminator: EVERY OpenCrabs binary issue
+    #     goes to the fork board `leshchenko1979/opencrabs`, and upstream
+    #     `opencrabs/opencrabs` receives PULL REQUESTS ONLY. Four live surfaces of this
+    #     factory's OWN law went on restating the RETIRED routing, because the class had no
+    #     observer -- the rework log's #305 entry states the bound in its own words: no gate
+    #     compares these prose surfaces. The gate's predicate is that NO declared routing
+    #     surface names upstream as a binary ISSUE home (it MAY name it as the PR
+    #     destination, which is the live law), over a DECLARED population of eight surfaces,
+    #     with the retired discriminator's phrases as a second leg. It carries a POSITIVE
+    #     CONTROL over the defect's own pre-fix bytes -- a gate that never looked cannot
+    #     pass -- and it FAILS LOUDLY if its population reads empty, so a rename cannot turn
+    #     it green. REQUIRED, not OPTIONAL: it drives SYNTHETIC claim units under a temp
+    #     dir -- no live board, no fleet manifest, no box-local fixture -- so it passes in a
+    #     bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE
+    #     copy. Its runner is SCRIPT: the file carries a `__main__` guard and no module-level
+    #     `def test_*` leg, so a pytest collection would gather nothing and read as a pass.
+    #     It carries NO budget entry -- a budget value is the process owner's, never the
+    #     implementing lane's (n=574 PART 5) -- so it runs on the DECLARED DEFAULT and the
+    #     audit prints that it did. Same grain as gate 84.
+    if (repo_root / "tests/test_issue_routing_surfaces.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_issue_routing_surfaces.py"])
+
     return gates_to_run
 
 

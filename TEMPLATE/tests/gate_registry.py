@@ -857,6 +857,21 @@ REQUIRED_GATES: tuple[str, ...] = (
     # UNCHANGED: the ledger sits outside it by a DIRECTORY BOUNDARY, so it gets its own
     # leg with the ledger's own gate set (`docs/instruments/ledger.md` section 5).
     "test_ledger_citation_declared.py",
+    # Added with its registration (board #454, ruling n=3024, intake n=3023). REQUIRED is the
+    # correct grain and OPTIONAL is not, for the deciding fact the entries around it state:
+    # the gate is PURE over the tree -- it reads the declared routing surfaces and drives
+    # SYNTHETIC claim units in its probes, with no live board, no fleet manifest and no
+    # box-local fixture -- so it passes in a bootstrapped factory exactly as it does here.
+    # It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory
+    # from dropping the runner and keeping the file. THE MECHANISM IT GUARDS: the owner
+    # order of 2026-10-09 retired the issue-routing discriminator -- EVERY OpenCrabs binary
+    # issue goes to the fork board, upstream `opencrabs/opencrabs` receives PULL REQUESTS
+    # ONLY -- and four live surfaces went on restating the RETIRED routing (binary defects
+    # upstream), because the class had NO observer: the rework log's #305 entry states the
+    # bound, "no gate compares these prose surfaces". A restatement that no gate reads is
+    # law drift with no failing signal, which is why this gate's population is DECLARED and
+    # its probes are the defect's own pre-fix bytes -- a gate that never looked cannot pass.
+    "test_issue_routing_surfaces.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

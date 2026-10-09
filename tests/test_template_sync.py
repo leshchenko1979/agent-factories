@@ -488,6 +488,13 @@ PAIRS = [
     # `TEMPLATE/**` AND `tools/**` in THIS tree, so without the entry the two copies
     # could drift and the shipped half would keep citing by number in every member.
     ("tests/test_citation_clause_titles.py", "TEMPLATE/tests/test_citation_clause_titles.py"),
+    # Added with its registration (board #454, ruling n=3024). The gate reads the factory's
+    # OWN routing surfaces -- `skills/meta-factory/SKILL.md`, `docs/factory-registry.md`,
+    # `registry/**`, `evidence/factories.md` -- and both ship whole for the reason the
+    # entries around it state: a factory that took the gate without the surfaces, or the
+    # surfaces without the gate, would carry the 2026-10-09 order's restatement drift with
+    # nothing comparing them (the #305 bound: no gate compared these prose surfaces).
+    ("tests/test_issue_routing_surfaces.py", "TEMPLATE/tests/test_issue_routing_surfaces.py"),
     # Added with its registration (issue #270, the atomic ruling act). The pairing gate
     # drives the writer `tools/rule.py`, and both ship whole for the same reason the ledger
     # and its gates do: a factory that took the writer without the gate proving every

@@ -1,9 +1,9 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-09T06:24:33Z",
+  "resolved_at": "2026-10-09T23:38:40Z",
   "fragments": [
     {
-      "path": "/tmp/wt-attest-20261009/registry/factories/ai-antispam.json",
+      "path": "/tmp/af-444/registry/factories/ai-antispam.json",
       "data": {
         "factory": "ai-antispam",
         "display_name": "ai-antispam",
@@ -260,7 +260,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261009/registry/factories/inferhub-watch.json",
+      "path": "/tmp/af-444/registry/factories/inferhub-watch.json",
       "data": {
         "factory": "inferhub-watch",
         "display_name": "Inferhub watch",
@@ -418,7 +418,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261009/registry/factories/infra-factory.json",
+      "path": "/tmp/af-444/registry/factories/infra-factory.json",
       "data": {
         "factory": "infra-factory",
         "display_name": "Infra Factory",
@@ -684,7 +684,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261009/registry/factories/meta-factory.json",
+      "path": "/tmp/af-444/registry/factories/meta-factory.json",
       "data": {
         "factory": "meta-factory",
         "display_name": "Factories",
@@ -899,7 +899,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261009/registry/factories/miidas.json",
+      "path": "/tmp/af-444/registry/factories/miidas.json",
       "data": {
         "factory": "miidas",
         "display_name": "Miidas Factory",
@@ -1109,7 +1109,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261009/registry/factories/opencrabs-dev.json",
+      "path": "/tmp/af-444/registry/factories/opencrabs-dev.json",
       "data": {
         "factory": "opencrabs-dev",
         "display_name": "Opencrabs Dev Factory",
@@ -1123,14 +1123,14 @@
             "the opencrabs-dev skill set: SKILL.md, the five role files (editor, hq, triage, toolsmith, harvest), fleet-directives.md and the runbooks -- NARROWED BY FIVE OWNER-APPROVED CARVE-OUTS: the Toolsmith lane owns tools/ CODE; the Triage lane owns AFFINITY_KEYWORDS and lane repurposing; Duty-4/6 finding remediation ships without the design gate; harvesting needs no design gate; and per-instrument law files under /root/agent-factories/docs/instruments/ are authored by each instrument's own owner, with the superseded fleet-directives.md copy reduced to a [LANE] pointer",
             "the workers-ledger and skill-version consensus",
             "the CLI tool fleet under tools/, authored by the Toolsmith lane inside this factory",
-            "the factory's three issue streams — BINARY defects on upstream opencrabs/opencrabs, FACTORY issues on leshchenko1979/opencrabs-dev-factory, and FORK-ONLY defects (surface exists only in our fork, discriminated by the fork-only boundary register #761 and the census FORK_ONLY_SURFACE predicate) on the fork board leshchenko1979/opencrabs"
+            "the factory's two issue streams (owner order 2026-10-09) — EVERY OpenCrabs BINARY issue (runtime behaviour, channels, providers, TUI, memory, tools) on the fork board leshchenko1979/opencrabs, and FACTORY issues (tooling, CI, release automation, process) on leshchenko1979/opencrabs-dev-factory; the fork-only boundary register #761 and the census FORK_ONLY_SURFACE predicate SURVIVE as commit-portability instruments — they decide whether a COMMIT can be ported upstream, never which tracker an issue goes to"
           ],
           "does_not_own": [
             "the fast-mcp-telegram substrate and its tg_* tool family",
             "the meta-factory registry, its surveys and its scoring surface",
             "the live daemon configuration on this box: config.toml, keys.toml and the running units",
             "member factories' own process law, repos and backlogs",
-            "upstream opencrabs/opencrabs (the historical alias adolfousier/opencrabs redirects there), which receives our PRs and -- since the 2026-10-03 two-stream routing order -- our BINARY issue filings; it is not ours to administer"
+            "upstream opencrabs/opencrabs (the historical alias adolfousier/opencrabs redirects there), which receives our PULL REQUESTS ONLY -- no new issues (owner order 2026-10-09); it is not ours to administer"
           ]
         },
         "services": [
@@ -1159,9 +1159,9 @@
             "cadence": "per skill version bump"
           },
           {
-            "name": "Issue intake and triage (two-stream)",
+            "name": "Issue intake and triage",
             "audience": "agent",
-            "entry": "the Triage lane; a BINARY issue on opencrabs/opencrabs, a FACTORY issue on leshchenko1979/opencrabs-dev-factory, and a FORK-ONLY defect (surface exists only in our fork) on the fork board leshchenko1979/opencrabs",
+            "entry": "the Triage lane; EVERY OpenCrabs BINARY issue (runtime behaviour, channels, providers, TUI, memory, tools) on the fork board leshchenko1979/opencrabs, and FACTORY issues (tooling, CI, release automation, process) on leshchenko1979/opencrabs-dev-factory",
             "cadence": "on request"
           },
           {
@@ -1609,28 +1609,28 @@
       "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
     },
     {
-      "session_id": "1210a5d1-429c-4cb8-b76a-5715e0c22369",
-      "channel": "telegram",
-      "chat_id": "-1004360461038",
-      "thread_id": null,
-      "updated_at": 1791504029,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Понауехали [chat:-1004360461038]",
-      "session_updated_at": 1791504147,
-      "_profile": "family",
-      "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
-    },
-    {
       "session_id": "f9f6969c-17f5-4dc2-ad1c-54a029a90b46",
       "channel": "telegram",
       "chat_id": "-5528478556",
       "thread_id": null,
-      "updated_at": 1791526882,
+      "updated_at": 1791557711,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Алексей & Сергей, БэррИИмор [chat:-5528478556]",
-      "session_updated_at": 1791526894,
+      "session_updated_at": 1791557812,
+      "_profile": "family",
+      "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
+    },
+    {
+      "session_id": "1210a5d1-429c-4cb8-b76a-5715e0c22369",
+      "channel": "telegram",
+      "chat_id": "-1004360461038",
+      "thread_id": null,
+      "updated_at": 1791573124,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Понауехали [chat:-1004360461038]",
+      "session_updated_at": 1791573274,
       "_profile": "family",
       "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
     },
@@ -1669,7 +1669,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780]",
-      "session_updated_at": 1791527058,
+      "session_updated_at": 1791571294,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2233,19 +2233,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 50566,
-      "updated_at": 1790519147,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Deploy issue 248 default group command scopes",
-      "session_updated_at": 1790520433,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "aff7ff41-a3a7-4c53-adc5-80fb7a33ba50",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -2345,7 +2332,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1791526863,
+      "session_updated_at": 1791528453,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2475,7 +2462,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1791526892,
+      "session_updated_at": 1791560907,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2488,7 +2475,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7]",
-      "session_updated_at": 1791527013,
+      "session_updated_at": 1791527695,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2540,7 +2527,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1791526888,
+      "session_updated_at": 1791587521,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2553,7 +2540,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1791494208,
+      "session_updated_at": 1791589015,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2579,7 +2566,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1791526871,
+      "session_updated_at": 1791527754,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2605,7 +2592,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1791525709,
+      "session_updated_at": 1791575239,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2618,7 +2605,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "worker: inferhub-watch-lane",
-      "session_updated_at": 1791484965,
+      "session_updated_at": 1791573531,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2631,7 +2618,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1791484493,
+      "session_updated_at": 1791549898,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2670,7 +2657,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
-      "session_updated_at": 1791419741,
+      "session_updated_at": 1791547813,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2749,19 +2736,6 @@
       "turn_open_at": null,
       "session_title": "Meta-factory insights register — class + status axes",
       "session_updated_at": 1791239407,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 40011,
-      "updated_at": 1791066230,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / Config: Schema [chat:-1003936827469:topic:40011]",
-      "session_updated_at": 1791067501,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2878,7 +2852,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1791526787,
+      "session_updated_at": 1791549859,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2961,19 +2935,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 4087,
-      "updated_at": 1791326303,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Factories / Open Question Tool [chat:-1004497192134:topic:4087]",
-      "session_updated_at": 1791326421,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "4515ea72-eb39-4a3c-9b05-a1dc02b1c977",
       "channel": "telegram",
       "chat_id": "-1004497192134",
@@ -2983,19 +2944,6 @@
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Instruments methodology [chat:-1004497192134:topic:4186]",
       "session_updated_at": 1791326456,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
-      "channel": "telegram",
-      "chat_id": "-1004497192134",
-      "thread_id": 21,
-      "updated_at": 1791403588,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1791526007,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3021,7 +2969,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1791526877,
+      "session_updated_at": 1791575015,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3047,7 +2995,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1791526089,
+      "session_updated_at": 1791537334,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3061,19 +3009,6 @@
       "turn_open_at": null,
       "session_title": "Harvesting upstream PRs into OpenCrabs",
       "session_updated_at": 1791499771,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 31847,
-      "updated_at": 1791474831,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Fix #1938/#1939/#1940 — marker & link seam",
-      "session_updated_at": 1791499730,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3099,7 +3034,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Triage: Issue Portfolio & Harvest Analysis",
-      "session_updated_at": 1791501219,
+      "session_updated_at": 1791577478,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3112,7 +3047,46 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1791501076,
+      "session_updated_at": 1791588122,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2646d31a-71ee-49f0-be81-9c8dc32d32fa",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 21,
+      "updated_at": 1791533924,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
+      "session_updated_at": 1791588683,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "52058a75-e94b-4400-9e07-aac3a891bb1f",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 50566,
+      "updated_at": 1791576813,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Deploy issue 248 default group command scopes",
+      "session_updated_at": 1791578080,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 31847,
+      "updated_at": 1791581906,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Fix #1938/#1939/#1940 — marker & link seam",
+      "session_updated_at": 1791588950,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3121,18 +3095,44 @@
       "channel": "telegram",
       "chat_id": "-1003936827469",
       "thread_id": 30220,
-      "updated_at": 1791526849,
-      "last_origin": "text",
+      "updated_at": 1791583069,
+      "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1791527056,
+      "session_updated_at": 1791585520,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "c2ba4ef2-eac3-406c-98d6-c861c5bebec2",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 40011,
+      "updated_at": 1791583701,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / #83 config-manager-warn [chat:-1003936827469:topic:40011]",
+      "session_updated_at": 1791587618,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "9f635151-4311-44ab-94f8-d4fd86e9b6c2",
+      "channel": "telegram",
+      "chat_id": "-1004497192134",
+      "thread_id": 4087,
+      "updated_at": 1791584560,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Factories / Open Questions Instrument [chat:-1004497192134:topic:4087]",
+      "session_updated_at": 1791584802,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
   ],
   "skill_versions": {
     "/root/ai-antispam/SKILL.md": "0.1.0",
-    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.137",
+    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.143",
     "/root/vds-servers/skills/infra-factory/SKILL.md": "0.2.1",
     "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.52",
     "/root/miidas/SKILL.md": "1.1.30",
@@ -3164,8 +3164,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T18:00:00+00:00",
-      "last_run_at": "2026-10-08T18:00:26Z",
+      "next_run_at": "2026-10-10T18:00:00+00:00",
+      "last_run_at": "2026-10-09T18:00:35Z",
       "trigger_cmd": "python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_gate.py",
       "_profile": "family"
     },
@@ -3182,36 +3182,6 @@
       "next_run_at": "2027-01-01T03:00:00+00:00",
       "last_run_at": "2026-09-27T11:07:24Z",
       "trigger_cmd": "cat /tmp/538-payload.txt",
-      "_profile": "ops"
-    },
-    {
-      "id": "093a0432-9d4d-41f1-95cf-ea05187408ae",
-      "name": "ai-antispam-43-close-gate",
-      "cron_expr": "5 12 * * *",
-      "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"ai-antispam pacemaker: the #76 close gate fired (72h window passed, #76 still open — the classifier-budget item, board #43 pre-migration). Run the close-gate measurement — read /root/ai-antispam/docs/pacemaker-procedures.md section 43-close-gate and follow it exactly. Report into the Bot topic.\" --title \"ai-antispam 43-close-gate $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-43-close-gate-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
-      "deliver_to": null,
-      "enabled": 1,
-      "set_goal": 0,
-      "goal_template": null,
-      "next_run_at": "2026-10-09T12:05:00+00:00",
-      "last_run_at": "2026-10-08T12:05:55Z",
-      "trigger_cmd": "[ \"$(date -u +%Y%m%d)\" -ge 20260927 ] && /usr/local/bin/gh issue view 76 --repo leshchenko1979/ai-antispam --json state 2>/dev/null | grep -q OPEN && echo GATE-DUE",
-      "_profile": "ops"
-    },
-    {
-      "id": "c83538e0-8054-4ebf-b210-00d00c9a22ee",
-      "name": "ai-antispam-52-close-gate",
-      "cron_expr": "30 11 * * *",
-      "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"ai-antispam pacemaker: the #85 close gate fired (window from the 2026-09-27T11:20:14Z deploy has passed, #85 still open — board #52 pre-migration). Run the close-gate measurement — read /root/ai-antispam/docs/pacemaker-procedures.md section 52-close-gate and follow it exactly. Report into the Bot topic.\" --title \"ai-antispam 52-close-gate $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-52-close-gate-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
-      "deliver_to": null,
-      "enabled": 1,
-      "set_goal": 0,
-      "goal_template": null,
-      "next_run_at": "2026-10-09T11:30:00+00:00",
-      "last_run_at": "2026-10-08T11:30:55Z",
-      "trigger_cmd": "D=$(date -u +%Y%m%d); S=$(gh issue view 85 --repo leshchenko1979/ai-antispam --json state --jq .state 2>/dev/null); if [ \"$D\" -ge 20260928 ] && [ \"$S\" = \"OPEN\" ]; then echo \"due: window closed, #85 still open\"; fi",
       "_profile": "ops"
     },
     {
@@ -3254,8 +3224,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T06:45:00+00:00",
-      "last_run_at": "2026-10-09T06:16:55Z",
+      "next_run_at": "2026-10-09T23:45:00+00:00",
+      "last_run_at": "2026-10-09T23:15:57Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
@@ -3269,8 +3239,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T07:00:00+00:00",
-      "last_run_at": "2026-10-08T07:00:37Z",
+      "next_run_at": "2026-10-10T07:00:00+00:00",
+      "last_run_at": "2026-10-09T07:00:13Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3329,8 +3299,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T12:07:00+00:00",
-      "last_run_at": "2026-10-09T06:07:27Z",
+      "next_run_at": "2026-10-10T00:07:00+00:00",
+      "last_run_at": "2026-10-09T18:07:22Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3344,8 +3314,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T06:30:00+00:00",
-      "last_run_at": "2026-10-08T06:30:10Z",
+      "next_run_at": "2026-10-10T06:30:00+00:00",
+      "last_run_at": "2026-10-09T06:30:17Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3374,8 +3344,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T06:40:00+00:00",
-      "last_run_at": "2026-10-09T00:40:21Z",
+      "next_run_at": "2026-10-10T00:40:00+00:00",
+      "last_run_at": "2026-10-09T18:40:09Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3389,8 +3359,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T12:00:00+00:00",
-      "last_run_at": "2026-10-08T12:00:55Z",
+      "next_run_at": "2026-10-10T12:00:00+00:00",
+      "last_run_at": "2026-10-09T12:00:29Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3404,8 +3374,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T06:25:00+00:00",
-      "last_run_at": "2026-10-09T00:25:21Z",
+      "next_run_at": "2026-10-10T00:25:00+00:00",
+      "last_run_at": "2026-10-09T18:25:56Z",
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "_profile": "ops"
     },
@@ -3434,8 +3404,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T09:00:00+00:00",
-      "last_run_at": "2026-10-08T09:00:52Z",
+      "next_run_at": "2026-10-10T09:00:00+00:00",
+      "last_run_at": "2026-10-09T09:00:26Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3474,7 +3444,7 @@
       "name": "factory-growth-map-biweekly",
       "cron_expr": "0 9 1,15 * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 2646d31a-71ee-49f0-be81-9c8dc32d32fa --text \"Bi-weekly growth-map calibration — calibrate docs/growth-stages.md against the latest fleet telemetry, verify Stage 0-4 maturity progress, and stamp evidence/ledger.jsonl. Then write the duty receipt: a ledger run row whose subject is growth-map-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory growth map biweekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-growth-map-biweekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: growth-map\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 2646d31a-71ee-49f0-be81-9c8dc32d32fa --text \"Bi-weekly growth-map calibration — calibrate docs/growth-stages.md against the latest fleet telemetry, verify Stage 0-4 maturity progress, and stamp evidence/ledger.jsonl. Then write the duty receipt: a ledger run row whose subject is growth-map-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory growth map biweekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-growth-map-biweekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: growth-map\n\nReport \"Dispatched.\" and exit immediately.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3489,13 +3459,13 @@
       "name": "factory-hq-pacemaker",
       "cron_expr": "50 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger — do NOT execute any project work yourself, do NOT investigate, do NOT edit files, do NOT write a report, do NOT call any tool, and do NOT send a session_notify. The scheduler performs the wake itself: this job's output is delivered to the HQ lane (deliver_to) and the lane's goal is set from goal_template. Nothing is required of you; a manual notify would only be a duplicate wake. Stop after the wake.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY — sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md §Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nReply with exactly one line and stop: Meta-factory HQ cycle due — the HQ lane's goal carries the cycle order.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nThin trigger — do NOT execute any project work yourself, do NOT investigate, do NOT edit files, do NOT write a report, do NOT call any tool, and do NOT send a session_notify. The scheduler performs the wake itself: this job's output is delivered to the HQ lane (deliver_to) and the lane's goal is set from goal_template. Nothing is required of you; a manual notify would only be a duplicate wake. Stop after the wake.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY — sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md §Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nReply with exactly one line and stop: Meta-factory HQ cycle due — the HQ lane's goal carries the cycle order.",
       "deliver_to": "session:2646d31a-71ee-49f0-be81-9c8dc32d32fa",
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "Meta-factory HQ cycle due (#253, owner ruled shape (1) at q20). Sweep the board (leshchenko1979/agent-factories issues) for items carrying an intake ledger row and no ruling row, and rule on each — then report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md §9).",
-      "next_run_at": "2026-10-09T06:50:00+00:00",
-      "last_run_at": "2026-10-09T00:50:22Z",
+      "next_run_at": "2026-10-10T00:50:00+00:00",
+      "last_run_at": "2026-10-09T18:50:19Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3504,13 +3474,13 @@
       "name": "factory-insights-weekly",
       "cron_expr": "0 18 * * Fri",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 5c99ad51-8889-40cb-b589-fa13fd673c06 --text \"Weekly insights synthesis — run your Process 3 insights run: python3 /root/agent-factories/tools/synthesize_insights.py --json, append high-confidence patterns to evidence/insights.jsonl, and stamp the ledger. Then write the duty receipt: a ledger run row whose subject is insights-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory insights weekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-insights-weekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: insights\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 5c99ad51-8889-40cb-b589-fa13fd673c06 --text \"Weekly insights synthesis — run your Process 3 insights run: python3 /root/agent-factories/tools/synthesize_insights.py --json, append high-confidence patterns to evidence/insights.jsonl, and stamp the ledger. Then write the duty receipt: a ledger run row whose subject is insights-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory insights weekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-insights-weekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: insights\n\nReport \"Dispatched.\" and exit immediately.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T15:00:00+00:00",
-      "last_run_at": "2026-10-02T15:00:27Z",
+      "next_run_at": "2026-10-16T15:00:00+00:00",
+      "last_run_at": "2026-10-09T15:00:53Z",
       "trigger_cmd": "python3 /root/agent-factories/tools/synthesize_insights.py --audit",
       "_profile": "ops"
     },
@@ -3519,7 +3489,7 @@
       "name": "factory-measurement-daily",
       "cron_expr": "0 9 * * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 5c99ad51-8889-40cb-b589-fa13fd673c06 --text \"Daily factory measurement — run your Process 3 survey per docs/measurement-procedure.md, commit evidence/scores/YYYY-MM-DD.md, and stamp the ledger score row with workspace_gate=rc=0. The same round also carries the gate-budget re-derivation leg declared at docs/measurement-procedure.md §5.2: run python3 tools/gate_budget_rederive.py against the round's own audit payload, apply on a containment trigger, and carry the population it prints in the round. Then write the duty receipt: a ledger run row whose subject is survey-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory measurement daily $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-measurement-daily-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: survey",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 5c99ad51-8889-40cb-b589-fa13fd673c06 --text \"Daily factory measurement — run your Process 3 survey per docs/measurement-procedure.md, commit evidence/scores/YYYY-MM-DD.md, and stamp the ledger score row with workspace_gate=rc=0. The same round also carries the gate-budget re-derivation leg declared at docs/measurement-procedure.md §5.2: run python3 tools/gate_budget_rederive.py against the round's own audit payload, apply on a containment trigger, and carry the population it prints in the round. Then write the duty receipt: a ledger run row whose subject is survey-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory measurement daily $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-measurement-daily-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: survey",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3534,13 +3504,13 @@
       "name": "factory-publish",
       "cron_expr": "0 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\n  python3 /root/agent-factories/tools/publish.py --apply\n\nThen state its one-line verdict (the status line it prints) and nothing else. This is the periodic pusher for the meta-factory's own repository (issue #146, ruling n=1168): it publishes commits that have already reached the grace window, and reports — never resolves — a diverged branch.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\n  python3 /root/agent-factories/tools/publish.py --apply\n\nThen state its one-line verdict (the status line it prints) and nothing else. This is the periodic pusher for the meta-factory's own repository (issue #146, ruling n=1168): it publishes commits that have already reached the grace window, and reports — never resolves — a diverged branch.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T12:00:00+00:00",
-      "last_run_at": "2026-10-09T06:00:25Z",
+      "next_run_at": "2026-10-10T00:00:00+00:00",
+      "last_run_at": "2026-10-09T18:00:21Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3549,13 +3519,13 @@
       "name": "factory-questions-redeliver",
       "cron_expr": "12 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT re-derive state, do NOT write project files. This cron's own session only relays the wake below and stops.\n\nTO THE RECEIVING LANE (Meta-Factory HQ, which owns this instrument): this delivery IS the wake, not a notification. The questions-redelivery pre-flight has ALREADY run — do NOT re-run `redeliver`. Report the result below in your topic, naming what a reader must act on:\n\n- **EXHAUSTED** — the attempt bound is reached, so this question will never be retried again and the lane it belongs to is still unwoken. Name each one.\n- **REFUSED** — the return address is unusable; retrying cannot fix it. Name each one.\n- **DELIVERED** — stranded answers reached their lanes; give the count.\n\nA silent sweep (nothing pending, or every retry still unreachable under the bound) never reaches you — the trigger suppresses it.\n\n{output}",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT re-derive state, do NOT write project files. This cron's own session only relays the wake below and stops.\n\nTO THE RECEIVING LANE (Meta-Factory HQ, which owns this instrument): this delivery IS the wake, not a notification. The questions-redelivery pre-flight has ALREADY run — do NOT re-run `redeliver`. Report the result below in your topic, naming what a reader must act on:\n\n- **EXHAUSTED** — the attempt bound is reached, so this question will never be retried again and the lane it belongs to is still unwoken. Name each one.\n- **REFUSED** — the return address is unusable; retrying cannot fix it. Name each one.\n- **DELIVERED** — stranded answers reached their lanes; give the count.\n\nA silent sweep (nothing pending, or every retry still unreachable under the bound) never reaches you — the trigger suppresses it.\n\n{output}",
       "deliver_to": "session:2646d31a-71ee-49f0-be81-9c8dc32d32fa",
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T12:12:00+00:00",
-      "last_run_at": "2026-10-09T06:16:55Z",
+      "next_run_at": "2026-10-10T00:12:00+00:00",
+      "last_run_at": "2026-10-09T18:12:22Z",
       "trigger_cmd": "/root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh",
       "_profile": "ops"
     },
@@ -3564,7 +3534,7 @@
       "name": "factory-registry-attest",
       "cron_expr": "0 6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Call the session_notify TOOL exactly ONCE, then stop:\n\n  target_session: 23549292-77ff-40d1-97e3-5aa0bdd19d74\n  delivery mode: turn-end\n  text:\n    Registry attestation — run the fleet registry re-attestation pacemaker.\n    Neither step shells out to the OpenCrabs CLI.\n\n    STEP 1 — RESOLVE (sends nothing):\n      cd /root/agent-factories && python3 tools/registry_attest.py --check\n    It prints one line per resolved HQ: slug, thread, status, session_id, topic.\n\n    STEP 2 — SEND with the DAEMON session_notify TOOL, one call per resolved target.\n    Do NOT run --dispatch and do NOT shell out: that CLI route is defect\n    opencrabs/opencrabs#2004 (migrated from the fork's leshchenko1979/opencrabs#412) and\n    this row's own closing note bans it. Its failure is SILENT, not loud: on a valid idle\n    target the CLI returns rc=0 and prints `delivered` while delivering nothing durable and\n    arming no wake, so never read its exit code as success.\n    For each target --check printed, call the session_notify tool once:\n      target_session: <the session_id --check printed for that slug>\n      delivery mode: turn-end\n      text: that slug's brief, verbatim (sends nothing):\n        python3 tools/registry_attest.py --dry-run --only <slug>\n    A target --check reports UNRESOLVED is named and skipped, and the rest of the fleet\n    is still sent — the tool's own fail-open property.\n\n    When the round completes, append ONE ledger run row for it, ending in the CANONICAL\n    TRAILER token that makes the row a receipt:\n      python3 tools/ledger.py append --event run --actor delegate \\\n        --subject registry-attest-<YYYY-MM-DD> \\\n        --detail '<the round outcome, the targets attested, and the instant each answer was received> duty=completed'\n\n    The duty= token IS the receipt. It must read duty=completed, duty=failed or duty=skipped,\n    and the patrol reads the round's completion through it and NOTHING else. A row without it\n    is not a receipt at all, so the round reports MISSING — the omission is the failure the\n    mechanism cannot see. Do NOT state the outcome in prose alone.\n\n    That run row IS the duty's completion receipt. THIS CRON RUN ROW records only that the thin trigger fired — it is never evidence that attestation completed. A fragment's attested_at is RESULTING STATE, not the receipt.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: registry-attest\n\nWHY THIS PATH AND NOT THE SHELL CLI. The wake used to shell out to the OpenCrabs CLI's own session-notify subcommand, which delivered 0 of 6 in our own measurement — and whose failure is SILENT rather than loud, since on a valid idle target it returns rc=0 and prints `delivered` while delivering nothing durable and arming no wake. The daemon session_notify tool measured 6 of 6. The CLI defect is tracked upstream as opencrabs/opencrabs#2004 (migrated from the fork's leshchenko1979/opencrabs#412) — do not duplicate it, and do not reintroduce a CLI route here.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Call the session_notify TOOL exactly ONCE, then stop:\n\n  target_session: 23549292-77ff-40d1-97e3-5aa0bdd19d74\n  delivery mode: turn-end\n  text:\n    Registry attestation — run the fleet registry re-attestation pacemaker.\n    Neither step shells out to the OpenCrabs CLI.\n\n    STEP 1 — RESOLVE (sends nothing):\n      cd /root/agent-factories && python3 tools/registry_attest.py --check\n    It prints one line per resolved HQ: slug, thread, status, session_id, topic.\n\n    STEP 2 — SEND with the DAEMON session_notify TOOL, one call per resolved target.\n    Do NOT run --dispatch and do NOT shell out: that CLI route is defect\n    opencrabs/opencrabs#2004 (migrated from the fork's leshchenko1979/opencrabs#412) and\n    this row's own closing note bans it. Its failure is SILENT, not loud: on a valid idle\n    target the CLI returns rc=0 and prints `delivered` while delivering nothing durable and\n    arming no wake, so never read its exit code as success.\n    For each target --check printed, call the session_notify tool once:\n      target_session: <the session_id --check printed for that slug>\n      delivery mode: turn-end\n      text: that slug's brief, verbatim (sends nothing):\n        python3 tools/registry_attest.py --dry-run --only <slug>\n    A target --check reports UNRESOLVED is named and skipped, and the rest of the fleet\n    is still sent — the tool's own fail-open property.\n\n    When the round completes, append ONE ledger run row for it, ending in the CANONICAL\n    TRAILER token that makes the row a receipt:\n      python3 tools/ledger.py append --event run --actor delegate \\\n        --subject registry-attest-<YYYY-MM-DD> \\\n        --detail '<the round outcome, the targets attested, and the instant each answer was received> duty=completed'\n\n    The duty= token IS the receipt. It must read duty=completed, duty=failed or duty=skipped,\n    and the patrol reads the round's completion through it and NOTHING else. A row without it\n    is not a receipt at all, so the round reports MISSING — the omission is the failure the\n    mechanism cannot see. Do NOT state the outcome in prose alone.\n\n    That run row IS the duty's completion receipt. THIS CRON RUN ROW records only that the thin trigger fired — it is never evidence that attestation completed. A fragment's attested_at is RESULTING STATE, not the receipt.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: registry-attest\n\nWHY THIS PATH AND NOT THE SHELL CLI. The wake used to shell out to the OpenCrabs CLI's own session-notify subcommand, which delivered 0 of 6 in our own measurement — and whose failure is SILENT rather than loud, since on a valid idle target it returns rc=0 and prints `delivered` while delivering nothing durable and arming no wake. The daemon session_notify tool measured 6 of 6. The CLI defect is tracked upstream as opencrabs/opencrabs#2004 (migrated from the fork's leshchenko1979/opencrabs#412) — do not duplicate it, and do not reintroduce a CLI route here.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3579,7 +3549,7 @@
       "name": "factory-template-weekly",
       "cron_expr": "0 9 * * Mon",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 2646d31a-71ee-49f0-be81-9c8dc32d32fa --text \"Weekly template packaging — run tests/test_template_sync.py, package the lean core and the fleet add-ons, and audit delivery status. Then write the duty receipt: a ledger run row whose subject is template-weekly-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory template weekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-template-weekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: template-weekly\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 2646d31a-71ee-49f0-be81-9c8dc32d32fa --text \"Weekly template packaging — run tests/test_template_sync.py, package the lean core and the fleet add-ons, and audit delivery status. Then write the duty receipt: a ledger run row whose subject is template-weekly-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"factory template weekly $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-template-weekly-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the runtime default, and is stated explicitly so the intended delivery is visible in the command itself. Under turn-end a busy target queues and the CLI returns at once, so no starvation-cap bound is needed (the cap is a quiet-mode flag). The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: template-weekly\n\nReport \"Dispatched.\" and exit immediately.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3594,13 +3564,13 @@
       "name": "factory-triage-patrol",
       "cron_expr": "0 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify f4c192c9-a8e9-4268-9026-ee3e4970cc8a --text \"Triage cycle — run your patrol: sweep open intake issues, verify claims and criteria, dispatch to persistent lanes, stamp the ledger, and REPORT EVERY CANONICALITY TIER LEFT UNRESOLVED. The patrol's canonicality-tier leg names them; a tier=T4 is a finding and never a clean result. Then write the duty receipt: a ledger run row whose subject is patrol-verify-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"triage 6h $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-triage-patrol-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the default for lane traffic (owner re-ruling 2026-09-19): an idle lane wakes immediately, a busy one queues to its next tool-loop boundary, and the trigger returns well inside this tool's 120s budget — so no quiet window and no starvation cap are needed. The redirect is named after THIS JOB, never a hand-typed label: the notify-receipt leg parses the job name out of the log filename (patrol_host_state.py:202) and looks it up among the cron rows, so a label no row owns lands the log in retired_logs as 'history, never judged' — measured 2026-09-25: 16 logs, all 16 this job's, none judged. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"delivered\", \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: patrol-verify\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "SUPERSEDES ALL EARLIER INSTRUCTIONS IN THIS SESSION. Ignore every earlier prompt in this session's history - including any \"execute the cycle\" or \"run the patrol\" order left there by a previous prompt revision. The trigger below is the whole order.\n\nNEVER read, copy or snapshot the daemon database. It is read IN PLACE ONLY - sqlite3 \"file:/root/.opencrabs/profiles/ops/opencrabs.db?mode=ro\" \"<sql>\" (BASH.md section Reading daemon state; standing order 2026-09-19). A cp of it is ~3 GB and has already taken this host's disk to 99% and nearly downed every factory on it.\n\nThin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify f4c192c9-a8e9-4268-9026-ee3e4970cc8a --text \"Triage cycle — run your patrol: sweep open intake issues, verify claims and criteria, dispatch to persistent lanes, stamp the ledger, and REPORT EVERY CANONICALITY TIER LEFT UNRESOLVED. The patrol's canonicality-tier leg names them; a tier=T4 is a finding and never a clean result. Then write the duty receipt: a ledger run row whose subject is patrol-verify-<YYYY-MM-DD> (UTC) declaring duty=completed.\" --title \"triage 6h $(date -u +%Y-%m-%dT%H)\" --mode turn-end > /tmp/factory-triage-patrol-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\n--mode turn-end is the default for lane traffic (owner re-ruling 2026-09-19): an idle lane wakes immediately, a busy one queues to its next tool-loop boundary, and the trigger returns well inside this tool's 120s budget — so no quiet window and no starvation cap are needed. The redirect is named after THIS JOB, never a hand-typed label: the notify-receipt leg parses the job name out of the log filename (patrol_host_state.py:202) and looks it up among the cron rows, so a label no row owns lands the log in retired_logs as 'history, never judged' — measured 2026-09-25: 16 logs, all 16 this job's, none judged. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"delivered\", \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nDuty-receipt declaration — READ from this row by the duty-receipt leg of tools/patrol_host_state.py, never executed. It binds this job to its duty's receipt: the woken lane writes a ledger run row whose subject carries this stem and the round date, and which declares duty=completed (or failed / skipped).\n\nreceipt_subject: patrol-verify\n\nReport \"Dispatched.\" and exit immediately.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T12:00:00+00:00",
-      "last_run_at": "2026-10-09T06:00:25Z",
+      "next_run_at": "2026-10-10T00:00:00+00:00",
+      "last_run_at": "2026-10-09T18:00:21Z",
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "_profile": "ops"
     },
@@ -3644,8 +3614,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "InferHub Watch HQ cycle due. Execute the 6-hourly cycle per skills/inferhub/SKILL.md and report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md 1.0.62).",
-      "next_run_at": "2026-10-09T12:10:00+00:00",
-      "last_run_at": "2026-10-09T06:10:32Z",
+      "next_run_at": "2026-10-10T00:10:00+00:00",
+      "last_run_at": "2026-10-09T18:10:22Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3674,8 +3644,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T12:23:00+00:00",
-      "last_run_at": "2026-10-09T06:23:15Z",
+      "next_run_at": "2026-10-10T00:23:00+00:00",
+      "last_run_at": "2026-10-09T18:23:54Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3719,8 +3689,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T15:05:00+00:00",
-      "last_run_at": "2026-10-08T15:07:06Z",
+      "next_run_at": "2026-10-10T15:05:00+00:00",
+      "last_run_at": "2026-10-09T15:05:53Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3749,8 +3719,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": "Execute the Infra Factory triage patrol per skills/infra-factory/roles/triage.md: check open ledger intake items, verify claims, and assign or close work.",
-      "next_run_at": "2026-10-09T12:05:00+00:00",
-      "last_run_at": "2026-10-09T06:05:26Z",
+      "next_run_at": "2026-10-10T00:05:00+00:00",
+      "last_run_at": "2026-10-09T18:05:22Z",
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "_profile": "ops"
     },
@@ -3764,8 +3734,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-09T09:00:00+00:00",
-      "last_run_at": "2026-10-08T09:00:52Z",
+      "next_run_at": "2026-10-10T09:00:00+00:00",
+      "last_run_at": "2026-10-09T09:00:26Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
