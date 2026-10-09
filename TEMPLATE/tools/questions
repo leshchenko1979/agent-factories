@@ -201,8 +201,8 @@ DEFAULT_TTL_DAYS = 7
 # question was about has moved. The answer is never inferred from prose, so the
 # tracker has to be NAMED -- and which tracker is a FACTORY PARAMETER, not a law:
 # a factory that files its work units elsewhere gets no answer from this repo's
-# fork. Overridable per factory; the default is THIS factory's own tracker
-# (three-stream routing, SKILL.md; owner order 2026-10-03, re-scoped 2026-10-08).
+# tracker. Overridable per factory; the default is THIS factory's own tracker
+# (two-stream routing, SKILL.md; owner order 2026-10-03, superseded 2026-10-09).
 FORK_REPO = os.environ.get("OC_QUESTIONS_TRACKER") or "leshchenko1979/opencrabs"
 ISSUE_RE = re.compile(r"#(\d{1,6})\b")
 # Every network or shell predicate is bounded. An unbounded probe inside a
