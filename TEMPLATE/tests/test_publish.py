@@ -295,8 +295,8 @@ def detached_head_publishes_arm() -> None:
             "a DETACHED head publishes to the configured branch (the law's own lane state)",
             f"status={report['status']} remote tip {'== HEAD' if tip_after == sha else '!= HEAD'}",
         )
-        receipt_file = repo / "evidence" / "publish-receipt.json"
-        body = pub.read_receipt(repo)[0] if receipt_file.is_file() else None
+        receipt_file = pub.receipt_path(repo)
+        body = pub.read_receipt(repo)[0] if receipt_file and receipt_file.is_file() else None
         check(
             isinstance(body, dict)
             and body.get("sha") == sha
@@ -467,7 +467,7 @@ def receipt_arm() -> None:
 
         report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=True)
         rec = report.get("receipt") or {}
-        path = repo / "evidence" / "publish-receipt.json"
+        path = pub.receipt_path(repo)
 
         check(
             report["status"] == "published" and rec.get("sha") == sha,
@@ -475,20 +475,23 @@ def receipt_arm() -> None:
             f"status={report['status']} receipt={rec}",
         )
         check(
-            path.is_file(), "the receipt is written under evidence/",
-            f"receipt={rec} exists={path.is_file()}",
+            path is not None and path.is_file(),
+            "the receipt is written to the repo's git common dir",
+            f"receipt={rec} path={path}",
         )
-        body = pub.read_receipt(repo)[0] if path.is_file() else None
+        body = pub.read_receipt(repo)[0] if path and path.is_file() else None
         check(
             isinstance(body, dict) and body.get("sha") == sha and body.get("instant"),
             "the receipt carries the sha AND the instant of the push",
             f"body={body}",
         )
         check(
-            rec.get("path") == "evidence/publish-receipt.json"
+            rec.get("path") == str(path)
+            and path is not None
+            and path.parent.name == ".git"
             and not (repo / "evidence" / "ledger.jsonl").exists(),
-            "the receipt is a FILE under evidence/, never a ledger row",
-            f"receipt={rec}",
+            "the receipt is a FILE in the git common dir, never a ledger row",
+            f"receipt={rec} path={path}",
         )
 
     # The control: a round that pushed NOTHING must leave no receipt behind, or the arm
@@ -502,11 +505,12 @@ def receipt_arm() -> None:
         commit(repo, "b.txt", when=old)
 
         report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=False)
+        control_path = pub.receipt_path(repo)
         check(
             report["status"] == "would-publish"
-            and not (repo / "evidence" / "publish-receipt.json").exists(),
+            and not (control_path is not None and control_path.is_file()),
             "a round that pushed nothing records NO receipt (the control)",
-            f"status={report['status']}",
+            f"status={report['status']} path={control_path}",
         )
 
         # An absent receipt is neither an error nor a mismatch: the leg reads it as
@@ -516,6 +520,69 @@ def receipt_arm() -> None:
             absent is None and bool(why),
             "an absent receipt is reported as absent, never as a clean read",
             f"receipt={absent} why={why!r}",
+        )
+
+def receipt_is_shared_across_worktrees_arm() -> None:
+    """Issue #445: the receipt is keyed on the REPOSITORY, not on the checkout.
+
+    Two checkouts of ONE repository -- a main clone and a linked worktree -- must resolve
+    the SAME receipt file. Before this shape each resolved its own
+    `evidence/publish-receipt.json` INSIDE ITS OWN TREE, so a push made from one was
+    invisible to the other while the patrol's receipt arm compared a GLOBAL remote tip
+    against whichever receipt the READING checkout happened to hold. Measured on one tip
+    across three checkouts: 0 / 1 / 1 problems, and BOTH findings named the lane that had
+    pushed correctly.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+
+        # a LINKED worktree: a second checkout of the same repository, one object store
+        wt = Path(tmp) / "wt"
+        git(repo, "worktree", "add", "-q", str(wt), "-b", "side")
+
+        main_path = pub.receipt_path(repo)
+        wt_path = pub.receipt_path(wt)
+        check(
+            main_path is not None and wt_path is not None and main_path == wt_path,
+            "both checkouts of one repository resolve the SAME receipt path",
+            f"main={main_path} worktree={wt_path}",
+        )
+        check(
+            main_path is not None and main_path.parent.name == ".git",
+            "the receipt lives in the repository's git common dir, not inside a checkout",
+            f"path={main_path}",
+        )
+
+        # the ACCEPTANCE: write it from the main checkout, read it from the worktree
+        tip = head_of(repo)
+        written, why = pub.write_receipt(
+            repo, sha=tip, remote="origin", branch="main",
+            instant=dt.datetime.now(dt.timezone.utc).isoformat(),
+        )
+        seen, seen_why = pub.read_receipt(wt)
+        check(
+            written is not None and isinstance(seen, dict) and seen.get("sha") == tip,
+            "a receipt written in one checkout is READ by a sibling worktree",
+            f"written={written} seen={seen} why={seen_why!r}",
+        )
+
+        # the ORIGIN half of the honesty requirement: the record names who wrote it
+        check(
+            isinstance(seen, dict) and seen.get("checkout") == str(repo.resolve()),
+            "the receipt names the checkout that wrote it (the honesty half)",
+            f"checkout={None if not isinstance(seen, dict) else seen.get('checkout')}",
+        )
+
+        # and the defect's own shape is gone: no checkout-local receipt is left behind
+        check(
+            not (repo / "evidence" / "publish-receipt.json").exists()
+            and not (wt / "evidence" / "publish-receipt.json").exists(),
+            "neither checkout leaves a checkout-local receipt behind",
+            f"main_local={(repo / 'evidence' / 'publish-receipt.json').exists()} "
+            f"wt_local={(wt / 'evidence' / 'publish-receipt.json').exists()}",
         )
 
 def dry_run_arm() -> None:
@@ -893,6 +960,7 @@ def main() -> int:
     grace_holds_arm()
     old_commit_publishes_arm()
     receipt_arm()
+    receipt_is_shared_across_worktrees_arm()
     dry_run_arm()
     divergence_arm()
     behind_is_not_diverged_arm()

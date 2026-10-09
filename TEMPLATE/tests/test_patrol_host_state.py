@@ -2771,6 +2771,19 @@ def _seeded(root: Path):
     _git(work, "config", "user.name", "probe")
     return remote, work
 
+def _sibling(work: Path, root: Path, name: str = "sibling") -> Path:
+    """A SECOND checkout of the SAME repository, sharing its git common dir (#445).
+
+    A `git worktree` is the only shape that gives one repository two working directories:
+    the sibling's `.git` is a FILE pointing into the main checkout's `.git/worktrees/`, so
+    `rev-parse --git-common-dir` resolves BOTH checkouts to the same directory. That is what
+    makes a receipt written here visible to a reader in `work` -- and what makes a
+    checkout-local fallback in `receipt_path` FAIL these arms rather than pass them.
+    """
+    sib = root / name
+    _git(work, "worktree", "add", "-q", "--detach", str(sib))
+    return sib
+
 
 def test_the_publish_leg_BITES_when_a_commit_has_been_unpushed_past_the_window() -> None:
     """The leg's whole purpose: a commit no healthy pusher can explain, NAMED."""
@@ -2989,7 +3002,12 @@ def _pusher():
 def test_the_publish_leg_REPORTS_an_ungoverned_push_BY_NAME() -> None:
     """Leg (c)(2). The receipt names the sha the pusher pushed; a tip that is not that sha
     left through some other path, and the finding must NAME the tip, the lane trailer of its
-    commit and the receipt it contradicts. A count alone cannot be dispatched or closed."""
+    commit and the receipt it contradicts. A count alone cannot be dispatched or closed.
+
+    THE RECEIPT IS WRITTEN BY A SIBLING CHECKOUT (#445): the record is per-REPOSITORY, so a
+    reader in `work` must still see it and report the mismatch -- a checkout-local fallback
+    would read no receipt at all and this arm would silently weaken to the tip-age case.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         remote, work = _seeded(root)
@@ -2999,8 +3017,9 @@ def test_the_publish_leg_REPORTS_an_ungoverned_push_BY_NAME() -> None:
 
         governed = _commit(work, "b.txt", when=old, trailer="gov-lane")
         _git(work, "push", "-q", "origin", "main:main")
+        writer = _sibling(work, root, "writer")
         path, why = pub.write_receipt(
-            work, sha=governed, remote="origin", branch="main",
+            writer, sha=governed, remote="origin", branch="main",
             instant=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
         assert path is not None and not why, why
@@ -3021,6 +3040,11 @@ def test_the_publish_leg_REPORTS_an_ungoverned_push_BY_NAME() -> None:
             f"the finding must NAME the receipt it contradicts: {leg['problems']}"
         )
         assert leg["coverage"]["receipt_mismatch"]["remote_tip"] == rogue
+        # The record was written by the SIBLING and the finding says so, rather than
+        # attributing it to the checkout that happens to be reading (#445).
+        assert leg["coverage"]["receipt_mismatch"]["receipt_origin_checkout"] == str(
+            writer.resolve()
+        ), leg["coverage"]["receipt_mismatch"]
 
         text = RUNNER.render(
             [leg], [], slug="owner/repo", read_at="2026-10-03T00:00:00Z", issues=[]
@@ -3030,7 +3054,14 @@ def test_the_publish_leg_REPORTS_an_ungoverned_push_BY_NAME() -> None:
 def test_the_publish_leg_is_QUIET_when_the_receipt_ACCOUNTS_for_the_tip() -> None:
     """The control. Without it, a leg that red on ANY receipt would pass the arm above --
     and would red the patrol on every healthy round, since a governed push leaves the tip
-    exactly equal to the sha the pusher recorded."""
+    exactly equal to the sha the pusher recorded.
+
+    THE RECEIPT IS WRITTEN IN A SIBLING CHECKOUT (#445). The record is per-REPOSITORY (git
+    common dir), so this control writes it from a `git worktree` sibling and reads it from
+    `work`. A checkout-local fallback would find no receipt in `work` and the leg would
+    report `no receipt recorded` -- the exact false negative this shape removes -- so the
+    control FAILS against the old shape rather than passing it.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         remote, work = _seeded(root)
@@ -3040,10 +3071,12 @@ def test_the_publish_leg_is_QUIET_when_the_receipt_ACCOUNTS_for_the_tip() -> Non
 
         governed = _commit(work, "b.txt", when=old, trailer="gov-lane")
         _git(work, "push", "-q", "origin", "main:main")
-        pub.write_receipt(
-            work, sha=governed, remote="origin", branch="main",
+        writer = _sibling(work, root, "writer")
+        path, why = pub.write_receipt(
+            writer, sha=governed, remote="origin", branch="main",
             instant=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
+        assert path is not None and not why, why
 
         leg = RUNNER.publish_freshness_leg(
             repo=work, remote="origin", branch="main", read_at="probe", now=now
@@ -3052,6 +3085,62 @@ def test_the_publish_leg_is_QUIET_when_the_receipt_ACCOUNTS_for_the_tip() -> Non
         assert leg["coverage"]["receipt_mismatch"] is None
         assert leg["coverage"]["receipt"]["sha"] == governed
         assert leg["coverage"]["tip_younger_than_grace"] is False
+        # The record was written by the SIBLING, and the coverage says so rather than
+        # attributing it to the checkout that happens to be reading (#445).
+        assert leg["coverage"]["receipt"]["origin_checkout"] == str(writer.resolve()), (
+            leg["coverage"]["receipt"]
+        )
+        assert leg["coverage"]["reading_checkout"] == str(work.resolve())
+        assert leg["coverage"]["receipt_path"] == str(pub.receipt_path(work))
+
+def test_the_receipt_is_SHARED_across_worktrees_of_one_repository() -> None:
+    """#445 acceptance: the SAME remote tip, read from TWO checkouts of ONE repository,
+    returns the SAME verdict -- the fixture pair.
+
+    This is the defect itself, as a discriminating arm. Before #445 the receipt sat under
+    `evidence/`, gitignored and therefore checkout-local, so one tip read 0 problems in the
+    checkout that had pushed and 1 in a sibling that had not: a GLOBAL remote tip judged
+    against a LOCAL record, with the finding naming a lane that had pushed correctly. Both
+    checkouts now read the ONE record in the git common dir, so the arm asserts EQUALITY of
+    the two verdicts AND that both resolve the SAME receipt file -- merely asserting each is
+    quiet would pass a leg that read no receipt at all.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote, work = _seeded(root)
+        pub = _pusher()
+        now = dt.datetime.now(dt.timezone.utc)
+        old = now - dt.timedelta(hours=6)
+
+        governed = _commit(work, "b.txt", when=old, trailer="gov-lane")
+        _git(work, "push", "-q", "origin", "main:main")
+        sibling = _sibling(work, root, "sibling")
+
+        # The pusher pushed FROM `work` and recorded its receipt there.
+        path, why = pub.write_receipt(
+            work, sha=governed, remote="origin", branch="main",
+            instant=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+        assert path is not None and not why, why
+
+        leg_a = RUNNER.publish_freshness_leg(
+            repo=work, remote="origin", branch="main", read_at="probe", now=now
+        )
+        leg_b = RUNNER.publish_freshness_leg(
+            repo=sibling, remote="origin", branch="main", read_at="probe", now=now
+        )
+        assert leg_a["problems"] == [] and leg_b["problems"] == [], (
+            f"one repository, one receipt: the two checkouts must agree, got "
+            f"{leg_a['problems']} vs {leg_b['problems']}"
+        )
+        assert (
+            leg_a["coverage"]["receipt_path"] == leg_b["coverage"]["receipt_path"]
+        ), "both checkouts must read the SAME receipt file (git common dir)"
+        # The reading checkout differs; the receipt's origin does not.
+        assert leg_a["coverage"]["reading_checkout"] == str(work.resolve())
+        assert leg_b["coverage"]["reading_checkout"] == str(sibling.resolve())
+        assert leg_a["coverage"]["receipt"]["origin_checkout"] == str(work.resolve())
+        assert leg_b["coverage"]["receipt"]["origin_checkout"] == str(work.resolve())
 
 def test_the_publish_leg_flags_a_YOUNG_tip_no_receipt_can_explain() -> None:
     """Leg (c)(3), the cheap arm. The pusher HOLDS a commit younger than its grace window,

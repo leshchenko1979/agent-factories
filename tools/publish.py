@@ -116,12 +116,36 @@ def age_secs(value: str, now: dt.datetime):
 # file beside the evidence it protects. It is LOCAL and never committed: a receipt that
 # travelled in the pushed history would move the remote tip PAST the sha it records, so
 # the record would contradict itself on the very round it was written.
-RECEIPT_REL = Path("evidence") / "publish-receipt.json"
+RECEIPT_NAME = "publish-receipt.json"
+
+def git_common_dir(repo: Path) -> Path | None:
+    """This checkout's GIT COMMON DIR, or None when it cannot be read (#445, #242).
+
+    The RELATIVE FORM IS THE TRAP: from the MAIN checkout `git rev-parse --git-common-dir`
+    prints the RELATIVE string ".git", so `Path(raw).resolve()` resolves against the
+    CALLER's cwd -- from /tmp that yields "/tmp/.git", matching nothing while looking like
+    a fix. The path is joined to the repo FIRST, which is correct from both a main checkout
+    and a worktree (`--path-format=absolute` also works but needs git >= 2.33).
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+        capture_output=True, text=True,
+    )
+    raw = proc.stdout.strip()
+    if proc.returncode != 0 or not raw:
+        return None
+    return (Path(repo) / raw).resolve()
 
 
-def receipt_path(repo: Path) -> Path:
-    """Where the pusher records its OWN last push."""
-    return Path(repo) / RECEIPT_REL
+def receipt_path(repo: Path) -> Path | None:
+    """Where the pusher records its OWN last push: ONE record per repository.
+
+    `None` when the common dir cannot be read. There is deliberately NO fallback to a
+    checkout-local path: a fallback would reinstate, silently, the very defect this shape
+    removes -- the caller reports the absence instead.
+    """
+    common = git_common_dir(repo)
+    return None if common is None else common / RECEIPT_NAME
 
 
 def write_receipt(repo: Path, *, sha: str, remote: str, branch: str, instant: str):
@@ -131,14 +155,22 @@ def write_receipt(repo: Path, *, sha: str, remote: str, branch: str, instant: st
     receipt -- the same reason the ledger fsyncs before it releases its lock.
     """
     path = receipt_path(repo)
-    body = {"sha": sha, "instant": instant, "remote": remote, "branch": branch}
+    if path is None:
+        return None, "the receipt could not be written: the repository's git common dir is unresolvable"
+    # `checkout` is the ORIGIN half of the honesty requirement (#445): the record is keyed
+    # on the REPOSITORY, so a reader in a sibling worktree must be able to say WHICH
+    # checkout made the push it is reading.
+    body = {
+        "sha": sha, "instant": instant, "remote": remote, "branch": branch,
+        "checkout": str(Path(repo).resolve()),
+    }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
-        return None, f"the receipt could not be written to {RECEIPT_REL}: {exc}"
+        return None, f"the receipt could not be written to {path}: {exc}"
     return path, ""
 
 
@@ -149,14 +181,16 @@ def read_receipt(repo: Path):
     red the reader on every fresh clone. The absence is stated; it is not a verdict.
     """
     path = receipt_path(repo)
+    if path is None:
+        return None, "no receipt read: the repository's git common dir is unresolvable"
     if not path.is_file():
-        return None, f"no receipt recorded at {RECEIPT_REL}"
+        return None, f"no receipt recorded at {path}"
     try:
         body = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return None, f"the receipt at {RECEIPT_REL} could not be read: {exc}"
+        return None, f"the receipt at {path} could not be read: {exc}"
     if not isinstance(body, dict) or not str(body.get("sha") or "").strip():
-        return None, f"the receipt at {RECEIPT_REL} names no sha"
+        return None, f"the receipt at {path} names no sha"
     return body, ""
 
 
@@ -670,7 +704,7 @@ def publish(
     )
     report["receipt"] = {
         "sha": pushed,
-        "path": None if path is None else str(RECEIPT_REL),
+        "path": None if path is None else str(path),
         "reason": problem,
     }
     return report

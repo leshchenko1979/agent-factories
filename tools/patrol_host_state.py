@@ -129,6 +129,22 @@ PUBLISH_BOUNDS_LABEL = (
     "cadence_secs / residual_secs are NOT a property of the fleet"
 )
 
+# THE RECEIPT'S RESIDUAL (#445), stated because a per-repository record carries a
+# per-repository hazard. The receipt is ONE file per REPOSITORY, in the git common dir, so
+# every worktree of this repository reads the SAME record -- which is the fix: before #445 it
+# sat under `evidence/`, was gitignored, and was therefore CHECKOUT-LOCAL, so this leg
+# compared a GLOBAL remote tip against whichever checkout happened to be reading and the same
+# tip produced a finding in one worktree and silence in another. The residual of the new
+# shape is that the record is LAST-WRITER-WINS: it names the MOST RECENT push from ANY
+# worktree, never this checkout's own push. That is by design -- one record, one repository --
+# and it is STATED here rather than asserted away. `checkout` in the receipt body says which
+# worktree wrote the record being read.
+PUBLISH_RECEIPT_RESIDUAL = (
+    "the receipt is ONE record per repository (git common dir) and is LAST-WRITER-WINS: it "
+    "names the most recent push from ANY worktree of this repository, never this checkout's "
+    "own push -- `checkout` in the receipt says which worktree wrote the record being read"
+)
+
 # THE DUTY RESIDUAL, stated because a threshold without its derivation is unreadable.
 # A round's receipt lands when the lane the trigger woke FINISHES ITS TURN, and the leg
 # cannot read a lane's turn -- so a round young enough that its lane is plausibly still
@@ -4972,8 +4988,18 @@ def publish_freshness_leg(
     PUSHER's declared bounds and bind `tools/publish.py` alone, so a late pusher and an
     absent one leave the same unpushed commit behind and this leg cannot tell them apart.
     The cadence side it does carry is a RECEIPT comparison: the pusher records its own last
-    push in a file under `evidence/`, and a remote tip that is not that sha left through
-    some other path. That arm names the tip, its age and the lane trailer of its commit.
+    push in ONE file per REPOSITORY, in the git common dir (#445), and a remote tip that is
+    not that sha left through some other path. That arm names the tip, its age and the lane
+    trailer of its commit.
+
+    THE RECEIPT IS PER-REPOSITORY, NOT PER-CHECKOUT (#445). The record lives in the git
+    COMMON dir, so every worktree of this repository reads the SAME receipt -- before this,
+    a receipt under `evidence/` was gitignored and therefore checkout-local, and this leg
+    compared a GLOBAL remote tip against whichever checkout happened to be reading, so the
+    same tip produced a finding in one worktree and silence in another. The coverage
+    therefore PRINTS the reading checkout AND the receipt's own recorded origin, and STATES
+    the residual: the record is LAST-WRITER-WINS across worktrees, so a push made by a
+    sibling checkout is named as that checkout's push and never misattributed to this one.
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     coverage = {
@@ -5004,6 +5030,15 @@ def publish_freshness_leg(
         "receipt": None,
         "receipt_reason": "",
         "receipt_mismatch": None,
+        # WHERE THIS LEG IS READING FROM, and WHERE THE RECEIPT IT READS WAS WRITTEN (#445).
+        # The receipt is ONE record per repository (git common dir), so "which checkout is
+        # reading" and "which checkout wrote the record" are DIFFERENT questions and both are
+        # printed. `receipt_path` is the resolved file the record was read from, or None when
+        # the common dir is unresolvable -- the absence is REPORTED, never silently fallen
+        # back to a checkout-local path.
+        "reading_checkout": str(Path(repo).resolve()),
+        "receipt_path": None,
+        "receipt_residual": PUBLISH_RECEIPT_RESIDUAL,
         "remote_tip_age_secs": None,
         "remote_tip_age_reason": "",
         "tip_younger_than_grace": False,
@@ -5101,6 +5136,8 @@ def publish_freshness_leg(
     tip_info, tip_why = pub.commit_info(Path(repo), tip)
 
     receipt, receipt_why = pub.read_receipt(Path(repo))
+    receipt_file = pub.receipt_path(Path(repo))
+    coverage["receipt_path"] = None if receipt_file is None else str(receipt_file)
     if receipt is None:
         coverage["receipt_reason"] = receipt_why
     else:
@@ -5109,15 +5146,22 @@ def publish_freshness_leg(
             "sha": str(receipt.get("sha") or ""),
             "instant": str(receipt.get("instant") or ""),
             "age_secs": None if rec_age is None else int(rec_age),
+            # THE ORIGIN HALF (#445): WHICH checkout wrote the record being read. A receipt
+            # written before #445 landed carries no `checkout`, and that absence is reported
+            # as None -- never assumed to be this checkout, which is the very misattribution
+            # the fix exists to remove.
+            "origin_checkout": str(receipt.get("checkout") or "") or None,
         }
         if coverage["receipt"]["sha"] != tip:
             lane = (tip_info or {}).get("session_id") or ""
             subject = (tip_info or {}).get("subject") or ""
             trailer = lane if tip_info is not None else f"unreadable ({tip_why})"
+            origin = coverage["receipt"]["origin_checkout"]
             coverage["receipt_mismatch"] = {
                 "remote_tip": tip,
                 "receipt_sha": coverage["receipt"]["sha"],
                 "receipt_instant": coverage["receipt"]["instant"],
+                "receipt_origin_checkout": origin,
                 "lane": lane,
                 "subject": subject,
             }
@@ -5127,6 +5171,11 @@ def publish_freshness_leg(
                 f"push that did not go through the pusher; lane "
                 f"{trailer or 'no lane trailer'}"
                 + (f" -- {subject[:60]}" if subject else "")
+                + (
+                    f" [receipt written by {origin}]"
+                    if origin
+                    else " [receipt names no origin checkout]"
+                )
             )
 
     if tip_info is None:
@@ -5454,6 +5503,21 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     lines.append(
                         f"  pusher receipt: NONE — {cov.get('receipt_reason', 'unstated')}"
                     )
+                # WHERE THE RECORD LIVES, WHICH CHECKOUT IS READING IT, AND WHO WROTE IT
+                # (#445). The receipt is ONE record per repository, so the reading checkout
+                # and the receipt's origin are different questions; both are printed, and the
+                # last-writer-wins residual is STATED rather than left for a reader to infer.
+                lines.append(
+                    f"  receipt file: {cov.get('receipt_path') or 'unresolvable (git common dir unreadable)'}"
+                )
+                lines.append(f"  reading checkout: {cov.get('reading_checkout', 'unknown')}")
+                if rec and rec.get("origin_checkout"):
+                    lines.append(f"  receipt origin checkout: {rec['origin_checkout']}")
+                elif rec:
+                    lines.append(
+                        "  receipt origin checkout: not recorded (written before #445)"
+                    )
+                lines.append(f"  receipt residual: {cov.get('receipt_residual', '')}")
                 if cov.get("receipt_mismatch"):
                     mm = cov["receipt_mismatch"]
                     lines.append(

@@ -482,7 +482,6 @@
     ],
     "tests/test_publish.py": [
       "TEMPLATE/tools/publish.py",
-      "evidence/publish-receipt.json",
       "tools/publish.py"
     ],
     "tests/test_questions.py": [
