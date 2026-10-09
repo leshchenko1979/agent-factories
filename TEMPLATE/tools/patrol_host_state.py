@@ -77,6 +77,7 @@ import json
 import os
 import re
 import sqlite3
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -145,21 +146,49 @@ PUBLISH_RECEIPT_RESIDUAL = (
     "own push -- `checkout` in the receipt says which worktree wrote the record being read"
 )
 
-# THE DUTY RESIDUAL, stated because a threshold without its derivation is unreadable.
+# THE DUTY RESIDUAL (#449), DERIVED per job rather than declared once for the fleet.
+#
 # A round's receipt lands when the lane the trigger woke FINISHES ITS TURN, and the leg
 # cannot read a lane's turn -- so a round young enough that its lane is plausibly still
-# working must not be judged. DECLARED rather than derived: deriving it from the round's
-# own `cron_expr` would mean widening the cron SELECT to reach a column this file
-# deliberately never parses (see the note at `box_cron_rows`), and it would be wrong for
-# every form that parser does not know -- six declaring jobs carry six distinct forms.
-# The value is MEASURED, not chosen. The filed specimen (#200, n=1455) judged three live
-# lanes MISSING at age 1136 s (fired 06:00:46Z, read 06:19:42Z), and every fire->receipt
-# latency on this factory's own ledger for a round that DID clear sits at or under 765 s.
-# The next datum up is 2388 s, and the fastest cadence among the declaring jobs is 6 h --
-# a window reaching either would let a round go UNJUDGED until the next fire superseded it.
-# 1800 s clears the specimen with 1.58x margin, stays under the 2388 s datum, and is 8.3%
-# of the fastest cadence. Printed in the coverage: an ACCEPTED window, never a hidden one.
-DUTY_RESIDUAL_SECS = 1800
+# working must not be judged. That window is a property of the JOB, not of the leg, and the
+# fleet constant this replaced (`DUTY_RESIDUAL_SECS = 1800`, #200) was derived from the
+# population of rounds that cleared FAST -- so it excluded by construction the very rounds
+# the window exists to protect. Measured 2026-09-28 (n=1518): of 29 fire->receipt latencies,
+# 22 (75.9%) sat ABOVE it, max 6.90 h. #449 recorded the harm live: the 06:00Z
+# `factory-measurement-daily` duty runs 44.6-178 min while `factory-hq-pacemaker` reads it at
+# 06:50Z, so EVERY 06:50Z round read a working duty MISSING.
+#
+# THE FORM is the gate-budget law's (`tools/gate_budget.py`), because that law already states
+# how a measured runtime becomes a cap -- `budget_sec = margin_for(measured_sec) x measured_sec`,
+# with `margin_for(m) = MARGIN_ASYMPTOTIC + MARGIN_FIXED_SEC/m`. The measurement is the job's
+# OWN measured max fire->receipt latency, read at THIS instant from the daemon's own fire
+# records (`cron_job_runs.started_at`) paired with the ledger's own receipt rows -- the
+# predicate n=1518 used. `margin_for` is BOUND to that module, never re-derived: one field,
+# one predicate (SKILL.md section 11).
+#
+# THE RESIDUAL IS NOT CLAMPED TO THE CADENCE, and an over-cadence value is PRINTED rather
+# than refused. For a duty whose own measured max exceeds its cadence the two requirements
+# are mutually unsatisfiable (n=1518 FINDING 3): a residual covering the observed max
+# outlives the next fire, and one short enough to stay under the cadence reads the duty's own
+# real rounds as MISSING. Clamping would hide that; the honest output is the number AND the
+# statement that this window cannot discriminate for that duty. The residual and the job's
+# own observed cadence are both printed, so the reader makes the call.
+DUTY_RESIDUAL_DEFAULT_SECS = 1800
+DUTY_RESIDUAL_DEFAULT_BASIS = (
+    "1800 s -- the pre-#449 fleet constant, retained as the DEFAULT for a job with no "
+    "measurable round. A job that has never receipted has no measured max to derive from, "
+    "and the two error directions are not equal: a short window judges a round the leg "
+    "cannot yet clear (a false MISSING, which costs one look), while a long one is SILENT "
+    "(#160). The default errs SHORT."
+)
+DUTY_RESIDUAL_FORM = (
+    "budget_sec = margin_for(measured_max) x measured_max, in the gate-budget law's form "
+    "(`tools/gate_budget.py`) -- the job's OWN measured max fire->receipt latency, from the "
+    "daemon's fire records paired with the ledger's receipt rows"
+)
+# The gate-budget module, reached by PATH through `load_module` like every sibling above: this
+# runner is copied into every member factory, where a module-level import would break the load.
+GATE_BUDGET = REPO / "tools" / "gate_budget.py"
 
 # ---- the canonicality leg (law: SKILL.md section 8, the ladder T0-T4) --------------
 #
@@ -1482,12 +1511,25 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
 
 
 def load_module(name: str, path: Path):
-    """Load a module by path, so no import path is assumed."""
+    """Load a module by path, so no import path is assumed.
+
+    The module is REGISTERED in `sys.modules` before `exec_module`, because a loaded
+    module that is not registered re-executes itself when its own code reaches an
+    `import` of its own name -- `gate_budget` does exactly that at its `__main__`
+    guard, and the second execution builds a SECOND copy of every constant the
+    first one exported. Registering is the fix; a module loaded twice is two
+    predicates for one field.
+    """
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise BoardReadError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
     return module
 
 
@@ -1756,6 +1798,47 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
         homes_read.append(db.parent.name)
     return rows, homes_read, unreached
 
+
+def cron_run_fires(root: Path | None = None) -> list[dict]:
+    """Every cron FIRE this box recorded: {job_id, job_name, started_at}.
+
+    `box_cron_rows` reads only the CURRENT row (`last_run_at`), so it can name each job's
+    LAST fire and nothing older. The per-job residual (#449) is derived from that job's OWN
+    measured MAX fire->receipt latency, which needs the job's HISTORY — so this reader takes
+    `cron_job_runs`, the daemon's own per-fire record, and the caller pairs each fire with
+    the ledger's own receipt row for the round it opened.
+
+    Read IN PLACE through the same `mode=ro` URI as `box_cron_rows`, for the same reason: a
+    copy of a live WAL-mode database is stale state and a disk leak. A home that cannot be
+    read contributes NOTHING and is not reported here — the residual this feeds is a
+    MEASUREMENT, and a measurement taken over a partial population prints its own
+    `measured_rounds` count beside its value so a thin sample is visible as thin.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    dbs, _unreached = registry.opencrabs_home_dbs(root)
+    fires: list[dict] = []
+    for db in dbs:
+        try:
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error:
+            continue
+        try:
+            fetched = list(conn.execute(
+                "select coalesce(job_id,''), coalesce(job_name,''), "
+                "coalesce(started_at,'') from cron_job_runs"
+            ))
+        except sqlite3.Error:
+            continue
+        finally:
+            conn.close()
+        for job_id, job_name, started_at in fetched:
+            fires.append({
+                "job_id": str(job_id),
+                "job_name": str(job_name),
+                "started_at": str(started_at),
+                "home": db.parent.name,
+            })
+    return fires
 
 def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], list[dict]]:
     """(rows attributed to this factory, rows attributed to NOBODY) — by declaration.
@@ -2554,6 +2637,148 @@ def duty_receipt_bound(repo: Path) -> tuple[dt.datetime | None, str, str]:
         )
     return instant, text, ""
 
+_GATE_BUDGET = None
+
+def gate_budget_module():
+    """The gate-budget law, loaded ONCE and cached (#449).
+
+    Cached for the reason `boundary_reader` is: `load_module` re-executes the module on
+    every call, and this accessor is reached once per declared job. The margin law is
+    BOUND to that module rather than re-derived here — one field, one predicate
+    (SKILL.md section 11): a second copy of `4.0 + 0.75/m` in this file would be a second
+    statement of the same law, and the two would drift.
+    """
+    global _GATE_BUDGET
+    if _GATE_BUDGET is None:
+        _GATE_BUDGET = load_module("gate_budget", GATE_BUDGET)
+    return _GATE_BUDGET
+
+def duty_fire_instants(job: dict, fires: list[dict], parse) -> list[dt.datetime]:
+    """This job's OWN fire instants, oldest first — the measurement's population.
+
+    Matched by `job_id` where both sides carry one, because a NAME is not an address: two
+    jobs may share a name across homes (#126). A fire carrying no id falls back to the
+    name, and the fallback is decided PER FIRE rather than per job, so a table written by
+    an older daemon still yields the fires it does carry. An unparseable instant is
+    dropped rather than defaulted: a fire this reader cannot date contributes no latency,
+    and inventing one would put a fabricated measurement under a derived cap.
+    """
+    job_id = str(job.get("id") or "")
+    name = str(job.get("name") or "")
+    instants: list[dt.datetime] = []
+    for fire in fires:
+        fire_id = str(fire.get("job_id") or "")
+        fire_name = str(fire.get("job_name") or "")
+        if job_id and fire_id:
+            if fire_id != job_id:
+                continue
+        elif name and fire_name:
+            if fire_name != name:
+                continue
+        else:
+            continue
+        try:
+            instants.append(parse(str(fire.get("started_at") or "")))
+        except (ValueError, TypeError):
+            continue
+    return sorted(instants)
+
+def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: list[dict],
+                      predicate=None, margin_for=None, parse=None) -> dict:
+    """The forward window for ONE job, DERIVED from that job's own measured max (#449).
+
+    THE MEASUREMENT. Each of the job's own fires opens a round (`receipt_round`), and the
+    latency is the gap from the fire to the NEWEST ledger row for that round which
+    DECLARES a duty (`receipt_subject_matches` + the shared field predicate). That pairing
+    is the predicate n=1518 used, and it is stated here because a rate without its
+    population is unreadable: `measured_rounds` travels in the returned record, so a
+    residual resting on one observation is visible as one.
+
+    THE FORM. `residual = margin_for(measured_max) * measured_max`, with `margin_for` READ
+    from `tools/gate_budget.py` — the same law the gate-budget manifest derives its
+    per-gate budgets with, so this instrument and that one cannot drift into two margins.
+    The returned record carries `margin_x` and `measured_max_secs` beside the product, so
+    the arithmetic is checkable rather than asserted.
+
+    THE DEFAULT. A job with no measurable round (never fired, never receipted, or a runs
+    table this reader cannot date) has NO measured max to derive from, and gets
+    `DUTY_RESIDUAL_DEFAULT_SECS` with `basis="default"` and the stated reason. The two
+    error directions are not equal — a short window judges a round the leg cannot yet
+    clear (a false MISSING, which costs one look), while a long one is SILENT (#160) — so
+    the default errs SHORT, and it is PRINTED, never applied invisibly.
+
+    THE CADENCE IS REPORTED, NEVER ENFORCED. `cadence_secs` is the median gap between this
+    job's own fires, and `over_cadence` is true when the derived residual reaches it. Such
+    a residual cannot discriminate (n=1518 FINDING 3) — it outlives the next fire — and
+    the honest output is the number AND that statement, never a clamp that hides it.
+    """
+    if predicate is None:
+        predicate = field_predicate_readers()
+    if parse is None:
+        parse = reader_parse_ts
+    if margin_for is None:
+        margin_for = gate_budget_module().margin_for
+
+    instants = duty_fire_instants(job, fires, parse)
+    latencies: list[float] = []
+    for instant in instants:
+        round_date = receipt_round(instant.isoformat())
+        if round_date is None:
+            continue
+        candidates = [
+            r for r in ledger_rows
+            if receipt_subject_matches(str(r.get("subject") or ""), stem, round_date)
+            and predicate.declared_duty(str(r.get("detail") or ""))
+        ]
+        if not candidates:
+            continue
+        newest = max(candidates, key=lambda r: str(r.get("ts") or ""))
+        try:
+            receipt_instant = parse(str(newest.get("ts") or ""))
+        except (ValueError, TypeError):
+            continue
+        latency = (receipt_instant - instant).total_seconds()
+        # A NEGATIVE latency is a clock artefact, not a fast duty: the receipt cannot
+        # precede the fire that opened its round. Dropped rather than clamped to zero,
+        # because a zero would enter the max as a real observation.
+        if latency < 0:
+            continue
+        latencies.append(latency)
+
+    measured_max = max(latencies) if latencies else None
+    if measured_max is None:
+        residual = float(DUTY_RESIDUAL_DEFAULT_SECS)
+        margin = None
+        basis = "default"
+        basis_text = DUTY_RESIDUAL_DEFAULT_BASIS
+    else:
+        margin = margin_for(measured_max)
+        residual = margin * measured_max
+        basis = "derived"
+        basis_text = DUTY_RESIDUAL_FORM
+
+    cadence: float | None = None
+    if len(instants) >= 2:
+        gaps = [(b - a).total_seconds() for a, b in zip(instants, instants[1:])]
+        gaps = [g for g in gaps if g > 0]
+        if gaps:
+            cadence = statistics.median(gaps)
+
+    return {
+        "name": str(job.get("name") or "(unnamed row)"),
+        "id": str(job.get("id") or "unstated"),
+        "stem": stem,
+        "basis": basis,
+        "basis_text": basis_text,
+        "residual_secs": residual,
+        "margin_x": margin,
+        "measured_max_secs": measured_max,
+        "measured_rounds": len(latencies),
+        "fires_read": len(instants),
+        "cadence_secs": cadence,
+        "over_cadence": cadence is not None and residual >= cadence,
+    }
+
 def dispatch_delivery_scope(repo: Path = REPO) -> tuple[dt.datetime | None, str, str]:
     """The bound this leg judges against, as `(instant, text, refusal)`.
 
@@ -3102,7 +3327,8 @@ def dispatch_delivery_leg(
 def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                      prefixes: list[str], ledger_rows: list[dict], *,
                      read_at: str = "", store: Path = FRAGMENT_STORE,
-                     predicate=None, repo: Path = REPO, now=None) -> dict:
+                     predicate=None, repo: Path = REPO, now=None,
+                     fires: list[dict] | None = None, margin_for=None) -> dict:
     """The duty-completion leg: did the round each thin trigger woke LEAVE A RECEIPT?
 
     POPULATION. The ENABLED cron rows this factory DECLARES that carry a receipt
@@ -3130,9 +3356,11 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     problems: list[str] = []
     excused: list[str] = []
     judged: list[dict] = []
+    residuals: list[dict] = []
     rounds_superseded = 0
     rounds_excused_by_bound = 0
     rounds_excused_by_residual = 0
+    rounds_over_cadence = 0
     # The residual's reference instant is the READ's own instant, so every age this leg
     # prints is a property of ONE instant rather than of when each row happened to be
     # visited. `now` is injectable for probes; the live path uses `read_at`.
@@ -3158,6 +3386,17 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         name = str(row.get("name") or "(unnamed row)")
         job_id = str(row.get("id") or "unstated")
         fired = str(row.get("last_run_at") or "")
+        # THE JOB'S OWN WINDOW (#449), derived BEFORE any branch so the coverage carries a
+        # residual for every declared job -- including one excused by the bound, whose
+        # window a reader still needs in order to see what it WOULD have been judged against.
+        residual = duty_residual_for(
+            row, stem, fires=fires or [], ledger_rows=ledger_rows,
+            predicate=predicate, margin_for=margin_for, parse=reader_parse_ts,
+        )
+        residuals.append(residual)
+        if residual["over_cadence"]:
+            rounds_over_cadence += 1
+        residual_secs = residual["residual_secs"]
         round_date = receipt_round(fired)
         if round_date is None:
             excused.append(
@@ -3185,19 +3424,23 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                 f"NOT JUDGED, and NEVER backfilled"
             )
             continue
-        # THE FORWARD WINDOW (#200). A round younger than the residual is IN FLIGHT: the
-        # trigger fired and the lane it woke has not finished, which the leg cannot read
-        # and must not call a missing duty. The window AND the age are PRINTED -- a bare
-        # skip would trade a false RED for a false clean, which is the #160 class.
+        # THE FORWARD WINDOW (#200), DERIVED per job since #449. A round younger than its
+        # OWN job's residual is IN FLIGHT: the trigger fired and the lane it woke has not
+        # finished, which the leg cannot read and must not call a missing duty. The window
+        # AND the age are PRINTED -- a bare skip would trade a false RED for a false clean,
+        # which is the #160 class -- and the window is now the JOB's, so a duty whose real
+        # rounds run 178 min is no longer judged against a fleet constant derived from the
+        # rounds that cleared FAST.
         age = (residual_now - fired_instant).total_seconds()
-        if 0 <= age < DUTY_RESIDUAL_SECS:
+        if 0 <= age < residual_secs:
             rounds_excused_by_residual += 1
             excused.append(
                 f"{name} (cron id {job_id}): the round {round_date} (fired {fired}) is "
                 f"IN FLIGHT — {duty_age_text(age)} old at the {read_at or 'unstated'} read, "
-                f"against the declared residual {duty_age_text(DUTY_RESIDUAL_SECS)}. A round "
-                f"younger than its residual is NOT JUDGED: the trigger fired and its lane "
-                f"has not finished, and this leg cannot tell that from a duty never done"
+                f"against its OWN residual {duty_age_text(residual_secs)} "
+                f"[{duty_residual_basis_text(residual)}]. A round younger than its residual "
+                f"is NOT JUDGED: the trigger fired and its lane has not finished, and this "
+                f"leg cannot tell that from a duty never done"
             )
             continue
         matched = [r for r in ledger_rows
@@ -3305,7 +3548,14 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "bound_refusal": bound_refusal,
             "rounds_superseded": rounds_superseded,
             "rounds_excused_by_bound": rounds_excused_by_bound,
-            "residual_secs": DUTY_RESIDUAL_SECS,
+            # THE WINDOW IS PER JOB (#449): there is no single fleet residual to print, so
+            # the coverage carries the DEFAULT and the FORM beside the per-job derivations.
+            # A scalar here would be a number no round was judged against.
+            "residuals": residuals,
+            "residual_default_secs": DUTY_RESIDUAL_DEFAULT_SECS,
+            "residual_default_basis": DUTY_RESIDUAL_DEFAULT_BASIS,
+            "residual_form": DUTY_RESIDUAL_FORM,
+            "rounds_over_cadence": rounds_over_cadence,
             "rounds_excused_by_residual": rounds_excused_by_residual,
             "duties_missing": len([p for p in problems if "NO duty receipt" in p]),
             "attested_at_state": state,
@@ -3321,6 +3571,25 @@ def duty_age_text(secs: float) -> str:
     if secs < 5400:
         return f"{secs / 60:.1f} min"
     return f"{secs / 3600:.2f} h"
+
+def duty_residual_basis_text(residual: dict) -> str:
+    """HOW one job's residual was obtained — the derivation, or the default and why.
+
+    A cap without its basis is unreadable: `4.12 h` says nothing a reader can check, while
+    `margin 4.01 x its own measured max 59.0 min over 13 round(s)` can be recomputed from
+    the ledger. The default's own reason travels too, because "no measurable round" and
+    "measured, and the number is this" are different facts that must never render alike.
+    """
+    if residual.get("basis") == "derived":
+        return (
+            f"derived: margin {residual['margin_x']:.3f} x its own measured max "
+            f"{duty_age_text(residual['measured_max_secs'])} over "
+            f"{residual['measured_rounds']} round(s)"
+        )
+    return (
+        f"DEFAULT — {residual.get('measured_rounds', 0)} measurable round(s) for this job, "
+        f"so there is no measured max to derive from"
+    )
 
 
 def reader_parse_ts(text: str):
@@ -5415,13 +5684,41 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  backward bound `{DUTY_RECEIPT_BOUNDARY_KEY}`: "
                 f"{cov.get('bound') or 'UNDECLARED'}"
             )
-            residual = cov.get("residual_secs")
-            lines.append(
-                f"  forward residual: "
-                f"{duty_age_text(residual) if residual is not None else 'UNDECLARED'} "
-                f"({residual if residual is not None else '?'} s) — a round younger than "
-                f"this is IN FLIGHT and NOT JUDGED"
-            )
+            residuals = cov.get("residuals") or []
+            if residuals:
+                lines.append(
+                    f"  forward residual: PER JOB, DERIVED (#449) — {len(residuals)} "
+                    f"declared job(s); a round younger than ITS OWN job's residual is IN "
+                    f"FLIGHT and NOT JUDGED"
+                )
+                for res in residuals:
+                    lines.append(
+                        f"    {res['name']} (cron id {res['id']}): "
+                        f"{duty_age_text(res['residual_secs'])} "
+                        f"({res['residual_secs']:.0f} s) — "
+                        f"{duty_residual_basis_text(res)}"
+                    )
+                    if res.get("over_cadence"):
+                        cadence = res.get("cadence_secs")
+                        lines.append(
+                            f"      OVER CADENCE: this residual reaches the job's own "
+                            f"observed cadence "
+                            f"{duty_age_text(cadence) if cadence else 'UNDECLARED'} — it "
+                            f"cannot discriminate for this duty (a residual covering the "
+                            f"observed max outlives the next fire). PRINTED, never refused, "
+                            f"and never clamped to the cadence: clamping would hide the "
+                            f"mutually-unsatisfiable pair rather than report it"
+                        )
+                lines.append(
+                    f"    DEFAULT for a job with no measurable round: "
+                    f"{duty_age_text(cov.get('residual_default_secs'))} "
+                    f"({cov.get('residual_default_secs')} s) — {cov.get('residual_form')}"
+                )
+            else:
+                lines.append(
+                    "  forward residual: NONE APPLIED — this leg judged no round, so no "
+                    "window was derived (a leg that judges nothing owes no bound)"
+                )
             if cov.get("rounds_excused_by_residual"):
                 lines.append(
                     f"    {cov['rounds_excused_by_residual']} round(s) are younger than "
@@ -6039,6 +6336,7 @@ def main(
     slug_fn=remote_slug,
     rows_fn=load_rows,
     cron_rows_fn=box_cron_rows,
+    cron_fires_fn=cron_run_fires,
     prefixes_fn=declared_prefixes,
     log_dir: Path = LOG_DIR,
     kit_manifest: Path | None = None,
@@ -6062,7 +6360,11 @@ def main(
     without a live board — and a probe that can only run against the live board is
     a probe that cannot be run at all when the board is what is broken. The cron read
     and the prefix declaration are injected for the same reason: a probe drives the
-    cron-thinness leg with NO live database. The two drift manifests are injected for the
+    cron-thinness leg with NO live database. The cron FIRE history is injected for the
+    same reason and one more (#449): the duty-receipt leg's forward window is now DERIVED
+    per job from that job's own fire->receipt latencies, so a probe that read the live
+    runs table would be asserting this box's own timings rather than the leg's arithmetic.
+    The two drift manifests are injected for the
     fourth: the kit-drift leg's population is five OTHER repositories, so a probe that
     could only run against the live box would be measuring whatever those trees happen to
     hold rather than the leg's behaviour. `kit_manifest` defaults to None, which is the
@@ -6178,7 +6480,11 @@ def main(
             read_at=read_at,
         ),
         duty_receipt_leg(
-            cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at
+            cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at,
+            # The per-job residual (#449) is derived from each job's OWN fire history, so
+            # the leg is handed the daemon's fire records. Injected for the same reason the
+            # cron table is: a probe must not have its window decided by the live box.
+            fires=cron_fires_fn(),
         ),
         canonicality_leg(rows, read_at=read_at),
         workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),

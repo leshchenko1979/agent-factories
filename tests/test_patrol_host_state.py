@@ -156,7 +156,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
-         board_scope=None, lane_names_fn=None):
+         board_scope=None, lane_names_fn=None, cron_fires=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -203,6 +203,12 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         slug_fn=lambda: "owner/repo",
         rows_fn=lambda: rows,
         cron_rows_fn=lambda: (cron_rows, homes, unreached),
+        # The FIRE history (#449) is injected for the same reason the cron table is: the
+        # duty-receipt leg's forward window is derived from it, so a probe must never have
+        # its window decided by the live box's own runs table. The default is EMPTY, which
+        # makes every job fall to the printed DEFAULT — the shape every pre-#449 probe was
+        # written against — and a probe that asserts the derivation passes `cron_fires`.
+        cron_fires_fn=lambda: ([] if cron_fires is None else cron_fires),
         prefixes_fn=lambda: prefixes,
         log_dir=log_dir,
         kit_manifest=kit_manifest,
@@ -1893,6 +1899,28 @@ def _receipt_row(subject=None,
     return {"n": n, "ts": _RECEIPT_TS, "event": "run", "actor": "delegate",
             "subject": subject, "detail": detail}
 
+def _fire_receipt(fire_hours: float, latency_secs: float, n: int) -> dict:
+    """A receipt row for the round opened `fire_hours` after the bound, `latency_secs` later.
+
+    Built rather than pinned, because the per-job residual (#449) is a function of the GAP
+    between a fire and its round's receipt: a fixture with a fixed receipt instant can only
+    express one latency, and a measurement over one observation is not a max.
+    """
+    fire = _plus(_DUTY_BOUND, fire_hours)
+    fired = dt.datetime.strptime(fire, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+    receipt = (fired + dt.timedelta(seconds=latency_secs)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {"n": n, "ts": receipt, "event": "run", "actor": "delegate",
+            "subject": f"registry-attest-{fire[:10]}",
+            "detail": "the round completed. duty=completed"}
+
+def _fires(hours: tuple[float, ...], *, name: str = "factory-registry-attest") -> list[dict]:
+    """Fire records for one job, on the instants named — the residual's population."""
+    return [
+        {"job_id": _duty_row()["id"], "job_name": name,
+         "started_at": _plus(_DUTY_BOUND, h)}
+        for h in hours
+    ]
+
 # THE FORWARD BOUND the duty probes are driven against (#175). Declared HERE rather than
 # read from the live tree, because this file is a SHIPPED PAIR: a member factory that has
 # not adopted the convention declares no key, and criterion 4 makes that a REFUSAL — so a
@@ -1919,12 +1947,13 @@ _DUTY_TREE = _duty_tree()
 
 
 def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None,
-              read_at=None) -> dict:
+              read_at=None, fires=None, margin_for=None) -> dict:
     return RUNNER.duty_receipt_leg(
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
         read_at=read_at if read_at is not None else _DUTY_READ_AT,
         store=store if store is not None else Path(tempfile.mkdtemp()),
         repo=repo if repo is not None else _DUTY_TREE,
+        fires=fires, margin_for=margin_for,
     )
 
 def test_the_duty_leg_BITES_when_a_fired_round_left_no_receipt() -> None:
@@ -2280,12 +2309,29 @@ def test_a_round_YOUNGER_than_the_residual_is_NOT_JUDGED_with_its_AGE_printed() 
 
 def test_the_residual_is_PRINTED_in_the_coverage_beside_its_sibling() -> None:
     """Criterion 3: the window travels in the coverage, so an ACCEPTED window is never a
-    hidden one -- the same discipline PUBLISH_RESIDUAL_SECS follows for the pusher."""
+    hidden one -- the same discipline PUBLISH_RESIDUAL_SECS follows for the pusher.
+
+    Since #449 there is no single fleet residual: the coverage carries the DEFAULT and the
+    FORM beside the PER-JOB derivations, and a scalar here would be a number no round was
+    judged against.
+    """
     leg = _duty_leg([_duty_row()], [_receipt_row()])
-    assert leg["coverage"]["residual_secs"] == RUNNER.DUTY_RESIDUAL_SECS, leg["coverage"]
+    assert "residual_secs" not in leg["coverage"], (
+        "there is no single fleet residual any more -- a scalar would be a number no round "
+        f"was judged against: {leg['coverage'].get('residual_secs')}"
+    )
+    assert leg["coverage"]["residual_default_secs"] == RUNNER.DUTY_RESIDUAL_DEFAULT_SECS, (
+        leg["coverage"]
+    )
+    # No fires were injected, so this job has no measurable round and falls to the DEFAULT.
+    residuals = leg["coverage"]["residuals"]
+    assert len(residuals) == 1, residuals
+    assert residuals[0]["basis"] == "default", residuals[0]
+    assert residuals[0]["residual_secs"] == RUNNER.DUTY_RESIDUAL_DEFAULT_SECS, residuals[0]
     rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"])
     assert "forward residual:" in out, out[-3000:]
-    assert f"{RUNNER.DUTY_RESIDUAL_SECS} s" in out, out[-3000:]
+    assert "PER JOB, DERIVED" in out, out[-3000:]
+    assert f"{RUNNER.DUTY_RESIDUAL_DEFAULT_SECS} s" in out, out[-3000:]
 
 def test_the_residual_does_NOT_excuse_a_round_OLDER_than_it() -> None:
     """The counter-control, and the half that keeps the fix honest: a window that excused
@@ -2298,6 +2344,70 @@ def test_the_residual_does_NOT_excuse_a_round_OLDER_than_it() -> None:
     assert leg["coverage"]["rounds_excused_by_residual"] == 0, leg["coverage"]
     assert len(leg["problems"]) == 1, leg["problems"]
     assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+
+def test_the_residual_is_DERIVED_from_the_jobs_OWN_measured_max() -> None:
+    """#449 criterion 1: the window is the JOB's, never a fleet constant.
+
+    Three fires, three receipts, the longest 6000 s behind its fire. The assertion is made
+    against the MARGIN LAW `tools/gate_budget.py` states -- `margin_for(measured_max) *
+    measured_max`, read through the runner's own accessor -- rather than against a number
+    copied into this probe, because a copied number would be a second statement of the law
+    and would keep passing after the law moved.
+    """
+    fires = _fires((0.5, 26.0, 50.0))
+    ledger = [
+        _fire_receipt(0.5, 6000.0, 11),
+        _fire_receipt(26.0, 3000.0, 12),
+        _fire_receipt(50.0, 1200.0, 13),
+    ]
+    leg = _duty_leg([_duty_row()], ledger, fires=fires)
+    residual = leg["coverage"]["residuals"][0]
+    assert residual["basis"] == "derived", residual
+    assert residual["measured_rounds"] == 3, residual
+    assert residual["measured_max_secs"] == 6000.0, residual
+    margin = RUNNER.gate_budget_module().margin_for(6000.0)
+    assert abs(residual["margin_x"] - margin) < 1e-9, residual
+    assert abs(residual["residual_secs"] - margin * 6000.0) < 1e-6, residual
+    assert residual["residual_secs"] > RUNNER.DUTY_RESIDUAL_DEFAULT_SECS, (
+        "the job's own measured max exceeds the pre-#449 fleet constant, so the derived "
+        f"window must be the WIDER one -- the derivation must not collapse back to it: {residual}"
+    )
+    # THE OBSERVABLE EFFECT, and it is the #449 harm exactly: this round's age (5400 s at
+    # the read) is ABOVE the old fleet constant and BELOW this job's own derived residual,
+    # so the round the pre-fix leg called a missing duty is now correctly IN FLIGHT.
+    assert 5400.0 > RUNNER.DUTY_RESIDUAL_DEFAULT_SECS, "the fixture must straddle the old value"
+    assert leg["coverage"]["rounds_excused_by_residual"] == 1, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+def test_an_OVER_CADENCE_residual_is_PRINTED_never_refused() -> None:
+    """#449 criterion 2: a mutually-unsatisfiable window is REPORTED, not hidden.
+
+    Four fires a day apart with a 7 h measured max give a derived residual of ~28 h -- past
+    the job's own 24 h cadence. The two requirements cannot both hold (n=1518 FINDING 3),
+    and the honest output is the number AND the statement. So the leg must still judge --
+    never refuse, never turn the job's own timing into a problem -- and the rendered report
+    must carry the OVER CADENCE line beside the value.
+    """
+    fires = _fires((0.5, 24.5, 48.5))
+    ledger = [
+        _fire_receipt(0.5, 25200.0, 21),
+        _fire_receipt(24.5, 25200.0, 22),
+        _fire_receipt(48.5, 25200.0, 23),
+    ]
+    leg = _duty_leg([_duty_row()], ledger, fires=fires)
+    residual = leg["coverage"]["residuals"][0]
+    assert residual["cadence_secs"] == 86400.0, residual
+    assert residual["over_cadence"] is True, residual
+    assert residual["residual_secs"] >= residual["cadence_secs"], residual
+    assert leg["coverage"]["rounds_over_cadence"] == 1, leg["coverage"]
+    # NEVER REFUSED, and never a problem in its own right: the leg still returns a verdict
+    # over the round, and the duty's timing is reported rather than judged.
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["problems"] == [], leg["problems"]
+    rc, out, err = _run([], ledger, cron_rows=[_duty_row()], prefixes=["factory-"],
+                        cron_fires=fires)
+    assert "OVER CADENCE" in out, out[-3000:]
+    assert "never clamped to the cadence" in out, out[-3000:]
 
 # ------------------------------------------------------------------- kit-drift leg
 
@@ -2485,6 +2595,7 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
         RUNNER.main(
             [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
             rows_fn=lambda: [], cron_rows_fn=lambda: ([], ["probe-home"], []),
+            cron_fires_fn=lambda: [],
             prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
             kit_manifest=mpath, fleet_manifest=fpath,
             out=lambda *a, **k: print(*a, file=out, **k),
@@ -2556,6 +2667,7 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
         RUNNER.main(
             [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
             rows_fn=lambda: [], cron_rows_fn=lambda: ([], ["probe-home"], []),
+            cron_fires_fn=lambda: [],
             prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
             kit_manifest=mpath, fleet_manifest=fpath,
             out=lambda *a, **k: print(*a, file=out, **k),
@@ -3533,6 +3645,7 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
         RUNNER.main(
             [], board_fn=lambda slug: [], slug_fn=lambda: "owner/repo",
             rows_fn=lambda: [], cron_rows_fn=lambda: (rows, ["probe-home"], []),
+            cron_fires_fn=lambda: [],
             prefixes_fn=lambda: [],
             log_dir=Path(tmp) / "logs",
             kit_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
@@ -4227,6 +4340,7 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
     rc = RUNNER.main(
         [], board_fn=lambda slug: issues, slug_fn=lambda: "owner/repo",
         rows_fn=lambda: rows, cron_rows_fn=lambda: ([], ["probe-home"], []),
+        cron_fires_fn=lambda: [],
         prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
         kit_manifest=_probe_kit_pair()[0], fleet_manifest=_probe_kit_pair()[1],
         out=lambda *a, **k: print(*a, file=out, **k),
