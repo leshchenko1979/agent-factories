@@ -969,3 +969,42 @@ def declared_delivery(detail: str) -> list[str]:
     so it is not a declaration and the row is refused exactly as if the token were absent.
     """
     return _declared_values(detail, DELIVERY_KEY)
+
+
+# The conversion row's `converted_from=<artifact>` field -- the pointer that makes the
+# score-regression duty MECHANICAL (issue #67, ruling `n=1599`).
+#
+# Section 6 declared the conversion "automatic" while no mechanism carried it, and the
+# filing's own remedy note said the factory-to-issue mapping "is not mechanical today".
+# It becomes mechanical the moment the conversion DECLARES its source: the declaration is
+# the reader's key, so the patrol's score-conversion leg joins a regression in a score
+# artifact to the row that answered it without reading any lane's prose. Same shape as the
+# duty receipt (`declared_duty`), one surface over.
+#
+# WELL-FORMED IS THE ARTIFACT PATH ITSELF, not merely a non-empty value: the ruling names
+# the literal `converted_from=evidence/scores/<date>.md`, and a token naming anything else
+# attributes the conversion to NO artifact -- which is the state being repaired. So
+# `converted_from=none`, a bare `converted_from=`, and a path outside `evidence/scores/`
+# all OCCUPY the key while naming no artifact, and the write path refuses them exactly as
+# if the token were absent (#297 clause 2's shape: one predicate, two call sites).
+#
+# POSITIONAL, through `trailer_tokens`, for the reason every field here is: `detail` is
+# free prose that QUOTES trailers as evidence, so a whole-detail scan would let a writer
+# satisfy the refusal by quoting an artifact path while the row's own run declares none.
+CONVERSION_KEY = "converted_from"
+
+CONVERSION_SOURCE_RE = re.compile(r"^evidence/scores/\d{4}-\d{2}-\d{2}\.md$")
+
+def declared_conversion_source(detail: str) -> str | None:
+    """The WELL-FORMED `converted_from=<artifact>` `detail`'s CANONICAL RUN declares.
+
+    `None` means the run declares no conversion source -- the state the write path refuses
+    for a `conversion` row and the leg reports as unattributed. The well-formedness test is
+    the artifact-path SHAPE, so a token that occupies the key while naming no artifact is
+    read as absent rather than as a source.
+    """
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, CONVERSION_KEY)
+        if value and CONVERSION_SOURCE_RE.match(value):
+            return value
+    return None

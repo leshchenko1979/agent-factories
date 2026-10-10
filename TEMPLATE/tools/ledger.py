@@ -145,6 +145,7 @@ from field_predicate import (
     declared_board_closed,
     declared_claim,
     declared_comment_id,
+    declared_conversion_source,
     declared_defect_key,
     declared_delivery,
     declared_keys,
@@ -1383,6 +1384,46 @@ def cmd_append(args: argparse.Namespace) -> int:
                         f"re-release, which is a new claim, or a DUPLICATE minted by "
                         f"retrying an append that had already completed (#213)"
                     )
+        # A CONVERSION MUST NAME THE ARTIFACT IT CONVERTED (issue #67, ruling `n=1599`).
+        #
+        # Section 6 declared the score-regression conversion "automatic" while no mechanism
+        # carried it, and the patrol's score-conversion leg can only join a regression to
+        # the row that answered it when the row DECLARES its source: `converted_from=
+        # evidence/scores/<date>.md` is that reader's key. A conversion naming no artifact
+        # is indistinguishable from an ordinary row, so the regression it was meant to
+        # answer reads as unconverted forever -- and the ledger cannot answer "converted, or
+        # still owed?". The state being repaired is precisely the unattributable conversion,
+        # so it is refused HERE, at the write path, where a row is still mutable: a row is
+        # IMMUTABLE once pushed, so an unattributed conversion could afterwards only ever be
+        # labelled NOT JUDGED by the leg, never repaired into one that names its artifact.
+        #
+        # The transition is its OWN event, DECLARED locally in `ledger-refs-kinds.json`
+        # rather than widened into the core tuple -- the same shape, and for the same
+        # reason, as this factory's `release` (#210, ruling `n=1577`): a member that never
+        # converts a score regression carries no dead vocabulary, and the transition
+        # promotes to the core set when a second factory needs it.
+        #
+        # THE PREDICATE IS THE SHARED ONE, through `declared_conversion_source`, never a
+        # private scan: one field, one predicate (`n=405` PART 5, `n=599`). It is POSITIONAL
+        # -- the canonical terminal run -- because `detail` is free prose that QUOTES
+        # trailers as evidence, so a whole-detail scan would let a writer satisfy this
+        # refusal by quoting an artifact path while the row's own run declares none. And it
+        # is WELL-FORMED, so `converted_from=none` OCCUPIES the key while naming no artifact
+        # and is refused for the same reason it would be a problem at the leg (one
+        # predicate, two call sites).
+        #
+        # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state:
+        # this binds the row ABOUT TO BE WRITTEN, so it can never predate itself. History is
+        # the leg's business, and nothing is backfilled -- a token written today for a
+        # conversion that predates the rule would be a falsified record, not a repair.
+        if args.event == "conversion" and declared_conversion_source(args.detail) is None:
+            sys.exit(
+                "ledger append refused: a 'conversion' must name the score artifact it "
+                "converted as a canonical-run token "
+                "`converted_from=evidence/scores/<date>.md`. A conversion naming no "
+                "artifact cannot be joined to the regression it answers, so the duty "
+                "reads as unconverted forever (#67)"
+            )
         # A NEW INTAKE IS INTERSECTED AGAINST THE OPEN SET, AND A DUPLICATE IS REFUSED
         # (#417, ruled `n=2745`; the owner's answers to `q34`/`q35`).
         #

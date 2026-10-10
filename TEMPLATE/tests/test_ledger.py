@@ -605,6 +605,98 @@ def check_release_vocabulary() -> None:
                   r.returncode == 0 and "0 terminal by release, 1 open" in r.stdout,
                   r.stdout[-420:])
 
+def check_conversion_vocabulary() -> None:
+    """#67's conversion arms, driven where the vocabulary exists.
+
+    The `conversion` event is FACTORY DATA (`docs/ledger-refs-kinds.json`), and the kit
+    ships only the empty `.example.json`. So a shipped tree has nothing to drive, and
+    these arms red as though the instrument were broken -- the same bytes scoring two
+    verdicts, which is a missing declaration reported as a defect (#229). The
+    precondition is stated ONCE, above the arms; a tree that has not adopted the
+    vocabulary SKIPS with its reason rather than reporting a false red.
+    """
+    if not _event_is_known("conversion"):
+        print(
+            "  SKIP  the conversion arms -- this tree declares no `conversion` event: "
+            "docs/ledger-refs-kinds.json is absent or silent. "
+            f"Population examined: {_vocabulary_size()} event(s) resolved in "
+            "this tree; 8 conversion arms declared, 0 driven here. A factory that declares "
+            "the vocabulary gets these arms; reding here would report a missing "
+            "declaration as a broken instrument (#229)."
+        )
+        return
+
+    # --- #67 criterion 5: a conversion must NAME the artifact it converted -------------
+    # HQ's ruling (n=1599) makes an unattributable conversion UNREPRESENTABLE: a row that
+    # answers a score regression must carry `converted_from=evidence/scores/<date>.md` for
+    # the artifact whose regression it answered, and the predicate is the SHARED one
+    # (`declared_conversion_source` -- one field, one predicate; the write path here and
+    # the patrol leg are its two call sites). The arms close each half the ruling names:
+    # (a) the control, a WELL-FORMED token ACCEPTED; (b) no token refused, naming the token
+    # to write; (c) `converted_from=none` refused -- it OCCUPIES the key while naming no
+    # artifact; (d) a bare `converted_from=` refused; (e) a token naming a path OUTSIDE
+    # `evidence/scores/` refused; (f) POSITIONAL -- the token QUOTED in prose does not
+    # satisfy the row's own canonical run, so it is refused; (g) the refused appends wrote
+    # NOTHING; and (h) the lawful row is READ by `verify` -- the arm that reds if the
+    # declaration is written and never read (#218). Arm (a) is the both-ways control for
+    # (b)-(f): without it, every one of them would pass on a write path that refused EVERY
+    # conversion.
+    with tempfile.TemporaryDirectory() as td:
+        cv_ledger = Path(td) / "conversion.jsonl"
+        cv_subj = "#9001"
+        artifact = "evidence/scores/2026-10-10.md"
+        run(cv_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+
+        def conversion(detail: str) -> subprocess.CompletedProcess:
+            return run(cv_ledger, "append", "--event", "conversion", "--actor", "worker",
+                       "--subject", cv_subj, "--detail", detail)
+
+        r = conversion(f"conversion: answered\nconverted_from={artifact}")
+        check("(67a) a conversion naming its artifact is ACCEPTED (the control)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-110:])
+        n_after_accept = len(rows(cv_ledger))
+
+        r = conversion("conversion: names no artifact")
+        msg = (r.stdout + r.stderr).strip()
+        check("(67b) a conversion naming NO artifact is REFUSED",
+              r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
+        check("(67b) and the refusal names the token to write",
+              "converted_from=evidence/scores/<date>.md" in msg, msg[-150:])
+
+        r = conversion("conversion: a token that names nothing\nconverted_from=none")
+        msg = (r.stdout + r.stderr).strip()
+        check("(67c) `converted_from=none` OCCUPIES the key and is REFUSED",
+              r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
+
+        r = conversion("conversion: a bare key\nconverted_from=")
+        msg = (r.stdout + r.stderr).strip()
+        check("(67d) a bare `converted_from=` is REFUSED",
+              r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
+
+        r = conversion("conversion: a path outside the score tree\n"
+                       "converted_from=docs/foo.md")
+        msg = (r.stdout + r.stderr).strip()
+        check("(67e) a token naming a path OUTSIDE evidence/scores/ is REFUSED",
+              r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
+
+        # (67f) POSITIONAL. `detail` is free prose that QUOTES trailers as evidence, so a
+        # whole-detail scan would let a writer satisfy the refusal by quoting an artifact
+        # path while the row's own canonical run declares none.
+        r = conversion(f"conversion: the row must carry converted_from={artifact} somewhere")
+        msg = (r.stdout + r.stderr).strip()
+        check("(67f) the token QUOTED in prose does NOT satisfy the run -- REFUSED",
+              r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
+
+        check("(67g) the refused appends wrote NOTHING",
+              len(rows(cv_ledger)) == n_after_accept,
+              f"{len(rows(cv_ledger))} row(s)")
+
+        r = run(cv_ledger, "verify")
+        out = r.stdout + r.stderr
+        check("(67h) `verify` reads a lawful conversion row (the declaration is READ)",
+              r.returncode == 0, out[-420:])
+
 def check_intake_duplicate_intersection() -> None:
     """#417: a DECLARED `defect-key` is intersected against the OPEN set at intake.
 
@@ -2763,6 +2855,7 @@ def main() -> int:
     check_worktree_fork_refused()
     check_intake_duplicate_intersection()
     check_release_vocabulary()
+    check_conversion_vocabulary()
 
     print()
     if failures:

@@ -5584,6 +5584,262 @@ def publish_freshness_leg(
     }
 
 
+# ------------------------------------------------------------------ score conversion
+
+SCORES_DIR_REL = "evidence/scores"
+
+_SCORE_ARTIFACT_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})\.md$")
+_SCORECARD_HEADING_RE = re.compile(
+    r"^###\s+\d+\.\s+(?P<name>.+?)\s+—\s+(?P<total>\d+)\s*/\s*(?P<den>\d+)\s*$"
+)
+_SCORECARD_CRITERIA_RE = re.compile(r"^\|\s*D1\s*\|")
+_SCORECARD_CELL_RE = re.compile(
+    r"^\*{0,2}\s*(?P<value>\d+)\s*(?P<unm>\(UNM\))?\s*$"
+)
+
+# THE FLOOR IS THE RULING'S OWN, not this leg's choice (#67): "any criterion score < 3".
+SCORE_FLOOR = 3
+
+
+def score_artifacts(scores_dir: Path) -> list[tuple[str, Path]]:
+    """Every dated survey artifact in `scores_dir`, OLDEST first.
+
+    The date is read from the FILENAME, never from the artifact's own heading: the name is
+    the identity the `converted_from` token joins against, so a leg that took the date from
+    the body would be joining on a different key than the one the write path accepts.
+    """
+    out: list[tuple[str, Path]] = []
+    try:
+        entries = list(Path(scores_dir).iterdir())
+    except OSError:
+        return []
+    for path in entries:
+        match = _SCORE_ARTIFACT_RE.match(path.name)
+        if match and path.is_file():
+            out.append((match.group("date"), path))
+    return sorted(out)
+
+
+def scorecard_blocks(text: str) -> list[dict]:
+    """Each factory scorecard's own total and criterion cells, in the artifact's own order.
+
+    A cell is `(criterion, value, unmeasurable)`. The UNM marker is carried rather than
+    dropped because `0 (UNM)` reads as `0 < 3` under the floor predicate while being an
+    EXCLUDED cell by ruling `n=2747` -- a leg that scored it would report every round as a
+    regression, which is the failure mode that makes a predicate ignored rather than fixed.
+    """
+    lines = text.splitlines()
+    blocks: list[dict] = []
+    current: dict | None = None
+    for idx, line in enumerate(lines):
+        heading = _SCORECARD_HEADING_RE.match(line)
+        if heading:
+            current = {
+                "name": heading.group("name").strip(),
+                "total": int(heading.group("total")),
+                "den": int(heading.group("den")),
+                "cells": [],
+            }
+            blocks.append(current)
+            continue
+        if current is None:
+            continue
+        if line.startswith("## ") or line.startswith("### "):
+            current = None
+            continue
+        if current["cells"] or not _SCORECARD_CRITERIA_RE.match(line):
+            continue
+        header = [c.strip() for c in line.strip().strip("|").split("|")]
+        values = None
+        for nxt in lines[idx + 1: idx + 4]:
+            if set(nxt.strip()) <= set("|-: "):
+                continue
+            values = [c.strip() for c in nxt.strip().strip("|").split("|")]
+            break
+        if not values or len(values) != len(header):
+            continue
+        for criterion, cell in zip(header, values):
+            match = _SCORECARD_CELL_RE.match(cell)
+            if not match:
+                continue
+            current["cells"].append((
+                criterion, int(match.group("value")), bool(match.group("unm")),
+            ))
+    return blocks
+
+
+def score_conversion_leg(
+    rows: list[dict],
+    *,
+    read_at: str,
+    repo: Path = REPO,
+    predicate=None,
+    scores_dir: Path | None = None,
+) -> dict:
+    """Every regression in the NEWEST survey artifact, and whether a row ANSWERS it.
+
+    The statute (`skills/meta-factory/SKILL.md` §6) carried the word "automatically" over a
+    conversion no trigger performed. The ruling's repair is not a promise in prose but a
+    JOIN: a regression is a criterion cell under the floor or a factory whose net total
+    fell, and it is ANSWERED only by a ledger row declaring
+    `converted_from=evidence/scores/<date>.md` for THAT artifact. A row naming a different
+    round answers a different regression, so the join is on the exact path.
+
+    THE POPULATION IS PRINTED, and a zero-regression read states its own size
+    (#112, `skills/meta-factory/SKILL.md` §8):
+    "no regression" and "no artifact parsed" are the same verdict otherwise, and the second
+    is the state a broken parse produces.
+
+    IT FAILS OPEN. An absent artifact, an unreadable one, or one carrying no scorecard
+    section is NOT RUN with its reason -- the leg has no predicate to read with, and a
+    finding invented from an unparsed file is worse than no finding at all. A regression
+    WITH no answering row is a FINDING, and it names the factory: a count cannot be
+    dispatched, claimed or closed (#148).
+    """
+    # THE FIELD PREDICATE, not the board-intake one: `converted_from` is a detail-field
+    # token read through the SHARED predicate (one field, one predicate, SKILL.md section
+    # 11), and the board-intake module carries no reader for it -- binding the leg to that
+    # loader would make its default arm raise on the first row rather than read it.
+    predicate = predicate or field_predicate_readers()
+    directory = Path(scores_dir) if scores_dir is not None else Path(repo) / SCORES_DIR_REL
+    coverage = {
+        "read_at": read_at,
+        "scores_dir": str(directory),
+        "artifact": None,
+        "previous": None,
+        "factories": 0,
+        "criteria_cells": 0,
+        "unmeasurable_cells": 0,
+        "regressions": [],
+        "answered": [],
+        "unanswered": [],
+        "conversion_rows": 0,
+        "floor": SCORE_FLOOR,
+    }
+    artifacts = score_artifacts(directory)
+    if not artifacts:
+        return {
+            "name": "score-conversion",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {**coverage, "reason": (
+                f"no `{SCORES_DIR_REL}/<date>.md` artifact is in this tree, so the "
+                f"predicate has nothing to read -- a bootstrapped factory carries the "
+                f"survey's artifacts only once it has run a round"
+            )},
+        }
+    date, path = artifacts[-1]
+    coverage["artifact"] = f"{SCORES_DIR_REL}/{path.name}"
+    if len(artifacts) >= 2:
+        coverage["previous"] = f"{SCORES_DIR_REL}/{artifacts[-2][1].name}"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {
+            "name": "score-conversion",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {**coverage, "reason": f"{path} could not be read: {exc}"},
+        }
+
+    blocks = scorecard_blocks(text)
+    if not blocks:
+        return {
+            "name": "score-conversion",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {**coverage, "reason": (
+                f"{path.name} carries no `## Detailed Factory Scorecards` section this leg "
+                f"can parse, so no regression can be read from it -- the artifact predates "
+                f"the section, or its shape has moved"
+            )},
+        }
+
+    previous: dict[str, int] = {}
+    if len(artifacts) >= 2:
+        try:
+            previous = {
+                block["name"]: block["total"]
+                for block in scorecard_blocks(artifacts[-2][1].read_text(encoding="utf-8"))
+            }
+        except OSError:
+            previous = {}
+
+    regressions: list[dict] = []
+    cells = 0
+    unmeasurable = 0
+    for block in blocks:
+        below: list[str] = []
+        for criterion, value, unm in block["cells"]:
+            cells += 1
+            if unm:
+                unmeasurable += 1
+                continue
+            if value < SCORE_FLOOR:
+                below.append(f"{criterion} {value}")
+        reasons: list[str] = []
+        if below:
+            reasons.append(
+                f"criterion cell(s) below the floor: {', '.join(below)}"
+            )
+        was = previous.get(block["name"])
+        if was is not None and block["total"] < was:
+            reasons.append(f"net total fell {was} -> {block['total']}")
+        if reasons:
+            regressions.append({
+                "factory": block["name"],
+                "total": block["total"],
+                "reasons": reasons,
+            })
+
+    artifact_rel = f"{SCORES_DIR_REL}/{path.name}"
+    answered: list[str] = []
+    for row in rows:
+        if str(row.get("event") or "") != "conversion":
+            continue
+        source = predicate.declared_conversion_source(str(row.get("detail") or ""))
+        if source is None:
+            continue
+        coverage["conversion_rows"] += 1
+        if source == artifact_rel:
+            answered.append(str(row.get("subject") or ""))
+
+    # THE JOIN IS PER-ARTIFACT, not per-factory (#67): the row the write path accepts names
+    # the artifact it converted (`converted_from=evidence/scores/<date>.md`), never a
+    # factory, so ONE answering row clears the round and the coverage field must say what
+    # the problems list says -- a field listing every regression as `unanswered` beside an
+    # empty `problems` is two surfaces disagreeing about one fact.
+    unanswered = [] if answered else [r["factory"] for r in regressions]
+    problems: list[str] = []
+    if regressions and not answered:
+        problems.append(
+            f"{artifact_rel} carries {len(regressions)} regression(s) and no ledger row "
+            f"declares `converted_from={artifact_rel}`: "
+            + "; ".join(f"{r['factory']} ({'; '.join(r['reasons'])})" for r in regressions)
+            + " -- a regression no row answers reads as converted and is not (#67)"
+        )
+
+    coverage.update({
+        "factories": len(blocks),
+        "criteria_cells": cells,
+        "unmeasurable_cells": unmeasurable,
+        "regressions": [r["factory"] for r in regressions],
+        "answered": answered,
+        "unanswered": unanswered,
+    })
+    return {
+        "name": "score-conversion",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": coverage,
+    }
+
+
+
 def deferred_legs() -> list[dict]:
     """Legs this runner does not run, each declaring its tracker and its checkable claims.
 
@@ -5611,7 +5867,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
         if leg["status"] == "NOT RUN" and leg["name"] in (
-            "cron-thinness", "pacemaker-presence", "notify-receipt", "duty-receipt"
+            "cron-thinness", "pacemaker-presence", "notify-receipt", "duty-receipt",
+            "score-conversion",
         ):
             # A leg that examined NOTHING must never render as one that examined the
             # population and found it clean (#242). Its reason is printed, and its
@@ -6297,6 +6554,32 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"board read at {cov['read_at']}, judged against the tree at "
                 f"{cov.get('read_rev') or 'an unrecorded revision'}"
             )
+        elif leg["name"] == "score-conversion":
+            # THE POPULATION IS PRINTED (#112, section 8, #67): "no regression" and "no
+            # artifact parsed" are the same verdict otherwise, and the second is the state
+            # a broken parse produces. An ASSERTED read names the artifact it read, the
+            # round it compared against, the cells it examined, which cells it EXCLUDED as
+            # (UNM) -- and which regressions a ledger row answers, because a regression no
+            # row answers reads as converted and is not.
+            if leg["status"] != "ASSERTED":
+                lines.append(
+                    f"  {leg['status']}: {cov.get('reason') or 'reason not stated'}"
+                )
+            else:
+                lines.append(
+                    f"  artifact: {cov['artifact']} (compared against "
+                    f"{cov.get('previous') or 'no earlier round'}) — "
+                    f"{cov['factories']} factory scorecard(s), {cov['criteria_cells']} "
+                    f"cell(s) examined, {cov['unmeasurable_cells']} excluded as (UNM), "
+                    f"floor {cov['floor']} — {len(cov['regressions'])} regression(s): "
+                    f"{', '.join(cov['regressions']) or 'none'}"
+                )
+                lines.append(
+                    f"  conversion rows read: {cov['conversion_rows']} — answered: "
+                    f"{', '.join(cov['answered']) or 'none'}; unanswered: "
+                    f"{', '.join(cov['unanswered']) or 'none'}"
+                )
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -6462,6 +6745,7 @@ def main(
     delivery_scope_fn=None,
     deliveries_fn=None,
     criterion_repo_fn=None,
+    scores_dir_fn=None,
     board_scope_fn=None,
     lane_names_fn=None,
     out=print,
@@ -6565,6 +6849,7 @@ def main(
             "board-unruled, "
             "dispatch-delivery, "
             "criterion-paths, "
+            "score-conversion, "
             "kit-drift, "
             f"publish-freshness, worktree) — the run aborted at the board read at "
             f"{read_at}, so no leg was built"
@@ -6607,6 +6892,17 @@ def main(
         criterion_path_leg(
             issues, read_at=read_at,
             repo=(criterion_repo_fn or (lambda: REPO))(),
+        ),
+        score_conversion_leg(
+            rows, read_at=read_at, predicate=predicate,
+            # The scores surface (#67) is injected for the same reason the criterion tree
+            # is: the leg reads the NEWEST `evidence/scores/<date>.md` in the LIVE tree, so
+            # a probe that did not inject a directory would have its verdict decided by
+            # this factory's own latest survey -- and every probe driven through `_run`
+            # would start reading red for a reason none of them names. The default is the
+            # live surface, which is what production wants; `_run` injects an EMPTY
+            # directory, so a probe that does not pass one reads NOT RUN with its reason.
+            scores_dir=scores_dir_fn() if scores_dir_fn else None,
         ),
         dispatch_delivery_leg(
             rows, read_at=read_at, bound=(delivery_scope_fn or dispatch_delivery_scope)(),

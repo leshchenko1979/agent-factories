@@ -85,6 +85,14 @@ RUNNER = load_runner()
 # the surface under test would be feeding its own fixtures to the next run.
 _EMPTY_LOG_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-log-"))
 
+# One EMPTY scores surface per process, for the same reason and one sharper one (#67): the
+# score-conversion leg reads the NEWEST `evidence/scores/<date>.md` in the LIVE tree, so a
+# probe that did not inject a directory would have its verdict decided by this factory's own
+# latest survey -- and, once the leg was wired in, EVERY probe driven through `_run` would
+# read red for a reason none of them names. An empty directory reads NOT RUN with its stated
+# reason, which leaves every pre-#67 probe with the meaning it was written with.
+_EMPTY_SCORES_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-scores-"))
+
 # A path under a fresh temp dir that is deliberately NEVER created: the board-ruling leg's
 # exemption table defaults to it, so a probe that does not pass a table of its own cannot
 # have its verdict decided by the exemptions the LIVE factory happens to hold (issue #334).
@@ -170,7 +178,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
-         board_scope=None, lane_names_fn=None, cron_fires=None):
+         board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -269,6 +277,14 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         criterion_repo_fn=(
             (lambda: criterion_repo) if criterion_repo is not None
             else _empty_criterion_tree
+        ),
+        # The score-conversion leg's surface (#67) is injected for the same reason and one
+        # sharper one: the leg reads the NEWEST survey in the LIVE tree, so the default here
+        # is an EMPTY directory -- a probe that does not pass one reads NOT RUN with its
+        # reason, and no probe's verdict is decided by this factory's own latest scorecard.
+        scores_dir_fn=(
+            (lambda: scores_dir) if scores_dir is not None
+            else (lambda: _EMPTY_SCORES_DIR)
         ),
         # The three BOARD legs' bounds (#428) are injected for the same reason the ruling
         # bound is: each judges a HISTORICAL population against a bound this tree declares,
@@ -2612,6 +2628,7 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             rows_fn=lambda: [], cron_rows_fn=lambda: ([], ["probe-home"], []),
             cron_fires_fn=lambda: [],
             prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+            scores_dir_fn=lambda: _EMPTY_SCORES_DIR,
             kit_manifest=mpath, fleet_manifest=fpath,
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
@@ -2684,6 +2701,7 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             rows_fn=lambda: [], cron_rows_fn=lambda: ([], ["probe-home"], []),
             cron_fires_fn=lambda: [],
             prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+            scores_dir_fn=lambda: _EMPTY_SCORES_DIR,
             kit_manifest=mpath, fleet_manifest=fpath,
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
@@ -3663,6 +3681,7 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             cron_fires_fn=lambda: [],
             prefixes_fn=lambda: [],
             log_dir=Path(tmp) / "logs",
+            scores_dir_fn=lambda: _EMPTY_SCORES_DIR,
             kit_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
                                         members={})[0],
             fleet_manifest=_synthetic_kit(Path(tmp), files={"tools/a.py": b"a"},
@@ -4357,6 +4376,7 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         rows_fn=lambda: rows, cron_rows_fn=lambda: ([], ["probe-home"], []),
         cron_fires_fn=lambda: [],
         prefixes_fn=lambda: [], log_dir=_EMPTY_LOG_DIR,
+        scores_dir_fn=lambda: _EMPTY_SCORES_DIR,
         kit_manifest=_probe_kit_pair()[0], fleet_manifest=_probe_kit_pair()[1],
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
@@ -6659,6 +6679,150 @@ def test_the_criterion_path_leg_PRINTS_the_revision_it_read() -> None:
     assert head and head[:12] in out, (
         f"the render must name the commit it read ({head})\n{out}"
     )
+
+# ---------------------------------------------------------------------------------------
+# score-conversion (#67). The statute asserted the conversion happened "automatically";
+# no trigger carried it, so a regression could sit unanswered in the newest survey and
+# nothing would say so. The repair is a JOIN -- the RUN declares, the leg READS -- and
+# these probes pin the join's four edges: a regression with no answering row is a FINDING
+# that names the factory (#148); a row naming THAT artifact answers it; a row naming a
+# DIFFERENT round does not, because the token names an artifact and not a factory; and an
+# (UNM) cell is EXCLUDED rather than scored, because `0 (UNM)` under a floor of 3 would
+# make every round read as a regression (ruling n=2747) and teach the next reader to
+# ignore the leg.
+# ---------------------------------------------------------------------------------------
+
+def _score_artifact(*, total: int, cells: list[str], name: str = "Probe factory") -> str:
+    """One survey artifact in the shape `scorecard_blocks` parses.
+
+    The criteria row must OPEN with `| D1 |` -- that is the anchor `_SCORECARD_CRITERIA_RE`
+    matches, and it is the shape the live artifacts carry. A fixture that merely mentioned
+    the criteria would parse as ZERO blocks, and every probe below would then assert a NOT
+    RUN verdict while appearing to assert a regression one.
+    """
+    header = " | ".join(f"D{i + 1}" for i in range(len(cells)))
+    body = " | ".join(cells)
+    return (
+        "## Detailed Factory Scorecards\n\n"
+        f"### 1. {name} — {total} / 76\n\n"
+        f"| {header} |\n"
+        "|" + "---:|" * len(cells) + "\n"
+        f"| {body} |\n"
+    )
+
+def _scores_dir(newest: str, previous: str | None = None) -> Path:
+    """A throwaway scores surface: the leg reads the NEWEST artifact and the one before it."""
+    root = Path(tempfile.mkdtemp(prefix="probe-scores-"))
+    if previous is not None:
+        (root / "2026-10-09.md").write_text(previous, encoding="utf-8")
+    (root / "2026-10-10.md").write_text(newest, encoding="utf-8")
+    return root
+
+def _conversion_row(source: str, *, subject: str = "#67") -> dict:
+    """The row shape the ledger's own write path accepts for a `conversion` event."""
+    return {
+        "n": 9001, "ts": _CLOSE_TS, "event": "conversion", "actor": "worker",
+        "subject": subject, "detail": f"converted_from={source}",
+    }
+
+def test_the_score_conversion_leg_NAMES_each_regression_and_PRINTS_its_population() -> None:
+    directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
+    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    assert leg["status"] == "ASSERTED", leg
+    cov = leg["coverage"]
+    assert cov["artifact"] == "evidence/scores/2026-10-10.md", cov
+    assert cov["factories"] == 1, cov
+    assert cov["criteria_cells"] == 2, cov
+    assert cov["regressions"] == ["Probe factory"], cov
+    assert cov["conversion_rows"] == 0, cov
+    assert cov["unanswered"] == ["Probe factory"], cov
+    assert len(leg["problems"]) == 1, leg["problems"]
+    # The finding NAMES the factory and the cell: a count cannot be dispatched (#148).
+    assert "Probe factory" in leg["problems"][0], leg["problems"]
+    assert "D1 2" in leg["problems"][0], leg["problems"]
+
+def test_the_score_conversion_leg_is_ANSWERED_by_a_row_naming_THAT_artifact() -> None:
+    directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
+    rows = [_conversion_row("evidence/scores/2026-10-10.md")]
+    leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["answered"] == ["#67"], leg["coverage"]
+    # ... and the coverage field must say what `problems` says. A row list still naming
+    # every regression `unanswered` beside an empty problems list is two surfaces
+    # disagreeing about one fact.
+    assert leg["coverage"]["unanswered"] == [], leg["coverage"]
+    assert leg["coverage"]["conversion_rows"] == 1, leg["coverage"]
+
+def test_a_row_naming_a_DIFFERENT_round_does_not_answer_this_one() -> None:
+    # The join is on the exact artifact path: `converted_from` names a ROUND, never a
+    # factory, so a row converting the previous round leaves this round unanswered.
+    directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
+    rows = [_conversion_row("evidence/scores/2026-10-09.md")]
+    leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
+    assert leg["status"] == "ASSERTED", leg
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert leg["coverage"]["answered"] == [], leg["coverage"]
+    assert leg["coverage"]["conversion_rows"] == 1, leg["coverage"]
+
+def test_the_score_conversion_leg_NEVER_scores_an_unmeasurable_cell() -> None:
+    # `0 (UNM)` is an EXCLUDED cell (ruling n=2747), not a zero. Scored, every round
+    # would read as a regression and the leg would be ignored rather than fixed.
+    directory = _scores_dir(_score_artifact(total=70, cells=["0 (UNM)", "4"]))
+    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["coverage"]["unmeasurable_cells"] == 1, leg["coverage"]
+    assert leg["coverage"]["regressions"] == [], leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+def test_the_score_conversion_leg_reads_a_FALLEN_net_total_as_a_regression() -> None:
+    # A factory can hold every criterion at or above the floor and still REGRESS: the
+    # second arm is its net total against the previous round's, which is how the
+    # 2026-09-19 decline would have been caught.
+    directory = _scores_dir(
+        _score_artifact(total=70, cells=["3", "3"]),
+        _score_artifact(total=74, cells=["4", "4"]),
+    )
+    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    assert leg["coverage"]["previous"] == "evidence/scores/2026-10-09.md", leg["coverage"]
+    assert leg["coverage"]["regressions"] == ["Probe factory"], leg["coverage"]
+    assert "net total fell 74 -> 70" in leg["problems"][0], leg["problems"]
+
+def test_the_score_conversion_leg_fails_OPEN_with_NO_artifact() -> None:
+    empty = Path(tempfile.mkdtemp(prefix="probe-no-scores-"))
+    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=empty)
+    assert leg["status"] == "NOT RUN", leg
+    assert leg["problems"] == [], leg
+    assert "no `evidence/scores/<date>.md`" in leg["coverage"]["reason"], leg["coverage"]
+
+def test_the_score_conversion_leg_fails_OPEN_when_the_artifact_carries_no_scorecards() -> None:
+    # The pre-2026-10-08 artifacts carry no `## Detailed Factory Scorecards` section. The
+    # leg must state that, never invent a finding from a file it could not parse.
+    directory = _scores_dir("# Survey\n\nNo scorecards in this one.\n")
+    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    assert leg["status"] == "NOT RUN", leg
+    assert leg["problems"] == [], leg
+    assert "no `## Detailed Factory Scorecards`" in leg["coverage"]["reason"], leg["coverage"]
+
+def test_the_score_conversion_leg_is_WIRED_into_the_run_and_PRINTS_its_population() -> None:
+    # Wired AND rendered: a leg the run builds but the render cannot describe is a leg
+    # whose verdict no reader ever sees -- and this one falls outside the board-intake
+    # arm's coverage keys, so an unhandled name is a KeyError rather than a blank line.
+    directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
+    rc, out, _ = _run([], [], scores_dir=directory)
+    assert rc == 1, out
+    assert "LEG score-conversion — ASSERTED" in out, out
+    assert "evidence/scores/2026-10-10.md" in out, out
+    assert "1 regression(s): Probe factory" in out, out
+    assert "read at " in out, out
+
+def test_the_score_conversion_leg_renders_its_REASON_when_it_cannot_run() -> None:
+    # An empty scores surface reads NOT RUN with its counters, never as a clean patrol:
+    # "no regression" and "no artifact parsed" are otherwise the same verdict (#242).
+    rc, out, _ = _run([], [])
+    assert rc == 0, out
+    assert "LEG score-conversion — NOT RUN" in out, out
+    assert "no `evidence/scores/<date>.md`" in out, out
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
