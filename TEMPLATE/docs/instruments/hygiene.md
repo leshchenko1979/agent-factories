@@ -13,6 +13,20 @@ factory is HQ's, and so is the process law *about* instruments; both are cited h
 `TEMPLATE/docs/instruments/hygiene.md`; repo pair `docs/instruments/hygiene.md` (byte-identical);
 reload link `skills/meta-factory/hygiene.md` (frame §6).
 
+**Reading a citation in this file.** This page ships to member factories, and a member holds only the
+manifest paths of §2. Every reference to a path the kit does **not** ship is therefore marked, so a
+member can tell a reference it can open from one it cannot:
+
+- ***(meta-factory tree only)*** — resolves in this repo and **nowhere in a member's tree**. It is a
+  citation to this factory's own process record, never an artifact a member is expected to open.
+- ***(factory data)*** — created at bootstrap from a shipped `.example`, so a member holds it only
+  after it has taken the corresponding step; its content is that factory's, never ours.
+- Unmarked references are shipped paths and resolve in both trees.
+
+The marks were added under #457 (ruling `n=3057`), where five of the page's six cross-references were
+measured to resolve **root-side only** — a member following them unqualified was reading references
+that resolve nowhere in its own tree.
+
 **This file cites `template-instruments.md`, the frame, and never restates it** — restating is how one
 definition becomes two, and two definitions drift. Parts 4, 7, 8 and 9 are cross-instrument by
 construction: the frame defines them **once, precisely so an instrument owner does not coin their
@@ -31,7 +45,7 @@ own.** This file therefore supplies only what is true of THIS instrument:
 tells a lane's work IN FLIGHT from work STRANDED by age — so a healthy factory with busy lanes never
 reads DEGRADED, and genuine litter is still caught.**
 
-It upholds **Process 4 — Workspace Hygiene Sweep** (`docs/processes.md`), HQ-owned, whose declared
+It upholds **Process 4 — Workspace Hygiene Sweep** (`docs/processes.md` ***(meta-factory tree only)***), HQ-owned, whose declared
 cadence is daily and whose client value is *zero runaway storage, zero stale scratch interference,
 reproducible builds*.
 
@@ -87,13 +101,24 @@ what a member adopts; the manifest hashes the `TEMPLATE/` half (frame §5.1).
 | 1 | `tools/hygiene.py` ↔ `TEMPLATE/tools/hygiene.py` | `standalone` | **the executable** — audit, classify, reap |
 | 2 | `tests/test_hygiene_inflight.py` ↔ `TEMPLATE/tests/test_hygiene_inflight.py` | `standalone` | **the gate** — in-flight vs stranded |
 | 3 | `tests/test_hygiene_namespace.py` ↔ `TEMPLATE/tests/test_hygiene_namespace.py` | `standalone` | **the gate** — the owned namespace |
-| 4 | `docs/hygiene-protected.example.json` ↔ `TEMPLATE/docs/hygiene-protected.example.json` | `standalone` | the data-surface skeleton (§6) |
-| 5 | `docs/instruments/hygiene.md` ↔ `TEMPLATE/docs/instruments/hygiene.md` | `standalone` | this file |
-| 6 | `tests/test_hygiene_build_residue.py` ↔ `TEMPLATE/tests/test_hygiene_build_residue.py` | `standalone` | **the gate** — build residue is declared out and printed (§4) |
+| 4 | `tests/test_hygiene_build_residue.py` ↔ `TEMPLATE/tests/test_hygiene_build_residue.py` | `standalone` | **the gate** — build residue is declared out and printed (§4) |
+| 5 | `tests/test_hygiene_declaration_sweep.py` ↔ `TEMPLATE/tests/test_hygiene_declaration_sweep.py` | `standalone` | **the gate** — a stale exemption debt is reported, never written |
+| 6 | `tests/test_hygiene_placement.py` ↔ `TEMPLATE/tests/test_hygiene_placement.py` | `standalone` | **the gate** — a file outside its declared content class |
+| 7 | `tests/test_hygiene_stale_dirs.py` ↔ `TEMPLATE/tests/test_hygiene_stale_dirs.py` | `standalone` | **the gate** — directories the reaper's glob cannot see |
+| 8 | `tests/test_hygiene_evidence_supersession.py` ↔ `TEMPLATE/tests/test_hygiene_evidence_supersession.py` | `standalone` | **the gate** — prose-only supersessions in append-only history |
+| 9 | `docs/hygiene-protected.example.json` ↔ `TEMPLATE/docs/hygiene-protected.example.json` | `standalone` | the data-surface skeleton (§6) |
+| 10 | `docs/instruments/hygiene.md` ↔ `TEMPLATE/docs/instruments/hygiene.md` | `standalone` | this file |
 
 **A reader holding the law file and the tree can answer *"is this instrument complete here?"* without
-enumerating imports**, which is what frame §1 requires of a declaration. The five pairs of rows 1–4 and
-6 were compared byte-for-byte and are identical; row 5's pair is held by `tests/test_docs_sync.py`.
+enumerating imports**, which is what frame §1 requires of a declaration. All ten pairs were compared
+byte-for-byte and are identical; row 10's pair is additionally held by `tests/test_docs_sync.py`.
+
+**This table declares six rows fewer than the predicate above demands, and it did until #457** (ruling
+`n=3057`): rows 5–8 were shipped, registered and listed in §4, yet absent here — so the page's own
+Predicate line named a set the table did not carry, and a reader checking *"is this instrument complete
+here?"* against this table would have answered yes over a quarter of the set missing. A declared set is
+read from the manifest, never from a table someone maintained by hand; the four rows are named above
+because a declaration a reader cannot enumerate is not a declaration.
 
 ## 3. The closure — declared, and it is EMPTY
 
@@ -116,7 +141,7 @@ available here**. A member that adopts the declared set and nothing else has a r
 
 ## 4. The gate set and its registry entries
 
-**All eight rows are registered in `registry/gates.json`**, which is what makes them run rather than
+**All eight rows are registered in `registry/gates.json`** ***(factory data)***, which is what makes them run rather than
 merely exist — a gate never registered never runs (frame §2, part 3).
 
 | gate | invocation mode | budget (s) | margin | measured (s) | measured at |
@@ -130,7 +155,7 @@ merely exist — a gate never registered never runs (frame §2, part 3).
 | `tests/test_hygiene_stale_dirs.py` | `pytest` | 26.1 | 4.118× | 6.337 | `ae34b695ef90f48abbfeb53a5d717a9b8f1f9643` |
 | `tests/test_hygiene_evidence_supersession.py` | `pytest` | 53.46 | 4.057× | 13.178 | `aa5c175baef03f29ab97400f73fba7ed19315b8a` |
 
-The figures are read from `registry/gates.json` and are **budgets, not claims about this instrument**:
+The figures are read from `registry/gates.json` ***(factory data)*** and are **budgets, not claims about this instrument**:
 a budget is the ceiling the gate may take, and the margin is the multiple between the measured run and
 that ceiling. The later rows were measured on a loaded box (build residue at load **10.39**, the declaration
 sweep at load **4.14**, the placement map at load **8.23**, the stale-directory leg at load **6.92**, the supersession leg at load **11.05**, the tool itself at load **10.77**), so each is a conservative upper bound
@@ -199,7 +224,7 @@ answered the placement half at all, so a file could sit in a directory its conte
 and every leg of `tools/hygiene.py` would still read clean. The leg is the smallest predicate that
 bites: a **declared map of directory -> content class**, checked against the tree —
 `hygiene placement: N file(s) over M declared directory(ies) — X mismatch(es), Y naming mismatch(es),
-Z git-ignored (excluded) (removes: no)`. `tools/kit_names.py` answers a different question (one name meaning two things across
+Z git-ignored (excluded) (removes: no)`. `tools/kit_names.py` ***(meta-factory tree only)*** answers a different question (one name meaning two things across
 **trees**) and is **cited here, not replaced**. Three properties keep the map honest. **An unmapped
 directory states its reason** — never silently exempt, the discipline the declaration sweep applies to
 its unswept families. **A mapped directory that is absent is `absent`, not clean**, for the same reason
@@ -264,7 +289,7 @@ the shape established for the worktree leg by `leshchenko1979/agent-factories#22
 **The docs leg is PARTIAL, and this is a declared gap rather than a footnote (frame §2, part 5).** The
 BOOTSTRAP step exists — `TEMPLATE/BOOTSTRAP.md` names the tool, both gates and the declaration
 skeleton, and names `--audit` as the adoption evidence — and the methodology entry exists
-(`docs/processes.md`, the Process 4 row and its §4.4). **The SKILL clause did not exist:** measured
+(`docs/processes.md` ***(meta-factory tree only)***, the Process 4 row and its §4.4). **The SKILL clause did not exist:** measured
 over `skills/meta-factory/SKILL.md` and `TEMPLATE/SKILL.md.tmpl`, this instrument's name occurred **0**
 times in either. Adding one is a clause about the process *about* an instrument, which is **HQ's
 authority, not this lane's** (frame §8) — so it is recorded here as a declared gap and routed, never
@@ -279,7 +304,7 @@ classes (A language, B filesystem, C work state, D kit, E runtime) — and it ow
 "clean" for each: the predicate and the population. It **builds a gate only where none exists**; where a
 surface already has one, this law doc **cites** it, because a second predicate over the same population
 is the defect this factory files against. The surface inventory, the gap table and each gap's
-disposition live in `docs/projects/hygiene-surfaces.md` §6.
+disposition live in `docs/projects/hygiene-surfaces.md` ***(meta-factory tree only)*** §6.
 
 ## 5. The version identifier — part 4
 
@@ -289,12 +314,25 @@ and no self-probe flag. That is the frame's requirement rather than a gap (§7.1
 is a claim about the tree that nothing can test.
 
 The identifier is read over **the declared file set of §2** — not over the whole kit — so a member can
-state *which version of the hygiene instrument it holds*:
+state *which version of the hygiene instrument it holds*. The reading is taken from the **pin**: a
+factory's own `registry/kit.json`, vendored from the shipped `registry/kit.example.json`
+(`BOOTSTRAP.md`), carries one digest per manifest path, so the instrument's identifier is the ten
+digests of §2 read out of that pin:
 
 ```
-python3 tools/kit_manifest.py --identity tools/hygiene.py tests/test_hygiene_inflight.py \
-    tests/test_hygiene_namespace.py docs/hygiene-protected.example.json docs/instruments/hygiene.md
+python3 -c "import json; f=json.load(open('registry/kit.json'))['files']; \
+print(*(f'{k} {f[k]}' for k in sorted(f) if 'hygiene' in k), sep='\n')"
 ```
+
+**This command resolves in a member's tree, and the one this page carried until #457 did not** (ruling
+`n=3057`): it invoked `tools/kit_manifest.py`, the generator this repo renders its own manifest with —
+a path **absent from all 164 manifest paths**, so a member following that spelling named a tool its
+tree does not carry. The reader a member holds is `tools/kit_pin.py`, whose pin keys are manifest paths
+(`TEMPLATE/tools/hygiene.py`) that `kit_pin.member_path()` maps onto the path a factory actually holds
+(`tools/hygiene.py`) — the `TEMPLATE/` prefix is an artefact of this repo's storage, never part of what
+a member carries. That reader carries no `__main__` and no flag of its own, so a one-command
+`--identity` spelling over the shipped reader is a `tools/**` mechanism and is owed to **Toolsmith**
+(frame §8, out of scope for an instrument owner by role) rather than supplied by this page.
 
 **This file cannot publish its own current value, and that is a property of the measurement rather
 than a defect of it** (frame §7.4): the doc is itself a manifest path, so any edit to it moves the
