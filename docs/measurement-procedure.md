@@ -608,6 +608,53 @@ still summed to the same 350. `tests/test_score_artifact_measurable.py` gates th
 
 ---
 
+### 5.4 The score-regression conversion — the run declares, the leg reads
+
+Ruled 2026-09-28 (board `#67`, ruling at ledger `n=1599`), against §6 of the skill: it declared the
+score-regression conversion **automatic** while no trigger carried it and no gate read the
+artifact. *"Automatically converted"* is a claim about a mechanism, so the repair is a **JOIN**,
+never a promise in prose. A run whose artifact shows a regression **declares the conversion on a
+row of its own**, and the patrol's `score-conversion` leg reads it. **The run declares; the leg
+reads** — the same division as the duty receipt (`docs/measurement-procedure.md` §5.1), and it
+needs no lane to remember.
+
+**1. What the leg reads.** `tools/patrol_host_state.py`'s `score-conversion` leg takes the
+**NEWEST** `evidence/scores/<date>.md` in the tree, computes the predicate — **any factory's net
+total below the previous round's, or any measurable criterion cell under the floor (3)** — and
+reports every regression **with no row answering it**. It **fails OPEN**: an absent artifact, an
+unreadable one, or one carrying no `## Detailed Factory Scorecards` section is **NOT RUN** with its
+reason, so *"no regression"* is never readable as *"no artifact parsed"*. It prints the population
+it examined and the instant it read the artifact.
+
+**2. The declaration is a `conversion` row, and it NAMES ITS ARTIFACT.** The row's canonical
+trailer carries `converted_from=evidence/scores/<date>.md` — that key is the reader's join, the
+same shape as the duty receipt's trailer. The write path **REFUSES** a `conversion` row naming no
+artifact (`tools/ledger.py`), because a conversion that cannot be attributed could afterwards only
+be joined by guessing. The join is **per-artifact, never per-factory**: one row naming the round
+clears that round, and a row naming a different artifact answers a different regression.
+
+**3. The declaration is the RUN's own act.** The row is written by the lane that ran the round —
+`Surveys` — and `docs/ledger-authorizations.json` carries that lane for `conversion` beside every
+lane that may claim and close the same unit. `conversion` is a **declared** event: it has no row in
+the core authorization matrix, so the declaration is its *entire* population, and a lane absent
+from it is refused at append. A lane that may claim and close a unit but may not declare its
+conversion is a lane that can take work it cannot settle.
+
+**4. Declared, not necessarily repaired.** The declaration records that the round's regressions
+were **routed** — converted into a board item by Triage (P1, P27) — never that they were fixed. It
+is written when the routing has happened, because the leg reads the ROW and never the board: a
+declaration made ahead of the routing silences the leg over a regression nothing has picked up. The
+row is the run's own statement of what it did, and it is read as exactly that.
+
+**5. The declaration is NOT the score row.** A `score` row answers nothing: the leg reads
+`conversion` rows only. *"Declares it on its own score row"* describes a join the instrument does
+not perform — measured on the ruling's own repair (2026-10-10), where the identical token answers
+the regression on `event=conversion` and leaves it reported on `event=score` and on `event=run`.
+The score row remains the round's measurement; the conversion row is its settlement.
+
+**6. THE POPULATION IS PRINTED, ALWAYS.** A round carrying no regression states that it examined
+the artifact and found none, so a leg that ran over nothing stays distinguishable from one that
+never ran (skill §8, `#112`).
 
 ---
 
