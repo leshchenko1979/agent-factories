@@ -92,12 +92,25 @@ PROCEDURE_ANCHORS: list[str] = [
     "**2. Every denominator is UNCHANGED.**",
     "**3. The disclosure is MANDATORY, and the exclusion is never silent.**",
     "**4. Forward-only.**",
+    "**5. Every family figure is RE-DERIVABLE from the round's own scorecards.**",
 ]
 
 _ARTIFACT_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})\.md$")
 _FAMILY_VIEW_HEADING = "### Family-level fleet view"
 _SEPARATOR_RE = re.compile(r"^:?-{2,}:?$")
 _MEAN_RE = re.compile(r"\d+\.\d+")
+# A family row's CURRENT figure is its bolded numeric CELL, and the FORM is read from the
+# value itself: an integer is the family SUM, a decimal is the MEAN over the row's measurable
+# cells. The 2026-10-10 round printed sums where the rounds before it printed means, and the
+# two are the same number in two presentations (71 == 2.958 x 24) — so every reading keys on
+# the form the row carries rather than demanding one of them (#458).
+_BOLD_NUM_CELL_RE = re.compile(r"^\*\*(\d+(?:\.\d+)?)\*\*$")
+# A SCORECARD cell carries the same emphasis for the same reason: a round bolds the cell that
+# moved (`| ... | **3** |`) so a reader can see it at a glance. The emphasis is presentation and
+# the value is the number, so the leading `**` is stripped before the value is read — dropping a
+# bolded cell instead would silently lose its points from every family aggregate, which is how
+# the 2026-10-09 round's Autonomy figure read 38 against its own cells' 41 (#458).
+_SCORECARD_CELL_RE = re.compile(r"^\*{0,2}\s*(\d+)")
 # The disclosure: `<n> of <m>` in `docs/measurement-procedure.md` §5.3's canonical wording, or the `<n>/<m>` spelling.
 # The row's other columns carry no `of` and no `/`, so the predicate cannot be satisfied
 # by a bare total — `| Output | 18 | **2.611** | 0.000 |` carries no disclosure.
@@ -110,7 +123,11 @@ _DISCLOSURE_RE = re.compile(r"\b(\d+)\s*(?:of|/)\s*(\d+)\b")
 CRITERIA = REPO / "docs" / "quality-criteria.md"
 FLEET = REPO / "registry" / "fleet.json"
 _RUBRIC_MAX = re.compile(r"maximum is \*\*(\d+)\*\*")
-_SCORECARD_DEN = re.compile(r"^### \d+\.\s+.+?\s+—\s+\d+\s*/\s*(?P<den>\d+)\s*\(")
+# The heading's trailing percentage is OPTIONAL. It was printed through the 2026-10-08 round
+# and absent from 2026-10-09 onward, so requiring the `(` made this arm match ZERO scorecards
+# in the two most recent artifacts — the gate still reported that denominators were checked
+# while examining none of them (#458). The denominator is the `/<n>` and nothing else.
+_SCORECARD_DEN = re.compile(r"^### \d+\.\s+.+?\s+—\s+\d+\s*/\s*(?P<den>\d+)")
 _FLEET_ROW = re.compile(r"^\|\s*\*\*Fleet\*\*\s*\|")
 _RATIO = re.compile(r"(\d+)\s*/\s*(\d+)")
 
@@ -131,10 +148,14 @@ def family_view_block(text: str) -> str:
 
 
 def family_rows(text: str) -> list[str]:
-    """Data rows of the fleet view's table: a `|`-row with a label and a decimal mean.
+    """Data rows of the fleet view's table: a `|`-row with a label and a numeric figure.
 
-    The header row and the `|---|` separator carry no decimal, so they are excluded by
-    construction rather than by position — a table whose column order moves stays read.
+    The header row and the `|---|` separator are excluded by construction rather than by
+    position — a table whose column order moves stays read. The FIGURE may be either form
+    the rounds use: a decimal mean (`2.958`) or a bolded integer sum (`**71**`). Requiring a
+    decimal made this selector return ONE row on the 2026-10-10 artifact — the fleet row,
+    whose percentage carries the only decimal — so six of seven rows went unexamined while
+    the gate reported a clean verdict (#458).
     """
     rows: list[str] = []
     for line in family_view_block(text).splitlines():
@@ -146,7 +167,7 @@ def family_rows(text: str) -> list[str]:
             continue
         if all(_SEPARATOR_RE.match(c) for c in cells if c):
             continue
-        if not _MEAN_RE.search(row):
+        if not (_MEAN_RE.search(row) or any(_BOLD_NUM_CELL_RE.match(c) for c in cells)):
             continue
         rows.append(row)
     return rows
@@ -228,6 +249,203 @@ def denominator_problems(text: str, factory_max: int | None, factories: int) -> 
                     )
     return problems
 
+
+# --- the aggregate: the family view re-derived from the artifact's own scorecards (#458) ---
+
+# The artifact's declared criteria order. BOTH the codes and the family names are read from
+# this one line, so a round that reorders or renames a family moves the reading with it: a
+# hardcoded family->code map would sum the wrong cells the day the order moved, and the
+# result would still look plausible.
+_ORDER_LINE_RE = re.compile(
+    r"\*\*Order of criteria throughout:\*\*\s*`(?P<codes>[^`]+)`\s*—\s*(?P<names>[A-Za-z ,]+)"
+)
+# A scorecard heading: `### <n>. <factory> — <total> / <denominator>`.
+_SCORECARD_TOTAL_RE = re.compile(
+    r"^### \d+\.\s+(?P<name>.+?)\s+—\s+(?P<total>\d+)\s*/\s*(?P<den>\d+)"
+)
+
+def _table_cells(line: str) -> list[str]:
+    """The trimmed cells of a markdown table row, or `[]` when the line is not one."""
+    row = line.strip()
+    if not row.startswith("|"):
+        return []
+    return [cell.strip() for cell in row.strip("|").split("|")]
+
+def criteria_order(text: str) -> dict[str, list[str]]:
+    """The artifact's declared family -> criterion-code map, or `{}` when it declares none.
+
+    An artifact carrying no order line is not judged by the aggregate arms: the declaration
+    is the artifact's own, and a round that predates the form carries none.
+    """
+    for line in text.splitlines():
+        match = _ORDER_LINE_RE.search(line)
+        if match is None:
+            continue
+        groups = [group.strip() for group in match.group("codes").split("·")]
+        names = [name.strip() for name in match.group("names").split(",") if name.strip()]
+        if len(groups) != len(names):
+            return {}
+        return {
+            name: [code for code in group.split() if code]
+            for name, group in zip(names, groups)
+        }
+    return {}
+
+def scorecard_blocks(text: str) -> list[tuple[str, list[str]]]:
+    """`(heading, body lines)` for every scorecard, in the artifact's own order."""
+    blocks: list[tuple[str, list[str]]] = []
+    current: tuple[str, list[str]] | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _SCORECARD_TOTAL_RE.match(stripped):
+            if current is not None:
+                blocks.append(current)
+            current = (stripped, [])
+            continue
+        if current is None:
+            continue
+        if stripped.startswith("#"):
+            blocks.append(current)
+            current = None
+            continue
+        current[1].append(line)
+    if current is not None:
+        blocks.append(current)
+    return blocks
+
+def scorecard_values(body: list[str], codes: list[str]) -> dict[str, int]:
+    """One scorecard's per-criterion values keyed by code, or `{}` when unreadable.
+
+    The criterion row is found by CONTENT — a `|`-row whose every cell is a declared code —
+    and the values are the first following row of the same width that is neither the `|---|`
+    separator nor a second code row. An UNMEASURABLE cell (`0 (UNM)`) reads as the 0 it
+    contributes, which is what ruling `n=2747` says it contributes to the totals, and a cell
+    bolded as the round's movement marker (`**3**`) reads as the 3 it is.
+    """
+    header: list[str] | None = None
+    start = 0
+    for index, line in enumerate(body):
+        cells = _table_cells(line)
+        if cells and all(cell in codes for cell in cells):
+            header = cells
+            start = index + 1
+            break
+    if header is None:
+        return {}
+    for line in body[start:]:
+        cells = _table_cells(line)
+        if len(cells) != len(header):
+            continue
+        if all(_SEPARATOR_RE.match(cell) for cell in cells if cell):
+            continue
+        if all(cell in codes for cell in cells):
+            continue
+        values: dict[str, int] = {}
+        for code, cell in zip(header, cells):
+            match = _SCORECARD_CELL_RE.match(cell)
+            if match is not None:
+                values[code] = int(match.group(1))
+        return values
+    return {}
+
+def family_totals(text: str) -> dict[str, int]:
+    """Family -> summed cell value, re-derived from the artifact's own scorecards."""
+    order = criteria_order(text)
+    if not order:
+        return {}
+    codes = [code for group in order.values() for code in group]
+    values = [scorecard_values(body, codes) for _heading, body in scorecard_blocks(text)]
+    return {
+        family: sum(row.get(code, 0) for row in values for code in family_codes)
+        for family, family_codes in order.items()
+    }
+
+def aggregate_problems(text: str) -> list[str]:
+    """Family-view figures that disagree with the artifact's own scorecards (#458).
+
+    Three readings, all over the artifact's own declarations and none over a second copy of
+    them:
+      * every family row's figure equals the sum of that family's cells across the
+        scorecards, compared in the FORM the row carries (an integer is the sum; a decimal
+        is the mean over the row's own measurable count);
+      * the fleet row's numerator equals the sum of the scorecards' own printed totals;
+      * every scorecard yields a readable criterion row at all.
+
+    The third reading is why the first two are trustworthy: a sum that silently omitted an
+    unreadable scorecard would agree with a table that omitted it too.
+    """
+    problems: list[str] = []
+    order = criteria_order(text)
+    if not order:
+        return problems
+    codes = [code for group in order.values() for code in group]
+    blocks = scorecard_blocks(text)
+    if not blocks:
+        return problems
+
+    rows: list[dict[str, int]] = []
+    printed: list[int] = []
+    for heading, body in blocks:
+        match = _SCORECARD_TOTAL_RE.match(heading)
+        if match is not None:
+            printed.append(int(match.group("total")))
+        values = scorecard_values(body, codes)
+        if not values:
+            problems.append(
+                f"scorecard {heading.lstrip('#').strip()}: no readable criterion row"
+            )
+            continue
+        rows.append(values)
+
+    totals = {
+        family: sum(row.get(code, 0) for row in rows for code in family_codes)
+        for family, family_codes in order.items()
+    }
+
+    for line in family_rows(text):
+        if _FLEET_ROW.match(line):
+            continue
+        cells = _table_cells(line)
+        label = cells[0].strip().strip("*")
+        if label not in totals:
+            continue
+        figure = next(
+            (cell for cell in cells if _BOLD_NUM_CELL_RE.match(cell)), None
+        )
+        if figure is None:
+            continue
+        declared = _BOLD_NUM_CELL_RE.match(figure).group(1)
+        expected = totals[label]
+        if "." not in declared:
+            if int(declared) != expected:
+                problems.append(
+                    f"{label}: total {declared}, its scorecard cells sum to {expected}"
+                )
+            continue
+        disclosure = _DISCLOSURE_RE.search(line)
+        measurable = int(disclosure.group(1)) if disclosure else 0
+        if measurable <= 0:
+            problems.append(f"{label}: mean {declared} with no measurable count to divide by")
+            continue
+        mean = expected / measurable
+        if abs(float(declared) - mean) > 0.0005:
+            problems.append(
+                f"{label}: mean {declared}, its scorecard cells sum to {expected} over "
+                f"{measurable} measurable cell(s) = {mean:.3f}"
+            )
+
+    fleet = next((line for line in family_rows(text) if _FLEET_ROW.match(line)), None)
+    if fleet is not None and printed:
+        ratios = _RATIO.findall(fleet)
+        if ratios:
+            numerator = int(ratios[0][0])
+            expected = sum(printed)
+            if numerator != expected:
+                problems.append(
+                    f"Fleet: numerator {numerator}, the {len(printed)} scorecard totals "
+                    f"sum to {expected}"
+                )
+    return problems
 
 def artifacts() -> list[tuple[dt.date, Path]]:
     """Every dated score artifact, oldest first. `*-self-audit.md` is not one."""
@@ -313,12 +531,91 @@ def probe_denominators() -> list[str]:
     return problems
 
 
+_AGGREGATE_FIXTURE = (
+    "**Order of criteria throughout:** `D1 D2 · O1 O2` — Documentation, Output.\n"
+    "\n"
+    "### 1. Alpha — 7 / 8\n"
+    "\n"
+    "| D1 | D2 | O1 | O2 |\n"
+    "|---:|---:|---:|---:|\n"
+    "| 2 | 3 | 1 | 1 |\n"
+    "\n"
+    "### 2. Beta — 6 / 8\n"
+    "\n"
+    "| D1 | D2 | O1 | O2 |\n"
+    "|---:|---:|---:|---:|\n"
+    "| 2 | 1 | 2 | 1 |\n"
+    "\n"
+    "### Family-level fleet view\n"
+    "\n"
+    "| Family | Criteria | Max | Measurable | Now | Before | Note |\n"
+    "|---|---|---:|---:|---:|---:|---|\n"
+    "| Documentation | D1 D2 | 16 | 4 of 4 | **8** | 8 | — |\n"
+    "| Output | O1 O2 | 16 | 4 of 4 | **5** | 5 | — |\n"
+    "| **Fleet** | | **16** | **8 of 8** | **13 / 16 (81.25 %)** | **13** | — |\n"
+)
+
+def _aggregate_labels(problems: list[str]) -> list[str]:
+    """The row label each aggregate problem names, so an arm asserts WHICH row it caught."""
+    return [problem.split(":", 1)[0] for problem in problems]
+
+def probe_aggregates() -> list[str]:
+    """The aggregate predicate's discriminating arms, over synthetic text.
+
+    The mean-form arms are not decoration: the two rounds before 2026-10-10 printed means and
+    that round printed sums, so a predicate reading only one form would have left the other
+    round's table unexamined — the shape the round's own 25-gate set passed.
+    """
+    problems: list[str] = []
+    mean_form = (
+        _AGGREGATE_FIXTURE.replace("| **8** |", "| **2.000** |").replace(
+            "| **5** |", "| **1.250** |"
+        )
+    )
+    no_order = _AGGREGATE_FIXTURE.replace(
+        "**Order of criteria throughout:** `D1 D2 · O1 O2` — Documentation, Output.\n", ""
+    )
+    cases: list[tuple[str, str, list[str]]] = [
+        ("GREEN (sum form re-adds)", _AGGREGATE_FIXTURE, []),
+        (
+            "RED (a family row off by one)",
+            _AGGREGATE_FIXTURE.replace("| **8** |", "| **9** |"),
+            ["Documentation"],
+        ),
+        (
+            "RED (the fleet numerator disagrees with the scorecard totals)",
+            _AGGREGATE_FIXTURE.replace("**13 / 16", "**12 / 16"),
+            ["Fleet"],
+        ),
+        ("GREEN (mean form over the row's measurable count)", mean_form, []),
+        (
+            "GREEN (a bolded cell — the round's movement marker — still re-adds)",
+            _AGGREGATE_FIXTURE.replace("| 2 | 1 | 2 | 1 |", "| 2 | **1** | 2 | 1 |"),
+            [],
+        ),
+        (
+            "RED (a mean that disagrees with the cells it summarises)",
+            mean_form.replace("**2.000**", "**2.250**"),
+            ["Documentation"],
+        ),
+        ("SCOPE (no declared order line)", no_order, []),
+    ]
+    for label, text, expected in cases:
+        got = _aggregate_labels(aggregate_problems(text))
+        if got != expected:
+            problems.append(f"{label}: expected {expected!r}, got {got!r}")
+    return problems
+
 def test_predicate_rejects_a_mean_with_no_measurable_count() -> None:
     assert probe() == [], "\n".join(probe())
 
 
 def test_predicate_rejects_a_re_based_denominator() -> None:
     assert probe_denominators() == [], "\n".join(probe_denominators())
+
+
+def test_predicate_rejects_a_family_row_that_disagrees_with_the_scorecards() -> None:
+    assert probe_aggregates() == [], "\n".join(probe_aggregates())
 
 
 def test_procedure_names_every_anchor() -> None:
@@ -358,6 +655,27 @@ def test_post_boundary_artifacts_disclose_their_measurable_count() -> None:
         missing = missing_disclosure(path.read_text(encoding="utf-8"))
         if missing:
             problems.append(f"{path.name}: no measurable count on {', '.join(missing)}")
+    assert problems == [], "\n".join(problems)
+
+
+def test_post_boundary_artifacts_re_add_their_own_family_view() -> None:
+    """Every family figure is re-derived from the artifact's own scorecards (#458).
+
+    The 2026-10-10 round shipped four of six family totals wrong while BOTH revisions summed
+    to the fleet total, and the round's own 25-gate set read the table clean. A total that
+    agrees with the fleet figure while disagreeing with the scorecards is exactly the shape a
+    reader cannot catch by adding up, which is why the per-family reading is the load-bearing
+    one — and why the form the row carries is read rather than demanded.
+    """
+    if not declared():
+        return
+    landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
+    problems: list[str] = []
+    for day, path in artifacts():
+        if day <= landed:
+            continue
+        for problem in aggregate_problems(path.read_text(encoding="utf-8")):
+            problems.append(f"{path.name}: {problem}")
     assert problems == [], "\n".join(problems)
 
 
@@ -506,7 +824,10 @@ def main() -> int:
         rows = len(family_rows(text))
         # The population is PRINTED, always: a clean verdict over a population that was
         # never named is indistinguishable from one that examined nothing (P29).
-        print(f"checked: {path.name} — {rows} family row(s) in the fleet view")
+        print(
+            f"checked: {path.name} — {rows} family row(s) in the fleet view, "
+            f"{len(scorecard_blocks(text))} scorecard(s) re-added"
+        )
         if rows == 0:
             print(
                 f"  {path.name}: 0 family rows — the post-boundary population is EMPTY, "
@@ -516,6 +837,8 @@ def main() -> int:
         if missing:
             problems.append(f"{path.name}: no measurable count on {', '.join(missing)}")
         for problem in denominator_problems(text, declared_maximum(), factory_count()):
+            problems.append(f"{path.name}: {problem}")
+        for problem in aggregate_problems(text):
             problems.append(f"{path.name}: {problem}")
 
     for name in excused:
@@ -527,6 +850,7 @@ def main() -> int:
 
     problems.extend(probe())
     problems.extend(probe_denominators())
+    problems.extend(probe_aggregates())
 
     if problems:
         print("score artifact measurable-count problems:", file=sys.stderr)

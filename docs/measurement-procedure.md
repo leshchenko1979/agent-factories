@@ -222,7 +222,8 @@ flowchart TD
    - **The artifact's REQUIRED SECTIONS — the run's own output is gated too.** The dated
      file must carry, at minimum, these headings:
      - `## Executive Summary & Movements`, with the `### Family-level fleet view`
-       subsection (mean score per family, out of 4 per criterion);
+       subsection (each family's figure — its sum, or its mean out of 4 per criterion with
+       the measurable count beside it, in either form §5.3 point 5 reads);
      - `## Subject Matter Consulting Gate Status`;
      - `## Detailed Factory Scorecards`, carrying one numbered per-factory criterion
        scorecard heading per surveyed factory, written `### <n>. <factory> — <score> / 76`;
@@ -591,6 +592,19 @@ with no printed count is a silent re-base wearing the old denominator.
 
 **4. Forward-only.** The round's cells stand exactly as produced; nothing already published is
 rewritten. These mechanics bind from the round that adopts them.
+
+**5. Every family figure is RE-DERIVABLE from the round's own scorecards.** The family view
+summarises the scorecards below it, so it is read as a summary and never as a second source: each
+family's figure must equal the aggregate of that family's cells as the round's own scorecards carry
+them, and the fleet numerator must equal the sum of the factories' own printed totals. **The
+figure's FORM is the row's own declaration, and both forms are the same number** — a family may be
+presented as its **sum** (`71`) or as its **mean over the family's measurable cells** (`2.958`,
+with its count beside it per point 3), because `71 = 2.958 × 24`. The form is never free of the
+arithmetic: a row presenting a figure its scorecards do not produce is wrong in either form, and a
+table whose totals stay internally consistent with the fleet figure while disagreeing with the
+scorecards is exactly the error a reader cannot catch by adding up — the 2026-10-10 round's first
+revision printed four wrong family totals (`72/38/80/66/57/37` against `71/38/79/64/57/41`) that
+still summed to the same 350. `tests/test_score_artifact_measurable.py` gates this reading.
 
 ---
 
