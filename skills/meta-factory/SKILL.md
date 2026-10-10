@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.55
+version: 0.1.56
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -402,6 +402,23 @@ outside it, the issue board. Every other path to it is read-only.
 | `registry/fleet.json` and `registry/factories/<slug>.json` | what each factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | `registry/gates.json` | the per-gate time budgets and the **default's derivation** — every declared value is `budget_sec = margin_x x measured_sec`, and the default is `margin_x x the largest measured runtime among the UNDECLARED population` (the registered gates with no entry), re-derived whenever that population changes | the measurement duty (`Surveys`), on the same derivation rule the budget values follow — **except the DEFAULT's VALUE, which is a policy choice about what the suite does with a gate nobody has measured, and is `HQ`'s** (n=574 PART 5) | read-only; `tools/gate_budget.py` REFUSES a stated derivation its own numbers contradict, and `tests/test_gate_registration.py` asserts the live one holds and bites on a synthetic manifest that violates it |
+
+**Landing work: the pusher, never a raw push.** A lane lands work through `tools/publish.py` —
+never a raw `git push`. The failure this prevents is measured, not hypothetical: a direct push
+leaves the per-repository receipt naming a tip that is not the remote's, and the patrol's
+`publish-freshness` leg reports that mismatch — TRUE when it fires, because the receipt is the
+pusher's own record and a raw push writes none. Two facts make the bypass pointless. `§9.1` of
+`docs/instruments/ledger.md` settles the race that invites it: an `n` is immutable once
+**PUBLISHED** and free to **RE-MINT** while unpublished, so losing a numbering race costs a
+re-mint and not the work — there is nothing to win by pushing first. And
+`tools/publish.py:482-537` resolves a **detached HEAD**, accepting it whenever HEAD sits on
+`<remote>/<branch>`'s line, ahead or behind, so a detached worktree is not a reason to bypass
+the pusher either. The pusher's own `status:"held"` inside the 900 s window is the pusher
+WORKING, not a failure: retry after the window, and never fall back to `git push`. The residual
+is stated rather than hidden — the detector's latency is the patrol cadence, so a direct push is
+caught late — and that is accepted; no hook is added, because a pre-push hook is bypassable with
+`--no-verify` and local-only, since hooks are not cloned, i.e. a prevention where this class
+needs a detector (`verdicts-and-claims.md`).
 
 **Authorship is not transcription.** The writer named above decides what a surface
 *says*; applying a correction already decided is **transcription**, and transcription is
