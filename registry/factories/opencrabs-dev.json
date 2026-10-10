@@ -68,7 +68,7 @@
       "id": "notify-now-mode-retired",
       "scope": "profile",
       "severity": "warning",
-      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict does NOT mean the target is mid-turn \u2014 a mid-turn target returns `queued_pending_drain`. The unconfirmed verdict means the probe read the target idle and no wake was seen inside the 10s cap, so it cannot distinguish 'queued, will drain' from 'folded into a turn-settle window and never re-armed' (opencrabs/opencrabs#2003: in the settle window the probe reads idle while the turn is still finishing, the notice joins the settling turn, and no wake is re-armed \u2014 measured 5m41s undrained). Never re-send on the verdict alone: re-check the target's own store first.",
+      "text": "session_notify's 'now' mode is RETIRED and passing it FAILS the delivery outright - it is not merely discouraged. 'turn-end' is the default and wakes an idle target immediately, so it loses nothing 'now' ever delivered; 'quiet' is retained for batch notices whose ack contract is the ledger. 'interrupt' is the URGENT tier (#393): it delivers at the SAME boundary as turn-end and adds precedence framing so the target yields its current plan and answers in that turn - never deferred, never a default, spell it explicitly. It is NOT pre-emption: no boundary exists inside a running tool call, so a mid-turn target still queues for its next tool-loop boundary. Legacy interrupt:true UPGRADES a non-quiet resolution to that tier. A 'no wake observed' confirm verdict does NOT mean the target is mid-turn \u2014 a mid-turn target returns `queued_pending_drain`. The unconfirmed verdict means the probe read the target idle and no wake was seen inside the 10s cap, so it cannot distinguish 'queued, will drain' from 'folded into a turn-settle window and never re-armed' (fork leshchenko1979/opencrabs#770 \u2014 migrated 2026-10-10 from upstream #2003, which was closed NOT_PLANNED with a pointer and NOT fixed: in the settle window the probe reads idle while the turn is still finishing, the notice joins the settling turn, and no wake is re-armed \u2014 measured 5m41s undrained). Never re-send on the verdict alone: re-check the target's own store first.",
       "affects": [
         "profile"
       ],
@@ -86,6 +86,15 @@
       ],
       "since": "2026-10-05",
       "evidence": "Probed on the fork, same key and signature, only the committer email differing: hq@l1979.ru -> verified:false reason=no_user; leshchenko1979@users.noreply.github.com -> verified:true reason=valid @2026-10-05T22:34:45Z. Cross-repo, /root/ai-antispam (leshchenko@gmail.com): commits 2026-10-05T13:58\u201314:43Z verified=false reason=unsigned, commits 2026-10-06T05:54\u201306:06Z verified=true reason=valid. Ruleset main-protection (id 13432403) carries required_signatures {} at enforcement=active."
+    },
+    {
+      "id": "issue-routing-two-boards",
+      "text": "Issue routing is TWO streams, not three (owner order 2026-10-09): EVERY OpenCrabs binary issue (runtime behaviour, channels, providers, TUI, memory, tools) goes to the fork board leshchenko1979/opencrabs, and factory issues (tooling, CI, release automation, process) to leshchenko1979/opencrabs-dev-factory. Upstream opencrabs/opencrabs receives PULL REQUESTS ONLY \u2014 no new issues. The 2026-10-03 three-stream law and its fork-only-defect discriminator are SUPERSEDED; the #761 boundary register and the census FORK_ONLY_SURFACE predicate survive unchanged as commit-portability instruments \u2014 they decide whether a COMMIT can be ported upstream, never which tracker an issue goes to.",
+      "severity": "info",
+      "since": "2026-10-09",
+      "affects": [
+        "profile"
+      ]
     }
   ],
   "lanes": [
@@ -307,7 +316,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-09T06:08:00Z",
+  "attested_at": "2026-10-10T06:06:40Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

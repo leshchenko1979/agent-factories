@@ -110,7 +110,7 @@
         "profile"
       ],
       "since": "2026-09-26",
-      "evidence": "deploy_lib.sh:157 \u2014 miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path at :159-160, one file, blind. The sanctioned path is miidas_compose() at deploy_lib.sh:163, which passes --env-file. Call sites: manager/deploy.sh:33, landing/deploy.sh:27, deploy-all.sh:36. Measured 2026-10-02. Closed by #63 (repo now carries init:true, and nine ${VAR:?} guards refuse an unset value at config time)."
+      "evidence": "deploy_lib.sh:157 \u2014 miidas_sync_platform_compose scp's ${MIIDAS_ROOT}/compose/docker-compose.yml over the live path, one file, blind; the sanctioned path is miidas_compose() at deploy_lib.sh:163, which passes --env-file. Live call sites read 2026-10-10: manager/deploy.sh:49, deploy-all.sh:35 (landing/deploy.sh:27 was a third until landing/ was retired in #108). Closed by #63 (repo carries init:true and nine ${VAR:?} guards)."
     },
     {
       "id": "miidas-kit-forks-declared",
@@ -188,7 +188,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-09T06:07:49Z",
+  "attested_at": "2026-10-10T06:04:57Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

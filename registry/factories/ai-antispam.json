@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 18 cron rows (16 enabled, 2 disabled: ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04)",
+      "this factory's own chat (-1003993000918), its topics and its 16 cron rows (14 enabled, 2 disabled: ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04; ai-antispam-43-close-gate and ai-antispam-52-close-gate were RETIRED 2026-10-09 per board #115 and both crons DELETED)",
       "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
     ],
     "does_not_own": [
@@ -93,19 +93,13 @@
     {
       "name": "ai-antispam-timeout-monitor",
       "audience": "agent",
-      "entry": "cron ai-antispam-timeout-monitor",
+      "entry": "cron 2681492a-82c7-469d-a996-eab0de381b22",
       "cadence": "daily 12:00 UTC"
-    },
-    {
-      "name": "ai-antispam-43-close-gate",
-      "audience": "agent",
-      "entry": "cron ai-antispam-43-close-gate",
-      "cadence": "daily 12:05 UTC, trigger-gated"
     },
     {
       "name": "ai-antispam-outreach-stream-joins",
       "audience": "agent",
-      "entry": "cron ai-antispam-outreach-stream-joins",
+      "entry": "cron 31f75ed3-6d27-45a9-8aec-d2180f77f824",
       "cadence": "daily 00:00 UTC"
     },
     {
@@ -113,18 +107,6 @@
       "audience": "agent",
       "entry": "cron 7ddb69a4-7ec9-4140-9791-2d651cead4c4",
       "cadence": "daily 09:00 MSK \u2014 ENABLED"
-    },
-    {
-      "name": "ai-antispam-52-close-gate",
-      "audience": "agent",
-      "entry": "cron 30 11 * * * UTC, trigger-gated on date>=2026-09-28 AND #52 open",
-      "cadence": "daily 11:30 UTC"
-    },
-    {
-      "name": "ai-antispam-62-close-gate",
-      "audience": "agent",
-      "entry": "cron 15 3 * * * UTC, trigger-gated on date>=2026-09-29 AND #62 open",
-      "cadence": "daily 03:15 UTC \u2014 DISABLED (see anomaly below)"
     },
     {
       "name": "ai-antispam-loss-watch",
@@ -222,7 +204,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-09T06:04:11Z",
+  "attested_at": "2026-10-10T06:05:52Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

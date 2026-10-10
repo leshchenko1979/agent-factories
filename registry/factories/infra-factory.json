@@ -237,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-09T06:06:45Z",
+  "attested_at": "2026-10-10T06:04:49Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
