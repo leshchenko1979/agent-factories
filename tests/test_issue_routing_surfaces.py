@@ -238,6 +238,7 @@ def _probes() -> list[str]:
 
 
 def main() -> int:
+# STATED SKIP: registry/state.json (factory data)
     failures = _probes()
     problems, surfaces, slugs, missing = scan()
 
@@ -247,9 +248,26 @@ def main() -> int:
     for p in problems:
         print(f"  FAIL  {p}")
 
-    if surfaces == 0 or slugs == 0:
-        print("issue-routing surfaces gate FAILED: the scan examined no surface or no "
-              "upstream routing mention - a clean verdict over an empty population is not a verdict")
+    if surfaces == 0:
+        # THE SHIPPED DEPTH (#459). This gate derives its subject root from its OWN file's
+        # location (`REPO = Path(__file__).resolve().parent.parent`), so the copy the kit
+        # ships — `TEMPLATE/tests/test_issue_routing_surfaces.py`, which the shipped audit
+        # runs with `cwd=TEMPLATE` — reads `TEMPLATE/` as its REPO. Every declared surface
+        # is a LIVE routing surface a BOOTSTRAP creates in a factory, and the tree the kit
+        # ships carries none of them: the population is EMPTY rather than clean, and a red
+        # here is a property of the DEPTH, not of the tree's routing. Unstated, it surfaced
+        # as an unaccounted verdict in `tests/test_shipped_audit_runs.py` (#459). STATED
+        # SKIP, never a silent pass — the reason is printed, names the absent surfaces, and
+        # is declared in `docs/shipped-audit-skips.json`.
+        print(f"issue-routing surfaces gate: SKIPPED — none of the {len(ROUTING_SURFACES)} "
+              f"declared routing surface(s) is in this tree, so there is no routing to judge. "
+              f"They are factory data the kit does not ship (BOOTSTRAP-created).")
+        for m in missing:
+            print(f"  ABSENT {m}")
+        return 0
+    if slugs == 0:
+        print("issue-routing surfaces gate FAILED: the scan examined no upstream routing "
+              "mention - a clean verdict over an empty population is not a verdict")
         return 1
     if problems or failures or missing:
         print(f"issue-routing surfaces gate FAILED: {len(problems)} problem(s), "

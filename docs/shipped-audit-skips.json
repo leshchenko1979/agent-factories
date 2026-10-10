@@ -94,6 +94,11 @@
       "artifact": "docs/ledger-invariants.json (factory data; the kit ships ledger-invariants.example.json)",
       "marker": "# STATED SKIP: docs/ledger-invariants.json",
       "reason": "the (e) arm drives `ledger repair`, which needs a DECLARED invariant boundary; that declaration is factory data the kit does not ship, so `repair` refuses with the boundary-unavailable reason and the arm SKIPS carrying it, while the (a)-(d) WRITE-PATH arms still run (#322)"
+    },
+    "tests/test_issue_routing_surfaces.py": {
+      "artifact": "the declared routing surfaces (factory data; BOOTSTRAP-created)",
+      "marker": "# STATED SKIP: registry/state.json",
+      "reason": "the gate derives its subject root from its OWN file's location, so the shipped copy (`TEMPLATE/tests/…`, which the shipped audit runs with `cwd=TEMPLATE`) reads `TEMPLATE/` as its REPO and finds NONE of its declared surfaces — all eight are live surfaces a BOOTSTRAP creates in a factory. The population is empty rather than clean, which is a property of the DEPTH, not of the tree's routing; unstated it surfaced as an unaccounted verdict in `tests/test_shipped_audit_runs.py` (#459). A tree carrying SOME of the surfaces still reds on the missing ones (#322's class)"
     }
   }
 }
