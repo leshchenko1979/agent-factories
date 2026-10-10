@@ -239,11 +239,11 @@
       "measured_sec": 1.08
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 384.23,
-      "load_at_measure": 3.78,
-      "margin_x": 4.008,
-      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
-      "measured_sec": 95.87
+      "budget_sec": 523.51,
+      "load_at_measure": 4.98,
+      "margin_x": 4.006,
+      "measured_at": "c5e576229fad862b4aa3876ffdc055d972c38aeb",
+      "measured_sec": 130.69
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 22.43,
@@ -349,11 +349,11 @@
       "measured_sec": 4.91
     },
     "tests/test_template_sync.py": {
-      "budget_sec": 10.15,
-      "margin_x": 4.319,
-      "measured_at": "89379ec1a94151e34b90405c8be6e4694691ff69",
-      "measured_sec": 2.35,
-      "load_at_measure": 2.22
+      "budget_sec": 7.47,
+      "margin_x": 4.446,
+      "measured_at": "c5e576229fad862b4aa3876ffdc055d972c38aeb",
+      "measured_sec": 1.68,
+      "load_at_measure": 4.98
     },
     "tools/hygiene.py": {
       "budget_sec": 35.83,
