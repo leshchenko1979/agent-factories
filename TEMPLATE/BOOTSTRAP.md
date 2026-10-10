@@ -449,6 +449,30 @@ someone else's is wrong for it.
 | `evidence/rework.md` | `seed` | **created here** — the log itself |
 | `evidence/ledger.jsonl` | `seed` | **created in Step 4b** — the denominator the resolution leg reads |
 
+**The paths above must be siblings under ONE root, and the gate cannot be told
+otherwise.** It resolves every one of them from its own location
+(`REPO = Path(__file__).resolve().parent.parent`) with no environment override, no
+flag and no search — so a factory that keeps its law and its process state in two
+trees cannot run this gate from either one: the root holding `tools/` has no
+`evidence/`, and the root holding `evidence/` has no `tools/`. **The closure belongs
+in the root carrying `evidence/`**, because a process instrument belongs with process
+state; a path override is refused as a second resolver, and two resolvers are two
+definitions of where the log lives.
+
+**A factory with no event ledger DECLARES THE SURFACE N/A with a reason** rather than
+substituting something for it. The resolution leg reads `evidence/ledger.jsonl`, and
+pointing it at another file — an acknowledgement ledger, say — is refused because that
+is a **different object**: it answers a different question, so a predicate reading it
+would report a number about something else. A declared absence is a state a reader can
+see; a substituted file is a number that means nothing.
+
+**The alternative — deriving the rework record from the ledger rather than from this
+log — is DEFERRED, not refused.** It becomes admissible the day the ledger carries a
+`prevention` field on a rework kind; today it carries neither, so the two surfaces stay
+complementary (the ledger records that work closed, this log records what had to be
+redone and why). Recording the route as a refusal would close a question the ruling left
+open.
+
 **This list is a snapshot, and it moved twice in one day.** It said seven paths
 until 2026-09-25, when `tools/kit_identity.py` entered `tools/audit.py`'s imports
 and the count became eight; hours later the same day it left again, when the import
