@@ -4161,6 +4161,25 @@ def stall_census_leg(
     re-routing -- so the search runs newest-first and stops at the first declaration. Where no
     row declares a target, or the declaration resolves to no lane name this read knows, the
     line SAYS SO in words; it never falls back to the author.
+
+    THE REMEDY IS THE LANE'S WHERE THE LANE IS DRAINING (#465, ruling n=3097). The OWED
+    line's closing sentence used to prescribe a per-item re-dispatch unconditionally, and
+    for a unit whose addressee lane is DEMONSTRABLY DRAINING that prescription names an exit
+    that does not exist: the re-dispatch is a duplicate (the sibling `dispatch-delivery` leg
+    proves a delivery EXISTS on the unit and says in its own words "do not re-dispatch on
+    this line"), and closing a live, wanted defect on the board would be a falsification.
+    So where -- and ONLY where -- the unit's addressee lane claimed a SIBLING of the same
+    standing set inside the window, the line says so and names the LANE as the remedy: one
+    consolidated backlog-first brief, never N per-item re-dispatches. A lane with no claim
+    inside the window keeps the original sentence VERBATIM, because there the stall is real
+    and the re-dispatch advice is the only exit there is.
+
+    THE DRAIN EVIDENCE IS PRINTED BESIDE THE OWED TOTAL, never left to be inferred from a
+    total that is smaller than the reader expected. The standing set is the LANE'S OWN
+    DISPATCHED POPULATION, grouped on the SAME declared routing the addressee is read from,
+    so the evidence and the line it corrects cannot disagree about whose lane it is. The
+    window is this leg's own declared threshold, and the claims' own instants and row
+    numbers travel with it, so the reading is re-derivable rather than asserted.
     """
     is_unit = ledger_predicate().is_work_unit
 
@@ -4189,12 +4208,19 @@ def stall_census_leg(
     claimed: set[str] = set()
     closed: set[str] = set()
     resident: set[str] = set()
+    # THE CLAIM ROWS ARE KEPT, not merely counted (#465): the drain evidence is a claim's
+    # INSTANT on a sibling unit, so the row itself has to survive the scan. The `claimed`
+    # set stays for the OWED predicate -- it is read by the same loop and must keep its
+    # exact meaning -- and this map is a SECOND reading of the same rows, keyed by the
+    # unit each claim took.
+    claims_by_unit: dict[str, list[dict]] = {}
     for row in rows:
         subject = str(row.get("subject") or "").strip()
         resident.add(subject)
         event = str(row.get("event") or "")
         if event == "claim":
             claimed.add(subject)
+            claims_by_unit.setdefault(subject, []).append(row)
         elif event == "close":
             closed.add(subject)
 
@@ -4414,8 +4440,86 @@ def stall_census_leg(
         except Exception:
             lane_names = {}
 
+    # THE LANE'S OWN DRAIN (#465), read off the rows and printed BESIDE the OWED total.
+    #
+    # THE DEFECT THIS ANSWERS. The OWED line used to close with a remedy that, for a unit
+    # whose addressee lane is demonstrably draining, names an exit that does not exist:
+    # "re-dispatch it" is a duplicate (the sibling `dispatch-delivery` leg proves a delivery
+    # EXISTS on the unit and says in its own words "do not re-dispatch on this line"), and
+    # "close it on the board" would be a falsification, because these units are live, OPEN,
+    # wanted defects of this factory's own product. A finding with no working exit is the
+    # class this factory refuses (#295, #139).
+    #
+    # THE MEASURED SHAPE. The addressee lane is SERIAL -- one unit at a time, implement ->
+    # audit -> publish -> close -- so a multi-item queue outlives the 1.0 d threshold and
+    # the tail re-flags every round while the lane works exactly as designed. Measured
+    # 2026-10-11T06 on the live ledger: the 2026-10-10T18:19Z batch (dispatch rows
+    # n=3066-n=3075, ten units) was still carrying nine OWED, and the Worker lane
+    # (`dcd8f7a9`) had claimed and closed two of that same batch inside the window --
+    # `#162` claim n=3080 at 2026-10-10T19:51:24Z, `#67` claim n=3083 at 22:25:43Z, 3.4553 h
+    # apart. A bare "9 OWED" is therefore a LANE reading, not nine independent findings.
+    #
+    # THE STANDING SET IS THE LANE'S OWN DISPATCHED POPULATION, and a SIBLING is any unit
+    # in it. The set is grouped on the SAME declared routing the addressee is read from, so
+    # the evidence and the line it corrects cannot disagree about whose lane it is; a unit
+    # whose routing does not resolve to a lane NAME is in no group, which is why a read with
+    # no binding store prints no drain evidence rather than attributing one to a bare uuid.
+    # A lane with no claim inside the window is left ALONE: its OWED line keeps the original
+    # remedy verbatim, because there the stall is real and the re-dispatch advice is the
+    # only exit there is (#465 criterion 3).
+    owed_lanes: set[str] = set()
+    for entry in owed:
+        ref = declared_refs.get(entry["unit"])
+        if ref and lane_names.get(ref[0]):
+            owed_lanes.add(lane_names[ref[0]])
+
+    lane_drain: list[str] = []
+    draining_lanes: set[str] = set()
+    if owed_lanes:
+        try:
+            now = reader_parse_ts(read_at)
+        except (ValueError, TypeError):
+            now = None
+        if now is not None:
+            window_start = now - dt.timedelta(days=threshold_days)
+            lane_units: dict[str, list[str]] = {}
+            for unit in carriers:
+                ref = declared_refs.get(unit)
+                if not ref:
+                    continue
+                name = lane_names.get(ref[0])
+                if name:
+                    lane_units.setdefault(name, []).append(unit)
+            for lane in sorted(owed_lanes):
+                drained: list[tuple[str, dict]] = []
+                for unit in lane_units.get(lane, []):
+                    for claim_row in claims_by_unit.get(unit, []):
+                        try:
+                            claimed_at = reader_parse_ts(str(claim_row.get("ts") or ""))
+                        except (ValueError, TypeError):
+                            continue
+                        if window_start <= claimed_at <= now:
+                            drained.append((unit, claim_row))
+                if not drained:
+                    continue
+                drained.sort(key=lambda item: str(item[1].get("ts") or ""))
+                draining_lanes.add(lane)
+                lane_drain.append(
+                    f"DRAINING {lane}: claimed {len(drained)} sibling(s) of the same "
+                    f"standing set inside the last {threshold_days} d -- "
+                    + ", ".join(
+                        f"{unit} at row n={claim_row.get('n')} "
+                        f"({claim_row.get('ts')})"
+                        for unit, claim_row in drained
+                    )
+                    + ". A multi-item backlog on a draining lane is a LANE reading, not N "
+                    "owed items: the remedy is ONE consolidated backlog-first brief to "
+                    "the lane, never a per-item re-dispatch (#465)"
+                )
+
     owed.sort(key=lambda entry: -entry["age_days"])
     addressees_resolved = 0
+    units_owed_on_draining_lanes = 0
     for entry in owed:
         unit = entry["unit"]
         # THE ASSIGNEE IS RENDERED, NEVER PREDICATED ON (#423). An assigned-but-unclaimed
@@ -4454,11 +4558,30 @@ def stall_census_leg(
                 f"dispatch-bearing row(s) declares a typed `session` target, so the lane "
                 f"the work was handed to is UNSTATED (#331)"
             )
+        # THE REMEDY IS THE LANE'S, NOT THE ITEM'S, WHERE THE LANE IS DRAINING (#465
+        # criterion 2). Where it is NOT, the original sentence is printed VERBATIM: the
+        # re-dispatch advice is the only exit there is for a genuine stall, and a census
+        # that softened it everywhere would stop naming the class it exists to name
+        # (criterion 3). The two forms are mutually exclusive on ONE predicate -- whether
+        # this unit's addressee lane claimed a sibling inside the window.
+        if name in draining_lanes:
+            units_owed_on_draining_lanes += 1
+            remedy_note = (
+                f"Do NOT re-dispatch this item: its addressee lane ({name}) is DRAINING "
+                f"-- it claimed a sibling of the same standing set inside the last "
+                f"{threshold_days} d -- so the remedy is ONE consolidated backlog-first "
+                f"brief to that lane, never a per-item re-dispatch (#465)"
+            )
+        else:
+            remedy_note = (
+                f"Re-dispatch it to the lane that owns it through `session_notify`, or "
+                f"close it on the board: a dispatch no lane has taken is work nobody is "
+                f"doing"
+            )
         problems.append(
             f"OWED {unit}: dispatched {entry['age_days']:.2f} d ago and NEVER CLAIMED, "
             f"and the board still carries it OPEN -- {addressee_note}.{assignee_note} "
-            f"Re-dispatch it to the lane that owns it through `session_notify`, or close "
-            f"it on the board: a dispatch no lane has taken is work nobody is doing"
+            f"{remedy_note}"
         )
 
     return {
@@ -4490,6 +4613,14 @@ def stall_census_leg(
             # question was never asked.
             "addressees_resolved": addressees_resolved,
             "addressees_unresolved": len(owed) - addressees_resolved,
+            # THE DRAIN EVIDENCE TRAVELS WITH THE VERDICT (#465 criterion 1). A reader who
+            # sees `units_owed: 9` must be able to read WHY that is a LANE reading and not
+            # nine independent findings, and the count of OWED units sitting on a draining
+            # lane is that answer. It prints even at zero, so a leg that found no drain is
+            # distinguishable from one that never looked.
+            "lanes_draining": len(draining_lanes),
+            "units_owed_on_draining_lanes": units_owed_on_draining_lanes,
+            "lane_drain": lane_drain,
             "threshold_days": threshold_days,
             "threshold_basis": STALL_CENSUS_THRESHOLD_BASIS,
             "read_at": read_at,
@@ -6382,6 +6513,24 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['units_owed']} never claimed past the declared threshold of "
                 f"{cov['threshold_days']} d"
             )
+            # THE DRAIN EVIDENCE IS PRINTED BESIDE THE OWED TOTAL (#465 criterion 1): a bare
+            # "9 OWED" reads as nine independent findings, and where the addressee lane is
+            # draining that reading is wrong. The line prints even at zero, so a leg that
+            # found no drain is distinguishable from one that never looked.
+            lines.append(
+                f"  drain evidence (the addressee lane's own claims on a SIBLING of the "
+                f"same standing set, inside the last {cov['threshold_days']} d): "
+                + (
+                    f"{cov['lanes_draining']} lane(s) DRAINING, "
+                    f"{cov['units_owed_on_draining_lanes']} of {cov['units_owed']} OWED "
+                    f"unit(s) sit on a draining lane -- the remedy there is the LANE's, "
+                    f"not the item's"
+                    if cov["lanes_draining"]
+                    else "no lane carrying an OWED unit claimed a sibling inside the window"
+                )
+            )
+            for note in cov.get("lane_drain", []):
+                lines.append(f"    {note}")
             # THE PARK EXCLUSION IS PRINTED BESIDE THE VERDICT (#331 clause 1), never left
             # to be inferred from a total that is smaller than the population: a reader who
             # cannot see WHY a dispatched unit left the owed count cannot tell a declared

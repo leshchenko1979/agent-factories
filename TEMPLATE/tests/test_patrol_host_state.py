@@ -6824,6 +6824,154 @@ def test_the_score_conversion_leg_renders_its_REASON_when_it_cannot_run() -> Non
     assert "LEG score-conversion — NOT RUN" in out, out
     assert "no `evidence/scores/<date>.md`" in out, out
 
+def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> None:
+    """#465 criterion 1: the OWED total travels with the addressee LANE's own drain
+    evidence -- its claims on a SIBLING of the same standing set inside the window.
+
+    The defect this answers: a bare "9 OWED" reads as nine independent findings, and for
+    an addressee lane that is demonstrably working through the same batch that reading is
+    wrong. The evidence is the lane's OWN claims on units it was dispatched, which is why
+    it is grouped on the SAME declared routing the addressee is read from -- so the
+    evidence and the line it corrects cannot disagree about whose lane it is.
+
+    The sibling here is `#1002`, dispatched in the same standing set and claimed 0.5 d
+    ago. `#1004` is claimed too, but 3 d ago -- OUTSIDE the 1.0 d window -- so a leg that
+    read "any claim ever" instead of "a claim inside the window" fails this arm.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker, pacemakers = "aaaaaaaa-0000-0000-0000-000000000001", \
+        "bbbbbbbb-0000-0000-0000-000000000002"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN"),
+              _issue(1003, "OPEN"), _issue(1004, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#1001", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+        _stall_row(4, "dispatch", "#1003", 5, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(5, "dispatch", "#1004", 5, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(6, "claim", "#1004", 3, now=now),
+    ]
+    names = {worker: "Worker", pacemakers: "Pacemakers / Crons"}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 2, cov
+    assert cov["lanes_draining"] == 1, cov
+    assert cov["units_owed_on_draining_lanes"] == 1, cov
+    assert len(cov["lane_drain"]) == 1, cov["lane_drain"]
+    drain = cov["lane_drain"][0]
+    assert "DRAINING Worker" in drain, drain
+    assert "#1002" in drain and "n=3" in drain, (
+        f"the evidence must name the SIBLING and the row it was claimed at\n{drain}"
+    )
+    assert "#1004" not in drain, (
+        f"a claim 3 d ago is OUTSIDE the 1.0 d window and is not drain evidence\n{drain}"
+    )
+
+    # ... and through the REAL `main()`: the drain evidence must reach the REPORT, beside
+    # the OWED population it corrects. A leg returning a correct dict while the render
+    # drops it is the half-fix this half exists to catch.
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
+    assert rc == 1, f"OWED lines must fail the run, got rc={rc}\n{out}"
+    assert "population: 4 dispatched unit(s) -- 2 never claimed" in out, out
+    assert "drain evidence" in out, out
+    assert "1 lane(s) DRAINING, 1 of 2 OWED unit(s) sit on a draining lane" in out, out
+    assert "DRAINING Worker" in out, out
+
+
+def test_the_stall_census_leg_STOPS_prescribing_a_PER_ITEM_re_dispatch_on_a_DRAINING_lane() -> None:
+    """#465 criterion 2: where the addressee lane is DRAINING, the OWED line stops naming
+    a remedy that does not exist.
+
+    "Re-dispatch it" is a duplicate (the lane already holds the batch), and "close it on
+    the board" would be a falsification (these units are live, OPEN, wanted defects). A
+    finding with no working exit is the class this factory refuses (#295, #139), so the
+    remedy becomes the LANE's: ONE consolidated backlog-first brief.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker = "aaaaaaaa-0000-0000-0000-000000000001"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#1001", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: {worker: "Worker"})
+    line = [ln for ln in leg["problems"] if "#1001" in ln][0]
+    assert "Do NOT re-dispatch this item: its addressee lane (Worker) is DRAINING" in line, line
+    assert "ONE consolidated backlog-first brief" in line, line
+    assert "Re-dispatch it to the lane that owns it through `session_notify`" not in line, (
+        f"a draining lane must never be told to re-dispatch the item it already holds\n{line}"
+    )
+
+    # ... and the render half.
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: {worker: "Worker"})
+    assert rc == 1, out
+    assert "Do NOT re-dispatch this item: its addressee lane (Worker) is DRAINING" in out, out
+
+
+def test_a_lane_with_NO_in_window_claim_keeps_its_OWED_line_VERBATIM() -> None:
+    """#465 criterion 3, the TWO-SIDED control: the softened remedy is a statement about
+    the drain, never a constant.
+
+    `#1003`'s lane (`Pacemakers / Crons`) claimed nothing inside the window, so its stall
+    is real and the re-dispatch advice is the only exit there is. A census that softened
+    the sentence everywhere would stop naming the class it exists to name.
+
+    The control has two halves, because a text assertion alone would pass a leg that
+    printed the original sentence by accident of the fixture: (a) with a resolver that
+    knows NOTHING there is no drain evidence at all -- the drain line says so in words
+    rather than going silent -- and (b) the drain line prints even at zero, so "found no
+    drain" is distinguishable from "never looked".
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker, pacemakers = "aaaaaaaa-0000-0000-0000-000000000001", \
+        "bbbbbbbb-0000-0000-0000-000000000002"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN"),
+              _issue(1003, "OPEN"), _issue(1004, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#1001", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+        _stall_row(4, "dispatch", "#1003", 5, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(5, "dispatch", "#1004", 5, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(6, "claim", "#1004", 3, now=now),
+    ]
+    names = {worker: "Worker", pacemakers: "Pacemakers / Crons"}
+    original = ("Re-dispatch it to the lane that owns it through `session_notify`, or "
+                "close it on the board: a dispatch no lane has taken is work nobody is "
+                "doing")
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    line = [ln for ln in leg["problems"] if "#1003" in ln][0]
+    assert original in line, (
+        f"a lane with NO in-window claim keeps the ORIGINAL remedy VERBATIM\n{line}"
+    )
+    assert "Do NOT re-dispatch this item" not in line, line
+
+    # (a) THE RESOLVER CONTROL: with a blind resolver no lane name exists, so no unit can
+    # sit on a draining lane and NO line is softened -- the drain evidence is a statement
+    # about the resolution, not a constant the leg prints.
+    blind = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                    lane_names_fn=lambda: {})
+    assert blind["coverage"]["lanes_draining"] == 0, blind["coverage"]
+    assert blind["coverage"]["units_owed_on_draining_lanes"] == 0, blind["coverage"]
+    assert blind["coverage"]["lane_drain"] == [], blind["coverage"]["lane_drain"]
+    assert all(original in ln for ln in blind["problems"]), blind["problems"]
+
+    # (b) THE ZERO-DRAIN RENDER: the line prints at zero and SAYS what it read, so a leg
+    # that never looked is distinguishable from one that looked and found nothing.
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: {})
+    assert "drain evidence" in out, out
+    assert "no lane carrying an OWED unit claimed a sibling inside the window" in out, out
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]
