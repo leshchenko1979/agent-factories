@@ -4095,6 +4095,16 @@ def stall_census_leg(
       `is_board_unit_occurrence` refuses a repository-qualified mention, so a fork's
       `#332` is not read as this board's `#332` however many rows the local issue
       carries (#333);
+      BEARING IS NOT ROUTING (#467): such a row is read as the unit's ADDRESSEE
+      only where the token stands in the row's OPENING LINE -- the SAME declared
+      header the dispatch-delivery leg matches a delivery's subject against (#433),
+      read through the same helper, because it is the same question one surface
+      over. A row that dispatches a batch declares its units up front
+      (`DISPATCH #318 -> the HQ lane`); a row that merely TALKS about them -- an
+      escalation asking for a ruling, a return leg, a defect carried -- lists them
+      hundreds of characters later, and dispatches none of them. The harvest count
+      is unaffected: every token such a row names is still CARRIED, because that
+      count is the harvest's coverage -- it is the ROUTING slot it may not take;
     * a descriptive-stem dispatch naming no such unit is an OBSERVATION dispatch,
       EXPLICITLY LEGAL (ruling n=524). It is COUNTED and printed, never judged.
 
@@ -4286,8 +4296,21 @@ def stall_census_leg(
     # census for good. A dispatch newer than the declaring row puts the unit back in play.
     newest_dispatch: dict[str, dict] = {}
 
-    def declare(unit: str, row: dict) -> None:
-        """Record one dispatch-bearing row against the unit it dispatched."""
+    def declare(unit: str, row: dict, *, routed: bool) -> None:
+        """Record one dispatch-bearing row against the unit it dispatched.
+
+        `routed` (#467) is whether the row DISPATCHED the unit or merely NAMED it. It
+        gates `declared_refs` ALONE, because that map answers "where was the work LAST
+        SENT" and only a routing answers it -- while `dispatch_counts`,
+        `newest_dispatch` and the caller's `carriers` keep reading every
+        dispatch-BEARING row, which is what they are for: the number of rows that name
+        the unit, the newest such row, and the earliest one the age is measured from.
+        That split is deliberate and stated rather than hidden: the harvest is
+        permissive so its coverage stays legible, and the ROUTING slot is strict.
+
+        A carrier row is routed for a unit when the token stands in its opening line;
+        a direct row is routed by construction, since the unit IS its subject.
+        """
         dispatch_counts[unit] = dispatch_counts.get(unit, 0) + 1
         held_row = newest_dispatch.get(unit)
         if held_row is None or _ledger_row_order(row) >= _ledger_row_order(held_row):
@@ -4298,6 +4321,10 @@ def stall_census_leg(
         )
         if not session_ref:
             return
+        if not routed:
+            # A MENTION, not a routing: the row names the unit without sending it
+            # anywhere, so it declares no addressee however new it is (#467).
+            return
         held = declared_refs.get(unit)
         if held is None or _ledger_row_order(row) >= _ledger_row_order(held[1]):
             declared_refs[unit] = (session_ref, row)
@@ -4305,6 +4332,11 @@ def stall_census_leg(
     observation = 0
     carried_units = 0
     pre_filing_rejected = 0
+    # THE ROUTING TEST'S OWN COUNT (#467): tokens carried by a carrier row but named
+    # only in its BODY, so read as a mention and refused the routing slot. Printed
+    # beside the harvest count, so a leg that rejected nothing is distinguishable from
+    # one that never applied the test.
+    mentions_rejected = 0
     for row in dispatch_rows:
         subject = str(row.get("subject") or "").strip()
         if is_unit(subject):
@@ -4316,9 +4348,30 @@ def stall_census_leg(
                 pre_filing_rejected += 1
             else:
                 carriers.setdefault(subject, row)
-                declare(subject, row)
+                # ROUTED BY CONSTRUCTION: the unit IS the row's subject, so the row
+                # names it in its header wherever in the detail it goes on to explain
+                # itself (#467).
+                declare(subject, row, routed=True)
             continue
         blob = f"{row.get('detail') or ''} {row.get('refs') or ''}"
+        # THE ROUTING TEST (#467). A carrier is read for the units it NAMES; whether it
+        # ROUTED them is a second question, and the ledger's own answer is WHERE the
+        # token stands. A batch dispatch declares its units in its OPENING LINE
+        # (`DISPATCH #318 -> the HQ lane`, `CENSUS RE-DISPATCH #67 -> Worker`), while a
+        # row that merely TALKS about them -- an escalation, a return leg, a defect
+        # carried -- lists them hundreds of characters and many lines further down.
+        # The scope is the SAME declared header the dispatch-delivery leg measures a
+        # delivery's subject against (#433), read through the SAME helper, because it
+        # is the same question one surface over: a body mention is a MENTION, not a
+        # routing. Raising the scope is a one-line change here, the same lever the
+        # delivery leg declares for a factory whose notices open with a banner.
+        header = delivery_header(row.get("detail") or "")
+        header_units = {
+            match.group(0)
+            for match in re.finditer(r"#\d+", header)
+            if is_unit(match.group(0))
+            and is_board_unit_occurrence(header, match.start())
+        }
         units = {
             match.group(0)
             for match in re.finditer(r"#\d+", blob)
@@ -4344,9 +4397,10 @@ def stall_census_leg(
         if not units:
             continue
         carried_units += len(units)
+        mentions_rejected += sum(1 for unit in units if unit not in header_units)
         for unit in units:
             carriers.setdefault(unit, row)
-            declare(unit, row)
+            declare(unit, row, routed=unit in header_units)
 
     problems: list[str] = list(park_problems)
     excused: list[str] = []
@@ -4593,6 +4647,13 @@ def stall_census_leg(
             "dispatch_rows_examined": len(dispatch_rows),
             "observation_dispatches": observation,
             "carried_units_resolved": carried_units,
+            # THE ROUTING TEST'S OWN COUNT (#467), beside the harvest it filters.
+            # `carried_units_resolved` measures the HARVEST -- every board-unit token
+            # a carrier row names -- and stays deliberately permissive, because that
+            # is what makes the leg's coverage legible. The ADDRESSEE is the stricter
+            # question, and this is how many of those tokens were named only in the
+            # BODY: read as a mention, never as a routing.
+            "mentions_rejected": mentions_rejected,
             "units_rejected_pre_filing": pre_filing_rejected,
             "units_in_population": len(carriers),
             "units_off_board": off_board,
@@ -6505,6 +6566,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  dispatch rows examined: {cov['dispatch_rows_examined']} "
                 f"({cov['observation_dispatches']} observation dispatch(es), explicitly "
                 f"legal; {cov['carried_units_resolved']} carried unit(s) resolved, "
+                f"{cov['mentions_rejected']} of their token(s) named only in the BODY "
+                f"and read as a MENTION, never as a routing (#467); "
                 f"{cov['units_off_board']} unit(s) dropped as not an OPEN issue of this "
                 f"board)"
             )

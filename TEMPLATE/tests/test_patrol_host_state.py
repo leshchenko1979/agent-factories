@@ -6972,6 +6972,92 @@ def test_a_lane_with_NO_in_window_claim_keeps_its_OWED_line_VERBATIM() -> None:
     assert "drain evidence" in out, out
     assert "no lane carrying an OWED unit claimed a sibling inside the window" in out, out
 
+def test_the_stall_census_leg_reads_a_CARRIER_mention_as_a_MENTION_never_a_ROUTING() -> None:
+    """#467, TWO-SIDED and HERMETIC: whether a carrier ROUTED a unit is read from WHERE
+    the token STANDS in the row, never from the fact that the row names it at all.
+
+    The defect: the addressee map kept the NEWEST dispatch-bearing row declaring a typed
+    `session` ref. An ESCALATION row -- non-unit subject, actor `hq`, its detail listing
+    the stalled units in the BODY -- declares HQ's own session, so it overwrote the
+    genuine routing for every unit it merely mentioned. On the live ledger that is row
+    `n=3098` (`stall-census-escalation-2026-10-11T06`), which took the slot from the real
+    routing row `n=3067` (`#79`, actor triage, addressed to the Worker lane) and read
+    twelve units as addressed to the lane that COMPLAINED about them rather than the lane
+    they were sent to. One surface over from #433: a body mention is a MENTION.
+
+    BOTH arms are built from rows THIS fixture supplies. The control is deliberately not
+    read from the live row `n=3098`: a control keyed on a mutable live artifact stops
+    discriminating the moment that artifact changes, and would keep passing while testing
+    nothing.
+
+    NEGATIVE arm: the escalation-shaped row names `#1101` and `#1102` in its body and
+    declares HQ -- the addressee must stay the row that actually dispatched them.
+    POSITIVE arm: a batch-dispatch-shaped row whose OPENING LINE names `#1103` DID route
+    it, and being newer it must win the slot from the older direct dispatch.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker, hq = "aaaaaaaa-0000-0000-0000-000000000001", \
+        "bbbbbbbb-0000-0000-0000-000000000002"
+    issues = [_issue(1101, "OPEN"), _issue(1102, "OPEN"), _issue(1103, "OPEN")]
+    rows = [
+        # THE GENUINE ROUTINGS, addressed to the Worker lane.
+        _stall_row(1, "dispatch", "#1101", 5, now=now, actor="triage",
+                   refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1102", 5, now=now, actor="triage",
+                   refs=[{"session": worker}]),
+        # THE NEGATIVE ARM: an escalation that only MENTIONS them, deep in its body.
+        _stall_row(3, "dispatch", "stall-census-escalation-probe", 1, now=now, actor="hq",
+                   refs=[{"session": hq}],
+                   detail="escalation for HQ's attention:\n"
+                          "the following units have never been claimed -- #1101, #1102 --\n"
+                          "and the census re-flags them every cycle"),
+        # #1103's genuine routing, older than the carrier below.
+        _stall_row(4, "dispatch", "#1103", 5, now=now, actor="triage",
+                   refs=[{"session": worker}]),
+        # THE POSITIVE ARM: a carrier that ROUTES #1103 in its opening line, and is newer.
+        _stall_row(5, "dispatch", "batch-dispatch-probe", 1, now=now, actor="hq",
+                   refs=[{"session": hq}],
+                   detail="DISPATCH #1103 -> the HQ lane\ncarrying the backlog brief"),
+    ]
+    names = {worker: "Worker", hq: "HQ"}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    by_unit = {ln.split("OWED ")[1].split(":")[0]: ln
+               for ln in leg["problems"] if "OWED #" in ln}
+
+    # NEGATIVE: a body mention never takes the routing slot.
+    for unit in ("#1101", "#1102"):
+        line = by_unit[unit]
+        assert "ADDRESSED to Worker" in line, (
+            f"a row that only MENTIONS {unit} in its body is a MENTION, not a routing: "
+            f"the addressee must stay the row that dispatched it\n{line}"
+        )
+        assert "ADDRESSED to HQ" not in line, (
+            f"the escalation's session must not stand in {unit}'s addressee slot\n{line}"
+        )
+
+    # POSITIVE: an opening-line carrier DID route its unit, and wins on being newer.
+    assert "ADDRESSED to HQ" in by_unit["#1103"], (
+        f"a carrier whose OPENING LINE names the unit DID route it, and being newer it "
+        f"takes the slot\n{by_unit['#1103']}"
+    )
+
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 3, cov
+    assert cov["addressees_resolved"] == 3, cov
+    assert cov["mentions_rejected"] == 2, (
+        f"the two body-only tokens must be COUNTED as rejected, or a leg that never "
+        f"applied the test is indistinguishable from one that rejected nothing\n{cov}"
+    )
+
+    # THE RENDER HALF: the rejected count reaches the report.
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
+    assert rc == 1, f"OWED lines must fail the run, got rc={rc}\n{out}"
+    assert "named only in the BODY and read as a MENTION, never as a routing (#467)" in out, out
+    assert "2 of their token(s) named only in the BODY" in out, out
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]
