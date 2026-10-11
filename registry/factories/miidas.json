@@ -153,6 +153,18 @@
       ],
       "evidence": "agent/runtime/lib/miidas_boot/config.py \u2014 gateway overlay finds [providers. at :203-207 and returns text[:start] + snippet + text[end:] at :250; openrouter overlay at :127-185 does the same. This deletion is what cost leshchenko1979/miidas#98 (closed 2026-10-03T19:07:29Z), where the overlay's own snippet carried enabled=false and wiped the template's working fallback. The overlay logs 'applied LLM_PROFILE=\u2026' while the file it read still shows the pre-refresh block, so during a refresh window the file and the log disagree \u2014 read the post-refresh file, not the log alone.",
       "since": "2026-10-05T06:06:09Z"
+    },
+    {
+      "id": "agents-old-degraded",
+      "text": "agents-old is DEGRADED and its live census could not be re-verified: its sshd does not answer (SSH stalls at banner exchange), and the public surface miidas.l1979.ru times out (HTTP GET 000 after 20s; TLS handshake OK).",
+      "severity": "warning",
+      "affects": [
+        "miidas",
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "SSH stalls at banner exchange ~2026-10-11T06:0xZ; public surface miidas.l1979.ru HTTP GET times out, 000 after 20s, TLS handshake OK. Measured 2026-10-11 (miidas HQ re-attestation).",
+      "since": "2026-10-11"
     }
   ],
   "lanes": [
@@ -188,7 +200,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-10T06:04:57Z",
+  "attested_at": "2026-10-11T06:25:18Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

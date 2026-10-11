@@ -95,6 +95,17 @@
       "affects": [
         "profile"
       ]
+    },
+    {
+      "id": "assignee-login-both-trackers",
+      "text": "The only assignable login on BOTH live trackers (fork leshchenko1979/opencrabs and factory leshchenko1979/opencrabs-dev-factory) is leshchenko1979. `gh issue edit <n> --add-assignee adolfousier` prints the issue URL and returns rc 0 while the assignees set stays EMPTY - a silent no-op, not an error, so a read-back is the only way to catch it.",
+      "severity": "warning",
+      "affects": [
+        "profile"
+      ],
+      "scope": "profile",
+      "evidence": "gh api repos/leshchenko1979/opencrabs/collaborators/adolfousier -> 404 (same on the factory tracker); --add-assignee adolfousier rc=0 with read-back []; positive control --add-assignee leshchenko1979 sticks; 28 fork issues carry leshchenko1979, 0 carry adolfousier. Law corrected in opencrabs-dev-factory commit b082869f (2026-10-10).",
+      "since": "2026-10-10"
     }
   ],
   "lanes": [
@@ -316,7 +327,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-10T06:06:40Z",
+  "attested_at": "2026-10-11T06:11:04Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

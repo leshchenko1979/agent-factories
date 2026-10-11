@@ -29,7 +29,7 @@
     {
       "name": "Gatus fleet monitoring and alert intake",
       "audience": "owner",
-      "entry": "vpn: vpn/services/gatus/config/config.yaml, delivered by gatus-notify.service (active)",
+      "entry": "vpn: container 'gatus' (ghcr.io/twin/gatus:stable) with config mounted from /data/projects/gatus/config/config.yaml (18266 B, 9 key blocks); source of record vpn/services/gatus/config/config.yaml in the /root/vds-servers repo, which is checked out on agents, NOT on vpn; alert delivery by gatus-notify.service (active) on vpn",
       "cadence": "continuous; alerts on endpoint failure"
     },
     {
@@ -136,7 +136,7 @@
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Check `journalctl --user -u opencrabs-ops` for a Stopping/Stopped pair (deliberate) versus `Main process exited code=dumped` (crash) before concluding indiscipline or a fault.",
+      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Before reading `journalctl --user -u opencrabs-ops`, read the INSTRUMENT: from a bare non-login shell it answers '-- No entries --' unless XDG_RUNTIME_DIR=/run/user/0 is set, and the retained window is short \u2014 measured 2026-10-11, the window began 2026-10-10T20:18:10Z while the unit's own last start was 18:42:30Z, so the restart sat OUTSIDE retention and the unit filter returned 2 rows, neither a Started/Stopped/code=dumped line. Read `systemctl --user show opencrabs-ops -p NRestarts -p ActiveEnterTimestamp` and `journalctl --user --list-boots` FIRST; only if the window covers the restart is a zero a verdict.",
       "severity": "warning",
       "affects": [
         "profile"
@@ -195,7 +195,7 @@
     },
     {
       "id": "opencrabs-home-unmanaged-growth",
-      "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-09: /root/.opencrabs 13G, profiles/ops 8.4G (opencrabs.db 3.0G, backups 2.5G, logs 967M, memory 885M), the dev repo 717M of which .git is 652M (926 loose objects = 566 MiB loose vs 74 MiB packed).",
+      "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-11: /root/.opencrabs 16G; profiles/ops 11G \u2014 opencrabs.db 3.1G, backups 3.0G (including a 3.0G pre-migration-61 copy dated 2026-10-10T02:36Z, unmanaged), memory 2.3G of which memory.db 2.0G, dev repo 1.2G of which .git/objects 1.2G, logs 848M. The pile is still growing: the memory store went 885M -> 2.3G in two days.",
       "severity": "info",
       "since": "2026-10-09",
       "affects": [
@@ -237,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-10T06:04:49Z",
+  "attested_at": "2026-10-11T06:15:17Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
