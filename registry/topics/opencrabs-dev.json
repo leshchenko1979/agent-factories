@@ -1,0 +1,327 @@
+{
+  "schema": "factory-topics/1",
+  "factory": "opencrabs-dev",
+  "chat_id": "-1003936827469",
+  "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+  "read_at": "2026-10-12T18:35:08Z",
+  "topics": [
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 2,
+      "name": "Memory update",
+      "observed_at": "2026-07-25T11:18:17Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 41,
+      "name": "Preferences",
+      "observed_at": "2026-08-25T12:32:15Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 1837,
+      "name": "Task #1: Mini App for Profile Editing",
+      "observed_at": "2026-06-24T06:33:41Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 2411,
+      "name": "Biztinder comeback",
+      "observed_at": "2026-06-28T19:09:11Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 2614,
+      "name": "Fix notifications",
+      "observed_at": "2026-08-20T18:38:40Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 5301,
+      "name": "New biz ideas",
+      "observed_at": "2026-08-17T07:29:58Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 7198,
+      "name": "Core: Brain Tools",
+      "observed_at": "2026-09-29T08:41:25Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 7451,
+      "name": "Авито бот",
+      "observed_at": "2026-06-30T19:27:12Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 8778,
+      "name": "МИИДАС",
+      "observed_at": "2026-09-07T16:24:45Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 10676,
+      "name": "X",
+      "observed_at": "2026-08-21T08:49:20Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 20431,
+      "name": "Miidas marketing",
+      "observed_at": "2026-09-09T18:50:55Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 21591,
+      "name": "Miidas skills",
+      "observed_at": "2026-07-07T23:41:26Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 29623,
+      "name": "Inferhub watch",
+      "observed_at": "2026-09-18T10:34:43Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 29867,
+      "name": "Tgproxy",
+      "observed_at": "2026-08-25T06:41:24Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 29947,
+      "name": "Telegram: Mermaid",
+      "observed_at": "2026-10-03T22:20:29Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30045,
+      "name": "Providers: Routing",
+      "observed_at": "2026-09-30T13:03:41Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30090,
+      "name": "Telegram: Push",
+      "observed_at": "2026-10-05T23:02:53Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30129,
+      "name": "OC Compiler",
+      "observed_at": "2026-08-28T17:11:44Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30134,
+      "name": "Telegram: Options",
+      "observed_at": "2026-09-28T08:52:38Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30220,
+      "name": "OC DEV HQ",
+      "observed_at": "2026-10-12T06:11:54Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30517,
+      "name": "Core: Subagents",
+      "observed_at": "2026-10-06T10:27:30Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 30679,
+      "name": "Telegram: Throttling",
+      "observed_at": "2026-10-07T00:13:24Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 31683,
+      "name": "Lifecycle: Restarts",
+      "observed_at": "2026-09-29T10:41:41Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 31789,
+      "name": "Core: Plan & Tasks",
+      "observed_at": "2026-09-28T18:59:59Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 31847,
+      "name": "Telegram: Rich Text",
+      "observed_at": "2026-10-10T12:16:27Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 34653,
+      "name": "Compaction visibility",
+      "observed_at": "2026-10-08T22:32:35Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 36841,
+      "name": "Memory: Vectors",
+      "observed_at": "2026-09-28T19:41:07Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 39171,
+      "name": "Carrier tools",
+      "observed_at": "2026-10-10T15:36:16Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 39218,
+      "name": "Upstream: Harvest",
+      "observed_at": "2026-10-08T22:49:40Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 39862,
+      "name": "Lifecycle: Boot",
+      "observed_at": "2026-10-01T23:02:18Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 39883,
+      "name": "Core: Loop",
+      "observed_at": "2026-09-27T15:52:54Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 40011,
+      "name": "Config: Schema",
+      "observed_at": "2026-10-10T02:39:50Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 40479,
+      "name": "Config: Typings",
+      "observed_at": "2026-09-27T19:08:53Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 40524,
+      "name": "Memory: Search",
+      "observed_at": "2026-10-06T16:08:14Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 40695,
+      "name": "Browser: CDP",
+      "observed_at": "2026-09-27T15:35:56Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 40696,
+      "name": "Security: Policies",
+      "observed_at": "2026-09-27T20:30:41Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 42311,
+      "name": "Core: Goal Loop",
+      "observed_at": "2026-09-28T02:43:46Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 42360,
+      "name": "Governance: Roles",
+      "observed_at": "2026-10-10T07:31:31Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 42487,
+      "name": "Triage",
+      "observed_at": "2026-10-10T06:38:44Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 42744,
+      "name": "Process: Waits",
+      "observed_at": "2026-10-04T14:17:03Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 42940,
+      "name": "Telegram: Host Guards",
+      "observed_at": "2026-09-27T19:24:44Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 43440,
+      "name": "Governance: Audits",
+      "observed_at": "2026-09-25T11:03:52Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 43727,
+      "name": "Telegram: Bot API",
+      "observed_at": "2026-09-29T08:02:01Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 43993,
+      "name": "Governance: Ontology",
+      "observed_at": "2026-10-06T13:19:59Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 44326,
+      "name": "Core: Multi-Tool",
+      "observed_at": "2026-09-28T08:28:03Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 49607,
+      "name": "Core: Crons",
+      "observed_at": "2026-10-04T23:07:02Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 49643,
+      "name": "Core: Skills",
+      "observed_at": "2026-10-06T15:40:36Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 50566,
+      "name": "Core: Prompts",
+      "observed_at": "2026-10-09T20:34:53Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 51188,
+      "name": "Telegram: Flow",
+      "observed_at": "2026-09-29T06:58:02Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 51714,
+      "name": "🔍 PROBE review-155",
+      "observed_at": "2026-09-11T14:55:01Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 68049,
+      "name": "JEV Classifier",
+      "observed_at": "2026-09-25T12:56:01Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 81141,
+      "name": "Probe: 572 renamed",
+      "observed_at": "2026-09-27T04:09:32Z"
+    },
+    {
+      "chat_id": "-1003936827469",
+      "thread_id": 81205,
+      "name": "572b 042557 RENAMED",
+      "observed_at": "2026-09-27T04:26:13Z"
+    }
+  ]
+}

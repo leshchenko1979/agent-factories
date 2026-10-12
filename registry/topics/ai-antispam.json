@@ -1,0 +1,45 @@
+{
+  "schema": "factory-topics/1",
+  "factory": "ai-antispam",
+  "chat_id": "-1003993000918",
+  "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+  "read_at": "2026-10-12T18:35:08Z",
+  "topics": [
+    {
+      "chat_id": "-1003993000918",
+      "thread_id": 10780,
+      "name": "Outreach",
+      "observed_at": "2026-10-12T18:16:21Z"
+    },
+    {
+      "chat_id": "-1003993000918",
+      "thread_id": 10781,
+      "name": "Triage",
+      "observed_at": "2026-10-12T12:30:20Z"
+    },
+    {
+      "chat_id": "-1003993000918",
+      "thread_id": 10782,
+      "name": "HQ",
+      "observed_at": "2026-10-12T06:36:27Z"
+    },
+    {
+      "chat_id": "-1003993000918",
+      "thread_id": 10783,
+      "name": "Landing",
+      "observed_at": "2026-09-11T21:55:58Z"
+    },
+    {
+      "chat_id": "-1003993000918",
+      "thread_id": 10784,
+      "name": "Bot",
+      "observed_at": "2026-10-12T12:03:47Z"
+    },
+    {
+      "chat_id": "-1003993000918",
+      "thread_id": 11156,
+      "name": "Max",
+      "observed_at": "2026-09-13T20:39:38Z"
+    }
+  ]
+}

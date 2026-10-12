@@ -126,7 +126,8 @@ PREDICATE = (
     "the fleet has a fragment; the committed artifacts are a byte-exact replay of the "
     "snapshot committed beside them; `resolved_at` is present, parseable, not in the "
     "future and agreed by both artifacts; every announcement is well-formed and no two "
-    "entries sharing an `id` carry differing text."
+    "entries sharing an `id` carry differing text; every lane that resolves to a live "
+    "binding carries a topic name this box OBSERVED."
 )
 
 failures: list[str] = []
@@ -1758,6 +1759,105 @@ def probe_a_slug_named_job_attributed_by_deliver_to_fails() -> None:
             f"checked={checked} owners={owners} unattributed={unattributed}",
         )
 
+def check_lane_topic_names() -> list[str]:
+    """Check 8: a lane that RESOLVES must carry a topic name this box OBSERVED.
+
+    The flag is not new — `resolve_lane` has always been able to set
+    `topic_name_verified` — but until #196 nothing READ it: `check_lanes_bound`
+    hands `resolve_lane` an empty mapping, and the renderer never printed the
+    field. A flag no reader consults is a declaration with no consumer, which is
+    `SKILL.md §State — every surface has one writer`'s "state with no writer" seen from the other end. The ruling at ledger
+    n=1579 names the FEED as the defect: the only feed that ever existed was a
+    COPY of the fragments it was supposed to check, so `verified: true` asserted
+    that a file generated from the fragments agreed with the fragments.
+
+    The population is RESOLVED lanes, and the reason is mechanical: a resolved
+    lane has a live `session_bindings` row, and a binding is created by an
+    INBOUND message, so the box has necessarily SEEN that topic. A lane that
+    resolves while carrying no observed name means the feed does not reach the
+    topic the lane actually lives in — the defect, stated as a predicate.
+
+    What this deliberately does NOT do is compare the declared label with the
+    observed name. The ruling DECLINES that leg on measurement: over every
+    declared lane it gave 23 clean / 19 stale-red / 24 unresolvable on data that
+    was CORRECT, because most declarations are label-shaped and were never names,
+    and a leg that reds correct data teaches lanes to ignore red. Both values are
+    rendered side by side for a human instead, and the probe below pins that a
+    DIVERGENT name is still a PASS.
+    """
+    problems: list[str] = []
+    feeds, feed_errors = reg.load_topic_feeds()
+    problems.extend(feed_errors)
+
+    bindings, errors = reg.all_bindings()
+    problems.extend(errors)
+    by_profile: dict[str, list[dict]] = {}
+    for row in bindings:
+        by_profile.setdefault(str(row.get("_profile")), []).append(row)
+
+    resolved = 0
+    verified = 0
+    for _path, fragment in load_live():
+        slug = str(fragment.get("factory"))
+        scoped = by_profile.get(str(fragment.get("profile")), [])
+        names = reg.topic_names_from_feed(feeds.get(slug))
+        chat_id = reg.FACTORY_CHATS.get(slug)
+        for lane in fragment.get("lanes") or []:
+            if not isinstance(lane, dict):
+                continue
+            outcome = reg.resolve_lane(lane, scoped, names, chat_id=chat_id)
+            if str(outcome.get("status")) not in ("resolved", "superseded"):
+                continue
+            resolved += 1
+            if outcome.get("topic_name_verified"):
+                verified += 1
+                continue
+            problems.append(
+                f"lane {slug}/{lane.get('topic')} (thread {lane.get('thread_id')}) RESOLVES to "
+                f"a live binding but carries no OBSERVED topic name — the topics feed does not "
+                f"reach the topic this lane lives in"
+            )
+    counts.append(
+        f"{verified}/{resolved} resolved lane(s) carry an observed topic name; "
+        f"{len(feeds)} topics feed(s) present"
+    )
+
+    # THE UNVERIFIED PATH IS REACHABLE — proven, not assumed. On a box whose feed
+    # happens to cover every lane, the live leg above passes for a reason that has
+    # nothing to do with this check being able to fail, so the path is driven
+    # directly here. Without it a future break reads exactly like a clean run.
+    synthetic = [
+        {
+            "thread_id": 999001,
+            "chat_id": "-1000000000001",
+            "session_id": "00000000-0000-4000-8000-000000000001",
+            "channel": "telegram",
+            "updated_at": 1.0,
+            "_profile": "synthetic",
+        }
+    ]
+    probe_lane = {"topic": "Synthetic", "role": "hq", "thread_id": 999001}
+    bare = reg.resolve_lane(probe_lane, synthetic, {}, chat_id="-1000000000001")
+    check(
+        "a lane with a live binding and NO feed comes back UNVERIFIED, not verified",
+        bare.get("topic_name_verified") is False and bare.get("topic_name") is None,
+        f"verified={bare.get('topic_name_verified')} name={bare.get('topic_name')!r}",
+    )
+    fed = reg.resolve_lane(
+        probe_lane,
+        synthetic,
+        {("-1000000000001", 999001): "Renamed Out Of Band"},
+        chat_id="-1000000000001",
+    )
+    check(
+        "...and a feed whose name DIVERGES from the declaration still PASSES — no divergence leg",
+        fed.get("topic_name_verified") is True
+        and fed.get("topic_name") == "Renamed Out Of Band",
+        f"verified={fed.get('topic_name_verified')} name={fed.get('topic_name')!r}",
+    )
+    return problems
+
+
 CHECKS = (
     ("1. every fragment validates against the schema", check_fragments_validate),
     ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
@@ -1765,6 +1865,7 @@ CHECKS = (
     ("5. every known factory group is covered", check_coverage),
     ("6. resolved_at is present, parseable, not in the future", check_resolved_at),
     ("7. every announcement is well-formed and unambiguous", check_announcements),
+    ("8. every resolved lane carries an OBSERVED topic name", check_lane_topic_names),
 )
 
 def _mutate_harness(fragment: dict) -> tuple[tempfile.TemporaryDirectory, Path]:

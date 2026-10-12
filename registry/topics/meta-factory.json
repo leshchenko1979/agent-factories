@@ -1,0 +1,93 @@
+{
+  "schema": "factory-topics/1",
+  "factory": "meta-factory",
+  "chat_id": "-1004497192134",
+  "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+  "read_at": "2026-10-12T18:35:08Z",
+  "topics": [
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 19,
+      "name": "Surveys",
+      "observed_at": "2026-10-12T07:56:15Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 20,
+      "name": "Triage",
+      "observed_at": "2026-10-12T18:34:50Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 21,
+      "name": "HQ",
+      "observed_at": "2026-10-12T13:41:44Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 68,
+      "name": "Delegate",
+      "observed_at": "2026-10-12T06:27:53Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 1271,
+      "name": "Worker",
+      "observed_at": "2026-10-12T15:12:19Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 3981,
+      "name": "Ledger",
+      "observed_at": "2026-10-11T00:47:15Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 4087,
+      "name": "Open Questions Instrument",
+      "observed_at": "2026-10-09T22:27:21Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 4186,
+      "name": "Instruments methodology",
+      "observed_at": "2026-10-06T22:41:13Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 4223,
+      "name": "Pacemakers / Crons",
+      "observed_at": "2026-10-10T18:20:57Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 4555,
+      "name": "Fleet instruments",
+      "observed_at": "2026-10-06T00:56:55Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 5574,
+      "name": "Review Rotation",
+      "observed_at": "2026-10-06T00:54:52Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 6865,
+      "name": "Insights",
+      "observed_at": "2026-10-05T22:30:58Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 8733,
+      "name": "Hygiene",
+      "observed_at": "2026-10-05T20:45:30Z"
+    },
+    {
+      "chat_id": "-1004497192134",
+      "thread_id": 11284,
+      "name": "Notifications",
+      "observed_at": "2026-10-04T22:17:14Z"
+    }
+  ]
+}

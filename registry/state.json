@@ -1,9 +1,9 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-12T06:14:46Z",
+  "resolved_at": "2026-10-12T18:35:13Z",
   "fragments": [
     {
-      "path": "/tmp/wt-attest-20261012/registry/factories/ai-antispam.json",
+      "path": "/tmp/af-465/registry/factories/ai-antispam.json",
       "data": {
         "factory": "ai-antispam",
         "display_name": "ai-antispam",
@@ -242,7 +242,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261012/registry/factories/inferhub-watch.json",
+      "path": "/tmp/af-465/registry/factories/inferhub-watch.json",
       "data": {
         "factory": "inferhub-watch",
         "display_name": "Inferhub watch",
@@ -400,7 +400,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261012/registry/factories/infra-factory.json",
+      "path": "/tmp/af-465/registry/factories/infra-factory.json",
       "data": {
         "factory": "infra-factory",
         "display_name": "Infra Factory",
@@ -666,7 +666,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261012/registry/factories/meta-factory.json",
+      "path": "/tmp/af-465/registry/factories/meta-factory.json",
       "data": {
         "factory": "meta-factory",
         "display_name": "Factories",
@@ -881,7 +881,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261012/registry/factories/miidas.json",
+      "path": "/tmp/af-465/registry/factories/miidas.json",
       "data": {
         "factory": "miidas",
         "display_name": "Miidas Factory",
@@ -1103,7 +1103,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261012/registry/factories/opencrabs-dev.json",
+      "path": "/tmp/af-465/registry/factories/opencrabs-dev.json",
       "data": {
         "factory": "opencrabs-dev",
         "display_name": "Opencrabs Dev Factory",
@@ -1640,11 +1640,11 @@
       "channel": "telegram",
       "chat_id": "-5528478556",
       "thread_id": null,
-      "updated_at": 1791745439,
+      "updated_at": 1791816869,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Алексей & Сергей, БэррИИмор [chat:-5528478556]",
-      "session_updated_at": 1791745463,
+      "session_updated_at": 1791816858,
       "_profile": "family",
       "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
     },
@@ -1683,7 +1683,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780]",
-      "session_updated_at": 1791765697,
+      "session_updated_at": 1791828975,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2346,7 +2346,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1791785494,
+      "session_updated_at": 1791786466,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2476,7 +2476,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1791785367,
+      "session_updated_at": 1791791750,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2541,7 +2541,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1791785189,
+      "session_updated_at": 1791830112,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2554,7 +2554,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1791715773,
+      "session_updated_at": 1791829973,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2606,7 +2606,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1791785519,
+      "session_updated_at": 1791830077,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2632,7 +2632,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1791720533,
+      "session_updated_at": 1791808215,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2814,7 +2814,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1791784930,
+      "session_updated_at": 1791786980,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2866,7 +2866,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1791720465,
+      "session_updated_at": 1791806624,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2983,7 +2983,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1791785678,
+      "session_updated_at": 1791829514,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3009,7 +3009,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1791784974,
+      "session_updated_at": 1791797728,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3074,7 +3074,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1791785197,
+      "session_updated_at": 1791812499,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3146,7 +3146,7 @@
   ],
   "skill_versions": {
     "/root/ai-antispam/SKILL.md": "0.1.0",
-    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.151",
+    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.153",
     "/root/vds-servers/skills/infra-factory/SKILL.md": "0.2.1",
     "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.52",
     "/root/miidas/SKILL.md": "1.1.30",
@@ -3178,8 +3178,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T18:00:00+00:00",
-      "last_run_at": "2026-10-11T18:00:51Z",
+      "next_run_at": "2026-10-13T18:00:00+00:00",
+      "last_run_at": "2026-10-12T18:00:58Z",
       "trigger_cmd": "python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_gate.py",
       "_profile": "family"
     },
@@ -3208,8 +3208,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:15:00+00:00",
-      "last_run_at": "2026-10-11T06:15:03Z",
+      "next_run_at": "2026-10-13T06:15:00+00:00",
+      "last_run_at": "2026-10-12T06:15:33Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3238,8 +3238,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:15:00+00:00",
-      "last_run_at": "2026-10-12T05:45:45Z",
+      "next_run_at": "2026-10-12T18:45:00+00:00",
+      "last_run_at": "2026-10-12T18:15:48Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
@@ -3253,8 +3253,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T07:00:00+00:00",
-      "last_run_at": "2026-10-11T07:00:18Z",
+      "next_run_at": "2026-10-13T07:00:00+00:00",
+      "last_run_at": "2026-10-12T07:00:40Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3268,8 +3268,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:15:00+00:00",
-      "last_run_at": "2026-10-11T06:15:04Z",
+      "next_run_at": "2026-10-13T06:15:00+00:00",
+      "last_run_at": "2026-10-12T06:15:33Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3283,8 +3283,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:15:00+00:00",
-      "last_run_at": "2026-10-09T06:16:55Z",
+      "next_run_at": "2026-10-14T06:15:00+00:00",
+      "last_run_at": "2026-10-12T06:15:33Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3313,8 +3313,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T12:07:00+00:00",
-      "last_run_at": "2026-10-12T06:09:23Z",
+      "next_run_at": "2026-10-13T00:07:00+00:00",
+      "last_run_at": "2026-10-12T18:07:46Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3328,8 +3328,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:30:00+00:00",
-      "last_run_at": "2026-10-11T06:30:09Z",
+      "next_run_at": "2026-10-13T06:30:00+00:00",
+      "last_run_at": "2026-10-12T06:30:37Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3358,8 +3358,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:40:00+00:00",
-      "last_run_at": "2026-10-12T00:40:42Z",
+      "next_run_at": "2026-10-12T18:40:00+00:00",
+      "last_run_at": "2026-10-12T12:40:04Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3373,8 +3373,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T12:00:00+00:00",
-      "last_run_at": "2026-10-11T12:00:38Z",
+      "next_run_at": "2026-10-13T12:00:00+00:00",
+      "last_run_at": "2026-10-12T12:00:48Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3388,8 +3388,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:25:00+00:00",
-      "last_run_at": "2026-10-12T00:25:42Z",
+      "next_run_at": "2026-10-13T00:25:00+00:00",
+      "last_run_at": "2026-10-12T18:25:55Z",
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "_profile": "ops"
     },
@@ -3418,8 +3418,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T09:00:00+00:00",
-      "last_run_at": "2026-10-11T09:00:58Z",
+      "next_run_at": "2026-10-13T09:00:00+00:00",
+      "last_run_at": "2026-10-12T09:00:44Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3433,8 +3433,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T09:00:00+00:00",
-      "last_run_at": "2026-10-05T09:00:56Z",
+      "next_run_at": "2026-10-19T09:00:00+00:00",
+      "last_run_at": "2026-10-12T09:00:44Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3478,8 +3478,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "Meta-factory HQ cycle due (#253, owner ruled shape (1) at q20). Sweep the board (leshchenko1979/agent-factories issues) for items carrying an intake ledger row and no ruling row, and rule on each — then report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md §9).",
-      "next_run_at": "2026-10-12T06:50:00+00:00",
-      "last_run_at": "2026-10-12T00:50:43Z",
+      "next_run_at": "2026-10-12T18:50:00+00:00",
+      "last_run_at": "2026-10-12T12:50:11Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3523,8 +3523,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T12:00:00+00:00",
-      "last_run_at": "2026-10-12T06:00:45Z",
+      "next_run_at": "2026-10-13T00:00:00+00:00",
+      "last_run_at": "2026-10-12T18:00:46Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3538,8 +3538,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T12:12:00+00:00",
-      "last_run_at": "2026-10-12T06:12:31Z",
+      "next_run_at": "2026-10-13T00:12:00+00:00",
+      "last_run_at": "2026-10-12T18:12:47Z",
       "trigger_cmd": "/root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh",
       "_profile": "ops"
     },
@@ -3583,8 +3583,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T12:00:00+00:00",
-      "last_run_at": "2026-10-12T06:00:46Z",
+      "next_run_at": "2026-10-13T00:00:00+00:00",
+      "last_run_at": "2026-10-12T18:00:46Z",
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "_profile": "ops"
     },
@@ -3628,8 +3628,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "InferHub Watch HQ cycle due. Execute the 6-hourly cycle per skills/inferhub/SKILL.md and report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (the no-plan law, skills/inferhub/SKILL.md §Hard rules).",
-      "next_run_at": "2026-10-12T12:10:00+00:00",
-      "last_run_at": "2026-10-12T06:11:29Z",
+      "next_run_at": "2026-10-13T00:10:00+00:00",
+      "last_run_at": "2026-10-12T18:10:46Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3658,8 +3658,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:23:00+00:00",
-      "last_run_at": "2026-10-12T00:23:42Z",
+      "next_run_at": "2026-10-13T00:23:00+00:00",
+      "last_run_at": "2026-10-12T18:23:55Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3703,8 +3703,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T15:05:00+00:00",
-      "last_run_at": "2026-10-11T15:05:28Z",
+      "next_run_at": "2026-10-13T15:05:00+00:00",
+      "last_run_at": "2026-10-12T15:05:44Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3733,8 +3733,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": "Execute the Infra Factory triage patrol per skills/infra-factory/roles/triage.md: check open ledger intake items, verify claims, and assign or close work.",
-      "next_run_at": "2026-10-12T12:05:00+00:00",
-      "last_run_at": "2026-10-12T06:05:46Z",
+      "next_run_at": "2026-10-13T00:05:00+00:00",
+      "last_run_at": "2026-10-12T18:05:46Z",
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "_profile": "ops"
     },
@@ -3748,8 +3748,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T09:00:00+00:00",
-      "last_run_at": "2026-10-11T09:00:58Z",
+      "next_run_at": "2026-10-13T09:00:00+00:00",
+      "last_run_at": "2026-10-12T09:00:44Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -4182,5 +4182,661 @@
     "oc348probe",
     "ops"
   ],
+  "topics": {
+    "ai-antispam": {
+      "schema": "factory-topics/1",
+      "factory": "ai-antispam",
+      "chat_id": "-1003993000918",
+      "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+      "read_at": "2026-10-12T18:35:08Z",
+      "topics": [
+        {
+          "chat_id": "-1003993000918",
+          "thread_id": 10780,
+          "name": "Outreach",
+          "observed_at": "2026-10-12T18:16:21Z"
+        },
+        {
+          "chat_id": "-1003993000918",
+          "thread_id": 10781,
+          "name": "Triage",
+          "observed_at": "2026-10-12T12:30:20Z"
+        },
+        {
+          "chat_id": "-1003993000918",
+          "thread_id": 10782,
+          "name": "HQ",
+          "observed_at": "2026-10-12T06:36:27Z"
+        },
+        {
+          "chat_id": "-1003993000918",
+          "thread_id": 10783,
+          "name": "Landing",
+          "observed_at": "2026-09-11T21:55:58Z"
+        },
+        {
+          "chat_id": "-1003993000918",
+          "thread_id": 10784,
+          "name": "Bot",
+          "observed_at": "2026-10-12T12:03:47Z"
+        },
+        {
+          "chat_id": "-1003993000918",
+          "thread_id": 11156,
+          "name": "Max",
+          "observed_at": "2026-09-13T20:39:38Z"
+        }
+      ]
+    },
+    "inferhub-watch": {
+      "schema": "factory-topics/1",
+      "factory": "inferhub-watch",
+      "chat_id": "-1004379632866",
+      "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+      "read_at": "2026-10-12T18:35:08Z",
+      "topics": [
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 2,
+          "name": "Auditor",
+          "observed_at": "2026-10-12T18:25:19Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 32,
+          "name": "LLM Gateway",
+          "observed_at": "2026-10-03T19:17:59Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 45,
+          "name": "Done — #2 hourly cadence law",
+          "observed_at": "2026-09-11T09:32:16Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 257,
+          "name": "Done — #11 Cleanliness & Sync",
+          "observed_at": "2026-09-11T09:32:16Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 288,
+          "name": "Done — #12 Auto Route Switcher",
+          "observed_at": "2026-09-11T09:32:16Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 343,
+          "name": "Done — #13 keys.toml Fallback",
+          "observed_at": "2026-09-10T18:27:36Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 357,
+          "name": "Done — #14 session_notify alerts",
+          "observed_at": "2026-09-10T18:27:31Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 399,
+          "name": "Done — #15 IQ/$ basis alignment",
+          "observed_at": "2026-09-11T09:32:16Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 421,
+          "name": "Done — #16 gate rank fidelity",
+          "observed_at": "2026-09-11T09:54:11Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 444,
+          "name": "Done — #18 CI run legibility",
+          "observed_at": "2026-09-13T12:09:58Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 465,
+          "name": "Worker — #16 top-1 crown gate",
+          "observed_at": "2026-09-13T10:10:33Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 476,
+          "name": "Done — #19 cache_ramp dated output",
+          "observed_at": "2026-09-11T10:27:09Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 510,
+          "name": "Done — #21 switcher topic scoping",
+          "observed_at": "2026-09-13T12:10:51Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 557,
+          "name": "Grafana",
+          "observed_at": "2026-09-25T15:35:54Z"
+        },
+        {
+          "chat_id": "-1004379632866",
+          "thread_id": 559,
+          "name": "Worker — InferHub Watch Lane",
+          "observed_at": "2026-10-10T12:31:30Z"
+        }
+      ]
+    },
+    "infra-factory": {
+      "schema": "factory-topics/1",
+      "factory": "infra-factory",
+      "chat_id": "-1004486255170",
+      "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+      "read_at": "2026-10-12T18:35:08Z",
+      "topics": [
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 4,
+          "name": "HQ",
+          "observed_at": "2026-10-12T06:14:17Z"
+        },
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 5,
+          "name": "Triage",
+          "observed_at": "2026-10-12T15:08:51Z"
+        },
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 6,
+          "name": "Workers",
+          "observed_at": "2026-09-14T18:39:20Z"
+        },
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 7,
+          "name": "Surveys",
+          "observed_at": "2026-10-12T06:12:28Z"
+        },
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 467,
+          "name": "LLM Gateway",
+          "observed_at": "2026-10-07T06:24:33Z"
+        },
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 475,
+          "name": "TG Hub",
+          "observed_at": "2026-10-01T00:40:58Z"
+        },
+        {
+          "chat_id": "-1004486255170",
+          "thread_id": 3036,
+          "name": "GH Runner",
+          "observed_at": "2026-09-30T21:48:00Z"
+        }
+      ]
+    },
+    "meta-factory": {
+      "schema": "factory-topics/1",
+      "factory": "meta-factory",
+      "chat_id": "-1004497192134",
+      "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+      "read_at": "2026-10-12T18:35:08Z",
+      "topics": [
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 19,
+          "name": "Surveys",
+          "observed_at": "2026-10-12T07:56:15Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 20,
+          "name": "Triage",
+          "observed_at": "2026-10-12T18:34:50Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 21,
+          "name": "HQ",
+          "observed_at": "2026-10-12T13:41:44Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 68,
+          "name": "Delegate",
+          "observed_at": "2026-10-12T06:27:53Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 1271,
+          "name": "Worker",
+          "observed_at": "2026-10-12T15:12:19Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 3981,
+          "name": "Ledger",
+          "observed_at": "2026-10-11T00:47:15Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 4087,
+          "name": "Open Questions Instrument",
+          "observed_at": "2026-10-09T22:27:21Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 4186,
+          "name": "Instruments methodology",
+          "observed_at": "2026-10-06T22:41:13Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 4223,
+          "name": "Pacemakers / Crons",
+          "observed_at": "2026-10-10T18:20:57Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 4555,
+          "name": "Fleet instruments",
+          "observed_at": "2026-10-06T00:56:55Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 5574,
+          "name": "Review Rotation",
+          "observed_at": "2026-10-06T00:54:52Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 6865,
+          "name": "Insights",
+          "observed_at": "2026-10-05T22:30:58Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 8733,
+          "name": "Hygiene",
+          "observed_at": "2026-10-05T20:45:30Z"
+        },
+        {
+          "chat_id": "-1004497192134",
+          "thread_id": 11284,
+          "name": "Notifications",
+          "observed_at": "2026-10-04T22:17:14Z"
+        }
+      ]
+    },
+    "miidas": {
+      "schema": "factory-topics/1",
+      "factory": "miidas",
+      "chat_id": "-1003996392908",
+      "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+      "read_at": "2026-10-12T18:35:08Z",
+      "topics": [
+        {
+          "chat_id": "-1003996392908",
+          "thread_id": 4,
+          "name": "HQ",
+          "observed_at": "2026-10-12T09:35:36Z"
+        },
+        {
+          "chat_id": "-1003996392908",
+          "thread_id": 6,
+          "name": "Agent runtime",
+          "observed_at": "2026-10-04T22:49:03Z"
+        },
+        {
+          "chat_id": "-1003996392908",
+          "thread_id": 9,
+          "name": "Manager",
+          "observed_at": "2026-10-08T16:30:36Z"
+        },
+        {
+          "chat_id": "-1003996392908",
+          "thread_id": 56,
+          "name": "Worker — #108 landing/ superseded",
+          "observed_at": "2026-10-08T16:44:44Z"
+        },
+        {
+          "chat_id": "-1003996392908",
+          "thread_id": 393,
+          "name": "Marketing",
+          "observed_at": "2026-10-02T23:14:33Z"
+        }
+      ]
+    },
+    "opencrabs-dev": {
+      "schema": "factory-topics/1",
+      "factory": "opencrabs-dev",
+      "chat_id": "-1003936827469",
+      "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+      "read_at": "2026-10-12T18:35:08Z",
+      "topics": [
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 2,
+          "name": "Memory update",
+          "observed_at": "2026-07-25T11:18:17Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 41,
+          "name": "Preferences",
+          "observed_at": "2026-08-25T12:32:15Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 1837,
+          "name": "Task #1: Mini App for Profile Editing",
+          "observed_at": "2026-06-24T06:33:41Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 2411,
+          "name": "Biztinder comeback",
+          "observed_at": "2026-06-28T19:09:11Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 2614,
+          "name": "Fix notifications",
+          "observed_at": "2026-08-20T18:38:40Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 5301,
+          "name": "New biz ideas",
+          "observed_at": "2026-08-17T07:29:58Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 7198,
+          "name": "Core: Brain Tools",
+          "observed_at": "2026-09-29T08:41:25Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 7451,
+          "name": "Авито бот",
+          "observed_at": "2026-06-30T19:27:12Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 8778,
+          "name": "МИИДАС",
+          "observed_at": "2026-09-07T16:24:45Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 10676,
+          "name": "X",
+          "observed_at": "2026-08-21T08:49:20Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 20431,
+          "name": "Miidas marketing",
+          "observed_at": "2026-09-09T18:50:55Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 21591,
+          "name": "Miidas skills",
+          "observed_at": "2026-07-07T23:41:26Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 29623,
+          "name": "Inferhub watch",
+          "observed_at": "2026-09-18T10:34:43Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 29867,
+          "name": "Tgproxy",
+          "observed_at": "2026-08-25T06:41:24Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 29947,
+          "name": "Telegram: Mermaid",
+          "observed_at": "2026-10-03T22:20:29Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30045,
+          "name": "Providers: Routing",
+          "observed_at": "2026-09-30T13:03:41Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30090,
+          "name": "Telegram: Push",
+          "observed_at": "2026-10-05T23:02:53Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30129,
+          "name": "OC Compiler",
+          "observed_at": "2026-08-28T17:11:44Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30134,
+          "name": "Telegram: Options",
+          "observed_at": "2026-09-28T08:52:38Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30220,
+          "name": "OC DEV HQ",
+          "observed_at": "2026-10-12T06:11:54Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30517,
+          "name": "Core: Subagents",
+          "observed_at": "2026-10-06T10:27:30Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 30679,
+          "name": "Telegram: Throttling",
+          "observed_at": "2026-10-07T00:13:24Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 31683,
+          "name": "Lifecycle: Restarts",
+          "observed_at": "2026-09-29T10:41:41Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 31789,
+          "name": "Core: Plan & Tasks",
+          "observed_at": "2026-09-28T18:59:59Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 31847,
+          "name": "Telegram: Rich Text",
+          "observed_at": "2026-10-10T12:16:27Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 34653,
+          "name": "Compaction visibility",
+          "observed_at": "2026-10-08T22:32:35Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 36841,
+          "name": "Memory: Vectors",
+          "observed_at": "2026-09-28T19:41:07Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 39171,
+          "name": "Carrier tools",
+          "observed_at": "2026-10-10T15:36:16Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 39218,
+          "name": "Upstream: Harvest",
+          "observed_at": "2026-10-08T22:49:40Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 39862,
+          "name": "Lifecycle: Boot",
+          "observed_at": "2026-10-01T23:02:18Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 39883,
+          "name": "Core: Loop",
+          "observed_at": "2026-09-27T15:52:54Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 40011,
+          "name": "Config: Schema",
+          "observed_at": "2026-10-10T02:39:50Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 40479,
+          "name": "Config: Typings",
+          "observed_at": "2026-09-27T19:08:53Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 40524,
+          "name": "Memory: Search",
+          "observed_at": "2026-10-06T16:08:14Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 40695,
+          "name": "Browser: CDP",
+          "observed_at": "2026-09-27T15:35:56Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 40696,
+          "name": "Security: Policies",
+          "observed_at": "2026-09-27T20:30:41Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 42311,
+          "name": "Core: Goal Loop",
+          "observed_at": "2026-09-28T02:43:46Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 42360,
+          "name": "Governance: Roles",
+          "observed_at": "2026-10-10T07:31:31Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 42487,
+          "name": "Triage",
+          "observed_at": "2026-10-10T06:38:44Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 42744,
+          "name": "Process: Waits",
+          "observed_at": "2026-10-04T14:17:03Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 42940,
+          "name": "Telegram: Host Guards",
+          "observed_at": "2026-09-27T19:24:44Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 43440,
+          "name": "Governance: Audits",
+          "observed_at": "2026-09-25T11:03:52Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 43727,
+          "name": "Telegram: Bot API",
+          "observed_at": "2026-09-29T08:02:01Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 43993,
+          "name": "Governance: Ontology",
+          "observed_at": "2026-10-06T13:19:59Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 44326,
+          "name": "Core: Multi-Tool",
+          "observed_at": "2026-09-28T08:28:03Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 49607,
+          "name": "Core: Crons",
+          "observed_at": "2026-10-04T23:07:02Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 49643,
+          "name": "Core: Skills",
+          "observed_at": "2026-10-06T15:40:36Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 50566,
+          "name": "Core: Prompts",
+          "observed_at": "2026-10-09T20:34:53Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 51188,
+          "name": "Telegram: Flow",
+          "observed_at": "2026-09-29T06:58:02Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 51714,
+          "name": "🔍 PROBE review-155",
+          "observed_at": "2026-09-11T14:55:01Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 68049,
+          "name": "JEV Classifier",
+          "observed_at": "2026-09-25T12:56:01Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 81141,
+          "name": "Probe: 572 renamed",
+          "observed_at": "2026-09-27T04:09:32Z"
+        },
+        {
+          "chat_id": "-1003936827469",
+          "thread_id": 81205,
+          "name": "572b 042557 RENAMED",
+          "observed_at": "2026-09-27T04:26:13Z"
+        }
+      ]
+    }
+  },
   "checks": {}
 }

@@ -1,0 +1,39 @@
+{
+  "schema": "factory-topics/1",
+  "factory": "miidas",
+  "chat_id": "-1003996392908",
+  "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+  "read_at": "2026-10-12T18:35:08Z",
+  "topics": [
+    {
+      "chat_id": "-1003996392908",
+      "thread_id": 4,
+      "name": "HQ",
+      "observed_at": "2026-10-12T09:35:36Z"
+    },
+    {
+      "chat_id": "-1003996392908",
+      "thread_id": 6,
+      "name": "Agent runtime",
+      "observed_at": "2026-10-04T22:49:03Z"
+    },
+    {
+      "chat_id": "-1003996392908",
+      "thread_id": 9,
+      "name": "Manager",
+      "observed_at": "2026-10-08T16:30:36Z"
+    },
+    {
+      "chat_id": "-1003996392908",
+      "thread_id": 56,
+      "name": "Worker — #108 landing/ superseded",
+      "observed_at": "2026-10-08T16:44:44Z"
+    },
+    {
+      "chat_id": "-1003996392908",
+      "thread_id": 393,
+      "name": "Marketing",
+      "observed_at": "2026-10-02T23:14:33Z"
+    }
+  ]
+}

@@ -29,6 +29,9 @@ Commands
   enroll --all          (step 3) scaffold one stub per factory
   mutate <factory>      write back an EXISTING fragment — mutation-only,
                         never a rebuild; refuses a top-level key-set change
+  topics                write registry/topics/<slug>.json — the forum names this
+                        box OBSERVED, keyed (chat, thread). The feed `render`
+                        consumes; absent a feed, every lane renders unverified.
   render                (step 5) write docs/factory-registry.md + registry/index.json
 
 Exit: 0 ok, 1 problem (invalid fragment, bad usage, unreadable store).
@@ -1499,6 +1502,263 @@ def load_topic_names(path: str | None) -> dict:
     return names
 
 
+# ---------------------------------------------------------------------------
+# The topics feed — the DECLARED WRITER for the live topic names (#196)
+# ---------------------------------------------------------------------------
+#
+# `resolve_lane` renders a lane's topic name VERIFIED only when the name arrived
+# through `--topics`, and that flag has always been true-by-construction and
+# false-in-fact: the only feed that ever existed was a COPY of the fragments it
+# was supposed to check, so `verified: true` asserted that a file generated from
+# the fragments agreed with the fragments. A tautology cannot detect the thing
+# the flag's name claims — that both are stale against Telegram.
+#
+# The HQ ruling at ledger n=1579 names the FEED, not the flag, as the defect: an
+# artefact with no producer, no path and no gate is `SKILL.md §State — every surface has one writer`'s "state with no writer".
+# This section DECLARES the writer. The names are read from the box's own daemon
+# database, `channel_messages.topic_name` — the forum name the daemon OBSERVED on
+# a real message from the Telegram surface. That is an authority INDEPENDENT of
+# any declaration: it can disagree with a fragment, and on this box it does.
+#
+# What the flag therefore means: "this name was read from the live surface at
+# `read_at`", never "this name agrees with a fragment". The ruling DECLINES a leg
+# that reds when a declared lane label and an observed name differ — measured over
+# every declared lane it gave 23 clean / 19 stale-red / 24 unresolvable on data
+# that was CORRECT, because 25 declarations are label-shaped and were never names,
+# and a leg that reds correct data teaches lanes to ignore red.
+#
+# The feed key is (chat, thread), never thread alone: a thread id is unique only
+# WITHIN a chat, and 26 lanes live in more than one chat.
+
+TOPIC_FEED_DIR = REPO_ROOT / "registry" / "topics"
+TOPIC_FEED_SCHEMA = "factory-topics/1"
+TOPIC_FEED_SOURCE = (
+    "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the "
+    "daemon observed on a real message from the Telegram surface"
+)
+
+
+def read_topic_rows(db: Path) -> list[dict]:
+    """Every (chat, thread) whose forum name this box has observed, newest wins.
+
+    `channel_messages.topic_name` is the name carried on a message that ARRIVED
+    from the Telegram surface, so it is an observation rather than a copy of any
+    declaration. A topic renamed out of band keeps its old name here until a new
+    message arrives — the SOURCE-side defect filed as
+    `leshchenko1979/opencrabs#268`. This reader is the CONSUMER side, and it
+    stamps `observed_at` so a stale row is visible rather than silent.
+
+    The columns are PROBED, like `read_bindings`: an older home carries no
+    `topic_name` column at all, and a fixed SELECT there fails outright — which
+    reads as "this box has observed no topics", the one wrong answer that is
+    indistinguishable from a healthy empty result.
+    """
+    rows: list[dict] = []
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+    except sqlite3.Error as exc:
+        return [{"_error": f"{db}: {exc}"}]
+    conn.row_factory = sqlite3.Row
+    try:
+        tables = {
+            r[0] for r in conn.execute("select name from sqlite_master where type='table'")
+        }
+        if "channel_messages" not in tables:
+            return [{"_error": f"{db}: no channel_messages table"}]
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(channel_messages)")}
+        missing = [
+            c for c in ("channel_chat_id", "thread_id", "topic_name") if c not in columns
+        ]
+        if missing:
+            return [{"_error": f"{db}: channel_messages lacks {', '.join(missing)}"}]
+        sql = (
+            "select channel_chat_id as chat_id, thread_id, topic_name as name, "
+            "max(created_at) as observed_at from channel_messages "
+            "where topic_name is not null and topic_name <> '' "
+            "and thread_id is not null and thread_id <> '' "
+            "group by channel_chat_id, thread_id"
+        )
+        for row in conn.execute(sql):
+            record = dict(row)
+            record["_db"] = str(db)
+            rows.append(record)
+    except sqlite3.Error as exc:
+        rows.append({"_error": f"{db}: {exc}"})
+    finally:
+        conn.close()
+    return rows
+
+
+def topic_feed(
+    factory: str,
+    chat_id: object,
+    rows: list[dict],
+    read_at: str,
+    source: str = TOPIC_FEED_SOURCE,
+) -> dict:
+    """One factory's feed, built from observed rows. PURE over `rows`.
+
+    Filtering is by CHAT, and that is the whole reason the key is a pair: thread 4
+    exists in both the Miidas and the Infra chat, so a feed keyed on thread alone
+    would hand one factory the other's name.
+    """
+    wanted = str(chat_id)
+    topics: list[dict] = []
+    seen: set[int] = set()
+    for row in rows:
+        if "_error" in row:
+            continue
+        if str(row.get("chat_id")) != wanted:
+            continue
+        try:
+            thread = int(row.get("thread_id"))
+        except (TypeError, ValueError):
+            continue
+        if thread in seen:
+            continue
+        seen.add(thread)
+        entry: dict = {"chat_id": wanted, "thread_id": thread, "name": row.get("name")}
+        observed = row.get("observed_at")
+        if observed is not None:
+            try:
+                entry["observed_at"] = datetime.datetime.fromtimestamp(
+                    int(observed), datetime.timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except (TypeError, ValueError, OSError):
+                pass
+        topics.append(entry)
+    topics.sort(key=lambda e: e["thread_id"])
+    return {
+        "schema": TOPIC_FEED_SCHEMA,
+        "factory": factory,
+        "chat_id": wanted,
+        "source": source,
+        "read_at": read_at,
+        "topics": topics,
+    }
+
+
+def topic_feed_path(slug: str) -> Path:
+    return TOPIC_FEED_DIR / f"{slug}.json"
+
+
+def topic_names_from_feed(feed: object) -> dict:
+    """`{(chat, thread): name}` — the exact shape `resolve_lane` consumes.
+
+    Built here rather than by re-reading a path through `load_topic_names`, so a
+    render's own read never depends on a file the caller did not hand it.
+    """
+    if not isinstance(feed, dict):
+        return {}
+    names: dict = {}
+    for entry in feed.get("topics") or []:
+        if not isinstance(entry, dict):
+            continue
+        thread = entry.get("thread_id")
+        if thread is None:
+            continue
+        try:
+            names[(str(entry.get("chat_id", "")), int(thread))] = entry.get("name")
+        except (TypeError, ValueError):
+            continue
+    return names
+
+
+def load_topic_feeds(slugs: list[str] | None = None) -> tuple[dict, list[str]]:
+    """Read `registry/topics/<slug>.json` for every slug that has one.
+
+    ABSENT IS NOT AN ERROR. A factory with no feed renders every lane unverified,
+    which is exactly today's bytes and the honest answer for a box that has not
+    observed its topics — so the missing set is RETURNED rather than dropped, and
+    the render prints the population it read.
+    """
+    if slugs is None:
+        slugs = sorted(MANIFEST_RECORDS)
+    feeds: dict = {}
+    problems: list[str] = []
+    for slug in slugs:
+        path = topic_feed_path(slug)
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            problems.append(f"{path}: cannot read — {exc}")
+            continue
+        if not isinstance(data, dict) or not isinstance(data.get("topics"), list):
+            problems.append(f"{path}: must be an object with a `topics` list")
+            continue
+        feeds[slug] = data
+    return feeds, problems
+
+
+def write_topic_feed(path: Path, feed: dict) -> None:
+    """The one serialisation of a feed. A second call site is how two writers of
+    the same file start disagreeing."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(feed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def cmd_topics(args: argparse.Namespace) -> int:
+    """The DECLARED WRITER for the topics feed (#196).
+
+    Reads the box's OBSERVED forum names and writes `registry/topics/<slug>.json`
+    for every factory whose chat has been observed. This verb is what turns the
+    feed from an artefact with no producer into a surface with one — the `SKILL.md §State — every surface has one writer`
+    defect the ruling names, and the reason `verified: true` had no authority.
+
+    A factory whose chat has yielded no observation gets NO feed rather than an
+    empty one: an empty feed and a failed read would render identically, and the
+    reader must be able to tell "nothing observed" from "read succeeded, no
+    topics".
+    """
+    if args.factory:
+        if args.factory not in MANIFEST_RECORDS:
+            print(f"topics: unknown factory {args.factory!r}", file=sys.stderr)
+            return 1
+        slugs = [args.factory]
+    else:
+        slugs = sorted(MANIFEST_RECORDS)
+    try:
+        dbs = profile_dbs()
+    except FleetManifestError as exc:
+        print(f"topics: {exc}", file=sys.stderr)
+        return 1
+    rows: list[dict] = []
+    errors: list[str] = []
+    for db in dbs:
+        read = read_topic_rows(db)
+        errors.extend(r["_error"] for r in read if "_error" in r)
+        rows.extend(r for r in read if "_error" not in r)
+    read_at = args.at or datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    wrote = 0
+    empty: list[str] = []
+    for slug in slugs:
+        chat_id = FACTORY_CHATS.get(slug)
+        feed = topic_feed(slug, chat_id, rows, read_at)
+        if not feed["topics"]:
+            empty.append(f"{slug} (chat {chat_id})")
+            continue
+        path = topic_feed_path(slug)
+        if args.check:
+            print(f"topics: would write {path} — {len(feed['topics'])} topic(s)")
+        else:
+            write_topic_feed(path, feed)
+            wrote += 1
+    print(
+        f"topics: {wrote} feed(s) {'checked' if args.check else 'wrote'} from "
+        f"{len(rows)} observed (chat, thread) pair(s) across {len(dbs)} home(s), "
+        f"read_at={read_at}"
+    )
+    for name in empty:
+        print(f"topics: no topic observed for {name} — no feed written", file=sys.stderr)
+    for line in errors:
+        print(f"topics: {line}", file=sys.stderr)
+    return 0
+
+
 def candidate_labels(matches: list[dict]) -> list[str]:
     """The `profile:chat/thread=session` label of each binding competing for one topic."""
     return sorted(
@@ -2348,6 +2608,20 @@ def main(argv: list[str] | None = None) -> int:
         help="allow a change to the top-level key set, the deliberate override",
     )
     p_mutate.set_defaults(func=cmd_mutate)
+    p_topics = sub.add_parser(
+        "topics",
+        help="write registry/topics/<slug>.json — the OBSERVED forum names (#196)",
+    )
+    p_topics.add_argument("--factory", help="one factory slug (default: every known factory)")
+    p_topics.add_argument(
+        "--at",
+        help="the instant to stamp as read_at (default: now); a fixed sentinel keeps "
+        "a re-run from reading as drift against itself",
+    )
+    p_topics.add_argument(
+        "--check", action="store_true", help="report what would be written, writing nothing"
+    )
+    p_topics.set_defaults(func=cmd_topics)
     p_render = sub.add_parser(
         "render", help="write docs/factory-registry.md and registry/index.json"
     )

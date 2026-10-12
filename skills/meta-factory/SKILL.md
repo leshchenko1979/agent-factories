@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.58
+version: 0.1.59
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -404,7 +404,20 @@ outside it, the issue board. Every other path to it is read-only.
 | `registry/fleet.json` and `registry/factories/<slug>.json` | what each factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | `registry/gates.json` | the per-gate time budgets and the **default's derivation** — every declared value is `budget_sec = margin_x x measured_sec`, and the default is `margin_x x the largest measured runtime among the UNDECLARED population` (the registered gates with no entry), re-derived whenever that population changes | the measurement duty (`Surveys`), on the same derivation rule the budget values follow — **except the DEFAULT's VALUE, which is a policy choice about what the suite does with a gate nobody has measured, and is `HQ`'s** (n=574 PART 5) | read-only; `tools/gate_budget.py` REFUSES a stated derivation its own numbers contradict, and `tests/test_gate_registration.py` asserts the live one holds and bites on a synthetic manifest that violates it |
+| `registry/topics/<slug>.json` | the forum names this box OBSERVED, keyed `(chat, thread)` — the live authority `render` marks a lane's topic name VERIFIED against, read from the daemon's own `channel_messages.topic_name` and carrying `observed_at` per row | the lane refreshing the registry (`tools/registry.py topics` — the ONE writer; `render` only consumes) | read-only; `tests/test_registry.py` check 8 fails a lane that RESOLVES to a live binding while carrying no observed name |
 | `docs/harness-bindings.json` | which law files this factory ships and where each one loads from — the `profile` whose `skills/` directory carries the load paths, and a row per bound law (`skill`, `repo_path`, `form`), with `loaded: false` + `reason` recording a law deliberately not bound | `HQ` (the content); the `Worker` types it — same authorship split as the surfaces above | read-only; `tests/test_harness_bindings.py` (gate P29) DISCOVERS every law file the tree ships, PRINTS the discovered set on every run, and fails naming any law file no row covers |
+
+**The topics feed, and what `verified` means.** A lane's topic name is marked VERIFIED when
+it arrived through the feed above — read from the daemon's own observation of the Telegram
+surface — and never when it was copied from a fragment. The distinction is the whole of #196:
+the feed that preceded this one was GENERATED from the fragments it was supposed to check, so
+`verified: true` asserted that a file agreed with the file it came from, a tautology that cannot
+see the thing the flag's name claims. Both values now render side by side in
+`docs/factory-registry.md` and in `registry/index.json`, so a divergence is VISIBLE to a reader
+without being gated: the ruling at ledger n=1579 declines a leg that reds on declared-vs-observed
+disagreement, measured at 23 clean / 19 stale-red / 24 unresolvable over lanes that were all
+CORRECT, because most declarations are label-shaped and were never names — and a leg that reds
+correct data teaches lanes to ignore red.
 
 **Landing work: the pusher, never a raw push.** A lane lands work through `tools/publish.py` —
 never a raw `git push`. The failure this prevents is measured, not hypothetical: a direct push

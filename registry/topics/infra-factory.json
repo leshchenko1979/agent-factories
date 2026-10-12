@@ -1,0 +1,51 @@
+{
+  "schema": "factory-topics/1",
+  "factory": "infra-factory",
+  "chat_id": "-1004486255170",
+  "source": "opencrabs daemon DB `channel_messages.topic_name` — the forum topic name the daemon observed on a real message from the Telegram surface",
+  "read_at": "2026-10-12T18:35:08Z",
+  "topics": [
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 4,
+      "name": "HQ",
+      "observed_at": "2026-10-12T06:14:17Z"
+    },
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 5,
+      "name": "Triage",
+      "observed_at": "2026-10-12T15:08:51Z"
+    },
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 6,
+      "name": "Workers",
+      "observed_at": "2026-09-14T18:39:20Z"
+    },
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 7,
+      "name": "Surveys",
+      "observed_at": "2026-10-12T06:12:28Z"
+    },
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 467,
+      "name": "LLM Gateway",
+      "observed_at": "2026-10-07T06:24:33Z"
+    },
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 475,
+      "name": "TG Hub",
+      "observed_at": "2026-10-01T00:40:58Z"
+    },
+    {
+      "chat_id": "-1004486255170",
+      "thread_id": 3036,
+      "name": "GH Runner",
+      "observed_at": "2026-09-30T21:48:00Z"
+    }
+  ]
+}

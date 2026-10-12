@@ -45,9 +45,11 @@ from registry import (
     all_bindings,
     live_fragment_paths,
     load_fragment,
+    load_topic_feeds,
     profile_dbs,
     read_skill_version,
     resolve_lane,
+    topic_names_from_feed,
 )
 
 # --- Freshness windows -----------------------------------------------------
@@ -171,6 +173,26 @@ def title_text(value: object) -> str:
         return "—"
     text = html.unescape(str(value)).strip()
     return cell(text) if text else "—"
+
+
+def observed_topic(lane: dict) -> str:
+    """The forum name this box OBSERVED for the lane's thread (#196).
+
+    The column exists because the flag had no reader: `resolve_lane` has always
+    been able to mark a topic name verified, and nothing a human reads ever
+    showed it, so a lane could sit beside a stale or absent name and look
+    identical to a checked one.
+
+    `_unverified_` is NOT a failure and never a gate. The ruling at ledger n=1579
+    DECLINES a leg that reds when a declared label and an observed name differ —
+    measured over every declared lane it gave 23 clean / 19 stale-red / 24
+    unresolvable on data that was CORRECT, because most declarations are
+    label-shaped and were never names. The two columns sit side by side so a
+    reader can SEE the divergence; nothing reds on it.
+    """
+    if lane.get("topic_name_verified"):
+        return f"`{cell(lane.get('topic_name'))}`"
+    return "_unverified_"
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +395,7 @@ def build_context(
     bindings: list[dict],
     resolved_at: str,
     recorded: dict | None = None,
+    topics: dict | None = None,
 ) -> tuple[dict, list[str]]:
     """Assemble the render context. One pass, so both outputs agree.
 
@@ -383,6 +406,11 @@ def build_context(
     When `recorded` is given, each of the six live reads is replaced by the
     snapshot's recorded value and the assembly below is untouched — ONE code
     path, so a replay cannot drift from a live render in its logic (#103).
+
+    `topics` is the SEVENTH input (#196): the observed forum names, keyed by
+    factory slug. It rides the snapshot like the other six — a replay that fell
+    back to a live read of `registry/topics/` would compare a fresh value against
+    the artifact's own, which is the mistake `#103` already cost this factory once.
     """
     fragments: list[dict] = []
     problems: list[str] = []
@@ -412,6 +440,15 @@ def build_context(
     recorded_versions = (recorded or {}).get("skill_versions") or {}
     skill_versions: dict[str, str | None] = {}
 
+    # The topics feed (#196), reduced to the shape `resolve_lane` consumes. The
+    # LIVE path is handed the feeds `render_texts` discovered in the tree; a
+    # REPLAY reads them out of the snapshot, so neither path reaches for a file
+    # the artifacts were not built from.
+    feed_by_slug = (recorded or {}).get("topics") if recorded is not None else topics
+    topic_names_by_slug = {
+        slug: topic_names_from_feed(feed) for slug, feed in (feed_by_slug or {}).items()
+    }
+
     factories: list[dict] = []
     for fragment in fragments:
         slug = str(fragment.get("factory"))
@@ -420,7 +457,10 @@ def build_context(
             if not isinstance(lane, dict):
                 continue
             resolved = resolve_lane(
-                lane, bindings, {}, chat_id=FACTORY_CHATS.get(slug)
+                lane,
+                bindings,
+                topic_names_by_slug.get(slug) or {},
+                chat_id=FACTORY_CHATS.get(slug),
             )
             resolved["declared_announcements"] = [
                 e for e in (lane.get("announcements") or []) if isinstance(e, dict)
@@ -471,6 +511,7 @@ def build_context(
         # second read would snapshot something no artifact was built from.
         "_bindings": bindings,
         "_skill_versions": skill_versions,
+        "_topics": feed_by_slug or {},
     }
     if recorded is not None:
         # Seed the predicate cache so `run_check` answers from the snapshot and
@@ -755,10 +796,10 @@ def render_markdown(ctx: dict) -> str:
         out.append("**Lanes**")
         out.append("")
         out.append(
-            "| topic | thread | role | session | session title | status | "
-            "channel | last active | lane announcements |"
+            "| topic (declared) | observed topic | thread | role | session | "
+            "session title | status | channel | last active | lane announcements |"
         )
-        out.append("|---|---|---|---|---|---|---|---|---|")
+        out.append("|---|---|---|---|---|---|---|---|---|---|")
         for lane in entry["lanes"]:
             lane_notes = lane.get("declared_announcements") or []
             note_text = "; ".join(
@@ -768,8 +809,9 @@ def render_markdown(ctx: dict) -> str:
                 for n in lane_notes
             )
             out.append(
-                "| {} | {} | {} | `{}` | {} | {} | {} | {} | {} |".format(
+                "| {} | {} | {} | {} | `{}` | {} | {} | {} | {} | {} |".format(
                     title_text(lane.get("topic")),
+                    observed_topic(lane),
                     cell(lane.get("thread_id")),
                     cell(lane.get("role")) if lane.get("role") else "_unstated_",
                     cell(lane.get("session_id")),
@@ -891,6 +933,8 @@ def render_index(ctx: dict) -> dict:
                 "lanes": [
                     {
                         "topic": lane.get("topic"),
+                        "topic_name": lane.get("topic_name"),
+                        "topic_name_verified": bool(lane.get("topic_name_verified")),
                         "thread_id": lane.get("thread_id"),
                         "role": lane.get("role"),
                         "session_id": lane.get("session_id"),
@@ -1005,6 +1049,7 @@ def record_state(
     jobs: list[dict],
     job_homes: list[str],
     checks: dict[str, tuple[bool | None, str]],
+    topics: dict | None = None,
 ) -> dict:
     """The snapshot of every LIVE input one render consumed (#103).
 
@@ -1012,6 +1057,13 @@ def record_state(
     renderer would fall back to a live read for whatever is missing, and the
     gate would compare a fresh value against itself. The six are enumerated
     here so a reader can check the set rather than trust it.
+
+    `topics` is the SEVENTH (#196) and it is recorded for the same reason as the
+    other six: the topics feed is a file on disk, so a replay that read it afresh
+    would be comparing the tree against itself rather than against what the
+    artifacts were rendered from. It is recorded as the feed OBJECTS, not as the
+    reduced `(chat, thread) -> name` map, so a reader can see the `read_at` the
+    flag's age depends on.
 
     `fragments` are the PARSED dicts the render consumed — not a second read of
     their paths, which would snapshot values no artifact was built from. The
@@ -1043,6 +1095,7 @@ def record_state(
         "skill_versions": dict(skill_versions),
         "jobs": recorded_jobs,
         "job_homes": list(job_homes),
+        "topics": {slug: feed for slug, feed in (topics or {}).items()},
         "checks": {
             name: {"holds": holds, "evidence": evidence}
             for name, (holds, evidence) in checks.items()
@@ -1071,6 +1124,7 @@ def render_texts(
     explicit: list[str] | None = None,
     resolved_at: str | None = None,
     recorded: dict | None = None,
+    topics: dict | None = None,
 ) -> tuple[str, str, dict]:
     """Render both artifacts to STRINGS, writing nothing.
 
@@ -1079,19 +1133,29 @@ def render_texts(
     compare — mutating the artifact it is judging.
 
     With `recorded`, no live read happens at all — not the fragment store, not
-    the bindings, not the cron tables, and not the predicates (#103).
+    the bindings, not the cron tables, not the predicates, and not the topics
+    feed (#103, #196).
+
+    `topics` overrides the DISCOVERED feed, and it exists for the gates: a
+    fixture has to hand the renderer a feed without writing one into the tree.
     """
+    feed_problems: list[str] = []
     if recorded is not None:
         stamp = str(recorded.get("resolved_at") or "")
         paths = [Path(str(e.get("path") or "")) for e in recorded.get("fragments") or []]
         bindings = [b for b in (recorded.get("bindings") or []) if isinstance(b, dict)]
         binding_errors: list[str] = []
+        feeds = recorded.get("topics") or {}
     else:
         stamp = resolved_at or utc_now()
         paths = live_fragment_paths(explicit or [])
         bindings, binding_errors = all_bindings()
-    ctx, problems = build_context(paths, bindings, stamp, recorded=recorded)
-    for error in binding_errors:
+        if topics is None:
+            feeds, feed_problems = load_topic_feeds()
+        else:
+            feeds = topics
+    ctx, problems = build_context(paths, bindings, stamp, recorded=recorded, topics=feeds)
+    for error in binding_errors + feed_problems:
         if error not in problems:
             problems.append(error)
             ctx["problems"].append(error)
@@ -1139,6 +1203,7 @@ def render_all(
         jobs=ctx["jobs"],
         job_homes=ctx["job_homes"],
         checks=ctx.get("_check_cache") or {},
+        topics=ctx.get("_topics") or {},
     )
     snapshot_text = json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n"
     report = {
