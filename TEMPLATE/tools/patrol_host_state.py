@@ -5884,9 +5884,14 @@ def score_conversion_leg(
 
     IT FAILS OPEN. An absent artifact, an unreadable one, or one carrying no scorecard
     section is NOT RUN with its reason -- the leg has no predicate to read with, and a
-    finding invented from an unparsed file is worse than no finding at all. A regression
-    WITH no answering row is a FINDING, and it names the factory: a count cannot be
-    dispatched, claimed or closed (#148).
+    finding invented from an unparsed file is worse than no finding at all. The JOIN side
+    carries the same guard one level down (#472): an EMPTY row population is NOT RUN too,
+    because the leg cannot tell "no row answers this regression" from "I was handed no
+    rows" and would otherwise report the former from a ledger it never read -- before the
+    guard existed both states returned the SAME `ASSERTED` status, so a lane verifying its
+    own just-written `conversion` row had no mechanical way to tell "my row is missing"
+    from "I passed no rows". A regression WITH no answering row is a FINDING, and it names
+    the factory: a count cannot be dispatched, claimed or closed (#148).
     """
     # THE FIELD PREDICATE, not the board-intake one: `converted_from` is a detail-field
     # token read through the SHARED predicate (one field, one predicate, SKILL.md section
@@ -5988,6 +5993,50 @@ def score_conversion_leg(
             })
 
     artifact_rel = f"{SCORES_DIR_REL}/{path.name}"
+
+    # AN EMPTY ROW POPULATION IS AN INSTRUMENT FAILURE, NEVER A FINDING (#472). The join
+    # below is handed the ledger to read WITH, and a caller that hands it none -- a probe
+    # checking its own declaration, a leg wired before the ledger is loaded -- would
+    # otherwise walk ZERO rows, find nothing answering the round, and report the SAME
+    # `ASSERTED` status a real read reports: a confident finding about a ledger the leg
+    # never read. The verdict is NOT RUN, and the artifact-side counters still travel with
+    # it, because a NOT RUN arm that zeroed them would misreport what it DID manage to read
+    # (SKILL.md section 8: the population is printed; #112: "no regression" and "no
+    # artifact parsed" are the same verdict otherwise; #242: a leg that examined NOTHING
+    # must never render as one that examined the population and found it clean).
+    #
+    # THE ARM IS THE JOIN INPUT ALONE, and deliberately NOT "a populated ledger carrying no
+    # `conversion` event at all". A ledger that WAS read and carries no conversion row is a
+    # legitimate FINDING -- it is precisely the state this leg exists to report (#67, #148:
+    # a regression no row answers reads as converted and is not, the 2026-09-19 decline).
+    # Widening the arm to that state would silence the leg exactly when it has something to
+    # say, and would report "nothing read" over a ledger whose thousands of rows were in
+    # fact read -- the conflation section 8 forbids, in the INVERSE direction. `len(rows)`
+    # settles the one question the guard exists to settle, and the population stays visible
+    # either way: `conversion_rows` travels in the coverage of both arms.
+    if not rows:
+        return {
+            "name": "score-conversion",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                **coverage,
+                "factories": len(blocks),
+                "criteria_cells": cells,
+                "unmeasurable_cells": unmeasurable,
+                "regressions": [r["factory"] for r in regressions],
+                "reason": (
+                    f"the leg was handed an EMPTY row population, so the join had no "
+                    f"ledger to read an answering `converted_from={artifact_rel}` row "
+                    f"from: {artifact_rel} parsed into {len(blocks)} factory scorecard(s) "
+                    f"carrying {len(regressions)} regression(s), but ZERO row(s) were read "
+                    f"against them -- the instrument failed, the round did not convert "
+                    f"(#472)"
+                ),
+            },
+        }
+
     answered: list[str] = []
     for row in rows:
         if str(row.get("event") or "") != "conversion":

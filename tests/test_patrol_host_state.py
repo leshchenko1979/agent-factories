@@ -6725,9 +6725,24 @@ def _conversion_row(source: str, *, subject: str = "#67") -> dict:
         "subject": subject, "detail": f"converted_from={source}",
     }
 
+def _non_conversion_row() -> dict:
+    """A row that is IN the population without being a `conversion` event.
+
+    The artifact-side probes below used to pass `[]` as a stand-in population. Since #472
+    an empty row list is NOT RUN, so the stand-in must be a POPULATED list carrying no
+    `conversion` event: the join still finds nothing answering the round -- which is the
+    state those probes assert -- and the empty-population path keeps its own probe.
+    """
+    return {
+        "n": 9002, "ts": _CLOSE_TS, "event": "run", "actor": "worker",
+        "subject": "probe", "detail": "no conversion declared here",
+    }
+
 def test_the_score_conversion_leg_NAMES_each_regression_and_PRINTS_its_population() -> None:
     directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
-    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    leg = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory
+    )
     assert leg["status"] == "ASSERTED", leg
     cov = leg["coverage"]
     assert cov["artifact"] == "evidence/scores/2026-10-10.md", cov
@@ -6769,7 +6784,9 @@ def test_the_score_conversion_leg_NEVER_scores_an_unmeasurable_cell() -> None:
     # `0 (UNM)` is an EXCLUDED cell (ruling n=2747), not a zero. Scored, every round
     # would read as a regression and the leg would be ignored rather than fixed.
     directory = _scores_dir(_score_artifact(total=70, cells=["0 (UNM)", "4"]))
-    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    leg = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory
+    )
     assert leg["status"] == "ASSERTED", leg
     assert leg["coverage"]["unmeasurable_cells"] == 1, leg["coverage"]
     assert leg["coverage"]["regressions"] == [], leg["coverage"]
@@ -6783,7 +6800,9 @@ def test_the_score_conversion_leg_reads_a_FALLEN_net_total_as_a_regression() -> 
         _score_artifact(total=70, cells=["3", "3"]),
         _score_artifact(total=74, cells=["4", "4"]),
     )
-    leg = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    leg = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory
+    )
     assert leg["coverage"]["previous"] == "evidence/scores/2026-10-09.md", leg["coverage"]
     assert leg["coverage"]["regressions"] == ["Probe factory"], leg["coverage"]
     assert "net total fell 74 -> 70" in leg["problems"][0], leg["problems"]
@@ -6809,7 +6828,7 @@ def test_the_score_conversion_leg_is_WIRED_into_the_run_and_PRINTS_its_populatio
     # whose verdict no reader ever sees -- and this one falls outside the board-intake
     # arm's coverage keys, so an unhandled name is a KeyError rather than a blank line.
     directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
-    rc, out, _ = _run([], [], scores_dir=directory)
+    rc, out, _ = _run([], [_non_conversion_row()], scores_dir=directory)
     assert rc == 1, out
     assert "LEG score-conversion — ASSERTED" in out, out
     assert "evidence/scores/2026-10-10.md" in out, out
@@ -6823,6 +6842,70 @@ def test_the_score_conversion_leg_renders_its_REASON_when_it_cannot_run() -> Non
     assert rc == 0, out
     assert "LEG score-conversion — NOT RUN" in out, out
     assert "no `evidence/scores/<date>.md`" in out, out
+
+def test_the_score_conversion_leg_reads_an_EMPTY_row_population_as_NOT_RUN() -> None:
+    """#472 criteria 1-3: the verdict travels with the population it examined.
+
+    The artifact side is guarded three times (no artifact, unreadable, no scorecards); the
+    JOIN side had no equivalent, so `rows=[]` walked ZERO rows, found nothing answering the
+    round, and returned the SAME `ASSERTED` status a real read returns -- a confident
+    finding about a ledger the leg never read. That is the state that made a lane believe
+    its own just-written `conversion` row had not landed and drove a second round of
+    diagnosis while the row was present and correct. #242: a leg that examined NOTHING must
+    never render as one that examined the population and found it clean.
+
+    HERMETIC: every arm is built from rows this fixture supplies, never from a live ledger
+    row, because a control keyed on a mutable artifact stops discriminating the moment that
+    artifact changes (#467 criterion 2).
+    """
+    directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
+
+    # ARM 1 -- an EMPTY population is NOT RUN with NO problem list, and the artifact-side
+    # counters still travel with it so the read is visible rather than absent.
+    empty = RUNNER.score_conversion_leg([], read_at="probe", scores_dir=directory)
+    assert empty["status"] == "NOT RUN", empty
+    assert empty["problems"] == [], empty["problems"]
+    reason = empty["coverage"]["reason"]
+    assert "EMPTY row population" in reason, reason
+    assert "evidence/scores/2026-10-10.md" in reason, reason
+    # ... it still states WHAT it parsed before it ran out of ledger: a NOT RUN arm that
+    # zeroed these would misreport the artifact side it did read.
+    assert empty["coverage"]["factories"] == 1, empty["coverage"]
+    assert empty["coverage"]["regressions"] == ["Probe factory"], empty["coverage"]
+    assert empty["coverage"]["conversion_rows"] == 0, empty["coverage"]
+    assert empty["coverage"]["answered"] == [], empty["coverage"]
+
+    # ARM 2 -- the real arm is UNCHANGED. A populated population whose row names THIS
+    # artifact answers the round ...
+    answered = RUNNER.score_conversion_leg(
+        [_conversion_row("evidence/scores/2026-10-10.md")], read_at="probe",
+        scores_dir=directory,
+    )
+    assert answered["status"] == "ASSERTED", answered
+    assert answered["problems"] == [], answered["problems"]
+    assert answered["coverage"]["answered"] == ["#67"], answered["coverage"]
+    assert answered["coverage"]["unanswered"] == [], answered["coverage"]
+
+    # ... and a POPULATED population carrying no conversion event stays a FINDING, never a
+    # NOT RUN. The ledger WAS read and nothing in it answers the round; this is the arm that
+    # keeps the guard narrow (#67, #148: a regression no row answers reads as converted and
+    # is not). Widening the guard to this state would silence the leg exactly when it has
+    # something to say.
+    unanswered = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory,
+    )
+    assert unanswered["status"] == "ASSERTED", unanswered
+    assert len(unanswered["problems"]) == 1, unanswered["problems"]
+    assert "Probe factory" in unanswered["problems"][0], unanswered["problems"]
+    assert unanswered["coverage"]["conversion_rows"] == 0, unanswered["coverage"]
+
+    # ARM 3 -- the RUN's own verdict, not just the function's: an empty population reads
+    # NOT RUN, contributes NO problem, and the patrol exits 0 rather than reporting a
+    # finding it cannot support.
+    rc, out, _ = _run([], [], scores_dir=directory)
+    assert rc == 0, out
+    assert "LEG score-conversion — NOT RUN" in out, out
+    assert "EMPTY row population" in out, out
 
 def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> None:
     """#465 criterion 1: the OWED total travels with the addressee LANE's own drain
