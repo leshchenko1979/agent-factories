@@ -2794,7 +2794,7 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
 
     # 87. the register's intake clause and its metric leg (board #271, ruled by HQ
     #     2026-10-02T18:21:56Z). The ruling's leg 3 asks for exactly this: a gate asserting
-    #     the clause's presence in the instrument's law and the pointer in §11. The metric
+    #     the clause's presence in the instrument's law and the pointer in SKILL.md §State — every surface has one writer. The metric
     #     itself is PRINTED, never gated -- its predicate is a pattern set over free text,
     #     which a gate cannot judge -- so this gate proves the metric CAN SEE (on a fixture
     #     reproducing the measured burst, q25's `cli` recording excluded by `answered_via`)

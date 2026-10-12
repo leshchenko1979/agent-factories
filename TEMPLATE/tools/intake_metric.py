@@ -87,7 +87,7 @@ def declines_as_internal(text: str | None) -> str | None:
 def resolve_store(explicit: str | None = None) -> tuple[Path | None, str]:
     """Resolve the register store, or return (None, why not).
 
-    **Resolved, never pinned** — the instrument's own §5.1 forbids a clause that fixes the
+    **Resolved, never pinned** — the instrument's own open-questions.md §5.1 forbids a clause that fixes the
     path, because a vendored copy and the executing copy are not interchangeable. So the
     order is: an explicit override, then `OC_QUESTIONS_STORE`, then a glob over the
     profile homes. Two-or-more matches are NOT a hard exit here (that rule belongs to the

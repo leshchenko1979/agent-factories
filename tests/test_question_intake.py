@@ -8,14 +8,14 @@ had to decline the question as internal — and every one of them inflated the h
 metric, which `skills/meta-factory/state.md` defines as the count of open questions.
 
 The ruling's leg 3: *"A gate asserts the clause's presence in the instrument's law and the
-pointer in §11."* This gate is that, plus the metric's own probes — because a printed number
+pointer in the law's State section."* This gate is that, plus the metric's own probes — because a printed number
 nobody can drive is a number nobody can trust.
 
   A. THE CLAUSE, in the instrument's own law. `docs/instruments/open-questions.md` §3 carries
      the four admissible inputs and the decisive negative (a lane that cannot name one decides
      it itself and does NOT register it), and the doc is byte-identical to its TEMPLATE twin.
-  B. THE POINTER, in §11. The surface table names the instrument's law AND the intake filter —
-     §11 keeps a pointer, never a second copy of the clause (§11's own split).
+  B. THE POINTER, in SKILL.md §State — every surface has one writer. The surface table names the instrument's law AND the intake
+     filter — that section keeps a pointer, never a second copy of the clause (the law's own split).
   C. THE METRIC CAN SEE, on a fixture. Driven with the measured burst: M counts the OWNER's
      answers, N the declines among them, and the LANE's own recording (q25, `answered_via:
      cli`) is NOT counted — a bare text scan reads that decision record as a fifth decline,
@@ -24,7 +24,7 @@ nobody can drive is a number nobody can trust.
   D. THE WIRING. The measurement round imports the ONE reader (two implementations drift, and
      the drift is silent) and prints the line.
 
-SHAPE, never a hash (§5.5): the clauses are matched by their stable tokens, and the missing
+SHAPE, never a hash (open-questions.md §5.5): the clauses are matched by their stable tokens, and the missing
 one is named. `skills/meta-factory/SKILL.md` is a ROOT-only law file -- a bootstrapped factory
 tree has no `skills/` directory -- so leg B SKIPS by name there rather than reddening a tree
 that legitimately has no such file (#68: a leg that reds correct data teaches lanes to ignore
@@ -47,6 +47,22 @@ SKILL = "skills/meta-factory/SKILL.md"
 READER = "tools/intake_metric.py"
 TEMPLATE_READER = "TEMPLATE/tools/intake_metric.py"
 AUDIT = "tools/audit.py"
+
+# The pair legs are a property of the ORIGIN tree alone. A tree with no nested `TEMPLATE/` is
+# either the shipped template itself — the copy runs with cwd=TEMPLATE, so REPO IS that
+# directory — or a bootstrapped factory, which receives the template's CONTENTS and keeps no
+# second copy of them. Comparing a tree against itself is not a check, so those legs SKIP BY
+# NAME there rather than red a tree that legitimately has no twin. #68's class: a gate that
+# reds correct data teaches lanes to ignore red.
+# STATED SKIP: TEMPLATE/
+PAIR_SKIP_NOTE = (
+    "pair: SKIPPED — this tree carries no nested TEMPLATE/ (it IS the shipped template, or a "
+    "bootstrapped factory), so there is no twin to compare against"
+)
+
+def origin_tree(repo: Path) -> bool:
+    """True where `repo` is the origin tree — the one that carries the shipped pairs."""
+    return (repo / "TEMPLATE").is_dir()
 
 # The clause's SHAPE: the four admissible owner-only inputs, each a stable phrase, plus the
 # decisive negative. Matched case-insensitively on the instrument's own text; a missing token
@@ -129,18 +145,21 @@ def leg_a_clause(repo: Path) -> tuple[list[str], list[str]]:
         problems.append(f"{INSTRUMENT} never names the metric leg's marker {METRIC_MARKER!r}")
     prints.append(f"clause: {len(INTAKE_TOKENS) - len(missing)}/{len(INTAKE_TOKENS)} token(s) present in {INSTRUMENT}")
 
-    twin = repo / TEMPLATE_INSTRUMENT
-    if not twin.is_file():
-        problems.append(f"{TEMPLATE_INSTRUMENT} is absent (the doc is a shipped pair)")
-    elif twin.read_bytes() != doc.read_bytes():
-        problems.append(f"{TEMPLATE_INSTRUMENT} is NOT byte-identical to {INSTRUMENT}")
+    if not origin_tree(repo):
+        prints.append(PAIR_SKIP_NOTE)
     else:
-        prints.append(f"pair: {INSTRUMENT} == {TEMPLATE_INSTRUMENT}")
+        twin = repo / TEMPLATE_INSTRUMENT
+        if not twin.is_file():
+            problems.append(f"{TEMPLATE_INSTRUMENT} is absent (the doc is a shipped pair)")
+        elif twin.read_bytes() != doc.read_bytes():
+            problems.append(f"{TEMPLATE_INSTRUMENT} is NOT byte-identical to {INSTRUMENT}")
+        else:
+            prints.append(f"pair: {INSTRUMENT} == {TEMPLATE_INSTRUMENT}")
     return problems, prints
 
 
 def leg_b_pointer(repo: Path) -> tuple[list[str], list[str], str]:
-    """The §11 pointer. SKIPS where the root-only law file is absent."""
+    """The SKILL.md §State — every surface has one writer pointer. SKIPS where the root-only law file is absent."""
     skill = repo / SKILL
     if not skill.is_file():
         return [], [], f"{SKILL} is not present in this tree (root-only law file)"
@@ -155,16 +174,16 @@ def leg_b_pointer(repo: Path) -> tuple[list[str], list[str], str]:
     # exists to catch -- this file ships to member factories that have no such binary.
     rows = [ln for ln in text.splitlines() if "questions register" in ln]
     if not rows:
-        problems.append(f"§11's surface table carries no row for the register in {SKILL}")
+        problems.append(f"SKILL.md §State — every surface has one writer: no row for the register in {SKILL}")
     else:
         row = rows[0]
         missing = [tok for tok in INTAKE_POINTER_TOKENS if tok.lower() not in row.lower()]
         if missing:
             problems.append(
-                "§11's register row does not carry the pointer's shape — missing: "
+                "SKILL.md §State — every surface has one writer: the register row does not carry the pointer's shape — missing: "
                 + "; ".join(repr(t) for t in missing)
             )
-    return problems, [f"pointer: §11 names the register and its law ({len(rows)} row(s))"], ""
+    return problems, [f"pointer: SKILL.md §State — every surface has one writer names the register and its law ({len(rows)} row(s))"], ""
 
 
 def leg_c_metric(repo: Path) -> tuple[list[str], list[str]]:
@@ -224,13 +243,16 @@ def leg_d_wiring(repo: Path) -> tuple[list[str], list[str]]:
     reader = repo / READER
     if not reader.is_file():
         return [f"{READER} is absent — the metric has no reader"], prints
-    twin = repo / TEMPLATE_READER
-    if not twin.is_file():
-        problems.append(f"{TEMPLATE_READER} is absent (the reader is a shipped pair)")
-    elif twin.read_bytes() != reader.read_bytes():
-        problems.append(f"{TEMPLATE_READER} is NOT byte-identical to {READER}")
+    if not origin_tree(repo):
+        prints.append(PAIR_SKIP_NOTE)
     else:
-        prints.append(f"pair: {READER} == {TEMPLATE_READER}")
+        twin = repo / TEMPLATE_READER
+        if not twin.is_file():
+            problems.append(f"{TEMPLATE_READER} is absent (the reader is a shipped pair)")
+        elif twin.read_bytes() != reader.read_bytes():
+            problems.append(f"{TEMPLATE_READER} is NOT byte-identical to {READER}")
+        else:
+            prints.append(f"pair: {READER} == {TEMPLATE_READER}")
 
     audit = repo / AUDIT
     if not audit.is_file():
@@ -274,7 +296,7 @@ def main() -> int:
     if skip:
         print(f"question-intake gate: clean — 1 leg SKIPPED: {skip}")
     else:
-        print("question-intake gate: clean — the intake clause is in the instrument's law, §11 points at it, and the metric can see")
+        print("question-intake gate: clean — the intake clause is in the instrument's law, SKILL.md §State — every surface has one writer points at it, and the metric can see")
     return 0
 
 

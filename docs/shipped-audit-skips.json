@@ -99,6 +99,11 @@
       "artifact": "the declared routing surfaces (factory data; BOOTSTRAP-created)",
       "marker": "# STATED SKIP: registry/state.json",
       "reason": "the gate derives its subject root from its OWN file's location, so the shipped copy (`TEMPLATE/tests/…`, which the shipped audit runs with `cwd=TEMPLATE`) reads `TEMPLATE/` as its REPO and finds NONE of its declared surfaces — all eight are live surfaces a BOOTSTRAP creates in a factory. The population is empty rather than clean, which is a property of the DEPTH, not of the tree's routing; unstated it surfaced as an unaccounted verdict in `tests/test_shipped_audit_runs.py` (#459). A tree carrying SOME of the surfaces still reds on the missing ones (#322's class)"
+    },
+    "tests/test_question_intake.py": {
+      "artifact": "the shipped pairs, resolved from a tree that carries no nested TEMPLATE/ of its own",
+      "marker": "# STATED SKIP: TEMPLATE/",
+      "reason": "both pair legs compare a shipped file against its twin under a nested TEMPLATE/, and the gate derives that root from its OWN file's location — so the shipped copy (`TEMPLATE/tests/…`, which the shipped audit runs with `cwd=TEMPLATE`) reads `TEMPLATE/` as its REPO and its twins resolve to `TEMPLATE/TEMPLATE/…`, which no tree carries. A tree with no nested TEMPLATE/ is either the shipped template itself or a bootstrapped factory, which receives the template's CONTENTS and keeps no second copy of them, so there is no twin to compare and the legs SKIP BY NAME rather than red a tree that legitimately has none (#68). The clause, the pointer and the metric legs still RUN there: the shipped tree carries the instrument's law and the reader, and the pointer leg skips separately where the root-only `skills/meta-factory/SKILL.md` is absent. The class is #459's"
     }
   }
 }
