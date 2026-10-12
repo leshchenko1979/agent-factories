@@ -131,19 +131,19 @@
         "profile"
       ],
       "since": "2026-09-26",
-      "review_by": "2026-10-10",
+      "review_by": "2026-10-26",
       "evidence": "pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM) and last reboot/shutdown records, both read 2026-09-29 11:38 MSK; hw.model Mac16,10. Prior evidence (2026-09-26): six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493."
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Before reading `journalctl --user -u opencrabs-ops`, read the INSTRUMENT: from a bare non-login shell it answers '-- No entries --' unless XDG_RUNTIME_DIR=/run/user/0 is set, and the retained window is short \u2014 measured 2026-10-11, the window began 2026-10-10T20:18:10Z while the unit's own last start was 18:42:30Z, so the restart sat OUTSIDE retention and the unit filter returned 2 rows, neither a Started/Stopped/code=dumped line. Read `systemctl --user show opencrabs-ops -p NRestarts -p ActiveEnterTimestamp` and `journalctl --user --list-boots` FIRST; only if the window covers the restart is a zero a verdict.",
+      "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Before reading `journalctl --user -u opencrabs-ops`, read the INSTRUMENT: root's user journal is VOLATILE and retains only ~10 h, and this unit's rows are lifecycle events that age out within hours of its start, so a window that does not cover the restart returns an EMPTY read that is indistinguishable from a clean one. Read `systemctl --user show opencrabs-ops -p NRestarts -p ActiveEnterTimestamp` and `journalctl --user --list-boots` FIRST, and prove the instrument live with a POSITIVE CONTROL (`journalctl --user -u oc-questions-push.service` must return rows); only if the window covers the restart is a zero a verdict. Re-measured 2026-10-12: window began 2026-10-11T19:49:09Z against ActiveEnterTimestamp 2026-10-10 18:42:30Z (daemon active, up 1d11h), NRestarts=1, and `-u opencrabs-ops` returned '-- No entries --'. XDG_RUNTIME_DIR is NOT the discriminator: a unit WITH rows returned 8 rows identically with the variable set, with it unset, and under `env -i`. The daemon's own dated log ~/.opencrabs/profiles/ops/logs/opencrabs.YYYY-MM-DD is on disk and outlives journald.",
       "severity": "warning",
       "affects": [
         "profile"
       ],
       "scope": "profile",
       "evidence": "journalctl --user -u opencrabs-ops, 2026-10-01 00:00Z-06:11Z: 4 Started events, 0 code=dumped. Caps read 2026-10-01T06:34Z: MemoryHigh=MemoryMax=2147483648, MemorySwapMax=2684354560 (drop-ins 10-oompolicy, 20-memory, 30-cores, 40-killmode-reaper.conf). The 1536 MiB pair this entry originally carried sat below the daemon's real footprint and was raised on 2026-09-30/10-01 (ledger n=855/856), after four kills 19:25:11Z / 20:27:42Z / 20:50:09Z / 21:28:14Z. Crash class: leshchenko1979/opencrabs#638. The earliest read of the new value I hold is 2026-10-01, so the change is not dated earlier than that.",
-      "review_by": "2026-10-11",
+      "review_by": "2026-10-26",
       "since": "2026-09-27T06:13:19Z"
     },
     {
@@ -156,7 +156,7 @@
       "scope": "profile",
       "since": "2026-09-27",
       "evidence": "Ledger n=611 (two layers: the requirement origin commit d6c9d55 is absent from this repo, and SKILL.md:29 declares the issue board to be the local ledger). Independently raised as a false regression by two lanes before it was declared.",
-      "review_by": "2026-10-12"
+      "review_by": "2026-10-26"
     },
     {
       "id": "bothelp-relay-load-bearing-on-vpn",
@@ -195,7 +195,7 @@
     },
     {
       "id": "opencrabs-home-unmanaged-growth",
-      "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-11: /root/.opencrabs 16G; profiles/ops 11G \u2014 opencrabs.db 3.1G, backups 3.0G (including a 3.0G pre-migration-61 copy dated 2026-10-10T02:36Z, unmanaged), memory 2.3G of which memory.db 2.0G, dev repo 1.2G of which .git/objects 1.2G, logs 848M. The pile is still growing: the memory store went 885M -> 2.3G in two days.",
+      "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-12: /root/.opencrabs 15G (du -sh), profiles/ops 9.4G \u2014 opencrabs.db 3.0G, backups 3.0G (TWO hardlinked names of ONE inode: a 3.0G pre-migration-61 copy dated 2026-10-10T02:36Z; du counts it once, `ls` double-counts it), opencrabs-dev 1.2G, logs 885M, memory 917M (memory.db 0.54 GB). The memory store is NOT monotonic: it measured 2.3G (memory.db 2.0G) on 2026-10-11 and 917M one day later, so a spike there is not by itself evidence of runaway growth. The durable growth is the dev-state repo's git objects.",
       "severity": "info",
       "since": "2026-10-09",
       "affects": [
@@ -237,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-11T06:15:17Z",
+  "attested_at": "2026-10-12T06:11:34Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

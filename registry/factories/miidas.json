@@ -156,14 +156,14 @@
     },
     {
       "id": "agents-old-degraded",
-      "text": "agents-old is DEGRADED and its live census could not be re-verified: its sshd does not answer (SSH stalls at banner exchange), and the public surface miidas.l1979.ru times out (HTTP GET 000 after 20s; TLS handshake OK).",
+      "text": "The MIIDAS deploy host agents-old (89.125.120.5:52676) is DEGRADED \u2014 TCP accepts but sshd never sends a banner (SSH stalls at banner exchange) and the public surface miidas.l1979.ru times out (000 after 20s, TLS OK) \u2014 so deploys, slot ops and the claim surface are blocked and slot miidas-linden-6c4a is unreachable; its live census cannot be re-verified. Recurrence of infra agents-old-host-degraded (n=372, cause unestablished); disposition registered as infra q25; agents-old has ZERO Gatus endpoints, so it wedges silently.",
       "severity": "warning",
       "affects": [
         "miidas",
         "profile"
       ],
       "scope": "profile",
-      "evidence": "SSH stalls at banner exchange ~2026-10-11T06:0xZ; public surface miidas.l1979.ru HTTP GET times out, 000 after 20s, TLS handshake OK. Measured 2026-10-11 (miidas HQ re-attestation).",
+      "evidence": "Measured 2026-10-12 by the miidas HQ lane: ssh agents-old -> 'Connection timed out during banner exchange'; ping 3/3 0% loss; miidas.l1979.ru HTTP 000 at 20.0s. Recurrence: infra ledger n=1249; disposition: infra q25; monitoring gap: infra n=1250.",
       "since": "2026-10-11"
     }
   ],
@@ -200,7 +200,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-11T06:25:18Z",
+  "attested_at": "2026-10-12T06:06:58Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

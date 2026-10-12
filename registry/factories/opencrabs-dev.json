@@ -74,11 +74,11 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\"; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 -- NOT notify.rs:172, where it no longer lives (the file moved); interrupt resolves to DeliveryMode::Interrupt at :189 (mode string) and :201 (interrupt==Some(true)). RE-VERIFIED 2026-10-07T06:55Z against the CURRENT deployed sha 3ea3f6195d6b9dcf31b58a1d8dc5f5747d5aac22: the Err is present at :206 in git show 3ea3f619:src/brain/agent/service/notify_policy.rs, and code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of that sha (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-05 re-verification, which cited b7470b562780ce0afd83d76d35b789647c78bd3c as the then-deployed sha -- b7470b5 remains an ancestor of 3ea3f619."
+      "evidence": "RE-VERIFIED 2026-10-12T06:05Z against the CURRENT deployed sha 81a5edd59540e170ec137c0e65768632d497416a (deployed.sha; swapped 2026-10-10T07:25:57Z, auth=auto-swap): git show 81a5edd5:src/brain/agent/service/notify_policy.rs carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 81a5edd5 (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-07 re-verification against 3ea3f619, which remains an ancestor of it."
     },
     {
       "id": "commit-signing-live-identity-retired",
-      "text": "Commit signing is now ON box-wide: /root/.gitconfig carries gpg.format=ssh, commit.gpgsign=true, user.signingkey=/root/.ssh/id_ed25519.pub, so every repo on this box produces signed commits. /root/opencrabs additionally changed its committer identity from the retired R2-D2 (HQ) <hq@l1979.ru> to leshchenko1979@users.noreply.github.com, because a valid signature under the old address reads Unverified (reason no_user) \u2014 GitHub cannot link that address to an account. The other factories' repos use the global leshchenko@gmail.com, which IS account-linked, so their new commits read Verified.",
+      "text": "Commit signing is now ON box-wide: /root/.gitconfig carries gpg.format=ssh, commit.gpgsign=true, user.signingkey=/root/.ssh/id_ed25519.pub, so every repo on this box produces signed commits. /root/opencrabs additionally changed its committer ADDRESS from the retired hq@l1979.ru to leshchenko1979@users.noreply.github.com, because a valid signature under the old address reads Unverified (reason no_user) \u2014 GitHub cannot link that address to an account. The committer NAME is unchanged and is still `R2-D2 (HQ)` (measured 2026-10-12); only the address moved. The other factories' repos use the global leshchenko@gmail.com, which IS account-linked, so their new commits read Verified.",
       "severity": "warning",
       "scope": "profile",
       "affects": [
@@ -327,7 +327,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-11T06:11:04Z",
+  "attested_at": "2026-10-12T06:09:35Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

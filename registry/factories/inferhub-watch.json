@@ -40,7 +40,7 @@
     {
       "name": "inferhub-daily-report",
       "audience": "owner",
-      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * * (Europe/Moscow), enabled \u2014 THIN TRIGGER since 2026-10-05: deliver_to is NULL and the job runs exactly ONE bash command (`opencrabs -p ops session notify 359fe71b-c7a1-420b-b856-acfb49939a7b --text \u2026`), so the report order travels in the notify payload and the cron session 31b2aefe-2e5b-4396-91e7-2ca0077e81c5 (NO session_bindings row) renders nothing itself. AMENDED 2026-10-07: the prior text claimed `deliver_to session:359fe71b-\u2026` and `mode turn-end` \u2014 the live row's deliver_to is NULL (read this turn); the HQ lane still receives the card, via the payload's own notify call. A LANE RE-POST IS OWED each day (thread-2 cards 3479 \u2192 5017 \u2192 5095).",
+      "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * * (Europe/Moscow), enabled, deliver_to NONE - AMENDED 2026-10-12 (live cron read this turn: `Deliver: none`), so it no longer delivers to session 359fe71b; the daily card reaches the owner through the CLI-relayed wake into the HQ lane, whose reply auto-delivers to topic 2 (this lane is channel-bound, so no separate re-post is owed). History kept: 'its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg)'; 2026-10-02 measurement: card rendered into topic 2 as msg 4790 with a '(truncated)' marker (#490 head+tail elision).",
       "cadence": "daily"
     },
     {
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-11T06:08:43Z",
+  "attested_at": "2026-10-12T06:09:51Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

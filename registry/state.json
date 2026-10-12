@@ -1,9 +1,9 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-11T06:27:14Z",
+  "resolved_at": "2026-10-12T06:14:46Z",
   "fragments": [
     {
-      "path": "/tmp/wt-attest-20261011/registry/factories/ai-antispam.json",
+      "path": "/tmp/wt-attest-20261012/registry/factories/ai-antispam.json",
       "data": {
         "factory": "ai-antispam",
         "display_name": "ai-antispam",
@@ -210,7 +210,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-11T06:08:31Z",
+        "attested_at": "2026-10-12T06:04:03Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -242,7 +242,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261011/registry/factories/inferhub-watch.json",
+      "path": "/tmp/wt-attest-20261012/registry/factories/inferhub-watch.json",
       "data": {
         "factory": "inferhub-watch",
         "display_name": "Inferhub watch",
@@ -285,7 +285,7 @@
           {
             "name": "inferhub-daily-report",
             "audience": "owner",
-            "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * * (Europe/Moscow), enabled — THIN TRIGGER since 2026-10-05: deliver_to is NULL and the job runs exactly ONE bash command (`opencrabs -p ops session notify 359fe71b-c7a1-420b-b856-acfb49939a7b --text …`), so the report order travels in the notify payload and the cron session 31b2aefe-2e5b-4396-91e7-2ca0077e81c5 (NO session_bindings row) renders nothing itself. AMENDED 2026-10-07: the prior text claimed `deliver_to session:359fe71b-…` and `mode turn-end` — the live row's deliver_to is NULL (read this turn); the HQ lane still receives the card, via the payload's own notify call. A LANE RE-POST IS OWED each day (thread-2 cards 3479 → 5017 → 5095).",
+            "entry": "cron 0120d22f-9974-4f81-a687-e1c152141bea, expr 0 8 * * * (Europe/Moscow), enabled, deliver_to NONE - AMENDED 2026-10-12 (live cron read this turn: `Deliver: none`), so it no longer delivers to session 359fe71b; the daily card reaches the owner through the CLI-relayed wake into the HQ lane, whose reply auto-delivers to topic 2 (this lane is channel-bound, so no separate re-post is owed). History kept: 'its body ALSO renders into the bound topic on its own (the 1.0.105 echo leg)'; 2026-10-02 measurement: card rendered into topic 2 as msg 4790 with a '(truncated)' marker (#490 head+tail elision).",
             "cadence": "daily"
           },
           {
@@ -374,7 +374,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-11T06:08:43Z",
+        "attested_at": "2026-10-12T06:09:51Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -400,7 +400,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261011/registry/factories/infra-factory.json",
+      "path": "/tmp/wt-attest-20261012/registry/factories/infra-factory.json",
       "data": {
         "factory": "infra-factory",
         "display_name": "Infra Factory",
@@ -534,19 +534,19 @@
               "profile"
             ],
             "since": "2026-09-26",
-            "review_by": "2026-10-10",
+            "review_by": "2026-10-26",
             "evidence": "pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM) and last reboot/shutdown records, both read 2026-09-29 11:38 MSK; hw.model Mac16,10. Prior evidence (2026-09-26): six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493."
           },
           {
             "id": "ops-daemon-dies-at-cgroup-cap",
-            "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Before reading `journalctl --user -u opencrabs-ops`, read the INSTRUMENT: from a bare non-login shell it answers '-- No entries --' unless XDG_RUNTIME_DIR=/run/user/0 is set, and the retained window is short — measured 2026-10-11, the window began 2026-10-10T20:18:10Z while the unit's own last start was 18:42:30Z, so the restart sat OUTSIDE retention and the unit filter returned 2 rows, neither a Started/Stopped/code=dumped line. Read `systemctl --user show opencrabs-ops -p NRestarts -p ActiveEnterTimestamp` and `journalctl --user --list-boots` FIRST; only if the window covers the restart is a zero a verdict.",
+            "text": "An unanswered notify to an ops-profile lane may be a re-push after ANY daemon restart, not a lane declining. The ops daemon restarts constantly, and every restart opens a boot-drain window that re-pushes parked rows, so a re-push is the COMMON case and a crash the minority one. Count restarts as STARTED events; a grep for 'Started|Stopped' returns their union and reads as roughly double the true count. Before reading `journalctl --user -u opencrabs-ops`, read the INSTRUMENT: root's user journal is VOLATILE and retains only ~10 h, and this unit's rows are lifecycle events that age out within hours of its start, so a window that does not cover the restart returns an EMPTY read that is indistinguishable from a clean one. Read `systemctl --user show opencrabs-ops -p NRestarts -p ActiveEnterTimestamp` and `journalctl --user --list-boots` FIRST, and prove the instrument live with a POSITIVE CONTROL (`journalctl --user -u oc-questions-push.service` must return rows); only if the window covers the restart is a zero a verdict. Re-measured 2026-10-12: window began 2026-10-11T19:49:09Z against ActiveEnterTimestamp 2026-10-10 18:42:30Z (daemon active, up 1d11h), NRestarts=1, and `-u opencrabs-ops` returned '-- No entries --'. XDG_RUNTIME_DIR is NOT the discriminator: a unit WITH rows returned 8 rows identically with the variable set, with it unset, and under `env -i`. The daemon's own dated log ~/.opencrabs/profiles/ops/logs/opencrabs.YYYY-MM-DD is on disk and outlives journald.",
             "severity": "warning",
             "affects": [
               "profile"
             ],
             "scope": "profile",
             "evidence": "journalctl --user -u opencrabs-ops, 2026-10-01 00:00Z-06:11Z: 4 Started events, 0 code=dumped. Caps read 2026-10-01T06:34Z: MemoryHigh=MemoryMax=2147483648, MemorySwapMax=2684354560 (drop-ins 10-oompolicy, 20-memory, 30-cores, 40-killmode-reaper.conf). The 1536 MiB pair this entry originally carried sat below the daemon's real footprint and was raised on 2026-09-30/10-01 (ledger n=855/856), after four kills 19:25:11Z / 20:27:42Z / 20:50:09Z / 21:28:14Z. Crash class: leshchenko1979/opencrabs#638. The earliest read of the new value I hold is 2026-10-01, so the change is not dated earlier than that.",
-            "review_by": "2026-10-11",
+            "review_by": "2026-10-26",
             "since": "2026-09-27T06:13:19Z"
           },
           {
@@ -559,7 +559,7 @@
             "scope": "profile",
             "since": "2026-09-27",
             "evidence": "Ledger n=611 (two layers: the requirement origin commit d6c9d55 is absent from this repo, and SKILL.md:29 declares the issue board to be the local ledger). Independently raised as a false regression by two lanes before it was declared.",
-            "review_by": "2026-10-12"
+            "review_by": "2026-10-26"
           },
           {
             "id": "bothelp-relay-load-bearing-on-vpn",
@@ -598,7 +598,7 @@
           },
           {
             "id": "opencrabs-home-unmanaged-growth",
-            "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-11: /root/.opencrabs 16G; profiles/ops 11G — opencrabs.db 3.1G, backups 3.0G (including a 3.0G pre-migration-61 copy dated 2026-10-10T02:36Z, unmanaged), memory 2.3G of which memory.db 2.0G, dev repo 1.2G of which .git/objects 1.2G, logs 848M. The pile is still growing: the memory store went 885M -> 2.3G in two days.",
+            "text": "On agents, /root/.opencrabs accumulates with NO reaper: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy never touches a profile home, and the ops profile's dev-state repo (/root/.opencrabs/profiles/ops/opencrabs-dev) auto-commits and needs periodic git gc. Re-measured 2026-10-12: /root/.opencrabs 15G (du -sh), profiles/ops 9.4G — opencrabs.db 3.0G, backups 3.0G (TWO hardlinked names of ONE inode: a 3.0G pre-migration-61 copy dated 2026-10-10T02:36Z; du counts it once, `ls` double-counts it), opencrabs-dev 1.2G, logs 885M, memory 917M (memory.db 0.54 GB). The memory store is NOT monotonic: it measured 2.3G (memory.db 2.0G) on 2026-10-11 and 917M one day later, so a spike there is not by itself evidence of runaway growth. The durable growth is the dev-state repo's git objects.",
             "severity": "info",
             "since": "2026-10-09",
             "affects": [
@@ -640,7 +640,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-11T06:15:17Z",
+        "attested_at": "2026-10-12T06:11:34Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -666,7 +666,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261011/registry/factories/meta-factory.json",
+      "path": "/tmp/wt-attest-20261012/registry/factories/meta-factory.json",
       "data": {
         "factory": "meta-factory",
         "display_name": "Factories",
@@ -862,7 +862,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-11T06:15:06Z",
+        "attested_at": "2026-10-12T06:04:07Z",
         "instruments": {
           "ledger": {
             "state": "adopted",
@@ -881,7 +881,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261011/registry/factories/miidas.json",
+      "path": "/tmp/wt-attest-20261012/registry/factories/miidas.json",
       "data": {
         "factory": "miidas",
         "display_name": "Miidas Factory",
@@ -1040,14 +1040,14 @@
           },
           {
             "id": "agents-old-degraded",
-            "text": "agents-old is DEGRADED and its live census could not be re-verified: its sshd does not answer (SSH stalls at banner exchange), and the public surface miidas.l1979.ru times out (HTTP GET 000 after 20s; TLS handshake OK).",
+            "text": "The MIIDAS deploy host agents-old (89.125.120.5:52676) is DEGRADED — TCP accepts but sshd never sends a banner (SSH stalls at banner exchange) and the public surface miidas.l1979.ru times out (000 after 20s, TLS OK) — so deploys, slot ops and the claim surface are blocked and slot miidas-linden-6c4a is unreachable; its live census cannot be re-verified. Recurrence of infra agents-old-host-degraded (n=372, cause unestablished); disposition registered as infra q25; agents-old has ZERO Gatus endpoints, so it wedges silently.",
             "severity": "warning",
             "affects": [
               "miidas",
               "profile"
             ],
             "scope": "profile",
-            "evidence": "SSH stalls at banner exchange ~2026-10-11T06:0xZ; public surface miidas.l1979.ru HTTP GET times out, 000 after 20s, TLS handshake OK. Measured 2026-10-11 (miidas HQ re-attestation).",
+            "evidence": "Measured 2026-10-12 by the miidas HQ lane: ssh agents-old -> 'Connection timed out during banner exchange'; ping 3/3 0% loss; miidas.l1979.ru HTTP 000 at 20.0s. Recurrence: infra ledger n=1249; disposition: infra q25; monitoring gap: infra n=1250.",
             "since": "2026-10-11"
           }
         ],
@@ -1084,7 +1084,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-11T06:25:18Z",
+        "attested_at": "2026-10-12T06:06:58Z",
         "instruments": {
           "ledger": {
             "state": "deferred",
@@ -1103,7 +1103,7 @@
       }
     },
     {
-      "path": "/tmp/wt-attest-20261011/registry/factories/opencrabs-dev.json",
+      "path": "/tmp/wt-attest-20261012/registry/factories/opencrabs-dev.json",
       "data": {
         "factory": "opencrabs-dev",
         "display_name": "Opencrabs Dev Factory",
@@ -1180,11 +1180,11 @@
             ],
             "since": "2026-09-19",
             "review_by": "2026-12-19",
-            "evidence": "fork issues #373 ('now' retired) and #393 (interrupt = urgent tier); src/brain/agent/service/notify_policy.rs:206 returns Err for mode=\"now\"; the enum is exactly {TurnEnd, Interrupt, Quiet{quiet_for,max_delay}} at :29 -- NOT notify.rs:172, where it no longer lives (the file moved); interrupt resolves to DeliveryMode::Interrupt at :189 (mode string) and :201 (interrupt==Some(true)). RE-VERIFIED 2026-10-07T06:55Z against the CURRENT deployed sha 3ea3f6195d6b9dcf31b58a1d8dc5f5747d5aac22: the Err is present at :206 in git show 3ea3f619:src/brain/agent/service/notify_policy.rs, and code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of that sha (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-05 re-verification, which cited b7470b562780ce0afd83d76d35b789647c78bd3c as the then-deployed sha -- b7470b5 remains an ancestor of 3ea3f619."
+            "evidence": "RE-VERIFIED 2026-10-12T06:05Z against the CURRENT deployed sha 81a5edd59540e170ec137c0e65768632d497416a (deployed.sha; swapped 2026-10-10T07:25:57Z, auth=auto-swap): git show 81a5edd5:src/brain/agent/service/notify_policy.rs carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 81a5edd5 (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-07 re-verification against 3ea3f619, which remains an ancestor of it."
           },
           {
             "id": "commit-signing-live-identity-retired",
-            "text": "Commit signing is now ON box-wide: /root/.gitconfig carries gpg.format=ssh, commit.gpgsign=true, user.signingkey=/root/.ssh/id_ed25519.pub, so every repo on this box produces signed commits. /root/opencrabs additionally changed its committer identity from the retired R2-D2 (HQ) <hq@l1979.ru> to leshchenko1979@users.noreply.github.com, because a valid signature under the old address reads Unverified (reason no_user) — GitHub cannot link that address to an account. The other factories' repos use the global leshchenko@gmail.com, which IS account-linked, so their new commits read Verified.",
+            "text": "Commit signing is now ON box-wide: /root/.gitconfig carries gpg.format=ssh, commit.gpgsign=true, user.signingkey=/root/.ssh/id_ed25519.pub, so every repo on this box produces signed commits. /root/opencrabs additionally changed its committer ADDRESS from the retired hq@l1979.ru to leshchenko1979@users.noreply.github.com, because a valid signature under the old address reads Unverified (reason no_user) — GitHub cannot link that address to an account. The committer NAME is unchanged and is still `R2-D2 (HQ)` (measured 2026-10-12); only the address moved. The other factories' repos use the global leshchenko@gmail.com, which IS account-linked, so their new commits read Verified.",
             "severity": "warning",
             "scope": "profile",
             "affects": [
@@ -1433,7 +1433,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-11T06:11:04Z",
+        "attested_at": "2026-10-12T06:09:35Z",
         "instruments": {
           "ledger": {
             "state": "not-applicable",
@@ -1640,11 +1640,11 @@
       "channel": "telegram",
       "chat_id": "-5528478556",
       "thread_id": null,
-      "updated_at": 1791660923,
+      "updated_at": 1791745439,
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Алексей & Сергей, БэррИИмор [chat:-5528478556]",
-      "session_updated_at": 1791661178,
+      "session_updated_at": 1791745463,
       "_profile": "family",
       "_db": "/root/.opencrabs/profiles/family/opencrabs.db"
     },
@@ -1683,7 +1683,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780]",
-      "session_updated_at": 1791699363,
+      "session_updated_at": 1791765697,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2346,7 +2346,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1791700012,
+      "session_updated_at": 1791785494,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2476,7 +2476,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1791699757,
+      "session_updated_at": 1791785367,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2489,7 +2489,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7]",
-      "session_updated_at": 1791699023,
+      "session_updated_at": 1791785539,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2541,7 +2541,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1791699997,
+      "session_updated_at": 1791785189,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2554,7 +2554,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1791675761,
+      "session_updated_at": 1791715773,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2580,7 +2580,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1791700018,
+      "session_updated_at": 1791785639,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2606,7 +2606,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1791699400,
+      "session_updated_at": 1791785519,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2632,7 +2632,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1791635298,
+      "session_updated_at": 1791720533,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2814,7 +2814,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1791698726,
+      "session_updated_at": 1791784930,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2866,7 +2866,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1791699937,
+      "session_updated_at": 1791720465,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2983,7 +2983,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1791699782,
+      "session_updated_at": 1791785678,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3009,7 +3009,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1791699813,
+      "session_updated_at": 1791784974,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3074,7 +3074,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1791699857,
+      "session_updated_at": 1791785197,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3113,7 +3113,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1791699598,
+      "session_updated_at": 1791785507,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3146,7 +3146,7 @@
   ],
   "skill_versions": {
     "/root/ai-antispam/SKILL.md": "0.1.0",
-    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.147",
+    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.151",
     "/root/vds-servers/skills/infra-factory/SKILL.md": "0.2.1",
     "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.52",
     "/root/miidas/SKILL.md": "1.1.30",
@@ -3178,8 +3178,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T18:00:00+00:00",
-      "last_run_at": "2026-10-10T18:00:44Z",
+      "next_run_at": "2026-10-12T18:00:00+00:00",
+      "last_run_at": "2026-10-11T18:00:51Z",
       "trigger_cmd": "python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_gate.py",
       "_profile": "family"
     },
@@ -3238,8 +3238,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T06:45:00+00:00",
-      "last_run_at": "2026-10-11T06:15:03Z",
+      "next_run_at": "2026-10-12T06:15:00+00:00",
+      "last_run_at": "2026-10-12T05:45:45Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
@@ -3253,8 +3253,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T07:00:00+00:00",
-      "last_run_at": "2026-10-10T07:00:53Z",
+      "next_run_at": "2026-10-12T07:00:00+00:00",
+      "last_run_at": "2026-10-11T07:00:18Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3298,8 +3298,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T00:00:00+00:00",
-      "last_run_at": "2026-10-11T00:00:38Z",
+      "next_run_at": "2026-10-13T00:00:00+00:00",
+      "last_run_at": "2026-10-12T00:00:41Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3313,8 +3313,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:07:00+00:00",
-      "last_run_at": "2026-10-11T06:07:48Z",
+      "next_run_at": "2026-10-12T12:07:00+00:00",
+      "last_run_at": "2026-10-12T06:09:23Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3328,8 +3328,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T06:30:00+00:00",
-      "last_run_at": "2026-10-10T06:30:56Z",
+      "next_run_at": "2026-10-12T06:30:00+00:00",
+      "last_run_at": "2026-10-11T06:30:09Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3343,8 +3343,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T05:50:00+00:00",
-      "last_run_at": "2026-10-11T05:50:46Z",
+      "next_run_at": "2026-10-13T05:50:00+00:00",
+      "last_run_at": "2026-10-12T05:50:45Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3358,8 +3358,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T06:40:00+00:00",
-      "last_run_at": "2026-10-11T00:40:42Z",
+      "next_run_at": "2026-10-12T06:40:00+00:00",
+      "last_run_at": "2026-10-12T00:40:42Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3373,8 +3373,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:00:00+00:00",
-      "last_run_at": "2026-10-10T12:00:15Z",
+      "next_run_at": "2026-10-12T12:00:00+00:00",
+      "last_run_at": "2026-10-11T12:00:38Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3388,8 +3388,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:25:00+00:00",
-      "last_run_at": "2026-10-11T06:25:08Z",
+      "next_run_at": "2026-10-12T06:25:00+00:00",
+      "last_run_at": "2026-10-12T00:25:42Z",
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "_profile": "ops"
     },
@@ -3418,8 +3418,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T09:00:00+00:00",
-      "last_run_at": "2026-10-10T09:00:13Z",
+      "next_run_at": "2026-10-12T09:00:00+00:00",
+      "last_run_at": "2026-10-11T09:00:58Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3448,8 +3448,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:05:00+00:00",
-      "last_run_at": "2026-10-11T06:05:47Z",
+      "next_run_at": "2026-10-13T06:05:00+00:00",
+      "last_run_at": "2026-10-12T06:05:46Z",
       "trigger_cmd": "timeout 25 /root/avito-realty-bot/scripts/daily_broadcast.sh; rc=$?; echo \"launch_exit=$rc\"; exit $rc",
       "_profile": "ops"
     },
@@ -3478,8 +3478,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "Meta-factory HQ cycle due (#253, owner ruled shape (1) at q20). Sweep the board (leshchenko1979/agent-factories issues) for items carrying an intake ledger row and no ruling row, and rule on each — then report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md §9).",
-      "next_run_at": "2026-10-11T06:50:00+00:00",
-      "last_run_at": "2026-10-11T00:50:43Z",
+      "next_run_at": "2026-10-12T06:50:00+00:00",
+      "last_run_at": "2026-10-12T00:50:43Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3508,8 +3508,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:00:00+00:00",
-      "last_run_at": "2026-10-11T06:00:46Z",
+      "next_run_at": "2026-10-13T06:00:00+00:00",
+      "last_run_at": "2026-10-12T06:00:45Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3523,8 +3523,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:00:00+00:00",
-      "last_run_at": "2026-10-11T06:00:46Z",
+      "next_run_at": "2026-10-12T12:00:00+00:00",
+      "last_run_at": "2026-10-12T06:00:45Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3538,8 +3538,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:12:00+00:00",
-      "last_run_at": "2026-10-11T06:15:04Z",
+      "next_run_at": "2026-10-12T12:12:00+00:00",
+      "last_run_at": "2026-10-12T06:12:31Z",
       "trigger_cmd": "/root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh",
       "_profile": "ops"
     },
@@ -3553,8 +3553,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:00:00+00:00",
-      "last_run_at": "2026-10-11T06:00:46Z",
+      "next_run_at": "2026-10-13T06:00:00+00:00",
+      "last_run_at": "2026-10-12T06:00:45Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3568,8 +3568,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:00:00+00:00",
-      "last_run_at": "2026-10-05T06:00:58Z",
+      "next_run_at": "2026-10-19T06:00:00+00:00",
+      "last_run_at": "2026-10-12T06:00:45Z",
       "trigger_cmd": "python3 /root/agent-factories/tools/roadmap.py --cadence",
       "_profile": "ops"
     },
@@ -3583,8 +3583,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:00:00+00:00",
-      "last_run_at": "2026-10-11T06:00:46Z",
+      "next_run_at": "2026-10-12T12:00:00+00:00",
+      "last_run_at": "2026-10-12T06:00:46Z",
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "_profile": "ops"
     },
@@ -3613,8 +3613,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T05:00:00+00:00",
-      "last_run_at": "2026-10-11T05:00:46Z",
+      "next_run_at": "2026-10-13T05:00:00+00:00",
+      "last_run_at": "2026-10-12T05:00:45Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3628,8 +3628,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "InferHub Watch HQ cycle due. Execute the 6-hourly cycle per skills/inferhub/SKILL.md and report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (the no-plan law, skills/inferhub/SKILL.md §Hard rules).",
-      "next_run_at": "2026-10-11T12:10:00+00:00",
-      "last_run_at": "2026-10-11T06:10:55Z",
+      "next_run_at": "2026-10-12T12:10:00+00:00",
+      "last_run_at": "2026-10-12T06:11:29Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3643,8 +3643,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:10:00+00:00",
-      "last_run_at": "2026-10-11T06:11:01Z",
+      "next_run_at": "2026-10-13T06:10:00+00:00",
+      "last_run_at": "2026-10-12T06:11:29Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3658,8 +3658,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T12:23:00+00:00",
-      "last_run_at": "2026-10-11T06:23:07Z",
+      "next_run_at": "2026-10-12T06:23:00+00:00",
+      "last_run_at": "2026-10-12T00:23:42Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3673,8 +3673,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T00:00:00+00:00",
-      "last_run_at": "2026-10-11T00:00:39Z",
+      "next_run_at": "2026-10-13T00:00:00+00:00",
+      "last_run_at": "2026-10-12T00:00:41Z",
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "_profile": "ops"
     },
@@ -3703,8 +3703,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T15:05:00+00:00",
-      "last_run_at": "2026-10-10T15:05:43Z",
+      "next_run_at": "2026-10-12T15:05:00+00:00",
+      "last_run_at": "2026-10-11T15:05:28Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3718,8 +3718,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-12T06:05:00+00:00",
-      "last_run_at": "2026-10-11T06:05:47Z",
+      "next_run_at": "2026-10-13T06:05:00+00:00",
+      "last_run_at": "2026-10-12T06:05:46Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3733,8 +3733,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": "Execute the Infra Factory triage patrol per skills/infra-factory/roles/triage.md: check open ledger intake items, verify claims, and assign or close work.",
-      "next_run_at": "2026-10-11T12:05:00+00:00",
-      "last_run_at": "2026-10-11T06:05:47Z",
+      "next_run_at": "2026-10-12T12:05:00+00:00",
+      "last_run_at": "2026-10-12T06:05:46Z",
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "_profile": "ops"
     },
@@ -3748,8 +3748,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-11T09:00:00+00:00",
-      "last_run_at": "2026-10-10T09:00:14Z",
+      "next_run_at": "2026-10-12T09:00:00+00:00",
+      "last_run_at": "2026-10-11T09:00:58Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
