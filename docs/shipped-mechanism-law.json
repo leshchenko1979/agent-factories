@@ -80,6 +80,13 @@
       "token": "DELIVERY_HEADER_LINES",
       "clause": "A dispatch notify names the unit it routes in its opening non-blank line",
       "why": "dispatch_delivery_leg reads a delivery's header through delivery_header(), whose scan is bounded by DELIVERY_HEADER_LINES = 1: it keys on the ONE line a delivery DECLARES itself on, measured from the #433 specimen's discriminator and deliberately NOT widened (widening it re-opened #433). That makes `the unit is named in the opening non-blank line` a load-bearing contract between every dispatch notify and the leg, and it was stated nowhere: the mechanism ships into every kit (TEMPLATE/tools/patrol_host_state.py is byte-identical to root) while its precondition was undocumented - the #170 class. A dispatch that names its subject only in the body is invisible to the leg, which is the reader-side defect #433 fixed and this is its writer-side twin."
+    },
+    {
+      "mechanism": "tools/patrol_host_state.py",
+      "leg": "shared_tree_rider",
+      "token": "shared_tree_rider",
+      "clause": "The shared tree is a READ surface; work happens in a worktree",
+      "why": "shared_tree_rider() reports the paths that BLOCK a reconcile - dirty in the tree AND moved by the base, the exact set that makes `git reset --keep <base>` refuse - and render_shared_tree_rider() prints them with the instant they were read, at the head of the board-leg region. It is a RIDER and never a leg: it carries no problem and never moves the patrol's exit code, because a standalone detection leg was refused as a state nobody would fix (#241, ruled). That design is only readable if the clause it attributes against is stated: without it a member inherits the rider with none of the discipline it reports against, a board verdict arrives with no statement of what the tree it was taken against is FOR, and the class the rider exists to surface reads as a state nobody was told to avoid. The mechanism ships into every kit (TEMPLATE/tools/patrol_host_state.py, byte-identical to root) while the clause stood in the live law alone - the #170 shape."
     }
   ]
 }

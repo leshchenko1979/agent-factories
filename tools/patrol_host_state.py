@@ -22,7 +22,7 @@ question.** So this runner supplies the input, and it prints each leg's own cove
 count beside its verdict: "0 problems" over "0 examined" and "0 problems" over "29
 examined" are different facts, and only the second is a finding.
 
-Six things it does deliberately:
+Seven things it does deliberately:
 
 - **Reads the board WHOLE** (`--state all`, no filter). The reverse leg — an intake
   row naming a number the board never heard of — is sound only over the full board,
@@ -61,6 +61,15 @@ Six things it does deliberately:
   carrying no receipt form is a notify that produced no receipt, which IS the invariant. A
   failure report cannot ride the channel that failed, which is why this is a READER and not
   a second notify.
+
+- **Names the shared tree's blocking paths, with the instant** (#241). The board legs read
+  ONE tree, and a tree another lane is mid-write on makes their verdicts unattributable —
+  measured 2026-09-29, when the fork produced FALSE verdicts and no single location gave a
+  wholly correct read. The rider prints the dirty paths `origin/main` also moved (the class
+  that makes `git reset --keep origin/main` refuse), the instant it read them, and NOT RUN
+  with its reason when the tree cannot be read. It carries no problem and cannot move the
+  exit code: a STANDALONE detection leg was refused as #83's class, so it rides the board
+  legs rather than standing beside them.
 
 The board slug is derived from the git remote, so nothing here hardcodes a factory.
 
@@ -5346,6 +5355,198 @@ WORKTREE_BASE_REF = "origin/main"
 
 _WORKTREE_FIELD = re.compile(r"^([a-z-]+)(?: (.*))?$")
 
+
+# ---------------------------------------------------------------------------
+# #241 — THE SHARED TREE RIDER.
+#
+# The board legs read the shared tree, and a read taken while a peer lane was mid-write
+# produced FALSE VERDICTS: measured at the filing, no single location gave a wholly
+# correct read (ruling n=1696). What was ruled is a RULE — the shared tree is a READ
+# surface, work happens in a worktree at origin/main — plus THIS cheap rider: the board
+# legs print the blocking paths and the instant they were read, and print NOT RUN with
+# its reason when the tree cannot be read.
+#
+# A RIDER, never a leg with a verdict of its own. A standalone detection leg was REFUSED
+# as #83's class — a permanent report of a state nobody will fix — so this carries NO
+# problem and NEVER moves the patrol's exit code. Its whole job is ATTRIBUTION: a reader
+# who sees a board verdict can see the tree state it was taken against.
+#
+# "BLOCKING" is the ruling's own measured class rather than a new one: a path that is
+# BOTH dirty in the shared tree AND moved by the base since that tree's HEAD — exactly
+# the set that makes `git reset --keep <base>` refuse with `Entry <path> not uptodate`.
+# It is REPORTED and never reconciled, because the ruling is explicit that the shared
+# tree must NOT be reconciled first: a lane whose append is refused has its own remedy,
+# a worktree.
+# ---------------------------------------------------------------------------
+
+SHARED_TREE_BASE = WORKTREE_BASE_REF
+"""The ref a dirty path is judged against — the same base the ruling's deadlock used."""
+
+
+def _git_read(repo: Path, args: list[str], *, timeout: int = 120) -> tuple[str | None, str | None]:
+    """One read-only git call: `(stdout, None)` or `(None, reason)`.
+
+    `GIT_OPTIONAL_LOCKS=0` for the reason `worktree_state` states: `git status` otherwise
+    REFRESHES the index and takes `index.lock` in a tree a peer lane may be mid-task in,
+    so a read-only census would be a writer on someone else's work. The reason is RETURNED
+    rather than raised, so the caller renders a STATED INABILITY instead of a traceback.
+    """
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True, text=True, env=env, timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"`git {' '.join(args)}` could not run: {exc}"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip().splitlines()
+        return None, (
+            f"`git {' '.join(args)}` exited {proc.returncode}"
+            + (f" — {detail[0][:160]}" if detail else "")
+        )
+    return proc.stdout, None
+
+
+def _status_z_paths(blob: str) -> list[str]:
+    """Paths out of `git status --porcelain -z`, INCLUDING both sides of a rename.
+
+    `-z` rather than the plain form because the plain form QUOTES a path carrying a
+    special character, and a quoted path never intersects a plain one — so a blocking
+    path would drop out of the report SILENTLY, which is the one failure mode this rider
+    exists to prevent. Both sides of a rename are returned because either can block.
+    """
+    tokens = blob.split("\0")
+    paths: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if len(token) < 4:
+            continue
+        status, path = token[:2], token[3:]
+        if not path:
+            continue
+        paths.append(path)
+        if "R" in status or "C" in status:
+            if index < len(tokens) and tokens[index]:
+                paths.append(tokens[index])
+                index += 1
+    return paths
+
+
+def shared_tree_read(repo: Path = REPO, *, base: str = SHARED_TREE_BASE) -> dict:
+    """The shared tree's dirty paths and the BLOCKING subset, read without writing.
+
+    A failed read is REPORTED, never rendered as an empty one — and a ZERO blocking set is
+    a verdict only from a WORKING comparison, so an unresolvable `base` (or a failed diff)
+    is reported as UNKNOWN rather than folded into a silent zero.
+    """
+    out, error = _git_read(repo, ["status", "--porcelain", "-z"])
+    if error:
+        return {"status": "NOT RUN", "reason": error}
+    dirty = _status_z_paths(out)
+
+    rev, error = _git_read(
+        repo, ["rev-parse", "--verify", f"{base}^{{commit}}"], timeout=60
+    )
+    if error:
+        return {
+            "status": "ASSERTED", "dirty": dirty, "blocking": None,
+            "base": base, "base_sha": None,
+            "reason": (
+                f"the BLOCKING subset is UNKNOWN — {error}, so a dirty path cannot be "
+                f"judged against the base that moved it"
+            ),
+        }
+    base_sha = rev.strip()
+
+    moved_out, error = _git_read(repo, ["diff", "--name-only", "-z", "HEAD", base_sha])
+    if error:
+        return {
+            "status": "ASSERTED", "dirty": dirty, "blocking": None,
+            "base": base, "base_sha": base_sha,
+            "reason": f"the BLOCKING subset is UNKNOWN — {error}",
+        }
+    moved = {path for path in moved_out.split("\0") if path}
+    return {
+        "status": "ASSERTED",
+        "dirty": dirty,
+        "blocking": sorted({path for path in dirty if path in moved}),
+        "base": base,
+        "base_sha": base_sha,
+        "reason": None,
+    }
+
+
+def shared_tree_rider(read_at: str, repo: Path = REPO, read_fn=None) -> dict:
+    """The rider the board legs carry and the report prints once (#241).
+
+    `read_fn` is injected for the reason every other leg here has one: a probe must drive
+    all three renderings — blocking paths, an UNKNOWN comparison, NOT RUN — without the
+    live box, and a rider that can only be driven against the live box cannot be probed at
+    all when the live box is what is wrong.
+    """
+    state = (read_fn or shared_tree_read)(repo)
+    if state.get("status") == "NOT RUN":
+        return {
+            "status": "NOT RUN",
+            "reason": state.get("reason"),
+            "read_at": read_at,
+            "reconciles": False,
+        }
+    blocking = state.get("blocking")
+    return {
+        "status": "ASSERTED",
+        "read_at": read_at,
+        "base": state.get("base") or SHARED_TREE_BASE,
+        "base_sha": state.get("base_sha"),
+        "dirty": list(state.get("dirty") or []),
+        "blocking": None if blocking is None else list(blocking),
+        "reason": state.get("reason"),
+        "reconciles": False,
+    }
+
+
+def render_shared_tree_rider(rider: dict) -> list[str]:
+    """The rider's report lines: the blocking paths and the instant, or NOT RUN (#241).
+
+    Every branch prints the instant, because a claim about a live tree is a claim about
+    the INSTANT it was read — and an unreadable comparison prints UNKNOWN with its reason
+    rather than an empty list, so a silent zero is not available to it.
+    """
+    head = "shared tree rider (qualifies the board legs below)"
+    instant = rider.get("read_at") or "unstated"
+    if rider.get("status") == "NOT RUN":
+        return [
+            f"{head} — NOT RUN: {rider.get('reason') or 'reason not stated'} "
+            f"(read attempted at {instant})"
+        ]
+    lines = [f"{head} — read at {instant}"]
+    dirty = rider.get("dirty") or []
+    blocking = rider.get("blocking")
+    if blocking is None:
+        lines.append(
+            f"  {len(dirty)} dirty path(s); BLOCKING: UNKNOWN — "
+            f"{rider.get('reason') or 'reason not stated'}"
+        )
+    else:
+        base = rider.get("base") or SHARED_TREE_BASE
+        sha_text = f" {rider['base_sha']}" if rider.get("base_sha") else ""
+        lines.append(
+            f"  {len(dirty)} dirty path(s); {len(blocking)} BLOCKING (dirty AND moved by "
+            f"{base}{sha_text}) — `git reset --keep {base}` refuses while these stand"
+        )
+        for path in blocking:
+            lines.append(f"    ~ {path}")
+    lines.append(
+        "  REPORTED, never reconciled (reconciles: "
+        f"{'yes' if rider.get('reconciles') else 'no'}) — a lane removes its OWN "
+        "worktree's residue, and the shared tree is a READ surface (#241)"
+    )
+    return lines
+
+
 def worktree_records(repo: Path = REPO) -> tuple[list[dict], str | None]:
     """`git worktree list --porcelain` parsed into records — or (records, error).
 
@@ -6093,7 +6294,8 @@ def deferred_legs() -> list[dict]:
 
 
 def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
-           issues: list[dict], deferred_problems: list[str] | None = None) -> str:
+           issues: list[dict], deferred_problems: list[str] | None = None,
+           board_rider: dict | None = None) -> str:
     """The report. Every count travels with the predicate that produced it."""
     deferred_problems = list(deferred_problems or [])
     open_count = sum(
@@ -6102,8 +6304,14 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     lines = [
         f"patrol host-state read: {slug} at {read_at}",
         f"board: {len(issues)} issue(s) read WHOLE (--state all), {open_count} open",
-        "",
     ]
+    if board_rider is not None:
+        # #241's rider, printed ONCE and at the head of the board-leg region: the four
+        # board legs share ONE read of ONE tree, so repeating it per leg would be noise,
+        # and printing it here is what makes their verdicts attributable to the tree state
+        # they were taken against. It carries no problem and cannot move the verdict.
+        lines.extend(render_shared_tree_rider(board_rider))
+    lines.append("")
     for leg in legs:
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
@@ -7009,6 +7217,7 @@ def main(
     scores_dir_fn=None,
     board_scope_fn=None,
     lane_names_fn=None,
+    shared_tree_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -7086,6 +7295,12 @@ def main(
     dispatch row's typed `session` target to a lane name, reading every profile's live
     session bindings, so a probe that did not inject it would be asserting whichever lanes
     THIS box happens to have bound.
+
+    The shared-tree rider is injected for the fourteenth and for the same reason (#241): it
+    shells out three times against the tree the patrol is running in, and its three
+    renderings -- blocking paths, an UNKNOWN comparison, NOT RUN -- are exactly what a
+    probe must be able to drive without the live box. It is deliberately NOT a leg: it
+    carries no problem, so it can never move the patrol's exit code.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
@@ -7119,6 +7334,12 @@ def main(
 
     cron_rows, homes_read, unreached = cron_rows_fn()
     board_bound = board_scope_fn or declared_leg_boundary
+    # #241: the shared-tree rider is read ONCE and handed to the report, which prints it
+    # at the head of the board-leg region. It is deliberately NOT a leg: it carries no
+    # problem, so it can never move the patrol's exit code (a standalone detection leg was
+    # refused as #83's class), and its only job is to make the board legs' read of the
+    # shared tree attributable.
+    board_rider = (shared_tree_fn or shared_tree_rider)(read_at=read_at)
     legs = [
         board_intake_leg(issues, rows, predicate=predicate, bound=board_bound),
         board_close_leg(issues, rows, read_at=read_at, bound=board_bound),
@@ -7181,7 +7402,7 @@ def main(
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)
     out(render(legs, deferred, slug=slug, read_at=read_at, issues=issues,
-               deferred_problems=deferred_problems))
+               deferred_problems=deferred_problems, board_rider=board_rider))
     return 1 if any(leg["problems"] for leg in legs) or deferred_problems else 0
 
 

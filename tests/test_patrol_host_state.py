@@ -42,8 +42,17 @@ having, each with a probe that would fail on the shape it forbids:
    (#139, ruling n=1087). Delivery and deferral keep their own kinds, a log with no output
    is reported as never ATTEMPTED, and only a log with output and no receipt form is the
    failed duty. A phrase without a uuid is not a receipt (n=405 clause 5), and its live
-   population is legitimately empty on a quiet day, so non-vacuity rides the probe and
-   never a loud-fail-on-zero (#112) — the opposite call from the cron-thinness leg.
+  population is legitimately empty on a quiet day, so non-vacuity rides the probe and
+  never a loud-fail-on-zero (#112) — the opposite call from the cron-thinness leg.
+
+7. **The shared tree's blocking paths are NAMED, with the instant, and move no verdict**
+   (#241). The board legs read ONE tree, and a tree another lane is mid-write on makes
+   their verdicts unattributable — measured 2026-09-29, when the fork produced FALSE
+   verdicts and no single location gave a wholly correct read. The rider prints the dirty
+   paths that `origin/main` also moved (the class that makes `git reset --keep origin/main`
+   refuse), the instant it read them, and NOT RUN with its reason when the tree cannot be
+   read. It carries no problem and cannot move the exit code: a STANDALONE detection leg
+   was refused as #83's class, so it is admitted only as this rider on the board legs.
 
 Run:  python3 tests/test_patrol_host_state.py
 Exit: 0 all checks pass, 1 a check failed.
@@ -178,7 +187,8 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
-         board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None):
+         board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
+         shared_tree_fn=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -299,6 +309,12 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # from whichever lanes this box happens to have bound. The park clause (clause 1)
         # needs no injection: it reads the unit's own rows, which the probe already supplies.
         lane_names_fn=lane_names_fn or (lambda: {}),
+        # The shared-tree rider (#241) shells out three times against the tree the patrol
+        # is running in, so it is stubbed by default for the same reason the publish and
+        # worktree legs are: a probe must not pay for live state it never asserts. The
+        # probes that DO assert the rider drive `render_shared_tree_rider` directly, or
+        # pass a rider of their own here so the RENDER path is exercised, not assumed.
+        shared_tree_fn=shared_tree_fn or _stub_shared_tree_rider,
     )
     return rc, out.getvalue(), err.getvalue()
 
@@ -358,6 +374,32 @@ def _stub_worktree_leg(*, read_at: str, **_kw) -> dict:
             "population_predicate": "git worktree list --porcelain, main = first record",
         },
     }
+
+
+def _stub_shared_tree_rider(*, read_at: str, **_kw) -> dict:
+    """A canned shared-tree rider for every probe that drives `main()` (#241).
+
+    The real rider shells out three times against the tree the patrol runs in, so stubbing
+    it is the same discipline the publish and worktree stubs exist for: a probe must not
+    pay for live state it never asserts. The probes that DO assert the rider drive
+    `render_shared_tree_rider` directly, or drive `main()` with this stub replaced so the
+    render path is exercised rather than assumed.
+
+    The default is an ASSERTED rider over an EMPTY tree — no blocking paths — so a probe
+    that does not care about the rider still gets a well-formed one, and the probes that do
+    pass their own.
+    """
+    return {
+        "status": "ASSERTED",
+        "read_at": read_at,
+        "base": "origin/main",
+        "base_sha": None,
+        "dirty": [],
+        "blocking": [],
+        "reason": None,
+        "reconciles": False,
+    }
+
 
 def test_repo_slug_reads_both_remote_forms() -> None:
     """The slug decides WHICH board is read; a wrong slug reads a wrong board clean."""
@@ -450,6 +492,7 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
+        shared_tree_fn=_stub_shared_tree_rider,
     )
     assert rc == 2, f"an unreadable board must exit 2, got rc={rc}"
     assert "FAILED" in err.getvalue(), err.getvalue()
@@ -2633,6 +2676,7 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
+            shared_tree_fn=_stub_shared_tree_rider,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -2706,6 +2750,7 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
+            shared_tree_fn=_stub_shared_tree_rider,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -3689,6 +3734,7 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             out=lambda *a, **k: print(*a, file=out, **k),
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
+            shared_tree_fn=_stub_shared_tree_rider,
         )
         text = out.getvalue()
 
@@ -4381,6 +4427,7 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg, worktree_fn=_stub,
+        shared_tree_fn=_stub_shared_tree_rider,
         ruling_scope_fn=lambda: RUNNER.UNBOUNDED_SCOPE,
         ruling_exemptions_path=_NO_RULING_EXEMPTIONS,
     )
@@ -7140,6 +7187,140 @@ def test_the_stall_census_leg_reads_a_CARRIER_mention_as_a_MENTION_never_a_ROUTI
     assert rc == 1, f"OWED lines must fail the run, got rc={rc}\n{out}"
     assert "named only in the BODY and read as a MENTION, never as a routing (#467)" in out, out
     assert "2 of their token(s) named only in the BODY" in out, out
+
+# --- #241: the shared-tree rider ------------------------------------------------
+
+
+def _rider(**over) -> dict:
+    base = {
+        "status": "ASSERTED",
+        "read_at": "2026-10-03T02:00:00Z",
+        "base": "origin/main",
+        "base_sha": "abc1234",
+        "dirty": [],
+        "blocking": [],
+        "reason": None,
+        "reconciles": False,
+    }
+    base.update(over)
+    return base
+
+
+def test_the_rider_prints_the_blocking_paths_AND_the_instant() -> None:
+    """The rider's whole job: name the paths that block `reset --keep`, and say WHEN read.
+
+    A claim about a live tree is a claim about the instant it was read, so the instant is
+    asserted here beside the paths — without it the rider is testimony, not evidence.
+    """
+    rider = _rider(
+        dirty=[" M a.py", "?? b.py", " M TEMPLATE/registry/kit.example.json"],
+        blocking=["TEMPLATE/registry/kit.example.json"],
+    )
+    text = "\n".join(RUNNER.render_shared_tree_rider(rider))
+    assert "read at 2026-10-03T02:00:00Z" in text, text
+    assert "3 dirty path(s)" in text, text
+    assert "1 BLOCKING" in text, text
+    assert "~ TEMPLATE/registry/kit.example.json" in text, text
+    assert "origin/main abc1234" in text, text
+    assert "REPORTED, never reconciled (reconciles: no)" in text, text
+
+
+def test_the_rider_reports_an_UNKNOWN_comparison_rather_than_a_zero() -> None:
+    """A zero blocking set is a verdict only from a WORKING comparison (#242).
+
+    When the base cannot be resolved the blocking subset is UNKNOWN, and the rider must
+    print that — an empty list there would read exactly like a clean tree.
+    """
+    rider = _rider(
+        dirty=[" M a.py"], blocking=None, base_sha=None,
+        reason="git rev-parse --verify origin/main^{commit} failed",
+    )
+    text = "\n".join(RUNNER.render_shared_tree_rider(rider))
+    assert "BLOCKING: UNKNOWN" in text, text
+    assert "git rev-parse --verify origin/main^{commit} failed" in text, text
+    assert "0 BLOCKING" not in text, f"an unknown comparison must not read as zero\n{text}"
+    assert "read at 2026-10-03T02:00:00Z" in text, text
+
+
+def test_the_rider_prints_NOT_RUN_with_its_reason() -> None:
+    """A tree that could not be read is NOT RUN with its reason — never an empty rider."""
+    rider = _rider(status="NOT RUN", reason="git status --porcelain -z failed: not a repo")
+    text = "\n".join(RUNNER.render_shared_tree_rider(rider))
+    assert "NOT RUN" in text, text
+    assert "git status --porcelain -z failed: not a repo" in text, text
+    assert "read attempted at 2026-10-03T02:00:00Z" in text, text
+    assert "dirty path(s)" not in text, f"a NOT RUN rider has no population to report\n{text}"
+
+
+def test_the_rider_is_NON_VACUOUS() -> None:
+    """The control: the SAME fixture with and without a blocking path.
+
+    One fixture, rendered twice — once with a path that is dirty AND moved, once with a
+    clean tree — so the difference is attributable to the hazard and not to the fixture.
+    Without this arm a renderer that always printed an empty list would satisfy the
+    assertions above.
+    """
+    moved = "TEMPLATE/registry/kit.example.json"
+    with_hazard = "\n".join(RUNNER.render_shared_tree_rider(
+        _rider(dirty=[f" M {moved}"], blocking=[moved])))
+    without = "\n".join(RUNNER.render_shared_tree_rider(
+        _rider(dirty=[f" M {moved}"], blocking=[])))
+    assert "1 BLOCKING" in with_hazard, with_hazard
+    assert "0 BLOCKING" in without, without
+    assert f"~ {moved}" in with_hazard, with_hazard
+    assert f"~ {moved}" not in without, without
+
+
+def test_an_unreadable_tree_yields_a_NOT_RUN_rider_through_the_real_reader() -> None:
+    """The NOT RUN path through `shared_tree_read` itself, not a hand-made dict.
+
+    A repo path that is not a repository makes `git status` fail; the reader must RETURN
+    that reason rather than raise, so the rider degrades to NOT RUN instead of taking the
+    patrol down.
+    """
+    state = RUNNER.shared_tree_read(Path("/nonexistent-probe-repo-241"))
+    assert state.get("status") == "NOT RUN", state
+    assert state.get("reason"), state
+    rider = RUNNER.shared_tree_rider("2026-10-03T02:00:00Z",
+                                     read_fn=lambda repo: state)
+    assert rider["status"] == "NOT RUN", rider
+    assert rider["read_at"] == "2026-10-03T02:00:00Z", rider
+    assert rider["reconciles"] is False, rider
+
+
+def test_the_whole_run_PRINTS_the_rider_and_it_moves_NO_verdict() -> None:
+    """Driven through the REAL `main()`: the rider is rendered AND cannot gate.
+
+    The rider is printed once, at the head of the board-leg region, and carries no
+    problem — so a run whose ONLY unusual fact is a dirty shared tree still exits 0. A
+    standalone detection leg was refused as #83's class precisely because a report of a
+    state nobody will fix must never move the verdict; this asserts the rider kept that
+    property.
+    """
+    issues = [_issue(1, "OPEN")]
+    # The `ruling` row is here so the fixture is CLEAN apart from the dirty tree: the
+    # board-unruled leg (added after this probe's fixture was first written) REDs on an
+    # intaken OPEN item with no ruling row, and a probe whose exit code is moved by an
+    # unrelated leg would be asserting that leg rather than the rider's non-gating.
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2))
+
+    def _dirty_rider(*, read_at: str, **_kw) -> dict:
+        return _rider(
+            read_at=read_at,
+            dirty=[" M TEMPLATE/registry/kit.example.json"],
+            blocking=["TEMPLATE/registry/kit.example.json"],
+        )
+
+    rc, out, _ = _run(issues, rows, shared_tree_fn=_dirty_rider)
+    assert rc == 0, f"the rider must not move the exit code\n{out}"
+    assert out.count("shared tree rider") == 1, f"the rider prints ONCE\n{out}"
+    assert "~ TEMPLATE/registry/kit.example.json" in out, out
+    head = out.split("LEG ")[0]
+    assert "shared tree rider" in head, (
+        f"the rider must precede the board legs it qualifies\n{out}"
+    )
+    assert "read at " in head, out
+
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

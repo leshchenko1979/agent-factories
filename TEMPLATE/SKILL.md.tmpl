@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.30
+version: 0.1.31
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -361,6 +361,16 @@ factory keeps outside it, the issue board. Every other path to it is read-only.
 | `registry/fleet.json` and `registry/factories/<slug>.json` | what this factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | this law | the process rules | `HQ` | read-only |
+
+**The shared tree is a READ surface; work happens in a worktree.** The tree every lane can
+see is for READING — `git log`, `grep`, `sed`, the ledger's own bytes. A change is made in a
+worktree checked out at `<remote>/<branch>`, and a lane that edits the shared tree in place
+races every peer who does the same, so its result is not a revision anyone chose. The patrol's
+**shared-tree rider** reports the paths that BLOCK a reconcile — dirty in the tree AND moved by
+the base, the exact set that makes `git reset --keep <base>` refuse — and prints the instant it
+read them; it is a RIDER and never a leg, so it carries no problem and never moves the patrol's
+exit code. What is NOT ruled: that the shared tree must be reconciled before the patrol may read
+it — the remedy is the discipline above, and a lane removes its OWN worktree's residue.
 
 **Landing work: the pusher, never a raw push.** A lane lands work through `tools/publish.py` —
 never a raw `git push`. The failure this prevents is measured, not hypothetical: a direct push
