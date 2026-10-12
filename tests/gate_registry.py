@@ -893,6 +893,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # factory has not yet created one, so a gate keyed on it returns the empty set and passes
     # on the one case that motivated the finding.
     "test_harness_bindings.py",
+    # Added with its registration (issue #271, ruled by HQ 2026-10-02T18:21:56Z). REQUIRED is
+    # the correct grain and OPTIONAL is not, for the deciding fact the entries above state:
+    # the gate is PURE over the tree -- it reads the instrument's law and the §11 pointer,
+    # drives its metric probes on a FIXTURE store, and SKIPS its §11 leg by name where the
+    # root-only `skills/meta-factory/SKILL.md` is absent -- so it passes in a bootstrapped
+    # factory exactly as it does here. Its only outside-tree read is the LIVE store, and that
+    # lives in `tools/intake_metric.py`, which returns NOT RUN with its reason rather than
+    # failing, the discipline #68 established for a reader whose store a member tree has no
+    # reason to carry. THE MECHANISM IT GUARDS: nothing separated an OWNER decision from an
+    # INTERNAL one before it reached the register, so four of the five answers in the measured
+    # burst (q21, q23, q24, q26) had to decline the question as internal -- and §11 defines
+    # the OPEN-QUESTION COUNT as the human-gate metric, so each mis-routed question inflated
+    # the owner's queue by exactly its own volume with nothing measuring the leak.
+    "test_question_intake.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

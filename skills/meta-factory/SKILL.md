@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.59
+version: 0.1.60
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -400,7 +400,7 @@ outside it, the issue board. Every other path to it is read-only.
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated by `tests/test_ontology.py` |
 | `docs/processes.md` | the canonical process register | `HQ` | read-only |
 | `skills/meta-factory/*.md` | this law and its two clause files (`verdicts-and-claims.md`, `state.md`) | `HQ` | read-only |
-| the questions register (profile home, outside this repo) | the open questions lanes have DECLARED, one standing set per factory key | the `oc-questions` tool | read-only; the rendered page is served from `vpn` behind basic auth; law: `docs/instruments/open-questions.md` |
+| the questions register (profile home, outside this repo) | the open questions lanes have DECLARED, one standing set per factory key — **and only questions whose answer needs an input only the OWNER can supply reach it at all** (§3's intake clause: a value he alone holds, a priority between goals he owns, a cost he bears, or a policy only he may set; a lane that cannot name that input decides it itself and does **not** register it) | the `oc-questions` tool | read-only; the rendered page is served from `vpn` behind basic auth; law: `docs/instruments/open-questions.md` — whose §5.8 prints `declined-as-internal: N of M answered` in the measurement round, because this surface's count IS the human-gate metric and a mis-routed question inflates it by exactly its own volume |
 | `registry/fleet.json` and `registry/factories/<slug>.json` | what each factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | `registry/gates.json` | the per-gate time budgets and the **default's derivation** — every declared value is `budget_sec = margin_x x measured_sec`, and the default is `margin_x x the largest measured runtime among the UNDECLARED population` (the registered gates with no entry), re-derived whenever that population changes | the measurement duty (`Surveys`), on the same derivation rule the budget values follow — **except the DEFAULT's VALUE, which is a policy choice about what the suite does with a gate nobody has measured, and is `HQ`'s** (n=574 PART 5) | read-only; `tools/gate_budget.py` REFUSES a stated derivation its own numbers contradict, and `tests/test_gate_registration.py` asserts the live one holds and bites on a synthetic manifest that violates it |

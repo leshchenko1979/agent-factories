@@ -664,6 +664,15 @@
       "skills/meta-factory/SKILL.md",
       "tests/declared_surface.py",
       "tests/test_harness_bindings.py"
+    ],
+    "tests/test_question_intake.py": [
+      "TEMPLATE/docs/instruments/open-questions.md",
+      "TEMPLATE/tools/intake_metric.py",
+      "docs/instruments/open-questions.md",
+      "skills/meta-factory/SKILL.md",
+      "tests/test_question_intake.py",
+      "tools/audit.py",
+      "tools/intake_metric.py"
     ]
   }
 }

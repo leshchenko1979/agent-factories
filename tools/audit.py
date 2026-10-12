@@ -126,6 +126,21 @@ from gate_budget import (  # noqa: E402
     load_gate_budgets,
 )
 
+# The register's INTAKE metric (issue #271, HQ ruling 2026-10-02T18:21:56Z leg 2), on the
+# same path-insert convention and for the same reason as the two readers above. It is
+# GUARDED, because the store it reads lives OUTSIDE the tree: a bootstrapped factory has no
+# register, and an unguarded import would make this file unrunnable there -- the failure #68
+# recorded for a cron-table reader. The reader resolves the store itself and returns NOT RUN
+# with its reason, so an absent register reports an absence rather than a zero.
+try:  # noqa: E402
+    from intake_metric import (
+        format_line as _intake_line,
+        intake_stats as _intake_stats,
+        resolve_store as _intake_store,
+    )
+except ImportError:  # pragma: no cover - a tree shipping audit.py without the reader
+    _intake_line = _intake_stats = _intake_store = None
+
 # The `Subject` column's vocabulary, named once. `tests/test_rework.py` enforces the
 # same three values on the document; they live here as well because the audit *reads*
 # the column to derive a numerator, and a second hand-written pattern would let the
@@ -737,6 +752,52 @@ def parse_rework(rework_path: Path, closed_subject_set: set[str]) -> dict[str, A
         "subject_coverage_numerator": determinate,
         "subject_coverage_denominator": entries,
     }
+
+def parse_intake_metric(days: float = 30.0) -> dict[str, Any]:
+    """The register's intake metric — how many of the OWNER's answers declined the question.
+
+    Issue #271, HQ ruling 2026-10-02T18:21:56Z, leg 2: *"The measurement round counts, over
+    a window, the answers whose text declines the question as internal, and prints
+    `declined-as-internal: N of M answered` beside the existing human-gate count."*
+
+    **Printed, never gated.** The predicate is a pattern set over free text -- semantics a
+    gate cannot judge -- so the population is reported and the trend read by a human, the
+    same shape the rework rates above already use. This closes the second half of the
+    defect: the law declares the OPEN-QUESTION COUNT to be the human-gate metric, so a
+    question that was internal all along over-reports the owner's queue by exactly the
+    mis-routed volume, and until this number is printed nothing measures the leak.
+
+    **NOT RUN is a first-class result and carries its reason.** The store lives outside this
+    tree, so a factory with no register reports the absence rather than a zero: an absent
+    store and a store with no declines must never read alike, or the metric's own silence
+    becomes indistinguishable from a clean run.
+    """
+    absent = {
+        "status": "not_run",
+        "reason": "",
+        "answered": 0,
+        "declined": 0,
+        "share": 0.0,
+        "window_days": days,
+        "matched": [],
+    }
+    if _intake_store is None:
+        absent["reason"] = "tools/intake_metric.py is not present in this tree"
+        return absent
+    path, reason = _intake_store()
+    if path is None:
+        absent["reason"] = reason
+        return absent
+    try:
+        store = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        absent["status"] = "unreadable"
+        absent["reason"] = f"{path}: {exc}"
+        return absent
+    stats = _intake_stats(store, days=days)
+    stats["status"] = "measured"
+    stats["store"] = str(path)
+    return stats
 
 
 def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
@@ -2731,6 +2792,20 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "tests/test_harness_bindings.py"]
         )
 
+    # 87. the register's intake clause and its metric leg (board #271, ruled by HQ
+    #     2026-10-02T18:21:56Z). The ruling's leg 3 asks for exactly this: a gate asserting
+    #     the clause's presence in the instrument's law and the pointer in §11. The metric
+    #     itself is PRINTED, never gated -- its predicate is a pattern set over free text,
+    #     which a gate cannot judge -- so this gate proves the metric CAN SEE (on a fixture
+    #     reproducing the measured burst, q25's `cli` recording excluded by `answered_via`)
+    #     and that the measurement round prints it. PYTEST form: the file carries module-level
+    #     `def test_*`, so a script runner would execute none of them and exit 0 (#124's
+    #     class, which `test_gate_invocation_mode.py` now catches).
+    if (repo_root / "tests/test_question_intake.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_question_intake.py"]
+        )
+
     return gates_to_run
 
 
@@ -2808,8 +2883,34 @@ def format_report_markdown(
     rework_stats: dict[str, Any],
     cadence_stats: dict[str, Any],
     gate_results: list[dict[str, Any]],
+    intake_stats: dict[str, Any] | None = None,
 ) -> str:
-    """Format the full audit into markdown document."""
+    """Format the full audit into markdown document.
+
+    `intake_stats` is OPTIONAL and defaults to the NOT RUN shape, for two reasons. A caller
+    that renders a report without having taken the measurement (the killed-gate probe in
+    `tests/test_gate_registration.py` is one) must not be handed a fabricated `0 of 0`, which
+    is a zero the reader cannot tell from a clean register; and a member tree that carries no
+    register at all renders the SAME row with its reason, so the absence is visible in the
+    artifact rather than silently dropped (#271, ruling 2026-10-02T18:21:56Z).
+    """
+    intake_stats = intake_stats or {}
+    if intake_stats.get("status") == "measured":
+        intake_cell = (
+            f"`{intake_stats.get('declined', 0)} of {intake_stats.get('answered', 0)}`"
+        )
+        intake_note = (
+            f"measured over a {intake_stats.get('window_days', 0):g}d window "
+            f"({round(intake_stats.get('share', 0.0) * 100, 1)}%) — owner answers whose text "
+            f"declines the question as internal; a mis-routed question inflates the "
+            f"human-gate metric by exactly this volume (#271)"
+        )
+    else:
+        intake_cell = f"`{intake_stats.get('status', 'not_run').upper()}`"
+        intake_note = (
+            f"NOT RUN is not a zero — "
+            f"{intake_stats.get('reason', 'the measurement was not taken')} (#271)"
+        )
     all_passed = all(g["passed"] for g in gate_results)
     verdict = "PASSED" if all_passed and cadence_stats.get("cadence_held", True) else "FAILED"
 
@@ -2839,6 +2940,7 @@ def format_report_markdown(
         f"| **Rework Share** | `{round(rework_stats.get('rework_share', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ ({rework_stats.get('closed_subjects', 0)} closed subjects + {rework_stats.get('total_entries', 0)} rework entries) |",
         f"| **Rework per Close** | `{round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}%` | {rework_stats.get('total_entries', 0)} rework entries ÷ {rework_stats.get('closed_subjects', 0)} closed subjects |",
         f"| **Change Fail Rate** | `{round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}%` | {rework_stats.get('change_fail_rate_numerator', 0)} closes that produced a rework entry ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units — **linkage coverage `{rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)}`** entries carry a determinate Subject ({round(rework_stats.get('subject_coverage', 0.0) * 100, 1)}%); read the rate only against this coverage |",
+        f"| **Intake Declines** | {intake_cell} | {intake_note} |",
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Mean intake→close duration over {len(ledger_stats.get('lead_times_sec', []))} sampled subjects |",
         f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry — summed from each row's canonical TRAILER only, by position and across every event (issue #90) |",
         f"| **Telemetry Outside the Trailer** | `{ledger_stats.get('out_of_trailer_count', 0)}` row(s) | {format_out_of_trailer_note(ledger_stats)} |",
@@ -2961,6 +3063,11 @@ def main() -> int:
     ledger_read_at = datetime.datetime.now(datetime.timezone.utc).strftime(READ_INSTANT_FORM)
     ledger_stats, closed_subject_set = parse_ledger(ledger_file)
     rework_stats = parse_rework(rework_file, closed_subject_set)
+    # The register's intake metric, computed ONCE here beside the rework rates and printed
+    # by every surface from this one value (#271). The store it reads is OUTSIDE the tree,
+    # so the result carries its own status: `measured` where a register is readable, and
+    # `not_run` with its reason where none is -- never a zero standing in for an absence.
+    intake_stats = parse_intake_metric()
     cadence_stats = check_cadence_integrity(ledger_file)
     # A manifest that EXISTS and cannot be read is a DEFECT, never a fallback: defaulting
     # over an unreadable budget set would silently re-cap every gate in the tree (#94).
@@ -3022,6 +3129,7 @@ def main() -> int:
             "cadence": cadence_stats,
             "delivery": ledger_stats,
             "rework": rework_stats,
+            "intake": intake_stats,
             "gates": gate_results,
         }
         print(json.dumps(payload, indent=2))
@@ -3039,6 +3147,12 @@ def main() -> int:
     print(f"  - Rework Entries: {rework_stats.get('total_entries', 0)} (share: {round(rework_stats.get('rework_share', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ ({rework_stats.get('closed_subjects', 0)} + {rework_stats.get('total_entries', 0)}) | per close: {round(rework_stats.get('rework_per_close', 0.0) * 100, 1)}% = {rework_stats.get('total_entries', 0)} ÷ {rework_stats.get('closed_subjects', 0)})")
     print(f"  - Rework Declarations: {ledger_stats.get('close_rows_declaring_rework', 0)}/{ledger_stats.get('close_events', 0)} close rows declare a disposition ({round(ledger_stats.get('rework_declaration_rate', 0.0) * 100, 1)}%) — {format_rework_declaration_note(ledger_stats)}")
     print(f"  - Change Fail Rate: {round(rework_stats.get('change_fail_rate', 0.0) * 100, 1)}% = {rework_stats.get('change_fail_rate_numerator', 0)} ÷ {rework_stats.get('change_fail_rate_denominator', 0)} closed work units (linkage coverage: {rework_stats.get('subject_coverage_numerator', 0)}/{rework_stats.get('subject_coverage_denominator', 0)} entries carry a determinate Subject — a bare rate is never read alone)")
+    # THE HUMAN-GATE LEAK, PRINTED (#271). The law declares the open-question count the
+    # human-gate metric; a question that was internal all along inflates it by exactly the
+    # mis-routed volume, and nothing measured that until this line. Printed, never gated:
+    # the predicate is a pattern set over free text. NOT RUN carries its reason, because an
+    # absent register and a register with no declines must not read alike.
+    print(f"  - {_intake_line(intake_stats, intake_stats.get('reason', ''))}" if _intake_line else f"  - declined-as-internal: NOT RUN — {intake_stats.get('reason', '')}")
     print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
@@ -3119,7 +3233,13 @@ def main() -> int:
 
     if args.report or args.output:
         report_md = format_report_markdown(
-            today, ledger_read_at, ledger_stats, rework_stats, cadence_stats, gate_results
+            today,
+            ledger_read_at,
+            ledger_stats,
+            rework_stats,
+            cadence_stats,
+            gate_results,
+            intake_stats,
         )
         out_path = Path(args.output) if args.output else (REPO_ROOT / f"evidence/scores/{today}-self-audit.md")
         out_path.parent.mkdir(parents=True, exist_ok=True)

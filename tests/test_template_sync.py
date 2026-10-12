@@ -220,6 +220,13 @@ def _probe_foreign_toolchain() -> list[str]:
 PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
     ("tools/ledger_declaration.py", "TEMPLATE/tools/ledger_declaration.py"),
+    # The register's intake metric (issue #271). It pairs for the reason the ledger's own
+    # readers pair: `tools/audit.py` is SHIPPED and imports it, so a tree carrying the audit
+    # without the reader would fail at import rather than at measurement -- and the gate
+    # `tests/test_question_intake.py` drives the same reader, so an unpaired copy is the #171
+    # shape again (two halves that must agree about what a decline looks like).
+    ("tools/intake_metric.py", "TEMPLATE/tools/intake_metric.py"),
+    ("tests/test_question_intake.py", "TEMPLATE/tests/test_question_intake.py"),
     # The DERIVED index (owner order 2026-09-27). It pairs because it is the same kind of
     # instrument as the ledger itself: a member that took the tool without its gate would
     # carry a derived view nothing proves agrees with the text, and one that took the gate

@@ -113,6 +113,7 @@ the answer is the paragraph above, because there is no vocabulary to declare.
 
 The owner cannot see which lane is blocked on him: a parked decision exists only as prose in that lane's own topic, with no aggregate, no ordering by age, and no one-tap answer. The Register is the fix; this clause is the lane-side contract.
 
+- **INTAKE — a question reaches the owner only if its answer needs an input only HE can supply.** The four admissible inputs, and the test a lane applies *before* it calls `ask`: **a value he alone holds, a priority between goals he owns, a cost he bears, or a policy only he may set.** A lane **MUST name that input in the question**. If it cannot, the decision is **INTERNAL**: the lane decides it, records the decision in the ledger, and does **NOT** register it. This is a codification of what the owner already does, not a new policy — measured on this register's own store, **four of the five answers in the burst of 2026-10-02T13:50:15Z–14:05:46Z declined the question as internal** (q21 · q23 · q24 · q26), and the standing directive that internal mechanics are not owner questions is the basis. The cost is not only his cycles: §11 declares the **open-question count the human-gate metric**, so an internal question counted there over-reports his queue by exactly the mis-routed volume — which is why the metric leg below exists and why this clause is the filter rather than a courtesy. **Not backfilled:** the five answers stand exactly as recorded, nothing is rewritten, and no question is re-opened.
 - **Register in the same turn you park.** A lane whose next action needs an owner decision calls `questions ask` in the SAME turn it stops, naming itself and its ordered question set. A prose "blocked on you" line in the topic is NOT a registration — nothing aggregates it.
 - **The Register is the ONLY sanctioned blocked-on-you channel.** Do not open a parallel mechanism, and do not re-ask in the topic on a daily clock once registered: the register's `asked_at` age is what re-surfaces a question, so a repeated topic ping is noise rather than pressure.
 - **Each question has exactly two required inputs:** `title` and Markdown `description` (tables and Mermaid supported). A question MAY carry `options[]`, a `recommended` default, and a Clarify action; a free-text answer is always available, and Clarify never silently closes the question.
@@ -303,6 +304,20 @@ The register carried fields no consumer reads, and one of them produced a false 
 What the default clause forbids — a verb that silently acquires the duty for every caller — is what the default still refuses.
 
 **Bound: the stamp covers the LIVE register.** A set that has been archived carries its questions in the archive, which is history and is not rewritten to record a delivery — rewriting history to close a gap is worse than the gap. A question in the archive therefore still reads without a delivery record, and that is a stated bound, not an oversight.
+
+### 5.8 The intake metric — PRINTED, never a verdict (#271)
+
+The intake clause in §3 is the filter; this is what makes a leak through it **visible**, because a clause alone is prose and prose does not report a trend. The measurement round counts, over a window, the answers whose text **declines the question as internal**, and prints:
+
+```
+declined-as-internal: N of M answered
+```
+
+**The population is printed, never gated.** The predicate is a pattern set over free text — semantics a gate cannot judge — so the number is reported and the trend read by a human, the same shape `evidence/rework.md`'s rates already use. The measurement round is `tools/audit.py`, which prints the line beside the rework rates; the predicate and the store resolution live once, in `tools/intake_metric.py`, so the reader and its gate cannot drift.
+
+**`answered_via` is the discriminator, and it closes a real trap.** An OWNER's answer arrives via `page` (the page is served behind basic auth); a LANE's own recording arrives via `cli`. A bare text scan without that field reads a lane's decision record as a decline: measured on this store, q25's text is a decision record that *quotes* the owner — `DECIDED BY HQ under the owner's standing delegation for this class (q23/q24/q26 all answered "decide by yourself" …)` — and counts as a fifth decline. It is `cli`. Read `answered_via` before reading a decline, or the leg reports the lane's prose as the owner's behaviour.
+
+**NOT RUN carries its reason.** The store lives outside any tree, so a factory with no register reports the absence rather than a zero — an absent store and a store with no declines must never read alike, or the metric's own silence becomes indistinguishable from a clean run. The store path is **resolved at call time**, never pinned here (§5.1).
 
 ## 6. Ownership, and the reload leg
 
