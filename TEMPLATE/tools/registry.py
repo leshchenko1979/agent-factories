@@ -1711,6 +1711,12 @@ def cmd_topics(args: argparse.Namespace) -> int:
     empty one: an empty feed and a failed read would render identically, and the
     reader must be able to tell "nothing observed" from "read succeeded, no
     topics".
+
+    `--check` is a PREVIEW, not a drift detector: it prints what the live read
+    produced and writes nothing, so its exit status is always 0 and it compares
+    the read against nothing. A reader wanting drift must diff the printed rows
+    against the committed feed — the gate that fails a lane with no observed name
+    is `tests/test_registry.py` check 8, which reads the committed feed itself.
     """
     if args.factory:
         if args.factory not in MANIFEST_RECORDS:
@@ -1733,7 +1739,7 @@ def cmd_topics(args: argparse.Namespace) -> int:
     read_at = args.at or datetime.datetime.now(datetime.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
-    wrote = 0
+    examined = 0
     empty: list[str] = []
     for slug in slugs:
         chat_id = FACTORY_CHATS.get(slug)
@@ -1746,9 +1752,12 @@ def cmd_topics(args: argparse.Namespace) -> int:
             print(f"topics: would write {path} — {len(feed['topics'])} topic(s)")
         else:
             write_topic_feed(path, feed)
-            wrote += 1
+        # Counted on BOTH branches: `--check` examines every feed it would write,
+        # and a summary that read `0 feed(s) checked` after six examinations was a
+        # false zero — the count must be of what the verb DID, not of what it wrote.
+        examined += 1
     print(
-        f"topics: {wrote} feed(s) {'checked' if args.check else 'wrote'} from "
+        f"topics: {examined} feed(s) {'checked' if args.check else 'wrote'} from "
         f"{len(rows)} observed (chat, thread) pair(s) across {len(dbs)} home(s), "
         f"read_at={read_at}"
     )
