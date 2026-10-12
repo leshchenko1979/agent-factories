@@ -495,6 +495,17 @@ PAIRS = [
     # surfaces without the gate, would carry the 2026-10-09 order's restatement drift with
     # nothing comparing them (the #305 bound: no gate compared these prose surfaces).
     ("tests/test_issue_routing_surfaces.py", "TEMPLATE/tests/test_issue_routing_surfaces.py"),
+    # Added with its registration (issue #79, ruling n=531, dispatch n=532). The gate and
+    # the DRY reader it imports both ship whole: the gate DISCOVERS the law files a tree
+    # ships and drives synthetic trees in its probes, and its reader is shared with
+    # `tests/ledger_boundary.py` so a second copy of the absent-means-skip policy cannot
+    # drift on the inputs that matter. A factory that took the gate without the reader would
+    # fail at import; one that took the reader without the gate would carry the policy with
+    # nothing applying it. The example JSON is deliberately NOT paired: it pairs by the
+    # `docs/` <-> `TEMPLATE/docs/` leg in `tests/test_docs_sync.py`, which compares that
+    # tree's every file, so a second entry here would be the same pair twice.
+    ("tests/declared_surface.py", "TEMPLATE/tests/declared_surface.py"),
+    ("tests/test_harness_bindings.py", "TEMPLATE/tests/test_harness_bindings.py"),
     # Added with its registration (issue #270, the atomic ruling act). The pairing gate
     # drives the writer `tools/rule.py`, and both ship whole for the same reason the ledger
     # and its gates do: a factory that took the writer without the gate proving every

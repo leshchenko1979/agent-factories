@@ -232,6 +232,14 @@ flowchart TD
      - `## Run Self-Audit Verdict` — the run's own gate verdict, so the artifact states the
        machine's condition beside the fleet's;
      - `## Pacemaker Verification` — the pacemaker-thinness result described below.
+     - `## Harness-Binding Verification` — the surveys patrol's LIVE-binding result (the
+       harness-binding law's live half, issue #79). No offline gate can read a surface
+       outside the tree, so this is where that half is RECORDED rather than trusted: for
+       each row of `docs/harness-bindings.json`, whether the profile entry is a SYMLINK
+       whose realpath equals the declared source. Required forward-only from 2026-10-12 —
+       its own boundary (`score_artifact_harness_binding`), because a section that lands
+       later than the nine above cannot share their date without reding every artifact in
+       between. Asserted by `tests/test_score_artifact_sections.py`.
 
      Seven of those nine entries are DERIVED: each is present in BOTH committed artifacts
      (`evidence/scores/2026-09-17.md` and `2026-09-18.md`), which is what makes them this

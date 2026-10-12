@@ -872,6 +872,27 @@ REQUIRED_GATES: tuple[str, ...] = (
     # law drift with no failing signal, which is why this gate's population is DECLARED and
     # its probes are the defect's own pre-fix bytes -- a gate that never looked cannot pass.
     "test_issue_routing_surfaces.py",
+    # Added with its registration (issue #79, ruling n=531, dispatch n=532). REQUIRED is the
+    # correct grain and OPTIONAL is not, for the deciding fact the entries around it state:
+    # the gate is PURE over the tree -- it DISCOVERS the law files the tree ships with a
+    # filesystem walk and drives SYNTHETIC trees in its probes, with no live board, no fleet
+    # manifest and no box-local fixture -- so it passes in a bootstrapped factory exactly as
+    # it does here. Its profile leg reads a surface OUTSIDE the tree, and that is handled by
+    # SKIPPING WITH ITS STATED REASON unless a profile root is supplied (the discipline
+    # `tests/ledger_boundary.py` exists to enforce after #76/#78), so the live binding is
+    # upheld by a patrol rather than asserted by a gate that cannot reach it. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the runner and keeping the file. THE MECHANISM IT GUARDS: the template
+    # PRESCRIBES a profile skill symlink (`BOOTSTRAP.md`, the harness-link step) and shipped
+    # NO mechanism anywhere that verified it, so a factory could bootstrap, pass every gate,
+    # and have its law never load at runtime -- a codified law with no active process and no
+    # deterministic gate upholding it, which is the failure P29 names. The surface is a
+    # DECLARED manifest (`docs/harness-bindings.json`), never a derivation over the repo's
+    # own `skills/` directory: a derivation sees only what EXISTS, and the property under
+    # test is that a load path is OWED -- the repo directory is empty exactly when the
+    # factory has not yet created one, so a gate keyed on it returns the empty set and passes
+    # on the one case that motivated the finding.
+    "test_harness_bindings.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

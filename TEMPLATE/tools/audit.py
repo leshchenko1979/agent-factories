@@ -2700,6 +2700,37 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_issue_routing_surfaces.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_issue_routing_surfaces.py"])
 
+    # GATE 86 -- harness bindings (issue #79, ruling n=531, dispatch n=532). The template
+    #     PRESCRIBED a profile skill symlink (`BOOTSTRAP.md`, the harness-link step) and
+    #     shipped NO mechanism anywhere that verified it: a factory could bootstrap, pass
+    #     every gate, and have its law never load at runtime -- a codified law with no
+    #     active process and no deterministic gate upholding it, which is the failure P29
+    #     names. The surface is a DECLARED manifest (`docs/harness-bindings.json`), never a
+    #     derivation over the repo's own `skills/` directory: a derivation sees only what
+    #     EXISTS, and the property under test is that a load path is OWED -- the repo
+    #     directory is empty exactly when the factory has not yet created one, so a gate
+    #     keyed on it returns the empty set and passes on the one case that motivated the
+    #     finding. Its COVERAGE leg DISCOVERS every law file the tree ships (a filesystem
+    #     walk, never `git ls-files`, so an UNCOMMITTED law file is seen in the worktree
+    #     that added it -- the #207 class), PRINTS the discovered set on every run, and REDs
+    #     naming every discovered law file no binding row covers, on BOTH admissible
+    #     layouts. REQUIRED, not OPTIONAL: it drives SYNTHETIC trees under a temp dir -- no
+    #     live board, no fleet manifest, no box-local fixture -- so it passes in a
+    #     bootstrapped factory exactly as it does here. Its profile leg reads a surface
+    #     OUTSIDE the tree and SKIPS WITH ITS STATED REASON unless a profile root is
+    #     supplied, so the live binding is upheld by a patrol rather than asserted by a gate
+    #     that cannot reach it. It is byte-paired with a TEMPLATE copy, as is the shared
+    #     reader it imports. Its runner is SCRIPT: the file carries a `__main__` guard and a
+    #     module-level `def test_*` leg, so a pytest collection would gather the live leg and
+    #     print its verdict; the script form is what PRINTS the discovered set and exits
+    #     non-zero on a problem. It carries NO budget entry -- a budget value is the process
+    #     owner's, never the implementing lane's (n=574 PART 5) -- so it runs on the DECLARED
+    #     DEFAULT and the audit prints that it did. Same grain as gate 85.
+    if (repo_root / "tests/test_harness_bindings.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_harness_bindings.py"]
+        )
+
     return gates_to_run
 
 

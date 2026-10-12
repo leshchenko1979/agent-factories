@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.57
+version: 0.1.58
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -384,6 +384,8 @@ outside it, the issue board. Every other path to it is read-only.
 
 **The workspace-hygiene instrument.** A factory audits and reaps its own workspace on a declared cadence, telling a lane's work IN FLIGHT from work STRANDED by age, so a busy factory never reads DEGRADED and genuine litter is still caught. Its law is `docs/instruments/hygiene.md` (shipped pair `TEMPLATE/docs/instruments/hygiene.md`), reloaded through the `skills/meta-factory/hygiene.md` symlink; it upholds **Process 4 — Workspace Hygiene Sweep** (`docs/processes.md`).
 
+**The harness-binding instrument.** The template PRESCRIBES a profile skill symlink (`BOOTSTRAP.md`, the harness-link step) and shipped no mechanism anywhere that verified it, so a factory could bootstrap, pass every gate, and have its law never load at runtime — a codified law with no active process and no deterministic gate upholding it, which is the failure P29 names (issue #79, ruled at `n=531`). It now has TWO halves, and the split is the point. The OFFLINE half is `tests/test_harness_bindings.py` (gate P29, shipped byte-paired with a TEMPLATE copy): it discovers every law file the tree ships, prints the discovered set on every run, and fails naming any law file the declared manifest `docs/harness-bindings.json` does not cover. The surface is a DECLARATION, never a derivation over the repo's own `skills/` directory — a derivation sees only what EXISTS, and the property under test is that a load path is OWED. The LIVE half is a **patrol**: that the profile entry is a SYMLINK whose realpath equals the declared source, never a copy. No offline gate can reach a surface outside the tree, so the patrol carries it — **ONE named owner, `Surveys`** (`docs/processes.md`, P30), folded into the EXISTING measurement run rather than given a cron of its own, and its product is a required section of the measurement artifact, asserted by `tests/test_score_artifact_sections.py`.
+
 | Surface | Holds | Authoritative writer | Everyone else |
 |---|---|---|---|
 | the issue board (`leshchenko1979/agent-factories` issues) | the work itself — intake, state, and the receipt that resolved it | the lane that files or settles the item (`Triage` owns intake) | read-only, via `gh` |
@@ -402,6 +404,7 @@ outside it, the issue board. Every other path to it is read-only.
 | `registry/fleet.json` and `registry/factories/<slug>.json` | what each factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
 | `registry/gates.json` | the per-gate time budgets and the **default's derivation** — every declared value is `budget_sec = margin_x x measured_sec`, and the default is `margin_x x the largest measured runtime among the UNDECLARED population` (the registered gates with no entry), re-derived whenever that population changes | the measurement duty (`Surveys`), on the same derivation rule the budget values follow — **except the DEFAULT's VALUE, which is a policy choice about what the suite does with a gate nobody has measured, and is `HQ`'s** (n=574 PART 5) | read-only; `tools/gate_budget.py` REFUSES a stated derivation its own numbers contradict, and `tests/test_gate_registration.py` asserts the live one holds and bites on a synthetic manifest that violates it |
+| `docs/harness-bindings.json` | which law files this factory ships and where each one loads from — the `profile` whose `skills/` directory carries the load paths, and a row per bound law (`skill`, `repo_path`, `form`), with `loaded: false` + `reason` recording a law deliberately not bound | `HQ` (the content); the `Worker` types it — same authorship split as the surfaces above | read-only; `tests/test_harness_bindings.py` (gate P29) DISCOVERS every law file the tree ships, PRINTS the discovered set on every run, and fails naming any law file no row covers |
 
 **Landing work: the pusher, never a raw push.** A lane lands work through `tools/publish.py` —
 never a raw `git push`. The failure this prevents is measured, not hypothetical: a direct push

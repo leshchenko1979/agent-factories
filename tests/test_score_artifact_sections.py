@@ -78,6 +78,14 @@ CRITERIA = REPO / "docs" / "quality-criteria.md"
 # its reason; a MALFORMED one FAILS.
 INVARIANT_KEY = "score_artifact_sections"
 BAND_KEY = "score_artifact_band"
+# A THIRD key, for the same reason the band has a second one: the harness-binding result
+# (the surveys patrol's product, issue #79 ruling n=531) is a required section whose
+# requirement landed LATER than the nine above, and one boundary cannot separate two
+# populations that landed at different instants. Adding it to `REQUIRED` instead would
+# retroactively RED every artifact written since 2026-09-19 -- a section reconstructed after
+# the fact is fabricated provenance (the no-backfill law), so the correct shape is its own
+# EXCLUSIVE boundary: artifacts at or before the landing day are excused, later ones checked.
+HARNESS_BINDING_KEY = "score_artifact_harness_binding"
 
 # The PROBES' own boundaries — fixtures, never the factory's declaration. Both are EXCLUSIVE
 # on the same terms the law states, and they are placed on the dates the probe fixtures were
@@ -356,6 +364,43 @@ def band_leg(band_landed: dt.date) -> tuple[list[str], list[str], list[str], boo
         )
     return excused, checked, found, True
 
+# --- the harness-binding section (issue #79, ruling n=531) --------------------
+#
+# The surveys patrol's product, and the mechanism P7 already uses for a process whose
+# result must be RECORDED rather than trusted: the live half of the harness-binding law
+# reads a surface outside the tree, so no offline gate can assert it, and the patrol
+# writes its result into the measurement artifact instead. This leg is the requirement
+# that the section is there. It carries its OWN boundary for the reason stated beside
+# `HARNESS_BINDING_KEY`.
+
+HARNESS_BINDING_ANCHOR = "## Harness-Binding Verification"
+
+def harness_binding_problems(text: str) -> list[str]:
+    """Problems in one artifact's harness-binding section. Pure: no file system, no clock."""
+    if HARNESS_BINDING_ANCHOR in headings(text):
+        return []
+    return [f"missing {HARNESS_BINDING_ANCHOR}"]
+
+def harness_binding_leg(landed: dt.date) -> tuple[list[str], list[str], list[str], bool]:
+    """`(excused, checked, problems, declared)` over the live tree.
+
+    `landed` is the DECLARED boundary, passed in rather than read from a module constant so
+    the probes can drive the predicate with their own fixture date — the `band_leg` shape.
+    """
+    excused: list[str] = []
+    checked: list[str] = []
+    found: list[str] = []
+    for day, path in artifacts():
+        if day <= landed:
+            excused.append(path.name)
+            continue
+        checked.append(path.name)
+        found.extend(
+            f"{path.name}: {problem}"
+            for problem in harness_binding_problems(path.read_text(encoding="utf-8"))
+        )
+    return excused, checked, found, True
+
 # The synthetic artifact the probes build from. One entry per required section, so
 # omitting an entry is exactly how a probe makes one section absent. The key set is
 # asserted EQUAL to the required labels: the fixture cannot drift from the rule.
@@ -613,6 +658,61 @@ def test_the_live_band_population_is_clean() -> None:
     if reason:
         pytest.skip(reason)
     assert problems == [], "\n".join(problems)
+
+def test_the_harness_binding_section_is_forward_only() -> None:
+    """Its OWN boundary: pre-boundary artifacts are excused, never repaired (no backfill)."""
+    landed = _declared_day_or_skip(REPO, HARNESS_BINDING_KEY)
+    excused, checked, _problems, _ = harness_binding_leg(landed)
+    assert set(excused) | set(checked) == {p.name for _d, p in artifacts()}
+    assert not (set(excused) & set(checked))
+
+def test_the_live_harness_binding_population_is_clean() -> None:
+    landed = _declared_day_or_skip(REPO, HARNESS_BINDING_KEY)
+    _excused, checked, problems, _ = harness_binding_leg(landed)
+    reason = _population_reason(checked, landed, "harness-binding-checked artifact")
+    if reason:
+        pytest.skip(reason)
+    assert problems == [], "\n".join(problems)
+
+def test_the_procedure_names_the_harness_binding_anchor() -> None:
+    """The rule is stated where the run reads it, not only where it is enforced."""
+    if not declared():
+        return
+    assert HARNESS_BINDING_ANCHOR in PROCEDURE.read_text(encoding="utf-8"), (
+        "docs/measurement-procedure.md must name the harness-binding section the patrol writes"
+    )
+
+def test_probe_the_harness_binding_predicate_bites() -> None:
+    assert harness_binding_problems("## Executive Summary & Movements\n") == [
+        f"missing {HARNESS_BINDING_ANCHOR}"
+    ]
+    assert harness_binding_problems(f"# x\n\n{HARNESS_BINDING_ANCHOR}\n") == []
+
+def test_probe_the_harness_binding_leg_excuses_pre_boundary_and_checks_after(
+    tmp_path: Path,
+) -> None:
+    """The boundary MOVES the requirement; it never excuses the population."""
+    global SCORES
+    saved = SCORES
+    try:
+        scores = tmp_path / "scores"
+        scores.mkdir()
+        (scores / "2026-10-10.md").write_text("# old\n", encoding="utf-8")
+        (scores / "2026-10-12.md").write_text(
+            f"# new\n\n{HARNESS_BINDING_ANCHOR}\n", encoding="utf-8"
+        )
+        SCORES = scores
+        excused, checked, problems, declared_here = harness_binding_leg(dt.date(2026, 10, 11))
+        assert declared_here
+        assert excused == ["2026-10-10.md"], excused
+        assert checked == ["2026-10-12.md"], checked
+        assert problems == [], problems
+        # The SAME post-boundary artifact, section absent, must bite.
+        (scores / "2026-10-12.md").write_text("# new\n", encoding="utf-8")
+        _e, _c, problems2, _ = harness_binding_leg(dt.date(2026, 10, 11))
+        assert len(problems2) == 1 and "Harness-Binding" in problems2[0], problems2
+    finally:
+        SCORES = saved
 
 def declared_day(repo: Path, key: str) -> dt.date:
     """The declared boundary `key` names, as a DATE, or `SkipGate`/`GateError`.

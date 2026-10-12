@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.29
+version: 0.1.30
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -58,6 +58,27 @@ scheduled, which shell a gate actually runs in.
 Swapping a binding is a **one-file change** and must not require editing this
 law. If a product name appears below in a sentence that states *mechanics*, that
 is a leak: move it to the binding.
+
+**A binding is DECLARED, and the declaration is checkable.** Every law file this
+factory ships must load somewhere, and the load path is a fact about the binding
+rather than about this law, so it lives in `docs/harness-bindings.json`: the
+`profile` (or harness equivalent) whose `skills/` directory carries the load
+paths, and one row per bound law — `skill`, `repo_path` (relative to the repo
+root) and `form` (`dir` or `file`). A law the factory deliberately does not bind
+gets a row with `"loaded": false` and a `reason`, so an omission is STATED rather
+than implied away.
+
+The surface is a DECLARATION and never a derivation over the repo's own `skills/`
+directory, and that distinction is the whole mechanism: a derivation sees only
+what EXISTS, while the property under test is that a load path is OWED — that
+directory is empty exactly when the factory has not yet created one, so a check
+keyed on it returns the empty set and passes on the one case that motivated the
+finding. `tests/test_harness_bindings.py` (gate P29) upholds the offline half:
+it discovers every law file the tree ships, prints the discovered set on every
+run, and fails naming any law file no row covers. The LIVE half — that the load
+path is a symlink to the declared source, never a copy — is upheld by a patrol
+with ONE named owner, because no offline gate can reach a surface outside the
+tree.
 
 ---
 

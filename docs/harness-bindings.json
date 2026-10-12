@@ -1,0 +1,11 @@
+{
+  "_note": "Which law files THIS factory ships and where each one loads from, read by tests/test_harness_bindings.py (gate P29). This is FACTORY DATA, read by the gate — never inline in it, because the gate is paired byte-identically with its TEMPLATE copy and one factory's history must not live in a file that ships to every new factory. The skeleton is TEMPLATE/docs/harness-bindings.example.json. `profile` names the OpenCrabs profile whose skills/ directory carries the load paths; each row in `bindings` names the profile entry (`skill`), the source in this repo (`repo_path`, relative to the repo root) and its shape (`form`: `dir` or `file`). Read at 2026-10-12T12:25:59Z: /root/.opencrabs/profiles/ops/skills/meta-factory is a SYMLINK whose realpath is /root/agent-factories/skills/meta-factory, which is the declared source, so the row below is the true binding and not an intention. The live leg (that the profile entry remains a symlink to the declared source, never a copy) is NOT asserted by the offline gate — no gate can reach outside the tree — and is upheld by the surveys patrol, whose product is a required section of the measurement artifact.",
+  "profile": "ops",
+  "bindings": [
+    {
+      "skill": "meta-factory",
+      "repo_path": "skills/meta-factory",
+      "form": "dir"
+    }
+  ]
+}

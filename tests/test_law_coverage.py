@@ -83,7 +83,15 @@ PRACTICE_GATES: dict[str, list[str]] = {
     # pair: the pure predicate for the wake route, and the measurement run for the live
     # check. A mapping to a file that implements nothing is dead text (P29, #54).
     "P28": ["tests/test_cron_thinness.py", "tests/test_score_artifact_sections.py", "docs/measurement-procedure.md"],
-    "P29": ["tests/test_law_coverage.py"],  # Every law needs active process or gate (this test)
+    # P29's own two mechanisms. This test is the mapping's reader (a declared practice with
+    # no mechanism is what it reds on), and `tests/test_harness_bindings.py` is the gate
+    # that upholds the practice's HARDEST instance: the template PRESCRIBED a profile skill
+    # symlink and shipped no mechanism anywhere verifying it, so a factory could pass every
+    # gate and have its law never load -- a codified law with no active process and no gate
+    # upholding it, which is the failure P29 names (issue #79, ruling n=531). Its shared
+    # reader is named beside it because the two are one mechanism split for DRY: the gate
+    # cannot run without the policy that decides skip-vs-fail.
+    "P29": ["tests/test_law_coverage.py", "tests/test_harness_bindings.py", "tests/declared_surface.py"],
     "P30": ["evidence/rework.md", "tests/test_rework.py"],  # Autonomous incident remediation
     "P31": ["docs/processes.md", "TEMPLATE/roles/hq.md"],  # Every process has exactly one named owner
     "P32": ["tools/review.py", "tests/test_review.py", "docs/review-lenses.md"],  # Multi-lens review rotation

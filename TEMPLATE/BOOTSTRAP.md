@@ -220,9 +220,43 @@ the profile directory to the repo skill directory during bootstrap:
 ln -s /path/to/repo/skills/{{NAME}} ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}}
 ```
 
+**Declare the binding.** The symlink is half the act; the other half is the DECLARATION
+that makes it checkable. Write a row for every law file this repo ships into
+`docs/harness-bindings.json` (copy [`docs/harness-bindings.example.json`](docs/harness-bindings.example.json)
+into `docs/` first — the example itself is never read):
+
+```json
+{
+  "profile": "{{PROFILE}}",
+  "bindings": [
+    { "skill": "{{NAME}}", "repo_path": "skills/{{NAME}}", "form": "dir" }
+  ]
+}
+```
+
+`repo_path` is the source relative to the repo root, and `form` is `dir` for a skill
+directory or `file` for a single law file at the repo root. A law this factory deliberately
+does not bind gets a row with `"loaded": false` and a `reason`, and is printed as excused
+rather than silently dropped.
+
+**Why declare rather than derive.** The repo's own `skills/` directory cannot be the
+surface: a derivation sees only what EXISTS, and the property under test is that a load
+path is OWED — that directory is empty exactly when the factory has not yet created one,
+so a gate keyed on it returns the empty set and passes on the one case that motivated the
+finding. A declaration is the only form that can owe.
+
+`tests/test_harness_bindings.py` (gate P29) upholds it: it DISCOVERS every law file the
+repo ships, PRINTS the discovered set on every run, and fails naming any law file no row
+covers. The live half — that the profile entry is a SYMLINK whose realpath equals the
+declared source, never a copy — is upheld by a PATROL rather than by the offline gate,
+because no gate can reach a surface outside the tree; the patrol has ONE named owner
+(P30) and its product is a required section of the measurement artifact.
+
 **Evidence:**
 - the skill file path, and the version string in it;
-- for OpenCrabs: `test -L ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}} && test -d ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}}`.
+- for OpenCrabs: `test -L ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}} && test -d ~/.opencrabs/profiles/{{PROFILE}}/skills/{{NAME}}`;
+- `docs/harness-bindings.json` exists and names this skill, and
+  `python3 tests/test_harness_bindings.py` exits 0 printing the discovered set.
 
 ---
 
