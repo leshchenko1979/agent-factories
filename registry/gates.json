@@ -239,11 +239,11 @@
       "measured_sec": 1.08
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 436.59,
-      "load_at_measure": 4.43,
-      "margin_x": 4.007,
-      "measured_at": "4c9ba0bd4b036fabcb7cdedf34c231a53eab0f26",
-      "measured_sec": 108.96
+      "budget_sec": 356.15,
+      "load_at_measure": 1.31,
+      "margin_x": 4.008,
+      "measured_at": "73edf9df680c398eb782093f560e73088e9f6349",
+      "measured_sec": 88.85
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 22.43,
