@@ -446,6 +446,8 @@ DECLARATION_SURFACES: tuple[
     ("close-board-exemptions", "docs/close-board-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`) and a ledger row `n`, neither of which this "
      "leg can read offline"),
+    ("harness-bindings", "docs/harness-bindings.json",
+     (("bindings", "repo_path", DECL_PATH),), ""),
     ("hygiene-protected", "docs/hygiene-protected.json", (),
      "a PREVENTION surface by its own docstring -- an unmatched entry is legal, not a "
      "debt -- and its targets are absolute /tmp paths, not tree paths"),

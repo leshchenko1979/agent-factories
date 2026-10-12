@@ -657,6 +657,13 @@
       "docs/products.example.json",
       "docs/products.json",
       "tools/roadmap.py"
+    ],
+    "tests/test_harness_bindings.py": [
+      "docs/harness-bindings.example.json",
+      "docs/harness-bindings.json",
+      "skills/meta-factory/SKILL.md",
+      "tests/declared_surface.py",
+      "tests/test_harness_bindings.py"
     ]
   }
 }

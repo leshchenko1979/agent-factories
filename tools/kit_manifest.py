@@ -204,6 +204,9 @@ CLOSURE_MODULES = frozenset({
     # tests/ -- helper modules the gates import rather than run
     "TEMPLATE/tests/gate_fixtures.py",       # imported_by 5 gates
     "TEMPLATE/tests/gate_registry.py",       # the gate roster, read by audit.py's gate
+    "TEMPLATE/tests/declared_surface.py",    # the absent-means-skip reader, imported
+                                             # by tests/test_harness_bindings.py; no CLI
+                                             # and no __main__, so it is a closure
     "TEMPLATE/tests/hook_installation.py",   # imported by 2 gates
     "TEMPLATE/tests/ledger_boundary.py",     # imported_by 7 gates
     "TEMPLATE/tests/rework_table.py",        # the ONE entries-table parser (miidas
