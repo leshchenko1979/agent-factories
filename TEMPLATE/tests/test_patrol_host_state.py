@@ -6407,6 +6407,89 @@ def test_the_dispatch_delivery_leg_reads_a_LATE_STAMP_by_the_instant_the_row_DEC
     assert mismatch["problems"], "without the declaration the delivery falls outside the window"
     assert "WINDOW MISMATCH" in mismatch["problems"][0], mismatch["problems"]
 
+def _row_with_lag(n: int, *, ts: dt.datetime, lag_secs: float, subject: str = "#90") -> dict:
+    """A dispatch row whose detail QUOTES `resolved_at` an exact LAG behind its write stamp.
+
+    `ts` is written to the second and `days_ago=0`, so the lag is exact and the boundary pair
+    below is a statement about the bound rather than about rounding.
+    """
+    declared = ts - dt.timedelta(seconds=lag_secs)
+    return _stall_row(
+        n, "dispatch", subject, 0, now=ts, actor="triage",
+        detail="DISPATCH to the probe lane, resolved LIVE this turn "
+               f"(resolved_at {declared.strftime('%Y-%m-%dT%H:%M:%SZ')})",
+        refs=[{"session": _PROBE_TARGET}],
+    )
+
+def test_the_declared_instant_is_BOUNDED_so_a_QUOTED_token_declares_NOTHING() -> None:
+    """#476: the declared-instant form is a PHRASE MATCH, so a row that QUOTES the token as
+    evidence about a DIFFERENT artifact declares it as its own dispatch instant.
+
+    The live specimen is row `n=3215` (#474's dispatch): its detail quotes the stale
+    `registry/state.json` snapshot's `resolved_at 2026-10-05T13:01:19Z` as a MEASUREMENT, 8
+    days before the row's own write stamp, and the #432 anchor rule built the judged window
+    from that quote -- printing "records no delivery" for a dispatch that had landed one
+    second BEFORE the row's stamp. `n=3226` repeated it within the hour, on the ruling lane's
+    own next dispatch.
+
+    BOTH ARMS, because either alone proves nothing: a mid-line declaration INSIDE the bound is
+    still used as the anchor, and the SAME shape with a quoted instant BEYOND the bound falls
+    back to `ts` -- where the delivery IS found. A bound that rejected every declaration would
+    pass the second arm while silently disabling the #432 repair the first arm pins.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    ts = now - dt.timedelta(hours=1)
+
+    # ARM 1 -- a DESIGNED declaration: 7200 s of lag, well inside the bound. It anchors the
+    # window on the declared instant and clears a delivery that sits there.
+    designed_at = ts - dt.timedelta(seconds=7200)
+    used = RUNNER.dispatch_delivery_leg(
+        [_row_with_lag(161, ts=ts, lag_secs=7200)], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(designed_at, "[session-notify from=abc]\nDISPATCH #90 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert used["coverage"]["dispatch_rows_declared_anchor"] == 1, used["coverage"]
+    assert used["problems"] == [], (
+        f"a declaration inside the bound must still anchor the window (#432)\n{used['problems']}"
+    )
+
+    # ARM 2 -- the `n=3215` shape: the same row carrying a quoted instant 8 days back. It must
+    # NOT become the anchor, and a delivery inside the `ts` window must be found.
+    fell_back = RUNNER.dispatch_delivery_leg(
+        [_row_with_lag(162, ts=ts, lag_secs=8 * 86400)], read_at=read_at, bound=bound,
+        deliveries_fn=lambda: (
+            [_delivery(ts - dt.timedelta(seconds=60),
+                       "[session-notify from=abc]\nDISPATCH #90 to the lane",
+                       session=_PROBE_TARGET)],
+            ["probe-home"], [],
+        ),
+    )
+    assert fell_back["coverage"]["dispatch_rows_declared_anchor"] == 0, (
+        f"a quote beyond the bound must fall back to the write stamp\n{fell_back['coverage']}"
+    )
+    assert fell_back["problems"] == [], (
+        f"anchored on `ts`, the delivery lands inside the window\n{fell_back['problems']}"
+    )
+
+    # ... AND THE BOUND IS EXACT, not merely present: a lag 1 s inside it anchors on the
+    # declaration, 1 s outside it falls back to `ts`. The arms above would pass under ANY
+    # bound; this pair pins WHICH one.
+    limit = RUNNER.DECLARED_INSTANT_MAX_LAG_SECS
+    for n, lag, expected in ((163, limit - 1, 1), (164, limit + 1, 0)):
+        leg = RUNNER.dispatch_delivery_leg(
+            [_row_with_lag(n, ts=ts, lag_secs=lag)], read_at=read_at, bound=bound,
+            deliveries_fn=lambda: ([], ["probe-home"], []),
+        )
+        assert leg["coverage"]["dispatch_rows_declared_anchor"] == expected, (
+            f"a {lag} s lag must anchor={expected} against a {limit} s bound\n"
+            f"{leg['coverage']}"
+        )
+
 def test_the_dispatch_delivery_leg_reports_a_WINDOW_MISMATCH_never_an_ABSENCE() -> None:
     """#432, the class. The leg carried ONE verdict for TWO conditions, so a delivery that
     exists but falls outside the window the leg chose read as "records no delivery" -- a FALSE

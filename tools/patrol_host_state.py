@@ -310,6 +310,21 @@ DISPATCH_DECLARED_INSTANT_FORMS = (
 # either side is generous by orders of magnitude and still leaves FIVE of those forty-nine
 # inside the band.
 DELIVERY_MATCH_HORIZON_SECS = 86400
+# THE BOUND ON A ROW'S OWN DECLARED INSTANT (#476). The declared-instant form is a PHRASE
+# MATCH, so a detail that QUOTES the token as evidence about a DIFFERENT artifact declares it
+# as its own dispatch instant -- the hole #432 left open. Measured on this ledger 2026-10-13:
+# row `n=3215` (#474's dispatch) quotes the stale `registry/state.json` snapshot's
+# `resolved_at 2026-10-05T13:01:19Z` AS A MEASUREMENT, and the anchor rule built the judged
+# window 8 days early, printing "records no delivery" for a dispatch that had landed one
+# second before the row's own write stamp. `n=3226` is the second instance, found within the
+# hour by the lane that wrote it.
+# The bound separates the DESIGNED population from a quote, with margin on both sides: the
+# largest lag among the 45 designed declarations is 1675 s (51.6x headroom under the bound),
+# while the two quoted instances are 672779 s and 672598 s (7.8x past it). A quote INSIDE the
+# horizon is NOT separated by this rule; that residual is stated in the #476 ruling rather
+# than papered over, and a third instance carrying a RECENT quote is the signal for the
+# schema-side field, not a third application of this bound.
+DECLARED_INSTANT_MAX_LAG_SECS = 86400
 # THE SCOPE OF A DELIVERY'S HEADER (#433), in LINES, so "the header" is a DECLARED quantity
 # rather than a number hidden in a function. A dispatched notify NAMES ITS SUBJECT in its
 # opening line -- `TRIAGE DISPATCH — #428 (law: ...)`, `[factory dispatch] #432 — WORK ITEM`,
@@ -3444,7 +3459,15 @@ def dispatch_delivery_leg(
         # count is of rows whose anchor actually CAME from the declaration, never of rows that
         # merely carry one -- a number that counted presence would print an anchor claim for a
         # window it did not build.
-        uses_declaration = declared is not None and declared < ts
+        # AND THE LAG IS BOUNDED (#476): a declaration far behind the write stamp is not this
+        # row's dispatch instant but a token the row QUOTES as evidence about another artifact,
+        # so it falls back to `ts` exactly as an unparsed form does. Both arms are in
+        # `DECLARED_INSTANT_MAX_LAG_SECS` above.
+        uses_declaration = (
+            declared is not None
+            and declared < ts
+            and (ts - declared).total_seconds() <= DECLARED_INSTANT_MAX_LAG_SECS
+        )
         anchor = declared if uses_declaration else ts
         if uses_declaration:
             declared_anchor += 1
