@@ -2150,11 +2150,23 @@ def _fire_receipt(fire_hours: float, latency_secs: float, n: int) -> dict:
             "subject": f"registry-attest-{fire[:10]}",
             "detail": "the round completed. duty=completed"}
 
-def _fires(hours: tuple[float, ...], *, name: str = "factory-registry-attest") -> list[dict]:
-    """Fire records for one job, on the instants named — the residual's population."""
+def _fires(hours: tuple[float, ...], *, name: str = "factory-registry-attest",
+           suppressed: bool = False) -> list[dict]:
+    """Fire records for one job, on the instants named — the residual's population.
+
+    `suppressed` writes the DAEMON's own wording into the record's `content` and derives the
+    flag from it through the module's own reader, so a probe exercising #477 carries the same
+    two fields the live source builds rather than a hand-set flag with no prose behind it.
+    """
+    content = (
+        f"Trigger condition not met (exit_code=0, output_bytes=0). "
+        f"{RUNNER.CRON_SUPPRESSION_MARKER}." if suppressed else ""
+    )
     return [
         {"job_id": _duty_row()["id"], "job_name": name,
-         "started_at": _plus(_DUTY_BOUND, h)}
+         "started_at": _plus(_DUTY_BOUND, h),
+         "content": content,
+         "suppressed": RUNNER.fire_is_suppressed(content)}
         for h in hours
     ]
 
@@ -4161,6 +4173,161 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
         "the reason must not assert a fact about the box over an empty population"
     )
 
+_OWES_NONE_PROMPT = (
+    "Thin trigger only — do NOT execute any project work yourself. Run the pusher, then "
+    "stop.\n\nreceipt_subject: none\n"
+)
+
+def test_an_OWES_NONE_declaration_reads_OWES_NONE_and_hunts_no_receipt() -> None:
+    """#424 items 1+2+3-clause-3 — ordered at n=2723, re-sequenced at n=3228.
+
+    `factory-publish` runs the pusher in the cron's OWN session, and the ledger's actor set is
+    closed — SKILL.md section 11 names the pusher a TOOL, not a lane — so its duty owes no
+    receipt at all. Before the bucket the leg read `none` as a STEM, hunted `none-<round>*`,
+    found nothing, and RED every round: the false MISSING the amendment ruling reproduced by
+    running this very reader hermetically.
+    """
+    row = _duty_row(prompt=_OWES_NONE_PROMPT)
+    leg = _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0))
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["jobs_owing_none"] == 1, leg["coverage"]
+    assert leg["coverage"]["owes_none_jobs"] == ["factory-registry-attest"], leg["coverage"]
+    # THE TWO SILENCES ARE COUNTED APART: a row that DECLARED it owes none is not a row that
+    # declared nothing, and folding them into one number reports the second as the first.
+    assert leg["coverage"]["jobs_declaring_receipt"] == 0, leg["coverage"]
+    assert leg["coverage"]["jobs_undeclared"] == 0, leg["coverage"]
+    # AND THE BUCKET REACHES THE REPORT. Driven from a MIXED population on purpose: a leg
+    # whose judged population is empty renders through the generic NOT-RUN block, so an
+    # owes-none row ALONE could never prove the bucket is PRINTED — only that it is counted.
+    # `factory-publish` owes none beside a duty that does, which is the live shape.
+    owes_none = _duty_row(name="factory-publish", prompt=_OWES_NONE_PROMPT,
+                          row_id="e30bfc83-3fee-400a-945d-e74b962c142e")
+    rc, out, err = _run([], [], cron_rows=[owes_none, _duty_row()], prefixes=["factory-"],
+                        cron_fires=_fires((0.5,)))
+    assert "OWES NONE" in out, out[-2500:]
+    assert "factory-publish" in out, out[-2500:]
+    assert "declare NOTHING and are NOT JUDGED" in out, out[-2500:]
+
+def test_the_OWES_NONE_bucket_is_what_stops_the_false_MISSING() -> None:
+    """The neuter probe, and without it the arm above proves nothing.
+
+    The neutered reader differs from the live one in ONE respect — whether the token `none` is
+    a declaration that nothing is owed or a stem to hunt — so a verdict that MOVES under it is
+    attributable to the bucket rather than to the fixture.
+    """
+    row = _duty_row(prompt=_OWES_NONE_PROMPT)
+    assert _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0))["problems"] == []
+
+    real = RUNNER.declared_receipt_disposition
+
+    def _pre_bucket(prompt):
+        disposition, stem = real(prompt)
+        return ("declares", stem or RUNNER.RECEIPT_OWES_NONE_TOKEN) if (
+            disposition == "owes_none") else (disposition, stem)
+
+    RUNNER.declared_receipt_disposition = _pre_bucket
+    try:
+        neutered = _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0))
+    finally:
+        RUNNER.declared_receipt_disposition = real
+    assert neutered["problems"], (
+        "reading `none` as a STEM must RED the round again — the bucket is the only thing "
+        f"standing between this row and a false MISSING every round: {neutered['coverage']}"
+    )
+    assert "NO duty receipt" in neutered["problems"][0], neutered["problems"][0]
+
+def test_the_SUPPRESSION_predicate_is_anchored_to_the_DAEMONS_own_wording() -> None:
+    """#477. The anchor is the daemon's EMITTED text, read here from the CONSTANT rather than
+    from a copied literal — so a change in that wording moves this probe instead of silently
+    un-excusing every gated round on the box."""
+    assert RUNNER.fire_is_suppressed(
+        f"Trigger condition not met (exit_code=0, output_bytes=0). "
+        f"{RUNNER.CRON_SUPPRESSION_MARKER}."
+    ), "the daemon's own suppression wording must read as suppressed"
+    assert RUNNER.fire_is_suppressed(
+        f"Trigger condition not met (exit_code=1, output_bytes=19070). "
+        f"{RUNNER.CRON_SUPPRESSION_MARKER}."
+    ), "the marker is the wording, not the exit code — both codes are emitted"
+    assert not RUNNER.fire_is_suppressed(""), "an empty run record is not a suppression"
+    assert not RUNNER.fire_is_suppressed("the round completed. duty=completed"), (
+        "a round that RAN and declared its duty must never read as suppressed"
+    )
+
+def test_a_SUPPRESSED_round_is_EXCUSED_and_never_a_missing_duty() -> None:
+    """#477 on the round the leg judges directly.
+
+    The round fired on time, the run is stored `status=success`, and no receipt exists — the
+    exact shape this leg exists to red, and legitimate all the same, because the job's own
+    trigger gate never let the lane wake.
+    """
+    fires = _fires((0.5,), suppressed=True)
+    leg = _duty_leg([_duty_row()], [], fires=fires, read_at=_plus(_DUTY_FIRE, 5.0))
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["rounds_excused_by_suppression"] == 1, leg["coverage"]
+    assert any(RUNNER.CRON_SUPPRESSION_MARKER in e for e in leg["excused"]), leg["excused"]
+
+def test_the_SUPPRESSION_excuse_is_what_stops_the_red_round() -> None:
+    """The neuter probe for #477: blind the leg to the fire's flag and the round REDS again.
+
+    Built by REMOVING the field the live source carries, not by editing a constant, because
+    that is the defect exactly — before #477 the reader did not carry it at all.
+    """
+    fires = _fires((0.5,), suppressed=True)
+    blind = [{k: v for k, v in f.items() if k != "suppressed"} for f in fires]
+    assert _duty_leg([_duty_row()], [], fires=fires,
+                     read_at=_plus(_DUTY_FIRE, 5.0))["problems"] == []
+    neutered = _duty_leg([_duty_row()], [], fires=blind, read_at=_plus(_DUTY_FIRE, 5.0))
+    assert neutered["coverage"]["rounds_excused_by_suppression"] == 0, neutered["coverage"]
+    assert len(neutered["problems"]) == 1, neutered["problems"]
+    assert "NO duty receipt" in neutered["problems"][0], neutered["problems"][0]
+
+def test_a_SUPPRESSED_PRIOR_round_is_excused_on_the_round_the_leg_JUDGES() -> None:
+    """#477 on the #281 path, which is the LIVE case rather than a corner.
+
+    `factory-questions-redeliver` carries a 1800 s default residual against a 6 h cadence, so
+    its newest round is ALWAYS in flight and the round this leg actually judges is the prior
+    one. An excuse wired only to the newest round would leave the live defect standing.
+    """
+    row = _duty_row(last_run_at=_plus(_DUTY_BOUND, 24.5))
+    newest = _fires((24.5,))[0]                       # the round that RAN
+    prior = _fires((0.25,), suppressed=True)[0]       # the PRIOR round, suppressed
+    fires = [prior, newest]
+    leg = _duty_leg([row], [], fires=fires, read_at=_plus(_DUTY_BOUND, 24.5 + 0.1))
+    assert leg["coverage"]["rounds_judged_by_fallback"] == 0, (
+        f"this fixture must be excused on the PRIOR round, not judged: {leg['coverage']}"
+    )
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["rounds_excused_by_suppression"] == 1, leg["coverage"]
+    assert any("PRIOR round" in e for e in leg["excused"]), leg["excused"]
+
+def test_a_NON_suppressed_round_still_REDS_so_the_excuse_is_no_false_CLEAN() -> None:
+    """The alternative #477's ruling REFUSED, kept as a probe.
+
+    A declaration-based excuse ("this duty is conditional") would also cover a conditional duty
+    that genuinely ran and produced nothing. This is that case: the fire record is present,
+    carries no suppression wording, and the round must still RED.
+    """
+    leg = _duty_leg([_duty_row()], [], fires=_fires((0.5,)),
+                    read_at=_plus(_DUTY_FIRE, 5.0))
+    assert leg["coverage"]["rounds_excused_by_suppression"] == 0, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+
+def test_a_round_no_fire_record_MATCHES_is_JUDGED_and_never_excused() -> None:
+    """An unreadable or mismatched fire table must not silently excuse every duty on the box.
+
+    The round's instant is matched to a record by INSTANT, so a record belonging to another
+    job can never stand in for it — and a suppression that cannot be ATTRIBUTED to this round
+    is one this leg must not act on.
+    """
+    foreign = {"job_id": "some-other-job", "job_name": "some-other-job",
+               "started_at": _DUTY_FIRE, "content": f"{RUNNER.CRON_SUPPRESSION_MARKER}.",
+               "suppressed": True}
+    leg = _duty_leg([_duty_row()], [], fires=[foreign], read_at=_plus(_DUTY_FIRE, 5.0))
+    assert leg["coverage"]["rounds_excused_by_suppression"] == 0, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "NO duty receipt" in leg["problems"][0], leg["problems"][0]
+
 def test_probe_the_duty_reason_NAMES_its_population_and_refuses_the_conclusion() -> None:
     """#242 clause 5. The old text ended "so no duty owes a receipt on this box" — a
     POSITIVE claim about the box drawn from an enumeration that can be empty. An empty
@@ -4173,13 +4340,19 @@ def test_probe_the_duty_reason_NAMES_its_population_and_refuses_the_conclusion()
                                   read_at="probe")
     assert leg["status"] == "NOT RUN", leg["status"]
     reason = leg["reason"]
-    assert "NONE carries" in reason, reason
+    assert "NONE names a receipt STEM to judge" in reason, reason
     assert "NO DUTY WAS JUDGED" in reason, reason
     assert "never a finding" in reason, reason
     assert "so no duty owes a receipt on this box" not in reason, reason
     assert "1 enabled row(s) this factory declares" in reason, (
         f"the reason must name the population it enumerated: {reason}"
     )
+    # #424 item 2 / #477: the reason must separate the TWO ways a row can be silent about a
+    # receipt -- declaring it OWES NONE (a declaration, read and honoured) and carrying no
+    # `receipt_subject:` line at all (a silence the leg cannot act on). A reason that prints
+    # one number for both reports the second as the first.
+    assert "declares it OWES NONE" in reason, reason
+    assert "carries no `receipt_subject:` line at all" in reason, reason
 
 def test_probe_every_probe_is_callable_by_the_SCRIPT_runner() -> None:
     """This file has TWO runners, and a probe must satisfy both (#242, measured).

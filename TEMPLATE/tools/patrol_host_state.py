@@ -1862,9 +1862,26 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
     return rows, homes_read, unreached
 
 
+# THE DAEMON'S OWN WORDING for a round its trigger gate skipped (#477). Read from the run
+# record's `content` prose, which is the ONLY field that separates a suppressed fire from a
+# round that ran and produced nothing -- both are stored `status=success`.
+CRON_SUPPRESSION_MARKER = "Execution skipped"
+
+def fire_is_suppressed(content: str) -> bool:
+    """Whether a run record's OWN `content` prose says its trigger gate SKIPPED the round.
+
+    #477. A suppressed fire is stored with `status=success`, so the run's own verdict cannot
+    distinguish it from a round that ran and produced nothing -- the only field that does is
+    this prose, and before #477 the reader did not carry it. Anchored to the DAEMON's own
+    emitted wording rather than to a pattern of our own invention, so a change in that
+    wording surfaces as a predicate to revisit instead of as silent drift: the marker is a
+    named constant and the probe asserts against the constant, not against a literal.
+    """
+    return CRON_SUPPRESSION_MARKER in str(content or "")
+
 def cron_run_fires(root: Path | None = None) -> list[dict]:
     """Every cron FIRE this box recorded: {job_id, job_name, started_at, status,
-    completed_at, error}.
+    completed_at, error, content, suppressed, home}.
 
     `box_cron_rows` reads only the CURRENT row (`last_run_at`), so it can name each job's
     LAST fire and nothing older. The per-job residual (#449) is derived from that job's OWN
@@ -1896,13 +1913,14 @@ def cron_run_fires(root: Path | None = None) -> list[dict]:
             fetched = list(conn.execute(
                 "select coalesce(job_id,''), coalesce(job_name,''), "
                 "coalesce(started_at,''), coalesce(status,''), "
-                "coalesce(completed_at,''), coalesce(error,'') from cron_job_runs"
+                "coalesce(completed_at,''), coalesce(error,''), "
+                "coalesce(content,'') from cron_job_runs"
             ))
         except sqlite3.Error:
             continue
         finally:
             conn.close()
-        for job_id, job_name, started_at, status, completed_at, error in fetched:
+        for job_id, job_name, started_at, status, completed_at, error, content in fetched:
             fires.append({
                 "job_id": str(job_id),
                 "job_name": str(job_name),
@@ -1915,6 +1933,12 @@ def cron_run_fires(root: Path | None = None) -> list[dict]:
                 "status": str(status),
                 "completed_at": str(completed_at),
                 "error": str(error),
+                # #477: the run's OWN suppression prose, and the flag derived from it by the
+                # ONE reader that owns that predicate. Carried because a trigger-gated duty
+                # fires on time, succeeds, and produces no receipt -- the exact shape this
+                # leg exists to red -- and this field is the only thing that tells them apart.
+                "content": str(content),
+                "suppressed": fire_is_suppressed(content),
                 "home": db.parent.name,
             })
     return fires
@@ -2735,6 +2759,12 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
 # is PRINTED as one. The probe that drives a fired round with no receipt is what shows the
 # leg can bite (#112's shape).
 RECEIPT_DECL_RE = re.compile(r"^receipt_subject:\s*(\S+)\s*$", re.MULTILINE)
+# THE TOKEN THAT DECLARES A DUTY OWES NO RECEIPT (#424 items 1+2+3-clause-3, ordered at
+# n=2723 and re-sequenced at n=3228). It rides the SAME line and the SAME regex as a stem,
+# because it is the same declaration -- what differs is what it says the duty owes. Read as
+# a STEM it forges a false MISSING: the leg hunts `none-<round>*`, finds nothing and reds,
+# every round, on a job that owes nothing at all. `factory-publish` is the live instance.
+RECEIPT_OWES_NONE_TOKEN = "none"
 FRAGMENT_STORE = REPO / "registry" / "factories"
 # The `duty` values that mean the round did NOT complete. The domain itself is DECLARED
 # beside the shared reader (`tools/field_predicate.py::DUTY_DOMAIN`) and read from there,
@@ -2757,6 +2787,26 @@ def declared_receipt_stem(prompt: str) -> str | None:
     """
     found = RECEIPT_DECL_RE.search(prompt or "")
     return found.group(1) if found else None
+
+def declared_receipt_disposition(prompt: str) -> tuple[str, str | None]:
+    """Which of the THREE buckets this row's `receipt_subject:` line puts it in.
+
+    Returns `("declares", stem)` when the row names a receipt to hunt, `("owes_none", None)`
+    when it declares it owes none, and `("undeclared", None)` when it carries no declaration
+    at all. ONE reader for ONE field (SKILL.md section 11): the line and the regex are
+    shared, and only the TOKEN differs -- so a member factory declaring `none` is read by
+    the same declaration the rest of the population uses rather than by a second vocabulary.
+
+    The third bucket is the one the leg has always had and never NAMED: a row that declares
+    nothing is NOT JUDGED, and the emitter already printed that phrase for it while the code
+    had no way to tell it from a row that had declared it owes none.
+    """
+    stem = declared_receipt_stem(prompt)
+    if stem is None:
+        return ("undeclared", None)
+    if stem == RECEIPT_OWES_NONE_TOKEN:
+        return ("owes_none", None)
+    return ("declares", stem)
 
 def declared_log_stems(prompt: str) -> tuple[str, ...]:
     """The redirect STEMS a prompt declares — `/tmp/<stem>-$(date ...)`, in order, deduped.
@@ -3004,6 +3054,58 @@ def prior_fire_instant(job: dict, fires: list[dict], newest: dt.datetime,
     """
     earlier = [i for i in duty_fire_instants(job, fires, parse) if i < newest]
     return max(earlier) if earlier else None
+
+# HOW FAR a run record's `started_at` may sit from its row's `last_run_at` and still be read
+# as the SAME round (#477). The two stamps are written by DIFFERENT acts -- the row stamps
+# the dispatch instant and the run row stamps when the run began -- so they are never equal
+# strings, and a string match would find nothing at all. MEASURED over this box's 33 enabled
+# rows carrying a readable `last_run_at` (read 2026-10-13T15Z): the gap is ALWAYS positive,
+# a run never beginning before its own dispatch stamp, and its maximum is 146.0017 s
+# (`factory-growth-map-biweekly`), against a shortest cadence of 6 h (21600 s) in that same
+# population. This bound is 1800 s -- 12.33x the measured maximum and 12x below the shortest
+# cadence -- so a fire a whole cadence away is never read as this round's.
+ROUND_FIRE_MATCH_TOLERANCE_SECS = 1800.0
+
+def round_fire_record(job: dict, fires: list[dict], instant: dt.datetime,
+                      parse) -> dict | None:
+    """The fire record this round's instant NAMES, or None when no record can be matched.
+
+    `last_run_at` and `cron_job_runs.started_at` are written by different acts, so the round
+    is matched by INSTANT: the record whose `started_at` lies nearest `instant` within
+    `ROUND_FIRE_MATCH_TOLERANCE_SECS`. Matching is per FIRE and by id-first, exactly as
+    `duty_fire_instants` does it, so a table written by an older daemon still yields what it
+    carries.
+
+    None is the honest answer when nothing matches, and the caller must then judge the round
+    exactly as it did before this reader existed: a suppression that cannot be ATTRIBUTED to
+    a round is a suppression this leg must not act on, or an unreadable run table would
+    silently excuse every duty on the box.
+    """
+    job_id = str(job.get("id") or "")
+    name = str(job.get("name") or "")
+    best: dict | None = None
+    best_gap: float | None = None
+    for fire in fires:
+        fire_id = str(fire.get("job_id") or "")
+        fire_name = str(fire.get("job_name") or "")
+        if job_id and fire_id:
+            if fire_id != job_id:
+                continue
+        elif name and fire_name:
+            if fire_name != name:
+                continue
+        else:
+            continue
+        try:
+            started = parse(str(fire.get("started_at") or ""))
+        except (ValueError, TypeError):
+            continue
+        gap = abs((started - instant).total_seconds())
+        if gap > ROUND_FIRE_MATCH_TOLERANCE_SECS:
+            continue
+        if best_gap is None or gap < best_gap:
+            best, best_gap = fire, gap
+    return best
 
 def job_schedule_text(row: dict) -> str:
     """The row's OWN scheduling record as a reader needs it, or a stated absence.
@@ -3845,12 +3947,21 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         predicate = field_predicate_readers()
 
     attributed, foreign = attribute_rows(rows, prefixes)
+    # THE THREE BUCKETS (#424 items 1+2+3-clause-3, ordered at n=2723). A row declaring a
+    # STEM is judged; a row declaring it OWES NONE is a declaration the leg READS and never
+    # hunts; a row declaring NOTHING is NOT JUDGED. The third was always this leg's
+    # behaviour and had no name; the second had no expression at all, so a
+    # `receipt_subject: none` row was read as a STEM, hunted as `none-<round>*`, and reddened
+    # every round -- the false MISSING measured at n=3228.
     declared: list[tuple[dict, str]] = []
+    owes_none: list[dict] = []
     undeclared: list[dict] = []
     for row in attributed:
-        stem = declared_receipt_stem(str(row.get("prompt") or ""))
-        if stem:
+        disposition, stem = declared_receipt_disposition(str(row.get("prompt") or ""))
+        if disposition == "declares":
             declared.append((row, stem))
+        elif disposition == "owes_none":
+            owes_none.append(row)
         else:
             undeclared.append(row)
 
@@ -3869,6 +3980,12 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     # and "judged nothing at all" are different facts about the box.
     rounds_judged_by_fallback = 0
     rounds_prior_unreadable = 0
+    # #477's counter. A round whose OWN trigger gate suppressed it owes no receipt at all,
+    # and the excuse must be VISIBLE rather than a silent skip: a leg that quietly drops the
+    # round trades a false RED for a false CLEAN, which is the #160 class this leg's other
+    # excuses are all careful to avoid. The round is NAMED through `excused` like every other
+    # excuse this leg writes, so no new rendering path is introduced for it.
+    rounds_excused_by_suppression = 0
     # A MALFORMED RECEIPT is its own class (#281): the declaration exists and the reader
     # cannot reach it, which is neither a clean receipt nor an absent duty.
     receipts_malformed = 0
@@ -3924,6 +4041,23 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                 f"{name} (cron id {job_id}): the round {round_date} records a fire "
                 f"instant this leg cannot date ({fired!r}), so it cannot be placed "
                 f"against the declared bound either — NOT JUDGED"
+            )
+            continue
+        # #477: THE ROUND'S OWN SUPPRESSION, read from the fire record the round names. A
+        # trigger-gated duty fires on time, is stored `status=success`, and produces no
+        # receipt — indistinguishable, without this read, from a lane that did nothing. The
+        # excuse is PER ROUND and from the FIRE RECORD, never from a declaration: a
+        # declaration-based excuse would also cover a conditional duty that genuinely ran and
+        # produced nothing, which is a false CLEAN and the exact failure this leg exists to
+        # catch (ruling n=3232).
+        fire = round_fire_record(row, fires or [], fired_instant, reader_parse_ts)
+        if fire is not None and fire.get("suppressed"):
+            rounds_excused_by_suppression += 1
+            excused.append(
+                f"{name} (cron id {job_id}): the round {round_date} (fired {fired}) was "
+                f"SUPPRESSED by its own trigger gate — the daemon's own run record reads "
+                f"`{CRON_SUPPRESSION_MARKER}` — so this round owed NO receipt and is NOT "
+                f"JUDGED, and NEVER backfilled"
             )
             continue
         if bound_instant is not None and fired_instant < bound_instant:
@@ -3984,6 +4118,21 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                     f"no prior round can be NAMED — NOT JUDGED"
                 )
                 continue
+            # #477, the same excuse on the round this leg actually JUDGES. A job whose gate
+            # suppresses every fire is judged on its prior round (#281), so the suppression
+            # read must follow the leg onto whichever round it lands on — `factory-questions-
+            # redeliver` is the live instance and it has never had a round that was not
+            # suppressed.
+            prior_fire = round_fire_record(row, fires or [], prior, reader_parse_ts)
+            if prior_fire is not None and prior_fire.get("suppressed"):
+                rounds_excused_by_suppression += 1
+                excused.append(
+                    f"{name} (cron id {job_id}): the PRIOR round {prior_date} (fired "
+                    f"{prior_fired}) was SUPPRESSED by its own trigger gate — the daemon's "
+                    f"own run record reads `{CRON_SUPPRESSION_MARKER}` — so this round owed "
+                    f"NO receipt and is NOT JUDGED, and NEVER backfilled"
+                )
+                continue
             if bound_instant is not None and prior < bound_instant:
                 rounds_excused_by_bound += 1
                 excused.append(
@@ -4037,10 +4186,11 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         # checkout reported two real problems in the same minute. An empty population
         # supports no conclusion about duties; it supports a statement about the read.
         "reason": (None if declared else (
-            f"of the {len(attributed)} enabled row(s) this factory declares, NONE carries "
-            f"a `receipt_subject:` declaration, so NO DUTY WAS JUDGED — that is a statement "
-            f"about the DECLARED population ({len(rows)} row(s) read in all), never a "
-            f"finding that no duty owes a receipt on this box"
+            f"of the {len(attributed)} enabled row(s) this factory declares, NONE names a "
+            f"receipt STEM to judge — {len(owes_none)} declares it OWES NONE and "
+            f"{len(undeclared)} carries no `receipt_subject:` line at all — so NO DUTY WAS "
+            f"JUDGED: that is a statement about the DECLARED population ({len(rows)} row(s) "
+            f"read in all), never a finding that no duty owes a receipt on this box"
         )),
         "problems": problems,
         "excused": excused,
@@ -4052,6 +4202,12 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "homes_unreached": unreached,
             "prefixes": prefixes,
             "jobs_declaring_receipt": len(declared),
+            # THE SECOND BUCKET (#424 item 2). Named beside the first rather than folded into
+            # it: a row that declares it owes none is a DECLARATION the leg read and honoured,
+            # and a row that declares nothing is a SILENCE the leg could not act on. Printing
+            # one number for both would report the second as the first.
+            "jobs_owing_none": len(owes_none),
+            "owes_none_jobs": [str(r.get("name") or "") for r in owes_none],
             "jobs_undeclared": len(undeclared),
             "undeclared_jobs": [str(r.get("name") or "") for r in undeclared],
             "jobs_unattributed": len(foreign),
@@ -4074,6 +4230,10 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             # round unjudged, and a reader who cannot tell them apart cannot act on either.
             "rounds_judged_by_fallback": rounds_judged_by_fallback,
             "rounds_prior_unreadable": rounds_prior_unreadable,
+            # #477: the rounds a trigger gate suppressed. The count rides here and the round
+            # itself is NAMED through `excused`, like every other excuse this leg writes --
+            # a count without the instance is a problem the operator cannot act on.
+            "rounds_excused_by_suppression": rounds_excused_by_suppression,
             # The malformed class counts separately from `duties_missing` even though both
             # RED the round: a receipt whose token the reader cannot reach is not a duty
             # nobody did, and the finding says so in its own words.
@@ -7016,9 +7176,15 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             lines.append(
                 f"  duties: {cov['jobs_declaring_receipt']} row(s) declare a receipt, "
-                f"{cov['jobs_undeclared']} declare none and are NOT JUDGED, "
+                f"{cov['jobs_owing_none']} declare they OWE NONE, "
+                f"{cov['jobs_undeclared']} declare NOTHING and are NOT JUDGED, "
                 f"{cov['jobs_unattributed']} attributed to nobody"
             )
+            for name in cov.get("owes_none_jobs", []):
+                lines.append(
+                    f"    OWES NONE — declares `receipt_subject: none`, so this duty owes no "
+                    f"receipt and is NOT JUDGED: {name or '(unnamed row)'}"
+                )
             for name in cov.get("undeclared_jobs", []):
                 lines.append(
                     f"    NOT JUDGED — declares no `receipt_subject:`, so this leg cannot "
@@ -7098,6 +7264,13 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"newest round is in flight and this job's OWN run record dates no "
                     f"earlier fire, so no prior round can be NAMED — NOT JUDGED with its "
                     f"reason, never a composed instant and never a clean verdict"
+                )
+            if cov.get("rounds_excused_by_suppression"):
+                lines.append(
+                    f"    {cov['rounds_excused_by_suppression']} round(s) were SUPPRESSED by "
+                    f"their OWN trigger gate and are excused by that, NAMED above — the "
+                    f"daemon's own run record reads `{CRON_SUPPRESSION_MARKER}`, so no duty "
+                    f"was ever owed and there is nothing to backfill (#477)"
                 )
             if cov.get("receipts_malformed"):
                 lines.append(
