@@ -1226,6 +1226,18 @@ def _notify_row(name, *, row_id="row-1", home="probe-home") -> dict:
     return {"id": row_id, "name": name, "home": home, "deliver_to": "session:probe",
             "prompt": _WAKE_PROMPT}
 
+def _run_row(name, *, started, completed, status, row_id="row-1") -> dict:
+    """A `cron_job_runs` row — the daemon's per-fire record, carrying the run's OWN VERDICT.
+
+    The columns are the ones the daemon writes on that table, and the `job_id` here is
+    deliberately the SAME value as the cron row's `id` in `_notify_row`: the leg keys a run
+    to its row by the `(job_id, job_name)` pair, and the two surfaces spell that pair
+    differently (`id`/`name` against `job_id`/`job_name`), so a probe that got the spelling
+    wrong would exercise a leg that can match nothing (#306).
+    """
+    return {"job_id": row_id, "job_name": name, "started_at": started,
+            "completed_at": completed, "status": status, "error": "", "home": "probe-home"}
+
 def test_the_notify_leg_BITES_on_a_log_carrying_no_receipt() -> None:
     """THE BITE, and the acceptance criterion's probe: a log with no notification id.
 
@@ -1384,6 +1396,157 @@ def test_a_log_with_NO_OUTPUT_is_reported_as_no_attempt_never_a_failed_duty() ->
     assert leg["coverage"]["logs_without_receipt"] == 0, (
         f"no-attempt must NOT be counted as a missing receipt\n{leg['coverage']}"
     )
+
+def test_a_COMPLETED_runs_0_byte_log_is_a_FAILED_DUTY_never_an_excuse() -> None:
+    """#306, acceptance leg 1: the run COMPLETED and its log is 0 bytes — that is a problem.
+
+    Measured defect: the leg excused EVERY 0-byte log as "never attempted", so a run that
+    completed, launched its notify, and then died leaving no output was filed as a run that
+    never got there. The two facts leave an identical log, and only the run's own verdict
+    separates them — which is why the fixture is a PAIR: this half flips the run row to
+    `success` and the SAME log must go from excused to RED.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    fires = [_run_row("factory-measurement-daily", row_id="55b363eb-probe",
+                      started="2026-09-22T08:55:15Z", completed="2026-09-22T08:56:20Z",
+                      status="success")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z",
+                                    fires=fires)
+    assert len(leg["problems"]) == 1, (
+        f"a COMPLETED run's 0-byte log is a failed duty, never 'not attempted': "
+        f"{leg['problems']}"
+    )
+    assert "COMPLETED" in leg["problems"][0] and "status success" in leg["problems"][0], (
+        leg["problems"][0]
+    )
+    assert leg["coverage"]["logs_not_attempted"] == 0, (
+        f"the excuse must NOT be earned by a completed run\n{leg['coverage']}"
+    )
+    assert leg["coverage"]["logs_without_receipt"] == 1, leg["coverage"]
+    assert leg["coverage"]["logs_completed_with_empty_log"] == 1, leg["coverage"]
+
+def test_a_DELIVERY_FAILED_run_is_a_PROBLEM_and_never_an_excuse() -> None:
+    """#306: `delivery_failed` is the daemon's own record that the notify WAS attempted.
+
+    The ruling names `delivery_failed` as the value a run whose notify never delivered must
+    carry, and 24 rows on this box carry it beside a `completed_at` and an error naming the
+    failed delivery. So it is the failed duty itself, and excusing it would file a duty that
+    was attempted and failed as one that never happened — the exact inversion #306 ends.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    fires = [_run_row("factory-measurement-daily", row_id="55b363eb-probe",
+                      started="2026-09-22T08:55:15Z", completed="2026-09-22T08:56:20Z",
+                      status="delivery_failed")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z",
+                                    fires=fires)
+    assert len(leg["problems"]) == 1, (
+        f"an attempted-and-FAILED delivery is a failed duty, never an excuse: "
+        f"{leg['problems']}"
+    )
+    assert "status delivery_failed" in leg["problems"][0], leg["problems"][0]
+    assert "REACHED ITS DELIVERY" in leg["problems"][0], (
+        f"the verdict must say WHICH completed status this is\n{leg['problems'][0]}"
+    )
+    assert leg["coverage"]["logs_not_attempted"] == 0, (
+        f"the excuse must NOT be earned by a run that reached its delivery\n{leg['coverage']}"
+    )
+    assert leg["coverage"]["logs_completed_with_empty_log"] == 1, leg["coverage"]
+
+
+def test_an_INTERRUPTED_runs_0_byte_log_is_excused_WITH_ITS_STATUS_NAMED() -> None:
+    """#306, acceptance leg 2 — the other half of the pair: the run did NOT complete.
+
+    This is the #139 case and it stays excused, because judging it made a permanent false
+    positive out of a run orphaned before it ever reached its notify. What changes is that
+    the excuse now CARRIES THE EVIDENCE: the status is named in the entry, so a reader can
+    tell an excused log from one that was excused because nothing was read.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    fires = [_run_row("factory-measurement-daily", row_id="55b363eb-probe",
+                      started="2026-09-22T08:55:15Z", completed="",
+                      status="interrupted")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z",
+                                    fires=fires)
+    assert leg["problems"] == [], (
+        f"a run that never reached its notify is not a failed duty: {leg['problems']}"
+    )
+    assert leg["coverage"]["logs_not_attempted"] == 1, leg["coverage"]
+    entry = leg["coverage"]["not_attempted_logs"][0]
+    assert entry["run_status"] == "interrupted", (
+        f"the excuse must NAME the status it rests on\n{entry}"
+    )
+    assert leg["coverage"]["logs_not_attempted_unattributed"] == 0, (
+        f"the run WAS matched, so this is not an unread surface\n{leg['coverage']}"
+    )
+
+def test_a_0_byte_log_matched_to_NO_run_is_PRINTED_as_a_read_not_an_excuse() -> None:
+    """#306: an unmatched 0-byte log is a statement about the READ, and it is printed.
+
+    With no run row carrying the log's stamp there is no verdict to excuse it, so the leg
+    must not fold it into the bucket silently: the count of unmatched logs is printed beside
+    the bucket's own predicate, because "the run did not complete" and "no run could be
+    matched" are different facts and only the first is a finding about the box.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z",
+                                    fires=[])
+    assert leg["problems"] == [], (
+        f"an unmatched log is not itself a failed duty: {leg['problems']}"
+    )
+    assert leg["coverage"]["logs_not_attempted_unattributed"] == 1, leg["coverage"]
+    assert leg["coverage"]["logs_not_attempted"] == 1, leg["coverage"]
+    assert leg["coverage"]["not_attempted_logs"][0]["run_status"] == "", (
+        f"no run was matched, so no status may be claimed\n{leg['coverage']}"
+    )
+
+def test_an_UNKNOWN_run_status_is_REPORTED_never_excused() -> None:
+    """#306: the status vocabulary is closed, so a value outside it cannot be an excuse.
+
+    A leg that excuses what it cannot read stops observing the class it is named for the
+    moment the substrate moves: the daemon adds a status, every 0-byte log under it is
+    excused, and the leg goes greener as its blind spot grows. The unknown value is
+    reported with the vocabulary it was checked against.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    fires = [_run_row("factory-measurement-daily", row_id="55b363eb-probe",
+                      started="2026-09-22T08:55:15Z", completed="2026-09-22T08:56:20Z",
+                      status="delivered_late")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-09-25T13:44:00Z",
+                                    fires=fires)
+    assert len(leg["problems"]) == 1, (
+        f"an unrecognised run status must be reported: {leg['problems']}"
+    )
+    assert "delivered_late" in leg["problems"][0], leg["problems"][0]
+    assert leg["coverage"]["logs_not_attempted"] == 0, leg["coverage"]
+
+def test_the_runner_PRINTS_the_no_attempt_verdict_and_its_predicate() -> None:
+    """#306's render leg: the report names the run's verdict, and prints the predicate.
+
+    A bucket and its predicate must appear together (#163 half 2 (b)): a reader who sees
+    "1 no-attempt log" without the predicate cannot tell whether the leg checked a run at
+    all, and the count of logs matched to NO run is printed so an unread surface is never
+    indistinguishable from a box with no failed notify.
+    """
+    log_dir = _log_dir(**{"factory-measurement-daily-20260922T085519.log": ""})
+    rows = [_notify_row("factory-measurement-daily", row_id="55b363eb-probe")]
+    fires = [_run_row("factory-measurement-daily", row_id="55b363eb-probe",
+                      started="2026-09-22T08:55:15Z", completed="",
+                      status="interrupted")]
+    rc, out, _ = _run([], [], cron_rows=rows, prefixes=["factory-"], log_dir=log_dir,
+                      cron_fires=fires)
+    assert "no-attempt predicate:" in out, out
+    assert "its run did NOT complete (status interrupted" in out, out
+    assert "no-attempt logs matched to NO run: 0 of 1" in out, out
 
 def test_a_log_with_no_live_ROW_is_reported_as_history_and_never_judged() -> None:
     """A name this factory declares but that no enabled row carries is HISTORY.

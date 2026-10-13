@@ -511,6 +511,24 @@ BARE_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 LOG_DIR = Path("/tmp")
 # `<job-name>-<YYYYmmddTHHMMSS>.log` — the thin trigger's own redirect, nothing else.
 NOTIFY_LOG_RE = re.compile(r"^(?P<job>.+)-(?P<stamp>\d{8}T\d{6})\.log$")
+# The RUN's own verdict about its delivery (#306, ruling n=2191). `cron_job_runs.status`
+# separates the two cases a 0-byte log renders identically, and before #306 nothing in this
+# tool read it: a run that REACHED its notify is a FAILED DUTY when its log is empty, while
+# a run that never reached its notify is the #139 case and is correctly not judged.
+#
+# `delivery_failed` sits on the PROBLEM side, never the excuse side. It is the daemon's own
+# value for "the notify was attempted and its delivery FAILED" — the ruling names it as the
+# value a run whose notify never delivered must carry — and it is measured on this box: all
+# 24 rows carrying it also carry `completed_at` and an error naming the failed delivery
+# ("Unbaked target URL … reached delivery"). Excusing it would file a failed duty as one that
+# never happened, which is the exact inversion #306 exists to end. The vocabulary is the
+# DAEMON's and is closed here on purpose — a status this leg does not know is REPORTED rather
+# than excused, because excusing an unknown value is how a green signal stops being able to
+# observe the failure it is named for (the n=903 class).
+RUN_DELIVERED_STATUSES = ("success",)
+RUN_UNDELIVERED_STATUSES = ("delivery_failed",)
+RUN_COMPLETED_STATUSES = RUN_DELIVERED_STATUSES + RUN_UNDELIVERED_STATUSES
+RUN_NOT_COMPLETED_STATUSES = ("interrupted", "error")
 # The redirect a prompt DECLARES, by its stem (#163 half 2). Every pacemaker on this
 # box writes `/tmp/<stem>-$(date ...).log` (one job escapes the `$` as `\$(date`), so
 # the stem is the token between `/tmp/` and the timestamp EXPRESSION. Read from the
@@ -1830,13 +1848,20 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
 
 
 def cron_run_fires(root: Path | None = None) -> list[dict]:
-    """Every cron FIRE this box recorded: {job_id, job_name, started_at}.
+    """Every cron FIRE this box recorded: {job_id, job_name, started_at, status,
+    completed_at, error}.
 
     `box_cron_rows` reads only the CURRENT row (`last_run_at`), so it can name each job's
     LAST fire and nothing older. The per-job residual (#449) is derived from that job's OWN
     measured MAX fire->receipt latency, which needs the job's HISTORY — so this reader takes
     `cron_job_runs`, the daemon's own per-fire record, and the caller pairs each fire with
     the ledger's own receipt row for the round it opened.
+
+    The run's OWN VERDICT rides along (#306, ruling n=2191): `status`, `completed_at` and
+    `error` are carried because the notify-receipt leg must ask whether the run that opened a
+    0-byte log COMPLETED — a completed run whose notify died is a failed duty, while a run
+    that never reached its notify is the #139 case. One table, one read, two legs: the duty
+    leg takes the instants and the notify leg takes the verdict.
 
     Read IN PLACE through the same `mode=ro` URI as `box_cron_rows`, for the same reason: a
     copy of a live WAL-mode database is stale state and a disk leak. A home that cannot be
@@ -1855,17 +1880,26 @@ def cron_run_fires(root: Path | None = None) -> list[dict]:
         try:
             fetched = list(conn.execute(
                 "select coalesce(job_id,''), coalesce(job_name,''), "
-                "coalesce(started_at,'') from cron_job_runs"
+                "coalesce(started_at,''), coalesce(status,''), "
+                "coalesce(completed_at,''), coalesce(error,'') from cron_job_runs"
             ))
         except sqlite3.Error:
             continue
         finally:
             conn.close()
-        for job_id, job_name, started_at in fetched:
+        for job_id, job_name, started_at, status, completed_at, error in fetched:
             fires.append({
                 "job_id": str(job_id),
                 "job_name": str(job_name),
                 "started_at": str(started_at),
+                # The run's OWN verdict (#306, ruling n=2191). Carried because the
+                # notify-receipt leg must tell a COMPLETED run whose notify was launched and
+                # then died from a run that never reached its notify — and the two leave the
+                # same 0-byte log. `cron_job_runs` is the only surface that separates them,
+                # and before #306 nothing in this tool read it.
+                "status": str(status),
+                "completed_at": str(completed_at),
+                "error": str(error),
                 "home": db.parent.name,
             })
     return fires
@@ -2255,9 +2289,95 @@ def notify_logs(log_dir: Path = LOG_DIR) -> tuple[list[tuple[str, Path]], str | 
     matched.sort(key=lambda pair: (pair[0], pair[1].name))
     return matched, None
 
+def run_key(row: dict) -> tuple[str, str]:
+    """The identity a cron row and a run row SHARE: `(job_id, job_name)`.
+
+    The two surfaces spell the pair DIFFERENTLY — `cron_jobs` carries `id`/`name` while
+    `cron_job_runs` carries `job_id`/`job_name` — so this one predicate reads both shapes,
+    and a reader that compared only one spelling would match nothing on one of the two
+    surfaces and report every log as unattributable.
+
+    Neither column alone is enough: a job that was deleted and re-created keeps its name but
+    changes its id, so keying on the name alone would attach a fresh run to a retired row,
+    and keying on the id alone would drop a run whose row was renamed. The pair is what the
+    daemon writes on both surfaces.
+    """
+    return (str(row.get("job_id") or row.get("id") or ""),
+            str(row.get("job_name") or row.get("name") or ""))
+
+
+def log_stamp(text: str):
+    """The instant a thin trigger's log NAME carries, as a UTC datetime — or None.
+
+    The name's stamp is the trigger's own record of when it fired
+    (`<job>-YYYYMMDDTHHMMSS.log`), and it is the only thing tying a log to the run that
+    opened it. It is written in UTC, which is checked rather than assumed: the log's own
+    mtime tracks the stamp within seconds on this box, and the stamp falls inside the
+    window of the run row for the same job. An unparsable stamp returns None, so the
+    caller reports the log as unattributable instead of comparing it against nothing.
+    """
+    try:
+        return dt.datetime.strptime(text, "%Y%m%dT%H%M%S").replace(tzinfo=dt.timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def ts_or_none(parse, text: str):
+    """`parse(text)` where an absent or malformed stamp is None, never an exception.
+
+    The daemon leaves `completed_at` EMPTY for a run that never reached its own end — the
+    #139 orphan, and any run still in flight — so a reader that raised on the empty string
+    would turn the very case this leg exists to see into a crash that takes the whole patrol
+    down with it (#306). A malformed stamp is treated the same way: the caller reports the
+    log as unattributable rather than dying on it.
+    """
+    if not str(text or "").strip():
+        return None
+    try:
+        return parse(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def run_containing(fires: list[dict], row: dict, parse, stamp: dt.datetime) -> dict | None:
+    """The run of THIS job whose window contains `stamp` — the run that opened the log.
+
+    A log's name carries the instant the thin trigger FIRED, and a run row carries the
+    window that fire opened (`[started_at, completed_at]`). Containment is the whole
+    predicate: the log cannot be attributed to a run by name alone, because a job fires
+    many times and every fire writes the same log name with a different stamp.
+
+    `completed_at` is EMPTY for a run that never reached its own end (the #139 orphan, and
+    any run still in flight), so the window is then open-ended and the run still counts as
+    containing the stamp: a run that died mid-flight is exactly the case this leg must be
+    able to see, and refusing to match it would leave the 0-byte log unattributed — which
+    reads as "no run to judge" rather than "a run that did not finish".
+
+    Where several runs contain the stamp (an overlapping retry), the LATEST `started_at`
+    governs: it is the fire the log belongs to, and the earlier one is a run the daemon
+    recorded as superseded. Returns None where no run of this job contains the stamp —
+    the caller reports that as unattributable rather than assuming either verdict.
+    """
+    wanted = run_key(row)
+    containing = []
+    for run in fires:
+        if run_key(run) != wanted:
+            continue
+        started = ts_or_none(parse, run.get("started_at") or "")
+        if started is None or started > stamp:
+            continue
+        finished = ts_or_none(parse, run.get("completed_at") or "")
+        if finished is not None and finished < stamp:
+            continue
+        containing.append((started, run))
+    if not containing:
+        return None
+    return max(containing, key=lambda pair: pair[0])[1]
+
+
 def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                        prefixes: list[str], *, log_dir: Path = LOG_DIR,
-                       read_at: str = "") -> dict:
+                       read_at: str = "", fires: list[dict] | None = None) -> dict:
     """The notify-receipt leg: did each thin trigger's notify produce a RECEIPT?
 
     POPULATION. The job-local logs whose job NAME is an ENABLED cron row this factory
@@ -2284,6 +2404,19 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     facts — one proves delivery, the other proves acceptance); a log with NO OUTPUT was
     never attempted and is REPORTED, never judged; and a log with output but no receipt
     form is the single class this leg exists to surface.
+
+    A 0-BYTE LOG IS TWO FACTS, NOT ONE (#306, ruling n=2191). Until #306 both were excused
+    as "never attempted", so a run that COMPLETED and whose notify was launched and then
+    died was filed as a run that never got there — a failed duty wearing an excuse. The
+    run's own verdict is what separates them, and `cron_job_runs` is the only surface that
+    carries it: a 0-byte log whose containing run REACHED ITS DELIVERY (`success` or
+    `delivery_failed`) is a PROBLEM, and a 0-byte log whose run never reached it
+    (`interrupted`/`error`, or no run matched at all) is the #139 case and is excused WITH
+    THE STATUS NAMED. `delivery_failed` is a PROBLEM and never an excuse: the daemon writes
+    it when the notify WAS attempted and its delivery FAILED, which is the failed duty
+    itself rather than a duty that never happened. The status vocabulary is closed here, so
+    a value this leg does not recognise is REPORTED rather than excused — a leg that excuses
+    what it cannot read is a green signal that has stopped observing its own failure class.
 
     ZERO MATCHED LOGS IS NOT A FAILURE HERE (ruling n=774 done-criteria). This population is
     legitimately empty on a quiet day, so an empty read is PRINTED and never gated — the
@@ -2314,6 +2447,12 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     # never ATTEMPTED, and judging it as a failed duty made a permanent false positive out
     # of a run that was orphaned before it ever reached its notify. Reported, never a problem.
     not_attempted: list[dict] = []
+    # The 0-byte logs no run row could be matched to (#306). Counted and NAMED rather than
+    # folded into the excuse, because "the run did not complete" and "no run could be
+    # matched to this log" are different facts and only the first is a finding about the
+    # box; the second is a statement about the read, and it must be visible as one.
+    unattributed: list[dict] = []
+    fires = list(fires or [])
     for name, path in matched:
         if not prefixes or not any(name.startswith(prefix) for prefix in prefixes):
             foreign.append({"job": name, "path": str(path)})
@@ -2349,11 +2488,73 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
             excused.append(f"{name}: {path.name} carries a receipt ({kind}{detail}) — {meaning}")
             continue
         if not text.strip():
-            not_attempted.append({
+            # A 0-byte log is a notify that produced NOTHING — which is what a run that
+            # never reached its notify leaves AND what a completed run whose notify died
+            # leaves. Only the run's own verdict separates them (#306, ruling n=2191).
+            found = NOTIFY_LOG_RE.match(path.name)
+            stamp = log_stamp(found.group("stamp")) if found else None
+            run = run_containing(fires, row, reader_parse_ts, stamp) if stamp else None
+            status = str(run.get("status") or "") if run else ""
+            entry = {
                 "job": name,
                 "id": str(row.get("id") or ""),
                 "path": str(path),
-            })
+                "run_status": status,
+                "run_started": str(run.get("started_at") or "") if run else "",
+                "run_completed": str(run.get("completed_at") or "") if run else "",
+            }
+            if status in RUN_COMPLETED_STATUSES:
+                judged.append({
+                    "job": name,
+                    "id": str(row.get("id") or ""),
+                    "path": str(path),
+                    "line": "",
+                    "run_status": status,
+                })
+                # The two completed statuses are DIFFERENT failures and the verdict says
+                # which: `success` is the n=903 lie (a delivery recorded as OK with no
+                # receipt), while `delivery_failed` is the daemon's own honest record that
+                # the notify was attempted and its delivery failed.
+                if status in RUN_UNDELIVERED_STATUSES:
+                    why = (
+                        "the run REACHED ITS DELIVERY and its own record says that delivery "
+                        "FAILED"
+                    )
+                else:
+                    why = (
+                        "the run recorded its delivery as DELIVERED"
+                    )
+                problems.append(
+                    f"{name} (cron id {row.get('id') or 'unstated'}): the run that opened "
+                    f"{path.name} COMPLETED (status {status}, "
+                    f"{entry['run_started'] or 'no start stamp'} -> "
+                    f"{entry['run_completed'] or 'no completion stamp'}) and the log is "
+                    f"0 bytes — {why}, so the duty FAILED. A completed run's empty log is "
+                    f"never 'not attempted' (#306)."
+                )
+                continue
+            if status and status not in RUN_NOT_COMPLETED_STATUSES:
+                # A status this leg does not know is REPORTED, never excused: excusing it
+                # would let the daemon move its own vocabulary and silently widen the
+                # excuse until the leg could no longer see the class it exists for.
+                judged.append({
+                    "job": name,
+                    "id": str(row.get("id") or ""),
+                    "path": str(path),
+                    "line": "",
+                    "run_status": status,
+                })
+                problems.append(
+                    f"{name} (cron id {row.get('id') or 'unstated'}): the run that opened "
+                    f"{path.name} carries the status {status!r}, which this leg does not "
+                    f"know ({', '.join(RUN_COMPLETED_STATUSES + RUN_NOT_COMPLETED_STATUSES)}) "
+                    f"— an unrecognised verdict cannot be an excuse, so it is reported and "
+                    f"the vocabulary is corrected where it is owned (#306)."
+                )
+                continue
+            if run is None:
+                unattributed.append(entry)
+            not_attempted.append(entry)
             continue
         line = notify_failure_line(text)
         judged.append({
@@ -2386,6 +2587,24 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
             "logs_without_receipt": len(judged),
             "logs_not_attempted": len(not_attempted),
             "not_attempted_logs": not_attempted,
+            # #306: the excuse is only earned by a run that did NOT complete, so the count
+            # of 0-byte logs no run could be matched to is printed SEPARATELY — a box whose
+            # runs table could not be read must not render as a box with no failed notify.
+            "logs_not_attempted_unattributed": len(unattributed),
+            "unattributed_not_attempted_logs": unattributed,
+            "logs_completed_with_empty_log": len(
+                [j for j in judged if j.get("run_status") in RUN_COMPLETED_STATUSES]
+            ),
+            # The bucket's own PREDICATE, printed beside its population (#163 half 2 (b)):
+            # a 0-byte log is excused only by the run's own verdict, and a clean bucket and
+            # one that cannot see a member must never render the same.
+            "not_attempted_predicate": (
+                "the 0-byte log's OWN stamp falls inside the window of a run row for the "
+                "same (job_id, job_name) whose status is one of "
+                f"{', '.join(RUN_NOT_COMPLETED_STATUSES)}; a run reading "
+                f"{', '.join(RUN_COMPLETED_STATUSES)} makes the same 0-byte log a PROBLEM, "
+                "and a status outside the closed vocabulary is reported, never excused"
+            ),
             "logs_retired": len(retired),
             "logs_attributed_by_redirect": len(redeclared),
             "logs_unattributed": len(foreign),
@@ -6702,10 +6921,41 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"declares — {cov['logs_without_receipt']} produced no receipt"
             )
             for row in cov.get("not_attempted_logs", []):
+                verdict = (
+                    f"its run did NOT complete (status {row.get('run_status')}"
+                    + (
+                        f", {row.get('run_started')} -> {row.get('run_completed') or 'no completion stamp'}"
+                        if row.get("run_started") else ""
+                    )
+                    + ")"
+                    if row.get("run_status") else
+                    "NO run row could be matched to its own stamp, so the excuse rests on "
+                    "an unread surface rather than on a run that did not finish"
+                )
                 lines.append(
                     f"    no attempt: {row['job']} (cron id {row['id'] or 'unstated'}) — "
-                    f"{row['path']} carries no output, so no notify was attempted; "
-                    f"reported, never a failed duty"
+                    f"{row['path']} carries no output; {verdict}; reported, never a failed duty"
+                )
+            lines.append(
+                f"  no-attempt predicate: {cov.get('not_attempted_predicate', 'predicate unstated')}"
+            )
+            lines.append(
+                f"  no-attempt logs matched to NO run: "
+                f"{cov.get('logs_not_attempted_unattributed', 0)} of "
+                f"{cov.get('logs_not_attempted', 0)} — a 0-byte log with no run to judge is "
+                f"a statement about the READ, and it is printed here so it can never be "
+                f"read as a box with no failed notify (#306)"
+            )
+            for row in cov.get("unattributed_not_attempted_logs", []):
+                lines.append(
+                    f"    unmatched 0-byte log: {row['job']} ({row['path']}) — no run row of "
+                    f"this job contains its stamp {row.get('path', '').rsplit('-', 1)[-1]}"
+                )
+            if cov.get("logs_completed_with_empty_log"):
+                lines.append(
+                    f"  COMPLETED runs with a 0-byte log: "
+                    f"{cov['logs_completed_with_empty_log']} — the notify was launched and "
+                    f"produced no output, so these are FAILED DUTIES (#306)"
                 )
             lines.append(
                 f"  retired: {cov.get('logs_retired', 0)} log(s) — "
@@ -7652,6 +7902,10 @@ def main(
         notify_receipt_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), log_dir=log_dir,
             read_at=read_at,
+            # #306: the run's own verdict, from the daemon's per-fire record. Injected for
+            # the same reason the cron table and the duty leg's fires are: a probe must
+            # never have its excuse decided by the live box's own runs table.
+            fires=cron_fires_fn(),
         ),
         duty_receipt_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at,
