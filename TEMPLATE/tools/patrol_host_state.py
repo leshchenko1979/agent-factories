@@ -1012,54 +1012,15 @@ def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
 #   3. `governs=<n>` — an explicit token for a ruling that governs a concern rather than an
 #      item, so a lane can declare the attribution instead of relying on a bridge.
 #
-# ARM 1 HAS TWO READERS SINCE #453, AND THEY ARE ONE RUNG. The strict form is `#<n>` and
-# nothing else, so a subject that OPENS with `#<n>` and carries PROSE after it fell through
-# every arm and returned None — the row named its issue in plain sight and the resolver
-# still called it `unbridgeable`. Live specimen, on the member factory that routed this
-# defect: a ruling row whose subject reads `#211 pin-stale exemption reasons - Triage flag
-# disposition`, with `#211` closed on that board. Arm 1 is the rung that answers "did the
-# row's OWN subject name an issue", and a subject opening `#211 ` answers YES — so the
-# reader widens and the RUNG does not: both readers report `strict`, because no decision
-# downstream differs between them and a fourth arm name would print as a bucket the render
-# does not carry. The widening stays HERE and never in the shared predicate (#243, shape 1):
-# `issue_reference` is strictly numeric BY DESIGN and its own gate's population depends on
-# that, so widening it would move a population nobody asked to move.
-#
 # A ROW THAT RESOLVES TO NO ISSUE IS PRINTED, never silently dropped: a resolver that
 # cannot place a row must say so, or the leg reports a smaller population than it examined.
 RULING_GOVERNS_KEY = "governs="
 _RULING_ISSUE_URL = re.compile(r"/issues/(\d+)\b")
 _RULING_BARE_NUMBER = re.compile(r"^(\d+)$")
-_RULING_LEADING_NUMBER = re.compile(r"^#(\d+)(?=\s|$)")
-"""A subject that OPENS with `#<n>` and then carries prose (#453), BOUNDARY-CHECKED.
-
-The lookahead is the whole mechanism and it is not decoration. `#2110` must read as **2110**
-and never as **211**, and `#211x` must read as nothing at all — the digit-extension class
-this factory has filed repeatedly. Requiring whitespace or end-of-string after the digits
-gets both right and is the same idiom `_accepted_heading` uses one screen below.
-
-MEASURED over this factory's own ledger on 2026-10-13, over all 3202 rows: **0** carry a
-subject this reader matches and the strict one does NOT, so the widening moves NO population
-here today and is not a repair to a live row of ours. (2623 rows carry the exact `#<n>` form,
-which the lookahead accepts too — so the shape count is NOT the new-reader count, and the
-difference between the two is the only number that answers "what moved".) The six subjects
-that start `#<digits>` and are NOT the exact form — `#332-D5`, `#332-D6-D1correction`,
-`#31-#32-claim-gap`, `#31-close-receipt`, `#171-dupnotify`, `#172-dispatch-decision` — are all
-`#<n><hyphen>…` SLUGS, and the lookahead refuses every one of them, which is the check doing
-its job rather than an accident of the sample. The live harm is on the member factory that
-routed this, which carries the `unbridgeable` row above; what lands here is the shared
-predicate that factory inherits, so the class cannot recur in any adopter.
-"""
 
 
 def issue_from_row(row: dict, predicate) -> int | None:
-    """The issue a row names, leg-locally: `#N` subject, `#N <prose>` subject, bare `N`, URL.
-
-    FOUR readers, in order, and the ORDER is the mechanism: the row's own subject is asked
-    first (exact `#<n>`, then `#<n>` followed by prose — #453), because a subject is a
-    declaration, while the `detail` URL is an inference and is asked LAST. A row whose
-    subject and whose detail name DIFFERENT issues resolves to its subject, which is the
-    reading that matches how the rows are written.
+    """The issue a row names, leg-locally: `#N` subject, bare `N` subject, or an issue URL.
 
     DELIBERATELY NOT the shared predicate (#243, shape 1): `issue_reference` is strictly
     numeric by design and its own gate depends on that. This is the patrol's question, so
@@ -1070,9 +1031,6 @@ def issue_from_row(row: dict, predicate) -> int | None:
     number = predicate.issue_reference(subject)
     if number is not None:
         return number
-    leading = _RULING_LEADING_NUMBER.match(subject)
-    if leading:
-        return int(leading.group(1))
     bare = _RULING_BARE_NUMBER.match(subject)
     if bare:
         return int(bare.group(1))
@@ -1089,13 +1047,6 @@ def resolve_ruling_issue(ruling: dict, rows: list[dict], predicate) -> tuple[int
     tier is reported rather than implied, the same discipline the canonicality ladder uses:
     a resolution that does not say how it was reached cannot be re-litigated when the
     vocabulary moves.
-
-    `"strict"` covers TWO readers since #453 — an exact `#<n>` subject and a `#<n> <prose>`
-    subject — and they stay ONE rung deliberately: nothing downstream branches on which
-    reader matched, both answer the same question ("did the row's own subject name an
-    issue"), and a fourth bucket would print as an arm the render's own vocabulary does not
-    carry. The reader is named in `issue_from_row`'s docstring; the RUNG is what a reader of
-    this leg's report needs.
     """
     own = issue_from_row(ruling, predicate)
     if own is not None:

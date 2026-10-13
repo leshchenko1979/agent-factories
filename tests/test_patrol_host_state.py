@@ -64,7 +64,6 @@ import importlib.util
 import io
 import json
 import os
-import re
 import sqlite3
 import shutil
 import subprocess
@@ -4218,86 +4217,6 @@ def test_probe_the_strict_arm_still_resolves() -> None:
     ruling = {"n": 1, "event": "ruling", "subject": "#42", "detail": "ruled"}
     issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
     assert (issue, arm) == (42, "strict"), (issue, arm)
-
-def test_probe_a_subject_OPENING_with_the_issue_and_carrying_PROSE_resolves() -> None:
-    """Arm 1's SECOND reader (#453) — the form that resolved to NOTHING until now.
-
-    The defect's specimen, on the member factory that routed it: a ruling row whose subject
-    reads `#211 pin-stale exemption reasons - Triage flag disposition`, while `#211` is
-    closed on that board. Every arm missed it — arm 1 wants `#<n>` and nothing else, arm 2
-    needs a row referencing the ruling's `n`, arm 3 needs the `governs=` token — so the leg
-    printed the row as `unbridgeable` while the row named its issue in plain sight.
-    """
-    pred = RUNNER.load_predicate()
-    ruling = {"n": 1, "event": "ruling",
-              "subject": "#211 pin-stale exemption reasons - Triage flag disposition",
-              "detail": "ruled"}
-    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
-    assert (issue, arm) == (211, "strict"), (issue, arm)
-
-def test_probe_the_LEADING_reader_is_BOUNDARY_CHECKED() -> None:
-    """The lookahead is the mechanism, not decoration — `#2110` is not `#211`.
-
-    Two failure classes, both live in this repo's own history: DIGIT EXTENSION (`#2110`
-    truncated to `#211` would attribute a row to the wrong issue, silently) and the
-    `#<n>-<slug>` subjects the ledger really carries (`#332-D5`, `#31-close-receipt`,
-    `#171-dupnotify`, `#172-dispatch-decision`, `#31-#32-claim-gap`,
-    `#332-D6-D1correction`) — six rows measured 2026-10-13, every one of which must stay
-    REFUSED so that the widening cannot swallow a slug as an issue number.
-    """
-    pred = RUNNER.load_predicate()
-    # Digit extension: the number must be read WHOLE.
-    assert RUNNER.issue_from_row({"subject": "#2110 prose"}, pred) == 2110
-    # ...and a non-digit continuation is not a number at all.
-    assert RUNNER.issue_from_row({"subject": "#211x"}, pred) is None
-    assert RUNNER.issue_from_row({"subject": "#211 "}, pred) == 211
-    assert RUNNER.issue_from_row({"subject": "#211"}, pred) == 211
-    # The six live slug shapes, verbatim.
-    for slug in ("#332-D5", "#332-D6-D1correction", "#31-#32-claim-gap",
-                 "#31-close-receipt", "#171-dupnotify", "#172-dispatch-decision"):
-        assert RUNNER.issue_from_row({"subject": slug}, pred) is None, slug
-
-def test_probe_the_LEADING_reader_is_PROVEN_to_BITE() -> None:
-    """The NON-VACUITY control: neuter the reader and the resolution returns to `None`.
-
-    A probe that only asserts the happy path cannot tell a working arm from one that is
-    never reached. This drives the SAME row twice, once with `_RULING_LEADING_NUMBER`
-    replaced by a pattern that matches nothing — the resolution must fall back to
-    `unbridgeable`, which is the pre-#453 behaviour the defect was filed for.
-    """
-    pred = RUNNER.load_predicate()
-    row = {"n": 1, "event": "ruling", "subject": "#211 pin-stale exemption reasons",
-           "detail": "ruled"}
-    original = RUNNER._RULING_LEADING_NUMBER
-    try:
-        RUNNER._RULING_LEADING_NUMBER = re.compile(r"(?!)")
-        issue, arm = RUNNER.resolve_ruling_issue(row, [row], pred)
-        assert (issue, arm) == (None, "unbridgeable"), (issue, arm)
-    finally:
-        RUNNER._RULING_LEADING_NUMBER = original
-    issue, arm = RUNNER.resolve_ruling_issue(row, [row], pred)
-    assert (issue, arm) == (211, "strict"), (issue, arm)
-
-def test_probe_the_LEADING_reader_is_counted_under_the_STRICT_rung() -> None:
-    """The RUNG is what the report carries, so the second reader must land in `strict`.
-
-    Two readers, one bucket, and the bucket is the contract: the render prints
-    `[strict N, declared M, bridged K]`, and a resolution that landed in no bucket would
-    read as a ruling that was examined and never resolved — a smaller population than the
-    leg examined, which is the clause this leg was built to keep.
-    """
-    pred = RUNNER.load_predicate()
-    issues = [_issue_with_comments(211, "OPEN", "## RULED — settled on the board.\n")]
-    ruling = {"n": 903, "event": "ruling",
-              "subject": "#211 pin-stale exemption reasons - Triage flag disposition",
-              "detail": "the clause"}
-    leg = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred,
-                                  scope=RUNNER.UNBOUNDED_SCOPE,
-                                  exemptions_path=_NO_RULING_EXEMPTIONS)
-    cov = leg["coverage"]
-    assert cov["resolution_arms"]["strict"] == 1, cov["resolution_arms"]
-    assert cov["rulings_unbridgeable"] == 0, cov
-    assert cov["rulings_resolved"] == 1, cov
 
 def test_probe_the_BRIDGE_resolves_a_slug_subject() -> None:
     """Arm 2 — the shape the ledger really carries, and the one #243 was filed for.
