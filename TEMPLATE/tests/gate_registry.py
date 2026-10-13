@@ -1351,3 +1351,228 @@ def runner_form_problems(tests_dir: Path, audit_path: Path) -> tuple[list[str], 
         "mismatches": mismatches,
     }
     return problems, report
+
+# --- direction 6: exit -> declared (#295) --------------------------------------------
+
+# The vocabulary. Every class names the LAWFUL PATH from a red on an ALREADY-EXISTING
+# violation back to green, which is the question the "stop with no andon cord" law
+# asks and which nothing asked at registration before this direction existed. The set
+# is closed on purpose: a class
+# outside it is an ERROR rather than a new word, because a vocabulary that grows one
+# ad-hoc token at a time is the same silent-absence defect one level up.
+EXIT_CLASSES = (
+    "write-path-refusal",
+    "exemption-table",
+    "repair-verb",
+    "always-satisfiable",
+    "exit-owed",
+)
+
+# Per class, the fields the declaration must carry and the kind each one is read as.
+# `path` resolves in the tree; `int` is a positive integer; `text` is a non-empty
+# command string that must name a tool the tree actually ships.
+EXIT_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
+    "write-path-refusal": (("refuser", "path"),),
+    "exemption-table": (("table", "path"),),
+    "repair-verb": (("command", "text"),),
+    "always-satisfiable": (),
+    "exit-owed": (("board", "int"),),
+}
+
+EXIT_MANIFEST_KEY = "exits"
+
+# The glob the orphan leg reads: a factory-data exemption table in docs/. The `.example`
+# siblings are the SHIPPED SKELETONS and are excluded -- they are the shape a member
+# copies, not a table this box reads.
+EXEMPTION_TABLE_GLOB = "docs/*exemptions*.json"
+EXEMPTION_EXAMPLE_MARKER = ".example"
+
+
+def invoked_gates(audit_path: Path) -> list[str]:
+    """Every gate the audit INVOKES, as repo-relative paths, from ONE append scan.
+
+    Never a file glob: a `tests/test_*.py` that exists but is never appended to the run
+    list is direction 1's finding, and a population keyed on the glob would demand an
+    exit declaration for a gate that does not run — inflating the population and hiding
+    the real count behind files that are not gates. This is the SAME scan the runner and
+    target projections use (`registration_entries`), so the three directions can never
+    disagree about what the audit contains.
+    """
+    text = audit_path.read_text(encoding="utf-8") if audit_path.is_file() else ""
+    keys: list[str] = []
+    for entry in registration_entries(text):
+        prefix = "tests" if entry["kind"] == "tests" else "tools"
+        keys.append(f"{prefix}/{entry['name']}")
+    return sorted(set(keys))
+
+
+def exit_declaration_problems(
+    invoked: list[str], exits: dict, repo_root: Path
+) -> tuple[list[str], dict]:
+    """Direction 6: every invoked gate DECLARES the exit its red has (#295).
+
+    Three legs, and the first is the acceptance one:
+
+      (a) COMPLETENESS. A gate the audit invokes that carries no declaration is REFUSED
+          BY NAME. This is the leg that would have made all eight exemption tables
+          unnecessary: each was added when a gate was DISCOVERED to have no lawful exit,
+          one gate at a time, each costing a RED origin/main plus a full cycle (#295).
+      (b) RESOLUTION. A declared exemption table, refuser or repair command must resolve
+          in THIS TREE. `always-satisfiable` carries nothing to resolve, which is the
+          point of it — its claim is about the artifact, not about a surface that exists.
+          An exemption table resolves against the file OR its shipped `.example.json`
+          sibling, because a table whose entries are legitimately zero ships as a skeleton
+          and its absence means "no exemptions", not "no surface" (the #112 shape).
+      (c) DRIFT. A declared key that is no longer invoked is an ERROR, not a harmless
+          leftover — it is a declaration for a gate that does not run. A declared
+          exemption table must be NAMED in the gate's own source, so the declaration and
+          the gate cannot disagree about which table it reads. And the INVERSE: a factory
+          exemption table in docs/ that NO declaration names is REPORTED, because that is
+          an exit whose reader is unregistered — measured on this tree, where
+          `docs/ruling-board-exemptions.json` is read by the patrol runner's board-ruling
+          leg and by no invoked gate directly.
+
+    WHAT THIS DOES NOT DECIDE, stated so a green is not read as more than it is: the CLASS
+    is a declaration by the registering lane. Nothing here can mechanically settle whether
+    a repair verb REACHES a given predicate, which is exactly why #317 and #320 stood
+    unseen. What the direction removes is the silent ABSENCE, and what it makes checkable
+    is every declared exit, in one file, on every run.
+    """
+    problems: list[str] = []
+    invoked_set = set(invoked)
+
+    missing = [k for k in invoked if k not in exits]
+    for key in missing:
+        problems.append(
+            f"{key} is invoked by the audit and declares NO exit — a gate whose only "
+            f"exits are barred is a stop with no andon cord, so declare its class in "
+            f"registry/gates.json `{EXIT_MANIFEST_KEY}` (or refuse the registration)"
+        )
+
+    stale = sorted(k for k in exits if k not in invoked_set)
+    for key in stale:
+        problems.append(
+            f"{key} declares an exit but is NOT invoked by the audit — a declaration for "
+            f"a gate that does not run is drift; remove it or register the gate"
+        )
+
+    unresolved: list[str] = []
+    drift: list[str] = []
+    for key in sorted(exits):
+        entry = exits[key]
+        if not isinstance(entry, dict):
+            problems.append(f"{key} declares {entry!r} — an exit declaration is an object")
+            continue
+        cls = entry.get("class")
+        if cls not in EXIT_CLASSES:
+            problems.append(
+                f"{key} declares the class {cls!r}, which is outside the vocabulary "
+                f"({', '.join(EXIT_CLASSES)})"
+            )
+            continue
+        for field, kind in EXIT_FIELDS[cls]:
+            value = entry.get(field)
+            if kind == "int":
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    problems.append(
+                        f"{key} is `{cls}` and declares {field}={value!r} — the debt must "
+                        f"name the board item that carries it"
+                    )
+                continue
+            if kind == "text":
+                if not isinstance(value, str) or not value.strip():
+                    problems.append(f"{key} is `{cls}` and declares no {field}")
+                continue
+            if not isinstance(value, str) or not value.strip():
+                problems.append(f"{key} is `{cls}` and declares no {field}")
+                continue
+            target = repo_root / value
+            resolves = target.is_file() or _example_sibling(target).is_file()
+            if not resolves:
+                unresolved.append(f"{key}: {field} {value} does not resolve in this tree")
+                problems.append(
+                    f"{key} is `{cls}` and its {field} {value!r} does not resolve — the "
+                    f"declared surface is not in this tree"
+                )
+                continue
+            if cls == "exemption-table" and field == "table":
+                source = _gate_source(key, repo_root)
+                if source is not None and Path(value).name not in source:
+                    drift.append(f"{key} does not name {Path(value).name} in its own source")
+                    problems.append(
+                        f"{key} declares the exemption table {value} but its own source "
+                        f"never names {Path(value).name} — the declaration and the gate "
+                        f"disagree about which table it reads"
+                    )
+
+    orphans = _unnamed_exemption_tables(exits, repo_root)
+    for table in orphans:
+        problems.append(
+            f"{table} is a factory exemption table that NO declaration names — an exit "
+            f"whose reader is unregistered; declare the gate that reads it, or remove "
+            f"the table"
+        )
+
+    counts: dict[str, int] = {}
+    for entry in exits.values():
+        if isinstance(entry, dict) and isinstance(entry.get("class"), str):
+            counts[entry["class"]] = counts.get(entry["class"], 0) + 1
+
+    report = {
+        "invoked": len(invoked),
+        "declared": len(exits),
+        "classes": counts,
+        "missing": missing,
+        "stale": stale,
+        "unresolved": unresolved,
+        "drift": drift,
+        "orphan_tables": orphans,
+    }
+    return problems, report
+
+
+def _example_sibling(path: Path) -> Path:
+    """`docs/x-exemptions.json` -> `docs/x-exemptions.example.json`, its shipped skeleton.
+
+    The marker carries no trailing dot: the stem is joined to `.example` and the SUFFIX
+    supplies the dot, so `stem + ".example." + ".json"` would read
+    `x-exemptions.example..json` and never resolve -- which is exactly what this
+    direction's first live run reported, on a tree whose skeleton was sitting there.
+    """
+    return path.with_name(path.stem + EXEMPTION_EXAMPLE_MARKER + path.suffix)
+
+
+def _gate_source(key: str, repo_root: Path) -> str | None:
+    """The gate's own text, or None when the file is absent.
+
+    A None is NOT an error here: presence is direction 3's leg, and a second direction
+    reporting absence would double-report one defect. The drift check simply has nothing
+    to read, and says so by returning None rather than by inventing a pass.
+    """
+    path = repo_root / key
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _unnamed_exemption_tables(exits: dict, repo_root: Path) -> list[str]:
+    """Factory exemption tables in docs/ that no declaration names, as repo-relative paths.
+
+    The INVERSE of the drift leg, and the direction that found this tree's own instance:
+    `docs/ruling-board-exemptions.json` is read by `tools/patrol_host_state.py`'s
+    board-ruling leg, and the patrol runner is not itself an invoked gate, so a
+    declaration keyed only on invoked gates could not name it at all. Reporting the
+    orphan is what keeps that fact visible instead of implied away.
+    """
+    named = {
+        Path(entry["table"]).name
+        for entry in exits.values()
+        if isinstance(entry, dict) and isinstance(entry.get("table"), str)
+    }
+    orphans: list[str] = []
+    for path in sorted(repo_root.glob(EXEMPTION_TABLE_GLOB)):
+        if EXEMPTION_EXAMPLE_MARKER in path.name:
+            continue
+        if path.name not in named:
+            orphans.append(str(path.relative_to(repo_root)))
+    return orphans

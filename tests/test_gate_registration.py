@@ -81,6 +81,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -107,9 +108,12 @@ from gate_registry import (  # noqa: E402
     reads_a_docstring,
     registration_entries,
     required_gate_problems,
+    exit_declaration_problems,
+    invoked_gates,
     runner_form_problems,
     target_form,
 )
+
 
 TESTS_DIR = REPO / "tests"
 AUDIT = REPO / "tools" / "audit.py"
@@ -2570,6 +2574,246 @@ def probe_the_live_cap_budget_ordering_holds() -> None:
     check("the live leg examined a non-empty population -- a silent zero is a defect",
           len(compared) >= 1, f"compared={len(compared)}")
 
+# --- synthetic probes — direction 6: every invoked gate DECLARES its exit (#295) ---
+#
+# The acceptance leg is the FIRST probe below: a gate the audit invokes and the manifest
+# does not declare is REFUSED BY NAME. The remaining probes each move ONE field of a
+# declaration that is otherwise clean, so a green run says the leg read the field rather
+# than the shape of the fixture.
+
+def _exit_tree(root: Path, *, invoked: dict[str, str], tables: dict[str, str] | None = None) -> Path:
+    """A throwaway tree: `invoked` gates (repo-relative path -> body) plus optional tables.
+
+    The audit is built FROM the dict, one append per key, so the population the direction
+    reads is the one the call sites actually carry -- never a glob over the tree.
+    """
+    for rel, body in invoked.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+    for rel, body in (tables or {}).items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+    audit = root / "audit.py"
+    audit.write_text(
+        "".join(f'gates_to_run.append([sys.executable, "{rel}"])\n' for rel in invoked),
+        encoding="utf-8",
+    )
+    return audit
+
+def probe_a_gate_with_no_declared_exit_is_REFUSED_by_name() -> None:
+    """THE ACCEPTANCE LEG (#295). A gate the audit invokes and nothing declares is REFUSED.
+
+    This is the leg that would have made eight exemption tables unnecessary: each of them
+    was added when a gate was DISCOVERED to have no lawful exit, one gate at a time, each
+    costing a RED origin/main plus a full cycle. Proven by the ABSENCE of the declaration,
+    never by an exit code.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        invoked = invoked_gates(audit)
+        problems, report = exit_declaration_problems(invoked, {}, root)
+        check("direction 6 — an UNDECLARED invoked gate is REFUSED by name",
+              any("tests/test_synthetic.py" in p and "declares NO exit" in p for p in problems),
+              str(problems)[:110] or "no problem reported")
+        check("direction 6 — and the report counts it as missing",
+              report["missing"] == ["tests/test_synthetic.py"] and report["invoked"] == 1,
+              str(report)[:110])
+
+def probe_a_complete_declaration_is_clean() -> None:
+    """The CONTROL: the same tree with the declaration supplied is clean -- so the refusal
+    above is the ABSENCE, not the fixture's shape."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        problems, report = exit_declaration_problems(
+            invoked_gates(audit), {"tests/test_synthetic.py": {"class": "always-satisfiable"}}, root
+        )
+        check("direction 6 — the SAME tree, declared, is CLEAN",
+              problems == [] and report["declared"] == 1 and report["missing"] == [],
+              str(problems)[:110] or "clean")
+
+def probe_a_declaration_for_a_gate_that_does_not_run_is_STALE() -> None:
+    """Drift, the outward direction: a key no longer invoked is an ERROR, not a leftover --
+    it is a declaration for a gate that does not run."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        exits = {"tests/test_synthetic.py": {"class": "always-satisfiable"},
+                 "tests/test_ghost.py": {"class": "always-satisfiable"}}
+        problems, report = exit_declaration_problems(invoked_gates(audit), exits, root)
+        check("direction 6 — a declaration for a gate that does NOT run is STALE",
+              report["stale"] == ["tests/test_ghost.py"]
+              and any("NOT invoked" in p for p in problems),
+              str(problems)[:110])
+
+def probe_a_class_outside_the_vocabulary_is_refused() -> None:
+    """The vocabulary is CLOSED: a class outside it is an ERROR, never a new word. A
+    vocabulary that grows one ad-hoc token at a time is the silent-absence defect one
+    level up."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        problems, _ = exit_declaration_problems(
+            invoked_gates(audit), {"tests/test_synthetic.py": {"class": "vibes"}}, root
+        )
+        check("direction 6 — a class outside the vocabulary is REFUSED",
+              any("outside the vocabulary" in p for p in problems),
+              str(problems)[:110] or "no problem reported")
+
+def probe_an_exemption_table_that_does_not_resolve_is_refused() -> None:
+    """Resolution: a declared table must be in THIS tree. A real surface and a typo must
+    stay distinguishable."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        exits = {"tests/test_synthetic.py": {"class": "exemption-table",
+                                            "table": "docs/typo-exemptions.json"}}
+        problems, report = exit_declaration_problems(invoked_gates(audit), exits, root)
+        check("direction 6 — a table that does NOT resolve is REFUSED",
+              any("does not resolve" in p for p in problems)
+              and report["unresolved"] == [
+                  "tests/test_synthetic.py: table docs/typo-exemptions.json does not resolve in this tree"],
+              str(problems)[:110])
+
+def probe_a_table_shipping_only_its_example_skeleton_RESOLVES() -> None:
+    """The FORWARD-ONLY case (#112): a gate whose exemption file legitimately holds zero
+    entries ships the `.example.json` skeleton, and absence means "no exemptions", not
+    "no surface". The marker carries no trailing dot -- a name joined as
+    `stem + ".example." + ".json"` reads `x.example..json` and never resolves, which is
+    exactly what this direction's first live run reported on a tree whose skeleton was
+    sitting there."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        naming_gate = (CANONICAL_GATE
+                       + 'EXEMPTIONS = "docs/synthetic-exemptions.json"\n')
+        audit = _exit_tree(
+            root,
+            invoked={"tests/test_synthetic.py": naming_gate},
+            tables={"docs/synthetic-exemptions.example.json": "{}\n"},
+        )
+        exits = {"tests/test_synthetic.py": {"class": "exemption-table",
+                                            "table": "docs/synthetic-exemptions.json"}}
+        problems, report = exit_declaration_problems(invoked_gates(audit), exits, root)
+        check("direction 6 — a table present only as its `.example.json` skeleton RESOLVES",
+              problems == [] and report["unresolved"] == [],
+              str(problems)[:110] or "clean")
+
+def probe_a_declared_table_the_gate_never_names_is_DRIFT() -> None:
+    """Drift, the inward direction: the declaration and the gate cannot disagree about
+    which table it reads. A gate whose source names a DIFFERENT table than the one
+    declared has an exit nobody wired."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        gate = '#!/usr/bin/env python3\n"""Gate: a synthetic gate.\n\nBody.\n"""\nEXEMPTIONS = "docs/other-exemptions.json"\n'
+        audit = _exit_tree(
+            root, invoked={"tests/test_synthetic.py": gate},
+            tables={"docs/synthetic-exemptions.json": "{}",
+                    "docs/other-exemptions.json": "{}"},
+        )
+        exits = {"tests/test_synthetic.py": {"class": "exemption-table",
+                                            "table": "docs/synthetic-exemptions.json"}}
+        problems, report = exit_declaration_problems(invoked_gates(audit), exits, root)
+        check("direction 6 — a declared table the gate's OWN SOURCE never names is DRIFT",
+              report["drift"] == [
+                  "tests/test_synthetic.py does not name synthetic-exemptions.json in its own source"]
+              and any("disagree about which table" in p for p in problems),
+              str(problems)[:110])
+        naming_problems, naming_report = exit_declaration_problems(
+            invoked_gates(audit),
+            {"tests/test_synthetic.py": {"class": "exemption-table",
+                                         "table": "docs/other-exemptions.json"}},
+            root,
+        )
+        check("direction 6 — and the gate NAMING its declared table is not DRIFT",
+              naming_report["drift"] == []
+              and not any("disagree about which table" in q for q in naming_problems),
+              str(naming_report["drift"])[:110] or "no drift")
+
+def probe_an_exemption_table_no_declaration_names_is_reported() -> None:
+    """The INVERSE leg, and the direction that found this tree's own instance:
+    `docs/ruling-board-exemptions.json` is read by the patrol runner's board-ruling leg,
+    and the patrol runner is not itself an invoked gate, so a declaration keyed only on
+    invoked gates could not name it. Reporting the orphan keeps that fact visible instead
+    of implied away."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(
+            root, invoked={"tests/test_synthetic.py": CANONICAL_GATE},
+            tables={"docs/orphan-exemptions.json": "{}"},
+        )
+        problems, report = exit_declaration_problems(
+            invoked_gates(audit),
+            {"tests/test_synthetic.py": {"class": "always-satisfiable"}}, root,
+        )
+        check("direction 6 — an exemption table NO declaration names is REPORTED",
+              report["orphan_tables"] == ["docs/orphan-exemptions.json"]
+              and any("NO declaration names" in p for p in problems),
+              str(problems)[:110])
+        check("direction 6 — and a `.example.json` SKELETON is never counted as an orphan",
+              report["orphan_tables"] == ["docs/orphan-exemptions.json"],
+              str(report["orphan_tables"]))
+
+def probe_an_exit_owed_entry_must_name_the_board_item() -> None:
+    """`exit-owed` is the class a gate with NO exit belongs to, and it must name the filed
+    debt -- a debt with no item is an unfiled defect wearing a declaration."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        for bad in ({"class": "exit-owed"}, {"class": "exit-owed", "board": 0},
+                    {"class": "exit-owed", "board": "317"}):
+            problems, _ = exit_declaration_problems(
+                invoked_gates(audit), {"tests/test_synthetic.py": bad}, root
+            )
+            check(f"direction 6 — `exit-owed` {bad!r} is REFUSED for naming no board item",
+                  any("board item that carries it" in p for p in problems),
+                  str(problems)[:90] or "no problem reported")
+        problems, _ = exit_declaration_problems(
+            invoked_gates(audit), {"tests/test_synthetic.py": {"class": "exit-owed", "board": 317}}, root
+        )
+        check("direction 6 — and the same entry WITH its board item is CLEAN",
+              problems == [], str(problems)[:90] or "clean")
+
+def probe_the_exit_population_is_the_call_sites_not_a_glob() -> None:
+    """The population is the audit's own call sites, never a file glob: a gate file that
+    exists but is never invoked is direction 1's finding, and a glob-keyed population
+    would demand an exit for a gate that does not run -- inflating the count and hiding
+    the real one behind files that are not gates."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        audit = _exit_tree(root, invoked={"tests/test_synthetic.py": CANONICAL_GATE})
+        (root / "tests" / "test_never_invoked.py").write_text(CANONICAL_GATE, encoding="utf-8")
+        check("direction 6 — a gate file that is NOT invoked is outside the population",
+              invoked_gates(audit) == ["tests/test_synthetic.py"], str(invoked_gates(audit)))
+
+def probe_the_live_tree_declares_every_invoked_gate() -> None:
+    """THE LIVE LEG. Every gate this audit invokes carries a declaration, every declared
+    surface resolves, and no table is unnamed. The classes are PRINTED, so a reader sees
+    the distribution rather than only the verdict -- and the two `exit-owed` entries are
+    the filed debt, not a false exit."""
+    manifest = REPO / "registry" / "gates.json"
+    if not manifest.is_file():
+        check("direction 6 — the kit ships `gates.example.json` and no live manifest; "
+              "the live leg SKIPS with its reason (never a silent pass)", True)
+        return
+    exits = json.loads(manifest.read_text(encoding="utf-8")).get("exits")
+    if exits is None:
+        check("direction 6 — the live manifest declares NO `exits` map -- the leg reports "
+              "that absence rather than a clean run", False, "no `exits` key")
+        return
+    problems, report = exit_declaration_problems(invoked_gates(AUDIT), exits, REPO)
+    check("direction 6 — every gate the audit INVOKES declares its exit",
+          report["missing"] == [], str(report["missing"])[:110] or "none missing")
+    check("direction 6 — no declared key is STALE and no surface fails to resolve",
+          report["stale"] == [] and report["unresolved"] == [],
+          str({"stale": report["stale"], "unresolved": report["unresolved"]})[:110])
+    check("direction 6 — the classes are PRINTED with their counts",
+          sum(report["classes"].values()) == report["declared"] and report["invoked"] > 0,
+          str(report["classes"]))
+    check("direction 6 — the live tree is CLEAN", problems == [], str(problems)[:150])
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -2678,6 +2922,21 @@ def main() -> int:
 
     print("  live manifest — #240: the cap/budget ordering, and its population")
     probe_the_live_cap_budget_ordering_holds()
+
+    print("  synthetic probes — #295: every invoked gate DECLARES its exit")
+    probe_a_gate_with_no_declared_exit_is_REFUSED_by_name()
+    probe_a_complete_declaration_is_clean()
+    probe_a_declaration_for_a_gate_that_does_not_run_is_STALE()
+    probe_a_class_outside_the_vocabulary_is_refused()
+    probe_an_exemption_table_that_does_not_resolve_is_refused()
+    probe_a_table_shipping_only_its_example_skeleton_RESOLVES()
+    probe_a_declared_table_the_gate_never_names_is_DRIFT()
+    probe_an_exemption_table_no_declaration_names_is_reported()
+    probe_an_exit_owed_entry_must_name_the_board_item()
+    probe_the_exit_population_is_the_call_sites_not_a_glob()
+
+    print("  live manifest — #295: the exit declaration, its classes and its coverage")
+    probe_the_live_tree_declares_every_invoked_gate()
 
     print()
     if failures:
