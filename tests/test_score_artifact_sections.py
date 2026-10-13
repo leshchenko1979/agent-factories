@@ -48,6 +48,7 @@ Exit: 0 clean or fully excused, non-zero on any post-boundary artifact missing a
 
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import json
 import re
@@ -714,6 +715,36 @@ def test_probe_the_harness_binding_leg_excuses_pre_boundary_and_checks_after(
     finally:
         SCORES = saved
 
+def test_the_entry_point_reaches_every_leg_the_module_defines() -> None:
+    """The #475 guard: `main()` must not be a SUBSET of the registered gate.
+
+    Asserted over THIS module's own source, so the verdict is hermetic — it depends on no
+    ledger row, no factory declaration, and no live population.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert entry_point_problems(source) == [], "\n".join(entry_point_problems(source))
+    # Non-vacuity: the assertion above is about a POPULATION, never about an empty list. The
+    # module ships three legs and this names the two the entry point calls as functions, so a
+    # rename that emptied the guard's population fails HERE rather than passing silently.
+    legs = legs_the_module_defines(source)
+    assert "harness_binding_leg" in legs, legs
+    assert "band_leg" in legs, legs
+
+def test_probe_the_entry_point_guard_BITES_when_main_drops_a_leg() -> None:
+    """The guard's own control: BUILD the pre-#475 defect and assert the guard names it.
+
+    The mutation strips every mention of `harness_binding_leg` from INSIDE `main()` and
+    touches nothing else, so the module still DEFINES the leg and every other caller still
+    calls it — exactly the shape the defect had. A guard that has only ever seen wired code
+    has not been shown to reject unwired code.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    broken = _source_with_main_reference_removed(source, "harness_binding_leg")
+    assert broken != source, "the control must actually mutate main()"
+    problems = entry_point_problems(broken)
+    assert len(problems) == 1, problems
+    assert "harness_binding_leg" in problems[0], problems
+
 def declared_day(repo: Path, key: str) -> dt.date:
     """The declared boundary `key` names, as a DATE, or `SkipGate`/`GateError`.
 
@@ -920,7 +951,97 @@ def test_a_factory_without_the_procedure_declares_nothing() -> None:
     assert PROCEDURE == saved, f"the probe must restore PROCEDURE, not leak it: {PROCEDURE}"
 
 
+# --- the entry point's own wiring (#475) -------------------------------------
+#
+# `main()` is this module's ADVERTISED invocation and the registered gate is the pytest
+# argv, so the two must reach the SAME verdict on the same bytes. They did not: `main()`
+# reached `missing_sections` (inline) and `band_leg`, and never `harness_binding_leg`, so
+# the script returned rc=0 over a population the registered gate REDs. That is the class
+# #475 names — a lane runs the module's own documented invocation, reads GREEN, and
+# publishes work the audit never accepted.
+#
+# The guard below is HERMETIC on purpose: it reads THIS FILE's own source and asserts
+# `main()` references every leg the module defines. It reads no live population, no ledger
+# row and no factory declaration, so its verdict is a property of the module rather than of
+# the tree it happens to run in.
+#
+# A LEG, for this predicate, is a module-level function that either RETURNS the leg shape
+# `tuple[list[str], list[str], list[str], bool]` or is NAMED `*_leg`. The shape half is what
+# makes the predicate semantic rather than a naming convention; the name half catches a leg
+# whose annotation was written differently. BOTH halves matter: a predicate keyed on the
+# name alone is the one the #475 ruling measured FALSE-POSITIVING over the 22 dual-shaped
+# modules, where `tests/test_patrol_host_state.py`'s helpers are named `_duty_leg` and
+# `_presence_leg` while its `main()` already iterates `globals()` — the correct pattern.
+#
+# BOUND, stated so it is not assumed: a leg introduced with NEITHER the leg return shape NOR
+# the `_leg` name is outside this guard's population. The guard's job is to keep the wiring
+# it can see honest, not to guess at a convention nobody wrote down.
+LEG_RETURN = "tuple[list[str], list[str], list[str], bool]"
+
+def legs_the_module_defines(source: str) -> list[str]:
+    """Every leg `source` defines, by name, in source order (see the block above)."""
+    found: list[str] = []
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.FunctionDef) or node.name.startswith("test_"):
+            continue
+        returns_leg_shape = (
+            node.returns is not None and ast.unparse(node.returns) == LEG_RETURN
+        )
+        if returns_leg_shape or node.name.endswith("_leg"):
+            found.append(node.name)
+    return found
+
+def _names_referenced_in_main(source: str) -> set[str]:
+    """Every bare name `main()` mentions, so a leg called only inside it is visible."""
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef) and node.name == "main":
+            return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+    return set()
+
+def entry_point_problems(source: str) -> list[str]:
+    """Every leg `main()` fails to reach in `source` (#475).
+
+    An EMPTY leg population is itself a problem: a guard that passes over nothing reports
+    nothing about anything, which is the #116 shape — "clean" and "examined nothing" must
+    never print the same.
+    """
+    legs = legs_the_module_defines(source)
+    if not legs:
+        return ["the module defines no leg — the entry-point guard has no population"]
+    referenced = _names_referenced_in_main(source)
+    return [
+        f"main() never reaches the leg `{name}` — the script invocation is a SUBSET of the "
+        f"registered gate, so the two return different rc on the same bytes"
+        for name in legs
+        if name not in referenced
+    ]
+
+def _source_with_main_reference_removed(source: str, leg: str) -> str:
+    """`source` with every mention of `leg` INSIDE `main()` renamed, nothing else touched.
+
+    The guard's own control, so the probe can BUILD the defect — the pre-#475 `main()` —
+    rather than assert around a constant: the self-neutering shape the #477 probes use. The
+    mutation is scoped to `main()`'s own line span, so the leg's DEFINITION and every other
+    caller stay intact and the leg population is unchanged.
+    """
+    lines = source.splitlines(keepends=True)
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef) and node.name == "main":
+            start, end = node.lineno - 1, node.end_lineno
+            body = "".join(lines[start:end]).replace(leg, f"unwired_{leg}")
+            return "".join(lines[:start]) + body + "".join(lines[end:])
+    raise AssertionError("the module defines no main() to mutate")
+
 def main() -> int:
+    # The entry point's OWN wiring is checked FIRST and unconditionally: it is a property of
+    # this FILE, not of the tree's declarations, so it holds in every tree — including the
+    # shipped one, where every leg below is skipped for want of a factory declaration (#475).
+    wiring = entry_point_problems(Path(__file__).read_text(encoding="utf-8"))
+    if wiring:
+        print("score artifact sections gate failed:", file=sys.stderr)
+        for problem in wiring:
+            print(f"  {problem}", file=sys.stderr)
+        return 1
     if not declared():
         print(
             f"no {PROCEDURE.relative_to(REPO)} — no required-section law is declared; "
@@ -978,6 +1099,41 @@ def main() -> int:
                 "population is EMPTY, so no band was verified"
             )
         problems.extend(f"band: {problem}" for problem in band_found)
+
+    # --- the harness-binding leg (issue #79 ruling n=531) ----------------------------
+    # Its OWN boundary and its OWN `try`, deliberately NOT shared with the block above. A
+    # factory that adopted the required-section law and has not yet adopted this one would,
+    # under a shared `try`, lose the section AND band legs to a whole-script SKIP — the
+    # script would read rc=0 over a population it never examined, which is the very class
+    # this entry point was repaired for (#475). A missing declaration is THIS leg's stated
+    # skip and nothing more; a MALFORMED one is a problem, because a broken declaration must
+    # not hide behind the same output as none at all.
+    try:
+        harness_landed: dt.date | None = declared_day(REPO, HARNESS_BINDING_KEY)
+    except SkipGate as exc:
+        harness_landed = None
+        print(f"harness-binding leg: NOT JUDGED — {exc}")
+    except GateError as exc:
+        harness_landed = None
+        problems.extend(f"harness-binding: {problem}" for problem in exc.problems)
+
+    if harness_landed is not None:
+        hb_excused, hb_checked, hb_found, _ = harness_binding_leg(harness_landed)
+        for name in hb_excused:
+            print(
+                f"excused (harness-binding): {name} — predates the harness-binding invariant"
+            )
+        if hb_checked:
+            print(
+                f"harness-binding leg: {len(hb_checked)} artifact(s) checked "
+                f"({', '.join(hb_checked)}), {len(hb_excused)} excused"
+            )
+        else:
+            print(
+                "harness-binding leg: 0 artifact(s) checked — the post-boundary "
+                "population is EMPTY, so no harness-binding section was verified"
+            )
+        problems.extend(f"harness-binding: {problem}" for problem in hb_found)
 
     if problems:
         print("score artifact problems:", file=sys.stderr)
