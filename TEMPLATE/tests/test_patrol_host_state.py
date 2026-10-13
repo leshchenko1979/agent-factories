@@ -5326,10 +5326,23 @@ def test_the_stall_census_leg_reads_a_park_ONLY_from_a_standalone_token() -> Non
     # A park declared for a unit the census does NOT report owed is PRINTED as a note, never
     # dropped: a declaration that matches no OWED line is indistinguishable from a declaration
     # aimed at the wrong subject, and it is the same silence the refusals above exist to stop.
-    extra = rows + [_park_row(9, "#955", 4, "park:owner:q39", now=now)]
-    leg2 = RUNNER.stall_census_leg(issues, extra, read_at=read_at)
+    # The two arms below are the two REASONS a park matches no OWED line, and they read
+    # differently because the reasons are different (#470).
+    extra = rows + [
+        # #955 has no dispatch row at all: no ROUTING ever handed it to a lane, so it was
+        # never in the population and its declaration held nothing out. It reads PARKED --
+        # not "matched NO OWED line", whose reasons all describe a unit that WAS routed.
+        _park_row(9, "#955", 4, "park:owner:q39", now=now),
+        # #956 WAS routed (a direct dispatch row) and the board carries it CLOSED, so it is
+        # dropped from the census by the off-board filter: this is the "matched NO OWED line"
+        # disposition, and it must keep a fixture of its own.
+        _stall_row(10, "dispatch", "#956", 5, now=now),
+        _park_row(11, "#956", 4, "park:owner:q40", now=now),
+    ]
+    leg2 = RUNNER.stall_census_leg(issues + [_issue(956, "CLOSED")], extra, read_at=read_at)
     notes = "\n".join(leg2["coverage"]["parks"])
-    assert "#955" in notes and "matched NO OWED line" in notes, leg2["coverage"]["parks"]
+    assert "#955" in notes and "PARKED #955" in notes, leg2["coverage"]["parks"]
+    assert "#956" in notes and "matched NO OWED line" in notes, leg2["coverage"]["parks"]
     assert leg2["coverage"]["units_parked"] == 1, leg2["coverage"]
 
 def test_the_stall_census_leg_SUPERSEDES_a_park_a_LATER_dispatch_lifted() -> None:
@@ -5372,6 +5385,84 @@ def test_the_stall_census_leg_SUPERSEDES_a_park_a_LATER_dispatch_lifted() -> Non
     assert cov["units_parked"] == 1, cov
     assert cov["parks_declared"] == 2, cov
     assert cov["units_park_superseded"] == 1, cov
+
+def test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park() -> None:
+    """#470, the routing split measured on ONE population, three arms.
+
+    THE DEFECT. Ledger `n=3098` is a Triage escalation whose subject is a descriptive stem
+    and whose BODY names `#460` and `#313`. Read permissively, those two tokens were admitted
+    to the census population, DATED off the escalation's own write stamp, and -- because that
+    same row then counted as their newest "dispatch" -- printed as parks SUPERSEDED. Two units
+    nobody had ever dispatched therefore read OWED, and the census totalled 11 where it owed 9.
+
+    THE SPLIT (#470). A row that names a unit only in its prose is a MENTION: it still counts
+    in the harvest's coverage (#467 criterion 3, asserted below), but it may take no ROUTING
+    slot -- not population admission, not the age, not park supersession.
+
+    THE DISCRIMINATOR IS THE TOKEN'S POSITION, not the row's identity, and the arms below
+    differ in that ALONE. `#971` is named only in a carrier's body, and its park HOLDS.
+    `#972` is named in the SAME carrier's opening line, so it was ROUTED and its park is
+    SUPERSEDED. `#973` is routed by a direct dispatch row and is superseded too. An
+    implementation that refused every carrier row fails on `#972`; one that obeyed every
+    carrier row fails on `#971` -- and the carrier is the NEWEST row in both cases, so the
+    mention arm is a live supersession that must not happen rather than a row too old to act.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(n, "OPEN") for n in (971, 972, 973)]
+    rows = [
+        # #971: parked, then named only in a carrier's BODY -- the park must HOLD.
+        _stall_row(1, "intake", "#971", 6, now=now),
+        _park_row(2, "#971", 5, "park:owner:q40", now=now),
+        # #972: parked, then named in the carrier's OPENING LINE -- ROUTED, so SUPERSEDED.
+        _stall_row(3, "intake", "#972", 6, now=now),
+        _park_row(4, "#972", 5, "park:owner:q41", now=now),
+        # #973: parked, then re-dispatched by a direct row -- SUPERSEDED, the #331 control.
+        _stall_row(5, "intake", "#973", 6, now=now),
+        _park_row(6, "#973", 5, "park:owner:q42", now=now),
+        _stall_row(7, "dispatch", "#973", 2, now=now),
+        # THE CARRIER, and the newest row in the population: a descriptive stem that ROUTES
+        # #972 in its opening line and only TALKS about #971 further down (the `n=3098` shape).
+        _stall_row(8, "dispatch", "stall-census-escalation-probe", 3, now=now,
+                   detail="TRIAGE ESCALATION -> the HQ lane: this row ROUTES #972.\n\n"
+                          "Its body then talks about #971, and hands it to nobody."),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #971" not in named, (
+        f"a token named only in a carrier's BODY is a MENTION, so it neither enters the "
+        f"population nor starts the clock on the unit's age\n{named}"
+    )
+    assert "OWED #972" in named, (
+        f"the POSITIVE arm: a token in the carrier's OPENING LINE was ROUTED, so the park it "
+        f"supersedes is lifted\n{named}"
+    )
+    assert "OWED #973" in named, named
+
+    parks = "\n".join(leg["coverage"]["parks"])
+    assert "PARKED #971" in parks, (
+        f"#971's declaration is RIGHT and the routing is simply absent, so it reads PARKED "
+        f"rather than being accused of naming the wrong subject\n{parks}"
+    )
+    assert "SUPERSEDED" in parks and "#972" in parks and "#973" in parks, parks
+
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 2, cov
+    assert cov["units_park_superseded"] == 2, cov
+    assert cov["parks_declared"] == 3, cov
+    # NOT counted among the OWED units a park held out: #971 was never in the population, so
+    # the census never owed it a line and the declaration held nothing out.
+    assert cov["units_parked"] == 0, cov
+    # COVERAGE IS UNCHANGED (#467 criterion 3): the mention is still CARRIED by the harvest
+    # and still counted as a mention. The split narrows the ROUTING slot, never the coverage.
+    assert cov["carried_units_resolved"] == 2, cov
+    assert cov["mentions_rejected"] == 1, cov
+    # AND THE TWO POPULATIONS ARE PRINTED SIDE BY SIDE (#470): what a dispatch ROUTED, and
+    # what the harvest saw and refused the population slot -- a narrowed read that hides what
+    # it dropped is the failure this leg exists to catch.
+    assert cov["units_in_population"] == 2, cov
+    assert cov["units_named_only_as_mentions"] == 1, cov
 
 def test_the_stall_census_leg_names_the_ADDRESSEE_and_never_the_AUTHOR() -> None:
     """#331 clause 2, two-sided: the OWED line names the LANE the dispatch was handed to, and

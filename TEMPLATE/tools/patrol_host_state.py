@@ -4785,7 +4785,13 @@ def stall_census_leg(
       escalation asking for a ruling, a return leg, a defect carried -- lists them
       hundreds of characters later, and dispatches none of them. The harvest count
       is unaffected: every token such a row names is still CARRIED, because that
-      count is the harvest's coverage -- it is the ROUTING slot it may not take;
+      count is the harvest's coverage. What a MENTION may not take is every ROUTING
+      slot (#470): population admission, the dispatch AGE the census measures from,
+      and the PARK SUPERSESSION test -- a row that handed the unit to nobody cannot
+      start its clock, and cannot put a declared park back in play. Measured on
+      `n=3098`, a Triage escalation whose BODY names `#460` and `#313`: read
+      permissively, both were admitted, dated off its own write stamp and printed
+      as parks SUPERSEDED, so two units nobody had ever dispatched read OWED;
     * a descriptive-stem dispatch naming no such unit is an OBSERVATION dispatch,
       EXPLICITLY LEGAL (ruling n=524). It is COUNTED and printed, never judged.
 
@@ -4964,8 +4970,8 @@ def stall_census_leg(
     carriers: dict[str, dict] = {}
     # THE DECLARED ROUTING (#331 clause 2), per unit: the NEWEST dispatch-bearing row that
     # declares a typed `session` target, and how many dispatch-bearing rows the unit has at
-    # all. Both are read off EVERY dispatch-bearing row rather than off the one `carriers`
-    # holds, because the two questions differ: `carriers` keeps the EARLIEST row, which is
+    # all. Both are read off every ROUTED row rather than off the one `carriers` holds,
+    # because the two questions differ: `carriers` keeps the EARLIEST routed row, which is
     # what the age is measured from (#308), while the addressee is where the work was LAST
     # sent. A later row that declares no target does NOT erase an earlier declaration --
     # silence is not a re-routing -- so the map keeps the newest row that actually declares.
@@ -4975,27 +4981,41 @@ def stall_census_leg(
     # (#331 clause 1): a park is a state read off the rows, and the ledger keeps every row
     # forever, so a unit re-dispatched AFTER its park would stay silently held out of the
     # census for good. A dispatch newer than the declaring row puts the unit back in play.
+    # It is read off ROUTED rows alone (#470): a row that only NAMES the unit in its prose
+    # dispatched nothing, so it cannot put a declared park back in play.
     newest_dispatch: dict[str, dict] = {}
+    # THE MENTION POPULATION (#470), per unit: named by a carrier row that did NOT route
+    # it. Kept as its own set so the leg prints the two populations side by side -- a
+    # narrowed read that hides what it dropped is the failure this leg exists to catch.
+    mention_units: set[str] = set()
 
     def declare(unit: str, row: dict, *, routed: bool) -> None:
         """Record one dispatch-bearing row against the unit it dispatched.
 
-        `routed` (#467) is whether the row DISPATCHED the unit or merely NAMED it. It
-        gates `declared_refs` ALONE, because that map answers "where was the work LAST
-        SENT" and only a routing answers it -- while `dispatch_counts`,
-        `newest_dispatch` and the caller's `carriers` keep reading every
-        dispatch-BEARING row, which is what they are for: the number of rows that name
-        the unit, the newest such row, and the earliest one the age is measured from.
-        That split is deliberate and stated rather than hidden: the harvest is
-        permissive so its coverage stays legible, and the ROUTING slot is strict.
+        `routed` (#467) is whether the row DISPATCHED the unit or merely NAMED it, and
+        it gates every ROUTING question this harvest feeds: `declared_refs` (where the
+        work was LAST SENT), `newest_dispatch` (the park-supersession test, #331 clause
+        1) and the caller's `carriers` (population admission and the age). A row that
+        merely NAMES a unit in its prose -- an escalation, a return leg, a defect
+        carried -- is a MENTION, and a mention answers none of them: it did not hand the
+        unit to anyone, it did not put a declared park back in play, and it did not
+        start the clock on the unit's age. Measured on `n=3098`, a Triage escalation
+        whose BODY names `#460` and `#313`: read permissively they were admitted, dated
+        off its own write stamp and printed as parks SUPERSEDED, so two units nobody had
+        ever dispatched read OWED (#470).
+
+        What stays PERMISSIVE is the harvest COUNT (`dispatch_counts`), which measures
+        how many rows name the unit at all: that is coverage, not routing, and it is
+        what keeps #467's criterion 3 legible.
 
         A carrier row is routed for a unit when the token stands in its opening line;
         a direct row is routed by construction, since the unit IS its subject.
         """
         dispatch_counts[unit] = dispatch_counts.get(unit, 0) + 1
-        held_row = newest_dispatch.get(unit)
-        if held_row is None or _ledger_row_order(row) >= _ledger_row_order(held_row):
-            newest_dispatch[unit] = row
+        if routed:
+            held_row = newest_dispatch.get(unit)
+            if held_row is None or _ledger_row_order(row) >= _ledger_row_order(held_row):
+                newest_dispatch[unit] = row
         session_ref = next(
             (str(value) for ref in (row.get("refs") or [])
              for kind, value in ref.items() if kind == "session"), ""
@@ -5080,7 +5100,13 @@ def stall_census_leg(
         carried_units += len(units)
         mentions_rejected += sum(1 for unit in units if unit not in header_units)
         for unit in units:
-            carriers.setdefault(unit, row)
+            if unit in header_units:
+                carriers.setdefault(unit, row)
+            else:
+                # A MENTION, not a routing: counted in `mention_units` and NOT admitted to
+                # the population, so it neither dates the unit nor lets the unit's declared
+                # park read SUPERSEDED (#470). #467's harvest count is unaffected.
+                mention_units.add(unit)
             declare(unit, row, routed=unit in header_units)
 
     problems: list[str] = list(park_problems)
@@ -5089,6 +5115,10 @@ def stall_census_leg(
     parked: list[str] = []
     parked_units: set[str] = set()
     park_superseded: list[str] = []
+    # THE SUPERSEDED UNITS (#470), by name: those units are listed in `park_superseded`, and
+    # they must NOT also be listed among the declarations that "matched NO OWED line" -- one
+    # park printed with two contradictory dispositions is the defect #471 reports.
+    superseded_units: set[str] = set()
     off_board = 0
     for unit, row in carriers.items():
         if unit not in open_on_board:
@@ -5127,6 +5157,7 @@ def stall_census_leg(
                 # held out of the census for good, and the stale declaration would read as a
                 # live park. The line stays OWED; the note says why the declaration no longer
                 # holds.
+                superseded_units.add(unit)
                 park_superseded.append(
                     f"{unit} declares park:owner:{question} at row n={park_row.get('n')}, but "
                     f"a LATER dispatch-bearing row n={superseding.get('n')} puts it back in "
@@ -5151,6 +5182,35 @@ def stall_census_leg(
             "dispatch_rows": dispatch_counts.get(unit, 1),
         })
 
+    # A PARK WHOSE UNIT IS NOT IN THE POPULATION AT ALL (#470). The declaration STANDS and the
+    # unit is EXCLUDED from the owed total, but no dispatch ROUTED it, so it never entered the
+    # census population and no OWED line is owed for it. `#460` and `#313` reach this branch
+    # through `n=3098`, a Triage escalation that names them in its BODY. They read PARKED
+    # rather than "matched NO OWED line", because that note's reasons -- claimed, closed, off
+    # this board, no longer stalled -- all describe a unit that WAS routed, and it closes by
+    # inviting the reader to suspect the declaration names the wrong subject. Here the
+    # declaration is right and the routing is simply absent.
+    park_never_routed = [
+        (unit, question, row)
+        for unit, (question, row) in parks.items()
+        if unit not in parked_units
+        and unit not in superseded_units
+        and unit not in carriers
+    ]
+    # NOT counted in `units_parked`, which means OWED units a park HELD OUT: these units were
+    # never in the population, so the census never owed them a line and the park held nothing
+    # out. The set exists so the "matched NO OWED line" note below does not print a second,
+    # contradictory disposition for the same park (#471).
+    never_routed_units = {unit for unit, _, _ in park_never_routed}
+    park_never_routed_notes = [
+        f"PARKED {unit}: declares park:owner:{question} at row n={row.get('n')} -- the "
+        f"declaration STANDS and the unit is EXCLUDED from the owed total; no dispatch "
+        f"ROUTED it (its token stands in a row's BODY, never in the opening line, or it is "
+        f"not a unit of this board), so it is not in the census population and no OWED line "
+        f"is owed (#470)"
+        for unit, question, row in park_never_routed
+    ]
+
     # A PARK DECLARED FOR A UNIT THAT IS NOT OWED IS PRINTED, never silently ignored: a
     # declaration that matches no OWED line is indistinguishable from a typo'd subject, and a
     # declaration that quietly does nothing is the same failure an unreadable one is. The
@@ -5162,7 +5222,9 @@ def stall_census_leg(
         f"if none of those hold, the declaration names the wrong subject (#331)"
         for unit, (question, row) in parks.items()
         if unit not in parked_units
-    ] + park_superseded
+        and unit not in superseded_units
+        and unit not in never_routed_units
+    ] + park_superseded + park_never_routed_notes
 
     # THE ADDRESSEE'S NAMES ARE RESOLVED ONCE, and only when there is a line to put them on:
     # the live read walks every profile's session bindings, so a census with nothing owed
@@ -5335,6 +5397,11 @@ def stall_census_leg(
             # question, and this is how many of those tokens were named only in the
             # BODY: read as a mention, never as a routing.
             "mentions_rejected": mentions_rejected,
+            # THE TWO POPULATIONS (#470), printed side by side so a narrowed read cannot
+            # hide what it dropped: `units_in_population` is what a dispatch ROUTED, and
+            # `units_named_only_as_mentions` is what the harvest saw and refused the
+            # population slot -- units a row named in its BODY and never handed to anyone.
+            "units_named_only_as_mentions": len(mention_units - set(carriers)),
             "units_rejected_pre_filing": pre_filing_rejected,
             "units_in_population": len(carriers),
             "units_off_board": off_board,
@@ -7574,6 +7641,16 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  population: {cov['units_in_population']} dispatched unit(s) -- "
                 f"{cov['units_owed']} never claimed past the declared threshold of "
                 f"{cov['threshold_days']} d"
+            )
+            # THE MENTION POPULATION IS PRINTED BESIDE THE ROUTED ONE (#470): the population
+            # admits ROUTED units alone, so a reader must be able to see how many units the
+            # harvest saw and refused the population slot -- a narrowed read that hides what
+            # it dropped is the failure this leg exists to catch.
+            lines.append(
+                f"  mentions: {cov['units_named_only_as_mentions']} unit(s) named by a "
+                f"dispatch row that never ROUTED them (their tokens stand in the BODY, not "
+                f"in the row's opening line) -- admitted to no population, dated by no row, "
+                f"and holding no park back (#470)"
             )
             # THE DRAIN EVIDENCE IS PRINTED BESIDE THE OWED TOTAL (#465 criterion 1): a bare
             # "9 OWED" reads as nine independent findings, and where the addressee lane is
