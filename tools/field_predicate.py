@@ -790,6 +790,45 @@ def declared_duty(detail: str) -> list[str]:
     return _declared_values(detail, DUTY_KEY)
 
 
+def mentions_duty(detail: str) -> bool:
+    """True when `detail` carries the `duty` KEY in the row's OWN VOICE, trailer or prose.
+
+    The LEXICAL half of the pair above, and it exists for ONE job: to let the patrol's
+    duty-receipt leg NAME a MALFORMED receipt instead of silently not seeing it (#281,
+    ruling n=2003). `declared_duty` reads the CANONICAL TRAILER, and a receipt whose
+    token sits in prose -- or whose trailer is terminated early by a `Session: <uuid>
+    (actor triage).` line carrying no `=` -- declares NOTHING to that reader while its
+    author is told to declare the very token they believe they declared. Measured on the
+    live ledger when this landed: n=1875, n=1880 and n=1966 all read
+    `declared_duty -> []` while carrying `duty=completed` in their own prose.
+
+    Deliberately NOT the declaration predicate: a LEXICAL test lets a row that merely
+    DISCUSSES a duty satisfy its own receipt, which is the #88 / `n=405` clause 5 damage
+    ("prose must not SATISFY a field"). The leg reads the positional form for the
+    VERDICT; this answers only "did the author write the token where a reader can point
+    at it?" so the finding can say WHY it is not being seen. The leg asks it only of a
+    row whose canonical trailer declares NO duty, so a token this finds is by
+    construction OUTSIDE the run.
+
+    THE SCOPE IS THE ROW'S OWN VOICE, and the shared discriminator is imported rather
+    than re-walked (`n=405` PART 5, `n=599`): a token inside a PARENTHETICAL ASIDE is a
+    CITATION of another row's token, not this row's declaration. A QUOTED token is
+    excluded by `keyed_value` itself, which requires a token to BEGIN with `key=`, so
+    `'duty=completed'` is a quotation of the field and never a mention of it.
+
+    WHAT THIS DOES NOT SEPARATE, stated rather than hidden: n=2000 is a repair record
+    that both quotes `'duty=completed'` and mentions the token UNQUOTED in its own prose
+    ("the receipt row declares duty=completed in its TEXT"). The unquoted mention is
+    indistinguishable from a declaration by any lexical reader, so n=2000 is kept out of
+    the leg's finding by its POPULATION and not by this predicate: the round it keys
+    (2026-10-03) also carries n=1999, which DECLARES, so no judged round ever asks this
+    question of it. A row that discusses a token in its own voice while its round has no
+    declaring row is reported -- and the finding is a POINTER ("make the token terminal"),
+    which is true of the row whether it declared or merely discussed.
+    """
+    return any(keyed_value(token, DUTY_KEY) is not None
+               for token in own_voice_text(detail).split())
+
 RECLOSE_KEY = "reclose"
 
 

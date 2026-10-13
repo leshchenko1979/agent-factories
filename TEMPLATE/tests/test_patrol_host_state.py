@@ -2021,14 +2021,49 @@ _DUTY_TREE = _duty_tree()
 
 
 def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None,
-              read_at=None, fires=None, margin_for=None) -> dict:
+              read_at=None, fires=None, margin_for=None, predicate=None) -> dict:
     return RUNNER.duty_receipt_leg(
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
         read_at=read_at if read_at is not None else _DUTY_READ_AT,
         store=store if store is not None else Path(tempfile.mkdtemp()),
         repo=repo if repo is not None else _DUTY_TREE,
-        fires=fires, margin_for=margin_for,
+        fires=fires, margin_for=margin_for, predicate=predicate,
     )
+
+def _stub_predicate(**overrides):
+    """The SHARED field predicate with ONE reader replaced — the neuter-the-code control.
+
+    Criterion 1 of the #281 ruling (n=2003) requires the MALFORMED-RECEIPT finding to be
+    proven to BITE, and a finding that survives its own discriminator being neutered is
+    not a finding: it is prose that happens to be true. So the probes replace exactly one
+    attribute and assert the finding MOVES, which is what makes the surviving assertion
+    attributable to that attribute rather than to the fixture.
+
+    Everything else delegates to the real module, so a probe neuters ONE reader and the
+    rest of the leg keeps the behaviour the live run has.
+    """
+    real = RUNNER.field_predicate_readers()
+    class _Stub:
+        def __init__(self):
+            object.__setattr__(self, "_real", real)
+            for key, value in overrides.items():
+                object.__setattr__(self, key, value)
+        def __getattr__(self, name):
+            return getattr(object.__getattribute__(self, "_real"), name)
+    return _Stub()
+
+def _lexical_duty_scan(detail: str) -> bool:
+    """`mentions_duty` with the own-voice scope REMOVED — the pre-#278 lexical reading.
+
+    Built on the real module's own `keyed_value`, so the neutered reader differs from the
+    live one in ONE respect only: whether a token inside a parenthetical aside counts. That
+    is the exact question the ruling says the shared discriminator answers, so this is the
+    control that shows it is answering it.
+    """
+    real = RUNNER.field_predicate_readers()
+    return any(real.keyed_value(token, real.DUTY_KEY) is not None
+               for token in str(detail).split())
+
 
 def test_the_duty_leg_BITES_when_a_fired_round_left_no_receipt() -> None:
     """THE probe this leg exists for: a green cron run with no duty row is a FINDING.
@@ -2482,6 +2517,220 @@ def test_an_OVER_CADENCE_residual_is_PRINTED_never_refused() -> None:
                         cron_fires=fires)
     assert "OVER CADENCE" in out, out[-3000:]
     assert "never clamped to the cadence" in out, out[-3000:]
+
+def test_a_MALFORMED_receipt_is_REPORTED_and_proven_to_BITE() -> None:
+    """#281 (A), acceptance 1 of ruling n=2003 — and the BITE is the probe.
+
+    THE MEASURED INSTANCE, and it is a real row: n=1966 writes its receipt as
+    *"DUTY RECEIPT, duty=completed."* in the prose HEAD and closes with
+    *"Session: f4c192c9-… (actor triage)."* — so the canonical terminal run is empty,
+    `declared_duty` reads NOTHING, and a lane that declared its completion reads as a lane
+    that declared nothing. The author is told to declare the token they believe they
+    declared; the reader cannot reach it. Neither "clean" nor "missing duty" describes that
+    state, so the leg names it and names the repair.
+
+    PROVEN TO BITE: the second half neuters `mentions_duty` to a constant False and asserts
+    the finding MOVES back to the generic no-declaration text. Without that half the
+    assertion would pass on any fixture, including one where the finding came from
+    something else entirely.
+    """
+    prose = (
+        "TRIAGE CYCLE — patrol-verify-2026-09-25. DUTY RECEIPT, duty=completed.\n"
+        "Session: f4c192c9-a8e9-4268-9026-ee3e4970cc8a (actor triage)."
+    )
+    row = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}", detail=prose, n=1875)
+    leg = _duty_leg([_duty_row()], [row])
+    assert leg["coverage"]["receipts_malformed"] == 1, leg["coverage"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 0, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    problem = leg["problems"][0]
+    assert "MALFORMED RECEIPT" in problem, problem
+    assert "OWN VOICE" in problem, problem
+    assert "Make it TERMINAL" in problem, problem
+    assert "n=1875" in problem, "the finding must NAME the row it is about, by number"
+    assert "registry-attest-2026-09-25" in problem, problem
+    assert "never a missing duty" in problem, (
+        "the finding must refuse the missing-duty reading, because a lane that declared is "
+        f"not a lane that did nothing: {problem}"
+    )
+    # THE BITE: neuter the discriminator and the finding must vanish, leaving the generic
+    # no-declaration text behind. A finding that survives this is not this finding.
+    neutered = _duty_leg([_duty_row()], [row],
+                         predicate=_stub_predicate(mentions_duty=lambda detail: False))
+    assert neutered["coverage"]["receipts_malformed"] == 0, (
+        f"the malformed class must be produced BY `mentions_duty`: {neutered['coverage']}"
+    )
+    assert "MALFORMED RECEIPT" not in neutered["problems"][0], (
+        f"with the discriminator neutered the generic text must return: {neutered['problems']}"
+    )
+    assert "declare no `duty=`" in neutered["problems"][0], neutered["problems"][0]
+
+def test_the_OWN_VOICE_discriminator_keeps_a_QUOTED_aside_out() -> None:
+    """The discriminator is the #278 helper, and THIS is what proves it is load-bearing.
+
+    A token inside a PARENTHETICAL ASIDE is a CITATION of another row's trailer, and the
+    ruling names exactly this as what keeps the detector off a row that quotes a token. The
+    probe neuters the own-voice scope — the same scan with the aside-stripping REMOVED — and
+    asserts the finding appears, so the clean verdict on the real reader is attributable to
+    that scope and not to the fixture happening to be quiet.
+
+    A SECOND discriminator was refused (n=405 PART 5 / n=599), so this probe asserts the
+    SHARED reader is the one doing the separating rather than a private walk here.
+    """
+    aside = (
+        "the round was cleared by the repair recorded in n=1999 (whose trailer carries "
+        "duty=completed), and nothing further is owed."
+    )
+    row = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}", detail=aside, n=2000)
+    real = RUNNER.field_predicate_readers()
+    assert real.mentions_duty(aside) is False, "the shared reader must drop the aside"
+    assert _lexical_duty_scan(aside) is True, "the lexical control must keep it, or it proves nothing"
+    leg = _duty_leg([_duty_row()], [row])
+    assert leg["coverage"]["receipts_malformed"] == 0, leg["coverage"]
+    assert "MALFORMED RECEIPT" not in leg["problems"][0], leg["problems"][0]
+    neutered = _duty_leg([_duty_row()], [row],
+                         predicate=_stub_predicate(mentions_duty=_lexical_duty_scan))
+    assert neutered["coverage"]["receipts_malformed"] == 1, (
+        "without the own-voice scope the aside must be read as a mention — that is the "
+        f"over-inclusion the scope exists to narrow: {neutered['coverage']}"
+    )
+
+def test_a_repair_rows_round_is_READ_through_its_DECLARING_row() -> None:
+    """The n=2000 population control, stated as a probe because the ruling states it.
+
+    n=2000 is a repair record that QUOTES the token and then MENTIONS it unquoted in its own
+    prose ("the receipt row declares duty=completed in its TEXT"). No lexical reader can tell
+    that mention from a declaration, so the ruling keeps the detector off n=2000 by its
+    POPULATION rather than by a cleverer predicate: the round it keys (2026-10-03) also
+    carries n=1999, which DECLARES. So the round is judged clean and the repair record is
+    never asked the question — which is what this probe pins, so a future change that made
+    n=2000 the only row of its round would show up here as the behaviour change it is.
+    """
+    repair = _receipt_row(
+        subject=f"registry-attest-{_DUTY_ROUND}",
+        detail=("the repair of n=1999: the receipt row declares duty=completed in its "
+                "TEXT. Session: 8f0c (actor triage)."),
+        n=2000,
+    )
+    declaring = _receipt_row(subject=f"registry-attest-{_DUTY_ROUND}", n=1999)
+    leg = _duty_leg([_duty_row()], [declaring, repair])
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["receipts_malformed"] == 0, leg["coverage"]
+    assert leg["coverage"]["duties_judged"][0]["receipts"] == 1, leg["coverage"]
+
+def test_the_PRIOR_round_is_JUDGED_when_the_newest_is_IN_FLIGHT() -> None:
+    """#281 (B), acceptance 2 — the permanent gap this fixes, and it is a REAL one.
+
+    `factory-triage-patrol` fires every 6 h and its own derived residual reaches 3.77 d, so
+    the round the leg judged was ALWAYS the one still in flight: the `continue` ended the
+    job's turn and no round was ever examined. Measured live at 2026-10-12T18:40Z, the job
+    had no round judged at all.
+
+    Here the newest fire is 18 min old (inside the 30 min default residual) and the fire
+    before it is a day older, with NO receipt: the leg must judge the PRIOR round and NAME
+    it, and the excuse must still name the round it declined to judge.
+    """
+    newest = _plus(_DUTY_BOUND, 74.0)
+    prior = _plus(_DUTY_BOUND, 50.0)
+    read_at = _plus(newest, 0.3)                      # 18 min after the newest fire
+    row = _duty_row(last_run_at=newest)
+    # The row's OWN scheduling record, carried since #281 (ruling n=2003): the reason a
+    # round was skipped is the cadence against the residual, so the finding must name the
+    # schedule it belongs to rather than leaving the reader to guess it.
+    row["cron_expr"] = "0 */6 * * *"
+    row["next_run_at"] = _plus(newest, 6.0)
+    fires = [
+        {"job_id": row["id"], "job_name": row["name"], "started_at": prior},
+        {"job_id": row["id"], "job_name": row["name"], "started_at": newest},
+    ]
+    leg = _duty_leg([row], [], read_at=read_at, fires=fires)
+    assert leg["coverage"]["rounds_judged_by_fallback"] == 1, leg["coverage"]
+    assert leg["coverage"]["rounds_prior_unreadable"] == 0, leg["coverage"]
+    judged = leg["coverage"]["duties_judged"]
+    assert len(judged) == 1, judged
+    assert judged[0]["round"] == prior[:10], (
+        f"the PRIOR round must be the one judged, and it must be NAMED: {judged[0]}"
+    )
+    assert judged[0]["fallback_from"] == newest[:10], judged[0]
+    assert judged[0]["fired"] == prior, judged[0]
+    assert len(leg["problems"]) == 1, leg["problems"]
+    problem = leg["problems"][0]
+    assert "PRIOR round" in problem, problem
+    assert "is NOT JUDGED" in problem, problem
+    assert newest[:10] in problem, "the round being declined must be named too"
+    assert "0 */6 * * *" in problem, (
+        f"the PRIOR-round note must carry the row's own schedule: {problem}"
+    )
+    in_flight = [e for e in leg["excused"] if "IN FLIGHT" in e]
+    assert len(in_flight) == 1, leg["excused"]
+    assert newest[:10] in in_flight[0], in_flight[0]
+
+def test_a_prior_round_that_cannot_be_DERIVED_is_NOT_JUDGED_with_its_reason() -> None:
+    """#281 (B)'s bound — acceptance 3, and it is the #112/#160 law, not a nicety.
+
+    The ruling is explicit: where the prior round cannot be derived the leg prints NOT JUDGED
+    with its reason, NEVER a silent fallback to the old behaviour. A fallback that cannot
+    judge must say so, because silence here is exactly the false clean the leg exists to
+    catch — and the old behaviour was a silent one.
+
+    The instant is READ from the job's own run record and never composed (`next_run_at -
+    last_run_at` is the #175 class wearing arithmetic), so a job whose record holds only the
+    in-flight fire has no prior round to name.
+    """
+    newest = _plus(_DUTY_BOUND, 74.0)
+    read_at = _plus(newest, 0.3)
+    row = _duty_row(last_run_at=newest)
+    fires = [{"job_id": row["id"], "job_name": row["name"], "started_at": newest}]
+    leg = _duty_leg([row], [], read_at=read_at, fires=fires)
+    assert leg["coverage"]["rounds_prior_unreadable"] == 1, leg["coverage"]
+    assert leg["coverage"]["rounds_judged_by_fallback"] == 0, leg["coverage"]
+    assert leg["coverage"]["duties_judged"] == [], (
+        f"no round may be judged from a fire the record does not date: {leg['coverage']}"
+    )
+    assert leg["problems"] == [], (
+        f"an unexamined round is not a RED — it is a stated absence: {leg['problems']}"
+    )
+    stated = [e for e in leg["excused"] if "NO fire before it" in e]
+    assert len(stated) == 1, leg["excused"]
+    assert "NOT JUDGED" in stated[0], stated[0]
+    assert "no prior round can be NAMED" in stated[0], stated[0]
+
+def test_the_runner_PRINTS_the_prior_round_and_the_malformed_class() -> None:
+    """Acceptance 4, the printing half: the leg's population and its two new verdicts.
+
+    A verdict that never reaches the report is a verdict no reader can act on, and the
+    population line is what keeps an empty or one-row population from reading as a clean
+    box (#160). Both new classes are asserted at the RENDERED output, not at the coverage
+    dict, because the coverage dict is what the leg computes and the report is what the
+    operator reads.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")
+    newest = iso(now - dt.timedelta(minutes=10))
+    prior = iso(now - dt.timedelta(hours=24, minutes=10))
+    prior_date = prior[:10]
+    row = _duty_row(last_run_at=newest)
+    fires = [
+        {"job_id": row["id"], "job_name": row["name"], "started_at": prior},
+        {"job_id": row["id"], "job_name": row["name"], "started_at": newest},
+    ]
+    malformed = {
+        "n": 1875, "ts": prior, "event": "run", "actor": "triage",
+        "subject": f"registry-attest-{prior_date}",
+        "detail": (f"TRIAGE CYCLE — patrol-verify-{prior_date}. DUTY RECEIPT, "
+                   f"duty=completed.\nSession: 8f0c (actor triage)."),
+    }
+    rc, out, err = _run([], [malformed], cron_rows=[row], prefixes=["factory-"],
+                        cron_fires=fires)
+    assert "LEG duty-receipt" in out, out
+    assert "jobs: 1 enabled row(s) attributed to this factory of 1 read across" in out, out
+    assert "duties: 1 row(s) declare a receipt" in out, out
+    assert "were judged as the PRIOR fire's round" in out, out[-4000:]
+    assert "MALFORMED RECEIPT" in out, out[-4000:]
+    assert "make it terminal" in out, out[-4000:]
+    assert f"round {prior_date}" in out, "the judged round must be NAMED in the report"
+    assert rc == 1, "both new classes are findings, so the run must fail"
+
 
 # ------------------------------------------------------------------- kit-drift leg
 

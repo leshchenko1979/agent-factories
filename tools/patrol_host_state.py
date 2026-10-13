@@ -1777,9 +1777,22 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             unreached.append(f"{db.parent.name}: {exc}")
             continue
         try:
+            # THE ROW'S OWN SCHEDULING RECORD (#281) IS PROBED, NEVER ASSUMED. A home whose
+            # `cron_jobs` predates `cron_expr`/`next_run_at` reads NULL for them and is still
+            # READ, because those two are CARRIED for the report and no instant is derived
+            # from them — the prior round comes from the job's own run history. This is the
+            # idiom `tools/registry.py` uses for `trigger_cmd`, for the same reason: a column
+            # a home does not have must not make that home unreadable. A home with no
+            # `cron_jobs` table at all still fails the select below and lands in `unreached`,
+            # which is the distinction that must not be lost.
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(cron_jobs)")}
+            sched = [
+                col if col in columns else f"NULL as {col}"
+                for col in ("cron_expr", "next_run_at")
+            ]
             fetched = list(conn.execute(
                 "select id, name, coalesce(deliver_to,''), coalesce(prompt,''), "
-                "coalesce(last_run_at,'') "
+                "coalesce(last_run_at,''), " + ", ".join(sched) + " "
                 "from cron_jobs where enabled = 1"
             ))
         except sqlite3.Error as exc:
@@ -1787,7 +1800,7 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             continue
         finally:
             conn.close()
-        for row_id, name, deliver_to, prompt, last_run_at in fetched:
+        for row_id, name, deliver_to, prompt, last_run_at, cron_expr, next_run_at in fetched:
             rows.append({
                 # The id is read because a report must RESOLVE the row it names: two jobs
                 # may share a name across homes, and a name alone is not an address. The
@@ -1802,6 +1815,14 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
                 # `last_run_at` is that instant. `enabled = 1` is in the WHERE clause
                 # above, so every row here is enabled and carries no `enabled` key.
                 "last_run_at": last_run_at,
+                # The row's OWN SCHEDULING RECORD (#281, ruling n=2003), read for the same
+                # reason `last_run_at` is: the duty-receipt leg must NAME the schedule the
+                # round it judges belongs to. It is CARRIED, never parsed into an instant --
+                # the prior round is READ from the job's own fire history
+                # (`cron_run_fires`), because a round composed from `last_run_at` and
+                # `next_run_at` would be an instant no record dates.
+                "cron_expr": cron_expr,
+                "next_run_at": next_run_at,
                 "home": db.parent.name,
             })
         homes_read.append(db.parent.name)
@@ -2418,6 +2439,25 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
 # would re-implement a scheduler and would be wrong for every form this parser does not
 # know; reading the row's own record cannot disagree with the row.
 #
+# **AND THE NEWEST ROUND IS NOT THE ONLY ROUND (#281, ruling n=2003).** Reading
+# `last_run_at` alone made this leg judge exactly ONE round per job, and the round it read
+# was usually the one still IN FLIGHT -- so the `continue` below ended the job's turn and
+# the round the PREVIOUS fire woke was never visited. For a job whose derived residual
+# reaches its own cadence that is EVERY round: measured live at 2026-10-12T18:40Z,
+# `factory-triage-patrol` (`0 */6`, derived residual 3.77 d against a 6 h cadence) had no
+# round judged at all, and a leg that examines nothing must never render as one that
+# examined and found clean (#160). The prior round is therefore READ -- from the job's own
+# run record (`cron_job_runs`, through `duty_fire_instants`), which dates every fire the
+# daemon took -- and it is judged when the newest one is in flight.
+#
+# IT IS NEVER COMPOSED. `last_run_at - (next_run_at - last_run_at)` would name an instant
+# no record carries, and the round this leg names must be one the daemon's own table
+# dates: an instant that was never read is the #175 class wearing arithmetic (SKILL.md
+# hard rule 4). So the row's own scheduling record is CARRIED beside the read -- the cron
+# SELECT reads `cron_expr` and `next_run_at` for the reason `last_run_at` is read, to NAME
+# the schedule the round belongs to -- and where no earlier fire can be read the leg
+# prints NOT JUDGED with its reason rather than falling back to an inferred round.
+#
 # **THE RECEIPT MUST DECLARE ITS COMPLETION — a subject match is not a receipt.** The row
 # the duty's lane appends carries `duty=completed|failed|skipped` in its canonical trailer,
 # read through the SHARED positional predicate (`field_predicate.declared_duty`), never a
@@ -2428,6 +2468,26 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
 # sits under a different subject. Requiring the declaration rejects a pre-completion row
 # AND makes silence unable to certify, which is the same property section 11 states for the
 # declaration itself: the omission is the failure the mechanism cannot see.
+#
+# **AND A RECEIPT THE READER CANNOT REACH IS NAMED, never read as a round that declared
+# nothing (#281, ruling n=2003).** The declaration is POSITIONAL — the token must sit inside
+# the row's canonical terminal run — and a row that writes it in the prose HEAD and closes
+# with a token carrying no `=` reads as declaring NOTHING. That state is neither clean nor a
+# missing duty, and both readings blame the wrong party: the author wrote the declaration and
+# the reader cannot see it. So a judged round whose matched rows declare no duty is asked one
+# further question — does a matched row carry the `duty=` token in its OWN VOICE outside its
+# canonical run? — and a yes is reported as a MALFORMED RECEIPT, NAMING the row and the
+# repair (make the token terminal). Measured on the live ledger when this landed: n=1875,
+# n=1880 and n=1966 each read `declared_duty -> []` while carrying `duty=completed` in prose.
+#
+# THE DISCRIMINATOR IS THE SHARED OWN-VOICE READER (`field_predicate.mentions_duty`), never a
+# private scan and never a second predicate (n=405 PART 5 / n=599): a token inside a
+# parenthetical aside is a CITATION of another row's token. A WRITE-PATH REFUSAL was ruled
+# out and the precedent is measured (#247 / `b4b1aa8`): a lexical branch that refused prose
+# quoting the token produced false positives on legitimate quotations and had to be demoted
+# to a NOTE. Reader-side detection with the own-voice scope is what is safe where a lexical
+# refusal is not. The finding is a POINTER, true of the row whether it declared or merely
+# discussed — the leg never rules on what the round DID from a malformed row.
 #
 # **THE KEY IS `duty`, NOT `outcome`, and the distinction is a property of the metric.** A
 # run row declaring `outcome=` ENTERS `first_pass_yield_population` (`tools/audit.py`), and
@@ -2691,6 +2751,39 @@ def duty_fire_instants(job: dict, fires: list[dict], parse) -> list[dt.datetime]
         except (ValueError, TypeError):
             continue
     return sorted(instants)
+
+def prior_fire_instant(job: dict, fires: list[dict], newest: dt.datetime,
+                       parse) -> dt.datetime | None:
+    """The fire BEFORE `newest` in this job's OWN run record, or None when none is readable.
+
+    The prior round of #281 (ruling n=2003), and it is READ rather than COMPOSED: the
+    instants come from `cron_job_runs` through `duty_fire_instants`, which matches fires to
+    this job by id (falling back to the name per fire). `last_run_at - (next_run_at -
+    last_run_at)` would name an instant no record carries, and a round this leg names must
+    be one the daemon's own table dates (SKILL.md hard rule 4) -- so where no earlier fire
+    can be read the caller prints NOT JUDGED with its reason.
+
+    STRICTLY OLDER than `newest`, and that is what makes it robust: the newest instant is
+    normally the `last_run_at` fire, so this is the second-newest -- but a row whose
+    dispatch stamp is newer than any recorded run row still resolves, because the filter is
+    the INSTANT and not the list position.
+    """
+    earlier = [i for i in duty_fire_instants(job, fires, parse) if i < newest]
+    return max(earlier) if earlier else None
+
+def job_schedule_text(row: dict) -> str:
+    """The row's OWN scheduling record as a reader needs it, or a stated absence.
+
+    Carried for #281 so a round judged by FALLBACK names the schedule it belongs to: a
+    prior round is only readable against the cadence that produced it. It is printed and
+    never parsed into an instant -- `cron_expr` is the row's declaration of WHEN it fires,
+    while every instant this leg names is one `cron_job_runs` dates.
+    """
+    expr = str(row.get("cron_expr") or "").strip()
+    nxt = str(row.get("next_run_at") or "").strip()
+    if not expr and not nxt:
+        return "the row records no schedule (cron_expr and next_run_at are both empty)"
+    return f"`{expr or 'no cron_expr'}` (next_run_at {nxt or 'unstated'})"
 
 def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: list[dict],
                       predicate=None, margin_for=None, parse=None) -> dict:
@@ -3333,6 +3426,163 @@ def dispatch_delivery_leg(
     return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
             "problems": problems, "excused": [], "coverage": coverage}
 
+def duty_fallback_note(problems: list[str], fallback_from: str | None,
+                       schedule_text: str = "") -> list[str]:
+    """Append the PRIOR-round note to every problem of a fallback finding (#281).
+
+    One exit path is not enough: `duty_round_finding` returns EARLY for a round with no
+    receipt, which is exactly the finding a fallback produces most often, so the note is
+    applied through this one function at BOTH returns. Measured while writing the probe:
+    the first version appended it only at the end of the function, and the prior round's
+    RED arrived with no statement of which round it was about — the finding read as a
+    stale verdict on a round the reader could not place.
+
+    `schedule_text` is the row's OWN scheduling record, carried because WHY a round was
+    skipped is a property of the job's cadence against its derived residual (#449): a
+    reader meeting "the prior round is the one judged" needs the schedule that produced
+    it, and a row that records none says so rather than printing an empty clause.
+    """
+    if not fallback_from:
+        return problems
+    tail = f" (that job's declared schedule: {schedule_text})" if schedule_text else ""
+    return [
+        p + (
+            f" [This is the PRIOR round: the newest round {fallback_from} is still in "
+            f"flight and is NOT JUDGED, and a round this leg cannot judge must not hide "
+            f"the one before it (#281){tail}]"
+        )
+        for p in problems
+    ]
+
+def duty_round_finding(*, name: str, job_id: str, stem: str, round_date: str, fired: str,
+                       ledger_rows: list[dict], predicate,
+                       fallback_from: str | None = None, schedule_text: str = "") -> dict:
+    """Judge ONE round of one job — the rows matching its subject, and what they DECLARE.
+
+    Split out of the leg's loop for #281 (ruling n=2003) so a round can be judged from a
+    WALK rather than from a single instant: the leg judges the newest round, and when that
+    round is IN FLIGHT it judges the one the PREVIOUS fire woke through THIS function, so
+    the prior round is judged by exactly the predicate the newest one is — never by a
+    second, weaker path.
+
+    `fallback_from` names the round this one is judged INSTEAD of, and it is CARRIED into
+    the finding rather than implied: a reader meeting a finding about an older round must
+    be told why the leg is not looking at the newest one, or the finding reads as a stale
+    verdict.
+    """
+    matched = [r for r in ledger_rows
+               if receipt_subject_matches(str(r.get("subject") or ""), stem, round_date)]
+    # A row that declares NOTHING is not a receipt (#160). This is the false-clean fix: the
+    # leg's first version accepted any subject match, so a DISPATCH record written before
+    # the round completed certified it. The declaration is what makes a row a receipt, so
+    # the filter is the predicate and not a formatting preference.
+    receipts = [r for r in matched
+                if predicate.declared_duty(str(r.get("detail") or ""))]
+    finding = {
+        "judged": {
+            "name": name, "id": job_id, "stem": stem, "round": round_date,
+            "fired": fired, "rows_matched": len(matched), "receipts": len(receipts),
+        },
+        "problems": [], "excused": [], "superseded": 0, "malformed": 0,
+    }
+    if fallback_from:
+        finding["judged"]["fallback_from"] = fallback_from
+    if not receipts:
+        # A MATCHED ROW THAT CARRIES THE TOKEN WHERE THE READER CANNOT REACH IT (#281).
+        # The row DECLARES nothing to the positional predicate while carrying the token in
+        # its own voice, and that is a distinct state from a round that never declared: the
+        # author wrote the declaration and the reader cannot reach it. Reporting it as a
+        # bare "declares no `duty=`" hides the fix; reporting it as a missing duty blames a
+        # lane that may well have completed. So it is NAMED, with the repair.
+        #
+        # THE PREDICATE IS THE SHARED OWN-VOICE READER, never a second discriminator
+        # (`n=405` PART 5, `n=599`): a token inside a parenthetical aside is a CITATION of
+        # another row's token, and only `field_predicate.own_voice_text` decides that. A row
+        # that DISCUSSES a duty in its own voice is reported too, and the finding is a
+        # POINTER ("make the token terminal") — true of the row whether it declared or
+        # merely discussed, and never a verdict on what the round did.
+        malformed = [r for r in matched
+                     if predicate.mentions_duty(str(r.get("detail") or ""))]
+        if malformed:
+            named = "; ".join(f"n={r.get('n')} ({r.get('subject')})" for r in malformed)
+            finding["malformed"] = len(malformed)
+            finding["problems"].append(
+                f"{name} (cron id {job_id}): the round {round_date} has NO duty receipt "
+                f"this leg can READ — {len(matched)} row(s) match the round's subject and "
+                f"{len(malformed)} of them carry `{predicate.DUTY_KEY}=` in the row's OWN "
+                f"VOICE while DECLARING nothing: {named}. The declaration is REAL and the "
+                f"reader cannot reach it, so this is a MALFORMED RECEIPT and never a missing "
+                f"duty: the token sits outside the row's canonical terminal run. Make it "
+                f"TERMINAL — the detail's last line must carry the "
+                f"`{predicate.DUTY_KEY}=` trailer"
+            )
+        else:
+            unmatched_note = (
+                f" {len(matched)} row(s) match the round's subject and declare no "
+                f"`{predicate.DUTY_KEY}=`, so none of them is a receipt."
+                if matched else ""
+            )
+            finding["problems"].append(
+                f"{name} (cron id {job_id}): the round {round_date} has NO duty receipt — "
+                f"no ledger run row for {stem}-{round_date}* DECLARES a completion "
+                f"(`{predicate.DUTY_KEY}=`).{unmatched_note} A cron run row records only that "
+                f"the TRIGGER fired, so a green run here is a MISSING duty and not a clean one"
+            )
+        return {**finding, "problems": duty_fallback_note(
+            finding["problems"], fallback_from, schedule_text)}
+    # THE ROUND'S NEWEST DECLARATION GOVERNS (#217). A round can fail at T and complete
+    # at T+n — the reporting lane measured exactly that on round 2026-09-28, where a
+    # `duty=failed` row at 5-of-6 was cleared by a later `duty=completed` row and the
+    # verdict did not move. A lane had no lawful way to record "failed, then completed"
+    # without leaving a standing finding, so the verdict is taken from the NEWEST row.
+    #
+    # WHAT SUPERSESSION MUST NOT DO, and it is why this prints rather than filters: it
+    # must not silently swallow a `failed` token. The superseded rows go to `excused`
+    # WITH their instant and value, so a reader meets "failed, superseded by completed"
+    # rather than only the happy ending. A supersession that hides the failure is a
+    # false clean, which is worse than the standing problem this replaces.
+    #
+    # THE DOMAIN LEG IS NOT SUPERSEDED, and deliberately: an unrecognised token is a
+    # fault in the WRITER'S VOCABULARY, not a state a later row settles. So it runs over
+    # every receipt below, while only the newest decides the verdict.
+    newest = max(receipts, key=lambda r: str(r.get("ts") or ""))
+    for receipt in receipts:
+        detail = str(receipt.get("detail") or "")
+        n = receipt.get("n")
+        for value in predicate.declared_duty(detail):
+            if value not in predicate.DUTY_DOMAIN:
+                finding["problems"].append(
+                    f"{name} (cron id {job_id}): the round {round_date} — receipt row "
+                    f"n={n} declares {predicate.DUTY_KEY}={value}, outside the domain "
+                    f"{'/'.join(predicate.DUTY_DOMAIN)}. An unrecognised value is an "
+                    f"ERROR, never a silent pass"
+                )
+            elif receipt is not newest and value in DUTY_INCOMPLETE_VALUES:
+                finding["superseded"] += 1
+                finding["excused"].append(
+                    f"{name}: the round {round_date} — SUPERSEDED receipt row n={n} "
+                    f"declares {predicate.DUTY_KEY}={value} at {receipt.get('ts')}, "
+                    f"superseded by n={newest.get('n')} "
+                    f"({predicate.DUTY_KEY}="
+                    f"{'/'.join(predicate.declared_duty(str(newest.get('detail') or ''))) or 'none'} "
+                    f"at {newest.get('ts')}) — the round failed before it succeeded, and "
+                    f"the earlier row is not backfilled"
+                )
+    for value in predicate.declared_duty(str(newest.get("detail") or "")):
+        if value in DUTY_INCOMPLETE_VALUES:
+            finding["problems"].append(
+                f"{name} (cron id {job_id}): the round {round_date} did NOT complete — "
+                f"its NEWEST receipt row n={newest.get('n')} declares "
+                f"{predicate.DUTY_KEY}={value} at {newest.get('ts')}"
+            )
+    if fallback_from:
+        # The reader must be told WHICH round this verdict is about and WHY it is not the
+        # newest one. A finding about an older round with no such note reads as a stale
+        # verdict, and a reader who cannot tell the two apart cannot act on either.
+        finding["problems"] = duty_fallback_note(
+            finding["problems"], fallback_from, schedule_text)
+    return finding
+
 def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                      prefixes: list[str], ledger_rows: list[dict], *,
                      read_at: str = "", store: Path = FRAGMENT_STORE,
@@ -3370,6 +3620,16 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     rounds_excused_by_bound = 0
     rounds_excused_by_residual = 0
     rounds_over_cadence = 0
+    # #281's two counters. `rounds_judged_by_fallback` counts the rounds judged as the
+    # PRIOR fire's round because the newest was in flight, and `rounds_prior_unreadable`
+    # counts the jobs left with NO round judged for want of a readable earlier fire — the
+    # second is printed rather than folded into the first, because "judged an older round"
+    # and "judged nothing at all" are different facts about the box.
+    rounds_judged_by_fallback = 0
+    rounds_prior_unreadable = 0
+    # A MALFORMED RECEIPT is its own class (#281): the declaration exists and the reader
+    # cannot reach it, which is neither a clean receipt nor an absent duty.
+    receipts_malformed = 0
     # The residual's reference instant is the READ's own instant, so every age this leg
     # prints is a property of ONE instant rather than of when each row happened to be
     # visited. `now` is injectable for probes; the live path uses `read_at`.
@@ -3451,77 +3711,78 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                 f"is NOT JUDGED: the trigger fired and its lane has not finished, and this "
                 f"leg cannot tell that from a duty never done"
             )
-            continue
-        matched = [r for r in ledger_rows
-                   if receipt_subject_matches(str(r.get("subject") or ""), stem, round_date)]
-        # A row that declares NOTHING is not a receipt (#160). This is the false-clean fix:
-        # the leg's first version accepted any subject match, so a DISPATCH record written
-        # before the round completed certified it. The declaration is what makes a row a
-        # receipt, so the filter is the predicate and not a formatting preference.
-        receipts = [r for r in matched
-                    if predicate.declared_duty(str(r.get("detail") or ""))]
-        judged.append({
-            "name": name, "id": job_id, "stem": stem, "round": round_date,
-            "fired": fired, "rows_matched": len(matched), "receipts": len(receipts),
-        })
-        if not receipts:
-            unmatched_note = (
-                f" {len(matched)} row(s) match the round's subject and declare no "
-                f"`{predicate.DUTY_KEY}=`, so none of them is a receipt."
-                if matched else ""
-            )
-            problems.append(
-                f"{name} (cron id {job_id}): the round {round_date} has NO duty receipt — "
-                f"no ledger run row for {stem}-{round_date}* DECLARES a completion "
-                f"(`{predicate.DUTY_KEY}=`).{unmatched_note} A cron run row records only that "
-                f"the TRIGGER fired, so a green run here is a MISSING duty and not a clean one"
-            )
-            continue
-        # THE ROUND'S NEWEST DECLARATION GOVERNS (#217). A round can fail at T and complete
-        # at T+n — the reporting lane measured exactly that on round 2026-09-28, where a
-        # `duty=failed` row at 5-of-6 was cleared by a later `duty=completed` row and the
-        # verdict did not move. A lane had no lawful way to record "failed, then completed"
-        # without leaving a standing finding, so the verdict is taken from the NEWEST row.
-        #
-        # WHAT SUPERSESSION MUST NOT DO, and it is why this prints rather than filters: it
-        # must not silently swallow a `failed` token. The superseded rows go to `excused`
-        # WITH their instant and value, so a reader meets "failed, superseded by completed"
-        # rather than only the happy ending. A supersession that hides the failure is a
-        # false clean, which is worse than the standing problem this replaces.
-        #
-        # THE DOMAIN LEG IS NOT SUPERSEDED, and deliberately: an unrecognised token is a
-        # fault in the WRITER'S VOCABULARY, not a state a later row settles. So it runs over
-        # every receipt below, while only the newest decides the verdict.
-        newest = max(receipts, key=lambda r: str(r.get("ts") or ""))
-        for receipt in receipts:
-            detail = str(receipt.get("detail") or "")
-            n = receipt.get("n")
-            for value in predicate.declared_duty(detail):
-                if value not in predicate.DUTY_DOMAIN:
-                    problems.append(
-                        f"{name} (cron id {job_id}): the round {round_date} — receipt row "
-                        f"n={n} declares {predicate.DUTY_KEY}={value}, outside the domain "
-                        f"{'/'.join(predicate.DUTY_DOMAIN)}. An unrecognised value is an "
-                        f"ERROR, never a silent pass"
-                    )
-                elif receipt is not newest and value in DUTY_INCOMPLETE_VALUES:
-                    rounds_superseded += 1
-                    excused.append(
-                        f"{name}: the round {round_date} — SUPERSEDED receipt row n={n} "
-                        f"declares {predicate.DUTY_KEY}={value} at {receipt.get('ts')}, "
-                        f"superseded by n={newest.get('n')} "
-                        f"({predicate.DUTY_KEY}="
-                        f"{'/'.join(predicate.declared_duty(str(newest.get('detail') or ''))) or 'none'} "
-                        f"at {newest.get('ts')}) — the round failed before it succeeded, and "
-                        f"the earlier row is not backfilled"
-                    )
-        for value in predicate.declared_duty(str(newest.get("detail") or "")):
-            if value in DUTY_INCOMPLETE_VALUES:
-                problems.append(
-                    f"{name} (cron id {job_id}): the round {round_date} did NOT complete — "
-                    f"its NEWEST receipt row n={newest.get('n')} declares "
-                    f"{predicate.DUTY_KEY}={value} at {newest.get('ts')}"
+            # THE ROUND THE PREVIOUS FIRE WOKE (#281, ruling n=2003). Reading `last_run_at`
+            # alone made this leg judge exactly ONE round per job, and for a job whose
+            # derived residual reaches its own cadence that round was ALWAYS the one still
+            # in flight — so the `continue` above ended the job's turn and NO round was ever
+            # judged. Measured live at 2026-10-12T18:40Z: `factory-triage-patrol` (`0 */6`,
+            # derived residual 3.77 d against a 6 h cadence) had no round judged at all.
+            #
+            # The prior round is READ from the job's own run record and NEVER composed: an
+            # instant no record dates is the #175 class wearing arithmetic, and a leg that
+            # judges one round per job owes a NAMED round or an honest silence.
+            prior = prior_fire_instant(row, fires or [], fired_instant, reader_parse_ts)
+            if prior is None:
+                rounds_prior_unreadable += 1
+                excused.append(
+                    f"{name} (cron id {job_id}): the round {round_date} (fired {fired}) is "
+                    f"still inside its residual, and this job's OWN run record dates NO fire "
+                    f"before it ({len(fires or [])} fire(s) read in all), so no prior round "
+                    f"can be NAMED — NOT JUDGED: this leg judges one round per job, and it "
+                    f"will not infer an instant that no record carries"
                 )
+                continue
+            prior_fired = prior.strftime("%Y-%m-%dT%H:%M:%SZ")
+            prior_date = receipt_round(prior_fired)
+            if prior_date is None or prior_date == round_date:
+                rounds_prior_unreadable += 1
+                excused.append(
+                    f"{name} (cron id {job_id}): the fire before the newest round "
+                    f"({prior_fired}) does not name a DIFFERENT round from {round_date}, so "
+                    f"no prior round can be NAMED — NOT JUDGED"
+                )
+                continue
+            if bound_instant is not None and prior < bound_instant:
+                rounds_excused_by_bound += 1
+                excused.append(
+                    f"{name} (cron id {job_id}): the PRIOR round {prior_date} (fired "
+                    f"{prior_fired}) is BEFORE the declared bound {bound_text} for "
+                    f"`{DUTY_RECEIPT_BOUNDARY_KEY}`, so no receipt was possible for it — "
+                    f"NOT JUDGED, and NEVER backfilled"
+                )
+                continue
+            prior_age = (residual_now - prior).total_seconds()
+            if 0 <= prior_age < residual_secs:
+                rounds_excused_by_residual += 1
+                excused.append(
+                    f"{name} (cron id {job_id}): the PRIOR round {prior_date} (fired "
+                    f"{prior_fired}) is {duty_age_text(prior_age)} old at the "
+                    f"{read_at or 'unstated'} read, inside its OWN residual "
+                    f"{duty_age_text(residual_secs)} — NOT JUDGED: two consecutive rounds "
+                    f"both inside one window leave this job with no round to judge"
+                )
+                continue
+            rounds_judged_by_fallback += 1
+            finding = duty_round_finding(
+                name=name, job_id=job_id, stem=stem, round_date=prior_date,
+                fired=prior_fired, ledger_rows=ledger_rows, predicate=predicate,
+                fallback_from=round_date, schedule_text=job_schedule_text(row),
+            )
+            judged.append(finding["judged"])
+            problems.extend(finding["problems"])
+            excused.extend(finding["excused"])
+            rounds_superseded += finding["superseded"]
+            receipts_malformed += finding["malformed"]
+            continue
+        finding = duty_round_finding(
+            name=name, job_id=job_id, stem=stem, round_date=round_date, fired=fired,
+            ledger_rows=ledger_rows, predicate=predicate,
+        )
+        judged.append(finding["judged"])
+        problems.extend(finding["problems"])
+        excused.extend(finding["excused"])
+        rounds_superseded += finding["superseded"]
+        receipts_malformed += finding["malformed"]
 
     state, state_reason = attestation_state(store)
     return {
@@ -3566,6 +3827,15 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "residual_form": DUTY_RESIDUAL_FORM,
             "rounds_over_cadence": rounds_over_cadence,
             "rounds_excused_by_residual": rounds_excused_by_residual,
+            # #281: the walk's two outcomes, PRINTED rather than folded together. A leg
+            # that judged an older round and a leg that judged NOTHING both leave the newest
+            # round unjudged, and a reader who cannot tell them apart cannot act on either.
+            "rounds_judged_by_fallback": rounds_judged_by_fallback,
+            "rounds_prior_unreadable": rounds_prior_unreadable,
+            # The malformed class counts separately from `duties_missing` even though both
+            # RED the round: a receipt whose token the reader cannot reach is not a duty
+            # nobody did, and the finding says so in its own words.
+            "receipts_malformed": receipts_malformed,
             "duties_missing": len([p for p in problems if "NO duty receipt" in p]),
             "attested_at_state": state,
             "attested_at_not_read": state_reason,
@@ -6487,6 +6757,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"(fired {duty['fired'] or 'unstated'}) — "
                     f"{duty['rows_matched']} row(s) match the round's subject, "
                     f"{duty['receipts']} DECLARE a completion"
+                    + (
+                        f" [the PRIOR round: the newest round {duty['fallback_from']} is "
+                        f"still in flight and is NOT JUDGED (#281)]"
+                        if duty.get("fallback_from") else ""
+                    )
                 )
             lines.append(
                 f"  backward bound `{DUTY_RECEIPT_BOUNDARY_KEY}`: "
@@ -6536,6 +6811,27 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 lines.append(
                     f"    {cov['rounds_excused_by_bound']} round(s) fired BEFORE that "
                     f"bound and are excused by it, NAMED above — never backfilled"
+                )
+            if cov.get("rounds_judged_by_fallback"):
+                lines.append(
+                    f"    {cov['rounds_judged_by_fallback']} round(s) were judged as the "
+                    f"PRIOR fire's round, because the newest round of that job was still in "
+                    f"flight — NAMED above, and the round judged is the one the PREVIOUS "
+                    f"fire woke"
+                )
+            if cov.get("rounds_prior_unreadable"):
+                lines.append(
+                    f"    {cov['rounds_prior_unreadable']} job(s) had NO round judged: the "
+                    f"newest round is in flight and this job's OWN run record dates no "
+                    f"earlier fire, so no prior round can be NAMED — NOT JUDGED with its "
+                    f"reason, never a composed instant and never a clean verdict"
+                )
+            if cov.get("receipts_malformed"):
+                lines.append(
+                    f"    {cov['receipts_malformed']} row(s) carry a `duty=` token in their "
+                    f"OWN VOICE that this reader cannot reach — MALFORMED RECEIPT, NAMED "
+                    f"above: the declaration is real, the token is outside the row's "
+                    f"canonical terminal run, and the repair is to make it terminal"
                 )
             lines.append(
                 "  attested_at (RESULTING STATE, never the receipt): "
