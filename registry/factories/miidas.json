@@ -156,7 +156,7 @@
     },
     {
       "id": "agents-old-degraded",
-      "text": "The MIIDAS deploy host agents-old (89.125.120.5:52676) is DEGRADED \u2014 TCP accepts but sshd never sends a banner (SSH stalls at banner exchange) and the public surface miidas.l1979.ru times out (000 after 20s, TLS OK) \u2014 so deploys, slot ops and the claim surface are blocked and slot miidas-linden-6c4a is unreachable; its live census cannot be re-verified. Recurrence of infra agents-old-host-degraded (n=372, cause unestablished); disposition registered as infra q25; agents-old has ZERO Gatus endpoints, so it wedges silently.",
+      "text": "agents-old (89.125.120.5:52676) is DEGRADED and has now wedged THREE times in three days (10-11, 10-12, 10-13): TCP accepts but sshd never sends a banner and miidas.l1979.ru times out (000 at 20-30 s, TLS OK), so deploys, slot ops and the claim surface are blocked and its live census cannot be re-verified. Mechanism (HYPOTHESIS, not proof): zero swap + caps 2.7x oversubscribed (2560 MiB declared on a 961 MiB host; miidas-ru-proxy unbounded) \u2192 global OOM under routine work, 2/5/7/15/26 kills/day over 10-09..10-12; a client slot (miidas-maple-c23a) was OOM-killed and sat dead 6.5 h undetected. Disposition: infra q25 (amended; power-cycle then add swap recommended). agents-old has ZERO Gatus endpoints, so it wedges silently.",
       "severity": "warning",
       "affects": [
         "miidas",
@@ -165,6 +165,16 @@
       "scope": "profile",
       "evidence": "Measured 2026-10-12 by the miidas HQ lane: ssh agents-old -> 'Connection timed out during banner exchange'; ping 3/3 0% loss; miidas.l1979.ru HTTP 000 at 20.0s. Recurrence: infra ledger n=1249; disposition: infra q25; monitoring gap: infra n=1250.",
       "since": "2026-10-11"
+    },
+    {
+      "id": "miidas-dead-slot-undetected",
+      "text": "Nothing on the MIIDAS side detects or restarts a dead client slot: the manager's duty scan is read-only by construction, so a slot whose daemon dies stays down silently until a human looks. A peer treating a 'running' slot as live should read its healthcheck, not its state.",
+      "severity": "warning",
+      "since": "2026-10-13",
+      "affects": [
+        "miidas"
+      ],
+      "evidence": "leshchenko1979/miidas#114; measured 2026-10-12T00:11Z: miidas-maple-c23a Health=unhealthy, FailingStreak=771 (=6.425 h), state 'running' but 0B/0B, probes 'cannot exec in a stopped state'."
     }
   ],
   "lanes": [
@@ -200,7 +210,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-12T06:06:58Z",
+  "attested_at": "2026-10-13T06:08:49Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

@@ -104,7 +104,7 @@
   ],
   "lanes": [
     {
-      "topic": "Auditor",
+      "topic": "HQ",
       "thread_id": 2,
       "role": "hq",
       "announcements": []
@@ -122,21 +122,21 @@
       "announcements": []
     },
     {
-      "topic": "Worker \u2014 InferHub Watch",
+      "topic": "Worker \u2014 InferHub Watch Lane",
       "thread_id": 559,
       "role": "worker",
       "announcements": []
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-12T06:09:51Z",
+  "attested_at": "2026-10-13T06:11:47Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
       "green": true,
-      "behind_by": 1,
-      "measured_at": "2026-09-28T02:36Z",
-      "reason": "Working-tree verdict over my own tree, measured 2026-09-28T02:36Z. TRACKEDNESS: 8 of the 11 declared paths are in the commit tree; 3 are untracked (tools/patrol_host_state.py, tests/test_patrol_host_state.py, tests/test_close_board_recorded.py), so the GATE ITSELF is one of the three and a clone of this commit cannot run the instrument. All three are byte-identical to their template halves; they are held untracked because the pair hard-names two board gates that are red here, and tracking a gate that crashes on an absent dependency is how CI stops meaning anything. A declared-inapplicability path for those two board gates is the routed fix. BEHIND_BY is a DIFFERENT AXIS and is 1: tests/ledger_boundary.py sits at an older revision than the template half (10,898 B vs 13,811 B; evidence_skip_reason 0 vs 2), a LAG not a fork, taken 2026-09-22 in f5b6525 and lagging a template change that landed today. DUTY-RECEIPT LEG reads NOT RUN by declared state: docs/ledger-invariants.json declares no duty_receipt_declared boundary. That is a held decision, not a gap, and the instrument gates (test_cron_thinness.py + test_patrol_host_state.py) are both green."
+      "behind_by": 0,
+      "measured_at": "2026-10-07T07:24Z",
+      "reason": "Working-tree verdict over my own tree, measured 2026-10-07T07:24Z (#215) \u2014 supersedes the 2026-09-28T02:36Z read, whose two central claims this read falsifies. TRACKEDNESS: ALL declared paths are now in the commit tree. The trio (tools/patrol_host_state.py, tests/test_patrol_host_state.py, tests/test_close_board_recorded.py) was TRACKED in 3d95aef, so a clone of this commit CAN run the instrument \u2014 the earlier '8 of the 11 declared paths are in the commit tree; 3 are untracked' was the pre-#215 state and is FALSE at this instant. The pair (tools/patrol_host_state.py, tests/test_patrol_host_state.py) is byte-identical to its template halves (7cc43686 / 547270e9) and carries no exemption. BEHIND_BY is now 0, and the axis is RESOLVED rather than standing: tests/ledger_boundary.py measures 23,960 B / 2 evidence_skip_reason occurrences / sha256 6321fa03bab026b9a1c96580af570158591c969d9748d454582763abb086fdae \u2014 byte-identical to the template half at TEMPLATE/tests/ledger_boundary.py (same size, same digest), so the 2026-09-22 LAG it recorded (10,898 B vs 13,811 B; 0 vs 2) no longer exists and this path is neither a lag nor a fork. registry/kit.json's vendored pin for that path (2e7d1ca36535) predates the template's own movement and is stale; it is left to the next re-vendor rather than rewritten here, since the PIN is a separate surface from this reason. BOARD GATES: measured 2026-10-07 only tests/test_close_board_recorded.py reds as shipped \u2014 its kit revision hardcodes a foreign boundary (the P35 class) \u2014 and the fork at kit-exemption [20] clears it through the declared-inapplicability form (docs/ledger-invariants.json 'close_board_recorded': ''), while tests/test_board_intake_recorded.py is GREEN. So the 2026-09-28 claim that 'the pair hard-names two board gates that are red here' is stale by one, and its 'A declared-inapplicability path for those two board gates is the routed fix' is LANDED (one gate; the other needs none). The kit defect is ROUTED upstream (agent-factories#428), not patched in place. DUTY-RECEIPT LEG reads NOT RUN by declared state: docs/ledger-invariants.json declares no duty_receipt_declared boundary. That is a held decision, not a gap, and the instrument gates (test_cron_thinness.py + test_patrol_host_state.py) are both green."
     },
     "ledger": {
       "state": "partial",
