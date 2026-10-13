@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-13T06:27:09Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-13T08:16:38Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-13T06:27:09Z` |
+| generated | live reads | resolved `2026-10-13T08:16:38Z` |
 
 ## Announcements
 
@@ -175,15 +175,15 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 |---|---|---|---|---|---|---|---|---|---|
 | `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-14T06:15:00+00:00 | — | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
-| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-13T06:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
-| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T07:00:00+00:00 | — | — |
+| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-13T08:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
+| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-14T07:00:00+00:00 | — | — |
 | `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-14T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-14T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-14T00:00:00+00:00 | — | — |
 | `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T12:07:00+00:00 | — | — |
-| `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-13T06:30:00+00:00 | — | — |
+| `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-14T06:30:00+00:00 | — | — |
 | `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-14T05:50:00+00:00 | — | — |
-| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T06:40:00+00:00 | — | — |
+| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T12:40:00+00:00 | — | — |
 | `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T12:00:00+00:00 | — | — |
 | `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
 | `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
@@ -392,7 +392,7 @@ Fresh reading 2026-10-01T06:08:14Z: LEG A, the always-injected Tier 0 triple (SO
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
 | `factory-growth-map-biweekly` | ops | `0 9 1,15 * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-15T06:00:00+00:00 | — | — |
-| `factory-hq-pacemaker` | ops | `50 */6 * * *` | UTC | yes | 1 | present | 2026-10-13T06:50:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | — |
+| `factory-hq-pacemaker` | ops | `50 */6 * * *` | UTC | yes | 1 | present | 2026-10-13T12:50:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | — |
 | `factory-insights-weekly` | ops | `0 18 * * Fri` | Europe/Moscow | yes | 0 | **absent** | 2026-10-16T15:00:00+00:00 | — | python3 /root/agent-factories/tools/synthesize_insights.py --audit |
 | `factory-measurement-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-14T06:00:00+00:00 | — | — |
 | `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-13T12:00:00+00:00 | — | — |
@@ -459,7 +459,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 | topic (declared) | observed topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|---|
 | HQ | `HQ` | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-10-08T14:17:22Z | — |
-| Agent runtime | `Agent runtime` | 6 | _unstated_ | `5a5335ee-db68-46fe-b13e-a082b2beadb5` | Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6] | resolved | telegram | 2026-10-03T20:48:57Z | — |
+| Agent runtime | `Agent runtime` | 6 | _unstated_ | `5a5335ee-db68-46fe-b13e-a082b2beadb5` | Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6] | resolved | telegram | 2026-10-13T08:10:27Z | — |
 | Manager | `Manager` | 9 | _unstated_ | `b64ca6ba-9ec0-47f7-8450-0d25b6c1d854` | Telegram: Miidas Factory / Manager [chat:-1003996392908:topic:9] | resolved | telegram | 2026-09-25T16:25:13Z | — |
 | Worker | `Worker — #108 landing/ superseded` | 56 | worker | `b57efabd-85df-4467-bed7-f5a596285f68` | Telegram: Miidas Factory / Worker — #39 board vs ledger comparison gate [chat:-1003996392908:topic:56] | resolved | telegram | 2026-09-29T07:19:56Z | — |
 | Marketing | `Marketing` | 393 | marketing | `39d2b612-dbfc-4953-ae02-609267c68c3e` | Telegram: Miidas Factory / Marketing [chat:-1003996392908:topic:393] | resolved | telegram | 2026-09-29T09:03:05Z | — |
