@@ -239,11 +239,11 @@
       "measured_sec": 1.08
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 194.47,
-      "load_at_measure": 2.03,
-      "margin_x": 4.015,
-      "measured_at": "8ac5bbba9fc3a945f9128b68d7c10d8b53e9d61d",
-      "measured_sec": 48.43
+      "budget_sec": 184.87,
+      "load_at_measure": 5.79,
+      "margin_x": 4.016,
+      "measured_at": "b45e76b9f503f296050c1984338289aeb30431c6",
+      "measured_sec": 46.03
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 22.43,
@@ -291,11 +291,11 @@
       "measured_sec": 2.81
     },
     "tests/test_score_artifact_sections.py": {
-      "budget_sec": 22.83,
-      "margin_x": 4.136,
-      "measured_at": "8ac5bbba9fc3a945f9128b68d7c10d8b53e9d61d",
-      "measured_sec": 5.52,
-      "load_at_measure": 2.03
+      "budget_sec": 36.27,
+      "margin_x": 4.084,
+      "measured_at": "b45e76b9f503f296050c1984338289aeb30431c6",
+      "measured_sec": 8.88,
+      "load_at_measure": 5.79
     },
     "tests/test_score_gate_recorded.py": {
       "budget_sec": 36.43,
