@@ -156,25 +156,25 @@
     },
     {
       "id": "agents-old-degraded",
-      "text": "agents-old (89.125.120.5:52676) is DEGRADED and has now wedged THREE times in three days (10-11, 10-12, 10-13): TCP accepts but sshd never sends a banner and miidas.l1979.ru times out (000 at 20-30 s, TLS OK), so deploys, slot ops and the claim surface are blocked and its live census cannot be re-verified. Mechanism (HYPOTHESIS, not proof): zero swap + caps 2.7x oversubscribed (2560 MiB declared on a 961 MiB host; miidas-ru-proxy unbounded) \u2192 global OOM under routine work, 2/5/7/15/26 kills/day over 10-09..10-12; a client slot (miidas-maple-c23a) was OOM-killed and sat dead 6.5 h undetected. Disposition: infra q25 (amended; power-cycle then add swap recommended). agents-old has ZERO Gatus endpoints, so it wedges silently.",
+      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after the owner answered infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200 at 0.54s, swap 2047 MiB. The wedge class is mitigated, not fixed \u2014 the host is 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe and miidas-ru-proxy remains unbounded, so swap absorbs pressure rather than removing it. 6 cgroup OOM kills this boot, all task=git: 4 in maple's cgroup before its 768 MiB cap raise, plus 2 the lane's own 256 MiB-capped repack attempts killed inside their throwaway scopes. agents-old still has ZERO Gatus endpoints, so a fourth wedge pages nobody \u2014 fix owner Infra HQ (infra n=1278).",
       "severity": "warning",
       "affects": [
         "miidas",
         "profile"
       ],
       "scope": "profile",
-      "evidence": "Measured 2026-10-12 by the miidas HQ lane: ssh agents-old -> 'Connection timed out during banner exchange'; ping 3/3 0% loss; miidas.l1979.ru HTTP 000 at 20.0s. Recurrence: infra ledger n=1249; disposition: infra q25; monitoring gap: infra n=1250.",
+      "evidence": "measured 2026-10-15 by the miidas HQ lane \u2014 ssh agents-old 6 containers healthy; uptime -s 2026-10-13 11:25:00; swap 2047/770 used; journalctl -b 0 -k | grep 'Memory cgroup out of memory: Killed' = 6, all git; maple memory.events oom_kill 4 unchanged; miidas.l1979.ru 200 @0.54s; miidas.ru 200 @0.53s. Supersedes infra n=1249 / n=1272 recurrence rows.",
       "since": "2026-10-11"
     },
     {
       "id": "miidas-dead-slot-undetected",
-      "text": "Nothing on the MIIDAS side detects or restarts a dead client slot: the manager's duty scan is read-only by construction, so a slot whose daemon dies stays down silently until a human looks. A peer treating a 'running' slot as live should read its healthcheck, not its state.",
+      "text": "The dead-slot gap is CLOSED as of 2026-10-14: leshchenko1979/miidas#114 shipped process-tree liveness in manager/slot_duties.py plus a bounded self-heal (manager/slot_heal.py, ADR 0021), so a slot whose daemon dies is detected within one scan interval and restarted when headroom permits. Two caveats stand: the heal refuses below a 512 MiB MemAvailable floor and allows at most 2 attempts per 6 h, so on a starved host a dead slot still persists; and the read discipline is unchanged \u2014 a 'running' state is not liveness, read the process tree (the 2026-10-13 corpse read 'Up 15 hours (unhealthy)' with an empty docker top).",
       "severity": "warning",
       "since": "2026-10-13",
       "affects": [
         "miidas"
       ],
-      "evidence": "leshchenko1979/miidas#114; measured 2026-10-12T00:11Z: miidas-maple-c23a Health=unhealthy, FailingStreak=771 (=6.425 h), state 'running' but 0B/0B, probes 'cannot exec in a stopped state'."
+      "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES; manager/health.py:149 _self_heal_dead_slots -> :169 heal_dead_slots; docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md."
     }
   ],
   "lanes": [
@@ -210,7 +210,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-13T06:08:49Z",
+  "attested_at": "2026-10-15T06:46:06Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

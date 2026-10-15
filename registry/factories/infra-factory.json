@@ -4,10 +4,10 @@
   "profile": "ops",
   "repo": "/root/vds-servers",
   "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
-  "purpose": "Keep the VDS fleet (vpn, apps, agents) and the services it hosts observable, healthy and self-healing: intake Gatus alerts, diagnose hosts, apply safe remediation, and own the fleet infrastructure source repo.",
+  "purpose": "Keep the VDS fleet (vpn, apps, agents, agents-old) and the services it hosts observable, healthy and self-healing: intake Gatus alerts, diagnose hosts, apply safe remediation, and own the fleet infrastructure source repo.",
   "zone": {
     "owns": [
-      "Fleet host operations on vpn, apps and agents - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation",
+      "Fleet host operations on vpn, apps, agents and agents-old - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation",
       "Gatus monitoring: endpoint configuration, alert intake and recovery routing (gatus-notify on vpn)",
       "The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger",
       "Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation",
@@ -83,7 +83,7 @@
   ],
   "substrates_owned": [
     "/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)",
-    "The fleet hosts vpn, apps and agents - host-level state: systemd units, containers, disk, /usr/local/bin scripts",
+    "The fleet hosts vpn, apps, agents and agents-old - host-level state: systemd units, containers, disk, /usr/local/bin scripts",
     "Gatus monitoring configuration and alert routing on vpn",
     "The Mac access path (vpn/mac-access: CDP tunnel and route pin)"
   ],
@@ -126,7 +126,7 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "scope": "profile",
       "severity": "warning",
-      "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF overnight, not because it sleeps: pmset reports sleep=0 (it never sleeps), and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off. Apple M4 (Mac16,10). Observed power-offs carry it offline for hours at a time, so any browser task through the Mac CDP path fails for the whole window - and no overlay fixes it, because a powered-off host is offline on every transport, Tailscale included.",
+      "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF, not because it sleeps: pmset reports sleep=0 (it never sleeps) and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off (Apple M4, Mac16,10). A powered-off Mac is offline on every transport, Tailscale included, so any browser task through the Mac CDP path fails for the whole window. CURRENT INSTANCE, read 2026-10-15T06:44:29Z: the Mac has been offline since 2026-10-02T16:31:38Z - 12.59 d - and tailscale on vpn reads mac-mini offline, last seen 12d ago; the fleet backup has not completed for 13.25 d (last real push success 2026-10-02T00:41:14Z). TWO CORRECTIONS to the earlier reading: (1) the mac-cdp-tunnel endpoint is NOT a Mac-host probe - its target is ssh://78.17.187.4:15259, the agents host, where it curls localhost:9222 - so its state is exposed to agents-host faults, not only Mac ones; (2) it went UNHEALTHY 2026-09-28T19:12:31Z, 4.35 d BEFORE the Mac went dark, so it is a separate pre-existing failure the Mac outage merely masks. Owner action owed: the Mac must be powered on; no lane can do it. Ruled at ledger n=1337; see also n=1333/n=1336.",
       "affects": [
         "profile"
       ],
@@ -148,7 +148,7 @@
     },
     {
       "id": "board-gates-declared-inapplicable",
-      "text": "Two gates in this factory suite are RED BY DESIGN and must not be reported as a regression: tests/test_board_intake_recorded.py and tests/test_close_board_recorded.py assert a board/ledger close agreement, and this factory issue board IS its ledger - ONE surface - so the two-surface predicate is INAPPLICABLE rather than failed. Declared at ledger n=611 and carried in instruments.pacemaker.reason.",
+      "text": "Two gates in this factory suite are RED BY DESIGN and must not be reported as a regression: tests/test_board_intake_recorded.py and tests/test_close_board_recorded.py assert a board/ledger close agreement, and this factory's issue board IS its ledger - ONE surface - so the two-surface predicate is INAPPLICABLE rather than failed. Declared at ledger n=611 and carried in instruments.pacemaker.reason. LIVE DECISION: these two gates are the ONLY REDs in this factory's 23-gate audit and are now the subject of OPEN QUESTION q27 in the register - 'Two board-close gates are permanently red - retire the assertion (the kit's declared-absent state), or adopt the convention?' - asked 2026-10-13T19:28:16Z, recommended 0 = retire. Until q27 is answered they stay RED BY DESIGN; do not file them as a regression.",
       "severity": "info",
       "affects": [
         "profile"
@@ -237,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-13T06:08:14Z",
+  "attested_at": "2026-10-15T07:10:42Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

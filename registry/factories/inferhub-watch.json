@@ -46,7 +46,7 @@
     {
       "name": "inferhub-self-audit-daily",
       "audience": "agent",
-      "entry": "cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 10 9 * * *, enabled, delivers to session 359fe71b",
+      "entry": "cron 3d1d00e1-6a41-4088-a1de-aeb6e9a4863c, expr 40 9 * * * (Europe/Moscow), enabled, delivers to session 359fe71b \u2014 AMENDED 2026-10-15: expr moved 10 9 -> 40 9 MSK (the #196 de-collision: it fired 0.70 s from inferhub-hq-pacemaker's 10 */6 UTC = 06:10 on 2026-10-03)",
       "cadence": "daily"
     },
     {
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-13T06:11:47Z",
+  "attested_at": "2026-10-15T07:33:21Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
