@@ -52,6 +52,24 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+
+
+def _repo_root(here: Path) -> Path:
+    """The repository root, whichever COPY of this file is running.
+
+    This file ships in two places (tests/ and TEMPLATE/tests/), so the
+    parent of its own directory is the copy root, not the repo root: in the
+    TEMPLATE twin that is <repo>/TEMPLATE, and a path built as
+    REPO/"TEMPLATE"/... would resolve to <repo>/TEMPLATE/TEMPLATE/... .
+    The repo root is the ancestor that holds both tools/ and TEMPLATE/tools/.
+    """
+    for cand in (here.parent, here.parent.parent):
+        if (cand / "tools").is_dir() and (cand / "TEMPLATE" / "tools").is_dir():
+            return cand
+    return here.parent
+
+
+ROOT = _repo_root(HERE)
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / "tools"))
 
@@ -1267,7 +1285,7 @@ def documented_statuses_arm() -> None:
     a status in the code and absent from the doc, or a status the doc names that no round can
     return. It reads the doc through the byte-gated pair, so the two copies cannot disagree.
     """
-    doc = (REPO / "docs" / "instruments" / "publish.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs" / "instruments" / "publish.md").read_text(encoding="utf-8")
     undeclared = [s for s in pub.ALL_STATUSES if f"`{s}`" not in doc]
     check(
         not undeclared,
@@ -1296,7 +1314,7 @@ def documented_statuses_arm() -> None:
         "the status set is TWELVE distinct statuses, as the law states",
         f"count={len(pub.ALL_STATUSES)} distinct={len(set(pub.ALL_STATUSES))}",
     )
-    twinned = (REPO / "TEMPLATE" / "docs" / "instruments" / "publish.md").read_bytes()
+    twinned = (ROOT / "TEMPLATE" / "docs" / "instruments" / "publish.md").read_bytes()
     check(
         twinned == doc.encode("utf-8"),
         "the doc's TEMPLATE twin is byte-identical, so the table cannot be true in one tree only",
@@ -1318,6 +1336,39 @@ def report_arms() -> None:
     )
     empty = dict(report, status="in-sync", count=0, shas=[], held=[], remote_tip=None)
     check("in-sync" in pub.render(empty), "an in-sync round renders as in-sync")
+
+
+def repo_root_is_copy_independent_arm() -> None:
+    """The gate must resolve the SAME repo root from either copy.
+
+    A path built from the copy root works in one tree and doubles in the
+    other: this arm ran green in tests/ and red in TEMPLATE/tests/ with
+    <repo>/TEMPLATE/TEMPLATE/docs/..., which the slow shipped audit caught
+    and this one catches locally.
+    """
+    root = _repo_root(HERE)
+    check(
+        (root / "tools" / "publish.py").is_file(),
+        "the detected root holds the tool",
+        f"root={root} tool={root / 'tools' / 'publish.py'}",
+    )
+    check(
+        (root / "TEMPLATE" / "tools" / "publish.py").is_file(),
+        "the detected root holds the TEMPLATE twin of the tool",
+        f"root={root}",
+    )
+    for rel in ("docs/instruments/publish.md", "TEMPLATE/docs/instruments/publish.md"):
+        p = root / rel
+        check(
+            p.is_file(),
+            f"the doc path resolves from this copy: {rel}",
+            f"missing {p}",
+        )
+    check(
+        not (root / "TEMPLATE" / "TEMPLATE").exists(),
+        "the root is not a copy root (no doubled TEMPLATE)",
+        f"root={root}",
+    )
 
 
 def main() -> int:
@@ -1348,6 +1399,7 @@ def main() -> int:
     wait_cli_publishes_arm()
     wait_cli_refuses_arm()
     not_on_branch_exits_nonzero_arm()
+    repo_root_is_copy_independent_arm()
     documented_statuses_arm()
     report_arms()
 
