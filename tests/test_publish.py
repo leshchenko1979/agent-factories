@@ -37,11 +37,13 @@ Exit: 0 every arm passed; 1 an arm failed.
 from __future__ import annotations
 
 import ast
+import contextlib
 import datetime as dt
 import importlib.util
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -1057,6 +1059,249 @@ def remote_tip_is_read_from_the_remote_arm() -> None:
         )
 
 
+class SteppingClock:
+    """A clock that ADVANCES on every read, so a grace window costs no real seconds.
+
+    `publish()` takes its instant through this and `wait_for_publish` reads it again for its
+    own budget, so one call per poll walks a commit past any window. The same injection the
+    round's own `now` parameter exists for, lifted to the waiting layer.
+    """
+
+    def __init__(self, start: dt.datetime | None = None, step_secs: float = 1.0):
+        self.now = start or dt.datetime.now(dt.timezone.utc)
+        self.step = dt.timedelta(seconds=step_secs)
+
+    def __call__(self) -> dt.datetime:
+        self.now = self.now + self.step
+        return self.now
+
+def wait_publishes_arm() -> None:
+    """#482: `--wait` BLOCKS until the round can publish, and the poll lines show it.
+
+    Driven by an injected clock: the window it waits through is 30 seconds of budget and
+    ZERO seconds of wall clock, which is the only way a gate can assert on a 900-second
+    window's behaviour.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "publish-me.txt")
+        clock = SteppingClock()
+        lines: list[str] = []
+        report = pub.wait_for_publish(
+            work, grace_secs=30, timeout=600, poll_secs=0,
+            now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+        )
+        check(
+            report["status"] == "published",
+            "a --wait round publishes once the grace window passes",
+            f"status={report['status']} polls={report.get('polls')}",
+        )
+        check(
+            len(lines) >= 2 and lines[0].startswith("status=held")
+            and lines[-1].startswith("status=published"),
+            "the poll lines record the held -> published transition, one per poll",
+            " | ".join(lines[:2] + lines[-1:]),
+        )
+        check(
+            report["polls"] == len(lines),
+            "every poll emitted exactly ONE machine-readable line",
+            f"polls={report['polls']} lines={len(lines)}",
+        )
+        check(ahead(work) == 0, "the waited-for commit is ON the remote afterwards")
+
+def wait_stops_on_a_terminal_status_arm() -> None:
+    """#482: only `held` can become publishable by waiting.
+
+    A terminal status must STOP the wait rather than poll to its own timeout, because
+    polling to a timeout reports a window that expired instead of a state that was never
+    going to change -- and the caller's budget is spent either way.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "r"
+        repo.mkdir(parents=True, exist_ok=True)
+        git(repo, "init", "-q")
+        git(repo, "symbolic-ref", "HEAD", "refs/heads/main")
+        clock = SteppingClock()
+        lines: list[str] = []
+        report = pub.wait_for_publish(
+            repo, timeout=600, poll_secs=0,
+            now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+        )
+        check(
+            report["status"] == "no-remote" and len(lines) == 1,
+            "a terminal status stops the wait after ONE poll, not at the timeout",
+            f"status={report['status']} polls={report.get('polls')} lines={len(lines)}",
+        )
+
+def wait_timeout_arm() -> None:
+    """#482: a wait that cannot clear its own timeout REPORTS that, never a publish."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "always-held.txt")
+        clock = SteppingClock()
+        lines: list[str] = []
+        report = pub.wait_for_publish(
+            work, grace_secs=10 ** 6, timeout=5, poll_secs=0,
+            now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+        )
+        check(
+            report["status"] == "held" and report.get("wait_timed_out") is True,
+            "a wait that hits its timeout reports the TIMEOUT, not a publish",
+            f"status={report['status']} timed_out={report.get('wait_timed_out')}",
+        )
+
+def wait_line_fields_arm() -> None:
+    """#482: the poll line is a RECORD a caller parses, not prose."""
+    report = {
+        "status": "held", "remote_tip": "b" * 40,
+        "held": [{"sha": "a" * 40, "age_secs": 42, "session_id": "s", "subject": "x"}],
+        "reason": "younger\nthan the window",
+    }
+    line = pub.wait_line(report)
+    fields = dict(part.split("=", 1) for part in line.split(" ") if "=" in part)
+    check(
+        all(k in fields for k in ("status", "held", "age", "tip", "reason")),
+        "the poll line carries status, held, age, tip and reason",
+        line,
+    )
+    check(
+        fields.get("age") == "42" and fields.get("held") == "1" and "\n" not in line,
+        "the poll line carries the AGE and the HELD COUNT on ONE line",
+        line,
+    )
+    empty = pub.wait_line({"status": "in-sync", "held": [], "reason": ""})
+    check(
+        "tip=-" in empty and "age=None" in empty,
+        "an absent tip and age read as '-', never as an empty field",
+        empty,
+    )
+
+def not_on_branch_exits_nonzero_arm() -> None:
+    """#482 order 2: `not-on-branch` exited 0 while being a REFUSAL like the statuses beside
+    it in the same tuple, so an rc-only caller could not tell it from a round that ran -- and
+    a caller that WAITS loops forever on a state that cannot change.
+
+    The CONTROL beside it is the other half: the fix must narrow the tuple, not the contract,
+    so an in-sync round still exits 0.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        remote = init_bare(Path(tmp) / "remote.git")
+        repo = init_work(Path(tmp) / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        git(repo, "checkout", "-q", "-b", "side")
+        report = pub.publish(repo, remote="origin", branch="main")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = pub.main(["--repo", str(repo)])
+        check(
+            report["status"] == "not-on-branch" and rc != 0,
+            "the not-on-branch round exits NON-ZERO, so an rc-only caller cannot loop",
+            f"status={report['status']} rc={rc}",
+        )
+        git(repo, "checkout", "-q", "main")
+        buf2 = io.StringIO()
+        with contextlib.redirect_stdout(buf2):
+            rc_sync = pub.main(["--repo", str(repo)])
+        check(
+            rc_sync == 0,
+            "CONTROL: an in-sync round still exits 0 -- the tuple narrowed, not the contract",
+            f"rc={rc_sync}",
+        )
+
+def wait_cli_publishes_arm() -> None:
+    """#482 (a): the CALLER's path. A cron shell runs `main()`, not `wait_for_publish()`, so
+    the exit code and the poll record are asserted at the CLI boundary with `--grace-secs 0`,
+    which publishes on the first poll and therefore needs no injected clock."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "publish-me.txt")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = pub.main(
+                ["--repo", str(work), "--wait", "--grace-secs", "0", "--timeout", "30"]
+            )
+        out = buf.getvalue()
+        check(
+            rc == 0 and "status=published" in out,
+            "--wait through the CLI exits 0 and prints a published poll line",
+            f"rc={rc} first={out.splitlines()[0] if out else ''}",
+        )
+        check(ahead(work) == 0, "the CLI waited-for commit is ON the remote")
+
+def wait_cli_refuses_arm() -> None:
+    """#482 (b): the CLI against a state that cannot publish. Non-zero AND the status is
+    PRINTED, because a caller that only learns "failed" cannot say what failed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "r"
+        repo.mkdir(parents=True, exist_ok=True)
+        git(repo, "init", "-q")
+        git(repo, "symbolic-ref", "HEAD", "refs/heads/main")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = pub.main(["--repo", str(repo), "--wait", "--timeout", "30"])
+        out = buf.getvalue()
+        check(
+            rc != 0 and "status=no-remote" in out,
+            "--wait through the CLI exits NON-ZERO and names the status it refused on",
+            f"rc={rc} first={out.splitlines()[0] if out else ''}",
+        )
+
+def documented_statuses_arm() -> None:
+    """#482 (order 4): the status table has a HOME, and that home is GATED.
+
+    A doc stating a contract nothing checks drifts the moment a thirteenth status ships. This
+    arm reads the DECLARATION (`ALL_STATUSES`) and the doc, and fails on either direction:
+    a status in the code and absent from the doc, or a status the doc names that no round can
+    return. It reads the doc through the byte-gated pair, so the two copies cannot disagree.
+    """
+    doc = (REPO / "docs" / "instruments" / "publish.md").read_text(encoding="utf-8")
+    undeclared = [s for s in pub.ALL_STATUSES if f"`{s}`" not in doc]
+    check(
+        not undeclared,
+        "every status the pusher can return is DOCUMENTED in docs/instruments/publish.md",
+        f"undocumented: {undeclared}",
+    )
+    extra = [
+        s for s in re.findall(r"^\| `([a-z-]+)` \|", doc, re.M)
+        if s not in pub.ALL_STATUSES
+    ]
+    check(
+        not extra,
+        "the documented table names NO status the pusher cannot return",
+        f"extra: {extra}",
+    )
+    check(
+        set(pub.PLAIN_NONZERO) <= set(pub.ALL_STATUSES)
+        and set(pub.TERMINAL_PUBLISHED) <= set(pub.ALL_STATUSES)
+        and set(pub.WAITABLE) <= set(pub.ALL_STATUSES),
+        "the partitioned sets are SUBSETS of the declared status set",
+        f"nonzero={len(pub.PLAIN_NONZERO)} published={len(pub.TERMINAL_PUBLISHED)} "
+        f"waitable={len(pub.WAITABLE)} all={len(pub.ALL_STATUSES)}",
+    )
+    check(
+        len(pub.ALL_STATUSES) == 12 and len(set(pub.ALL_STATUSES)) == 12,
+        "the status set is TWELVE distinct statuses, as the law states",
+        f"count={len(pub.ALL_STATUSES)} distinct={len(set(pub.ALL_STATUSES))}",
+    )
+    twinned = (REPO / "TEMPLATE" / "docs" / "instruments" / "publish.md").read_bytes()
+    check(
+        twinned == doc.encode("utf-8"),
+        "the doc's TEMPLATE twin is byte-identical, so the table cannot be true in one tree only",
+    )
+
 def report_arms() -> None:
     report = {
         "status": "held", "remote": "origin", "branch": "main",
@@ -1096,6 +1341,14 @@ def main() -> int:
     sync_then_publish_arm()
     sync_blocked_by_a_dirty_tree_arm()
     remote_tip_is_read_from_the_remote_arm()
+    wait_publishes_arm()
+    wait_stops_on_a_terminal_status_arm()
+    wait_timeout_arm()
+    wait_line_fields_arm()
+    wait_cli_publishes_arm()
+    wait_cli_refuses_arm()
+    not_on_branch_exits_nonzero_arm()
+    documented_statuses_arm()
     report_arms()
 
     failures = [c for c in checks if not c[0]]

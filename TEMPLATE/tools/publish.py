@@ -47,9 +47,15 @@ be dispatched, claimed or closed; a boolean can be none of those.
 Run:  python3 tools/publish.py            report only, nothing is pushed or synced
       python3 tools/publish.py --apply    sync (fetch + fast-forward), then push when
                                           the grace window allows
+      python3 tools/publish.py --wait     --apply, then POLL until the round publishes
+                                          (issue #482); --timeout N bounds the block
 Exit: 0 the round ran (published, held, in sync, behind, or reported a divergence)
-      1 the round could not be completed (no remote, unreachable, unreadable, a refused
-        fast-forward, or a failed push)
+      1 the round could not be completed (no remote, not on the branch, unreachable,
+        unreadable, a refused fast-forward, or a failed push)
+      --wait: 0 only on published/in-sync, 1 on EVERY other status -- a caller that
+        blocked until it could publish and still did not has not published. Each poll
+        prints one machine-readable line, so a caller parses a record, not prose:
+        status=<s> held=<n> age=<secs> tip=<sha> reason=<text>
 """
 
 from __future__ import annotations
@@ -58,12 +64,47 @@ import argparse
 import datetime as dt
 import json
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_REMOTE = "origin"
 DEFAULT_BRANCH = "main"
 DEFAULT_GRACE_SECS = 900
+# THE WAIT CEILING (issue #482). `--wait` blocks until the round can publish, so its default
+# budget must OUTLAST the grace window it is waiting on. The ruling that ordered the primitive
+# named the harness's own run-lifetime budget (`agent.run_max_lifetime_secs`) as that default,
+# but the value is not readable from this repository and this tool runs as a subprocess with no
+# view of the agent's config -- so the default is DERIVED from the window it must clear rather
+# than guessed from a number nobody here can read, and `--timeout` lets a caller state its own.
+WAIT_TIMEOUT_MARGIN_SECS = 300
+WAIT_POLL_SECS = 15
+
+# THE STATUS SET, DECLARED (#482). Every status a round can end in, in ONE place, so the gate
+# that checks the documented table against the code reads a DECLARATION rather than scraping
+# string literals out of branches -- a scraper misses the status assigned inside a nested
+# branch, which is precisely how a thirteenth status would ship undocumented.
+ALL_STATUSES = (
+    "published", "in-sync", "held", "behind", "diverged", "ff-blocked",
+    "not-on-branch", "no-remote", "unreachable", "unreadable", "push-failed",
+    "would-publish",
+)
+# The statuses the PLAIN path reports as a FAILURE (exit 1). `behind` and `diverged` are
+# deliberately absent: they are reports the round was asked to make, not failures.
+PLAIN_NONZERO = (
+    "no-remote", "not-on-branch", "unreachable", "unreadable", "push-failed", "ff-blocked",
+)
+
+# THE TWELVE STATUSES, PARTITIONED BY WHAT A BLOCKING CALLER MAY DO WITH THEM (#482).
+# `published` and `in-sync` are the only two that mean the work is on the remote; every other
+# terminal status is a verdict the caller must act on rather than wait through. `held` is the
+# ONLY status that can become publishable by waiting -- it is the grace window working -- so
+# `--wait` loops on that one alone and exits non-zero on all the rest. The terminal,
+# unpublishable set is: no-remote, not-on-branch, unreachable, ff-blocked, behind, diverged,
+# unreadable, push-failed (and `would-publish`, which cannot occur under an applying round).
+TERMINAL_PUBLISHED = ("published", "in-sync")
+WAITABLE = ("held",)
 LS_REMOTE_TIMEOUT = 30
 GIT_TIMEOUT = 120
 
@@ -756,6 +797,84 @@ def publish(
     return report
 
 
+def wait_line(report: dict) -> str:
+    """One machine-readable line per poll (#482). Count and age, never a boolean."""
+    held = report.get("held") or []
+    age = held[0]["age_secs"] if held else None
+    reason = " ".join(str(report.get("reason", "")).split())
+    return (
+        f"status={report['status']} held={len(held)} age={age} "
+        f"tip={report.get('remote_tip') or '-'} reason={reason}"
+    )
+
+def wait_for_publish(
+    repo: Path = REPO,
+    *,
+    remote: str = DEFAULT_REMOTE,
+    branch: str = DEFAULT_BRANCH,
+    grace_secs: int = DEFAULT_GRACE_SECS,
+    timeout: int | None = None,
+    poll_secs: int = WAIT_POLL_SECS,
+    now_fn=None,
+    emit=None,
+    sleep_fn=None,
+) -> dict:
+    """Poll a publishing round until it publishes, or until a status that cannot.
+
+    The caller reads the RETURNED report's `status`: `published` and `in-sync` mean the work
+    is on the remote, and EVERY other value is terminal and unpublishable. Only `held` -- the
+    grace window working -- can become publishable by waiting, so it is the only status this
+    loops on. A caller that asked to block until publication and did not get one has not
+    published, which is why the exit code is not the plain round's.
+
+    The clock, the emitter and the sleep are INJECTED so a gate can drive a window that would
+    otherwise cost 900 real seconds -- the same discipline the round's own `now` parameter
+    exists for.
+    """
+    repo = Path(repo)
+    now_fn = now_fn or (lambda: dt.datetime.now(dt.timezone.utc))
+    emit = emit or (lambda line: print(line))
+    sleep_fn = sleep_fn or time.sleep
+    started = now_fn()
+    deadline = None if timeout is None else started + dt.timedelta(seconds=timeout)
+    polls = 0
+    while True:
+        report = publish(
+            repo,
+            remote=remote,
+            branch=branch,
+            grace_secs=grace_secs,
+            apply=True,
+            now=now_fn(),
+        )
+        polls += 1
+        emit(wait_line(report))
+        report["polls"] = polls
+        report["wait_secs"] = int((now_fn() - started).total_seconds())
+        status = report["status"]
+        if status in TERMINAL_PUBLISHED:
+            return report
+        if status not in WAITABLE:
+            # TERMINAL, and stated as terminal: polling to the timeout would report a window
+            # that expired rather than a state that was never going to change.
+            report["reason"] = (
+                f"{status} cannot become published by waiting, so this round stops here "
+                f"rather than polling to its own timeout: " + str(report.get("reason", ""))
+            )
+            return report
+        if deadline is not None and now_fn() >= deadline:
+            report["wait_timed_out"] = True
+            report["reason"] = (
+                f"waited {report['wait_secs']}s of a {timeout}s timeout and the round is "
+                f"still not publishable ({status}): " + str(report.get("reason", ""))
+            )
+            return report
+        sleep_for = poll_secs
+        if deadline is not None:
+            sleep_for = min(poll_secs, max(0.0, (deadline - now_fn()).total_seconds()))
+        if sleep_for > 0:
+            sleep_fn(sleep_for)
+
 def render(report: dict) -> str:
     """The round's record. Count and shas, never a boolean."""
     lines = [
@@ -821,8 +940,47 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="push when the grace window allows; without it the round only reports",
     )
+    parser.add_argument(
+        "--wait",
+        action="store_true",
+        help=(
+            "poll until the round can publish, then exit 0; implies --apply, and exits "
+            "non-zero on every status that cannot become published by waiting"
+        ),
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help=(
+            f"seconds --wait may block before giving up (default: the {DEFAULT_GRACE_SECS}s "
+            f"grace window plus {WAIT_TIMEOUT_MARGIN_SECS}s = "
+            f"{DEFAULT_GRACE_SECS + WAIT_TIMEOUT_MARGIN_SECS}s)"
+        ),
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+
+    # `--wait` IMPLIES `--apply`: a caller that asked to block until publication cannot be
+    # asking for a report-only round, and a report-only round never publishes at all.
+    if args.wait:
+        timeout = (
+            args.timeout
+            if args.timeout is not None
+            else args.grace_secs + WAIT_TIMEOUT_MARGIN_SECS
+        )
+        # WITH --json THE POLL LINES GO TO STDERR, so stdout stays ONE JSON document and a
+        # machine reader is not handed a stream it cannot parse.
+        report = wait_for_publish(
+            Path(args.repo),
+            remote=args.remote,
+            branch=args.branch,
+            grace_secs=args.grace_secs,
+            timeout=timeout,
+            emit=((lambda line: print(line, file=sys.stderr)) if args.json else print),
+        )
+        print(json.dumps(report, indent=2, sort_keys=True) if args.json else render(report))
+        return 0 if report["status"] in TERMINAL_PUBLISHED else 1
 
     report = publish(
         Path(args.repo),
@@ -836,9 +994,13 @@ def main(argv: list[str] | None = None) -> int:
     # are COMPLETED rounds: the first is the window working, the second is a stale checkout
     # with nothing of its own, and the third is the report the ruling asks for — none is a
     # failure.
-    return 1 if report["status"] in (
-        "no-remote", "unreachable", "unreadable", "push-failed", "ff-blocked",
-    ) else 0
+    #
+    # `not-on-branch` JOINED THIS TUPLE AT #482. It exited 0 beside the statuses above while
+    # being a REFUSAL like them, and the caller paid: an rc-only waiter cannot tell "HEAD is
+    # on neither end of main's line" from "the round ran", so it loops forever on a state
+    # that will never change. `behind` and `diverged` stay at 0 -- they are reports the round
+    # was asked to make -- and a WAITING caller refuses them through `WAITABLE` instead.
+    return 1 if report["status"] in PLAIN_NONZERO else 0
 
 
 if __name__ == "__main__":
