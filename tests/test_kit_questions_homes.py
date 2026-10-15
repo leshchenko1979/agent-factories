@@ -74,8 +74,13 @@ LOCAL_FIXES: tuple[tuple[str, str], ...] = (
     ),
     (
         r"^#\s*Unified tools log",
-        "the tools-log header comment -- the shipped copy de-names the donor's own log lib, "
-        "which resolves on no host (#85)",
+        "the tools-log header comment -- each home names its own entry schema, and the shipped "
+        "copy de-names the donor's own log lib, which resolves on no host (#85, #484)",
+    ),
+    (
+        r"^#\s*rc vocabulary",
+        "the rc-vocabulary comment -- the shipped copy de-names the donor's `tools/docs/` "
+        "path, which the shipped tree does not carry (#484; #188 adoption)",
     ),
     (
         r"^#\s*(?:`oc-questions`|the instrument's home in the)",

@@ -14,7 +14,7 @@
 #
 # Verbs: ask · answer · amend · list · publish · lint · gc · notify
 #
-# rc vocabulary (tools/docs/RC-CONTRACT.md): 0 ok / 1 finding-or-not-found /
+# rc vocabulary, printed by --help: 0 ok / 1 finding-or-not-found /
 # 2 usage / 3 state-refused (already answered, expired) / 4 store-or-IO fault.
 # =============================================================================
 
@@ -896,7 +896,7 @@ def set_is_closed(entry):
 
 
 # =============================================================================
-# Unified tools log (schema per RC-CONTRACT)
+# Unified tools log (entry: ts, tool, actor, args, exit, secs, extra)
 # =============================================================================
 _LOG_ENABLED = False
 _LOG_ARGS = ""

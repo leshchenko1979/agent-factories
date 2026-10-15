@@ -217,6 +217,169 @@ def _probe_foreign_toolchain() -> list[str]:
     return problems
 
 
+# --- the absent-namespace leg (#484) ---------------------------------------
+#
+# `portability_problems` above judges a literal that RESOLVES here and nowhere else. The
+# foreign-toolchain leg judges a NAME that resolves on no host. This leg judges the third
+# form of the same hazard: a shipped file that cites a PATH into a namespace the shipped
+# tree does not carry at all -- `tools/docs/RC-CONTRACT.md` in a tree with no `tools/docs/`.
+# A member reading it is told to look somewhere that does not exist, and the citation reads
+# as authoritative precisely because it is specific.
+#
+# THE POPULATION IS SHIPPED CODE, NOT EVERY FILE, and the bound is MEASURED. Over every
+# file under `TEMPLATE/`, 81 distinct path citations fail to resolve and all but ONE are
+# legitimate: a gate's synthetic fixture paths (`tests/test_a.py`), an `.example` placeholder
+# naming the real file it is the example OF, a runtime store path, a citation into another
+# factory's tree. Prose cites for provenance as often as for dependency, so a leg over docs
+# would be red on arrival. A CODE file's citation is a dependency claim -- that is the class
+# this leg can hold: 26 shipped code files, 4 hits, 3 survivor sites across 2 declared
+# namespaces.
+#
+# THE BOUND, stated rather than left implied:
+#   * `TEMPLATE/tests/**` is EXCLUDED -- a gate's synthetic paths are synthetic ON PURPOSE,
+#     and a leg that forbade them would forbid the fixtures every gate is built on.
+#   * A citation QUALIFIED by a path prefix is not a citation of THIS tree
+#     (`vds-servers/docs/rulings/...` names another repository), so a match must start at a
+#     real boundary.
+#   * The leg judges the NAMESPACE, never the file: `docs/hygiene-protected.json` is the real
+#     file an `.example` stands in for, and a file that simply does not exist yet (a runtime
+#     store, a factory-owned doc) is not a phantom path.
+SHIPPED_NAMESPACE_ROOTS = ("tools", "docs", "tests", "registry", "skills", "evidence")
+
+NAMESPACE_CITATION = re.compile(
+    r"(?<![A-Za-z0-9_./-])((?:" + "|".join(SHIPPED_NAMESPACE_ROOTS) + r")/([A-Za-z0-9_.-]+))/"
+)
+
+# DECLARED survivors: a namespace the shipped tree does not carry, cited by a shipped code
+# file, with the reason it is a real reference rather than a phantom path. Every entry must
+# name a namespace that resolves in the tree the file is DEPLOYED into -- never a namespace
+# that is merely convenient.
+DECLARED_ABSENT_NAMESPACES = {
+    "tools/state": (
+        "the DEPLOYED layout, not the shipped one: the dynamic-tool bridge lives at "
+        "`tools/state/oc_questions_tool.py` in the skill tree the tool is installed into "
+        "(tools/docs/OPEN-QUESTIONS-INSTALL.md), and the citation names that host path so a "
+        "reader can find the bridge. It resolves wherever the tool actually runs."
+    ),
+    "skills/x": (
+        "a SYNTHETIC example inside prose that defines what a citation IS (tools/review.py: "
+        "a bare `X.md` is a name, `skills/x/y.md` is a repo citation). The path IS the "
+        "illustration, so it is deliberately not a real one."
+    ),
+}
+
+def _is_shipped_code(path: Path, text: str) -> bool:
+    """A shipped file that RUNS -- where a citation is a dependency claim, not prose."""
+    if path.name.endswith((".py", ".sh", ".mjs")):
+        return True
+    return text.startswith("#!")
+
+def absent_namespace_problems(
+    root: "Path | None" = None, repo: "Path | None" = None
+) -> "tuple[list[str], int]":
+    """`(problems, files_scanned)` over every shipped CODE file under `root`.
+
+    `root` and `repo` are parameters rather than constants so the leg is PROBEABLE: the
+    neuter probe below points them at a synthetic tree, which is the only way to show the
+    detector bites. A rule that has only ever seen good input has not been shown to bite.
+    """
+    base = root if root is not None else REPO / "TEMPLATE"
+    home = repo if repo is not None else REPO
+    problems: list[str] = []
+    scanned = 0
+    if not base.is_dir():
+        return problems, 0
+    for path in sorted(q for q in base.rglob("*") if q.is_file()):
+        if "__pycache__" in path.parts:
+            continue
+        rel = path.relative_to(base)
+        if rel.parts and rel.parts[0] == "tests":
+            continue  # a gate's synthetic fixture paths are synthetic ON PURPOSE
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if not _is_shipped_code(path, text):
+            continue
+        scanned += 1
+        try:
+            label = str(path.relative_to(home))
+        except ValueError:
+            label = str(path)
+        for m in NAMESPACE_CITATION.finditer(text):
+            ns = m.group(1)
+            if ns in DECLARED_ABSENT_NAMESPACES:
+                continue
+            if (home / ns).is_dir() or (base / ns).is_dir():
+                continue
+            line = text[: m.start()].count("\n") + 1
+            problems.append(
+                f"{label}:{line} cites `{ns}/`, a namespace the shipped tree does not "
+                f"carry -- it resolves neither in this repository nor in the factory this "
+                f"file ships to. Point the reader at a path the tree HAS (a runtime home "
+                f"such as `--help` always exists), or declare it in "
+                f"DECLARED_ABSENT_NAMESPACES with the tree it DOES resolve in."
+            )
+    return problems, scanned
+
+def _probe_absent_namespace() -> list[str]:
+    """The two-sided neuter probe: the leg BITES on a phantom namespace, stays SILENT on a
+    declared one and on a non-code file, and a declared one never mutes a real finding."""
+    import tempfile
+
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "tools").mkdir()
+        (root / "tools" / "present").mkdir()
+        code = root / "tools" / "clean.py"
+
+        # A citation of a namespace the tree HAS -> silence.
+        code.write_text("# see tools/present/ for the rest\n")
+        got, scanned = absent_namespace_problems(root, root)
+        if scanned != 1:
+            problems.append(f"probe: expected 1 code file scanned, got {scanned}")
+        if got:
+            problems.append(f"probe: expected SILENCE on a namespace the tree has, got {got}")
+
+        # A citation of a namespace the tree LACKS -> one problem naming it.
+        code.write_text("# see tools/absent/ for the rest\n")
+        got, _ = absent_namespace_problems(root, root)
+        if len(got) != 1 or "tools/absent/" not in got[0]:
+            problems.append(f"probe: expected ONE problem naming tools/absent/, got {got}")
+
+        # A DECLARED namespace is silent -- the allowlist is real, not a blanket mute.
+        declared = sorted(DECLARED_ABSENT_NAMESPACES)[0]
+        code.write_text(f"# see {declared}/x.py for the rest\n")
+        got, _ = absent_namespace_problems(root, root)
+        if got:
+            problems.append(f"probe: expected SILENCE on the declared {declared}/, got {got}")
+
+        # ...and it must not mute a REAL finding on the same file.
+        code.write_text(f"# see {declared}/x.py and tools/absent/ for the rest\n")
+        got, _ = absent_namespace_problems(root, root)
+        if len(got) != 1 or "tools/absent/" not in got[0]:
+            problems.append(
+                f"probe: a declared namespace muted a real one on the same file, got {got}"
+            )
+
+        # A NON-CODE file is out of the population by design: prose cites for provenance.
+        code.write_text("# nothing here\n")
+        (root / "tools" / "notes.md").write_text("# see tools/absent/ for the rest\n")
+        got, scanned = absent_namespace_problems(root, root)
+        if got:
+            problems.append(f"probe: expected SILENCE on a non-code file, got {got}")
+        if scanned != 1:
+            problems.append(f"probe: expected 1 code file scanned (never the .md), got {scanned}")
+
+        # A QUALIFIED citation is another repository's path, not a citation of this tree.
+        (root / "tools" / "notes.md").unlink()
+        code.write_text("# see other-repo/tools/absent/ for the rest\n")
+        got, _ = absent_namespace_problems(root, root)
+        if got:
+            problems.append(f"probe: a qualified citation should not bite, got {got}")
+    return problems
+
 PAIRS = [
     ("tools/ledger.py", "TEMPLATE/tools/ledger.py"),
     ("tools/ledger_declaration.py", "TEMPLATE/tools/ledger_declaration.py"),
@@ -613,6 +776,34 @@ def main() -> int:
             f"foreign toolchain: {ft_scanned} file(s) under TEMPLATE/ scanned, "
             f"0 undeclared oc-* reference(s); "
             f"{len(DECLARED_FOREIGN_TOKENS)} declared survivor token(s)"
+        )
+
+    ns_probe = _probe_absent_namespace()
+    if ns_probe:
+        print("template absent-namespace leg: NEUTER PROBE FAILED\n")
+        for p in ns_probe:
+            print(f"  {p}")
+        return 1
+
+    if not (REPO / "TEMPLATE").is_dir():
+        print("absent namespace: no TEMPLATE/ tree -- nothing to scan")
+    else:
+        ns_problems, ns_scanned = absent_namespace_problems()
+        if ns_scanned == 0:
+            print(
+                "template absent-namespace leg ERROR: zero code file(s) read, so this leg "
+                "examined nothing and cannot report a clean verdict"
+            )
+            return 1
+        if ns_problems:
+            print("template cites a namespace it does not carry:\n")
+            for p in ns_problems:
+                print(f"  {p}")
+            return 1
+        print(
+            f"absent namespace: {ns_scanned} shipped code file(s) scanned, "
+            f"0 undeclared phantom citation(s); "
+            f"{len(DECLARED_ABSENT_NAMESPACES)} declared survivor namespace(s)"
         )
 
     print(f"template in sync: {len(PAIRS)} pair(s) byte-identical")
