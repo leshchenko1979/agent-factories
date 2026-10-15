@@ -253,3 +253,78 @@ The gap this section disclosed closed **the same day**. At **2026-10-01T07:10:49
 Both crossings trace to a **live execution failure, not a documentation one** — precisely the `2 → 3` trigger in §2's transition matrix ("Rework share exceeds 30% or tasks stall silently"). InferHub Watch's own committed self-audit reads `Cadence MISSED — last run 48.1h ago` (Stability 3→2 **and** Cadence autonomy 4→2); Miidas reads `34 PASS / 1 FAIL / 0 UNKNOWN of 35` with 2 dirty paths (Verification depth 4→3 **and** Recoverability 4→3).
 
 One cell of the fleet's −5 is **self-inflicted on this factory**: Meta-factory **Documentation consistency 4→3**, because `tests/test_citation_clause_titles.py` is **RED at the tip** — 18 bare `§<number>` citations naming no document, introduced by **`7b0b5c5`** (this factory's own `#256` ledger fix; the gate was green at `23568bc7`, and `tools/ledger.py`'s bare-`§N` count went 0 → 5 in that commit). Filed by Surveys as **`#258`**, dispatched to the Ledger lane; the gate's own rc at the tip is **1**.
+
+---
+
+## 6. Bi-Weekly Fleet Calibration & Maturity Verification (2026-10-15)
+
+> **Pacemaker Cadence:** Bi-Weekly (1st & 15th) · `factory-growth-map-biweekly`
+> **Evaluation Rubric:** Quality Criteria v0.5 (19 criteria across 6 families, max 76)
+> **Telemetry Source:** the fleet survey `evidence/scores/2026-10-14.md` (its own read instants `2026-10-14T06:01Z`–`07:05Z`, against tree `b45e76b9`), plus this factory's own live read at `2026-10-15T06:16:35Z` against HEAD `1701e2ec`.
+
+### The survey this run reads, and its freshness
+
+§5's round had to disclose a **three-day telemetry gap** because `evidence/scores/` held nothing after 2026-09-28. **This round owes no such disclosure:** `evidence/scores/` now holds a run for **every day from 2026-10-05 through 2026-10-14**, so this calibration reads a survey **one day old** rather than a stale one. The freshness is a property of the *store*, not of this run's diligence, and it is stated so a reader can check it rather than trust it.
+
+### Fleet Maturity Census
+
+**Score column is the 2026-10-14 survey's own reading; the stage column is this document's mapping of that reading onto the §1 stages** — a mapping, never an identity (see §5's own caveat, and §4 itself shows a Scalable-band factory at Stage 1).
+
+| Factory | Score (v0.5/76) | Maturity Band | Active Stage | Target Stage | Breakthrough Mechanism Deployed | Primary Health Metric Status |
+|---|:---:|:---:|:---:|:---:|---|---|
+| **Meta-factory** | **67** (88%) | **Optimizing** | **Stage 3** | Stage 4 | self-audit kit (94 gates, **0 UNKNOWN**), single-writer ledger, automated RCA | cadence **held** (4.0 h); rework share **45.44%**; change-fail **71.28%** |
+| **OpenCrabs dev** | **61** (80%) | **Optimizing** | **Stage 3** | Stage 4 | 4-leg smoke rubric, atomic workers-ledger, runtime supply to the fleet | `tests/test_shipped_audit_runs.py` **830.0 s / 1 008.75 s (82.28%)** — highest in the series |
+| **InferHub Watch** | **58** (76%) | **Optimizing** | **Stage 3** | Stage 3 | self-audit kit, hourly pacemaker, model-routing telemetry | subject anchor **2 / 4** — below gate, 7th consecutive round |
+| **Miidas** | **58** (76%) | **Optimizing** | **Stage 3** | Stage 3 | self-audit gates, `rework.md`, ledger discipline (`L2` 4) | ledger instrument **`deferred`** (`behind_by=6`) |
+| **Infra Factory** | **55** (72%) | **Scalable** | **Stage 2** | Stage 3 | single-writer ledger, mechanical audit gates | **`O2` 2** — the fleet's lowest Output cell, 6th round |
+| **AI AntiSpam** | **51** (67%) | **Scalable** | **Stage 1** | Stage 2 | 0-token preflight pacemakers, Postgres single-writer | ledger instrument **`partial`, red, `behind_by=1`** |
+
+**Fleet 350 / 456 = 76.75%.** Band thresholds are `docs/quality-criteria.md`'s own and are read, not composed: **Scalable 51–75% (39–57) · Optimizing 76–100% (58–76)**.
+
+### Stage-by-Stage Verification Summary
+
+1. **Stage 0 (Interactive Prototype): 0 / 6 active.** No factory relies on prompt-by-prompt operator guidance; all six intake from persistent surfaces. **Unchanged.**
+
+2. **Stage 1 (Autonomous Intake & the Pacemaker Law): 6 / 6 conformance.** All six factories are enrolled in `registry/fleet.json` with a declared `job_prefixes` entry — `ai-antispam-`, `infra-`, `inferhub-`, `factory-`, `miidas-`, `oc-` — and each prefix is claimed by exactly one factory. **Live cron census, 2026-10-15T06:2xZ:** the **ops** profile home holds **66 rows**, of which **24 carry an explicit `--mode`** — **9 turn-end / 15 quiet**. That split is **identical to the 2026-10-13, 2026-10-11 and 2026-10-10 readings**, so the quiet population **held flat a fourth reading**; only the row total moved (68 → 66). **Box-wide the same read is larger and is stated so the two are not confused:** 3 homes hold a `cron_jobs` table — default **11**, family **2**, ops **66** = **79 rows**, **42 enabled**.
+
+3. **Stage 2 (Single-Writer & Concurrency Locking): NOT fleet-wide — 1 of 6 `adopted`, unchanged from §5.** The mechanical signal is each registry fragment's own `instruments.ledger.state`:
+
+   | Factory | ledger state | green | `behind_by` |
+   |---|:---:|:---:|:---:|
+   | Meta-factory | **`adopted`** | true | 0 |
+   | InferHub Watch | `partial` | true | 5 |
+   | AI AntiSpam | `partial` | **false** | 1 |
+   | Infra Factory | `deferred` | true | 13 |
+   | Miidas | `deferred` | true | 6 |
+   | OpenCrabs dev | `not-applicable` | false | — |
+
+   **Adoption is a different predicate from "has an append-only ledger"** — the two are named apart here so a reader does not read one as the other. The states are read from the fragments as attested `2026-10-13`, which is the newest attestation this round can read.
+
+4. **Stage 3 (Self-Auditing Quality Loops): 4 / 6 active.** Meta-factory runs the loop live at this read: cadence held (`last_run_ts 2026-10-15T02:15:06Z`, 4.0 h), **3,275 ledger rows**, a rework instrument at **319 entries / 47 unprevented**, and a self-audit of **94 gates with 0 UNKNOWN** (verdict `DEGRADED`, 89 PASS / 5 FAIL — the 10-14 survey's read at `b45e76b9`). OpenCrabs dev, InferHub Watch and Miidas carry their own loops; **InferHub Watch's `D2` 2 remains below the subject-matter gate for the seventh round**, which withholds substantive consulting work on it. Infra Factory holds initial loops.
+
+5. **Stage 4 (Fleet Ecosystem & Value Optimization): 2 / 6 pioneering.** Meta-factory and OpenCrabs dev hold active supplier-client loops; value-weighted routing remains the open milestone. **Unchanged.**
+
+### Live self-metrics (2026-10-15T06:16:35Z, HEAD `1701e2ec`)
+
+Read from `tools/audit.py --json --no-gates`; the gate verdict fields read `null` because the suite was deliberately skipped, **never as a green**. Each ratio is printed with the predicate `tools/audit.py` actually computes, which is not always the one a reader assumes:
+
+| Metric | Value | Predicate / denominator |
+|---|---|---|
+| Ledger events | **3,275** | — |
+| Closed subjects | **383** | 389 close rows |
+| Rework entries | **319** | 47 unprevented |
+| Rework share | **45.44%** | entries ÷ (closed subjects + entries) = 319 ÷ 702 |
+| Rework per close | **83.29%** | entries ÷ closed subjects = 319 ÷ 383 |
+| Change-fail rate | **71.28%** | change-failures ÷ closed subjects = 273 ÷ 383 |
+| Rework subject coverage | **94.04%** | determinate ÷ entries = 300 ÷ 319 |
+| Cadence | **held** | last run `2026-10-15T02:15:06Z`, 4.0 h |
+
+**The gate verdict is not this round's reading, and is not claimed as one.** `--no-gates` was passed deliberately, so the newest *complete* gate read remains the 10-14 survey's own: **`DEGRADED`, 89 PASS / 5 FAIL / 0 UNKNOWN of 94 gates** at `b45e76b9`, with the five reds all `exit_code 1`, `unknown false`, `duration_is_lower_bound false` — genuine verdicts, none a budget kill.
+
+### What to watch
+
+- **No cell moved for the sixth consecutive round, and the fleet total did not move either** (350 → 350). A flat score is not by itself health: the §5.2 gate-budget leg has now fired **eleven** times, so the instruments keep finding real drift while the cells stay still — the movement is in the machinery, not the scores.
+- **Two of the five reds are unreachable by any lane.** `tests/test_ontology.py` (13 drift hits, 8th round) has two sites inside `evidence/scores/2026-10-05.md`, a **published artifact that is never rewritten**; `tests/test_ledger_citation_declared.py` reads **pre-boundary rows no lane can repair** (460 citations, 75 problem lines across 39 rows). Both want a **boundary decision**, not a repair, and neither has had one.
+- **`tests/test_shipped_audit_runs.py` is the round's largest movement and sits 178.75 s from its wall** — 830.0 s of 1 008.75 s (82.28 %), the highest reading the series has taken, and simultaneously one of the five reds.
+- **`factory-publish` carries both new patrol problems**, and the leg names **this factory** as the repairer: its `deliver_to` is NULL and its prompt invokes no session notify, so nothing wakes the lane that is meant to do the work; and its prompt embeds the instant `2026-10-11T12:59`, a boundary the law owns, so the prompt drifts the moment the law moves. **A problem count that holds steady while its composition turns over is not a stable reading.**
+- **Box-wide cron attribution:** 79 rows across 3 homes; **20 carry no factory prefix**, and all 20 sit outside this factory's nine. Reported in this factory's registry attestation, **never touched**.
