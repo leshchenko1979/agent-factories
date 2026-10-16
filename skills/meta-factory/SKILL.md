@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.60
+version: 0.1.61
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -430,7 +430,14 @@ re-mint and not the work — there is nothing to win by pushing first. And
 `tools/publish.py:482-537` resolves a **detached HEAD**, accepting it whenever HEAD sits on
 `<remote>/<branch>`'s line, ahead or behind, so a detached worktree is not a reason to bypass
 the pusher either. The pusher's own `status:"held"` inside the 900 s window is the pusher
-WORKING, not a failure: retry after the window, and never fall back to `git push`. The residual
+WORKING, not a failure — but the window is keyed on the newest unpushed commit's **committer
+date** (`tools/publish.py:114`, `:517-518`, `%cI`), and a catch-up `git rebase` rewrites that
+date, so a rebase done to chase a moving remote RE-ARMS the full 900 s. On a remote advancing
+faster than the window that is a **livelock**: the pusher is fast-forward-only and never rebases
+for you, so a `not-on-branch` or `diverged` verdict cannot become published by waiting, and
+retrying forever only re-arms the clock. The remedy is the age-preserving catch-up —
+`git rebase --committer-date-is-author-date origin/main` — then re-run the pusher, which
+publishes on the first poll. Never fall back to `git push`. The residual
 is stated rather than hidden — the detector's latency is the patrol cadence, so a direct push is
 caught late — and that is accepted; no hook is added, because a pre-push hook is bypassable with
 `--no-verify` and local-only, since hooks are not cloned, i.e. a prevention where this class
