@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 16 cron rows (14 enabled, 2 disabled: ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04; ai-antispam-43-close-gate and ai-antispam-52-close-gate were RETIRED 2026-10-09 per board #115 and both crons DELETED)",
+      "this factory's own chat (-1003993000918), its topics and its 17 cron rows (14 enabled, 3 disabled: ai-antispam-118-probe is a spent 2026-10-16 one-shot, disabled at fire; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04; ai-antispam-43-close-gate and ai-antispam-52-close-gate were RETIRED 2026-10-09 per board #115 and both crons DELETED)",
       "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
     ],
     "does_not_own": [
@@ -204,7 +204,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-15T06:58:43Z",
+  "attested_at": "2026-10-16T06:36:25Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

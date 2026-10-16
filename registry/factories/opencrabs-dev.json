@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "RE-VERIFIED 2026-10-12T06:05Z against the CURRENT deployed sha 81a5edd59540e170ec137c0e65768632d497416a (deployed.sha; swapped 2026-10-10T07:25:57Z, auth=auto-swap): git show 81a5edd5:src/brain/agent/service/notify_policy.rs carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 81a5edd5 (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-07 re-verification against 3ea3f619, which remains an ancestor of it."
+      "evidence": "RE-VERIFIED 2026-10-16T06:31Z against the CURRENT deployed sha 466e7dfb33a894e61ad7826ef4516f68486313cb (deployed.sha; swapped 2026-10-15T21:40:32Z, run 38810307913, auth=auto-swap, version 0.5.4; prev_sha 552ecd82b1a9b46554dca499e81c1ea5f56ef017): `git show 466e7dfb:src/brain/agent/service/notify_policy.rs` carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, `None | Some(\"turn-end\")` -> TurnEnd, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 466e7dfb (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-12 re-verification against 81a5edd5, itself an ancestor of 466e7dfb."
     },
     {
       "id": "commit-signing-live-identity-retired",
@@ -106,6 +106,16 @@
       "scope": "profile",
       "evidence": "gh api repos/leshchenko1979/opencrabs/collaborators/adolfousier -> 404 (same on the factory tracker); --add-assignee adolfousier rc=0 with read-back []; positive control --add-assignee leshchenko1979 sticks; 28 fork issues carry leshchenko1979, 0 carry adolfousier. Law corrected in opencrabs-dev-factory commit b082869f (2026-10-10).",
       "since": "2026-10-10"
+    },
+    {
+      "id": "ship-test-threads-wedge",
+      "text": "A default-threads full test gate can WEDGE: four test-thread slots hang indefinitely and the run burns the whole 45-min workflow wall with ZERO `test result:` lines while fmt and clippy both report success, so a CANCELLED run is not evidence against the diff. Every ship invocation therefore carries `--test-threads 2` (editor.md \u00a7Phase 5), and that line's expiry is keyed on the SYMPTOM \u2014 a default-threads full gate completing with a real test verdict \u2014 NEVER on an issue reading closed: upstream opencrabs/opencrabs#1936 reads CLOSED/COMPLETED on a stall watchdog alone, its own closer states the deadlock root cause is still unfixed, and the deadlock is live at fork leshchenko1979/opencrabs#781.",
+      "severity": "warning",
+      "since": "2026-10-16",
+      "affects": [
+        "opencrabs-dev"
+      ],
+      "evidence": "Fork run 38799188468 (sha c350d66c6, 2026-10-15): cancelled at 2722 s against the workflow's timeout-minutes 45 (2700 s), four `has been running for over 60 seconds` lines, stuck set hot_write_paths_retry_test x1 + loop_break_test x2 + memory_archive_index_test x1 \u2014 character-identical to the 2026-10-04 run quoted inside #1936's own body; fmt+clippy both success, so the wedge is not the diff. Re-dispatch of the same gate input with --test-threads 2 (fork run 38806046232) = success in 1884 s. Law: editor.md:401/:404, commit 7723a1a4. The recurrence was measured 2026-10-15; `since` records the answering instant (2026-10-16), not a fact-origin date I cannot evidence."
     }
   ],
   "lanes": [
@@ -327,7 +337,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-15T06:45:06Z",
+  "attested_at": "2026-10-16T06:32:37Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",
