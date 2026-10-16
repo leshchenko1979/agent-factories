@@ -264,6 +264,12 @@ SEEDS = frozenset({
     # PARAMETERS are the factory's own declared debt, and this factory's filled-in table
     # legitimately differs from the empty skeleton that ships.
     "TEMPLATE/docs/ruling-board-exemptions.example.json",
+    # The audit-rates gate's exemption table (issue #496, ruling n=3410): same class and
+    # the same measured reason as the two entries above -- the gate's LOGIC is universal,
+    # its PARAMETERS are the factory's own declared debt, and the one entry this factory
+    # carries (n=3399, whose canonical run declares `rework` twice) must not travel to a
+    # member whose ledger has no such row.
+    "TEMPLATE/docs/audit-rates-exemptions.example.json",
     "TEMPLATE/docs/ledger-no-shrink-exemptions.example.json",
     "TEMPLATE/docs/ledger-retirements.example.json",
     "TEMPLATE/docs/ledger-schema-exemptions.example.json",

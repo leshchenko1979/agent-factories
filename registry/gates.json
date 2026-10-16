@@ -498,7 +498,9 @@
       "class": "always-satisfiable"
     },
     "tests/test_audit_rates.py": {
-      "class": "always-satisfiable"
+      "class": "exemption-table",
+      "refuser": "tools/ledger.py",
+      "table": "docs/audit-rates-exemptions.json"
     },
     "tests/test_audit_tree_condition.py": {
       "class": "always-satisfiable"

@@ -11,6 +11,7 @@
     ],
     "tests/test_audit_rates.py": [
       "ONTOLOGY.md",
+      "docs/audit-rates-exemptions.json",
       "registry/gates.json",
       "tests/test_audit_rates.py",
       "tools/audit.py"

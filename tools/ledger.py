@@ -159,6 +159,8 @@ from field_predicate import (
     declared_telemetry_provenance,
     declares_field,
     split_canonical_run,
+    token_key,
+    trailer_tokens,
 )
 
 # The reconstruction predicate — which rows are reconstructed claims and the interval
@@ -1611,6 +1613,86 @@ def cmd_append(args: argparse.Namespace) -> int:
                 f"value (#104). A SUBJECT POINTER IS NOT A CLAIM: it belongs in "
                 f"`--ref subject:#N`, a typed edge that is first-class on every row and "
                 f"repeatable, and the row's own `subject` field already carries it (#249)."
+            )
+        # A DETAIL WHOSE CANONICAL RUN DECLARES THE SAME KEY TWICE IS REFUSED (#496,
+        # ruling n=3410). The run is read POSITIONALLY — the maximal trailing sequence of
+        # `=`-carrying tokens — because `detail` is free prose that QUOTES trailers as
+        # evidence, and a whole-detail scan would take a quotation for a declaration.
+        #
+        # THE HAZARD IS THE KEY, NOT THE EVENT: a field carried twice has no canonical
+        # reading (SKILL.md section 8), so a consumer taking the first token and one
+        # taking the last get different answers, and the row's repair space is emptied at
+        # the same instant — `repair --append-detail` extends the run only when the key is
+        # NEW (#104, ruled at ledger n=620 PART 4), so the ONE repair that would clear the
+        # leg is unreachable from the moment the collision is written.
+        #
+        # THE PROSE IS WHAT MAKES IT REACHABLE, and n=3399 (#495's close row) is the
+        # shape: its prose ends `… the declaration is rework=none.`, the full stop rides
+        # inside the VALUE, the token carries `=`, and the trailing walk absorbs it into
+        # the run beside the trailer's own `rework=none` — one declaration read as two.
+        # Measured on a detached copy: `repair --n 3399 --invariant close_row_revision
+        # --append-detail "rework=#496"` returns rc=1 and leaves the ledger
+        # byte-identical, and `repair` composes `f"{head} {appended} {run}"`, inserting
+        # BEFORE the run, so it cannot displace a token that lives INSIDE it.
+        #
+        # THE POPULATION IS MEASURED, AND WIDER THAN THE GATE'S. The ruling's own
+        # measurement is scoped to the gate's population — the 399 `close` rows, of which
+        # n=3399 is the only one — and that is the population `tests/test_audit_rates.py`
+        # reads. Across ALL events the predicate is wider, measured 2026-10-16 over 3409
+        # rows: 11 rows carry a doubled key in three families — `rework` (n=3399, the one
+        # the gate sees), `n` (7 rows: n=311/312/313/330/331/335/668, prose citations of
+        # the ledger's own row numbers, the last written 2026-09-20), and `finding`
+        # (n=32/141/177, a repeated-key list in `score` rows, the last 2026-09-18). Both
+        # non-close families are INERT: no reader in the tree reads `n` or `finding` out
+        # of a detail (`_declared_values` is called for `rework`, `telemetry`, `duty`,
+        # `reclose`, `reclaim`, `claim` and `delivery`, and for no other key), so their
+        # doubling is a LATENT instance of this class, not an active reading defect. None
+        # of the ten is touched: a write-path refusal reaches only rows written after it,
+        # and the gate's population is `close` rows alone.
+        #
+        # THE READ IS THE SHARED PREDICATE (`trailer_tokens` and `token_key` in
+        # `tools/field_predicate.py`), never a private scan: one field, one predicate
+        # (`n=405` PART 5, `n=599`), and the SAME home the gate's own detector composes
+        # from, so the refuser and the detector cannot drift — the requirement #434's
+        # `board=closed` refusal already meets.
+        #
+        # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state:
+        # this binds the row ABOUT TO BE WRITTEN, so it can never predate itself. The one
+        # published row of this shape (n=3399) is HISTORY — `tests/test_audit_rates.py`
+        # reads it against `docs/audit-rates-exemptions.json` and prints it as `excused:`
+        # — and nothing is backfilled: a rewrite of a published detail would be a
+        # falsified record, not a repair.
+        #
+        # STATED RESIDUAL, not claimed as prevented: a prose token that carries `=` whose
+        # key collides with NOTHING is still absorbed into the run as a phantom field, and
+        # no gate reads that. It is a different defect, and this refusal does not cover it.
+        _run_keys: dict[str, list[str]] = {}
+        for _token in trailer_tokens(args.detail):
+            _key = token_key(_token)
+            if _key is not None:
+                _run_keys.setdefault(_key, []).append(_token)
+        _doubled = {_k: _t for _k, _t in _run_keys.items() if len(_t) > 1}
+        if _doubled:
+            sys.exit(
+                "ledger append refused: this detail's canonical terminal run declares "
+                + "; ".join(
+                    f"`{_k}` more than once ({', '.join(repr(t) for t in _t)})"
+                    for _k, _t in sorted(_doubled.items())
+                )
+                + ". A `key=value` token extends the run only when the key is NEW, so a "
+                "field carried twice has no canonical reading (SKILL.md section 8): a "
+                "consumer taking the first token and one taking the last get different "
+                "answers, and the row's repair space is emptied at the same instant "
+                "(#104, ruled at ledger n=620 PART 4). The usual cause is PROSE whose "
+                "last token carries `=`: the trailing walk absorbs it into the run, where "
+                "it collides with the trailer's own declaration — n=3399's detail ends "
+                "`… the declaration is rework=none.` beside a trailer carrying "
+                "`rework=none` (#496, ruling n=3410). The remedy is to keep the key OUT "
+                "of the prose: a declaration key belongs to the row's trailer alone, so "
+                "reword the sentence so its final token carries no `=` (or separate it "
+                "from the trailer with a plain word). Moving the prose ABOVE the trailer "
+                "does NOT help while its last token carries `=`: the run is maximal and "
+                "contiguous, so the token is still absorbed into it."
             )
         if args.event in ("close", "claim") and target_ledger == LEDGER:
             problems = sequence_problems(

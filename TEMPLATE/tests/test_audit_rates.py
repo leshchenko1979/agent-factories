@@ -72,8 +72,24 @@ not been shown to reject bad input.
     shared predicate cannot hide in both; it also reports MULTIPLICITY, which the
     audit's row count cannot see, the law giving a row one `rework` token.
 
+11. **A gate with no exit carries an exemption surface, and its debt is PRINTED.** The
+    multiplicity leg above has no lawful repair for a row ALREADY PUBLISHED: `repair`
+    composes `f"{head} {appended} {run}"` and so inserts BEFORE the canonical run, and it
+    cannot remove a token INSIDE it, while the #104 re-declaration refusal blocks a second
+    `rework=`. So the one published row of this shape is admitted as visible debt in
+    `docs/audit-rates-exemptions.json`, keyed by its OWN `n` — a future close can never be
+    excused by it — printed as an `excused:` line on EVERY run in BOTH invocation modes,
+    with the closing line distinguishing clean from excused. The surface declares its
+    GROUND (`bar`) with ONE lawful value and REFUSES every other, so a ground that does not
+    hold is unexpressible rather than merely discouraged (`docs/instruments/ledger.md`
+    §9.12); an entry that matches NO doubled row is an ERROR, never a silent pass, because a
+    stale exemption inflates the visible debt while excusing nothing. The remedy for the
+    CLASS is the write-path refusal in `tools/ledger.py append`, and it lands in the SAME
+    commit — prevention and repair are not alternatives (issue #496, ruling `n=3410`; the
+    #144 ruling, `n=936`; the `n=405` precedent as applied at `n=2844`).
+
 Run:  python3 -m pytest tests/test_audit_rates.py -q
-Exit: 0 clean, non-zero on any rate regression.
+Exit: 0 clean or fully excused, non-zero on any rate regression.
 """
 
 from __future__ import annotations
@@ -138,6 +154,119 @@ REQUIRED_FAIL_FIELDS = (
 # placeholder.
 SUBJECT_NONE = "none"
 SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
+
+# ---------------------------------------------------------------------------------------
+# THE EXEMPTION SURFACE (issue #496, ruling `n=3410` §6.2). FACTORY DATA, never source:
+# this file is paired byte-identically with `TEMPLATE/tests/test_audit_rates.py`, so a
+# factory's own row number must not live in a file that ships to every new factory.
+#
+# `n=3399`'s canonical run declares `rework` TWICE. The row's prose ends `... the
+# declaration is rework=none.`; that token carries `=`, so the positional trailer reader
+# absorbs it into the run beside the trailer's own `rework=none`, and one declaration reads
+# as two. The row is defective and stays exactly as it is — no hand edit, no rewrite of a
+# published detail, no backfill. The WRITE PATH now refuses the shape (`tools/ledger.py
+# append`), which is the PREVENTION; this table is the REPAIR for the one row already
+# written, and neither closes #496 alone (`n=936`: prevention and repair are not
+# alternatives).
+#
+# THE GROUND, stated truthfully (§9.12). The close-board surface declares
+# `bar=no-truthful-value` because ITS rows are REACHABLE — its own recorded probe returns
+# rc=0 — and only the truthfulness of the value bars them; its note says so in as many
+# words ("a TRUTHFULNESS bar, never a claim of unreachability"). THAT GROUND DOES NOT HOLD
+# HERE, so it is NOT reused. `tools/ledger.py repair` composes `f"{head} {appended} {run}"`,
+# inserting the appended text BEFORE the canonical run, so it cannot remove a token INSIDE
+# it; and the #104 re-declaration refusal blocks appending a second `rework=`. The repair is
+# therefore barred BY CONSTRUCTION — the recorded probe returns rc=1 and the row reads back
+# byte-identical — which is the bar this surface declares, and the only value it admits.
+# The mismatch with the sibling surface is STATED rather than papered over by reusing a
+# ground that does not hold (ruling `n=3410` §6.2). §9.3's barred phrase — the claim that
+# "no lawful path restores the token", a MECHANICAL claim of absence the close-board probe
+# FALSIFIED — is not restated here: what is declared is the measured outcome of THIS row's
+# own repair probe, and the entry's `proof` carries it.
+EXEMPTIONS_PATH = REPO / "docs" / "audit-rates-exemptions.json"
+AUDIT_RATES_EXEMPT_DOMAIN = (
+    "the close row's canonical run declares its `rework` disposition twice",
+)
+AUDIT_RATES_EXEMPT_BAR_KEY = "bar"
+AUDIT_RATES_EXEMPT_BAR_VALUE = "repair-barred-by-construction"
+AUDIT_RATES_EXEMPT_BARS = (AUDIT_RATES_EXEMPT_BAR_VALUE,)
+
+def load_exemptions(path: Path | None = None) -> tuple[dict[int, dict], list[str]]:
+    """Load the factory's audit-rates exemptions, keyed by row `n`.
+
+    Absent or empty data means no exemptions — the shipped state of a new factory, and the
+    state of the shipped skeleton itself. Anything malformed is a problem, never a silent
+    pass: an exemption list that quietly fails to load is indistinguishable from no
+    exemptions, which is the vacuous-pass shape this gate exists to catch.
+    """
+    path = EXEMPTIONS_PATH if path is None else path
+    if not path.is_file():
+        return {}, []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, [f"{path.name}: unreadable or malformed JSON: {exc!r}"]
+    if not isinstance(data, dict):
+        return {}, [f"{path.name}: expected a JSON object with an 'exemptions' list"]
+    raw = data.get("exemptions", [])
+    if not isinstance(raw, list):
+        return {}, [f"{path.name}: 'exemptions' must be a list"]
+    out: dict[int, dict] = {}
+    problems: list[str] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            problems.append(f"{path.name}: exemption #{i} is not an object")
+            continue
+        row_n = entry.get("n")
+        if not isinstance(row_n, int) or isinstance(row_n, bool):
+            problems.append(f"{path.name}: exemption #{i} has no integer `n`")
+            continue
+        reason = str(entry.get("reason") or "").strip()
+        proof = str(entry.get("proof") or "").strip()
+        domain = str(entry.get("domain") or "").strip()
+        if not reason or not proof:
+            problems.append(
+                f"{path.name}: exemption n={row_n} must state both `reason` and `proof`"
+            )
+            continue
+        if domain not in AUDIT_RATES_EXEMPT_DOMAIN:
+            problems.append(
+                f"{path.name}: exemption n={row_n} declares domain {domain!r}, outside the "
+                f"declared domain {AUDIT_RATES_EXEMPT_DOMAIN}"
+            )
+            continue
+        # The GROUND, required and refused outside its one lawful value (§9.12). This is
+        # the arm that makes a ground that does NOT hold unexpressible rather than merely
+        # discouraged, and an entry that states NO ground is refused rather than defaulted
+        # — a missing bar is the vacuous-pass shape this gate exists to catch, one level up.
+        bar = str(entry.get(AUDIT_RATES_EXEMPT_BAR_KEY) or "").strip()
+        if bar not in AUDIT_RATES_EXEMPT_BARS:
+            problems.append(
+                f"{path.name}: exemption n={row_n} must declare "
+                f"`{AUDIT_RATES_EXEMPT_BAR_KEY}` as one of {AUDIT_RATES_EXEMPT_BARS} — its "
+                f"ground is the bar that HOLDS; got {bar!r}"
+            )
+            continue
+        if row_n in out:
+            problems.append(f"{path.name}: exemption n={row_n} is declared twice")
+            continue
+        out[row_n] = entry
+    return out, problems
+
+def rework_excused(independent: dict, exempt: dict[int, dict] | None) -> list[str]:
+    """The doubled-declaration rows an entry EXCUSES, as printable lines.
+
+    Keyed by the row's own `n` — the value the gate reads — so a FUTURE close (a different
+    `n`) can never be excused by an entry written for this one. Printed on EVERY run, in
+    both invocation modes, so the debt is visible rather than forgiven.
+    """
+    declared = exempt or {}
+    return [
+        f"n={n} declares its `rework` disposition twice, EXEMPTED — "
+        f"{declared[n].get('reason')} [proof: {declared[n].get('proof')}]"
+        for n in independent.get("multi", [])
+        if n in declared
+    ]
 
 def load_audit() -> dict:
     """Read the live audit payload with the gate suite skipped.
@@ -704,29 +833,55 @@ def read_rework_declarations(path: Path = LEDGER) -> dict:
             rows_declaring += 1
     return {"rows_declaring": rows_declaring, "buckets": buckets, "multi": multi}
 
-def rework_declaration_problems(payload: dict, independent: dict | None = None) -> list[str]:
+def rework_declaration_problems(
+    payload: dict,
+    independent: dict | None = None,
+    exempt: dict[int, dict] | None = None,
+) -> list[str]:
     """The printed declaration figure must MATCH an independent read (#106).
 
     Nothing here thresholds the share — it is PRINTED, never gated (ruling `n=386`
     clause 5). What is gated is the reader: a figure the audit publishes must equal the
     population a second implementation measures on the same ledger, or it reports a
     number nobody can re-derive.
+
+    The MULTIPLICITY leg is the one a declared exemption may reach (#496, ruling `n=3410`):
+    `exempt` keys the rows whose doubled declaration is admitted as visible debt, and an
+    entry that matches no such row is a problem of its own — a stale exemption inflates the
+    visible debt while excusing nothing.
     """
     problems: list[str] = []
     delivery = payload.get("delivery", {})
     if independent is None:
         independent = read_rework_declarations()
+    if exempt is None:
+        exempt, exempt_problems = load_exemptions()
+        problems.extend(exempt_problems)
 
     declared = delivery.get("close_rows_declaring_rework")
     close_events = delivery.get("close_events", 0)
     buckets = delivery.get("rework_declarations_by_bucket", {}) or {}
     rate = delivery.get("rework_declaration_rate")
 
-    if independent["multi"]:
+    # The exemption arm sits AFTER the deficiency is established, never before it: an
+    # exemption may only excuse a row that genuinely carries the doubled declaration.
+    # Applied first it would excuse a clean row, and the stale-exemption check below could
+    # never see it — the row consumed before it could be judged (the shape the sibling
+    # close-board gate's own probe caught on 2026-10-03).
+    doubled = list(independent["multi"])
+    unexcused = [n for n in doubled if n not in exempt]
+    if unexcused:
         problems.append(
             "close row(s) declare the `rework` field more than once "
-            f"(n={independent['multi']}): the law gives a row one token"
+            f"(n={unexcused}): the law gives a row one token"
         )
+    for n in sorted(exempt):
+        if n not in doubled:
+            problems.append(
+                f"exemption n={n} matches NO close row declaring the `rework` field more "
+                f"than once — a stale exemption excuses nothing while inflating the "
+                f"visible debt ({exempt[n].get('reason')})"
+            )
     if declared != independent["rows_declaring"]:
         problems.append(
             f"the audit prints {declared} close row(s) declaring a disposition, an "
@@ -765,8 +920,82 @@ def test_the_rework_classifier_names_each_form():
     assert not problems, "; ".join(problems)
 
 def test_the_printed_rework_declaration_figure_is_derived_not_stated():
-    problems = rework_declaration_problems(load_audit())
+    # BOTH INVOCATION MODES PRINT THE DEBT (#496 §6.4). The audit invokes this gate in
+    # pytest mode, and pytest never calls `main()` — so the `excused:` lines are printed
+    # here too, and a debt visible only in script mode would be invisible where the audit
+    # actually reads the gate.
+    independent = read_rework_declarations()
+    exempt, exempt_problems = load_exemptions()
+    for line in rework_excused(independent, exempt):
+        print(f"  excused: {line}")
+    problems = list(exempt_problems) + rework_declaration_problems(
+        load_audit(), independent, exempt
+    )
     assert not problems, "; ".join(problems)
+
+def test_the_exemption_surface_admits_only_its_declared_ground():
+    """The surface must BITE, not merely accept (#496, ruling `n=3410` §6.2).
+
+    A rule that has only ever seen good input has not been shown to reject bad input, so
+    every arm below is a shape the surface MUST refuse: a wrong ground, a foreign domain, a
+    missing `reason`/`proof`, a malformed or duplicated entry — and the stale arm, which is
+    what keeps an exemption from outliving the row it was written for.
+    """
+    base = {
+        "n": 3399,
+        "subject": "#495",
+        "domain": AUDIT_RATES_EXEMPT_DOMAIN[0],
+        AUDIT_RATES_EXEMPT_BAR_KEY: AUDIT_RATES_EXEMPT_BAR_VALUE,
+        "reason": "probe",
+        "proof": "probe",
+    }
+
+    def load(entries: list) -> tuple[dict, list[str]]:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "audit-rates-exemptions.json"
+            path.write_text(json.dumps({"exemptions": entries}), encoding="utf-8")
+            return load_exemptions(path)
+
+    got, problems = load([base])
+    assert got.get(3399) and not problems, (got, problems)
+
+    # The GROUND is REQUIRED and refused outside its one lawful value — including the
+    # sibling surface's value, whose ground (truthfulness on a REACHABLE row) does not hold
+    # for this row (§9.12, ruling n=3410 §6.2).
+    for bad in (None, "", "no-truthful-value", "the repair space is empty"):
+        entry = dict(base)
+        if bad is None:
+            entry.pop(AUDIT_RATES_EXEMPT_BAR_KEY)
+        else:
+            entry[AUDIT_RATES_EXEMPT_BAR_KEY] = bad
+        got, problems = load([entry])
+        assert not got and problems, (bad, got, problems)
+
+    for entry in (
+        {**base, "reason": ""},
+        {**base, "proof": ""},
+        {**base, "domain": "the board close happened but was not recorded in the row"},
+        {**base, "n": "3399"},
+        "not-an-object",
+    ):
+        got, problems = load([entry])
+        assert not got and problems, (entry, got, problems)
+
+    # A DUPLICATE is a problem, and the FIRST entry stands: the loader reports the clash
+    # and does not let a second declaration of the same `n` overwrite the one it read.
+    got, problems = load([base, dict(base)])
+    assert any("declared twice" in p for p in problems), (got, problems)
+    assert got.get(3399) == base, got
+
+    # An exemption matching NO doubled row is a PROBLEM, never a silent pass; and an
+    # exempted row is EXCUSED rather than reported as a defect.
+    real = read_rework_declarations()
+    payload = load_audit()
+    stale = rework_declaration_problems(payload, {**real, "multi": []}, {3399: base})
+    assert any("matches NO close row" in p for p in stale), stale
+    live = rework_declaration_problems(payload, real, {3399: base})
+    assert not live, live
+    assert rework_excused(real, {3399: base}), "the live entry printed nothing"
 
 def test_a_doctored_rework_declaration_figure_is_rejected():
     """The reconciliation must reject bad input, not merely accept good input."""
@@ -1099,6 +1328,14 @@ def test_the_definition_gate_rejects_a_narrowed_definition():
 def main() -> int:
     payload = load_audit()
 
+    # The exemption surface (#496, ruling `n=3410` §6.4). Loaded ONCE, here, so the table's
+    # own problems and the `excused:` lines it produces are read from the same bytes the
+    # predicate below is handed. A malformed table is a defect in ANY tree — absent means
+    # "no exemptions", which is the shipped state — so its problems are added before the
+    # population guard rather than inside it.
+    exempt, exempt_problems = load_exemptions()
+    excused: list[str] = []
+
     # The legs that judge a POPULATION this tree may legitimately not have yet (#83).
     # They are guarded TOGETHER because absence propagates through all of them: with no
     # ledger the payload's denominators are zeroed, so `rate_form_problems` would report
@@ -1113,6 +1350,7 @@ def main() -> int:
     problems += outcome_population_problems(payload)
     problems += rework_bucket_problems()
     problems += telemetry_scope_problems()
+    problems += exempt_problems
 
     if not skip:
         # The directory IS present, so the ledger must be READABLE. A CORRUPT ledger is a
@@ -1134,7 +1372,12 @@ def main() -> int:
             try:
                 problems += rate_form_problems(payload)
                 problems += derivation_problems(payload, derive_fail_linkage())
-                problems += rework_declaration_problems(payload)
+                # One read, handed to both the predicate and the printer, so the excused
+                # lines and the excused verdict can never disagree about which rows carry
+                # the doubled declaration (#496).
+                independent_rework = read_rework_declarations()
+                excused = rework_excused(independent_rework, exempt)
+                problems += rework_declaration_problems(payload, independent_rework, exempt)
                 problems += work_unit_definition_problems(payload)
             except FileNotFoundError as exc:
                 # The directory IS present and a file is gone: a live factory that lost its
@@ -1151,6 +1394,11 @@ def main() -> int:
         # Stated, never printed as zeros: a vacuous "0 of 0" reads as a measurement.
         print(f"rate gate OK — population legs SKIPPED: {skip}")
         return 0
+
+    # The declared debt, printed on EVERY run (#496 §6.4): the entry is a visible debt, not
+    # forgiveness, and clean is never the same output as excused.
+    for line in excused:
+        print(f"  excused: {line}")
 
     rows, subjects = ledger_close_counts()
     rw = payload["rework"]
@@ -1185,6 +1433,15 @@ def main() -> int:
         f"{dl['unstated_run_rows']} run and {dl['unstated_close_rows']} close rows state none "
         f"(UNKNOWN, never accepted); {len(dl['invalid_outcome_reports'])} invalid value(s) reported"
     )
+    # The closing line distinguishes CLEAN from EXCUSED (#496 §6.4): a run that excused a
+    # row must never read as a run that found nothing.
+    if excused:
+        print(
+            f"rate gate OK — {len(excused)} doubled declaration(s) EXCUSED by "
+            f"{EXEMPTIONS_PATH.name}: visible debt, and the write path now REFUSES the "
+            f"shape (`tools/ledger.py append`), so no second row of this class can be "
+            f"written at all"
+        )
     return 0
 
 if __name__ == "__main__":

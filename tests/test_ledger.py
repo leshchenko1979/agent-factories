@@ -2848,6 +2848,76 @@ def main() -> int:
                   hashlib.md5(cv_ledger.read_bytes()).hexdigest() == digest_before,
                   digest_before)
 
+    # A DETAIL WHOSE CANONICAL RUN DECLARES THE SAME KEY TWICE IS REFUSED (#496, ruling
+    # n=3410). The read is the SHARED positional predicate (`trailer_tokens` + `token_key`
+    # in `tools/field_predicate.py`) — the same home the gate's own token is composed from,
+    # so the refuser and the detector cannot drift, which is the shape #434's
+    # `board=closed` refusal already has. n=3399 is the one published row of this shape:
+    # its prose ends `… the declaration is rework=none.`, the full stop rides INSIDE the
+    # value, the token carries `=`, and the trailing walk absorbs it into the run beside
+    # the trailer's own `rework=none` — one declaration read as two.
+    #
+    # THE ARMS ARE ORDERED TO SHOW THE READ IS POSITIONAL, exactly as the `claim=` arms
+    # above are: (a) refuses the absorbed-prose shape, (b) admits the SAME row once the
+    # prose's final token carries no `=`, (c) admits a prose MENTION that is not terminal,
+    # and (d) shows the scope is the KEY rather than the event carrying it.
+    with tempfile.TemporaryDirectory() as td:
+        dk_ledger = Path(td) / "doubledkey.jsonl"
+        run(dk_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        dk_head = "d" * 40
+
+        # (a) THE ABSORBED-PROSE SHAPE IS REFUSED — the n=3399 form: the prose's last
+        # token carries `=`, and it is terminal-adjacent to the trailer.
+        before = dk_ledger.read_bytes()
+        r = run(dk_ledger, "append", "--event", "run", "--actor", "worker",
+                "--subject", "#496",
+                "--detail", f"run: the declaration is rework=none. board=closed "
+                            f"head={dk_head} outcome=accepted rework=none")
+        msg = (r.stdout + r.stderr).strip()
+        check("(a) a terminal-adjacent prose token colliding with the trailer is REFUSED",
+              r.returncode != 0, msg[-110:])
+        check("(a) and the refusal NAMES the doubled key", "`rework`" in msg, msg[-300:])
+        check("(a) and it names BOTH tokens carrying the key, so the collision is readable",
+              "rework=none." in msg and "rework=none" in msg, msg[-300:])
+        check("(a2) a refused append wrote NOTHING",
+              dk_ledger.read_bytes() == before, f"{len(before)} bytes before")
+
+        # (b) THE SAME ROW IS ADMITTED once the prose's FINAL token carries no `=`. The
+        # trailer is byte-identical — only the prose differs — so the refusal is caused by
+        # the absorbed token, not by the key's presence in the trailer. This arm is also
+        # what makes the refusal's ADVICE honest: moving the prose "above the trailer"
+        # does NOT help while its last token carries `=`, because the run is maximal and
+        # contiguous. Measured on a detached copy 2026-10-16: that shape still refuses.
+        r = run(dk_ledger, "append", "--event", "run", "--actor", "worker",
+                "--subject", "#496",
+                "--detail", f"run: the declaration is that no rework entry is owed "
+                            f"board=closed head={dk_head} outcome=accepted rework=none")
+        check("(b) the SAME row with a prose final token carrying no `=` is ADMITTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-150:])
+
+        # (c) A PROSE MENTION IS NOT A DECLARATION. The read is POSITIONAL — the maximal
+        # TERMINAL run — so a `key=value` token mid-detail must pass. Without this arm the
+        # refusal could be "fixed" into a whole-detail scan, which is the `#99` class that
+        # put a false population into this lane's own #247 close row (n=1785, corrected
+        # forward-only at n=1790).
+        r = run(dk_ledger, "append", "--event", "run", "--actor", "worker",
+                "--subject", "#496",
+                "--detail", f"run: this row DOCUMENTS the old rework=none. shape here "
+                            f"in prose board=closed head={dk_head} outcome=accepted "
+                            f"rework=none")
+        check("(c) a prose MENTION of `rework=none.` is ADMITTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-150:])
+
+        # (d) EVENT-AGNOSTIC: the hazard is the KEY, not the event carrying it — the same
+        # sentence the `claim=` refusal states. A non-`close` row whose run declares a key
+        # twice is refused too.
+        r = run(dk_ledger, "append", "--event", "run", "--actor", "worker",
+                "--subject", "#496",
+                "--detail", "run: routed. note=one note=two")
+        check("(d) a doubled key on a non-`close` event is REFUSED too (event-agnostic)",
+              r.returncode != 0, (r.stdout + r.stderr).strip()[-110:])
+
     check_lock_is_repo_scoped()
     check_stale_ref_refused()
     check_fail_open_needs_no_remote()
