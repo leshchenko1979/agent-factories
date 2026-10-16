@@ -1808,13 +1808,21 @@ def cmd_amend(argv):
         # The whole point: the question becomes ANSWERABLE again.
         was = question.get("status")
         question["status"] = "open"
-        question.pop("answer", None)
-        # answer_kind must go WITH the answer. Leaving "clarify" (or "text" /
-        # "option") on an OPEN, unanswered question is a record asserting
+        # EVERY field the answer WROTE goes WITH it, or the reopened row asserts
         # something untrue -- the same class this register exists to remove.
-        # Found live 2026-09-25: q14 read status=open, answer=None, but
-        # answer_kind="clarify" after a clarify was amended back open.
-        question.pop("answer_kind", None)
+        # The first half was found live 2026-09-25: q14 read status=open,
+        # answer=None, but answer_kind="clarify" after a clarify was amended
+        # back open. The PROVENANCE half stood until #451 (found live
+        # 2026-10-09): q30 read status=open, answer=None, yet carried
+        # answered_at + answered_via="page" + delivery {outcome: delivered},
+        # and a lane spent a cycle chasing a lost owner answer that was never
+        # lost -- the submission was a Clarify and the amend was correct.
+        # `delivery` is the one with teeth: pending_deliveries() READS it to
+        # decide what to retry, so a surviving `delivered` stamp suppresses the
+        # redelivery of the NEXT answer to the same question.
+        for stale in ("answer", "answer_kind", "answered_at", "answered_via",
+                      "answered_by", "delivery"):
+            question.pop(stale, None)
         question["amend_count"] = int(question.get("amend_count") or 0) + 1
         if flags.get("--by"):
             question["amended_by"] = flags["--by"]
@@ -3903,15 +3911,41 @@ def selftest():
         # (iii) amend must clear answer_kind WITH the answer. Found live: q14
         # read status=open, answer=None, answer_kind="clarify" after a clarify
         # was amended back open -- a durable record asserting something untrue.
+        # #451 widened the same rule to the FOUR PROVENANCE fields the amend
+        # left standing (answered_at / answered_via / answered_by / delivery),
+        # which made an OPEN question read as answered at X via page. The
+        # control is TWO-SIDED: the row must CARRY all six before the amend, or
+        # the assertion below passes on an empty row and tests nothing.
+        _pdir = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        _pdata = json.load(open(_pdir, encoding="utf-8"))
+        for _s in _pdata["sets"]:
+            for _q in _s.get("questions", []):
+                if _q.get("qid") == _cq:
+                    _q["answered_by"] = "test-lane"
+                    _q["delivery"] = {"attempted_at": now_iso(),
+                                      "outcome": "delivered", "http": 200,
+                                      "mode": "turn-end", "attempts": 1}
+        with open(_pdir, "w", encoding="utf-8") as _fh:
+            json.dump(_pdata, _fh)
+        _STALE = ("answer", "answer_kind", "answered_at", "answered_via",
+                  "answered_by", "delivery")
+
+        def _amend_row():
+            return next((q for q in (get_set(set_id) or {}).get("questions", [])
+                         if q.get("qid") == _cq), {})
+
+        _before = _amend_row()
+        ck(all(_before.get(_f) is not None for _f in _STALE),
+           "the fixture CARRIES all six stale fields BEFORE the amend (%r)"
+           % ({_f: _before.get(_f) for _f in _STALE},))
         rc, out, _ = run("amend", "--set", set_id, "--qid", _cq,
                          "--description", "d2")
         ck(rc == 0, "a clarified question can be amended back open (rc=%d)" % rc)
-        _aq = (get_set(set_id) or {}).get("questions", [{}])[-1]
-        ck(_aq.get("status") == "open" and not _aq.get("answer")
-           and not _aq.get("answer_kind"),
-           "\u2026and amend clears answer AND answer_kind together "
-           "(status=%r answer=%r kind=%r)"
-           % (_aq.get("status"), _aq.get("answer"), _aq.get("answer_kind")))
+        _aq = _amend_row()
+        _left = [_f for _f in _STALE if _f in _aq]
+        ck(_aq.get("status") == "open" and not _left,
+           "\u2026and amend clears the answer AND its provenance together "
+           "(status=%r left=%r)" % (_aq.get("status"), _left))
 
         # -- 5c. withdraw — the moot-question exit (HQ 2026-09-25) -----------
         # "withdrawn" was in CLOSED_STATUSES and named by the law, but nothing
@@ -4753,8 +4787,11 @@ def selftest():
         ck(question["title"] == "Rewritten?" and question["options"] == ["x", "y"]
            and question["recommended"] == 1,
            "amend applied title, options and recommendation together")
-        ck("answer" not in question,
-           "amend CLEARS the stale answer, so the reopened question is clean")
+        ck(not [f for f in ("answer", "answer_kind", "answered_at",
+                             "answered_via", "answered_by", "delivery")
+                if f in question],
+           "amend CLEARS the stale answer AND its provenance, so the reopened "
+           "question is clean")
         rc, out, _ = run("answer", am_set, "q1", "1")
         ck(rc == 0 and "y" in out,
            "the amended question is answerable and records the new option")
