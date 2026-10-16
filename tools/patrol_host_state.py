@@ -2868,6 +2868,116 @@ def receipt_round(last_run_at: str) -> str | None:
         return None
     return text[:10]
 
+def round_fire_instants(job: dict, fires: list[dict], round_date: str,
+                        parse) -> list[dt.datetime]:
+    """This job's fires that fall on `round_date`, oldest first — the round's OWN population.
+
+    THE ROUND IS A DAY and a sub-daily job fires SEVERAL times inside it, so the round's
+    receipt question is per FIRE: a day carrying four fires and three receipts has one round
+    unaccounted, and `last_run_at` alone can never show it (#499, ruling n=3446). The fires
+    come from `cron_job_runs` through `duty_fire_instants`, so a fire this reader cannot date
+    contributes no round rather than a composed one.
+    """
+    return [inst for inst in duty_fire_instants(job, fires, parse)
+            if inst.strftime("%Y-%m-%d") == round_date]
+
+def fire_receipt_token(stem: str, round_date: str, fire_iso: str) -> str:
+    """The subject token a receipt for THIS fire carries — `<stem>-<date>T<HH>`.
+
+    The hour is the FIRE's own hour, which is the key the box's pacemakers actually write
+    (`hq-cycle-2026-10-16T06`). A lane that keys its COMPLETION hour instead writes a token
+    that answers no fire — measured at 10-06, where the 06:50 fire left a `T09` row and the
+    round read clean — and that is exactly the miss this predicate exists to name.
+    """
+    text = str(fire_iso or "")
+    return f"{stem}-{round_date}T{text[11:13]}" if len(text) >= 13 else ""
+
+def receipt_hour_token(subject: str, stem: str, round_date: str) -> str | None:
+    """The `T<HH>` hour a round receipt carries, or None when it is ROUND-LEVEL.
+
+    THE HOUR IS THE WRITER'S TO CHOOSE, exactly as the date decoration is (#159): the box
+    runs TWO conventions and both are lawful. `hq-cycle-2026-10-16T06` is HOUR-KEYED — a
+    sub-daily pacemaker writing one receipt per fire — while `insights-2026-10-16` is
+    ROUND-LEVEL, a daily job writing one receipt for its single round. A reader that
+    demanded an hour from every receipt would charge the round-level jobs a receipt per
+    fire they never promised, which is the false-RED class the ruling warns about (#146);
+    measured live at 2026-10-16T21:0xZ, that mistake turned `factory-insights-weekly`,
+    `factory-template-weekly` and `factory-growth-map-biweekly` RED on rounds that had
+    receipted correctly.
+    """
+    prefix = f"{stem}-{round_date}"
+    text = str(subject or "")
+    if not text.startswith(prefix):
+        return None
+    rest = text[len(prefix):]
+    if rest[:1] != "T" or not rest[1:3].isdigit() or rest[3:4].isdigit():
+        return None
+    return rest[:3]
+
+def receipt_is_hour_keyed(subject: str, stem: str, round_date: str) -> bool:
+    """Does this receipt's subject KEY AN HOUR — valid or not?
+
+    The distinction that keeps the round-level exemption honest. A subject carrying `T` plus
+    digits declares the HOUR-KEYED convention whether or not its hour answers a fire, so
+    `registry-attest-2026-09-25T070` is a malformed hour token and NOT a round-level
+    receipt: reading it as round-level would let one mistyped row exempt every fire in the
+    round, turning the 10-06 miss CLEAN again. Only a subject that stops at the date is
+    round-level.
+    """
+    prefix = f"{stem}-{round_date}"
+    text = str(subject or "")
+    if not text.startswith(prefix):
+        return False
+    rest = text[len(prefix):]
+    return rest[:1] == "T" and rest[1:].isdigit()
+
+def unanswered_fires(round_fires: list[str], stem: str, round_date: str,
+                     receipts: list[dict], *, residual_secs: float | None = None,
+                     read_instant: dt.datetime | None = None, parse=None) -> list[str]:
+    """The round's fires that NO receipt answers — each named by its OWN instant.
+
+    THE ROUND'S OWN CONVENTION DECIDES, and that is what keeps this from being a false RED.
+    The hour tokens present among the round's receipts are read first:
+
+    - **No hour key at all** — the round is ROUND-LEVEL and its receipt answers the round.
+      Every fire is answered, so nothing is charged. This is the honest reading: a
+      date-only subject declares one round, and how many receipts such a round "should"
+      carry is not something the subject says.
+    - **An hour key present** — the round IS hour-keyed, so each fire owns one, and a fire
+      whose hour no receipt carries is UNANSWERED. `hq-cycle-2026-10-16T06` answers the
+      06:50 fire and nothing else. A MALFORMED hour key (`T070`) still declares the
+      convention, so it exempts nothing — one mistyped row must not silence the round.
+    - **No receipts at all** — nothing declares anything, so every fire past its residual is
+      unanswered. The caller reaches here only when the round HAS receipts, so this arm is
+      the helper's own contract rather than a live path.
+
+    Boundary-checked so `T06` is not satisfied by `T060`. A fire still inside the job's own
+    residual is NOT counted: the trigger fired and its lane has not finished, which is the
+    same in-flight window the round-level judgement honours (#200/#449) — charging a
+    receipt for a round still running would trade this leg's false CLEAN for a false RED.
+    """
+    subjects = [str(r.get("subject") or "") for r in receipts]
+    hours = {tok for tok in (receipt_hour_token(s, stem, round_date) for s in subjects)
+             if tok is not None}
+    if receipts and not any(receipt_is_hour_keyed(s, stem, round_date) for s in subjects):
+        return []
+    out: list[str] = []
+    for fire in round_fires:
+        if residual_secs is not None and read_instant is not None and parse is not None:
+            try:
+                age = (read_instant - parse(fire)).total_seconds()
+            except (ValueError, TypeError):
+                age = None
+            if age is not None and 0 <= age < residual_secs:
+                continue
+        token = fire_receipt_token(stem, round_date, fire)
+        if not token:
+            continue
+        if token[-3:] in hours:
+            continue
+        out.append(fire)
+    return out
+
 def attestation_state(store: Path = FRAGMENT_STORE) -> tuple[dict, str | None]:
     """(fragment -> attested_at, not-read reason) — RESULTING STATE, never a receipt.
 
@@ -3801,7 +3911,10 @@ def duty_fallback_note(problems: list[str], fallback_from: str | None,
 
 def duty_round_finding(*, name: str, job_id: str, stem: str, round_date: str, fired: str,
                        ledger_rows: list[dict], predicate,
-                       fallback_from: str | None = None, schedule_text: str = "") -> dict:
+                       fallback_from: str | None = None, schedule_text: str = "",
+                       round_fires: list[str] | None = None,
+                       residual_secs: float | None = None,
+                       read_instant: dt.datetime | None = None) -> dict:
     """Judge ONE round of one job — the rows matching its subject, and what they DECLARE.
 
     Split out of the leg's loop for #281 (ruling n=2003) so a round can be judged from a
@@ -3875,6 +3988,39 @@ def duty_round_finding(*, name: str, job_id: str, stem: str, round_date: str, fi
             )
         return {**finding, "problems": duty_fallback_note(
             finding["problems"], fallback_from, schedule_text)}
+    # THE ROUND'S FIRES, EACH OWING A RECEIPT (#499, ruling n=3446). The round is a DAY and
+    # a sub-daily job fires SEVERAL times inside it, so the `if not receipts` test above —
+    # AT LEAST ONE — let a day carrying four fires and three receipts read exactly like a
+    # day carrying one and one. `last_run_at` cannot show the difference either: it records
+    # the NEWEST fire, so the earlier ones leave no trace in any field the leg read.
+    #
+    # The day prefix STAYS for DECLARATION (#159 is not reverted): a lane still writes one
+    # receipt per round and the round-level predicates below are untouched. What is added is
+    # JUDGEMENT, keyed on the FIRE: the receipts are bucketed by the token each fire owns
+    # and the fires no receipt answers are NAMED with their own instants.
+    #
+    # THE FALSE-RED GUARD IS THE RESIDUAL (#146, #200/#449). A fire younger than the job's
+    # own residual has a lane still working on it — the trigger fired and the work is IN
+    # FLIGHT, which is the same window the round-level judgement already honours. Charging a
+    # receipt for it would trade this leg's false CLEAN for a false RED, and the ruling
+    # names that class explicitly. So `unanswered_fires` skips them.
+    if round_fires:
+        finding["judged"]["fires"] = len(round_fires)
+        missing = unanswered_fires(
+            round_fires, stem, round_date, receipts,
+            residual_secs=residual_secs, read_instant=read_instant, parse=reader_parse_ts,
+        )
+        finding["judged"]["fires_unanswered"] = len(missing)
+        if missing:
+            named = "; ".join(missing)
+            finding["problems"].append(
+                f"{name} (cron id {job_id}): the round {round_date} FIRED "
+                f"{len(round_fires)} time(s) and {len(missing)} of those fires left NO "
+                f"receipt — {named}. {len(receipts)} receipt(s) match the round and none "
+                f"carries the token for those fires, so the day is UNDER-RECEIPTED: the "
+                f"job ran, its lane did not report, and a round judged on the newest fire "
+                f"alone reads clean while the earlier one did nothing"
+            )
     # THE ROUND'S NEWEST DECLARATION GOVERNS (#217). A round can fail at T and complete
     # at T+n — the reporting lane measured exactly that on round 2026-09-28, where a
     # `duty=failed` row at 5-of-6 was cleared by a later `duty=completed` row and the
@@ -3982,6 +4128,13 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     # and "judged nothing at all" are different facts about the box.
     rounds_judged_by_fallback = 0
     rounds_prior_unreadable = 0
+    # #499's two counters, and they are SEPARATE because they answer different questions: a
+    # round carrying four fires and three receipts is ONE round under-receipted, and the
+    # reader who must act on it needs both the count of rounds and the count of fires left
+    # unanswered -- a single number would report either the rounds as fires or the fires as
+    # rounds. Both print on a clean round as an explicit `0`, never as a missing key.
+    rounds_under_receipted = 0
+    fires_unanswered = 0
     # #477's counter. A round whose OWN trigger gate suppressed it owes no receipt at all,
     # and the excuse must be VISIBLE rather than a silent skip: a leg that quietly drops the
     # round trades a false RED for a false CLEAN, which is the #160 class this leg's other
@@ -4041,6 +4194,14 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             continue
         if bound_refusal:
             continue
+        # THE ROUND'S OWN FIRES (#499), read from the daemon's table through the SAME reader
+        # the residual above uses -- one population, one reader, so the comparison this feeds
+        # cannot disagree with the window it is judged against. A day is a round and a
+        # sub-daily job fires several times inside it; these are the fires that owe receipts.
+        round_fires = [
+            inst.strftime("%Y-%m-%dT%H:%M:%SZ")
+            for inst in round_fire_instants(row, fires or [], round_date, reader_parse_ts)
+        ]
         try:
             fired_instant = reader_parse_ts(fired)
         except (ValueError, TypeError):
@@ -4160,27 +4321,43 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                     f"both inside one window leave this job with no round to judge"
                 )
                 continue
+            prior_round_fires = [
+                inst.strftime("%Y-%m-%dT%H:%M:%SZ")
+                for inst in round_fire_instants(row, fires or [], prior_date, reader_parse_ts)
+            ]
             rounds_judged_by_fallback += 1
             finding = duty_round_finding(
                 name=name, job_id=job_id, stem=stem, round_date=prior_date,
                 fired=prior_fired, ledger_rows=ledger_rows, predicate=predicate,
                 fallback_from=round_date, schedule_text=job_schedule_text(row),
+                round_fires=prior_round_fires, residual_secs=residual_secs,
+                read_instant=residual_now,
             )
             judged.append(finding["judged"])
             problems.extend(finding["problems"])
             excused.extend(finding["excused"])
             rounds_superseded += finding["superseded"]
             receipts_malformed += finding["malformed"]
+            _missing = finding["judged"].get("fires_unanswered", 0)
+            fires_unanswered += _missing
+            if _missing:
+                rounds_under_receipted += 1
             continue
         finding = duty_round_finding(
             name=name, job_id=job_id, stem=stem, round_date=round_date, fired=fired,
             ledger_rows=ledger_rows, predicate=predicate,
+            round_fires=round_fires, residual_secs=residual_secs,
+            read_instant=residual_now,
         )
         judged.append(finding["judged"])
         problems.extend(finding["problems"])
         excused.extend(finding["excused"])
         rounds_superseded += finding["superseded"]
         receipts_malformed += finding["malformed"]
+        _missing = finding["judged"].get("fires_unanswered", 0)
+        fires_unanswered += _missing
+        if _missing:
+            rounds_under_receipted += 1
 
     state, state_reason = attestation_state(store)
     return {
@@ -4237,6 +4414,11 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             # round unjudged, and a reader who cannot tell them apart cannot act on either.
             "rounds_judged_by_fallback": rounds_judged_by_fallback,
             "rounds_prior_unreadable": rounds_prior_unreadable,
+            # #499: the fires that owed a receipt and found none. The round itself is NAMED
+            # through `problems`, each fire with its own instant -- a count without the
+            # instance is a problem the operator cannot act on.
+            "rounds_under_receipted": rounds_under_receipted,
+            "fires_unanswered": fires_unanswered,
             # #477: the rounds a trigger gate suppressed. The count rides here and the round
             # itself is NAMED through `excused`, like every other excuse this leg writes --
             # a count without the instance is a problem the operator cannot act on.
@@ -7768,6 +7950,21 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"PRIOR fire's round, because the newest round of that job was still in "
                     f"flight — NAMED above, and the round judged is the one the PREVIOUS "
                     f"fire woke"
+                )
+            # #499: the fires/receipts comparison, PRINTED on a clean round as an explicit
+            # zero -- a round that fired once and was receipted once reads `1 of 1`, and a
+            # reader who sees no line at all cannot tell that from a leg that never counted.
+            if cov.get("rounds_under_receipted"):
+                lines.append(
+                    f"    {cov['rounds_under_receipted']} round(s) are UNDER-RECEIPTED: "
+                    f"{cov['fires_unanswered']} fire(s) owed a receipt and found none, each "
+                    f"NAMED with its own instant above — the job RAN and its lane did not "
+                    f"report"
+                )
+            else:
+                lines.append(
+                    f"    fires vs receipts: 0 fire(s) left unanswered across every judged "
+                    f"round — each fire on a judged round carried a receipt token"
                 )
             if cov.get("rounds_prior_unreadable"):
                 lines.append(

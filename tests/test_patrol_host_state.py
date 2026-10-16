@@ -4321,6 +4321,209 @@ def test_the_leg_prints_the_bound_beside_the_population_it_judged() -> None:
 
 _SKIPS: list[str] = []
 
+# --- #499: the round's FIRES against its RECEIPTS (ruling n=3446) ------------------
+# The round is a DAY and a sub-daily job fires several times inside it, so a leg that
+# asked only "is there at least ONE receipt for this date?" certified a day that fired
+# four times and reported three. `factory-hq-pacemaker` is the live instance: it fired
+# four times on 2026-10-06/10-14/10-16 and the leg printed "problems: 0" each day, because
+# one of the four receipts satisfied the whole round.
+#
+# THE FIRES ARE ON THE SAME DATE, hours apart, and `last_run_at` names the NEWEST one —
+# the shape the live table has. The receipts are keyed by the FIRE's hour, which is the
+# token the box's pacemakers write; a lane that keys its COMPLETION hour writes a row
+# that answers no fire, and that is the 10-06 miss reproduced exactly.
+_499_FIRE_HOURS = (0.5, 4.5, 8.5, 12.5)  # 07:31 / 11:31 / 15:31 / 19:31 on the round date
+_499_ROUND = _plus(_DUTY_BOUND, 0.5)[:10]
+# THE READ INSTANT IS FAR PAST THE WINDOW, and it has to be: #449 pairs EVERY fire of the
+# round to that round's NEWEST receipt, so a job firing four times a day derives a residual
+# of `margin x (last receipt - first fire)` -- here ~33 h, longer than its own 4 h cadence
+# (`over_cadence`, reported and never clamped). A probe reading minutes after the fires
+# would sit inside that window and be excused by it, which is the leg working correctly and
+# the fixture testing nothing. Reading a week out puts every fire past the residual, so what
+# the arm does with an ANSWERED and an UNANSWERED fire is what the probes actually measure.
+_499_READ_AT = _plus(_DUTY_BOUND, 200.0)
+
+def _499_row(**kw) -> dict:
+    """The duty row whose newest fire is the LAST of the four — the round is their date."""
+    kw.setdefault("last_run_at", _plus(_DUTY_BOUND, _499_FIRE_HOURS[-1]))
+    return _duty_row(**kw)
+
+def _499_receipt(hour: float, n: int, *, token_hour: str | None = None) -> dict:
+    """A receipt for the fire at `hour`, or — when `token_hour` is given — one that keys a
+    DIFFERENT hour, which is a row that declares a duty and answers no fire."""
+    fire = _plus(_DUTY_BOUND, hour)
+    token = token_hour if token_hour is not None else fire[11:13]
+    return {"n": n, "ts": _plus(_DUTY_BOUND, hour + 0.25), "event": "run",
+            "actor": "delegate", "subject": f"registry-attest-{_499_ROUND}T{token}",
+            "detail": "the round completed. duty=completed"}
+
+def _499_leg(receipt_hours, *, fires=None, read_at=_499_READ_AT, **kw) -> dict:
+    return _duty_leg(
+        [_499_row()], list(receipt_hours),
+        fires=_fires(fires if fires is not None else _499_FIRE_HOURS),
+        read_at=read_at, **kw)
+
+def test_the_fires_arm_REDs_a_round_that_fired_more_often_than_it_reported() -> None:
+    """Acceptance 1: four fires, three receipts — the day is UNDER-RECEIPTED and the fire
+    that answered nothing is NAMED by its own instant.
+
+    This is the exact state that read CLEAN before the arm existed: one receipt satisfied
+    `if not receipts`, and `last_run_at` records only the newest fire, so the three earlier
+    ones left no trace in any field the leg read.
+    """
+    leg = _499_leg([_499_receipt(h, i + 1) for i, h in enumerate(_499_FIRE_HOURS[:3])])
+    assert leg["status"] == "ASSERTED", leg["reason"]
+    cov = leg["coverage"]
+    assert cov["fires_unanswered"] == 1, cov
+    assert cov["rounds_under_receipted"] == 1, cov
+    named = "\n".join(leg["problems"])
+    assert "UNDER-RECEIPTED" in named, named
+    assert _plus(_DUTY_BOUND, _499_FIRE_HOURS[-1]) in named, (
+        f"the finding must NAME the fire that found no receipt: {named}")
+    assert cov["duties_judged"][0]["fires"] == 4, cov["duties_judged"]
+    assert cov["duties_judged"][0]["fires_unanswered"] == 1, cov["duties_judged"]
+
+def test_the_fires_arm_is_CLEAN_when_every_fire_answered() -> None:
+    """The CONTROL for the probe above: the SAME fixture with the fourth receipt present.
+
+    Without it the RED above is attributable to the fixture rather than to the missing
+    receipt — a finding that survives its own input being fixed is not a finding.
+    """
+    leg = _499_leg([_499_receipt(h, i + 1) for i, h in enumerate(_499_FIRE_HOURS)])
+    cov = leg["coverage"]
+    assert cov["fires_unanswered"] == 0, (cov, leg["problems"])
+    assert cov["rounds_under_receipted"] == 0, cov
+    assert not leg["problems"], leg["problems"]
+
+def test_the_fires_arm_REDs_a_receipt_that_keys_its_COMPLETION_hour() -> None:
+    """The 10-06 miss, reproduced: the fire is at 06:50 and the lane wrote a `T09` row.
+
+    ONE fire, ONE receipt, and the round matched — so every predicate this leg had before
+    the arm read CLEAN. The token answers no fire, so the day is unreported and the arm
+    says so. This is the clause that makes the predicate a CONTENT comparison rather than
+    a count: a row existing is not a row answering.
+    """
+    leg = _499_leg([_499_receipt(0.5, 1, token_hour="09")], fires=(0.5,))
+    cov = leg["coverage"]
+    assert cov["fires_unanswered"] == 1, (cov, leg["problems"])
+    assert "UNDER-RECEIPTED" in "\n".join(leg["problems"]), leg["problems"]
+    assert cov["duties_missing"] == 0, (
+        "the round DID declare a duty — this is the under-receipted class, not a missing "
+        f"duty, and folding them together would misreport the repair: {cov}")
+
+def test_the_fires_arm_does_not_charge_a_ROUND_LEVEL_receipt() -> None:
+    """The LIVE false RED of 2026-10-16, reproduced: a DATE-ONLY receipt on a 4-fire day.
+
+    `factory-insights-weekly` fired four times and wrote `insights-2026-10-16` — no `T<HH>`
+    anywhere, because a round-level job writes ONE receipt for its round. An earlier form of
+    this predicate demanded an hour token from every receipt and charged all four fires, so
+    three correctly-receipted jobs on the live box read UNDER-RECEIPTED (#146's false-RED
+    class, found only by driving the real ledger). The hour is the WRITER's convention to
+    choose (#159): where a round's receipts carry no hour at all, the round IS the unit and
+    its receipt answers every fire in it.
+    """
+    date_only = {"n": 1, "ts": _plus(_DUTY_BOUND, 0.75), "event": "run", "actor": "delegate",
+                 "subject": f"registry-attest-{_499_ROUND}",
+                 "detail": "the round completed. duty=completed"}
+    leg = _499_leg([date_only])
+    cov = leg["coverage"]
+    assert cov["fires_unanswered"] == 0, (cov, leg["problems"])
+    assert cov["rounds_under_receipted"] == 0, cov
+    assert not leg["problems"], (
+        "a round-level receipt declares the round; charging it per-fire is the false RED: "
+        f"{leg['problems']}")
+
+def test_the_fires_arm_still_REDs_when_an_HOUR_keyed_round_skips_one() -> None:
+    """The CONTROL for the probe above — and the guard against over-correcting into a false
+    CLEAN.
+
+    The exemption must key on the ROUND's convention, not on a receipt merely lacking an
+    hour: here the round writes hours for 3 of its 4 fires, so the convention IS hour-keyed
+    and the fourth fire is genuinely unanswered. A predicate that accepted any date-only
+    token would read this CLEAN — and would then also read the 10-06 `T09` miss clean the
+    moment one receipt dropped its hour.
+    """
+    receipts = [_499_receipt(h, i + 1) for i, h in enumerate(_499_FIRE_HOURS[:3])]
+    receipts.append({"n": 9, "ts": _plus(_DUTY_BOUND, 1.0), "event": "run",
+                     "actor": "delegate", "subject": f"registry-attest-{_499_ROUND}",
+                     "detail": "the round completed. duty=completed"})
+    leg = _499_leg(receipts)
+    cov = leg["coverage"]
+    assert cov["fires_unanswered"] == 1, (
+        "an hour-keyed round that also carries a bare date token still owes its fourth "
+        f"fire a receipt: {cov}")
+    assert _plus(_DUTY_BOUND, _499_FIRE_HOURS[-1]) in "\n".join(leg["problems"])
+
+def test_the_fires_arm_counts_only_the_round_it_judges() -> None:
+    """A fire on ANOTHER date contributes no round to this one.
+
+    `round_fire_instants` filters by the round's own date, so a job that fired yesterday
+    and today is judged per day. Without the filter the older fires would be charged to
+    today's receipts and every round would read under-receipted.
+    """
+    fires = (_499_FIRE_HOURS[0], _499_FIRE_HOURS[0] - 24.0)  # one today, one yesterday
+    leg = _499_leg([_499_receipt(_499_FIRE_HOURS[0], 1)], fires=fires)
+    cov = leg["coverage"]
+    assert cov["duties_judged"][0]["fires"] == 1, (
+        f"only the round's OWN date may be counted: {cov['duties_judged']}")
+    assert cov["fires_unanswered"] == 0, (cov, leg["problems"])
+
+def test_the_fires_arm_does_not_charge_a_fire_still_inside_its_residual() -> None:
+    """The false-RED guard (#146, #200/#449): a fire younger than the job's residual has a
+    lane still working on it, and charging it a receipt would trade a false CLEAN for a
+    false RED.
+
+    Driven at the helper, where the window is stated rather than derived, so the guard is
+    tested as a predicate and not as a side effect of the fixture's timing.
+    """
+    fire = _plus(_DUTY_BOUND, 0.5)
+    read = RUNNER.reader_parse_ts(_plus(_DUTY_BOUND, 0.6))  # 6 minutes after the fire
+    assert RUNNER.unanswered_fires(
+        [fire], "registry-attest", _499_ROUND, [], residual_secs=3600.0,
+        read_instant=read, parse=RUNNER.reader_parse_ts) == [], (
+        "a fire inside its residual is IN FLIGHT and owes no receipt yet")
+    assert RUNNER.unanswered_fires(
+        [fire], "registry-attest", _499_ROUND, [], residual_secs=60.0,
+        read_instant=read, parse=RUNNER.reader_parse_ts) == [fire], (
+        "past the residual the same fire IS owed a receipt")
+
+def test_the_fires_arm_token_is_BOUNDARY_checked() -> None:
+    """`T06` is not satisfied by `T060` — the same boundary guard the round prefix keeps.
+
+    A bare `startswith` would let a receipt for a DIFFERENT hour certify this fire, which
+    is a false CLEAN wearing a match.
+    """
+    fire = _plus(_DUTY_BOUND, 0.5)  # 07:31, token T07
+    exact = {"subject": f"registry-attest-{_499_ROUND}T07"}
+    wider = {"subject": f"registry-attest-{_499_ROUND}T070"}
+    assert RUNNER.unanswered_fires([fire], "registry-attest", _499_ROUND, [exact]) == []
+    assert RUNNER.unanswered_fires([fire], "registry-attest", _499_ROUND, [wider]) == [fire], (
+        "a token that merely extends the hour's digits answers a DIFFERENT fire")
+
+def test_the_fires_arm_prints_its_population_on_a_CLEAN_round() -> None:
+    """#242: a clean round states what it counted. A reader who sees no line cannot tell
+    `0 fires unanswered` from `the leg never counted fires` — and a leg that silently
+    examines nothing renders exactly like one that examined everything and found nothing.
+    """
+    rc, out, err = _run(
+        [], [_499_receipt(0.5, 1)], cron_rows=[_duty_row()], prefixes=["factory-"],
+        cron_fires=_fires((0.5,)))
+    assert "LEG duty-receipt" in out, out[-3000:]
+    assert "fires vs receipts:" in out, out[-4000:]
+    assert "0 fire(s) left unanswered" in out, out[-4000:]
+    assert "UNDER-RECEIPTED" not in out, out[-4000:]
+
+def test_the_fires_arm_renders_the_UNDER_RECEIPTED_round_it_found() -> None:
+    """The other render branch, driven through `main()`: the fires/receipts line must reach
+    the report rather than being computed and dropped (#242's swallow).
+    """
+    rc, out, err = _run(
+        [], [_499_receipt(h, i + 1) for i, h in enumerate(_499_FIRE_HOURS[:3])],
+        cron_rows=[_499_row()], prefixes=["factory-"],
+        cron_fires=_fires(_499_FIRE_HOURS))
+    assert "fires vs receipts:" in out or "UNDER-RECEIPTED" in out, out[-4000:]
+
+
 
 def _declared_skip(what: str, reason: str) -> None:
     """`ledger_boundary.py`'s third outcome: nothing to judge, stated, exit 0.
