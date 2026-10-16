@@ -1615,7 +1615,7 @@ def cmd_append(args: argparse.Namespace) -> int:
                 f"repeatable, and the row's own `subject` field already carries it (#249)."
             )
         # A DETAIL WHOSE CANONICAL RUN DECLARES THE SAME KEY TWICE IS REFUSED (#496,
-        # ruling n=3410). The run is read POSITIONALLY — the maximal trailing sequence of
+        # ruling n=3412). The run is read POSITIONALLY — the maximal trailing sequence of
         # `=`-carrying tokens — because `detail` is free prose that QUOTES trailers as
         # evidence, and a whole-detail scan would take a quotation for a declaration.
         #
@@ -1687,7 +1687,7 @@ def cmd_append(args: argparse.Namespace) -> int:
                 "last token carries `=`: the trailing walk absorbs it into the run, where "
                 "it collides with the trailer's own declaration — n=3399's detail ends "
                 "`… the declaration is rework=none.` beside a trailer carrying "
-                "`rework=none` (#496, ruling n=3410). The remedy is to keep the key OUT "
+                "`rework=none` (#496, ruling n=3412). The remedy is to keep the key OUT "
                 "of the prose: a declaration key belongs to the row's trailer alone, so "
                 "reword the sentence so its final token carries no `=` (or separate it "
                 "from the trailer with a plain word). Moving the prose ABOVE the trailer "

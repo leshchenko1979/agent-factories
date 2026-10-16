@@ -81,11 +81,11 @@ not been shown to reject bad input.
     excused by it — printed as an `excused:` line on EVERY run in BOTH invocation modes,
     with the closing line distinguishing clean from excused. The surface declares its
     GROUND (`bar`) with ONE lawful value and REFUSES every other, so a ground that does not
-    hold is unexpressible rather than merely discouraged (`docs/instruments/ledger.md`
-    §9.12); an entry that matches NO doubled row is an ERROR, never a silent pass, because a
+    hold is unexpressible rather than merely discouraged (`docs/instruments/ledger.md` §9.12);
+    an entry that matches NO doubled row is an ERROR, never a silent pass, because a
     stale exemption inflates the visible debt while excusing nothing. The remedy for the
     CLASS is the write-path refusal in `tools/ledger.py append`, and it lands in the SAME
-    commit — prevention and repair are not alternatives (issue #496, ruling `n=3410`; the
+    commit — prevention and repair are not alternatives (issue #496, ruling `n=3412`; the
     #144 ruling, `n=936`; the `n=405` precedent as applied at `n=2844`).
 
 Run:  python3 -m pytest tests/test_audit_rates.py -q
@@ -156,7 +156,7 @@ SUBJECT_NONE = "none"
 SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
 
 # ---------------------------------------------------------------------------------------
-# THE EXEMPTION SURFACE (issue #496, ruling `n=3410` §6.2). FACTORY DATA, never source:
+# THE EXEMPTION SURFACE (issue #496, ruling `n=3412` PART 6, item 2). FACTORY DATA, never source:
 # this file is paired byte-identically with `TEMPLATE/tests/test_audit_rates.py`, so a
 # factory's own row number must not live in a file that ships to every new factory.
 #
@@ -169,7 +169,7 @@ SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
 # written, and neither closes #496 alone (`n=936`: prevention and repair are not
 # alternatives).
 #
-# THE GROUND, stated truthfully (§9.12). The close-board surface declares
+# THE GROUND, stated truthfully (`docs/instruments/ledger.md` §9.12). The close-board surface declares
 # `bar=no-truthful-value` because ITS rows are REACHABLE — its own recorded probe returns
 # rc=0 — and only the truthfulness of the value bars them; its note says so in as many
 # words ("a TRUTHFULNESS bar, never a claim of unreachability"). THAT GROUND DOES NOT HOLD
@@ -179,10 +179,11 @@ SUBJECT_WORK_UNIT_RE = re.compile(r"#\d+")
 # therefore barred BY CONSTRUCTION — the recorded probe returns rc=1 and the row reads back
 # byte-identical — which is the bar this surface declares, and the only value it admits.
 # The mismatch with the sibling surface is STATED rather than papered over by reusing a
-# ground that does not hold (ruling `n=3410` §6.2). §9.3's barred phrase — the claim that
-# "no lawful path restores the token", a MECHANICAL claim of absence the close-board probe
-# FALSIFIED — is not restated here: what is declared is the measured outcome of THIS row's
-# own repair probe, and the entry's `proof` carries it.
+# ground that does not hold (ruling `n=3412` PART 6, item 2). The barred phrase at
+# `docs/instruments/ledger.md` §9.3 — the claim that "no lawful path restores the token",
+# a MECHANICAL claim of absence the close-board probe FALSIFIED — is not restated here:
+# what is declared is the measured outcome of THIS row's own repair probe, and the entry's
+# `proof` carries it.
 EXEMPTIONS_PATH = REPO / "docs" / "audit-rates-exemptions.json"
 AUDIT_RATES_EXEMPT_DOMAIN = (
     "the close row's canonical run declares its `rework` disposition twice",
@@ -235,7 +236,8 @@ def load_exemptions(path: Path | None = None) -> tuple[dict[int, dict], list[str
                 f"declared domain {AUDIT_RATES_EXEMPT_DOMAIN}"
             )
             continue
-        # The GROUND, required and refused outside its one lawful value (§9.12). This is
+        # The GROUND, required and refused outside its one lawful value
+        # (`docs/instruments/ledger.md` §9.12). This is
         # the arm that makes a ground that does NOT hold unexpressible rather than merely
         # discouraged, and an entry that states NO ground is refused rather than defaulted
         # — a missing bar is the vacuous-pass shape this gate exists to catch, one level up.
@@ -845,7 +847,7 @@ def rework_declaration_problems(
     population a second implementation measures on the same ledger, or it reports a
     number nobody can re-derive.
 
-    The MULTIPLICITY leg is the one a declared exemption may reach (#496, ruling `n=3410`):
+    The MULTIPLICITY leg is the one a declared exemption may reach (#496, ruling `n=3412`):
     `exempt` keys the rows whose doubled declaration is admitted as visible debt, and an
     entry that matches no such row is a problem of its own — a stale exemption inflates the
     visible debt while excusing nothing.
@@ -920,7 +922,7 @@ def test_the_rework_classifier_names_each_form():
     assert not problems, "; ".join(problems)
 
 def test_the_printed_rework_declaration_figure_is_derived_not_stated():
-    # BOTH INVOCATION MODES PRINT THE DEBT (#496 §6.4). The audit invokes this gate in
+    # BOTH INVOCATION MODES PRINT THE DEBT (#496, ruling `n=3412` PART 6, item 4). The audit invokes this gate in
     # pytest mode, and pytest never calls `main()` — so the `excused:` lines are printed
     # here too, and a debt visible only in script mode would be invisible where the audit
     # actually reads the gate.
@@ -934,7 +936,7 @@ def test_the_printed_rework_declaration_figure_is_derived_not_stated():
     assert not problems, "; ".join(problems)
 
 def test_the_exemption_surface_admits_only_its_declared_ground():
-    """The surface must BITE, not merely accept (#496, ruling `n=3410` §6.2).
+    """The surface must BITE, not merely accept (#496, ruling `n=3412` PART 6, item 2).
 
     A rule that has only ever seen good input has not been shown to reject bad input, so
     every arm below is a shape the surface MUST refuse: a wrong ground, a foreign domain, a
@@ -961,7 +963,7 @@ def test_the_exemption_surface_admits_only_its_declared_ground():
 
     # The GROUND is REQUIRED and refused outside its one lawful value — including the
     # sibling surface's value, whose ground (truthfulness on a REACHABLE row) does not hold
-    # for this row (§9.12, ruling n=3410 §6.2).
+    # for this row (`docs/instruments/ledger.md` §9.12, ruling n=3412 PART 6, item 2).
     for bad in (None, "", "no-truthful-value", "the repair space is empty"):
         entry = dict(base)
         if bad is None:
@@ -1328,7 +1330,7 @@ def test_the_definition_gate_rejects_a_narrowed_definition():
 def main() -> int:
     payload = load_audit()
 
-    # The exemption surface (#496, ruling `n=3410` §6.4). Loaded ONCE, here, so the table's
+    # The exemption surface (#496, ruling `n=3412` PART 6, item 4). Loaded ONCE, here, so the table's
     # own problems and the `excused:` lines it produces are read from the same bytes the
     # predicate below is handed. A malformed table is a defect in ANY tree — absent means
     # "no exemptions", which is the shipped state — so its problems are added before the
@@ -1395,8 +1397,8 @@ def main() -> int:
         print(f"rate gate OK — population legs SKIPPED: {skip}")
         return 0
 
-    # The declared debt, printed on EVERY run (#496 §6.4): the entry is a visible debt, not
-    # forgiveness, and clean is never the same output as excused.
+    # The declared debt, printed on EVERY run (#496, ruling `n=3412` PART 6, item 4): the entry
+    # is a visible debt, not forgiveness, and clean is never the same output as excused.
     for line in excused:
         print(f"  excused: {line}")
 
@@ -1433,8 +1435,8 @@ def main() -> int:
         f"{dl['unstated_run_rows']} run and {dl['unstated_close_rows']} close rows state none "
         f"(UNKNOWN, never accepted); {len(dl['invalid_outcome_reports'])} invalid value(s) reported"
     )
-    # The closing line distinguishes CLEAN from EXCUSED (#496 §6.4): a run that excused a
-    # row must never read as a run that found nothing.
+    # The closing line distinguishes CLEAN from EXCUSED (#496, ruling `n=3412` PART 6, item 4):
+    # a run that excused a row must never read as a run that found nothing.
     if excused:
         print(
             f"rate gate OK — {len(excused)} doubled declaration(s) EXCUSED by "

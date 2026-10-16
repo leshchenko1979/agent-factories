@@ -2849,7 +2849,7 @@ def main() -> int:
                   digest_before)
 
     # A DETAIL WHOSE CANONICAL RUN DECLARES THE SAME KEY TWICE IS REFUSED (#496, ruling
-    # n=3410). The read is the SHARED positional predicate (`trailer_tokens` + `token_key`
+    # n=3412). The read is the SHARED positional predicate (`trailer_tokens` + `token_key`
     # in `tools/field_predicate.py`) — the same home the gate's own token is composed from,
     # so the refuser and the detector cannot drift, which is the shape #434's
     # `board=closed` refusal already has. n=3399 is the one published row of this shape:
