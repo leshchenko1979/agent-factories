@@ -81,6 +81,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import os
@@ -6471,6 +6472,408 @@ def worktree_leg(*, read_at: str, repo: Path = REPO,
     }
 
 
+# ---- the binding-freshness arm (issue #468, ruled at ledger n=3137) ------------------
+#
+# #79's gate owns RESOLUTION, offline: `test -L && test -d`, plus the forward leg that the
+# declared source exists. The LIVE half -- that the profile entry still points at the
+# declared source -- was explicitly DELEGATED to this patrol, because no offline gate can
+# reach a surface outside the tree (`docs/harness-bindings.json` states that in its `_note`).
+#
+# RESOLUTION IS NOT FRESHNESS, and that is the defect this arm closes. A binding resolves
+# perfectly and still serves STALE LAW. Measured first-hand 2026-10-16: the tree the ops
+# profile loads stood 487 commits behind its own `origin/main` while `test -L && test -d`
+# read GREEN -- and the #443 dispatch-composition clause was in force on `origin/main` and
+# ABSENT from every lane's loaded text, which is why 5 of the 23 dispatches stamped since it
+# landed named their unit only in the body, 4 of them the HQ lane's own. That recurrence is
+# this class's SYMPTOM, not a discipline slip.
+#
+# THE PREDICATE IS A CONTENT HASH, NEVER A TIMESTAMP. A timestamp is disarmed by a rewrite of
+# identical bytes -- an instrument error this factory has already logged -- so the comparison
+# is sha256 over the bytes the profile LOADS (the resolved working tree) against the bytes at
+# the reference. The REFERENCE travels with its own residual, printed rather than taken
+# silently: the remote tip when its object is present in this store, else this checkout's
+# `refs/remotes/origin/main`, which is a CACHE updated only by a fetch.
+#
+# NO NEW INSTRUMENT (#3137): this rides the leg that already asks the same question -- is
+# what we serve the same as what we published -- and it is SKIPPED with a STATED reason when
+# the repo declares no binding, so a factory that never adopted the manifest is never
+# measured against one.
+
+HARNESS_BINDINGS_REL = "docs/harness-bindings.json"
+HARNESS_PROFILE_ROOT_ENV = "OC_HARNESS_PROFILE_ROOT"
+HARNESS_LAW_BASENAME = "SKILL.md"
+HARNESS_BINDING_FORMS = ("dir", "file")
+BINDING_FRESHNESS_SCOPE = (
+    "CONTENT only, per law file: the bytes the profile LOADS (the resolved tree) against "
+    "the bytes at the reference. Never a timestamp and never a commit age -- a rewrite of "
+    "identical bytes moves an mtime and changes no law."
+)
+BINDING_REFERENCE_RESIDUAL = (
+    "the reference is the remote tip read from the REMOTE when its object is present in "
+    "this store; otherwise this checkout's own `refs/remotes/origin/main`, which is a CACHE "
+    "updated only by a fetch -- a lagging cache makes a stale loaded tree read level, which "
+    "is why the reference used is PRINTED with every verdict"
+)
+
+def _git_bytes(repo: Path, args: list[str], *, timeout: int = 120) -> tuple[bytes | None, str | None]:
+    """One read-only git call returning BYTES: `(stdout, None)` or `(None, reason)`.
+
+    Bytes, not text, because the predicate is a CONTENT hash and a decode would make two
+    different blobs hash alike (or raise) on any byte that is not valid UTF-8. Same
+    `GIT_OPTIONAL_LOCKS=0` as `_git_read` and the same reason: a read must never take
+    `index.lock` in a tree a peer lane is mid-task in.
+    """
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True, env=env, timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"`git {' '.join(args)}` could not run: {exc}"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip().splitlines()
+        return None, (
+            f"`git {' '.join(args)}` exited {proc.returncode}"
+            + (f" — {detail[0][:160]}" if detail else "")
+        )
+    return proc.stdout, None
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+def _git_toplevel(path: Path) -> tuple[Path | None, str | None]:
+    out, err = _git_read(Path(path), ["rev-parse", "--show-toplevel"], timeout=60)
+    if err:
+        return None, err
+    return Path(out.strip()), None
+
+def _git_common_dir(path: Path) -> tuple[Path | None, str | None]:
+    """The COMMON git dir, which is what makes two paths the same repository.
+
+    Not `--show-toplevel`: under the worktree law a lane works in a worktree while the
+    profile loads the SHARED tree, so two DIFFERENT paths are routinely the same repository
+    -- comparing paths would red every worktree run for the one shape the law prescribes.
+    """
+    out, err = _git_read(Path(path), ["rev-parse", "--git-common-dir"], timeout=60)
+    if err:
+        return None, err
+    raw = Path(out.strip())
+    if not raw.is_absolute():
+        raw = Path(path) / raw
+    try:
+        return raw.resolve(), None
+    except OSError as exc:
+        return None, f"{raw} could not be resolved: {exc}"
+
+def _binding_profile_root(declaration: dict, explicit: Path | None) -> tuple[Path | None, str]:
+    """`(profile_root, source)` -- explicit, then the env var, then the declared profile."""
+    if explicit is not None:
+        return Path(explicit), "explicit"
+    env = os.environ.get(HARNESS_PROFILE_ROOT_ENV, "").strip()
+    if env:
+        return Path(env), f"{HARNESS_PROFILE_ROOT_ENV}"
+    profile = str(declaration.get("profile") or "").strip()
+    if not profile:
+        return None, ""
+    return Path.home() / ".opencrabs" / "profiles" / profile, "the declaration's `profile`"
+
+def _binding_reference(repo: Path, tip: str | None) -> tuple[str | None, str, str]:
+    """`(ref, source, reason)` for the bytes the loaded law is compared AGAINST.
+
+    The remote tip first: it was read from the REMOTE this round, so it is the published
+    fact rather than a local cache. It can only be used when its object is present in this
+    store -- a checkout that never fetched does not hold it -- and then the fallback is the
+    local ref, whose residual is printed rather than hidden.
+    """
+    if tip:
+        _, err = _git_read(repo, ["cat-file", "-e", f"{tip}^{{commit}}"], timeout=60)
+        if err is None:
+            return tip, "the remote tip, read from the REMOTE this round", ""
+    out, err = _git_read(
+        repo, ["rev-parse", "--verify", f"{PUBLISH_REMOTE}/{PUBLISH_BRANCH}^{{commit}}"], timeout=60
+    )
+    if err:
+        return None, "", (
+            f"neither the remote tip nor {PUBLISH_REMOTE}/{PUBLISH_BRANCH} could be "
+            f"resolved in this store: {err}"
+        )
+    return (
+        out.strip(),
+        f"this checkout's {PUBLISH_REMOTE}/{PUBLISH_BRANCH} (a CACHE, updated only by a fetch)",
+        "",
+    )
+
+def binding_freshness_arm(
+    *,
+    repo: Path,
+    profile_root: Path | None,
+    declaration_path: Path,
+    reference_ref: str | None,
+    reference_source: str,
+    reference_reason: str = "",
+    read_at: str,
+) -> tuple[list[str], dict]:
+    """The law a profile LOADS, hashed against the law at the reference. `(problems, coverage)`.
+
+    Two predicates, and they are NOT the same question (#468's own intake ruling): the entry
+    must RESOLVE to the declared source of THIS repository, and the bytes it serves must
+    MATCH the bytes at the reference. A binding can pass either and fail the other, so both
+    are checked and each finding names which one broke.
+
+    The population is per LAW FILE, not per binding: a binding serving eleven files where one
+    is stale is one stale file, NAMED, and a count without the name cannot be dispatched.
+    """
+    coverage = {
+        "declaration": str(declaration_path),
+        "profile_root": None,
+        "profile_root_source": "",
+        "reference_ref": reference_ref,
+        "reference_source": reference_source,
+        "reference_residual": BINDING_REFERENCE_RESIDUAL,
+        "scope": BINDING_FRESHNESS_SCOPE,
+        "rows": [],
+        "stale": [],
+        "missing_local": [],
+        "binding_reason": "",
+    }
+    problems: list[str] = []
+
+    if not declaration_path.is_file():
+        coverage["binding_reason"] = (
+            f"{declaration_path} is absent, so this repo declares no binding to check -- a "
+            f"factory carries the manifest only if it adopted it"
+        )
+        return problems, coverage
+
+    try:
+        declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        problems.append(f"the binding declaration could not be read: {exc}")
+        return problems, coverage
+
+    root, source = _binding_profile_root(declaration, profile_root)
+    if root is None:
+        coverage["binding_reason"] = (
+            f"no profile root: neither an explicit root, {HARNESS_PROFILE_ROOT_ENV}, nor a "
+            f"`profile` in the declaration -- the live leg is NOT RUN rather than passed"
+        )
+        return problems, coverage
+    coverage["profile_root"] = str(root)
+    coverage["profile_root_source"] = source
+
+    if not reference_ref:
+        coverage["binding_reason"] = (
+            f"no reference to compare against -- {reference_reason or 'unstated'}; an "
+            f"unreadable reference is never a clean result"
+        )
+        problems.append(
+            f"the binding-freshness arm has no `origin/main` to compare the loaded law "
+            f"against: {reference_reason or 'the reference could not be resolved'}"
+        )
+        return problems, coverage
+
+    rows = declaration.get("bindings")
+    if not isinstance(rows, list):
+        problems.append(f"{declaration_path} carries no `bindings` list")
+        return problems, coverage
+
+    skills_dir = root / "skills"
+    for row in rows:
+        if not isinstance(row, dict):
+            problems.append(f"{declaration_path}: a binding row is not an object")
+            continue
+        skill = str(row.get("skill") or "").strip()
+        repo_path = str(row.get("repo_path") or "").strip()
+        form = row.get("form")
+        entry: dict = {
+            "skill": skill, "form": form, "repo_path": repo_path,
+            "entry": "", "resolves_to": None, "resolution": "", "files": [], "stale": 0,
+        }
+        coverage["rows"].append(entry)
+
+        if row.get("loaded") is False:
+            entry["resolution"] = f"not bound (declared `loaded: false`: {row.get('reason') or 'no reason'})"
+            continue
+        if not skill or form not in HARNESS_BINDING_FORMS or not repo_path:
+            entry["resolution"] = "unusable row"
+            problems.append(
+                f"{declaration_path}: a binding row is missing `skill`, `repo_path` or a "
+                f"`form` in {HARNESS_BINDING_FORMS}"
+            )
+            continue
+
+        # WHAT THE PROFILE LOADS: form `dir` -> `skills/<skill>`; form `file` ->
+        # `skills/<skill>/SKILL.md`. The same shape gate P29's forward leg checks, so the
+        # two never disagree about which entry is owed as the symlink.
+        loaded = skills_dir / skill / HARNESS_LAW_BASENAME if form == "file" else skills_dir / skill
+        entry["entry"] = str(loaded)
+
+        if not loaded.is_symlink():
+            entry["resolution"] = "NOT A SYMLINK"
+            problems.append(
+                f"{loaded} is not a symlink -- the profile must LOAD the law this repo "
+                f"authors ({repo_path}), never carry a COPY of it (the copy-not-link class)"
+            )
+            continue
+        try:
+            resolved = loaded.resolve(strict=True)
+        except OSError as exc:
+            entry["resolution"] = "UNRESOLVABLE"
+            problems.append(f"{loaded} is a symlink that does not resolve: {exc}")
+            continue
+        entry["resolves_to"] = str(resolved)
+
+        top, err = _git_toplevel(resolved if resolved.is_dir() else resolved.parent)
+        if err:
+            # A path INSIDE this repository always reports a toplevel, so git's own "not a
+            # git repository" is PROOF that the resolved target sits in no repository at all
+            # -- and a target in no repository cannot be the declared source of THIS one.
+            # That is the RESOLVES ELSEWHERE class, and it is decidable from the failure, so
+            # it is not reported as an unreadable verdict. Every OTHER failure (git could not
+            # run, a timeout, a refusal) stays UNREADABLE: a stated inability is never a
+            # clean result, and it is never promoted to a class it cannot prove. Reaching
+            # this loop at all means git works -- the reference was resolved through it
+            # above, and a broken git returns before any row is read.
+            if "not a git repository" in err:
+                entry["resolution"] = "RESOLVES ELSEWHERE"
+                problems.append(
+                    f"{loaded} resolves to {resolved}, which is inside NO git repository "
+                    f"({err}) -- so it is not `{repo_path}` of this one: the profile loads "
+                    f"law this repo does not author"
+                )
+            else:
+                entry["resolution"] = "UNREADABLE"
+                problems.append(
+                    f"{loaded} resolves to {resolved}, whose repository could not be read: "
+                    f"{err}"
+                )
+            continue
+        try:
+            rel_resolved = resolved.relative_to(top).as_posix()
+        except ValueError:
+            rel_resolved = None
+        repo_common, _ = _git_common_dir(repo)
+        res_common, _ = _git_common_dir(top)
+        same_repo = None not in (repo_common, res_common) and repo_common == res_common
+        if rel_resolved != Path(repo_path).as_posix() or not same_repo:
+            entry["resolution"] = "RESOLVES ELSEWHERE"
+            problems.append(
+                f"{loaded} resolves to {resolved} -- {rel_resolved!r} of {top}"
+                + ("" if same_repo else ", which is a DIFFERENT repository")
+                + f", not `{repo_path}` of this one: the profile loads law this repo does "
+                f"not author"
+            )
+            continue
+        entry["resolution"] = "resolved"
+
+        # --- the FRESHNESS predicate: sha256 per law file, loaded vs the reference --------
+        if form == "file":
+            local_files = [resolved]
+            base = resolved.parent
+        else:
+            base = resolved
+            local_files = []
+            for dirpath, dirnames, filenames in os.walk(base):
+                dirnames[:] = sorted(d for d in dirnames if d != ".git")
+                for name in sorted(filenames):
+                    if name.endswith(".md"):
+                        local_files.append(Path(dirpath) / name)
+            local_files.sort()
+
+        for path in local_files:
+            try:
+                real = path.resolve(strict=True)
+            except OSError as exc:
+                entry["files"].append({"path": str(path), "status": "UNREADABLE", "detail": str(exc)})
+                entry["stale"] += 1
+                coverage["stale"].append(str(path))
+                problems.append(f"{path} could not be read: {exc}")
+                continue
+            try:
+                rel = real.relative_to(top).as_posix()
+            except ValueError:
+                entry["files"].append(
+                    {"path": str(path), "status": "OUTSIDE-SOURCE", "detail": str(real)}
+                )
+                entry["stale"] += 1
+                coverage["stale"].append(str(path))
+                problems.append(
+                    f"{path} loads {real}, which is OUTSIDE {top} -- the law is served from "
+                    f"outside the tree this repo authors"
+                )
+                continue
+            try:
+                loaded_bytes = real.read_bytes()
+            except OSError as exc:
+                entry["files"].append({"path": rel, "status": "UNREADABLE", "detail": str(exc)})
+                entry["stale"] += 1
+                coverage["stale"].append(rel)
+                problems.append(f"{real} could not be read: {exc}")
+                continue
+
+            ref_bytes, why = _git_bytes(repo, ["show", f"{reference_ref}:{rel}"])
+            record = {
+                "path": rel,
+                "loaded": _sha256(loaded_bytes)[:12],
+                "at_reference": None,
+                "status": "equal",
+            }
+            if ref_bytes is None:
+                record["status"] = "ABSENT AT THE REFERENCE"
+                record["detail"] = why
+                entry["stale"] += 1
+                coverage["stale"].append(rel)
+                problems.append(
+                    f"{rel} is LOADED by `{skill}` but does not exist at {reference_ref} "
+                    f"({why}) -- a law file the profile serves and the repository does not "
+                    f"publish is either local-only or moved upstream"
+                )
+            elif ref_bytes != loaded_bytes:
+                record["status"] = "STALE"
+                record["at_reference"] = _sha256(ref_bytes)[:12]
+                entry["stale"] += 1
+                coverage["stale"].append(rel)
+                problems.append(
+                    f"{rel} is STALE: the profile loads {record['loaded']} from {top} but "
+                    f"{record['at_reference']} stands at {reference_ref} "
+                    f"({reference_source}) -- a lane loading `{skill}` reads law this "
+                    f"repository has already replaced"
+                )
+            else:
+                record["at_reference"] = record["loaded"]
+            entry["files"].append(record)
+
+        # THE OTHER DIRECTION: a law file the reference publishes and the loaded tree lacks.
+        # The #443 clause landed inside an existing file, but a NEW clause file upstream is
+        # the same staleness wearing a different shape -- and a hash over local files alone
+        # can never see it.
+        if form == "dir":
+            out, why = _git_read(
+                repo, ["ls-tree", "-r", "--name-only", reference_ref, "--", repo_path], timeout=60
+            )
+            if why:
+                problems.append(
+                    f"the law files at {reference_ref} under {repo_path} could not be listed: {why}"
+                )
+            else:
+                prefix = f"{Path(repo_path).as_posix().rstrip('/')}/"
+                at_ref = {
+                    name.strip()[len(prefix):]
+                    for name in (out or "").splitlines()
+                    if name.strip().startswith(prefix) and name.strip().endswith(".md")
+                }
+                loaded_names = {p.relative_to(base).as_posix() for p in local_files}
+                for name in sorted(at_ref - loaded_names):
+                    coverage["missing_local"].append(name)
+                    problems.append(
+                        f"{prefix}{name} is published at {reference_ref} and ABSENT from the "
+                        f"loaded tree {base} -- the profile serves a law the repository has "
+                        f"already extended"
+                    )
+
+    return problems, coverage
+
 def publish_freshness_leg(
     *,
     repo: Path = REPO,
@@ -6479,6 +6882,7 @@ def publish_freshness_leg(
     read_at: str,
     now=None,
     pusher: Path = PUBLISH_PUSHER,
+    profile_root: Path | None = None,
 ) -> dict:
     """Every commit that has not reached `origin`, NAMED, with the instant read.
 
@@ -6509,6 +6913,15 @@ def publish_freshness_leg(
     therefore PRINTS the reading checkout AND the receipt's own recorded origin, and STATES
     the residual: the record is LAST-WRITER-WINS across worktrees, so a push made by a
     sibling checkout is named as that checkout's push and never misattributed to this one.
+
+    THE BINDING ARM (issue #468, ruled at n=3137). This leg also answers the same freshness
+    question one surface over: the LAW a profile LOADS, against the law at `origin/main`.
+    A profile skill binding is verified offline for RESOLUTION only (`test -L && test -d`),
+    so a binding that resolves can still serve a tree hundreds of commits behind -- measured
+    first-hand 2026-10-16, 487 commits behind, with the #443 dispatch-composition clause in
+    force on `origin/main` and ABSENT from every lane's loaded text. The predicate is a
+    CONTENT hash per law file and never a timestamp, and a repo that declares no binding
+    leaves the arm NOT RUN with its stated reason rather than silently clean.
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     coverage = {
@@ -6712,6 +7125,31 @@ def publish_freshness_leg(
                         f"SAMPLED while still young -- roughly 1 round in "
                         f"{PUBLISH_CADENCE_SECS // PUBLISH_GRACE_SECS} at this cadence)"
                     )
+
+    # --- the binding arm (issue #468, ruled at n=3137) --------------------------------
+    #
+    # It rides THIS leg because the leg already asks the question the arm answers -- is what
+    # we serve the same as what we published -- and it reads the same checkout the pusher
+    # reads, so no second instrument is created (#3137). The reference is the tip THIS round
+    # read from the remote when its object is present, so the arm is anchored on the
+    # published fact rather than on a local cache whenever that is possible.
+    ref, ref_source, ref_reason = _binding_reference(Path(repo), tip)
+    arm_problems, arm_coverage = binding_freshness_arm(
+        repo=Path(repo),
+        profile_root=None if profile_root is None else Path(profile_root),
+        declaration_path=Path(repo) / HARNESS_BINDINGS_REL,
+        reference_ref=ref,
+        reference_source=ref_source,
+        reference_reason=ref_reason,
+        read_at=read_at,
+    )
+    problems.extend(arm_problems)
+    # NAMESPACED, never merged flat (#468): the arm's own key vocabulary is close to this
+    # leg's -- both carry a `stale` list and both count law/commits -- and a flat update
+    # silently overwrote the leg's commit `stale` list with the arm's law-file list, which
+    # read as a clean round on the very probe that exists to catch an unpushed commit. One
+    # nested key cannot collide with any key the leg already carries.
+    coverage["binding"] = arm_coverage
 
     return {
         "name": "publish-freshness",
@@ -7409,6 +7847,42 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
                 lines.append(f"  those bounds are {cov.get('bounds_label', 'the pusher\u2019s own')}")
                 lines.append(f"  SCOPE: {cov.get('leg_scope', '')}")
+                # THE BINDING ARM (#468). Guarded on the arm's own key, so a leg injected
+                # for a probe -- which carries no binding block -- renders without inventing
+                # one, and an arm that could not run says so instead of reading clean.
+                binding = cov.get("binding")
+                if binding is not None:
+                    if binding.get("binding_reason"):
+                        lines.append(
+                            f"  binding freshness: NOT RUN — {binding['binding_reason']}"
+                        )
+                    else:
+                        lines.append(
+                            f"  binding freshness: {len(binding.get('rows') or [])} "
+                            f"binding(s) against {binding.get('reference_ref')} "
+                            f"({binding.get('reference_source')}), "
+                            f"{len(binding.get('stale') or [])} stale law file(s)"
+                        )
+                        for row in binding.get("rows") or []:
+                            lines.append(
+                                f"    {row.get('skill')} [{row.get('form')}]: "
+                                f"{row.get('resolution')} -> "
+                                f"{row.get('resolves_to') or 'nothing resolved'}"
+                            )
+                            for item in row.get("files") or []:
+                                if item.get("status") != "equal":
+                                    lines.append(
+                                        f"      {item.get('status')}: {item.get('path')} — "
+                                        f"loaded {item.get('loaded')} vs "
+                                        f"{item.get('at_reference') or 'absent'} at the "
+                                        f"reference"
+                                    )
+                        for name in binding.get("missing_local") or []:
+                            lines.append(f"    MISSING FROM THE LOADED TREE: {name}")
+                        lines.append(f"    scope: {binding.get('scope', '')}")
+                        lines.append(
+                            f"    reference residual: {binding.get('reference_residual', '')}"
+                        )
                 rec = cov.get("receipt")
                 if rec:
                     lines.append(

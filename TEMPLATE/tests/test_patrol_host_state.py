@@ -3944,7 +3944,252 @@ def test_the_publish_leg_prints_the_PUSHERS_bounds_and_its_OWN_scope() -> None:
         assert "not a property of the fleet" in text.lower(), text
         assert "pusher receipt:" in text, text
 
-# --- the duty-receipt leg's FORWARD BOUND (#175) --------------------------------
+# --- the binding-freshness arm (#468, ruled at n=3137) --------------------------------
+#
+# RESOLUTION IS NOT FRESHNESS. Gate P29 verifies that the profile entry resolves to the
+# declared source; nothing verified that the bytes it serves are the bytes this repository
+# publishes. Measured live 2026-10-16: the ops profile's tree stood 487 commits behind its
+# own `origin/main` -- 6 of the binding's 11 law files differing, 5 equal -- while
+# `test -L && test -d` read GREEN, and the #443 dispatch-composition clause was in force
+# upstream and absent from every lane's loaded text.
+#
+# The live population is therefore NOT empty, but a probe must not depend on the box's own
+# staleness (a factory that caught up would turn every probe below vacuous). These probes
+# drive the arm directly against synthetic repositories, and the discriminating pair is the
+# BITE and its CONTROL -- a control is what proves the arm is reading, not merely red.
+
+def _binding_fixture(root: Path, *, behind: bool = False, publish_extra: str | None = None):
+    """`(repo, profile_root, declaration_path, reference_sha)` for a synthetic factory.
+
+    The profile root carries `skills/demo` as a SYMLINK to the repo's own `skills/demo`, so
+    the fixture is the live shape and not an approximation of it. With `behind=True` the
+    loaded tree is reset one commit back AFTER the reference was pushed -- the loaded tree
+    stands BEHIND `origin/main`, which is exactly the state the live box is in and the one a
+    timestamp cannot distinguish from a healthy tree.
+    """
+    remote = _bare(root / "remote.git")
+    work = _work(root / "work", remote)
+    law = work / "skills" / "demo"
+    law.mkdir(parents=True)
+    (law / "SKILL.md").write_text("v1\n", encoding="utf-8")
+    (work / "docs").mkdir()
+    (work / "docs" / "harness-bindings.json").write_text(
+        json.dumps({
+            "profile": "probe",
+            "bindings": [{"skill": "demo", "repo_path": "skills/demo", "form": "dir"}],
+        }, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    _commit(work, "seed-law")
+    _git(work, "push", "-q", "origin", "main:main")
+
+    (law / "SKILL.md").write_text("v2 -- the published law\n", encoding="utf-8")
+    if publish_extra:
+        (law / publish_extra).write_text(f"{publish_extra}\n", encoding="utf-8")
+    _commit(work, "publish-law")
+    _git(work, "push", "-q", "origin", "main:main")
+    reference = _git(work, "rev-parse", "HEAD")
+    if behind:
+        _git(work, "reset", "--hard", "HEAD~1")
+
+    profile = root / "profile"
+    (profile / "skills").mkdir(parents=True)
+    (profile / "skills" / "demo").symlink_to(law)
+    return work, profile, work / "docs" / "harness-bindings.json", reference
+
+def _run_arm(repo: Path, profile: Path, declaration: Path, reference: str | None):
+    return RUNNER.binding_freshness_arm(
+        repo=repo, profile_root=profile, declaration_path=declaration,
+        reference_ref=reference, reference_source="probe", read_at="probe",
+    )
+
+def test_the_binding_arm_BITES_when_the_loaded_law_stands_BEHIND_the_reference() -> None:
+    """The arm's whole purpose, on the live shape: the tree the profile LOADS is behind the
+    tree this repository publishes. The finding must NAME the file and BOTH content hashes --
+    a count cannot be dispatched, a named file can."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(Path(tmp), behind=True)
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert problems, "a loaded tree behind the reference must be a finding"
+        assert cov["stale"] == ["skills/demo/SKILL.md"], cov
+        joined = " ".join(problems)
+        assert "skills/demo/SKILL.md" in joined, joined
+        assert "STALE" in joined, joined
+        assert cov["rows"][0]["resolution"] == "resolved", (
+            f"the binding RESOLVES and is still stale -- that split is the defect: {cov['rows']}"
+        )
+        assert cov["rows"][0]["stale"] == 1, cov["rows"]
+        item = [f for f in cov["rows"][0]["files"] if f["path"] == "skills/demo/SKILL.md"][0]
+        assert item["status"] == "STALE", item
+        assert item["loaded"] != item["at_reference"], (
+            f"both hashes must travel, and they must DIFFER: {item}"
+        )
+
+def test_the_binding_arm_is_QUIET_when_the_loaded_law_MATCHES_the_reference() -> None:
+    """The control. Without it an arm that reds on every round would pass the probe above --
+    and would teach the next reader to ignore it, which is the false RED #146's ruling warns
+    of. It also proves the fixture is a real comparison: the same files, the same reference."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(Path(tmp))
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert problems == [], problems
+        assert cov["stale"] == [] and cov["missing_local"] == [], cov
+        assert len(cov["rows"][0]["files"]) == 1, cov["rows"][0]["files"]
+        assert cov["rows"][0]["files"][0]["status"] == "equal", cov["rows"][0]["files"]
+        assert cov["reference_ref"] == reference, cov["reference_ref"]
+
+def test_the_binding_arm_reads_CONTENT_and_is_not_disarmed_by_an_IDENTICAL_rewrite() -> None:
+    """The ruling's own clause (n=3137): the predicate is a CONTENT hash, NEVER a timestamp.
+
+    A rewrite of identical bytes moves the mtime and changes no law -- this factory has
+    already logged that as an instrument error, and a timestamp predicate here would red a
+    healthy binding every time a lane touched the file. The probe asserts the mtime really
+    moved, so it cannot pass by the rewrite having been a no-op.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(Path(tmp))
+        path = repo / "skills" / "demo" / "SKILL.md"
+        before = path.stat().st_mtime_ns
+        body = path.read_text(encoding="utf-8")
+        path.write_text(body, encoding="utf-8")
+        os.utime(path, ns=(before + 10_000_000_000, before + 10_000_000_000))
+        assert path.stat().st_mtime_ns != before, "the probe must actually move the mtime"
+
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert problems == [], (
+            f"an identical rewrite changes no law and must not be a finding: {problems}"
+        )
+        assert cov["stale"] == [], cov
+
+def test_the_binding_arm_REDs_a_COPY_where_the_profile_owes_a_SYMLINK() -> None:
+    """The resolution half, which #79 owns and this arm must not go blind to: a profile that
+    carries a COPY of the law serves whatever it copied, forever, and no hash can see it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        repo, profile, declaration, reference = _binding_fixture(root)
+        entry = profile / "skills" / "demo"
+        entry.unlink()
+        shutil.copytree(repo / "skills" / "demo", entry)
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert any("not a symlink" in p for p in problems), problems
+        assert cov["rows"][0]["resolution"] == "NOT A SYMLINK", cov["rows"]
+
+def test_the_binding_arm_REDs_a_symlink_that_RESOLVES_ELSEWHERE() -> None:
+    """A symlink is not enough: it must resolve to the source THIS repo declares. A link into
+    a sibling checkout -- or into another repository entirely -- serves law this repo does not
+    author, and it resolves perfectly while doing so."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        repo, profile, declaration, reference = _binding_fixture(root)
+        other = root / "other" / "skills" / "demo"
+        other.mkdir(parents=True)
+        (other / "SKILL.md").write_text("someone else's law\n", encoding="utf-8")
+        entry = profile / "skills" / "demo"
+        entry.unlink()
+        entry.symlink_to(other)
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert any("RESOLVES ELSEWHERE" in p or "not `skills/demo`" in p for p in problems), problems
+        assert cov["rows"][0]["resolution"] == "RESOLVES ELSEWHERE", cov["rows"]
+
+def test_the_binding_arm_does_NOT_RED_a_SIBLING_worktree_of_the_SAME_repo() -> None:
+    """The false-RED the arm must NOT raise, and the reason it compares COMMON DIRS.
+
+    Under the worktree law a lane works in a worktree while the profile may load the SHARED
+    tree, so two DIFFERENT paths are routinely ONE repository. A path comparison would red
+    the very shape the law prescribes -- and a guard that fires on the prescribed shape is
+    the one its readers learn to ignore. The common dir is what tells the two apart, so the
+    probe holds that split: the sibling serves the same law file at the same relative path,
+    the bytes match the reference, and there is NO finding.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        repo, profile, declaration, reference = _binding_fixture(root)
+        sib = _sibling(repo, root)
+        entry = profile / "skills" / "demo"
+        entry.unlink()
+        entry.symlink_to(sib / "skills" / "demo")
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert cov["rows"][0]["resolution"] == "resolved", (
+            f"a sibling worktree of the SAME repo serves this repo's own law at the "
+            f"declared path: {cov['rows']}"
+        )
+        assert not problems, (
+            f"the worktree shape the law prescribes must not be a finding: {problems}"
+        )
+
+def test_the_binding_arm_REDs_a_law_file_the_reference_does_NOT_publish() -> None:
+    """A law file the profile serves and the repository never published is either local-only
+    or moved upstream; both are staleness, and a hash over local files alone would read the
+    first as clean."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(Path(tmp))
+        (repo / "skills" / "demo" / "local-only.md").write_text("local\n", encoding="utf-8")
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert any("does not exist at" in p for p in problems), problems
+        assert cov["stale"] == ["skills/demo/local-only.md"], cov
+
+def test_the_binding_arm_REDs_a_law_file_the_reference_PUBLISHES_and_the_tree_LACKS() -> None:
+    """The OTHER direction, and the reason the arm lists the reference's own tree: the #443
+    clause landed inside an existing file, but a NEW clause file upstream is the same
+    staleness in a shape a local-only hash can never see."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(
+            Path(tmp), behind=True, publish_extra="newer.md"
+        )
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert cov["missing_local"] == ["newer.md"], cov
+        assert any("ABSENT from the loaded tree" in p for p in problems), problems
+
+def test_the_binding_arm_is_NOT_RUN_when_the_repo_declares_no_binding() -> None:
+    """A factory that never adopted the manifest is not measured against one, and the reason
+    is STATED -- an arm that silently read clean over zero declarations would be the exact
+    found-nothing-is-not-clean defect this file's doctrine forbids."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(Path(tmp))
+        declaration.unlink()
+        problems, cov = _run_arm(repo, profile, declaration, reference)
+        assert problems == [], problems
+        assert "declares no binding" in cov["binding_reason"], cov
+        assert cov["rows"] == [], cov
+
+def test_the_binding_arm_REDs_an_UNREADABLE_reference_rather_than_reading_clean() -> None:
+    """'I could not ask' and 'the law is level' are different facts. With no reference to
+    compare against, the arm has no verdict to give -- and must say so, never pass."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, _ = _binding_fixture(Path(tmp))
+        problems, cov = _run_arm(repo, profile, declaration, None)
+        assert any("no `origin/main` to compare" in p for p in problems), problems
+        assert "unreadable reference is never a clean result" in cov["binding_reason"], cov
+
+def test_the_binding_arm_rides_the_LEG_and_its_keys_do_not_COLLIDE_with_the_legs_own() -> None:
+    """#3137: the detector RIDES the existing leg -- no new instrument. It must therefore
+    reach the report through the leg, and its coverage must be NAMESPACED: the arm and the
+    leg both carry a `stale` list, and a flat merge silently overwrote the leg's commit list
+    with the arm's law-file list -- which read as a clean round on the leg's own probe."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, profile, declaration, reference = _binding_fixture(Path(tmp), behind=True)
+        now = dt.datetime.now(dt.timezone.utc)
+        leg = RUNNER.publish_freshness_leg(
+            repo=repo, remote="origin", branch="main", read_at="probe", now=now,
+            profile_root=profile,
+        )
+        assert leg["name"] == "publish-freshness", leg["name"]
+        assert any("skills/demo/SKILL.md is STALE" in p for p in leg["problems"]), leg["problems"]
+        assert leg["coverage"]["binding"]["stale"] == ["skills/demo/SKILL.md"], (
+            leg["coverage"]["binding"]
+        )
+        assert all(not str(s).endswith(".md") for s in leg["coverage"]["stale"]), (
+            f"the leg's own commit `stale` list must survive beside the arm's: "
+            f"{leg['coverage']['stale']}"
+        )
+        text = RUNNER.render(
+            [leg], [], slug="owner/repo", read_at="2026-10-16T00:00:00Z", issues=[]
+        )
+        assert "binding freshness:" in text, text
+        assert "skills/demo/SKILL.md" in text, text
+        assert "CONTENT only" in text, text
+
+
 #
 # The law is forward-looking: SKILL.md section 11 says a duty whose lane writes an
 # undated, ad-hoc subject predating the convention "owes the convention going forward".
