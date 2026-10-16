@@ -239,8 +239,15 @@ removal call — a misplaced file is a decision for a human to make, and this le
 
 **A path the tree's OWN `.gitignore` declares is OUT of the placement population, and it is PRINTED (#282).**
 The population is every file in a declared directory, but a repository **creates** runtime artifacts it does not
-**track** — `evidence/.ledger.lock`, `evidence/.insights.lock`, the derived `evidence/.ledger-index.sqlite` — and a
-file the repo itself declares out is not a misplacement. The first remedy, extending `PLACEMENT_SKIP`, is the same
+**track** — `evidence/.insights.lock`, the derived `evidence/.ledger-index.sqlite`, and the ledger's append lock at
+its **fail-open** anchor `evidence/opencrabs-ledger.lock` — and a file the repo itself declares out is not a
+misplacement. The ledger's lock has **two** anchors, and only the second is walkable (#348): on the normal path it is
+`<git-common-dir>/opencrabs-ledger.lock`, inside the git dir, which no working-tree walk reaches — so the tree cannot
+declare it and need not; when git cannot be run at all (`tools/ledger.py:_git_common_dir`'s documented fail-open —
+fork exhaustion, a git-less fixture) the anchor is the ledger's own directory and the lock lands **inside** the
+population, which is why that name is declared. `evidence/.ledger.lock` is neither anchor: it is the name a *fixture*
+takes (`tests/test_ledger_schema.py`), no live write path touches it, and the zero-byte file of that name on disk is
+a leftover — declared, and therefore out of the population, but created by nothing. The first remedy, extending `PLACEMENT_SKIP`, is the same
 allowlist this file already refused by name for AGE (*exempting one path removes that case and leaves the general
 one*): `PLACEMENT_SKIP` grew by exactly that accretion — `.audit.lock` appended one path at a time — until #282
 arrived. The predicate therefore reads **git's own declaration** (`git check-ignore`) for the whole tree in **one

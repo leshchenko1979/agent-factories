@@ -411,6 +411,9 @@ def test_the_LIVE_tree_ignores_its_own_runtime_artifacts():
 
     This reads git's own answer about the live checkout, so it fails if a future edit
     drops the .gitignore lines the predicate depends on — the declaration is the contract.
+    `evidence/.ledger.lock` stays in the list because the file of that name sits on disk in
+    this tree and must remain declared while it does — it is NOT the ledger's lock, and the
+    arm below is what says so (#348).
     """
     for rel in ("evidence/.insights.lock", "evidence/.ledger.lock", "evidence/.ledger-index.sqlite"):
         proc = subprocess.run(
@@ -420,3 +423,41 @@ def test_the_LIVE_tree_ignores_its_own_runtime_artifacts():
             f"{rel} is no longer declared ignored by the tree — either the .gitignore "
             "lost the rule or the runtime artifact moved"
         )
+
+def test_the_ledger_lock_is_declared_at_the_anchor_the_walk_can_reach():
+    """#348: the ledger's append lock has TWO anchors, and only ONE is in the population.
+
+    `tools/ledger.py` takes its lock at `<git-common-dir>/opencrabs-ledger.lock` — inside the
+    git dir, which no working-tree walk reaches, so it can never be a placement mismatch and
+    the tree need not declare it. Its documented fail-open anchor is the ledger's own
+    directory, which lands the lock INSIDE a declared directory; that name must therefore be
+    declared, or a box that hits the fallback (git unavailable — fork exhaustion, a git-less
+    fixture) reads RED on a clean tree. `evidence/.ledger.lock`, the path the law used to
+    name, is neither anchor: it is the path a fixture takes.
+
+    `git check-ignore` answers for a path that need not exist, so the declaration is asserted
+    directly rather than by waiting for the fallback to fire.
+    """
+    rel = "evidence/opencrabs-ledger.lock"
+    assert hygiene._gitignored(REPO, [rel])[0] == {rel}, (
+        f"{rel} is not declared ignored by the tree: this is the ledger lock's WALKABLE "
+        "anchor, so an undeclared name reads as a placement mismatch on any box that reaches "
+        "the fail-open path (#348)"
+    )
+    resolved = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=str(REPO), capture_output=True, text=True,
+    )
+    assert resolved.returncode == 0 and resolved.stdout.strip(), (
+        "the live checkout is a git repository, so the NORMAL anchor resolves"
+    )
+    normal = Path(resolved.stdout.strip()).resolve()
+    walked = [
+        (REPO / d["dir"]).resolve()
+        for d in _leg(REPO)["directories"]
+        if d["status"] != "absent"
+    ]
+    assert not any(normal == d or normal.is_relative_to(d) for d in walked), (
+        f"the ledger lock's NORMAL anchor ({normal}) resolved inside a declared placement "
+        "directory — the walk would then see the lock, and the tree would have to declare it"
+    )

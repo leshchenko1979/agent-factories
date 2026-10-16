@@ -1,6 +1,12 @@
 .*.lock
 .ledger.lock
 .insights.lock
+# The ledger's append lock at its FAIL-OPEN anchor (#348). The NORMAL lock sits in the git
+# common dir (`<git-common-dir>/opencrabs-ledger.lock`), inside a directory no working-tree
+# walk can reach; when git cannot be run at all (fork exhaustion, a git-less fixture)
+# `tools/ledger.py` anchors the lock beside the ledger instead, and THAT file lands inside a
+# declared directory -- so the tree declares its name.
+opencrabs-ledger.lock
 __pycache__/
 
 # The derived ledger index: disposable, regenerable, ~2.9x the text.

@@ -789,9 +789,12 @@ def _gitignored(root: Path, rels: list[str]) -> tuple[set[str], str, str]:
     general one* -- and that is exactly how `PLACEMENT_SKIP` accreted: `.audit.lock` was
     appended one path at a time, and each patch left the next case uncaught. Measured
     2026-10-03 on a working checkout, the live leg reported three paths the repo itself
-    writes and gitignores (`evidence/.insights.lock`, `evidence/.ledger.lock`,
-    `evidence/.ledger-index.sqlite`), so the gate was RED on a clean tree -- which trains
-    lanes to ignore a red gate.
+    writes and gitignores (`evidence/.insights.lock`, `evidence/.ledger-index.sqlite`, and
+    the ledger's append lock at its fail-open anchor `evidence/opencrabs-ledger.lock`), so
+    the gate was RED on a clean tree -- which trains lanes to ignore a red gate. The ledger
+    lock has TWO anchors and only the fail-open one is walkable (#348): the NORMAL lock is
+    `<git-common-dir>/opencrabs-ledger.lock`, inside the git dir and out of every walk, and
+    `evidence/.ledger.lock` is the name a FIXTURE takes -- no live write path touches it.
 
     Three outcomes, and the middle one is why this returns a triple rather than a bool:
 
