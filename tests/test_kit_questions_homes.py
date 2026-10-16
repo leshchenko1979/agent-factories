@@ -166,8 +166,14 @@ def main() -> int:
     diff = residual(template_text, executing_text)
     bad = undeclared(template_text, executing_text)
 
-    print(f"template home : {TEMPLATE_HOME.relative_to(REPO)} ({len(template_text)} B)")
-    print(f"executing home: {executing} ({len(executing_text)} B)")
+    # UTF-8 BYTE counts, not character counts: the homes carry em-dashes, and a
+    # character count understates the file a ` B` label claims to report.  Hoisted
+    # into locals because nesting same-type quotes in an f-string is PEP 701
+    # (Python 3.12+) and this gate ships to member factories of unknown interpreter.
+    template_bytes = len(template_text.encode("utf-8"))
+    executing_bytes = len(executing_text.encode("utf-8"))
+    print(f"template home : {TEMPLATE_HOME.relative_to(REPO)} ({template_bytes} B)")
+    print(f"executing home: {executing} ({executing_bytes} B)")
     print(f"population    : {len(diff)} differing line(s) examined")
 
     if bad:

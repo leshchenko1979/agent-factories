@@ -779,9 +779,10 @@ def probe_a_file_with_a_main_guard_is_still_pytest_form() -> None:
           target_form(both) == PYTEST_RUNNER, f"got {target_form(both)}")
     check("direction 5 — without the guard it is pytest-form too",
           target_form(PYTEST_STYLE) == PYTEST_RUNNER, f"got {target_form(PYTEST_STYLE)}")
+    no_test_fn = target_form('def main() -> int:\n    return 0\n')
     check("direction 5 — a file with NO test function stays script-form",
-          target_form('def main() -> int:\n    return 0\n') == SCRIPT_RUNNER,
-          f"got {target_form('def main() -> int:\n    return 0\n')}")
+          no_test_fn == SCRIPT_RUNNER,
+          f"got {no_test_fn}")
 
 def probe_the_runner_is_read_from_argv_not_guessed_from_the_target() -> None:
     """The runner comes from the APPEND; the shape from the TARGET. Neither implies the other."""

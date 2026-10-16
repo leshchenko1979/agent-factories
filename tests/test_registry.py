@@ -2050,10 +2050,12 @@ def probe_a_raw_utf8_fragment_is_canonicalised_and_the_note_says_so() -> None:
     rc, text, after = _drive_mutate(fragment, {"zone": {"owns": ["z"], "does_not_own": ["y"]}},
                                     raw_utf8=True)
     check("a raw-UTF-8 fragment is written back through the named writer", rc == 0, f"rc={rc}")
+    raw_present = "\u2014" in after
+    escape_present = "\\u2014" in after
     check(
         "...and the file on disk is the canonical ESCAPE form, so the store stays uniform",
-        "\\u2014" in after and "\u2014" not in after,
-        f"raw em dash present={'\u2014' in after} escape present={'\\u2014' in after}",
+        escape_present and not raw_present,
+        f"raw em dash present={raw_present} escape present={escape_present}",
     )
     check(
         "...and the write-back DECLARES the canonicalisation, with its count and its reason",

@@ -8314,7 +8314,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"({cov.get('cadence_secs', 0)}s cadence + {cov.get('grace_secs', 0)}s "
                     f"grace); {len(cov.get('stale') or [])} commit(s) past it"
                 )
-                lines.append(f"  those bounds are {cov.get('bounds_label', 'the pusher\u2019s own')}")
+                bounds_label = cov.get('bounds_label', 'the pusher\u2019s own')
+                lines.append(f"  those bounds are {bounds_label}")
                 lines.append(f"  SCOPE: {cov.get('leg_scope', '')}")
                 # THE BINDING ARM (#468). Guarded on the arm's own key, so a leg injected
                 # for a probe -- which carries no binding block -- renders without inventing
