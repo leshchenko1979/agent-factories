@@ -62,6 +62,28 @@ DECLINE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("dont-ask-me", re.compile(r"\bdon'?t\s+ask\s+me\b", re.I)),
     ("not-owner-question", re.compile(r"\b(?:that'?s|it'?s)\s+(?:not|no)\s+(?:my|an?\s+owner)\b", re.I)),
     ("your-call", re.compile(r"\byour\s+(?:call|decision)\b", re.I)),
+    # Added for the declines the owner's 2026-10-15 burst carried that the set above MISSED
+    # (#489): q39 "This is outside of my human scope", q42 "I do not want to get involved in
+    # this", and q31 "I dint want to be involved in this". All three sit INSIDE the same 30d
+    # window the leg already reads, so the leg under-reported the very trend it exists to
+    # surface -- it read 6 of 143 answered where the honest reading on that window is 9 of 143.
+    # q31 was not even in the filing's count of four: `internal-question` wants a NOUN after
+    # "internal" and its text says "internals", so a pattern written from the filing's list
+    # would still have missed it. The two families are DIFFERENT refusals and not variants of
+    # one phrase: a scope boundary says whose DOMAIN the question falls in, while a refusal to
+    # engage says something about the answerer. Each carries its own name so the printed match
+    # tells a reader WHICH refusal it saw.
+    ("scope-boundary", re.compile(r"\b(?:outside|beyond)\b[^.\n]{0,24}\bmy\s+(?:human\s+)?(?:scope|remit)\b", re.I)),
+    # The `get|be` alternation and the `dint` spelling are both MEASURED, not guessed: the
+    # live burst carries "get involved" (q42) and "be involved"/"dint" (q31). Swept over the
+    # whole store, this catches q31 and no other answer, and it leaves all seven
+    # concept-mentioning NON-declines (q10, q12, q2, q22, q55, q6 and the "Uphold all 8
+    # refusals" control) unmatched.
+    ("get-involved", re.compile(
+        r"\b(?:don'?t|do\s+not|won'?t|didn'?t|dint|dont)\b[^.\n]{0,30}\b(?:get|be)\s+involved\b"
+        r"|\bnot\s+mine\s+to\s+(?:solve|decide|fix|answer)\b",
+        re.I,
+    )),
 )
 
 # The store's own `answered_via` value for an answer that arrived from the OWNER's page.

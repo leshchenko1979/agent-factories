@@ -227,6 +227,28 @@ def leg_c_metric(repo: Path) -> tuple[list[str], list[str]]:
     else:
         prints.append("predicate: a substantive answer is NOT a decline")
 
+    # A CASE PER PATTERN for the declines the owner's 2026-10-15 burst carried and the set
+    # above MISSED (#489): the leg read 6 of 143 answered on that 30d window where the honest
+    # reading is 9 of 143. Gated rather than asserted, so narrowing either regex reds HERE
+    # instead of silently returning to the under-report. One case per ALTERNATION branch too:
+    # a two-branch regex whose second branch is never exercised is half an instrument, and the
+    # `be involved` / `dint` spellings are MEASURED from q31, not guessed.
+    for text, expected in (
+        ("This is outside of my human scope", "scope-boundary"),
+        ("this is outside my remit", "scope-boundary"),
+        ("I do not want to get involved in this", "get-involved"),
+        ("I dint want to be involved in this", "get-involved"),
+        ("that is not mine to solve", "get-involved"),
+    ):
+        got = module.declines_as_internal(text)
+        if got != expected:
+            problems.append(
+                f"the measured decline {text!r} matched {got!r}, expected {expected!r} — the "
+                "pattern set cannot see this class, which is the under-report #489 was filed on"
+            )
+        else:
+            prints.append(f"predicate: {text!r} is seen as {expected}")
+
     # The absent store is NOT RUN with a reason, never a zero (#68's shape).
     line = module.format_line({"answered": 0, "declined": 0, "window_days": 30, "matched": []}, "no store here")
     if "NOT RUN" not in line or "no store here" not in line:
