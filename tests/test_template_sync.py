@@ -706,6 +706,15 @@ PAIRS = [
     # this landing -- the two legs judge different populations and neither stands in for
     # the other.
     ("tests/test_ledger_citation_declared.py", "TEMPLATE/tests/test_ledger_citation_declared.py"),
+    # Added with its registration (board #313, ruling n=3360, dispatched n=3363). Paired for
+    # the manifest grain and for one property of its own: the gate reads SOURCE in BOTH trees
+    # -- the law table and the instrument docs -- and asserts `B ⊆ A` independently at each
+    # depth, so a copy that drifted would judge a population the other tree never saw. The
+    # shipped depth carries its OWN law table (`TEMPLATE/SKILL.md.tmpl`) and its OWN
+    # `docs/instruments/*.md`, so the twin is what keeps the two halves answering the same
+    # question; without this entry the gate would exist in both trees with nothing enforcing
+    # that they stay identical.
+    ("tests/test_declaration_drift.py", "TEMPLATE/tests/test_declaration_drift.py"),
     # Added with its registration (board #431, ruling n=2799, dispatched n=2793). Paired for
     # the reason that makes a CENSUS portable rather than for the manifest grain alone: it
     # reads SOURCE and never `evidence/`, so a bootstrapped factory runs the same predicate

@@ -249,6 +249,26 @@ def leg_c_metric(repo: Path) -> tuple[list[str], list[str]]:
         else:
             prints.append(f"predicate: {text!r} is seen as {expected}")
 
+    # THE NEGATIVE HALF, one per new pattern (#489's ruling, point 2). Recall alone is not a
+    # fix: a predicate that matches everything scores perfect recall and measures nothing. The
+    # refusal pattern is anchored on the NEGATED verb of engagement, so it must NOT fire on an
+    # answer that ACCEPTS involvement -- a pattern keyed on the bare phrase `get involved`
+    # would, and would read "I want to get involved" as a decline. The scope pattern is
+    # anchored on the boundary words, so it must NOT fire on an answer that AFFIRMS the
+    # question is inside his scope.
+    for text, why in (
+        ("I want to get involved in this", "an ACCEPTING answer"),
+        ("this is inside my scope", "an IN-SCOPE answer"),
+    ):
+        got = module.declines_as_internal(text)
+        if got is not None:
+            problems.append(
+                f"{text!r} matched {got!r} — {why} was read as a decline, so the widened "
+                "pattern is too wide: it measures topical words, not the refusal"
+            )
+        else:
+            prints.append(f"predicate: {why} {text!r} is NOT a decline")
+
     # The absent store is NOT RUN with a reason, never a zero (#68's shape).
     line = module.format_line({"answered": 0, "declined": 0, "window_days": 30, "matched": []}, "no store here")
     if "NOT RUN" not in line or "no store here" not in line:

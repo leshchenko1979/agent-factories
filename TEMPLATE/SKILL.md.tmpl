@@ -1,7 +1,7 @@
 ---
 name: {{FACTORY_SLUG}}
 description: {{FACTORY_DESCRIPTION}}
-version: 0.1.31
+version: 0.1.32
 author: {{AUTHOR}}
 globs:
   - "{{REPO}}/**"
@@ -357,9 +357,20 @@ factory keeps outside it, the issue board. Every other path to it is read-only.
 | `evidence/rework.md` | the rework entries this factory has **recorded** — each defect, regression and law rollback it wrote down, with its root cause and what now prevents it | the lane that HOLDS the defect: the declaring lane where a close declared the entry, the discovering lane where a patrol or survey found it | read-only; `tests/test_rework.py` gates each entry's completeness, the `Subject` column's vocabulary, the table's contiguity, every rate claim's form, and that each determinate `Subject` resolves to a closed work unit; the share of closes declaring a disposition is printed, never gated — never the completeness of the set |
 | `evidence/scores/<date>.md` | one measurement run, one file per run | the measurement job | read-only |
 | `ONTOLOGY.md` | the canonical vocabulary | `HQ` | read-only, gated |
-| `processes.md` | the canonical process register | `HQ` | read-only |
-| `registry/fleet.json` and `registry/factories/<slug>.json` | what this factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
+| `docs/processes.md` | the canonical process register | `HQ` | read-only |
+| `registry/fleet.json` and `registry/factories/*.json` | what this factory IS in a form a peer can read — its chat, its lanes, the substrates it owns, the cron prefixes it claims | `HQ` (the fleet manifest) and the lane that enrolls (`tools/registry.py enroll`) | read-only, via `tools/registry.py resolve` |
 | `docs/factory-registry.md` and `registry/index.json` | the generated half — the same facts rendered for a reader, plus the reachability route | `tools/registry.py render` | read-only; `tests/test_registry.py` fails a committed render that no longer reproduces over its state-bearing bytes |
+| `registry/kit.json` | the kit version source — `kit_version` names the manifest the tree carries, and a member's verdict is read against **its own** pin, never ours | the **kit** — `tools/kit_manifest.py`, regenerated and never hand-edited | read-only; a hand-kept list of shipped files is a second copy of the tree that goes stale silently (`docs/instruments/kit.md` §5) |
+| `TEMPLATE/registry/kit.example.json` | the **pin vehicle** — the copy a member VENDORS at the version it ported, paired with `registry/kit.example.json` and excluded from the set it renders | the **kit** | read-only; `source_head` stays `"unset"` in every `.example`, never hand-edited |
+| `registry/kit-decisions.json` | the adoption decisions store `tools/kit_census.py` reads | the **factory** — the adopter writes its own | read-only |
+| `registry/kit-exemptions.json` | a member's own declared forks — the kit instrument's **extension surface** (§6.1) | the **factory** | read-only; absence IS the empty state, and the reader's absence-default makes it GREEN |
+| `docs/ledger-invariants.json` | the DECLARED duty-receipt boundary (#78 clause b), read by the runner's `duty_receipt_leg` through the one reader | the **factory** | read-only; a tree that has not declared one gets `DeclarationUnavailable` — the shipped half carries only `ledger-invariants.example.json`, whose `"invariants": {}` |
+| `docs/hygiene-protected.json` | the factory's own declaration of which paths inside its scratch namespace are LIVE STATE | the **factory** | read-only; **never ships** — factory data, deliberately not a manifest path |
+| `tests/gate_registry.py` | the `REQUIRED_GATES` inventory — which gates a factory's suite must carry | the **kit** | read-only |
+| `docs/review-cycle.schema.json` | the review cycle's own schema, emitted by `review.py schema` | the **kit** | read-only; the pair is held byte-identical by `test_docs_sync.py` |
+| `docs/review-lenses.json` | the member's own lens additions — the review instrument's extension surface | the **factory** — the member declares it | read-only; ABSENT is the default state, and the manifest does not track it |
+| `docs/review-lenses.example.json` | the skeleton a member copies to declare its own lenses | the **kit** | read-only; shipped EMPTY and manifest-tracked, so it stays byte-identical |
+| `registry/gates.json` | the per-gate time budgets and the **default's derivation** | the measurement duty (`Surveys`); the DEFAULT's VALUE is `HQ`'s | read-only; `tools/gate_budget.py` REFUSES a stated derivation its own numbers contradict |
 | this law | the process rules | `HQ` | read-only |
 
 **The shared tree is a READ surface; work happens in a worktree.** The tree every lane can

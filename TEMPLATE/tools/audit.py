@@ -2823,6 +2823,24 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "tests/test_template_gate_pairing.py"]
         )
 
+    # 89. the declaration-drift leg (#313). Two committed homes declare which surfaces this
+    #     factory owns: the law table in `skills/meta-factory/SKILL.md` (home A) and every
+    #     `surface`-headed table in `docs/instruments/*.md` (home B). `test_single_writer.py`
+    #     parses home A ALONE, so a surface declared in B and never mirrored into A reads
+    #     clean -- the #311 instance, where the publish receipt was declared in
+    #     `pacemaker.md` and absent from the table. The predicate is ONE-DIRECTIONAL (B must
+    #     be a subset of A; A may lawfully declare surfaces no single instrument enumerates),
+    #     it reads only COMMITTED files, and it PRINTS the population it examined so an empty
+    #     run is distinguishable from a clean one (#116's class). SCRIPT form: the file
+    #     carries `main()` and no module-level `def test_*`, so a pytest runner would collect
+    #     nothing and exit 0 (#124's class). Its arms spawn it as a child, and the recursion
+    #     is capped by `DRIFT_DEPTH` in the ENVIRONMENT -- an argv flag was dropped once and
+    #     forked the box 152 ways (2026-10-16), so the cap is structural, never argv.
+    if (repo_root / "tests/test_declaration_drift.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "tests/test_declaration_drift.py"]
+        )
+
     return gates_to_run
 
 

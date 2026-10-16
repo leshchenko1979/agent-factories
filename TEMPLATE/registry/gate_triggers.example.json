@@ -94,6 +94,12 @@
       "registry/**",
       "tools/**"
     ],
+    "tests/test_declaration_drift.py": [
+      "TEMPLATE/SKILL.md.tmpl",
+      "TEMPLATE/docs/instruments/**",
+      "docs/instruments/**",
+      "skills/**"
+    ],
     "tests/test_declared_boundary_census.py": [
       "TEMPLATE/tests/**",
       "tests/**"

@@ -583,6 +583,17 @@ REQUIRED_GATES: tuple[str, ...] = (
     # with a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
     # runner and keeping the file.
     "test_cron_thinness.py",
+    # Added with its registration (board #313, ruling n=3360). REQUIRED is the correct grain
+    # and OPTIONAL is not: the predicate reads SOURCE in both trees and never `evidence/`, so
+    # it examines a bootstrapped factory's own law surfaces exactly as it examines this
+    # tree's, and it passes there on the same rule. It is byte-paired with a TEMPLATE copy, so
+    # the manifest grain is what keeps a factory from dropping the runner and keeping the
+    # file. THE MECHANISM IT GUARDS: two COMMITTED homes declare the same surfaces -- the law
+    # table in `SKILL.md` (A) and the `surface` tables across `docs/instruments/*.md` (B) --
+    # and the pre-existing single-writer gate parses A ALONE, so a surface declared in B and
+    # never mirrored into A reads clean. This one asserts the one-directional `B ⊆ A` and
+    # PRINTS its population, so an empty run is distinguishable from a clean one.
+    "test_declaration_drift.py",
     # Added with its registration (board #431, ruling n=2799, dispatched n=2793). REQUIRED is
     # the correct grain and OPTIONAL is not: the predicate reads SOURCE and never `evidence/`,
     # so it examines a bootstrapped factory's own modules exactly as it examines this tree's,
