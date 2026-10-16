@@ -694,6 +694,43 @@ def _declared_values(detail: str, key: str) -> list[str]:
             values.append(value)
     return values
 
+# The `outcome` field. Its DOMAIN lives in `tools/audit.py` beside `OUTCOME_DOMAIN`
+# (`docs/processes.md`: accepted · reworked · abandoned · failed), because a bucket is a
+# classification and not a read; the READ lives here, because it is the same positional
+# read as every other word-valued field.
+OUTCOME_KEY = "outcome"
+
+def declared_outcome_values(detail: str) -> list[str]:
+    """Every `outcome` value `detail`'s CANONICAL TRAILER declares, in order.
+
+    The positional leg of the read, published so `tools/audit.py::declared_outcome` can
+    COMPOSE it rather than scan the text itself (#498). Until then that function was the
+    last field reader in the tree that did not go through this module: it took the LAST
+    `outcome=` token ANYWHERE in the detail, which equals the trailer read only while the
+    trailer is intact AND terminal. The module's own `declared_rework` docstring asserted
+    the parallelism while one half of it read the run and the other read the prose.
+
+    Measured at 3435 rows (#498, ruling `n=3436`): 61 rows diverge from this read and
+    every one of the 61 matches a token OUTSIDE its canonical run. The fabrications run
+    in BOTH directions — `n=2028` (close) declares `telemetry=unavailable` and was read
+    as `failed` off prose QUOTING another row's trailer; `n=3275` (run) declares
+    `duty=completed` and was read as `accepted` off a quotation; `n=1062` (run) states
+    it deliberately carries no `outcome=` and was read as declaring `,`. The `#53`
+    remedy (last-token-wins) cured the first direction and left the other, and this read
+    closes both: a token quoted mid-sentence is prose and never becomes a declaration.
+
+    An EMPTY value is a MENTION, not a declaration — `keyed_value` refuses an empty value
+    by design, so `outcome=` contributes nothing even inside the run. That is why the
+    empty shape is an ABSENCE rather than a malformed value (#498 correction, superseding
+    the ruling's Part 4 item 4 for that entry).
+
+    A LIST, not a single value, for `_declared_values`' reason: a resolving caller must
+    see every token it has to resolve. A caller reading a DISPOSITION takes the last,
+    which is the law's canonical token and the only one the run can carry — `append`
+    refuses a run that declares a key twice (#496).
+    """
+    return _declared_values(detail, OUTCOME_KEY)
+
 # The close trailer's `telemetry` field — the PROVENANCE of the measurement keys above,
 # and the field #129 introduced for the absence case. `#130` (HQ ruling, three parts)
 # made it the answer to a question no structural read of a row can settle: HQ measured

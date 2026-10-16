@@ -612,13 +612,41 @@ def outcome_reader_problems() -> list[str]:
     if problem is not None:
         problems.append("a row stating no outcome was reported as malformed; absence is not a bad value")
 
-    # A malformed value is REPORTED, never bucketed as a verdict.
-    for malformed in ("outcome=accepted.", "outcome=", "outcome=Accepted", "outcome=done"):
-        bucket, problem = audit_reader.declared_outcome(f"work landed. {malformed} board=closed")
+    # A malformed value is REPORTED when it sits IN the canonical run, never bucketed as
+    # a verdict — and the SAME token in prose is a mention, not a declaration (#498).
+    # The fixture is the ruling's: the token goes into the run (`board=closed {malformed}`),
+    # because a malformed token left in prose is not reported at all under a positional read
+    # and an arm asserting otherwise would be asserting the old prose scan.
+    for malformed in ("outcome=accepted.", "outcome=Accepted", "outcome=done"):
+        bucket, problem = audit_reader.declared_outcome(f"work landed. board=closed {malformed}")
         if bucket in OUTCOME_DOMAIN:
             problems.append(f"{malformed!r} was bucketed as the verdict {bucket!r}")
         if not problem:
             problems.append(f"{malformed!r} was not reported")
+        prose_bucket, prose_problem = audit_reader.declared_outcome(
+            f"work landed. {malformed} the sentence then continues. board=closed"
+        )
+        if prose_bucket != "unstated" or prose_problem is not None:
+            problems.append(
+                f"{malformed!r} in PROSE was read as {prose_bucket!r} {prose_problem!r}; "
+                f"the canonical run is positional and a token outside it declares nothing"
+            )
+
+    # An EMPTY value is a MENTION, not a declaration — `keyed_value` refuses an empty value
+    # by design, so `outcome=` states nothing even INSIDE the run. It belongs to the ABSENCE
+    # class, not the malformed one (#498 correction, superseding the ruling's Part 4 item 4
+    # for this entry: the prescribed fix would have moved it into the run, where it would
+    # still declare nothing, while the arm demanded a report).
+    for shape in ("work landed. board=closed outcome=", "work landed. outcome= board=closed"):
+        bucket, problem = audit_reader.declared_outcome(shape)
+        if bucket != "unstated":
+            problems.append(
+                f"an empty outcome value was bucketed {bucket!r}, expected 'unstated'"
+            )
+        if problem is not None:
+            problems.append(
+                "an empty outcome value was reported as malformed; a mention is not a value"
+            )
 
     # A mention in prose is not the declaration: the writer appends its trailer LAST, so
     # the last token is canonical. The old reader took the first and parsed `and` out of

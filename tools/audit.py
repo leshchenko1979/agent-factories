@@ -113,6 +113,7 @@ from field_predicate import (  # noqa: E402
     declared_telemetry,
     mentioned_telemetry,
     declared_cause_count,
+    declared_outcome_values,
 )
 
 # The gate-budget reader, on the SAME path-insert convention and for the same
@@ -162,30 +163,41 @@ def declared_outcome(detail: str) -> tuple[str, str | None]:
     declares no outcome at all, or `"invalid:<value>"` when it declares one outside
     the domain. `problem` is a readable report for the two non-domain cases.
 
-    Two rules, both from #53 (ruling n=333 clause 4):
+    Three rules. The first is #53 (ruling n=333 clause 4); the other two are its
+    consequences, and the third was not delivered until #498 conformed this reader.
 
-    * **Read a FIELD, not the first `outcome=` substring in free prose.** The writer
-      appends its trailer at the END of the detail, so the LAST `outcome=` token is
-      the canonical one and an earlier mention is prose that happens to contain the
-      word. The old reader took the FIRST substring and stripped nothing, so a close
-      row whose prose ended `outcome=accepted.` yielded the value `accepted.` — the
-      sentence's full stop travelling inside the value.
-    * **Validate the value against the domain.** The old reader did not, so a typo
-      read as a failure — it fabricated a non-success as readily as a success. The
-      live instance was a close row whose prose read `outcome=accepted.`, with the
-      sentence's full stop inside the value, which dropped a genuinely accepted
-      work unit out of the success set.
+    * **Read the CANONICAL TRAILER, not `outcome=` in free prose.** The read is
+      `field_predicate.declared_outcome_values` — the same positional read
+      (`trailer_tokens` -> `keyed_value`) that `declared_rework`, `declared_duty` and
+      `declared_telemetry_provenance` compose. It was NOT always so: until #498 this
+      function hand-rolled a scan of the WHOLE detail and took the LAST `outcome=`
+      token, which equals the trailer read only while the trailer is intact AND
+      terminal. The DOMAIN stays here, beside `OUTCOME_DOMAIN`; only the READ moved,
+      because a bucket is a classification and not a read.
+    * **An earlier mention is prose, not a declaration.** `#53`'s live instance was a
+      close row whose prose read `outcome=accepted.`, and the sentence's full stop
+      travelled inside the value — which dropped a genuinely accepted work unit out of
+      the success set.
+    * **A token OUTSIDE the run is never a value at all.** The old reader cured the
+      `#53` direction and left its mirror: measured at 3435 rows (#498), 61 rows
+      diverged from the positional read, every one of them on a token outside its run,
+      and the fabrications run BOTH ways — `n=2028` declares `telemetry=unavailable`
+      and read as `failed` off prose quoting another row's trailer, `n=3275` declares
+      `duty=completed` and read as `accepted` off a quotation, `n=1062` states it
+      deliberately carries no `outcome=` and read as declaring `,`.
+
+    An EMPTY value is a MENTION, not a declaration: `keyed_value` refuses an empty value
+    by design, so `outcome=` states nothing even inside the run and the row reads
+    UNKNOWN. A malformed value must be IN the run to be reported at all.
 
     An unstated outcome is UNKNOWN. It is never `accepted`: that default is the
     defect this clause removes, and it is why the two headline rates could only
     report success.
     """
-    value = None
-    for part in str(detail).split():
-        if part.startswith("outcome="):
-            value = part.split("=", 1)[1]
-    if value is None:
+    values = declared_outcome_values(detail)
+    if not values:
         return "unstated", None
+    value = values[-1]
     if value in OUTCOME_DOMAIN:
         return value, None
     return (
