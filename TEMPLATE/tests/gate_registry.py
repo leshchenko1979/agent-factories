@@ -780,6 +780,16 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_skill_version_contract.py",
     "test_subject_form.py",
     "test_telemetry_reader_registry.py",
+    # Added with its registration (board #488, ruled n=3332). REQUIRED is the correct grain:
+    # the CLASS it guards is a property of the KIT, not of this factory — a factory that adds
+    # a gate under `TEMPLATE/` inherits exactly the obligation this tree has, and the gate
+    # proves it by RUNNING the candidate with `cwd=TEMPLATE` rather than inspecting it. It
+    # reads no live board, no fleet manifest and no box-local fixture: its subject is the
+    # staged index plus the shipped tree's own audit and skip surfaces, so it passes in a
+    # bootstrapped factory exactly as it does here. Byte-paired with a TEMPLATE copy, so the
+    # manifest grain is what keeps a factory from dropping the instrument and keeping the
+    # shipped gates it was supposed to watch.
+    "test_template_gate_pairing.py",
     "test_template_integrity.py",
     # Added with its registration (board #235). REQUIRED is the correct grain: the gate scans
     # `tools/*.py`, which every factory has, so it passes in a bootstrapped factory exactly

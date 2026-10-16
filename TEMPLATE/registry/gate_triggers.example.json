@@ -171,6 +171,13 @@
       "tools/audit.py",
       "tools/gate_select.py"
     ],
+    "tests/test_harness_bindings.py": [
+      "docs/harness-bindings.example.json",
+      "docs/harness-bindings.json",
+      "skills/meta-factory/SKILL.md",
+      "tests/declared_surface.py",
+      "tests/test_harness_bindings.py"
+    ],
     "tests/test_hq_delegation.py": [
       "ONTOLOGY.md",
       "TEMPLATE/*.tmpl",
@@ -493,6 +500,15 @@
       "TEMPLATE/tools/publish.py",
       "tools/publish.py"
     ],
+    "tests/test_question_intake.py": [
+      "TEMPLATE/docs/instruments/open-questions.md",
+      "TEMPLATE/tools/intake_metric.py",
+      "docs/instruments/open-questions.md",
+      "skills/meta-factory/SKILL.md",
+      "tests/test_question_intake.py",
+      "tools/audit.py",
+      "tools/intake_metric.py"
+    ],
     "tests/test_questions.py": [
       "TEMPLATE/tools/questions*",
       "tools/questions*"
@@ -631,6 +647,14 @@
       "skills/**",
       "tools/**"
     ],
+    "tests/test_template_gate_pairing.py": [
+      "TEMPLATE/**",
+      "docs/shipped-audit-skips.json",
+      "registry/gate_triggers.json",
+      "tests/gate_registry.py",
+      "tests/test_template_gate_pairing.py",
+      "tools/audit.py"
+    ],
     "tests/test_template_integrity.py": [
       "TEMPLATE/**",
       "tests/test_template_sync.py"
@@ -657,22 +681,6 @@
       "docs/products.example.json",
       "docs/products.json",
       "tools/roadmap.py"
-    ],
-    "tests/test_harness_bindings.py": [
-      "docs/harness-bindings.example.json",
-      "docs/harness-bindings.json",
-      "skills/meta-factory/SKILL.md",
-      "tests/declared_surface.py",
-      "tests/test_harness_bindings.py"
-    ],
-    "tests/test_question_intake.py": [
-      "TEMPLATE/docs/instruments/open-questions.md",
-      "TEMPLATE/tools/intake_metric.py",
-      "docs/instruments/open-questions.md",
-      "skills/meta-factory/SKILL.md",
-      "tests/test_question_intake.py",
-      "tools/audit.py",
-      "tools/intake_metric.py"
     ]
   }
 }

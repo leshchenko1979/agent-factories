@@ -416,6 +416,14 @@ PAIRS = [
     ("tools/gate_select.py", "TEMPLATE/tools/gate_select.py"),
     ("tests/test_gate_triggers.py", "TEMPLATE/tests/test_gate_triggers.py"),
     ("registry/gate_triggers.example.json", "TEMPLATE/registry/gate_triggers.example.json"),
+    # The TEMPLATE-pairing leg and its gate (#488). The gate ships with the kit because the
+    # CLASS it guards is a property of the kit: a factory that adds a shipped gate inherits
+    # the same obligation the root tree has, so the instrument travels with the template
+    # rather than staying behind as root-only tooling. Its own shipped-depth population is
+    # absent (no nested TEMPLATE/), which it STATES rather than passing silently -- the
+    # declaration lives in `docs/shipped-audit-skips.json` and is checked by
+    # `tests/test_shipped_audit_runs.py`.
+    ("tests/test_template_gate_pairing.py", "TEMPLATE/tests/test_template_gate_pairing.py"),
     ("tests/test_ontology.py", "TEMPLATE/tests/test_ontology.py"),
     ("tests/test_ledger.py", "TEMPLATE/tests/test_ledger.py"),
     ("tests/test_rework.py", "TEMPLATE/tests/test_rework.py"),

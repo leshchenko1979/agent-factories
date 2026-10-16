@@ -2806,6 +2806,23 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "tests/test_question_intake.py"]
         )
 
+    # 88. the TEMPLATE-pairing leg (#488). A shipped gate is ADDED, or its subject-root
+    #     derivation CHANGES, and the shipped depth can no longer carry its subject. That is
+    #     #459's class, whose remedy reached the routing gate and did not reach the bound
+    #     reader, so #487 recurred as a shipped copy reddening the shipped audit. The
+    #     predicate reads the STAGED INDEX -- the commit, not the working tree, because a
+    #     worktree that holds its new files uncommitted is exactly the surface a tree-wide
+    #     reader cannot see -- and demands one of three: the shipped depth CARRIES the gate
+    #     (proved by RUNNING it with cwd=TEMPLATE, never by inspecting it), the skip surface
+    #     `docs/shipped-audit-skips.json` DECLARES it with a reason marker present in the
+    #     gate's own source, or the shipped audit does not register it at all. SCRIPT form:
+    #     the file carries `main()` and no module-level `def test_*`, so a pytest runner
+    #     would collect nothing and exit 0 (#124's class).
+    if (repo_root / "tests/test_template_gate_pairing.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "tests/test_template_gate_pairing.py"]
+        )
+
     return gates_to_run
 
 

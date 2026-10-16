@@ -419,16 +419,18 @@
     "tests/test_gate_fixtures_closure.py": "pytest",
     "tests/test_gate_invocation_mode.py": "script",
     "tests/test_gate_registration.py": "script",
+    "tests/test_gate_triggers.py": "pytest",
+    "tests/test_harness_bindings.py": "pytest",
     "tests/test_hq_delegation.py": "pytest",
     "tests/test_hygiene_build_residue.py": "pytest",
     "tests/test_hygiene_declaration_sweep.py": "pytest",
-    "tests/test_hygiene_placement.py": "pytest",
-    "tests/test_hygiene_stale_dirs.py": "pytest",
     "tests/test_hygiene_evidence_supersession.py": "pytest",
     "tests/test_hygiene_inflight.py": "pytest",
     "tests/test_hygiene_namespace.py": "pytest",
-    "tests/test_insights_author.py": "pytest",
+    "tests/test_hygiene_placement.py": "pytest",
+    "tests/test_hygiene_stale_dirs.py": "pytest",
     "tests/test_insights_audience.py": "pytest",
+    "tests/test_insights_author.py": "pytest",
     "tests/test_insights_gate_recorded.py": "pytest",
     "tests/test_insights_status.py": "pytest",
     "tests/test_instrument_census.py": "script",
@@ -445,6 +447,8 @@
     "tests/test_law_no_raw_session_uuid.py": "script",
     "tests/test_law_structure.py": "pytest",
     "tests/test_ledger.py": "script",
+    "tests/test_ledger_citation_declared.py": "pytest",
+    "tests/test_ledger_claim_preflight.py": "pytest",
     "tests/test_ledger_close_preflight.py": "pytest",
     "tests/test_ledger_commit_cites_no_rows.py": "script",
     "tests/test_ledger_header_closure.py": "script",
@@ -456,6 +460,7 @@
     "tests/test_ontology.py": "script",
     "tests/test_patrol_host_state.py": "pytest",
     "tests/test_publish.py": "script",
+    "tests/test_question_intake.py": "pytest",
     "tests/test_questions.py": "script",
     "tests/test_reconstructed_claim_declared.py": "pytest",
     "tests/test_registry.py": "script",
@@ -471,6 +476,8 @@
     "tests/test_score_gate_recorded.py": "pytest",
     "tests/test_self_audit_instant.py": "script",
     "tests/test_session_bindings.py": "pytest",
+    "tests/test_shipped_audit_runs.py": "script",
+    "tests/test_shipped_mechanism_law.py": "script",
     "tests/test_single_writer.py": "script",
     "tests/test_skill_version_contract.py": "pytest",
     "tests/test_subject_anchor.py": "script",
@@ -478,18 +485,12 @@
     "tests/test_synthesize_insights.py": "pytest",
     "tests/test_synthesize_interface.py": "script",
     "tests/test_telemetry_reader_registry.py": "pytest",
+    "tests/test_template_gate_pairing.py": "script",
     "tests/test_template_integrity.py": "pytest",
     "tests/test_template_sync.py": "script",
     "tools/hygiene.py": "script",
     "tools/ledger.py": "script",
-    "tools/roadmap.py": "script",
-    "tests/test_ledger_claim_preflight.py": "pytest",
-    "tests/test_shipped_audit_runs.py": "script",
-    "tests/test_shipped_mechanism_law.py": "script",
-    "tests/test_ledger_citation_declared.py": "pytest",
-    "tests/test_gate_triggers.py": "pytest",
-    "tests/test_harness_bindings.py": "pytest",
-    "tests/test_question_intake.py": "pytest"
+    "tools/roadmap.py": "script"
   },
   "exits": {
     "tests/test_audit_inflight_guard.py": {
@@ -778,6 +779,9 @@
       "class": "always-satisfiable"
     },
     "tests/test_telemetry_reader_registry.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_template_gate_pairing.py": {
       "class": "always-satisfiable"
     },
     "tests/test_template_integrity.py": {
