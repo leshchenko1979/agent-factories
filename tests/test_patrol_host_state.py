@@ -188,7 +188,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
-         shared_tree_fn=None):
+         shared_tree_fn=None, duty_scope=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -303,6 +303,13 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # every probe written before the conversion keeps its meaning; a probe that asserts
         # a pre-boundary, post-boundary, NOT RUN or REFUSED bound passes its own.
         board_scope_fn=(board_scope if board_scope is not None else _board_scope),
+        # The duty-receipt leg's bound (#487) is injected for the same reason the three
+        # board legs' are: it judges a HISTORICAL population of rounds against a bound THIS
+        # tree declares, so a probe must be able to drive a pre-boundary round, a
+        # post-boundary one or a REFUSED bound without the live declaration deciding its
+        # verdict. The default reads this tree's declaration through the SAME `_duty_scope`
+        # the probes derive their own instants from, so probe and leg resolve by one path.
+        duty_scope_fn=(duty_scope if duty_scope is not None else _duty_scope),
         # The stall-census leg's ONE read (#331 clause 2) is injected for the same reason as
         # every other declaration here: the default `lane_names_fn` resolves NO session id, so
         # an addressee can only resolve in a probe that supplied its own binding map — never
@@ -2105,7 +2112,24 @@ def _board_scope(repo, key: str) -> tuple[str, str, str]:
     return _tree_bound(key, _BOARD_BOUNDS.get(key, "")), "", ""
 
 
-_DUTY_BOUND = _tree_bound(RUNNER.DUTY_RECEIPT_BOUNDARY_KEY, "2026-09-25T07:01:07Z")
+# The duty leg's bound (#487). Same rule as the three board legs' bounds above: the instant
+# is read from THIS tree's declaration through the reader the leg itself uses, with the kit's
+# literal only as the pre-adoption fallback. `_duty_scope` returns `(instant, text, refusal)`
+# -- the INSTANT first, unlike `_board_scope`, because this leg consumes a parsed instant where
+# the board legs re-parse a text -- and it is the SAME function `_run` hands the leg as its
+# default reader, so the probe's own instants and the leg's bound resolve by ONE path.
+def _duty_scope(repo) -> tuple:
+    """The duty leg's bound, read from THIS tree (#487), as `(instant, text, refusal)`.
+
+    The default for every probe that drives `main()`, and the reader `_DUTY_BOUND` below is
+    derived from, so the probe's instants and the leg's bound can never resolve by two
+    different paths -- the discipline `_board_scope` keeps for the three board legs. The kit's
+    literal is only the fallback that keeps the probes runnable before adoption.
+    """
+    text = _tree_bound(RUNNER.DUTY_RECEIPT_BOUNDARY_KEY, "2026-09-25T07:01:07Z")
+    return RUNNER.reader_parse_ts(text), text, ""
+
+_DUTY_BOUND = _duty_scope(REPO)[1]
 _DUTY_FIRE = _plus(_DUTY_BOUND, 0.5)
 _DUTY_ROUND = _DUTY_FIRE[:10]
 _RECEIPT_TS = _plus(_DUTY_BOUND, 1.0)
@@ -2556,20 +2580,37 @@ def test_the_duty_leg_is_WIRED_into_the_runner_and_prints_its_population() -> No
     assert "LEG duty-receipt" in out, out
     assert "1 row(s) declare a receipt" in out, out
     assert "RESULTING STATE, never the receipt" in out, out
-    # WHICH verdict reaches the report depends on whether THIS tree declares the bound the
-    # leg judges against (#78 clause b): a tree that has declared none is REFUSED rather
-    # than shown a clean run, which is the leg's own fail-closed law (#175) and not a
-    # weaker outcome. Both states must carry the verdict and both must fail the run — a leg
-    # silenced in either one is the failure this probe exists to catch — so the branch
-    # asserts each tree's own honest verdict rather than one tree's wording.
-    _, _, refusal = RUNNER.duty_receipt_bound(RUNNER.REPO)
-    if refusal:
-        assert "UNDECLARED" in out or "REFUSED" in out, (
-            f"a tree that declares no bound must be TOLD so in the report\n{out}"
-        )
-    else:
-        assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
+    # #487: the bound is read through the SAME reader the runner was handed, never the LIVE
+    # one. A probe that resolved this field by a second path would be the very defect #487
+    # fixed — and it would assert the shipped half REFUSES while the runner, handed the
+    # reader whose fallback keeps the probes runnable, JUDGES. The REFUSAL path is exercised
+    # through `main()` by the probe below, which drives a refusing reader.
+    assert _duty_scope(RUNNER.REPO)[2] == "", "the default reader must not refuse here"
+    assert "NO duty receipt" in out, "a missing duty receipt must reach the report"
     assert rc == 1, "the leg's verdict must fail the run"
+
+
+def test_a_REFUSED_duty_bound_is_HONOURED_through_the_runner() -> None:
+    """#487 acceptance, the FAIL arm: a reader that REFUSES must reach the verdict.
+
+    The bound is injected, so a probe can drive a state the live tree cannot be in — a
+    declaration that is present but unreadable — without the live tree deciding the verdict.
+    A REFUSAL is neither a skip nor a pass: no round may be judged while the bound is
+    unreadable, and the run must be RED naming the key it could not read. Without this arm
+    the injection could be wired to nothing and every other probe would still pass.
+    """
+    def _refusing(_repo):
+        return None, "", (
+            "`duty_receipt_declared` is declared in this tree but cannot be read: "
+            "not an instant — REFUSED: probe"
+        )
+
+    rc, out, _ = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"],
+                      duty_scope=_refusing)
+    assert rc == 1, f"a refused bound is a defect, got rc={rc}\n{out}"
+    assert "LEG duty-receipt" in out, out
+    assert "cannot be read" in out, out[-3000:]
+    assert "REFUSED" in out, out[-3000:]
 
 
 def test_a_round_YOUNGER_than_the_residual_is_NOT_JUDGED_with_its_AGE_printed() -> None:

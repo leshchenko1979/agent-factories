@@ -3931,7 +3931,8 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                      prefixes: list[str], ledger_rows: list[dict], *,
                      read_at: str = "", store: Path = FRAGMENT_STORE,
                      predicate=None, repo: Path = REPO, now=None,
-                     fires: list[dict] | None = None, margin_for=None) -> dict:
+                     fires: list[dict] | None = None, margin_for=None,
+                     scope_fn=None) -> dict:
     """The duty-completion leg: did the round each thin trigger woke LEAVE A RECEIPT?
 
     POPULATION. The ENABLED cron rows this factory DECLARES that carry a receipt
@@ -4003,7 +4004,12 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     # A leg that judges NOTHING owes no bound: computing one anyway would hand a member
     # factory with zero declared receipts a REFUSED line for a duty it never owed.
     if declared:
-        bound_instant, bound_text, bound_refusal = duty_receipt_bound(repo)
+        # #487: the bound is read through the INJECTED reader where a probe supplied one,
+        # exactly as the three board legs read theirs. Read from the ambient `REPO`, this
+        # leg judges a history the probe never declared -- and the two halves of this
+        # byte-paired file then disagree about what the factory declared, which is the
+        # #459 class: the shipped half declares nothing and reads an adopting tree's bound.
+        bound_instant, bound_text, bound_refusal = (scope_fn or duty_receipt_bound)(repo)
     else:
         bound_instant, bound_text, bound_refusal = None, "", ""
     if bound_refusal:
@@ -8035,6 +8041,7 @@ def main(
     criterion_repo_fn=None,
     scores_dir_fn=None,
     board_scope_fn=None,
+    duty_scope_fn=None,
     lane_names_fn=None,
     shared_tree_fn=None,
     out=print,
@@ -8120,6 +8127,16 @@ def main(
     renderings -- blocking paths, an UNKNOWN comparison, NOT RUN -- are exactly what a
     probe must be able to drive without the live box. It is deliberately NOT a leg: it
     carries no problem, so it can never move the patrol's exit code.
+
+    The duty-receipt leg's bound is injected for the fifteenth and for the same reason as
+    the three board legs' (#487): it judges a HISTORICAL population of rounds against a
+    bound this tree declares, so a probe that could only read the live declaration could
+    not exercise a pre-boundary round, a post-boundary one, or a REFUSED bound at all --
+    and in the half of this byte-paired file that ships, no declaration exists, so a probe
+    reading the live tree would assert an ADOPTING member's history rather than the leg's
+    behaviour. `duty_scope_fn(repo)` returns `(instant, text, refusal)` -- the INSTANT
+    first, because this reader parses where the board legs' returns only text; the live
+    default reads this tree's declaration through the one boundary reader.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", help="override the owner/repo derived from the remote")
@@ -8153,6 +8170,11 @@ def main(
 
     cron_rows, homes_read, unreached = cron_rows_fn()
     board_bound = board_scope_fn or declared_leg_boundary
+    # #487: the duty leg's bound is read the same way and for the same reason. It was the
+    # one bounded leg still resolving the ambient `REPO` INSIDE the leg, so a probe that
+    # injected a board bound still had its duty bound decided by the tree the patrol ran
+    # in -- and in the half of this byte-paired file that ships, no declaration exists.
+    duty_scope = duty_scope_fn or duty_receipt_bound
     # #241: the shared-tree rider is read ONCE and handed to the report, which prints it
     # at the head of the board-leg region. It is deliberately NOT a leg: it carries no
     # problem, so it can never move the patrol's exit code (a standalone detection leg was
@@ -8186,6 +8208,9 @@ def main(
             # the leg is handed the daemon's fire records. Injected for the same reason the
             # cron table is: a probe must not have its window decided by the live box.
             fires=cron_fires_fn(),
+            # #487: the bound is injected, never read from the ambient tree the patrol runs
+            # in -- the same reason the three board legs' bounds are.
+            scope_fn=duty_scope,
         ),
         canonicality_leg(rows, read_at=read_at),
         workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
