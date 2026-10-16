@@ -4540,6 +4540,113 @@ def _declared_skip(what: str, reason: str) -> None:
     pytest.skip(reason)
 
 
+# --- #500: a NON-POSITIVE measured max is not a measurement ------------------------
+# `margin_for` (tools/gate_budget.py) is `4.0 + 0.75/x`, so it DIVIDES by its argument: a
+# measured max of 0.0 raises ZeroDivisionError. That is reachable through the residual
+# derivation -- a round that fires more than once whose single receipt is ts-EQUAL to the
+# round's FIRST fire leaves latencies == [0.0], because the first fire's gap is exactly
+# zero and every later fire's gap is NEGATIVE and dropped as a clock artefact.
+#
+# WHY IT MATTERED: the runner builds its legs in ONE list in main() with no try/except, so
+# the exception does not lose one leg -- it takes the WHOLE round down and every leg after
+# it never runs. The guard therefore belongs at the CALLER, and these probes pin BOTH
+# halves: the caller returns the default, AND `margin_for(0.0)` still raises at the bytes,
+# because that predicate is shared law with its own probes on the division.
+_500_FIRE_HOURS = (0.5, 4.5, 8.5, 12.5)
+_500_READ_AT = _plus(_DUTY_BOUND, 200.0)
+
+def _500_rows() -> list[dict]:
+    """ONE receipt, ts-EQUAL to the FIRST of the four fires.
+
+    It answers the first fire exactly and every later fire with a negative gap, so the
+    measured max is 0.0 -- NOT None, which is the whole defect: the `is None` guard passed
+    it straight through to the division.
+    """
+    first = _plus(_DUTY_BOUND, _500_FIRE_HOURS[0])
+    return [{"n": 1, "ts": first, "event": "run", "actor": "delegate",
+             "subject": f"registry-attest-{first[:10]}",
+             "detail": "the round completed. duty=completed"}]
+
+def _500_row(**kw) -> dict:
+    kw.setdefault("last_run_at", _plus(_DUTY_BOUND, _500_FIRE_HOURS[-1]))
+    return _duty_row(**kw)
+
+def _500_residual(rows) -> dict:
+    return RUNNER.duty_residual_for(
+        _500_row(), "registry-attest", fires=_fires(_500_FIRE_HOURS), ledger_rows=rows)
+
+def test_the_zero_max_guard_keeps_margin_for_RAISING() -> None:
+    """Acceptance 1: the guard is at the CALLER, so the SHARED law is unchanged.
+
+    A fix that caught the zero INSIDE `margin_for` would silence the predicate for every
+    caller in the fleet, including the gate-budget manifest's own derivation. This asserts
+    the raise still happens, at the bytes.
+    """
+    margin_for = RUNNER.gate_budget_module().margin_for
+    try:
+        margin_for(0.0)
+    except ZeroDivisionError:
+        return
+    raise AssertionError(
+        "margin_for(0.0) no longer raises — the #500 guard leaked into shared law "
+        "(tools/gate_budget.py), whose own probes pin the division")
+
+def test_the_zero_max_guard_returns_the_DEFAULT_instead_of_raising() -> None:
+    """Acceptance 2: the exact fixture that crashed the derivation returns the default.
+
+    `measured_rounds` is asserted beside the basis, because the requirement is that the
+    reading is STATED rather than silent: a default that also hid the one round it measured
+    would render identically to a job that never fired at all.
+    """
+    residual = _500_residual(_500_rows())
+    assert residual["basis"] == "default", residual
+    assert residual["measured_max_secs"] == 0.0, residual
+    assert residual["measured_rounds"] == 1, residual
+    assert residual["margin_x"] is None, residual
+    assert residual["residual_secs"] == float(RUNNER.DUTY_RESIDUAL_DEFAULT_SECS), residual
+
+def test_the_zero_max_guard_CONTROL_derives_a_POSITIVE_max_normally() -> None:
+    """The CONTROL for the probe above: a positive max still DERIVES.
+
+    Without it the default could be the guard firing on EVERY fixture rather than on the
+    zero — a change that replaced the whole derivation with the constant would pass the
+    probe above and destroy the measurement (#449).
+    """
+    rows = [{**_500_rows()[0], "ts": _plus(_500_rows()[0]["ts"], 1.0)}]
+    residual = _500_residual(rows)
+    assert residual["basis"] == "derived", residual
+    assert residual["measured_max_secs"] == 3600.0, residual
+    assert residual["margin_x"] is not None, residual
+
+def test_the_zero_max_guard_reaches_the_LEG_and_it_keeps_its_shape() -> None:
+    """Acceptance 3: the fixture driven through `duty_receipt_leg`, the path a round runs.
+
+    A guard that only satisfied the helper would leave the crash on the real path, and the
+    leg is what the patrol actually calls. The assertion is that the leg RETURNS and that
+    the record is the leg's normal shape — before the guard the exception propagated out of
+    the derivation and, with no try/except around the leg list, took the round down.
+    """
+    leg = _duty_leg([_500_row()], _500_rows(), fires=_fires(_500_FIRE_HOURS),
+                    read_at=_500_READ_AT)
+    assert set(leg) >= {"name", "status", "problems", "excused", "coverage"}, sorted(leg)
+    assert leg["status"] in ("ASSERTED", "NOT RUN"), leg["status"]
+    assert leg["name"] == "duty-receipt", leg["name"]
+
+def test_the_zero_max_guard_STATES_the_reading_in_the_render() -> None:
+    """The render distinguishes a measured ZERO from an absent measurement.
+
+    "no measurable round" and "measured, and the number is zero" are different facts, and a
+    render printing one sentence for both would report a silent job and a clock-artefact job
+    identically. The second half is the control: the absent case must not borrow the
+    non-positive wording.
+    """
+    zero_text = RUNNER.duty_residual_basis_text(
+        {"basis": "default", "measured_max_secs": 0.0, "measured_rounds": 1})
+    absent_text = RUNNER.duty_residual_basis_text(
+        {"basis": "default", "measured_max_secs": None, "measured_rounds": 0})
+    assert "NON-POSITIVE" in zero_text, zero_text
+    assert "NON-POSITIVE" not in absent_text, absent_text
+
 # --- #242: attribution by GIT COMMON DIR, and an empty prefix set is NOT RUN ---------
 
 def _git_repo_with_worktree(root: Path) -> tuple[Path, Path]:

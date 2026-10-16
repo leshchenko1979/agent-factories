@@ -191,6 +191,16 @@ DUTY_RESIDUAL_DEFAULT_BASIS = (
     "cannot yet clear (a false MISSING, which costs one look), while a long one is SILENT "
     "(#160). The default errs SHORT."
 )
+DUTY_RESIDUAL_ZERO_BASIS = (
+    "1800 s -- the same default, applied because the max measured latency is NON-POSITIVE "
+    "rather than absent (#500). `margin_for` is shared law in `tools/gate_budget.py` and "
+    "divides by its argument (`4.0 + 0.75/x`), so a measured max of 0.0 raises "
+    "ZeroDivisionError -- and because this runner builds its legs in ONE list with no "
+    "try/except, that exception takes the WHOLE round down and every leg after it never "
+    "runs. The guard therefore lives HERE, at the caller, and never in `margin_for`: that "
+    "predicate is pinned by its own probes, so `margin_for(0.0)` must still raise at the "
+    "bytes. `measured_rounds` stays in the record, so the reading is STATED, not silent."
+)
 DUTY_RESIDUAL_FORM = (
     "budget_sec = margin_for(measured_max) x measured_max, in the gate-budget law's form "
     "(`tools/gate_budget.py`) -- the job's OWN measured max fire->receipt latency, from the "
@@ -3254,7 +3264,10 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
     `DUTY_RESIDUAL_DEFAULT_SECS` with `basis="default"` and the stated reason. The two
     error directions are not equal — a short window judges a round the leg cannot yet
     clear (a false MISSING, which costs one look), while a long one is SILENT (#160) — so
-    the default errs SHORT, and it is PRINTED, never applied invisibly.
+    the default errs SHORT, and it is PRINTED, never applied invisibly. A max measured as
+    NON-POSITIVE takes this same path (#500): `margin_for` divides by it, and this runner
+    builds its legs in one list with no try/except, so raising here would take the whole
+    round down. The guard is at this CALLER, never in `margin_for`.
 
     THE CADENCE IS REPORTED, NEVER ENFORCED. `cadence_secs` is the median gap between this
     job's own fires, and `over_cadence` is true when the derived residual reaches it. Such
@@ -3295,11 +3308,17 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
         latencies.append(latency)
 
     measured_max = max(latencies) if latencies else None
-    if measured_max is None:
+    # A NON-POSITIVE max is not a measurable round (#500), and it takes the SAME default
+    # path as an absent one rather than reaching `margin_for`, which DIVIDES by its
+    # argument. Guarded at the CALLER, never in `margin_for`: that predicate is shared law
+    # with its own probes pinning the division.
+    if measured_max is None or measured_max <= 0:
         residual = float(DUTY_RESIDUAL_DEFAULT_SECS)
         margin = None
         basis = "default"
-        basis_text = DUTY_RESIDUAL_DEFAULT_BASIS
+        basis_text = (
+            DUTY_RESIDUAL_DEFAULT_BASIS if measured_max is None else DUTY_RESIDUAL_ZERO_BASIS
+        )
     else:
         margin = margin_for(measured_max)
         residual = margin * measured_max
@@ -4455,6 +4474,13 @@ def duty_residual_basis_text(residual: dict) -> str:
             f"derived: margin {residual['margin_x']:.3f} x its own measured max "
             f"{duty_age_text(residual['measured_max_secs'])} over "
             f"{residual['measured_rounds']} round(s)"
+        )
+    max_secs = residual.get("measured_max_secs")
+    if max_secs is not None and max_secs <= 0:
+        return (
+            f"DEFAULT — {residual.get('measured_rounds', 0)} measurable round(s) for this "
+            f"job, whose max measured latency is NON-POSITIVE ({max_secs} s); `margin_for` "
+            f"divides by it, so the default is applied at this caller rather than raising"
         )
     return (
         f"DEFAULT — {residual.get('measured_rounds', 0)} measurable round(s) for this job, "
