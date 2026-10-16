@@ -762,8 +762,7 @@ def batch_return_address(entry):
     -- the pre-factory shape, where questions carry no session of their own.
     """
     answered = [q for q in (entry.get("questions") or [])
-                if q.get("answer") is not None
-                or q.get("status") in ("clarifying", "clarified")]
+                if q.get("status") in DELIVERABLE_STATUSES]
     resolved = []
     for question in answered:
         session = (question.get("session") or entry.get("session") or "").strip()
@@ -788,6 +787,43 @@ def batch_return_address(entry):
 # silently removed it from the live register — the opposite of the contract
 # ("a Clarify request ... never silently closes the question").
 CLOSED_STATUSES = ("answered", "withdrawn", "expired")
+
+# The statuses whose row CARRIES AN ANSWER TO DELIVER (#494). Declared here,
+# once, beside CLOSED_STATUSES and for the same reason: a reader must ask the
+# row's own STATE which population it belongs to, so a NEW status has to be
+# classified explicitly instead of falling into whatever a field-presence test
+# happens to do with it.
+#
+# The population used to be selected by `answer is not None`, and that is a
+# DISAGREEMENT rather than a filter: a RETRACTED row keeps its stale answer on
+# disk until something re-writes it -- measured 2026-10-16 on the live register,
+# 17 retracted rows still carried the answer KEYS and 7 carried a NON-NULL one,
+# 2 of them a real `answer` -- so field-presence put withdrawn questions into the
+# DELIVERY population. Only a second stale field -- the `delivered` stamp that is never
+# retried (#251) -- was holding them out of a retry, so the population was
+# correct by ACCIDENT. Selecting on status makes it correct by CONSTRUCTION,
+# and it repairs the rows already on disk, which the writer leg cannot reach.
+DELIVERABLE_STATUSES = ("answered", "clarifying", "clarified")
+
+# EVERY field the ANSWER wrote. A RETRACTION owes all six (#451, #494).
+#
+# The rule is retraction => clear, NOT closed => clear: `answered` is itself in
+# CLOSED_STATUSES and it is the ONE status that HOLDS the answer, so a rule
+# keyed on closure would wipe a real answer at the very moment cmd_answer writes
+# it.
+ANSWER_FIELDS = ("answer", "answer_kind", "answered_at", "answered_via",
+                 "answered_by", "delivery")
+
+def clear_answer(question):
+    """Take the answer AND its provenance off a row that no longer holds one.
+
+    One declaration, three verbs (`amend` #451, `withdraw` and `gc`'s expiry
+    #494): the class is the disagreement between verbs about what a state
+    change owes, so the fix is the shared predicate rather than three copies of
+    the same pop loop that can drift apart again.
+    """
+    for field in ANSWER_FIELDS:
+        question.pop(field, None)
 
 # What an empty Clarify tap MEANS (#183, 2026-09-26). The owner's click is the
 # whole request — no payload is owed — but the transition must still carry
@@ -1820,9 +1856,10 @@ def cmd_amend(argv):
         # `delivery` is the one with teeth: pending_deliveries() READS it to
         # decide what to retry, so a surviving `delivered` stamp suppresses the
         # redelivery of the NEXT answer to the same question.
-        for stale in ("answer", "answer_kind", "answered_at", "answered_via",
-                      "answered_by", "delivery"):
-            question.pop(stale, None)
+        # The list itself lives in ANSWER_FIELDS (#494): `withdraw` and `gc`'s
+        # expiry owe the SAME six, and three copies of one pop loop is how the
+        # class re-opens.
+        clear_answer(question)
         question["amend_count"] = int(question.get("amend_count") or 0) + 1
         if flags.get("--by"):
             question["amended_by"] = flags["--by"]
@@ -1881,6 +1918,18 @@ def cmd_withdraw(argv):
             return 3
         was = question.get("status")
         question["status"] = "withdrawn"
+        # A RETRACTION takes the answer AND its provenance with it (#494). The
+        # reachable case is not hypothetical: `answer ... clarify` sets
+        # status=clarifying and writes the clarify text into `answer`, and a
+        # clarifying question is NOT closed -- so a row can be retracted while
+        # carrying a real answer, its answered_at, and a delivery stamp. Left
+        # behind, that row keeps asserting it was answered at X, via page, by Y.
+        clear_answer(question)
+        # ...and the retraction records its OWN instant (#494 leg 3).
+        # clear_answer removes `answered_at`, which was the row's only temporal
+        # anchor, so without this a withdrawn row would be strictly LESS datable
+        # than an expired one -- and expiry already stamps `expired_at`.
+        question["withdrawn_at"] = now_iso()
         if flags.get("--text"):
             question["withdrawn_reason"] = flags["--text"]
         if flags.get("--by"):
@@ -1969,6 +2018,13 @@ def cmd_gc(argv):
                     # and its lane anchors remain permanent.
                     question["status"] = "expired"
                     question["expired_at"] = now_iso()
+                    # Expiry is the SECOND retraction verb, and it owed the same
+                    # clear (#494). Reachable, not theoretical: the loop above
+                    # skips only rows question_is_closed() already returns True
+                    # for, and a `clarifying` row -- which carries the owner's
+                    # clarify request in `answer` -- is NOT closed, so TTL can
+                    # expire it with its answer intact.
+                    clear_answer(question)
                     expired.append("%s %s" % (entry.get("id"), question.get("qid")))
         closed = [s for s in data["sets"] if set_is_closed(s)]
         closed_ids = {s.get("id") for s in closed}
@@ -2079,13 +2135,15 @@ def compose_answer_body(entry, qid=None):
 def answerable_questions(entry, qid=None):
     """The questions a delivery BODY carries: answered, or awaiting a clarify.
     Extracted so the body and the delivery stamp cannot disagree about which
-    questions were actually in the message."""
+    questions were actually in the message.
+
+    Selected on the row's STATUS (#494), never on the presence of an `answer`
+    field -- see DELIVERABLE_STATUSES for why field-presence is a disagreement
+    rather than a filter."""
     questions = entry.get("questions") or []
     if qid:
         questions = [q for q in questions if q.get("qid") == qid]
-    return [q for q in questions
-            if q.get("answer") is not None
-            or q.get("status") in ("clarifying", "clarified")]
+    return [q for q in questions if q.get("status") in DELIVERABLE_STATUSES]
 
 def delivery_outcome(status):
     """HTTP status -> the vocabulary the register records."""
@@ -3396,6 +3454,14 @@ def selftest():
     env["OC_QUESTIONS_DIR"] = os.path.join(root, "store")
     env["OC_TOOLS_NOLOG"] = "1"
     env["OC_QUESTIONS_BASE_URL"] = PRODUCTION_BASE_URL
+    # ...and the PARENT process's environment too, not just the subprocess
+    # `env` dict. `run()` gives the child an env, but the probes below also
+    # drive the tool IN-PROCESS (`store_path()`, `read_register()`), and those
+    # read os.environ -- so a probe that points OC_QUESTIONS_DIR at a store of
+    # its own would otherwise still be reading the fixture. Set it for the
+    # whole run and restore it in the `finally`.
+    _saved_environ_dir = os.environ.get("OC_QUESTIONS_DIR")
+    os.environ["OC_QUESTIONS_DIR"] = env["OC_QUESTIONS_DIR"]
     # The asking session comes from the ENV and the lane is resolved from that
     # session's OWN binding, so the fixture needs a REAL session DB. Two bound
     # sessions (different lanes -- the multi-lane page) and one deliberately
@@ -3953,6 +4019,38 @@ def selftest():
         rc, out, _ = run("ask", "--factory", set_id, "--title", "moot",
                          "--description", "d")
         ck(rc == 0, "a question to withdraw registers (rc=%d)" % rc)
+        # #494 probe 3: a RETRACTION owes the answer AND its provenance, and the
+        # control is TWO-SIDED -- the row must CARRY all six FIRST, or the
+        # assertion below passes on an empty row and tests nothing. q5 is the
+        # REACHABLE case rather than a hypothetical one: `answer ... clarify`
+        # writes the clarify text into `answer` and leaves status=clarifying,
+        # which is NOT closed -- so a row can be retracted while holding a real
+        # answer, its answered_at, and a delivery stamp.
+        _wdir = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        _wdata = json.load(open(_wdir, encoding="utf-8"))
+        for _s in _wdata["sets"]:
+            for _q in _s.get("questions", []):
+                if _q.get("qid") == "q5":
+                    _q["answer"] = "rephrase please"
+                    _q["answer_kind"] = "clarify"
+                    _q["answered_at"] = now_iso()
+                    _q["answered_via"] = "page"
+                    _q["answered_by"] = "test-lane"
+                    _q["delivery"] = {"attempted_at": now_iso(),
+                                      "outcome": "delivered", "http": 200,
+                                      "mode": "turn-end", "attempts": 1}
+        with open(_wdir, "w", encoding="utf-8") as _fh:
+            json.dump(_wdata, _fh)
+
+        def _withdraw_row():
+            return next((q for q in (get_set(set_id) or {}).get("questions", [])
+                         if q.get("qid") == "q5"), {})
+
+        _wbefore = _withdraw_row()
+        ck(all(_wbefore.get(_f) is not None for _f in ANSWER_FIELDS),
+           "the withdraw fixture CARRIES all six answer fields BEFORE the "
+           "retraction (%r)"
+           % ({_f: _wbefore.get(_f) for _f in ANSWER_FIELDS},))
         rc, out, _ = run("withdraw", "--set", set_id, "--qid", "q5",
                          "--text", "became moot")
         ck(rc == 0, "withdraw closes a moot question (rc=%d)" % rc)
@@ -3965,6 +4063,15 @@ def selftest():
            "\u2026the reason is recorded (%r)" % q5.get("withdrawn_reason"))
         ck(question_is_closed(q5),
            "\u2026and it counts as CLOSED, so it leaves the open total")
+        _wafter = _withdraw_row()
+        _wleft = [_f for _f in ANSWER_FIELDS if _f in _wafter]
+        ck(not _wleft,
+           "\u2026and the retraction clears the answer AND its provenance "
+           "together (#494; left=%r)" % (_wleft,))
+        ck(bool(_wafter.get("withdrawn_at")),
+           "\u2026while stamping its OWN instant, since the clear took the "
+           "row's only temporal anchor with it (withdrawn_at=%r)"
+           % _wafter.get("withdrawn_at"))
         rc, out, _ = run("withdraw", "--set", set_id, "--qid", "q5")
         ck(rc == 3, "a re-withdraw is idempotent rc=3 (rc=%d)" % rc)
         rc, out, _ = run("withdraw", "--set", set_id)
@@ -3985,6 +4092,75 @@ def selftest():
         ck("withdraw" in out, "help lists the withdraw verb")
         ck("pages/<slug>/" in out,
            "help names the constant-slug page path, not pages/<token>/")
+
+        # -- 5e. the READER selects on STATUS, not field-presence (#494 leg 1)
+        # The population was `answer is not None`, and that is a DISAGREEMENT
+        # rather than a filter: a RETRACTED row keeps its stale answer on disk
+        # (17 withdrawn rows did, 2 carrying a real answer), so field-presence
+        # put withdrawn questions into the DELIVERY population. Only the second
+        # stale field -- the `delivered` stamp that is never retried (#251) --
+        # held them out of a retry, so the population was right by ACCIDENT.
+        # These two probes are the CONTROL for that: each row is placed on BOTH
+        # sides, and the pre-fix predicate is evaluated beside the fixed one.
+        _rstore = os.path.join(root, "reader-store")
+        os.makedirs(_rstore, exist_ok=True)
+        _reader_rows = [
+            # A retracted row still carrying a real answer and an UNREACHABLE
+            # delivery: the shape the old predicate would have retried. It did
+            # NOT exist on the live register when this was measured
+            # (2026-10-16): both retracted rows holding a real answer carried a
+            # terminal `delivered` stamp, which the sweep never retries (#251),
+            # so the defect was LATENT there and this fixture is the reachable
+            # shape that realizes it.
+            {"qid": "q1", "title": "retracted", "description": "d",
+             "status": "withdrawn", "asked_at": "2026-10-01T00:00:00+00:00",
+             "answer": "rephrase please", "answer_kind": "clarify",
+             "answered_at": "2026-10-16T00:00:00+00:00", "answered_via": "page",
+             "answered_by": "lane", "withdrawn_at": "2026-10-16T01:00:00+00:00",
+             "delivery": {"attempted_at": "2026-10-16T00:00:00+00:00",
+                          "outcome": "unreachable", "http": 0,
+                          "mode": "turn-end", "attempts": 1}},
+            # ...and its live counterpart, which MUST still be delivered.
+            {"qid": "q2", "title": "answered", "description": "d",
+             "status": "answered", "asked_at": "2026-10-01T00:00:00+00:00",
+             "answer": "ship it", "answer_kind": "answer",
+             "answered_at": "2026-10-16T00:00:00+00:00", "answered_via": "page",
+             "answered_by": "lane",
+             "delivery": {"attempted_at": "2026-10-16T00:00:00+00:00",
+                          "outcome": "unreachable", "http": 0,
+                          "mode": "turn-end", "attempts": 1}},
+        ]
+        _rpath = os.path.join(_rstore, "open.json")
+        with open(_rpath, "w", encoding="utf-8") as _fh:
+            json.dump({"sets": [{"id": "f-reader", "lane": "Reader",
+                                 "status": "open", "questions": _reader_rows}]},
+                      _fh)
+        _saved_env_dir = os.environ.get("OC_QUESTIONS_DIR")
+        os.environ["OC_QUESTIONS_DIR"] = _rstore
+        try:
+            _entry = read_register()["sets"][0]
+            _by_status = [q.get("qid") for q in answerable_questions(_entry)]
+            # The predicate this leg replaced, evaluated on the SAME rows: the
+            # point is that the two disagree, not that one of them is empty.
+            _by_presence = [q.get("qid") for q in _entry["questions"]
+                            if q.get("answer") is not None]
+            _pending = [p.get("qid") for p in pending_deliveries()[0]]
+        finally:
+            if _saved_env_dir is None:
+                os.environ.pop("OC_QUESTIONS_DIR", None)
+            else:
+                os.environ["OC_QUESTIONS_DIR"] = _saved_env_dir
+        ck(_by_status == ["q2"],
+           "the delivery population is selected by STATUS, so a RETRACTED row "
+           "is excluded even while it still carries an answer (got %r)"
+           % (_by_status,))
+        ck(_by_presence == ["q1", "q2"],
+           "\u2026and the field-presence predicate it replaced DID include it, "
+           "so this leg can tell the two apart (got %r)" % (_by_presence,))
+        ck(_pending == ["q2"],
+           "\u2026and the retry sweep inherits it: an unreachable delivery on a "
+           "RETRACTED row is not retried, while the same stamp on a live one "
+           "is (pending=%r)" % (_pending,))
 
         # -- 6. lint --------------------------------------------------------
         # --lane was REMOVED (owner order 2026-09-25): the lane is resolved
@@ -4010,8 +4186,28 @@ def selftest():
             if item["id"] == "f-leaky-lane":
                 for _q in item["questions"]:
                     _q["asked_at"] = "2020-01-01T00:00:00+00:00"
+                    # #494 probe 4: expiry is the SECOND retraction verb and it
+                    # owed the same clear. Reachable, not theoretical: the gc
+                    # loop skips only rows question_is_closed() already returns
+                    # True for, and a `clarifying` row -- which carries the
+                    # owner's request in `answer` -- is NOT closed, so TTL can
+                    # expire it with its answer and provenance intact. Two-sided:
+                    # the row CARRIES all six before the run.
+                    _q["answer"] = "rephrase please"
+                    _q["answer_kind"] = "clarify"
+                    _q["answered_at"] = now_iso()
+                    _q["answered_via"] = "page"
+                    _q["answered_by"] = "test-lane"
+                    _q["delivery"] = {"attempted_at": now_iso(),
+                                      "outcome": "delivered", "http": 200,
+                                      "mode": "turn-end", "attempts": 1}
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh)
+        _gexp = next((q for q in (get_set("f-leaky-lane") or {}).get("questions", [])
+                      if q.get("status") != "expired"), {})
+        ck(all(_gexp.get(_f) is not None for _f in ANSWER_FIELDS),
+           "the expiry fixture CARRIES all six answer fields BEFORE the run "
+           "(%r)" % ({_f: _gexp.get(_f) for _f in ANSWER_FIELDS},))
         rc, out, _ = run("gc", "--dry-run", "--json")
         dry = json.loads(out)
         ck(dry["expired"] >= 1 and dry["archived"] == 0,
@@ -4029,6 +4225,14 @@ def selftest():
         ck(any(q.get("status") == "expired"
                for q in (leaked or {}).get("questions", [])),
            "…while its question is expired")
+        _gq = next((q for q in (leaked or {}).get("questions", [])
+                    if q.get("status") == "expired"), {})
+        _gleft = [_f for _f in ANSWER_FIELDS if _f in _gq]
+        ck(not _gleft,
+           "…and the EXPIRY clears the answer AND its provenance together, the "
+           "same rule `withdraw` and `amend` obey (#494; left=%r)" % (_gleft,))
+        ck(bool(_gq.get("expired_at")),
+           "…while stamping its own instant (%r)" % _gq.get("expired_at"))
         rc, out, _ = run("gc", "--archive-closed", "--json")
         ck(json.loads(out)["archived"] >= 1,
            "gc --archive-closed archives it on EXPLICIT request (archived=%d)"
@@ -5909,6 +6113,10 @@ def selftest():
         print("  all checks passed")
         return 0
     finally:
+        if _saved_environ_dir is None:
+            os.environ.pop("OC_QUESTIONS_DIR", None)
+        else:
+            os.environ["OC_QUESTIONS_DIR"] = _saved_environ_dir
         shutil.rmtree(root, ignore_errors=True)
 
 USAGE = """questions — the Open Questions register (#547)
