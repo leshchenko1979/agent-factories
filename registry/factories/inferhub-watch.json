@@ -11,7 +11,7 @@
       "Grafana dashboard inferhub-watch on grafana.l1979.ru \u2014 its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
       "Postgres inferhub_logs on apps \u2014 route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
       "The new_api channels table on apps as an AUTHORED POLICY OBJECT \u2014 the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-04: exactly THREE rows \u2014 id 43 gemini (status 1 = ENABLED, priority 100, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED by ChannelDisableThreshold=15 at 2026-09-26T14:41:40Z, reason recorded verbatim 'status_code=503, combo has no member with a provider within budget right now'; priority 210). The 09-25T22:33:39Z re-enable of id 43 is NO LONGER UNATTRIBUTED: it was the owner's own admin session (new_api.audit_logs row 1121, auth_method=session, username=root, admin_id=1, role=100, matching other_info.status_time to the second, 14s after a failing test_time) \u2014 his own later message to a lane said he had been adjusting the config. It was disabled again 2026-09-26T07:03:33Z (audit row 1127) after measurement showed 43's members are a strict subset of 44's at an identical 0.003 bid while priority 300 made it the first call on every request. Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names. AMENDED 2026-10-04 (GET /api/channel/ read live this turn): id 43 was RE-ENABLED and its priority dropped 300 -> 100, so id 44 iq-75-plus (priority 200) is now the FIRST call on every request and 43 is the degraded fallback; id 46 is still status 3 / priority 210 / auto_ban 1.",
-      "Client-side fallback-chain order and provider settings for all OpenCrabs profiles (four live 2026-10-02: default, family, oc348probe, ops) (owner-granted 2026-09-19)",
+      "Client-side fallback-chain order and provider settings for all OpenCrabs profiles (three live 2026-10-16: default, family, ops) (owner-granted 2026-09-19)",
       "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
       "This factory's own crons and its daily GitHub Actions sweep"
     ],
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-15T07:33:21Z",
+  "attested_at": "2026-10-16T06:16:46Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

@@ -1,9 +1,9 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-15T21:02:20Z",
+  "resolved_at": "2026-10-16T06:52:48Z",
   "fragments": [
     {
-      "path": "/tmp/af-481/registry/factories/ai-antispam.json",
+      "path": "/tmp/wt-attest-20261016/registry/factories/ai-antispam.json",
       "data": {
         "factory": "ai-antispam",
         "display_name": "ai-antispam",
@@ -17,7 +17,7 @@
             "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
             "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
             "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-            "this factory's own chat (-1003993000918), its topics and its 16 cron rows (14 enabled, 2 disabled: ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04; ai-antispam-43-close-gate and ai-antispam-52-close-gate were RETIRED 2026-10-09 per board #115 and both crons DELETED)",
+            "this factory's own chat (-1003993000918), its topics and its 17 cron rows (14 enabled, 3 disabled: ai-antispam-118-probe is a spent 2026-10-16 one-shot, disabled at fire; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04; ai-antispam-43-close-gate and ai-antispam-52-close-gate were RETIRED 2026-10-09 per board #115 and both crons DELETED)",
             "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
           ],
           "does_not_own": [
@@ -210,7 +210,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-15T06:58:43Z",
+        "attested_at": "2026-10-16T06:36:25Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -242,7 +242,7 @@
       }
     },
     {
-      "path": "/tmp/af-481/registry/factories/inferhub-watch.json",
+      "path": "/tmp/wt-attest-20261016/registry/factories/inferhub-watch.json",
       "data": {
         "factory": "inferhub-watch",
         "display_name": "Inferhub watch",
@@ -256,7 +256,7 @@
             "Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author",
             "Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics",
             "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-04: exactly THREE rows — id 43 gemini (status 1 = ENABLED, priority 100, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED by ChannelDisableThreshold=15 at 2026-09-26T14:41:40Z, reason recorded verbatim 'status_code=503, combo has no member with a provider within budget right now'; priority 210). The 09-25T22:33:39Z re-enable of id 43 is NO LONGER UNATTRIBUTED: it was the owner's own admin session (new_api.audit_logs row 1121, auth_method=session, username=root, admin_id=1, role=100, matching other_info.status_time to the second, 14s after a failing test_time) — his own later message to a lane said he had been adjusting the config. It was disabled again 2026-09-26T07:03:33Z (audit row 1127) after measurement showed 43's members are a strict subset of 44's at an identical 0.003 bid while priority 300 made it the first call on every request. Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names. AMENDED 2026-10-04 (GET /api/channel/ read live this turn): id 43 was RE-ENABLED and its priority dropped 300 -> 100, so id 44 iq-75-plus (priority 200) is now the FIRST call on every request and 43 is the degraded fallback; id 46 is still status 3 / priority 210 / auto_ban 1.",
-            "Client-side fallback-chain order and provider settings for all OpenCrabs profiles (four live 2026-10-02: default, family, oc348probe, ops) (owner-granted 2026-09-19)",
+            "Client-side fallback-chain order and provider settings for all OpenCrabs profiles (three live 2026-10-16: default, family, ops) (owner-granted 2026-09-19)",
             "The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)",
             "This factory's own crons and its daily GitHub Actions sweep"
           ],
@@ -374,7 +374,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-15T07:33:21Z",
+        "attested_at": "2026-10-16T06:16:46Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -400,7 +400,7 @@
       }
     },
     {
-      "path": "/tmp/af-481/registry/factories/infra-factory.json",
+      "path": "/tmp/wt-attest-20261016/registry/factories/infra-factory.json",
       "data": {
         "factory": "infra-factory",
         "display_name": "Infra Factory",
@@ -582,7 +582,7 @@
             ],
             "scope": "profile",
             "evidence": "Ledger n=966 (intake) / n=967 (ruling). Daemon log: five 'API error (502)' retries 19:41:32.728064Z-19:54:04.974683Z; tool_loop.rs:3635 'All 5 5xx retries failed, checking for fallback provider'; turn_settle Failed 19:54:06.727609Z; ConfigWatcher 'fallback chain reloaded - [inferhub, openrouter] (was [inferhub])' 20:57:14.402309Z.",
-            "review_by": "2026-10-16"
+            "review_by": "2026-11-16"
           },
           {
             "id": "gatus-page-can-be-silently-lost",
@@ -640,7 +640,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-15T07:10:42Z",
+        "attested_at": "2026-10-16T06:24:59Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -666,7 +666,7 @@
       }
     },
     {
-      "path": "/tmp/af-481/registry/factories/meta-factory.json",
+      "path": "/tmp/wt-attest-20261016/registry/factories/meta-factory.json",
       "data": {
         "factory": "meta-factory",
         "display_name": "Factories",
@@ -755,14 +755,14 @@
         "announcements": [
           {
             "id": "pacemaker-triggers-still-pass-mode-quiet",
-            "text": "Pacemaker cron triggers on this box still pass `--mode quiet` for a set of jobs, NONE of them meta-factory's: the original three are `ai-antispam-owner-digest` and `ai-antispam-triage-sweep` (ai-antispam, both ENABLED), and `oc-triage-owner-digest` (opencrabs-dev, now DISABLED) — but the quiet population stands well past them. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit `--mode turn-end` on 2026-09-23 (byte-verified; schedule and next_run_at preserved): of its NINE `factory-*` jobs, FIVE carry it (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and FOUR carry none (`factory-hq-pacemaker`, `factory-publish`, `factory-questions-redeliver`, `factory-registry-attest`). Infra-factory's four now read plain `--mode turn-end` with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING ONES — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries.\n\nLive census 2026-10-15T06:56:37Z (ops home): of 66 cron rows, 24 carry `--mode` — 9 turn-end rows, 15 quiet rows (one quiet row disabled — `oc-triage-owner-digest`; 13 ai-antispam jobs carry it; `inferhub-daily-report` remains a SECOND factory's job). THE QUIET POPULATION HELD FLAT A FOURTH READING — 24 mode-carrying, 9 turn-end / 15 quiet is IDENTICAL to the 2026-10-13, 2026-10-11 and 2026-10-10 readings; only the table total moved (68 → 66 rows), so the standing claim is that the population PERSISTS, neither growing nor shrinking.\n\nSCOPE CORRECTION, and read it with the census above: the series is an OPS-HOME read, while this entry's own opening sentence is a claim about the BOX — those are not the same population, and the box-wide read is LARGER. At the same instant three homes hold a `cron_jobs` table — default 11 rows (8 enabled), family 2 (1 enabled), ops 66 (33 enabled) = **79 rows, 42 enabled** — so a reader who checks the box sees 79 rows where the series names 66. The 24/9/15 figure is the one comparable across the series; 79 is the box. Neither is derived from the other, and the entry no longer states a box claim off a profile-scoped reader.\n\nPrior censuses kept as the steps this one follows, never overwritten: 2026-10-13T06:07:35Z of 66 rows, 24 — 9/15; 2026-10-11T06:09:42Z of 68 rows, 24 — 9/15; 2026-10-10T06:05:09Z of 68 rows, 24 — 9/15; 2026-10-09T06:05:50Z of 68 rows, 26 — 9/17; 2026-10-06T06:09Z of 67 rows, 26 — 9/17; 2026-10-05T06:19Z of 67 rows, 25 — 9/16; 2026-10-04T06:29:35Z of 66 rows, 12 — 9/3; 2026-10-02T06:19Z of 66 rows, 12 — 9/3; 2026-10-01T06:07Z of 65 rows, 12 — 9/3; 2026-09-29T08:26Z of 64, 12 — 9/3; 2026-09-28T11:35:19Z of 63, 12 — 9/3; 2026-09-26T06:20Z of 57, 12 — 9/3; 2026-09-23T11:31Z of 55, 13 — 10/3.",
+            "text": "Pacemaker cron triggers on this box still pass `--mode quiet` for a set of jobs, NONE of them meta-factory's: the original three are `ai-antispam-owner-digest` and `ai-antispam-triage-sweep` (ai-antispam, both ENABLED), and `oc-triage-owner-digest` (opencrabs-dev, now DISABLED) — but the quiet population stands well past them. The owner re-ruling of 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each of these defers instead of waking an idle lane immediately. Meta-factory's jobs were moved to explicit `--mode turn-end` on 2026-09-23 (byte-verified; schedule and next_run_at preserved): of its NINE `factory-*` jobs, FIVE carry it (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and FOUR carry none (`factory-hq-pacemaker`, `factory-publish`, `factory-questions-redeliver`, `factory-registry-attest`). Infra-factory's four now read plain `--mode turn-end` with no cap flags, so the pattern is demonstrated by a second factory rather than asserted. CAUTION FOR WHOEVER FIXES THE REMAINING ONES — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries.\n\nLive census 2026-10-16T06:48:55Z (ops home): of 67 cron rows, 25 carry `--mode` — 9 turn-end rows, 16 quiet rows (one quiet row disabled — `oc-triage-owner-digest`; 13 ai-antispam jobs carry it; `inferhub-daily-report` remains a SECOND factory's job). THE QUIET POPULATION IS NO LONGER FLAT: quiet went 15 → 16 and the table total 66 → 67 on ONE new row, `ai-antispam-118-probe` (enabled=0, `--mode quiet`, created 2026-10-16T00:42:42) — a DISABLED row, so it grows the population while leaving the enabled count untouched (ops stays 33 enabled). The three prior readings (2026-10-13, 2026-10-11, 2026-10-10) all read 24 — 9/15 and were called flat; that description is now FALSIFIED, and the standing claim is only that the series is appended to, never overwritten.\n\nSCOPE CORRECTION, and read it with the census above: the series is an OPS-HOME read, while this entry's own opening sentence is a claim about the BOX — those are not the same population, and the box-wide read is LARGER. At the same instant three homes hold a `cron_jobs` table — default 11 rows (8 enabled), family 2 (1 enabled), ops 67 (33 enabled) = **80 rows, 42 enabled** — so a reader who checks the box sees 80 rows where the series names 67. The 25/9/16 figure is the one comparable across the series; 80 is the box. Neither is derived from the other, and the entry no longer states a box claim off a profile-scoped reader.\n\nPrior censuses kept as the steps this one follows, never overwritten: 2026-10-15T06:56:37Z of 66 rows, 24 — 9/15; 2026-10-13T06:07:35Z of 66 rows, 24 — 9/15; 2026-10-11T06:09:42Z of 68 rows, 24 — 9/15; 2026-10-10T06:05:09Z of 68 rows, 24 — 9/15; 2026-10-09T06:05:50Z of 68 rows, 26 — 9/17; 2026-10-06T06:09Z of 67 rows, 26 — 9/17; 2026-10-05T06:19Z of 67 rows, 25 — 9/16; 2026-10-04T06:29:35Z of 66 rows, 12 — 9/3; 2026-10-02T06:19Z of 66 rows, 12 — 9/3; 2026-10-01T06:07Z of 65 rows, 12 — 9/3; 2026-09-29T08:26Z of 64, 12 — 9/3; 2026-09-28T11:35:19Z of 63, 12 — 9/3; 2026-09-26T06:20Z of 57, 12 — 9/3; 2026-09-23T11:31Z of 55, 13 — 10/3.",
             "severity": "warning",
             "since": "2026-09-19T03:36:54Z",
             "affects": [
               "profile"
             ],
             "scope": "profile",
-            "evidence": "cron_jobs read in place via mode=ro URI at 2026-10-15T06:56:37Z — ops home 66 rows, 24 carrying `--mode` (9 turn-end / 15 quiet); box-wide, 3 homes hold a `cron_jobs` table (default 11, family 2, ops 66 = 79 rows, 42 enabled). Meta-factory's five turn-end rows: factory-measurement-daily, factory-triage-patrol, factory-insights-weekly, factory-template-weekly, factory-growth-map-biweekly. Original 2026-09-19T14:21Z reading: 36 rows, `--mode` values = {quiet: 8}, zero using the retired `now`."
+            "evidence": "cron_jobs read in place via mode=ro URI at 2026-10-16T06:48:55Z — ops home 67 rows, 25 carrying `--mode` (9 turn-end / 16 quiet); box-wide, 3 homes hold a `cron_jobs` table (default 11, family 2, ops 67 = 80 rows, 42 enabled). Meta-factory's five turn-end rows: factory-measurement-daily, factory-triage-patrol, factory-insights-weekly, factory-template-weekly, factory-growth-map-biweekly. Original 2026-09-19T14:21Z reading: 36 rows, `--mode` values = {quiet: 8}, zero using the retired `now`."
           },
           {
             "id": "brain-metrics-baseline-measured",
@@ -862,7 +862,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-15T06:58:26Z",
+        "attested_at": "2026-10-16T06:30:42Z",
         "instruments": {
           "ledger": {
             "state": "adopted",
@@ -881,7 +881,7 @@
       }
     },
     {
-      "path": "/tmp/af-481/registry/factories/miidas.json",
+      "path": "/tmp/wt-attest-20261016/registry/factories/miidas.json",
       "data": {
         "factory": "miidas",
         "display_name": "Miidas Factory",
@@ -1040,7 +1040,7 @@
           },
           {
             "id": "agents-old-degraded",
-            "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after the owner answered infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200 at 0.54s, swap 2047 MiB. The wedge class is mitigated, not fixed — the host is 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe and miidas-ru-proxy remains unbounded, so swap absorbs pressure rather than removing it. 6 cgroup OOM kills this boot, all task=git: 4 in maple's cgroup before its 768 MiB cap raise, plus 2 the lane's own 256 MiB-capped repack attempts killed inside their throwaway scopes. agents-old still has ZERO Gatus endpoints, so a fourth wedge pages nobody — fix owner Infra HQ (infra n=1278).",
+            "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after the owner answered infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, swap 2047 MiB, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed — 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git (4 in maple's cgroup before its 768 MiB cap raise, 2 the lane's own 256 MiB-capped repack attempts inside throwaway scopes). THE MONITORING BLIND IS NOW CLOSED (2026-10-16): agents-old carries Gatus endpoints — infra_agents-old (host-diag, 5m) and the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (miidas-manager, miidas-cdp) plus a NEW miidas-slots (unhealthy-slot probe, 2m, telegram alerts, failure-threshold 2) — all four green at 06:19Z, so a fourth wedge now PAGES. The earlier 'agents-old has ZERO Gatus endpoints / fix owner Infra HQ (n=1278)' clause is SUPERSEDED.",
             "severity": "warning",
             "affects": [
               "miidas",
@@ -1094,7 +1094,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-15T06:46:06Z",
+        "attested_at": "2026-10-16T06:25:16Z",
         "instruments": {
           "ledger": {
             "state": "deferred",
@@ -1113,7 +1113,7 @@
       }
     },
     {
-      "path": "/tmp/af-481/registry/factories/opencrabs-dev.json",
+      "path": "/tmp/wt-attest-20261016/registry/factories/opencrabs-dev.json",
       "data": {
         "factory": "opencrabs-dev",
         "display_name": "Opencrabs Dev Factory",
@@ -1190,7 +1190,7 @@
             ],
             "since": "2026-09-19",
             "review_by": "2026-12-19",
-            "evidence": "RE-VERIFIED 2026-10-12T06:05Z against the CURRENT deployed sha 81a5edd59540e170ec137c0e65768632d497416a (deployed.sha; swapped 2026-10-10T07:25:57Z, auth=auto-swap): git show 81a5edd5:src/brain/agent/service/notify_policy.rs carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 81a5edd5 (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-07 re-verification against 3ea3f619, which remains an ancestor of it."
+            "evidence": "RE-VERIFIED 2026-10-16T06:31Z against the CURRENT deployed sha 466e7dfb33a894e61ad7826ef4516f68486313cb (deployed.sha; swapped 2026-10-15T21:40:32Z, run 38810307913, auth=auto-swap, version 0.5.4; prev_sha 552ecd82b1a9b46554dca499e81c1ea5f56ef017): `git show 466e7dfb:src/brain/agent/service/notify_policy.rs` carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, `None | Some(\"turn-end\")` -> TurnEnd, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 466e7dfb (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-12 re-verification against 81a5edd5, itself an ancestor of 466e7dfb."
           },
           {
             "id": "commit-signing-live-identity-retired",
@@ -1222,6 +1222,16 @@
             "scope": "profile",
             "evidence": "gh api repos/leshchenko1979/opencrabs/collaborators/adolfousier -> 404 (same on the factory tracker); --add-assignee adolfousier rc=0 with read-back []; positive control --add-assignee leshchenko1979 sticks; 28 fork issues carry leshchenko1979, 0 carry adolfousier. Law corrected in opencrabs-dev-factory commit b082869f (2026-10-10).",
             "since": "2026-10-10"
+          },
+          {
+            "id": "ship-test-threads-wedge",
+            "text": "A default-threads full test gate can WEDGE: four test-thread slots hang indefinitely and the run burns the whole 45-min workflow wall with ZERO `test result:` lines while fmt and clippy both report success, so a CANCELLED run is not evidence against the diff. Every ship invocation therefore carries `--test-threads 2` (editor.md §Phase 5), and that line's expiry is keyed on the SYMPTOM — a default-threads full gate completing with a real test verdict — NEVER on an issue reading closed: upstream opencrabs/opencrabs#1936 reads CLOSED/COMPLETED on a stall watchdog alone, its own closer states the deadlock root cause is still unfixed, and the deadlock is live at fork leshchenko1979/opencrabs#781.",
+            "severity": "warning",
+            "since": "2026-10-16",
+            "affects": [
+              "opencrabs-dev"
+            ],
+            "evidence": "Fork run 38799188468 (sha c350d66c6, 2026-10-15): cancelled at 2722 s against the workflow's timeout-minutes 45 (2700 s), four `has been running for over 60 seconds` lines, stuck set hot_write_paths_retry_test x1 + loop_break_test x2 + memory_archive_index_test x1 — character-identical to the 2026-10-04 run quoted inside #1936's own body; fmt+clippy both success, so the wedge is not the diff. Re-dispatch of the same gate input with --test-threads 2 (fork run 38806046232) = success in 1884 s. Law: editor.md:401/:404, commit 7723a1a4. The recurrence was measured 2026-10-15; `since` records the answering instant (2026-10-16), not a fact-origin date I cannot evidence."
           }
         ],
         "lanes": [
@@ -1443,7 +1453,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-15T06:45:06Z",
+        "attested_at": "2026-10-16T06:32:37Z",
         "instruments": {
           "ledger": {
             "state": "not-applicable",
@@ -1693,7 +1703,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780]",
-      "session_updated_at": 1792089741,
+      "session_updated_at": 1792132635,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2356,7 +2366,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1792051292,
+      "session_updated_at": 1792132603,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2486,7 +2496,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1792054144,
+      "session_updated_at": 1792132671,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2499,7 +2509,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7]",
-      "session_updated_at": 1792077113,
+      "session_updated_at": 1792131300,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2525,7 +2535,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Ledger [chat:-1004497192134:topic:3981]",
-      "session_updated_at": 1791679633,
+      "session_updated_at": 1792130355,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2551,7 +2561,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1792088495,
+      "session_updated_at": 1792132656,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2564,7 +2574,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1792097473,
+      "session_updated_at": 1792131889,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2603,7 +2613,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1792088351,
+      "session_updated_at": 1792133562,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2629,7 +2639,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1792097596,
+      "session_updated_at": 1792132522,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2668,7 +2678,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Pacemakers / Crons [chat:-1004497192134:topic:4223]",
-      "session_updated_at": 1791941371,
+      "session_updated_at": 1792133292,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2681,7 +2691,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Hygiene [chat:-1004497192134:topic:8733]",
-      "session_updated_at": 1791233016,
+      "session_updated_at": 1792132930,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2928,7 +2938,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1792088366,
+      "session_updated_at": 1792133090,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2941,7 +2951,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1792055437,
+      "session_updated_at": 1792132320,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2967,7 +2977,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1792097968,
+      "session_updated_at": 1792132771,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2993,7 +3003,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Open Questions Instrument [chat:-1004497192134:topic:4087]",
-      "session_updated_at": 1791584802,
+      "session_updated_at": 1792131472,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3006,7 +3016,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1792064487,
+      "session_updated_at": 1792132359,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3045,7 +3055,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1792089487,
+      "session_updated_at": 1792132023,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3071,7 +3081,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1792097564,
+      "session_updated_at": 1792132707,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3084,7 +3094,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1792097564,
+      "session_updated_at": 1792112889,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3123,20 +3133,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1792061666,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 31847,
-      "updated_at": 1792088642,
-      "last_origin": "callback",
-      "turn_open_at": null,
-      "session_title": "Fix #1938/#1939/#1940 — marker & link seam",
-      "session_updated_at": 1792097551,
+      "session_updated_at": 1792100543,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3152,11 +3149,24 @@
       "session_updated_at": 1792096075,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 31847,
+      "updated_at": 1792099330,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Fix #1938/#1939/#1940 — marker & link seam",
+      "session_updated_at": 1792101505,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
   ],
   "skill_versions": {
     "/root/ai-antispam/SKILL.md": "0.1.0",
-    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.165",
+    "/root/inferhub-watch/skills/inferhub/SKILL.md": "1.0.167",
     "/root/vds-servers/skills/infra-factory/SKILL.md": "0.2.1",
     "/root/agent-factories/skills/meta-factory/SKILL.md": "0.1.52",
     "/root/miidas/SKILL.md": "1.1.30",
@@ -3209,17 +3219,32 @@
       "_profile": "ops"
     },
     {
+      "id": "f3435e7e-5c1c-46ac-988a-f497f72defad",
+      "name": "ai-antispam-118-probe",
+      "cron_expr": "0 4 1 1 *",
+      "timezone": "UTC",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"🔍 PROBE (#118 positive control — success class): ignore, no action needed.\" --title \"ai-antispam 118-probe-pos $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nPOSITIVE CONTROL for #118: this run must prove the success class ALSO lands in the run row, so the instrument can observe both. A valid target is used on purpose — the failure class was proven separately with a bogus one.\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero.",
+      "deliver_to": null,
+      "enabled": 0,
+      "set_goal": 0,
+      "goal_template": null,
+      "next_run_at": "2027-01-01T04:00:00+00:00",
+      "last_run_at": "2026-10-16T00:47:09Z",
+      "trigger_cmd": null,
+      "_profile": "ops"
+    },
+    {
       "id": "d2c7e157-9370-4752-a054-c853b4bb2d3c",
       "name": "ai-antispam-bot-service-health",
       "cron_expr": "15 9 * * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"ai-antispam pacemaker: daily bot-service health digest is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section bot-service-health and follow it exactly. Report into the Bot topic.\" --title \"ai-antispam bot-service-health $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-bot-service-health-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"ai-antispam pacemaker: daily bot-service health digest is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section bot-service-health and follow it exactly. Report into the Bot topic.\" --title \"ai-antispam bot-service-health $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). The trailing `&` this prompt used to carry made the trigger's exit status the LAUNCH's, so a wake that died on the wire still recorded `Dispatched.` — twice, on 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN. The `timeout 60` bound replaces the backgrounding: it keeps the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure) while still propagating the notify's status.\n\nThe bounded --max-delay-secs 30 is still required: the default starvation cap is 1800s, which would block past the budget. The unique --title still prevents the bash retry guard from latching onto the command permanently.\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:15:00+00:00",
-      "last_run_at": "2026-10-15T06:15:56Z",
+      "next_run_at": "2026-10-17T06:15:00+00:00",
+      "last_run_at": "2026-10-16T06:15:19Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3248,8 +3273,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-15T21:15:00+00:00",
-      "last_run_at": "2026-10-15T20:45:49Z",
+      "next_run_at": "2026-10-16T07:15:00+00:00",
+      "last_run_at": "2026-10-16T06:45:08Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
@@ -3258,7 +3283,7 @@
       "name": "ai-antispam-outreach-auto-kick",
       "cron_expr": "0 7 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: auto-kick mining check is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-auto-kick and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam outreach-auto-kick $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-outreach-auto-kick-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: auto-kick mining check is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-auto-kick and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam outreach-auto-kick $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3273,13 +3298,13 @@
       "name": "ai-antispam-outreach-db-sync",
       "cron_expr": "15 9 * * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: daily outreach DB-to-repo export is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-db-sync. Report into the Outreach topic.\" --title \"ai-antispam outreach-db-sync $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-outreach-db-sync-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: daily outreach DB-to-repo export is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-db-sync. Report into the Outreach topic.\" --title \"ai-antispam outreach-db-sync $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:15:00+00:00",
-      "last_run_at": "2026-10-15T06:16:33Z",
+      "next_run_at": "2026-10-17T06:15:00+00:00",
+      "last_run_at": "2026-10-16T06:15:24Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3288,13 +3313,13 @@
       "name": "ai-antispam-outreach-mining-tranche",
       "cron_expr": "15 6 * * Mon,Wed,Fri",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: outreach mining tranche is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-mining-tranche and follow it exactly (zero-stars law). Report into the Outreach topic.\" --title \"ai-antispam outreach-mining-tranche $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-outreach-mining-tranche-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: outreach mining tranche is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-mining-tranche and follow it exactly (zero-stars law). Report into the Outreach topic.\" --title \"ai-antispam outreach-mining-tranche $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:15:00+00:00",
-      "last_run_at": "2026-10-14T06:15:58Z",
+      "next_run_at": "2026-10-19T06:15:00+00:00",
+      "last_run_at": "2026-10-16T06:15:25Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3303,13 +3328,13 @@
       "name": "ai-antispam-outreach-stream-joins",
       "cron_expr": "0 0 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: stream join pass is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-stream-joins and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam outreach-stream-joins $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-outreach-stream-joins-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: stream join pass is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-stream-joins and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam outreach-stream-joins $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:00:00+00:00",
-      "last_run_at": "2026-10-15T00:00:41Z",
+      "next_run_at": "2026-10-17T00:00:00+00:00",
+      "last_run_at": "2026-10-16T00:00:06Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3318,13 +3343,13 @@
       "name": "ai-antispam-outreach-watch-poll",
       "cron_expr": "7 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: watch-poll run is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-watch-poll. Report into the Outreach topic.\" --title \"ai-antispam outreach-watch-poll $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-outreach-watch-poll-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: watch-poll run is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section outreach-watch-poll. Report into the Outreach topic.\" --title \"ai-antispam outreach-watch-poll $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:07:00+00:00",
-      "last_run_at": "2026-10-15T18:07:27Z",
+      "next_run_at": "2026-10-16T12:07:00+00:00",
+      "last_run_at": "2026-10-16T06:07:35Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3333,13 +3358,13 @@
       "name": "ai-antispam-owner-digest",
       "cron_expr": "30 9 * * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 6ca0d547-4a72-4c29-ac10-967daa98af0a --text \"Triage owner digest — run your Owner digest procedure.\" --title \"ai-antispam owner digest $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-owner-digest-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify 6ca0d547-4a72-4c29-ac10-967daa98af0a --text \"Triage owner digest — run your Owner digest procedure.\" --title \"ai-antispam owner digest $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:30:00+00:00",
-      "last_run_at": "2026-10-15T06:30:28Z",
+      "next_run_at": "2026-10-17T06:30:00+00:00",
+      "last_run_at": "2026-10-16T06:30:28Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3348,13 +3373,13 @@
       "name": "ai-antispam-self-audit-daily",
       "cron_expr": "50 8 * * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 --text \"ai-antispam pacemaker: daily self-audit is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section self-audit-daily and follow it exactly. Report into the HQ topic.\" --title \"ai-antispam self-audit-daily $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-self-audit-daily-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify cb06a94a-be02-4e8c-b6c6-c8c9f09922f4 --text \"ai-antispam pacemaker: daily self-audit is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section self-audit-daily and follow it exactly. Report into the HQ topic.\" --title \"ai-antispam self-audit-daily $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T05:50:00+00:00",
-      "last_run_at": "2026-10-15T05:50:59Z",
+      "next_run_at": "2026-10-17T05:50:00+00:00",
+      "last_run_at": "2026-10-16T05:50:42Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3363,13 +3388,13 @@
       "name": "ai-antispam-stream-liveness-check",
       "cron_expr": "40 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: stream capture liveness check is due. Run the probe and report the reading — read /root/ai-antispam/docs/pacemaker-procedures.md section stream-liveness-check. Report into the Outreach topic.\" --title \"ai-antispam stream-liveness-check $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-stream-liveness-check-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: stream capture liveness check is due. Run the probe and report the reading — read /root/ai-antispam/docs/pacemaker-procedures.md section stream-liveness-check. Report into the Outreach topic.\" --title \"ai-antispam stream-liveness-check $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:40:00+00:00",
-      "last_run_at": "2026-10-15T18:40:30Z",
+      "next_run_at": "2026-10-16T12:40:00+00:00",
+      "last_run_at": "2026-10-16T06:40:56Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3378,7 +3403,7 @@
       "name": "ai-antispam-timeout-monitor",
       "cron_expr": "0 12 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"ai-antispam pacemaker: classification effectiveness receipt is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section timeout-monitor and follow it exactly. Report into the Bot topic.\" --title \"ai-antispam timeout-monitor $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-timeout-monitor-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify 6d921dca-fb0a-455b-bceb-dfb78dcf1f07 --text \"ai-antispam pacemaker: classification effectiveness receipt is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section timeout-monitor and follow it exactly. Report into the Bot topic.\" --title \"ai-antispam timeout-monitor $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). The trailing `&` this prompt used to carry made the trigger's exit status the LAUNCH's, so a wake that died on the wire still recorded `Dispatched.` — twice, on 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN. The `timeout 60` bound replaces the backgrounding: it keeps the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure) while still propagating the notify's status.\n\nThe bounded --max-delay-secs 30 is still required: the default starvation cap is 1800s, which would block past the budget. The unique --title still prevents the bash retry guard from latching onto the command permanently.\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3393,13 +3418,13 @@
       "name": "ai-antispam-triage-sweep",
       "cron_expr": "25 */6 * * *",
       "timezone": "UTC",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify 6ca0d547-4a72-4c29-ac10-967daa98af0a --text \"Triage cycle — run your Cycle procedure. Silence if nothing is actionable.\" --title \"ai-antispam triage cycle $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-triage-sweep-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify 6ca0d547-4a72-4c29-ac10-967daa98af0a --text \"Triage cycle — run your Cycle procedure. Silence if nothing is actionable.\" --title \"ai-antispam triage cycle $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:25:00+00:00",
-      "last_run_at": "2026-10-15T18:25:29Z",
+      "next_run_at": "2026-10-16T12:25:00+00:00",
+      "last_run_at": "2026-10-16T06:25:15Z",
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "_profile": "ops"
     },
@@ -3423,7 +3448,7 @@
       "name": "ai-antispam-wave0-reply-sweep",
       "cron_expr": "0 12 * * *",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: wave-0 reply sweep is due. Run your sweep procedure — read /root/ai-antispam/docs/pacemaker-procedures.md section wave0-reply-sweep and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam wave0-reply-sweep $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-wave0-reply-sweep-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: wave-0 reply sweep is due. Run your sweep procedure — read /root/ai-antispam/docs/pacemaker-procedures.md section wave0-reply-sweep and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam wave0-reply-sweep $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3438,7 +3463,7 @@
       "name": "ai-antispam-wave0-unactivated-reprobe",
       "cron_expr": "0 12 * * 2",
       "timezone": "Europe/Moscow",
-      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\nnohup /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: weekly unactivated-inbox re-probe is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section wave0-unactivated-reprobe and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam wave0-unactivated-reprobe $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30 > /tmp/ai-antispam-wave0-unactivated-reprobe-$(date -u +%Y%m%dT%H%M%S).log 2>&1 &\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions. The trailing & is REQUIRED — do NOT remove it, do NOT add a wait.\n\nThe bounded --max-delay-secs 30 is required: the default starvation cap is 1800s, which blocks past this tool's 120s budget and kills the trigger. The unique --title prevents the bash retry guard from latching onto the command permanently.\n\nThe command SUCCEEDED if its output shows a notification id, \"deferred\", or \"queued\". Silence on success. If it exits non-zero, report the error text only — do not retry.\n\nReport \"Dispatched.\" and exit immediately.",
+      "prompt": "Thin trigger only — do NOT execute any project work yourself, do NOT investigate, do NOT write a report. Run exactly ONE bash command, then stop:\n\ntimeout 60 /usr/local/bin/opencrabs -p ops session notify acc3fa9b-cefa-4e35-bf87-422696e558f0 --text \"ai-antispam pacemaker: weekly unactivated-inbox re-probe is due. Run it — read /root/ai-antispam/docs/pacemaker-procedures.md section wave0-unactivated-reprobe and follow it exactly. Report into the Outreach topic.\" --title \"ai-antispam wave0-unactivated-reprobe $(date -u +%Y-%m-%dT%H)\" --mode quiet --quiet-for-secs 20 --max-delay-secs 30; rc=$?; echo \"notify_exit=$rc\"\n\nCopy that command EXACTLY as written, INCLUDING both $(date ...) substitutions and the trailing `; rc=$?; echo \"notify_exit=$rc\"`. Do NOT background it, do NOT add `&`, do NOT add a wait.\n\nFOREGROUND is the point (#118). Backgrounded, the trigger's exit status is the LAUNCH's, so a wake that dies on the wire still records `Dispatched.` — twice, 2026-10-14 and 2026-10-15. In the foreground the exit status is the notify's OWN, and `timeout 60` replaces the backgrounding while keeping the command inside the tool budget (measured: 6.7s on the success path, 23.8s on a no_route failure).\n\nKeep the bounded `--max-delay-secs 30` (the default 1800s starvation cap would block past the budget and kill the trigger) and the unique `--title` (it prevents the bash retry guard from latching onto the command permanently).\n\nThen report EXACTLY one of these two lines, and nothing else:\n\n- notify_exit=0 → reply with exactly: Dispatched.\n- any non-zero notify_exit → reply with exactly: ❌ notify FAILED (exit <value>) — the wake did not land. Do not retry.\n\nNever reply `Dispatched.` when notify_exit is non-zero: the wake and the record must agree.",
       "deliver_to": null,
       "enabled": 1,
       "set_goal": 0,
@@ -3458,8 +3483,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:05:00+00:00",
-      "last_run_at": "2026-10-15T06:05:31Z",
+      "next_run_at": "2026-10-17T06:05:00+00:00",
+      "last_run_at": "2026-10-16T06:05:31Z",
       "trigger_cmd": "timeout 25 /root/avito-realty-bot/scripts/daily_broadcast.sh; rc=$?; echo \"launch_exit=$rc\"; exit $rc",
       "_profile": "ops"
     },
@@ -3488,8 +3513,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "Meta-factory HQ cycle due (#253, owner ruled shape (1) at q20). Sweep the board (leshchenko1979/agent-factories issues) for items carrying an intake ledger row and no ruling row, and rule on each — then report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md §9).",
-      "next_run_at": "2026-10-16T00:50:00+00:00",
-      "last_run_at": "2026-10-15T18:50:32Z",
+      "next_run_at": "2026-10-16T12:50:00+00:00",
+      "last_run_at": "2026-10-16T06:50:22Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3518,8 +3543,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:00:00+00:00",
-      "last_run_at": "2026-10-15T06:00:59Z",
+      "next_run_at": "2026-10-17T06:00:00+00:00",
+      "last_run_at": "2026-10-16T06:00:35Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3533,8 +3558,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:00:00+00:00",
-      "last_run_at": "2026-10-15T18:00:27Z",
+      "next_run_at": "2026-10-16T12:00:00+00:00",
+      "last_run_at": "2026-10-16T06:00:37Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3548,8 +3573,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:12:00+00:00",
-      "last_run_at": "2026-10-15T18:12:28Z",
+      "next_run_at": "2026-10-16T12:12:00+00:00",
+      "last_run_at": "2026-10-16T06:13:11Z",
       "trigger_cmd": "/root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh",
       "_profile": "ops"
     },
@@ -3563,8 +3588,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:00:00+00:00",
-      "last_run_at": "2026-10-15T06:01:00Z",
+      "next_run_at": "2026-10-17T06:00:00+00:00",
+      "last_run_at": "2026-10-16T06:00:37Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3593,8 +3618,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:00:00+00:00",
-      "last_run_at": "2026-10-15T18:00:27Z",
+      "next_run_at": "2026-10-16T12:00:00+00:00",
+      "last_run_at": "2026-10-16T06:00:38Z",
       "trigger_cmd": "out=$(gh issue list -R leshchenko1979/agent-factories --state open --limit 5 --json number --jq \"length\" 2>/dev/null) || { echo \"triage-trigger: gh FAILED - failing OPEN\"; exit 0; }; if [ \"$out\" = \"0\" ]; then echo \"triage-trigger: 0 open issues - silent\"; exit 1; fi; echo \"triage-trigger: $out open issues - firing\"; exit 0",
       "_profile": "ops"
     },
@@ -3623,8 +3648,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T05:00:00+00:00",
-      "last_run_at": "2026-10-15T05:00:57Z",
+      "next_run_at": "2026-10-17T05:00:00+00:00",
+      "last_run_at": "2026-10-16T05:00:30Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3638,8 +3663,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "InferHub Watch HQ cycle due. Execute the 6-hourly cycle per skills/inferhub/SKILL.md and report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (the no-plan law, skills/inferhub/SKILL.md §Hard rules).",
-      "next_run_at": "2026-10-16T00:10:00+00:00",
-      "last_run_at": "2026-10-15T18:10:27Z",
+      "next_run_at": "2026-10-16T12:10:00+00:00",
+      "last_run_at": "2026-10-16T06:10:40Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3653,8 +3678,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:40:00+00:00",
-      "last_run_at": "2026-10-15T06:44:06Z",
+      "next_run_at": "2026-10-17T06:40:00+00:00",
+      "last_run_at": "2026-10-16T06:40:57Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3668,8 +3693,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:23:00+00:00",
-      "last_run_at": "2026-10-15T18:23:28Z",
+      "next_run_at": "2026-10-16T12:23:00+00:00",
+      "last_run_at": "2026-10-16T06:24:14Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3683,8 +3708,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T00:00:00+00:00",
-      "last_run_at": "2026-10-15T00:00:41Z",
+      "next_run_at": "2026-10-17T00:00:00+00:00",
+      "last_run_at": "2026-10-16T00:00:06Z",
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "_profile": "ops"
     },
@@ -3728,8 +3753,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-16T06:05:00+00:00",
-      "last_run_at": "2026-10-15T06:05:34Z",
+      "next_run_at": "2026-10-17T06:05:00+00:00",
+      "last_run_at": "2026-10-16T06:05:31Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3743,8 +3768,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": "Execute the Infra Factory triage patrol per skills/infra-factory/roles/triage.md: check open ledger intake items, verify claims, and assign or close work.",
-      "next_run_at": "2026-10-16T00:05:00+00:00",
-      "last_run_at": "2026-10-15T18:05:27Z",
+      "next_run_at": "2026-10-16T12:05:00+00:00",
+      "last_run_at": "2026-10-16T06:05:33Z",
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py",
       "_profile": "ops"
     },

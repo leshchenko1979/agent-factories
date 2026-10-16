@@ -156,7 +156,7 @@
     },
     {
       "id": "agents-old-degraded",
-      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after the owner answered infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200 at 0.54s, swap 2047 MiB. The wedge class is mitigated, not fixed \u2014 the host is 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe and miidas-ru-proxy remains unbounded, so swap absorbs pressure rather than removing it. 6 cgroup OOM kills this boot, all task=git: 4 in maple's cgroup before its 768 MiB cap raise, plus 2 the lane's own 256 MiB-capped repack attempts killed inside their throwaway scopes. agents-old still has ZERO Gatus endpoints, so a fourth wedge pages nobody \u2014 fix owner Infra HQ (infra n=1278).",
+      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after the owner answered infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, swap 2047 MiB, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git (4 in maple's cgroup before its 768 MiB cap raise, 2 the lane's own 256 MiB-capped repack attempts inside throwaway scopes). THE MONITORING BLIND IS NOW CLOSED (2026-10-16): agents-old carries Gatus endpoints \u2014 infra_agents-old (host-diag, 5m) and the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (miidas-manager, miidas-cdp) plus a NEW miidas-slots (unhealthy-slot probe, 2m, telegram alerts, failure-threshold 2) \u2014 all four green at 06:19Z, so a fourth wedge now PAGES. The earlier 'agents-old has ZERO Gatus endpoints / fix owner Infra HQ (n=1278)' clause is SUPERSEDED.",
       "severity": "warning",
       "affects": [
         "miidas",
@@ -210,7 +210,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-15T06:46:06Z",
+  "attested_at": "2026-10-16T06:25:16Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

@@ -179,7 +179,7 @@
       ],
       "scope": "profile",
       "evidence": "Ledger n=966 (intake) / n=967 (ruling). Daemon log: five 'API error (502)' retries 19:41:32.728064Z-19:54:04.974683Z; tool_loop.rs:3635 'All 5 5xx retries failed, checking for fallback provider'; turn_settle Failed 19:54:06.727609Z; ConfigWatcher 'fallback chain reloaded - [inferhub, openrouter] (was [inferhub])' 20:57:14.402309Z.",
-      "review_by": "2026-10-16"
+      "review_by": "2026-11-16"
     },
     {
       "id": "gatus-page-can-be-silently-lost",
@@ -237,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-15T07:10:42Z",
+  "attested_at": "2026-10-16T06:24:59Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
