@@ -1329,6 +1329,20 @@ predicate before it touches either surface. The two mutation controls (the predi
 always answer "published", the note's listing removed) must each make their arm vanish — a probe that
 has only ever seen the good build has not been shown to bite.
 
+**The remit is the RULING act, and the reason is that the ledger cannot produce this hazard
+internally.** The ledger is ONE append-only file with LINEAR history, so every commit that carries row
+`X` carries every row numbered below it: a reader who can read a citation can always read the row it
+names. The hazard therefore requires two surfaces with DIFFERENT publication latencies — an INSTANT
+surface, public the moment it is posted, citing into a DELAYED one. A `dispatch` row is INSIDE the
+delayed surface, so the predicate would answer "unpublished" at append and "readable" at read for
+every such row without exception, and a note that can never vary carries no information; wiring it in
+would add a constant field beside a variable one. The hazard does exist for every OTHER instant
+surface — a notify, a report, a board comment written outside this writer — and no gate reaches it,
+because a notify body lives in no tree the offline suite reads. That case is a SENDER discipline
+rather than a mechanism (ruled on `#441`, ledger `n=3322`): a citation of a same-turn row states its
+own state in the same breath, so that *"I could not ask"* and *"there is nothing to ask about"* never
+render alike — the same rule the read itself follows one paragraph above.
+
 ---
 
 ## 10. What this file does not own
