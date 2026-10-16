@@ -3456,12 +3456,15 @@ def selftest():
     env["OC_QUESTIONS_BASE_URL"] = PRODUCTION_BASE_URL
     # ...and the PARENT process's environment too, not just the subprocess
     # `env` dict. `run()` gives the child an env, but the probes below also
-    # drive the tool IN-PROCESS (`store_path()`, `read_register()`), and those
-    # read os.environ -- so a probe that points OC_QUESTIONS_DIR at a store of
-    # its own would otherwise still be reading the fixture. Set it for the
-    # whole run and restore it in the `finally`.
+    # drive the tool IN-PROCESS (`store_path()`, `read_register()`,
+    # `render_via_node()`), and those read os.environ -- so a probe that points
+    # OC_QUESTIONS_DIR at a store of its own would otherwise still be reading
+    # the fixture. Set it for the whole run and restore it in the `finally`.
+    # The render dir is SAVED here as well, so the restore is bound even if the
+    # run dies before the fixture below has built it.
     _saved_environ_dir = os.environ.get("OC_QUESTIONS_DIR")
     os.environ["OC_QUESTIONS_DIR"] = env["OC_QUESTIONS_DIR"]
+    _saved_environ_render = os.environ.get("OC_QUESTIONS_RENDER_DIR")
     # The asking session comes from the ENV and the lane is resolved from that
     # session's OWN binding, so the fixture needs a REAL session DB. Two bound
     # sessions (different lanes -- the multi-lane page) and one deliberately
@@ -3563,6 +3566,16 @@ def selftest():
     except OSError:
         pass
     env["OC_QUESTIONS_RENDER_DIR"] = fixture_render
+    # Publish it to the PARENT too. `render_via_node()` runs IN-PROCESS for the
+    # catalog checks below and reads os.environ, so with only the child `env`
+    # set it fell back to `store_dir()/build` -- and once the parent's
+    # OC_QUESTIONS_DIR points at this fixture, that fallback is an EMPTY scratch
+    # dir with no node_modules, so every in-process render died with
+    # ERR_MODULE_NOT_FOUND (react-dom) instead of reaching the catalog it was
+    # meant to be judged by. Publishing it here also closes the leak the comment
+    # above warns about: left unset, the in-process path resolved against the
+    # LIVE build dir and wrote render.mjs into the real store.
+    os.environ["OC_QUESTIONS_RENDER_DIR"] = fixture_render
 
     def run(*args):
         proc = subprocess.run([tool] + list(args), env=env, capture_output=True,
@@ -6117,6 +6130,10 @@ def selftest():
             os.environ.pop("OC_QUESTIONS_DIR", None)
         else:
             os.environ["OC_QUESTIONS_DIR"] = _saved_environ_dir
+        if _saved_environ_render is None:
+            os.environ.pop("OC_QUESTIONS_RENDER_DIR", None)
+        else:
+            os.environ["OC_QUESTIONS_RENDER_DIR"] = _saved_environ_render
         shutil.rmtree(root, ignore_errors=True)
 
 USAGE = """questions — the Open Questions register (#547)
