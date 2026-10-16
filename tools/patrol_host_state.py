@@ -7706,6 +7706,22 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
     for leg in legs:
         cov = leg["coverage"]
         lines.append(f"LEG {leg['name']} — {leg['status']}")
+        if leg["status"] == "FAILED":
+            # #501: a leg whose CONSTRUCTION raised. It is NAMED, its reason is printed
+            # and its problem is counted, so the round still prints a verdict and the exit
+            # code still reflects the failure. The name dispatch BELOW is deliberately
+            # skipped: a leg that never built has none of the coverage keys its own branch
+            # reads, so falling into that chain would raise a KeyError in the REPORT and
+            # take the round down by the back door -- the very class this contains.
+            lines.append(f"  FAILED: {cov.get('reason') or 'reason not stated'}")
+            lines.append(f"  exception: {cov.get('exception') or 'unstated'}")
+            lines.append(f"  excused: {len(leg['excused'])}")
+            lines.append(f"  problems: {len(leg['problems'])}")
+            for problem in leg["problems"]:
+                lines.append(f"    - {problem}")
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+            lines.append("")
+            continue
         if leg["status"] == "NOT RUN" and leg["name"] in (
             "cron-thinness", "pacemaker-presence", "notify-receipt", "duty-receipt",
             "score-conversion",
@@ -8714,6 +8730,44 @@ def live_pacemaker_presence_leg(rows: list[dict], homes_read: list[str],
         prefixes=prefixes, homes_read=homes_read, unreached=unreached,
     )
 
+def leg_guard(name: str, build, read_at: str) -> dict:
+    """Build ONE leg, and CONTAIN a raise so it cannot take the round down (#501).
+
+    `main()` builds its legs EAGERLY, inside a single list literal, with no try/except
+    between that literal and the exit-code line -- so an exception raised while building ANY
+    leg aborts before the list is even complete, and every leg AFTER it never runs. Those
+    legs leave no trace of their own: no NOT RUN line, no problem, no coverage count. That is
+    the silent-failure class, and it is worse than a red leg because it is invisible.
+
+    CONTAINMENT, not repair: the leg still FAILS, its problem still moves the exit code, and
+    its verdict is UNKNOWN -- never clean. What changes is that its NEIGHBOURS still run and
+    the round still prints a verdict.
+
+    The NAME is passed in rather than derived: a leg that raised never returned the name it
+    would have carried, so the caller states it -- and a probe asserts every name in the
+    caller's table against a CLEAN round's own names, which is what keeps the table from
+    drifting away from the legs it names.
+    """
+    try:
+        return build()
+    except Exception as exc:  # noqa: BLE001 -- containment is the whole point of this guard
+        return {
+            "name": name,
+            "status": "FAILED",
+            "problems": [
+                f"the {name} leg RAISED while being built: {type(exc).__name__}: {exc} -- "
+                f"it was contained so the round could finish, which means this leg's verdict "
+                f"is UNKNOWN and NOT clean (board #501)"
+            ],
+            "excused": [],
+            "coverage": {
+                "reason": f"raised {type(exc).__name__}: {exc}",
+                "exception": type(exc).__name__,
+                "read_at": read_at,
+            },
+        }
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -8877,29 +8931,40 @@ def main(
     # problem, so it can never move the patrol's exit code (a standalone detection leg was
     # refused as #83's class), and its only job is to make the board legs' read of the
     # shared tree attributable.
-    board_rider = (shared_tree_fn or shared_tree_rider)(read_at=read_at)
+    # #501: the rider is read EAGERLY, before any leg is built, so a raise here would
+    # abort the round exactly as a leg's would -- and for the same reason it is contained.
+    # It carries no problem by design (it can never move the exit code), so the containment
+    # yields None, a value the report already handles: it is STATED on stderr, never silent.
+    try:
+        board_rider = (shared_tree_fn or shared_tree_rider)(read_at=read_at)
+    except Exception as exc:  # noqa: BLE001 -- same class as a leg's raise (#501)
+        board_rider = None
+        err(
+            f"shared tree rider: NOT RUN -- it raised {type(exc).__name__}: {exc} at "
+            f"{read_at}; the round continues and the board legs' read is UNATTRIBUTED"
+        )
     legs = [
-        board_intake_leg(issues, rows, predicate=predicate, bound=board_bound),
-        board_close_leg(issues, rows, read_at=read_at, bound=board_bound),
-        board_closed_leg(issues, rows, read_at=read_at, predicate=predicate,
-                         bound=board_bound),
-        board_ruling_leg(
+        leg_guard("board-intake", lambda: board_intake_leg(issues, rows, predicate=predicate, bound=board_bound), read_at),
+        leg_guard("board-close", lambda: board_close_leg(issues, rows, read_at=read_at, bound=board_bound), read_at),
+        leg_guard("board-closed", lambda: board_closed_leg(issues, rows, read_at=read_at, predicate=predicate,
+                         bound=board_bound), read_at),
+        leg_guard("board-ruling", lambda: board_ruling_leg(
             issues, rows, read_at=read_at, predicate=predicate,
             scope=(ruling_scope_fn or ruling_board_scope)(),
             exemptions_path=ruling_exemptions_path,
-        ),
-        cron_thinness_leg(
+        ), read_at),
+        leg_guard("cron-thinness", lambda: cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
-        ),
-        notify_receipt_leg(
+        ), read_at),
+        leg_guard("notify-receipt", lambda: notify_receipt_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), log_dir=log_dir,
             read_at=read_at,
             # #306: the run's own verdict, from the daemon's per-fire record. Injected for
             # the same reason the cron table and the duty leg's fires are: a probe must
             # never have its excuse decided by the live box's own runs table.
             fires=cron_fires_fn(),
-        ),
-        duty_receipt_leg(
+        ), read_at),
+        leg_guard("duty-receipt", lambda: duty_receipt_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), rows, read_at=read_at,
             # The per-job residual (#449) is derived from each job's OWN fire history, so
             # the leg is handed the daemon's fire records. Injected for the same reason the
@@ -8908,19 +8973,19 @@ def main(
             # #487: the bound is injected, never read from the ambient tree the patrol runs
             # in -- the same reason the three board legs' bounds are.
             scope_fn=duty_scope,
-        ),
-        canonicality_leg(rows, read_at=read_at),
-        workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn),
-        stall_census_leg(
+        ), read_at),
+        leg_guard("canonicality-tier", lambda: canonicality_leg(rows, read_at=read_at), read_at),
+        leg_guard("workspace-blocked", lambda: workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn), read_at),
+        leg_guard("stall-census", lambda: stall_census_leg(
             issues, rows, read_at=read_at,
             lane_names_fn=lane_names_fn or stall_lane_names,
-        ),
-        board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate),
-        criterion_path_leg(
+        ), read_at),
+        leg_guard("board-unruled", lambda: board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate), read_at),
+        leg_guard("criterion-paths", lambda: criterion_path_leg(
             issues, read_at=read_at,
             repo=(criterion_repo_fn or (lambda: REPO))(),
-        ),
-        score_conversion_leg(
+        ), read_at),
+        leg_guard("score-conversion", lambda: score_conversion_leg(
             rows, read_at=read_at, predicate=predicate,
             # The scores surface (#67) is injected for the same reason the criterion tree
             # is: the leg reads the NEWEST `evidence/scores/<date>.md` in the LIVE tree, so
@@ -8930,19 +8995,19 @@ def main(
             # live surface, which is what production wants; `_run` injects an EMPTY
             # directory, so a probe that does not pass one reads NOT RUN with its reason.
             scores_dir=scores_dir_fn() if scores_dir_fn else None,
-        ),
-        dispatch_delivery_leg(
+        ), read_at),
+        leg_guard("dispatch-delivery", lambda: dispatch_delivery_leg(
             rows, read_at=read_at, bound=(delivery_scope_fn or dispatch_delivery_scope)(),
             deliveries_fn=deliveries_fn,
-        ),
-        kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
-                      read_at=read_at),
-        (publish_fn or publish_freshness_leg)(read_at=read_at),
-        (worktree_fn or worktree_leg)(read_at=read_at),
-        (presence_fn or live_pacemaker_presence_leg)(
+        ), read_at),
+        leg_guard("kit-drift", lambda: kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
+                      read_at=read_at), read_at),
+        leg_guard("publish-freshness", lambda: (publish_fn or publish_freshness_leg)(read_at=read_at), read_at),
+        leg_guard("worktree", lambda: (worktree_fn or worktree_leg)(read_at=read_at), read_at),
+        leg_guard("pacemaker-presence", lambda: (presence_fn or live_pacemaker_presence_leg)(
             cron_rows, homes_read, unreached, prefixes=prefixes_fn(),
             read_at=read_at,
-        ),
+        ), read_at),
     ]
     deferred = deferred_legs()
     deferred_problems = deferred_entry_problems(deferred)

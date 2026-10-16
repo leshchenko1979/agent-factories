@@ -188,7 +188,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
-         shared_tree_fn=None, duty_scope=None):
+         shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -247,8 +247,10 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         fleet_manifest=fleet_manifest,
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
-        publish_fn=_stub_publish_leg,
-        worktree_fn=_stub_worktree_leg,
+        # #501: injectable so a probe can hand the runner a leg that RAISES. The default is
+        # the stub, so every probe written before the containment guard keeps its meaning.
+        publish_fn=publish_fn or _stub_publish_leg,
+        worktree_fn=worktree_fn or _stub_worktree_leg,
         presence_fn=presence_fn or _stub_presence_leg,
         # The workspace-blocked leg's tree read is stubbed by default: a probe must not
         # cross-read against whatever THIS checkout happens to have dirty. A probe that
@@ -4646,6 +4648,167 @@ def test_the_zero_max_guard_STATES_the_reading_in_the_render() -> None:
         {"basis": "default", "measured_max_secs": None, "measured_rounds": 0})
     assert "NON-POSITIVE" in zero_text, zero_text
     assert "NON-POSITIVE" not in absent_text, absent_text
+
+# --- #501: a RAISING leg is CONTAINED, NAMED, and cannot take the round down ----------
+# `main()` builds its legs EAGERLY in one list literal with no try/except before the
+# exit-code line, so a raise in ANY leg aborted the round mid-build: every leg AFTER it
+# never ran, and left NO trace of its own -- no NOT RUN line, no problem, no coverage
+# count. That is the silent-failure class, and it is worse than a red leg because a red leg
+# is visible and a vanished one is not.
+#
+# The remedy is CONTAINMENT at the RUNNER (#501): the leg FAILS by name with its reason,
+# its problem still moves the exit code, and its neighbours still run. `margin_for` is NOT
+# widened -- the #500 probes above pin that, and the guard belongs at this call site.
+
+def _501_clean():
+    """A board the round can sweep clean, so the ONLY variable is the raising leg."""
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 5))
+    return issues, rows
+
+def _raising_publish_leg(*, read_at: str) -> dict:
+    """A MIDDLE leg that raises, so legs on BOTH sides of it are asserted to survive.
+
+    `publish-freshness` is leg 16 of 18: `kit-drift` precedes it and `worktree` and
+    `pacemaker-presence` follow it. Under the old shape those last two were exactly the
+    legs that vanished.
+    """
+    raise RuntimeError("probe: the publish leg could not read the remote")
+
+def _leg_names(text: str) -> list[str]:
+    return [line.split()[1] for line in text.splitlines() if line.startswith("LEG ")]
+
+def _leg_status(text: str) -> dict:
+    out = {}
+    for line in text.splitlines():
+        if line.startswith("LEG ") and " \u2014 " in line:
+            name, status = line[4:].split(" \u2014 ", 1)
+            out[name] = status
+    return out
+
+def test_a_contained_round_still_carries_EVERY_leg_the_clean_round_carries() -> None:
+    """The crux: a raise used to DELETE every leg after it, with no trace of its own.
+
+    This is asserted as SET AND ORDER equality against a clean round's own leg list, so the
+    probe fails both when a leg vanishes AND when the containment guard's name table drifts
+    away from the legs it names -- a contained leg is only useful if the name is right.
+    """
+    issues, rows = _501_clean()
+    _, clean_out, _ = _run(issues, rows)
+    _, out, _ = _run(issues, rows, publish_fn=_raising_publish_leg)
+
+    clean, got = _leg_names(clean_out), _leg_names(out)
+    assert got == clean, (
+        "a contained round must carry the SAME legs as a clean one, in the same order -- a "
+        f"missing leg IS the silent failure #501 is about\nclean: {clean}\ngot:   {got}"
+    )
+    # EXACTLY ONE status may differ from the clean round's: the raiser's. Comparing against
+    # the clean run's OWN statuses rather than against "ASSERTED" is the point -- several
+    # legs are legitimately NOT RUN under `_run`'s inert defaults, and a probe that demanded
+    # ASSERTED of them would be asserting the fixture, not the containment.
+    clean_statuses = _leg_status(clean_out)
+    statuses = _leg_status(out)
+    assert statuses == {**clean_statuses, "publish-freshness": "FAILED"}, (
+        "containment must change EXACTLY the raising leg's status and nothing else\n"
+        f"clean: {clean_statuses}\ngot:   {statuses}"
+    )
+
+def test_a_raising_leg_is_NAMED_with_its_reason_and_moves_the_exit_code() -> None:
+    """Criterion (a)+(d): a FAILED leg named for ITSELF, with the reason, and rc reflects it.
+
+    A containment that swallowed the problem would be worse than the abort: the round would
+    read CLEAN over a leg that never ran. So the problem is asserted to be COUNTED and the
+    exit code asserted to move.
+    """
+    issues, rows = _501_clean()
+    rc, out, _ = _run(issues, rows, publish_fn=_raising_publish_leg)
+
+    assert rc == 1, f"a contained leg's problem must still move the exit code\n{out}"
+    block = out.split("LEG publish-freshness")[1].split("LEG ")[0]
+    assert "FAILED" in block.split("\n")[0], block
+    assert "RuntimeError" in block, block
+    assert "could not read the remote" in block, block
+    assert "problems: 1" in block, block
+    assert "UNKNOWN" in block, (
+        f"the containment must state that the leg's verdict is UNKNOWN, not clean: {block}"
+    )
+    assert "verdict:" in out, f"the round must STILL print a verdict\n{out}"
+
+def test_the_containment_guard_changes_NOTHING_on_a_clean_round() -> None:
+    """CONTROL: with no leg raising, the guard is invisible -- rc, verdict and legs alike.
+
+    A guard that perturbed the clean path would move every other probe in this file, and
+    the honest way to say it does not is to assert the clean round is unchanged.
+    """
+    issues, rows = _501_clean()
+    rc, out, _ = _run(issues, rows)
+
+    assert rc == 0, f"a clean round must stay clean\n{out}"
+    assert "FAILED" not in out, out
+    assert "0 problem(s)" in out, out
+    assert len(_leg_names(out)) == len(set(_leg_names(out))), "no leg may be named twice"
+
+def test_the_board_read_abort_path_is_UNCHANGED_by_the_containment_guard() -> None:
+    """Criterion (c): the abort BEFORE the legs is by design, and it is the leg-free case.
+
+    The board read happens before any leg exists, so containment cannot apply there: the run
+    must still abort with rc=2, name every leg NOT RUN, and print NO verdict. A guard that
+    caught this too would replace a loud abort with a quiet round over zero issues.
+    """
+    def _boom(slug):
+        raise RUNNER.BoardReadError("probe: the board could not be read")
+
+    out, err = io.StringIO(), io.StringIO()
+    rc = RUNNER.main(
+        [], board_fn=_boom, slug_fn=lambda: "owner/repo", rows_fn=lambda: [],
+        out=lambda *a, **k: print(*a, file=out, **k),
+        err=lambda *a, **k: print(*a, file=err, **k),
+        publish_fn=_stub_publish_leg, shared_tree_fn=_stub_shared_tree_rider,
+    )
+    assert rc == 2, f"the board-read abort must be unchanged, got rc={rc}"
+    assert "NOT RUN: every leg" in err.getvalue(), err.getvalue()
+    assert "verdict" not in out.getvalue(), out.getvalue()
+
+def test_a_raise_in_the_FIRST_leg_still_prints_a_verdict() -> None:
+    """Criterion (b), on the leg whose OWN render branch reads coverage keys it lacks.
+
+    The probes above raise in `publish-freshness`, which is leg 16 of 18 AND whose render
+    branch is status-guarded -- so they prove the BUILD half (the leg is named, its problem
+    counts, its neighbours survive) but they cannot exercise the REPORT half, because that
+    leg's branch tolerates a leg that never built. `board-intake` is leg 1 of 18 and its
+    branch reads `forward_issues_examined` and `reverse_intake_rows_examined` with NO status
+    guard, and a leg that never built has neither key.
+
+    So without the FAILED branch the round raises `KeyError` while printing its own report:
+    the same silent-failure class one layer down, and the reason the branch is load-bearing
+    rather than decorative. Disable it and this probe errors with the KeyError; that is its
+    bite, and it is the only probe here that bites on the report half at all.
+    """
+    real = RUNNER.board_intake_leg
+
+    def _boom(*a, **k):
+        raise RuntimeError("probe: board-intake could not read the board")
+
+    issues, rows = _501_clean()
+    _, clean_out, _ = _run(issues, rows)
+
+    RUNNER.board_intake_leg = _boom
+    try:
+        rc, out, err = _run(issues, rows)
+    finally:
+        RUNNER.board_intake_leg = real
+
+    assert "verdict:" in out, f"the round must STILL print a verdict\n{out}\n{err}"
+    assert rc == 1, f"a contained leg's problem must still move the exit code\n{out}"
+    block = out.split("LEG board-intake")[1].split("LEG ")[0]
+    assert "FAILED" in block.split("\n")[0], block
+    assert "RuntimeError" in block, block
+    # Leg 1 raising must not delete the other seventeen: the report is built from the SAME
+    # leg list the clean round produced, in the same order.
+    assert _leg_names(out) == _leg_names(clean_out), (
+        "a raise in the FIRST leg must not vanish the ones after it\n"
+        f"clean: {_leg_names(clean_out)}\ngot:   {_leg_names(out)}"
+    )
 
 # --- #242: attribution by GIT COMMON DIR, and an empty prefix set is NOT RUN ---------
 
