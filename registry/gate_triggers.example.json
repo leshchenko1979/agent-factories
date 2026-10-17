@@ -95,6 +95,11 @@
     "tests/test_criteria_count.py": [
       "docs/quality-criteria.md"
     ],
+    "tests/test_criterion_path_exemptions.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/criterion-path-exemptions.json",
+      "tools/patrol_host_state.py"
+    ],
     "tests/test_cron_landing_route.py": [
       "TEMPLATE/**",
       "docs/landing-route-debt.json",
