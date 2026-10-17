@@ -1,0 +1,161 @@
+{
+  "_note": "THIS factory's declared exemptions for tests/test_ledger_citation_declared.py (#317). The gate reads a ledger row's OWN VOICE and reds when a `§N` has no document token (a `*.md` name) in the 70 characters BEFORE it, because a ledger row numbers no sections of its own: a bare `§N` in a row can only point at ANOTHER document and resolves in no tree. This store exists because the ledger is APPEND-ONLY: a row written at or after the declared boundary has an EMPTY REPAIR SPACE -- the row is immutable once published, and `ledger.py repair --append-detail` inserts BEFORE the canonical trailer, i.e. AFTER the citation, so the bare number survives every lawful repair. `docs/instruments/ledger.md` section 9.6 names excusing as the remedy for exactly this shape. THE ADMISSION RULE: every entry names ONE row and carries a `reason` stating what the citation actually points at and why the row's prose is correct as written -- an exemption nobody can check is forgiveness, and this list is debt. An entry that names a row carrying NO bare citation is a STALE exemption and a gate ERROR, so the store can only ever hold rows that are actually red. Every matched entry prints as an `excused:` line on EVERY run and is counted in the population, so 'clean' and 'excused' are never the same output. A malformed or duplicated entry, or an unparseable store, is an ERROR. Absent or empty means no exemptions, never a failure. THE FIVE CLASSES OF ADMITTED ROW, each named in its reason: (1) the document is named EARLIER IN THE SAME ROW, beyond the 70-character window -- the window is a heuristic and the row is resolvable; (2) the citation is a ROW REFERENCE's own numbered part (`n=2861 §5(a)`), and a row is not a document; (3) the citation is QUOTED prose reporting a bare citation that was repaired -- a quotation, not a citation; (4) the document is the meta-factory SKILL cited by its in-tree name (`SKILL §6`), whose numbering differs per tree; (5) the row is a ruling about ONE instrument and the section numbers are that instrument's own, named at the row's head. The gate cannot tell these from neglect, which is why they are declared here rather than silently passed.",
+  "exemptions": [
+    {
+      "row": 2277,
+      "reason": "#305 ruling. The row names `skills/meta-factory/SKILL.md` in its own first clause ('`skills/meta-factory/SKILL.md` §5 prose'); the second occurrence reads 'the same §5', an anaphor whose referent is that named document. Class 1 -- named earlier in the same row."
+    },
+    {
+      "row": 2278,
+      "reason": "#274 ruling. 'CLASS. SKILL §8 -- a counter's NAME is not its PREDICATE' cites the meta-factory SKILL by its in-tree name; 'SKILL' is not a `.md` token, and the doctrine deliberately refuses it because every factory carries its own SKILL with its own numbering. Class 4."
+    },
+    {
+      "row": 2279,
+      "reason": "#301 ruling. 'Per SKILL §6 the control must discriminate' -- meta-factory SKILL §6 (measurement law), cited by its in-tree name. Class 4."
+    },
+    {
+      "row": 2295,
+      "reason": "#77 dispatch. 'add to SKILL §6 (measurement law) the clause' -- the dispatch names both the document by its in-tree name and the section's subject in the same clause. Class 4."
+    },
+    {
+      "row": 2309,
+      "reason": "#315 ruling. The row opens '**The gap.** `SKILL.md` §6 names every periodic process owner', naming the document with its token; the later 'a §6-named owner' refers back to it from well outside the 70-character window. Class 1."
+    },
+    {
+      "row": 2363,
+      "reason": "survey-2026-10-05 score. '§5.2 GATE-BUDGET RE-DERIVATION LEG' is the meta-factory SKILL's gate-budget clause, the survey instrument this row scores against; the row's population line names the survey. Class 4."
+    },
+    {
+      "row": 2364,
+      "reason": "survey-2026-10-05 run. Same clause as the score row n=2363 it reports: '§5.2' twice, both the meta-factory SKILL's gate-budget re-derivation leg that the run executed. Class 4."
+    },
+    {
+      "row": 2366,
+      "reason": "#326 ruling. '`n=2355` is the §9.1 re-mint of the unpublished `n=2350`' -- `docs/instruments/ledger.md` §9.1, the re-mint clause, in a ruling that is entirely about the ledger instrument's own protocol. Class 5."
+    },
+    {
+      "row": 2407,
+      "reason": "#329 ruling. 'But §4 of the skill mandates that **every** ...' -- the document is named by the noun phrase 'the skill' in the same clause, and the row is a ruling on that skill's publish protocol. Class 1."
+    },
+    {
+      "row": 2410,
+      "reason": "#327 ruling. The §4 and §3 occurrences are inside BACKTICKED QUOTATIONS of the two bare citations this ruling repaired ('the spec is infra's §4' -> 'the spec is infra's ruling'; 'EMPTY (instrument law §3)' -> 'EMPTY (docs/instruments/review-rotation.md §3)'). The row REPORTS the defect, it does not cite. Class 3 -- `own_voice_text` strips parenthetical asides, not backticks, which is why the quotation reaches the scan."
+    },
+    {
+      "row": 2413,
+      "reason": "#327 close. Same two quotations as n=2410: 'a bare 'infra's §4' and 'instrument law §3' were unresolvable in any tree' -- the close row names the defect class it closed. Class 3."
+    },
+    {
+      "row": 2523,
+      "reason": "#412 intake. 'so per SKILL §4 the leg is handed to Triage' -- meta-factory SKILL §4; the row also names `routes/review-rotation.md` and `routes/worker.md` by token for the same routing question. Class 4."
+    },
+    {
+      "row": 2524,
+      "reason": "#413 intake. The same routing sentence as its sibling n=2523, same document: 'per SKILL §4'. Class 4."
+    },
+    {
+      "row": 2525,
+      "reason": "#359 claim. 'the §2 declared-set reading fix is taken' -- §2 of the meta-factory SKILL, the clause the claimed issue is about; a claim row is one sentence and has no room to re-name a document its issue already names. Class 4."
+    },
+    {
+      "row": 2526,
+      "reason": "#359 run. Names `docs/instruments/open-questions.md` by token and cites the SKILL's §5.1/§4 and the frame's §6; '§2' is the issue's own clause, carried from the claim row n=2525. Class 1."
+    },
+    {
+      "row": 2529,
+      "reason": "#359 close. 'the §2 declared-set reading is STATED' -- the same clause as the claim n=2525 and run n=2526 of the same unit. Class 4."
+    },
+    {
+      "row": 2538,
+      "reason": "#353 claim. The row names `kit.md` at its head ('defect(kit): kit.md §4.1 / §9.2-F1'); every later section number (§9.2, §7.2, §2.1, §4.1, §7.2, §9.2) is a subsection of that same `kit.md`, listed in an enumeration that runs far past the 70-character window. Class 1."
+    },
+    {
+      "row": 2681,
+      "reason": "survey-2026-10-06 score. '§5.2' -- the meta-factory SKILL's gate-budget re-derivation leg, the same survey instrument scored in n=2363 one day earlier. Class 4."
+    },
+    {
+      "row": 2682,
+      "reason": "survey-2026-10-06 run. '§5.2' twice, the clause the run executed; same survey as its score row n=2681. Class 4."
+    },
+    {
+      "row": 2776,
+      "reason": "#430 intake. 'the UNMEASURABLE mechanics (§5.3 ...)' -- meta-factory SKILL §5.3, the clause the filed defect is against; an intake row names its subject's clause and the issue body carries the document. Class 4."
+    },
+    {
+      "row": 2777,
+      "reason": "#430 ruling. §5.3 four times is the meta-factory SKILL clause under ruling; §12 is `docs/instruments/template-instruments.md` §12, whose 'Prevented by' test the row quotes. Class 4/5."
+    },
+    {
+      "row": 2778,
+      "reason": "#430 dispatch. 'land a gate for §5.3's UNMEASURABLE mechanics' -- the meta-factory SKILL clause, the dispatch's own subject; the same row names `docs/measurement-procedure.md` by token for the boundary half. Class 4."
+    },
+    {
+      "row": 2783,
+      "reason": "#430 close. '§5.3's UNMEASURABLE mechanics now have ...' -- the clause the close reports landed. Class 4."
+    },
+    {
+      "row": 2849,
+      "reason": "#438 intake. 'Dispatched to the HQ lane, which owns §11 canonical-trailer doctrine' -- the document is named by the duty's own name in the same clause, and §11 is the meta-factory SKILL's canonical-trailer section. Class 1/4."
+    },
+    {
+      "row": 2878,
+      "reason": "#301 run. 'Ruling n=2861 §5(a) names ONLY #317 and #320' and four further '§5' -- these are a RULING ROW's own numbered part, not a document's section. A row reference is deliberately not a document (`n=950 §4` is the dominant bare shape this gate tolerates by design). Class 2."
+    },
+    {
+      "row": 2880,
+      "reason": "patrol-verify-2026-10-08T00 run. 'RULED at n=2861 (§5)' and 'this is a CORRECTION TO §5' -- the numbered part of ruling row n=2861. Class 2."
+    },
+    {
+      "row": 2883,
+      "reason": "#301 run. 'its §5 duty is already discharged' and '§5's 7-day default' -- the duty named in ruling n=2861 §5. Class 2."
+    },
+    {
+      "row": 2958,
+      "reason": "#448 ruling. The row names `docs/instruments/ledger.md` at its head ('exposed a gap in `docs/instruments/ledger.md` §9.1, and the gap is closed here') and then cites §9.1 five more times in the same ruling; §12 is the meta-factory SKILL's template-twin clause, quoted as 'P30 / §12'. Class 1."
+    },
+    {
+      "row": 3009,
+      "reason": "#450 ruling. '§7.5' four times is `docs/instruments/template-instruments.md` §7.5, which the row names by path and line ('template-instruments.md:776 (both twins)') before citing it. Class 1."
+    },
+    {
+      "row": 3012,
+      "reason": "#452 ruling. '§7.5' twice -- the same `docs/instruments/template-instruments.md` clause that n=3009 ruled on the day before; this row is its follow-on ruling. Class 5."
+    },
+    {
+      "row": 3031,
+      "reason": "#456 ruling. §9.1 twice is `docs/instruments/ledger.md` §9.1 (the row's whole subject is a ledger repair clause); §11 is the meta-factory SKILL's, named in the same bullet ('this repo's own `skills/meta-factory/SKILL.md`'). Class 1."
+    },
+    {
+      "row": 3057,
+      "reason": "#457 ruling. §2/§5/§4 are clauses of `TEMPLATE/docs/instruments/hygiene.md`, the page under review, which the row names at its head and again in every table row; the bare occurrences are TABLE CELLS abbreviating 'clause 1 -- §2', 'clause 2 -- §5' in the disposition table, and `registry/gates.json` (§4) style cells. Class 1."
+    },
+    {
+      "row": 3058,
+      "reason": "#458 ruling. '§5.3 (`:576`)' -- the hygiene instrument's fleet-view clause, named by the subsection title the row amends; §8 is the frame. Class 5."
+    },
+    {
+      "row": 3059,
+      "reason": "hq-cycle-2026-10-10T12 run. §2/§5 are `docs/instruments/hygiene.md` clauses, and the row names the ruling it applies ('Board ruling comment 6097837286, ledger row n=3057') which carries the page; §8 is the frame. Class 1."
+    },
+    {
+      "row": 3078,
+      "reason": "hq-cycle-2026-10-10T18 run. 'addressed by ARTIFACT, never by name (frame §8:884)' -- the frame document, named by the noun 'frame' beside the number; 'unattended lane, SKILL.md §9' names its own token in the same parenthesis. Class 1."
+    },
+    {
+      "row": 3105,
+      "reason": "#463 ruling. §5.4.3/§5.4.4 are the meta-factory SKILL's routing and declaration clauses, which are this ruling's entire subject; the row quotes them verbatim. Class 4/5."
+    },
+    {
+      "row": 3107,
+      "reason": "#463 dispatch. §5.4.3/§5.4.4 -- the same SKILL clauses, the dispatch's own subject, quoting n=3105. Class 4/5."
+    },
+    {
+      "row": 3127,
+      "reason": "hq-cycle-2026-10-11T06 run. '§9.1' names `docs/instruments/ledger.md` in the same sentence ('Per docs/instruments/ledger.md §9.1 the unpublished rows were RE-DERIVED'); '§5.4.3' is the SKILL's clause the cycle executed; '§9' is the SKILL's unattended-lane clause. Class 1."
+    },
+    {
+      "row": 3143,
+      "reason": "#424 ruling. '`n=3102` §2' three times -- a ROW reference's own numbered part, used to name a prior ruling's clause. A row is not a document. Class 2."
+    }
+  ]
+}

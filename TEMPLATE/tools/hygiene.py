@@ -475,6 +475,11 @@ DECLARATION_SURFACES: tuple[
      "entries name LANES (actors and by_event values), not a path or a commit"),
     ("ledger-commit-exemptions", "docs/ledger-commit-exemptions.json",
      (("exemptions", "sha", DECL_COMMIT),), ""),
+    ("ledger-citation-exemptions", "docs/ledger-citation-exemptions.json", (),
+     "entries name a ledger ROW (`row`) and the ledger is append-only, so no number here "
+     "can be stranded by a rename; the citation gate reconciles every entry against a "
+     "LIVE read of the ledger's own rows, where an entry naming a row that carries no "
+     "bare citation is a STALE exemption and an ERROR"),
     ("ledger-exemptions", "docs/ledger-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`), which this leg cannot read offline"),
     ("ledger-invariants", "docs/ledger-invariants.json", (),

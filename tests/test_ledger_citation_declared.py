@@ -75,6 +75,7 @@ Exit: 0 clean, fully excused, or skipped-with-reason; non-zero on a governed row
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -115,6 +116,19 @@ from field_predicate import own_voice_text  # noqa: E402
 # which invariant each date belongs to (#248).
 INVARIANT_KEY = "ledger_citation_declared"
 
+# THE POST-BOUNDARY EXIT (#317). Forward-only means a bare `\u00a7N` written after the boundary
+# has an EMPTY REPAIR SPACE: the row is immutable once published, and `ledger.py repair
+# --append-detail` inserts BEFORE the canonical trailer, i.e. after the citation, so the
+# bare number survives every lawful repair. `docs/instruments/ledger.md` section 9.6 names
+# the remedy for exactly this shape -- *excusing is what the exemption surfaces do for a
+# violation whose repair space is empty* -- and this gate shipped without one while eight
+# sibling ledger gates declared theirs. The surface is FACTORY DATA read by the gate, never
+# a list inside it: this file is paired byte-identically with its TEMPLATE twin, and a
+# factory's own rows must not live in a file that ships to every new factory. Ruling
+# n=2310 parked the shape; ledger rows n=3355 released it as SHAPE A, an allow-list naming
+# its exact rows.
+EXEMPTIONS_PATH = "docs/ledger-citation-exemptions.json"
+
 # A section NUMBER citation. The section sign followed by a TITLE is a different leg --
 # the shipped gate resolves titles against the law corpus, and the ledger's clause is
 # about numbers.
@@ -144,6 +158,59 @@ class Verdict(NamedTuple):
     governed: int
     examined: int
     boundary_text: str
+    # `declared` is the count of POST-BOUNDARY rows the exemption store actually excused, so
+    # the population line can never read "clean" over an excused row: 0 and 3 are different
+    # outputs, printed every run.
+    declared: int = 0
+
+def load_exemptions(repo: Path) -> tuple[dict[int, dict], list[str]]:
+    """`({row_number: entry}, problems)` read from the factory's own data file.
+
+    Absent or empty data means NO exemptions -- the shipped state of a new factory, where
+    `docs/` carries only the `.example.json` skeleton. Anything malformed is a problem,
+    never a silent pass: an exemption list that quietly fails to load is indistinguishable
+    from no exemptions at all, which is the same vacuous-pass shape the boundary guard
+    exists to forbid.
+
+    Each entry must name a row and carry a reason. The PROOF obligation is not checked
+    here but in `evaluate`: an entry that names a row carrying no bare citation excuses
+    nothing, so it is a STALE exemption and a gate ERROR. That is what keeps the store
+    from becoming a standing waiver list -- it can only ever hold rows that are actually
+    red.
+    """
+    problems: list[str] = []
+    path = repo / EXEMPTIONS_PATH
+    if not path.is_file():
+        return {}, problems
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {}, [f"{path.name} is not JSON: {exc}"]
+    if not isinstance(data, dict):
+        return {}, [f"{path.name}: expected a JSON object with an 'exemptions' list"]
+    raw = data.get("exemptions", [])
+    if not isinstance(raw, list):
+        return {}, [f"{path.name}: 'exemptions' must be a list"]
+
+    entries: dict[int, dict] = {}
+    for i, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            problems.append(f"{path.name}: entry {i} is not an object")
+            continue
+        row = item.get("row")
+        if not isinstance(row, int) or isinstance(row, bool) or row < 1:
+            problems.append(
+                f"{path.name}: entry {i} names a row that is not a positive integer: {row!r}"
+            )
+            continue
+        if not str(item.get("reason") or "").strip():
+            problems.append(f"{path.name}: entry {i} (n={row}) carries no reason")
+            continue
+        if row in entries:
+            problems.append(f"{path.name}: entry {i} repeats n={row}")
+            continue
+        entries[row] = item
+    return entries, problems
 
 
 def own_voice_citations(detail: object) -> int:
@@ -181,6 +248,13 @@ def evaluate(repo: Path) -> Verdict:
     rather than a silent exemption. A real problem always outranks a skip: the population
     guard runs only on an otherwise-clean ledger, so a defect is never hidden behind
     "there was nothing to judge".
+
+    A governed row carrying a bare citation is excused ONLY by a declared entry naming its
+    exact row number, and every such excuse is PRINTED with its reason on every run -- the
+    gate reports what it let through, never a bare "clean". An entry that matches no
+    governed row carrying a bare citation is a STALE exemption and a problem: it inflates
+    visible debt while excusing nothing, and it would let the store rot into a standing
+    waiver list.
     """
     try:
         boundary, boundary_text, rows = boundary_and_rows(repo, INVARIANT_KEY)
@@ -189,10 +263,12 @@ def evaluate(repo: Path) -> Verdict:
     except GateError as exc:
         return Verdict("fail", "", list(exc.problems), [], 0, 0, "")
 
-    problems: list[str] = []
+    exemptions, problems = load_exemptions(repo)
     excused: list[str] = []
+    matched: set[int] = set()
     governed = 0
     examined = 0
+    declared = 0
     for row in rows:
         detail = row.get("detail")
         examined += own_voice_citations(detail)
@@ -208,10 +284,21 @@ def evaluate(repo: Path) -> Verdict:
             continue
         if when >= boundary:
             governed += 1
-            problems.extend(
-                f"n={number} ({row.get('event')}): {b} -- a ledger row numbers no "
-                f"sections of its own, so this citation names no document and resolves in "
-                f"no tree" for b in bare
+            if not bare:
+                continue
+            entry = exemptions.get(number) if isinstance(number, int) else None
+            if entry is None:
+                problems.extend(
+                    f"n={number} ({row.get('event')}): {b} -- a ledger row numbers no "
+                    f"sections of its own, so this citation names no document and resolves "
+                    f"in no tree" for b in bare
+                )
+                continue
+            matched.add(number)
+            declared += 1
+            excused.append(
+                f"n={number} ({row.get('ts')}): {len(bare)} bare citation(s) EXCUSED by "
+                f"{EXEMPTIONS_PATH} -- {entry.get('reason')}"
             )
         elif bare:
             excused.append(
@@ -219,8 +306,17 @@ def evaluate(repo: Path) -> Verdict:
                 f"the declared boundary ({boundary_text})"
             )
 
+    for stale in sorted(set(exemptions) - matched):
+        problems.append(
+            f"{EXEMPTIONS_PATH}: the exemption for n={stale} matches no governed row "
+            f"carrying a bare citation -- a stale exemption excuses nothing and must be "
+            f"removed (the row was repaired, or was never red)"
+        )
+
     if problems:
-        return Verdict("fail", "", problems, excused, governed, examined, boundary_text)
+        return Verdict(
+            "fail", "", problems, excused, governed, examined, boundary_text, declared
+        )
     if not governed:
         return Verdict(
             "skip",
@@ -230,8 +326,11 @@ def evaluate(repo: Path) -> Verdict:
             0,
             examined,
             boundary_text,
+            declared,
         )
-    return Verdict("pass", "", [], excused, governed, examined, boundary_text)
+    return Verdict(
+        "pass", "", [], excused, governed, examined, boundary_text, declared
+    )
 
 
 def _row(number: int, ts: str, detail: str) -> dict:
@@ -273,7 +372,7 @@ def test_live_ledger_rows_name_the_document_they_cite() -> None:
     print(
         f"ledger citation gate: clean -- {verdict.governed} governed row(s) at or after "
         f"the boundary, {verdict.examined} own-voice citation(s) scanned, "
-        f"{len(verdict.excused)} pre-boundary row(s) excused, 0 problem(s)"
+        f"{verdict.declared} declared-exempt row(s), 0 problem(s)"
     )
 
 
@@ -409,6 +508,146 @@ def test_probe_a_clean_governed_population_passes_and_counts_it(tmp_path: Path) 
     assert verdict.examined == 1, verdict.examined
 
 
+def _write_exemptions(root: Path, payload: object) -> None:
+    """Write this gate's exemption store into a synthetic tree, verbatim."""
+    (root / "docs").mkdir(parents=True, exist_ok=True)
+    text = payload if isinstance(payload, str) else json.dumps(payload)
+    (root / "docs" / "ledger-citation-exemptions.json").write_text(text, encoding="utf-8")
+
+def test_probe_a_declared_exemption_excuses_a_governed_row_and_prints_its_reason(
+    tmp_path: Path,
+) -> None:
+    """The surface exists so a post-boundary bare citation stops being a permanent red.
+
+    The row must NOT be silent: `clean` and `excused` are different outputs, and the reason
+    is printed on every run, so an exemption can never hide behind a green verdict.
+    """
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(7, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(root, {"exemptions": [{"row": 7, "reason": "pushed before the gate had a surface"}]})
+    verdict = evaluate(root)
+    assert verdict.status == "pass", (verdict.status, verdict.problems)
+    assert verdict.problems == [], verdict.problems
+    assert verdict.declared == 1, verdict.declared
+    assert len(verdict.excused) == 1, verdict.excused
+    assert "pushed before the gate had a surface" in verdict.excused[0], verdict.excused
+
+def test_probe_the_exemption_does_not_swallow_an_undeclared_governed_row(
+    tmp_path: Path,
+) -> None:
+    """THE CONTROL THAT BITES: with the store in place, a row it does NOT name still fails.
+
+    An exemption surface that excused everything would pass every other probe in this file
+    while testing nothing -- the failure class `docs/instruments/ledger.md` section 9.6
+    names when it says an exemption is a visible debt, not forgiveness.
+    """
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[
+            _row(7, "2026-01-03T00:00:00Z", "cites \u00a75 bare"),
+            _row(8, "2026-01-04T00:00:00Z", "cites \u00a76 bare"),
+        ],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(root, {"exemptions": [{"row": 7, "reason": "declared debt"}]})
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.excused)
+    assert len(verdict.problems) == 1, verdict.problems
+    assert "n=8" in verdict.problems[0], verdict.problems
+    assert verdict.declared == 1, verdict.declared
+
+def test_probe_a_stale_exemption_is_an_error(tmp_path: Path) -> None:
+    """An entry naming a row that carries NO bare citation excuses nothing.
+
+    Without this arm the store rots into a standing waiver list: an entry outlives the
+    defect it named and still reads as admitted debt.
+    """
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(7, "2026-01-03T00:00:00Z", "see docs/instruments/ledger.md \u00a75")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(root, {"exemptions": [{"row": 7, "reason": "no longer red"}]})
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.problems)
+    assert any("stale exemption" in p for p in verdict.problems), verdict.problems
+    assert verdict.declared == 0, verdict.declared
+
+def test_probe_an_exemption_for_a_row_that_does_not_exist_is_stale(tmp_path: Path) -> None:
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(7, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(
+        root,
+        {"exemptions": [{"row": 7, "reason": "real"}, {"row": 999, "reason": "a typo"}]},
+    )
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.problems)
+    assert any("n=999" in p and "stale exemption" in p for p in verdict.problems), verdict.problems
+
+def test_probe_an_absent_store_is_the_shipped_state_not_a_failure(tmp_path: Path) -> None:
+    """A new factory ships only the `.example.json` skeleton, so absence must be clean."""
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(1, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    verdict = evaluate(root)
+    assert verdict.status == "fail", verdict.status
+    assert verdict.declared == 0
+    assert all("stale exemption" not in p for p in verdict.problems), verdict.problems
+
+def test_probe_a_malformed_store_fails_closed(tmp_path: Path) -> None:
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(1, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(root, "{ not json")
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.problems)
+    assert any("not JSON" in p for p in verdict.problems), verdict.problems
+
+def test_probe_a_store_entry_without_a_reason_is_an_error(tmp_path: Path) -> None:
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(7, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(root, {"exemptions": [{"row": 7}]})
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.problems)
+    assert any("carries no reason" in p for p in verdict.problems), verdict.problems
+
+def test_probe_a_duplicated_store_entry_is_an_error(tmp_path: Path) -> None:
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(7, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(
+        root, {"exemptions": [{"row": 7, "reason": "a"}, {"row": 7, "reason": "b"}]}
+    )
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.problems)
+    assert any("repeats n=7" in p for p in verdict.problems), verdict.problems
+
+def test_probe_a_non_integer_row_is_an_error(tmp_path: Path) -> None:
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(7, "2026-01-03T00:00:00Z", "cites \u00a75 bare")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    _write_exemptions(root, {"exemptions": [{"row": "7", "reason": "a string is not a row"}]})
+    verdict = evaluate(root)
+    assert verdict.status == "fail", (verdict.status, verdict.problems)
+    assert any("not a positive integer" in p for p in verdict.problems), verdict.problems
+
 def main() -> int:
     """Script form: the same verdict, with the skip reason on STDOUT rather than in a
     pytest short summary -- so a reader of the run sees WHY nothing was judged."""
@@ -432,7 +671,7 @@ def main() -> int:
     print(
         f"ledger citation gate: clean -- {verdict.governed} governed row(s) at or after "
         f"the boundary, {verdict.examined} own-voice citation(s) scanned, "
-        f"{len(verdict.excused)} pre-boundary row(s) excused, 0 problem(s)"
+        f"{verdict.declared} declared-exempt row(s), 0 problem(s)"
     )
     return 0
 
