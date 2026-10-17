@@ -286,7 +286,17 @@ def load_declarations(slug: str) -> dict:
         frag = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         return {"declared": False, "why": f"unreadable: {exc}"}
-    zone = frag.get("zone") or {}
+    if not isinstance(frag, dict):
+        # A fragment that PARSES is not thereby READABLE: `.get` on a list raises, and the
+        # whole census would go down for the one member it could not describe — the exact
+        # failure this function's absence path exists to prevent.
+        return {"declared": False,
+                "why": f"unreadable: the fragment is a {type(frag).__name__}, not an object"}
+    zone = frag.get("zone")
+    if not isinstance(zone, dict):
+        # A non-object `zone` is no declaration at all; `zone.get` would raise for it, and
+        # the declaration's other halves are still readable.
+        zone = {}
     return {
         "declared": True,
         "display_name": frag.get("display_name") or slug,
@@ -324,14 +334,44 @@ def pin_state(root: str) -> dict:
     `declared` 0 in the unreadable case too, so the `exemption_problem` it also carries is
     what tells the two apart — dropping it would trade the over-count this fix removes for
     an absent-vs-zero lie.
+
+    AN ENTRY THAT CANNOT BE LOADED IS NOT AN ABSENT ONE, and `is_file()` cannot tell them
+    apart: it is False for a DANGLING SYMLINK and for a directory, so a pin that had rotted
+    read "no registry/kit.json in the member's tree" — a false statement — and the fleet
+    bound counted it among the members that had vendored NO pin. Such an entry is
+    `vendored` True (an entry exists, so it is not non-adoption) with `judged` False (it
+    cannot be used, so the cell must not read as adopted), and `entry` names the shape the
+    renderer shows. Same class as the `own copy` column: installed-but-dead is not nothing.
     """
     r = Path(root)
     pin = r / "registry" / "kit.json"
     ex = r / "registry" / "kit-exemptions.json"
-    out = {"vendored": pin.is_file(), "exemptions": None, "judged": False, "why": ""}
-    if not out["vendored"]:
+    out = {"vendored": False, "entry": "absent", "exemptions": None,
+           "judged": False, "why": ""}
+    # AN ENTRY THAT CANNOT BE LOADED IS NOT AN ABSENT ONE, and this branch precedes the
+    # `is_file()` gate ON PURPOSE: `exists()` is False for a dangling symlink, so a rotted
+    # pin read "no registry/kit.json in its tree" and the fleet bound counted it among the
+    # members that had vendored NO pin. `vendored` stays True (an entry exists, so this is
+    # not non-adoption) and `judged` stays False (it cannot be used, so the cell must not
+    # read as adopted); `entry` names the shape the renderer shows.
+    if not pin.exists() and pin.is_symlink():
+        out["vendored"] = True
+        out["entry"] = "dangling link"
+        out["why"] = ("its registry/kit.json is a symlink that does not resolve — a pin "
+                      "entry that cannot be loaded, so it has no figure of its own")
+        return out
+    if pin.exists() and not pin.is_file():
+        out["vendored"] = True
+        out["entry"] = "not a file"
+        out["why"] = ("its registry/kit.json is a non-file (a directory or a special "
+                      "file) — a pin entry that cannot be loaded, so it has no figure of "
+                      "its own")
+        return out
+    if not pin.is_file():
         out["why"] = "no registry/kit.json in the member's tree"
         return out
+    out["vendored"] = True
+    out["entry"] = "file"
     loaded, pin_problem = kit_pin.load_pin(pin)
     if loaded is None:
         # A pin that EXISTS but cannot be loaded is NOT an empty reference, and `load_pin`
@@ -361,14 +401,29 @@ def pin_state(root: str) -> dict:
     return out
 
 
-def load_decisions() -> dict:
-    """Our record of what each member DECLARED, sourced — see the file's own _note."""
+def load_decisions() -> tuple[dict, str]:
+    """Our record of what each member DECLARED, and why it is unusable when it is.
+
+    A RECORD THAT EXISTS BUT CANNOT BE READ IS NOT AN ABSENT ONE. Collapsing both to `{}`
+    made the artifact say `registry/kit-decisions.json` **is absent** for a file that was
+    there and malformed — a false statement about our own tree, in the very section that
+    reports what members said. The second element names the fault; it is empty when the
+    file is genuinely absent (or carries no members), because absence is then the truth.
+    """
     if not DECISIONS.is_file():
-        return {}
+        return {}, ""
     try:
-        return (json.loads(DECISIONS.read_text()).get("members") or {})
-    except (OSError, json.JSONDecodeError):
-        return {}
+        loaded = json.loads(DECISIONS.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, f"unreadable: {exc}"
+    if not isinstance(loaded, dict):
+        return {}, f"the record is a {type(loaded).__name__}, not an object"
+    members = loaded.get("members")
+    if members is None:
+        return {}, ""
+    if not isinstance(members, dict):
+        return {}, f"its `members` is a {type(members).__name__}, not an object"
+    return members, ""
 
 
 def _cell_row(m: dict, decl: dict, answering: dict | None = None) -> str:
@@ -391,6 +446,10 @@ def _cell_row(m: dict, decl: dict, answering: dict | None = None) -> str:
     # file that cannot be judged are different faults with the same `exemptions is None`.
     if not ps["vendored"]:
         pin = "**none**"
+    elif not ps["judged"] and ps.get("entry") in ("dangling link", "not a file"):
+        # WHICH shape failed, named: an entry that cannot be LOADED at all is a different
+        # fault from a file that loads and refuses, and a bare `vendored` reads as adopted.
+        pin = "vendored · **PIN BROKEN (" + str(ps["entry"]) + ")**"
     elif not ps["judged"]:
         pin = "vendored · **PIN UNREADABLE**"
     elif ps["exemptions"] is None:
@@ -522,7 +581,9 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
     out.append("")
     out.append("Four columns carry the point. **own pin** is the member-actionable half: a")
     out.append("member with no pin has no figure of its own, and the DIFF beside it is against")
-    out.append("OUR manifest. **own copy** is a DIFFERENT PREDICATE from every figure beside it")
+    out.append("OUR manifest. An entry that cannot be LOADED reads **PIN BROKEN**, not `none`:")
+    out.append("it exists, so it is not non-adoption, and it cannot be judged, so it is not")
+    out.append("adoption either. **own copy** is a DIFFERENT PREDICATE from every figure beside it")
     out.append("— not a comparison of the same bytes but a statement about which copy an")
     out.append("owner's tap REACHES: LIVE (it is that copy), inert (off that path, so it reaches")
     out.append("no owner tap), ABSENT (there is no copy to reach with), BROKEN (an entry that")
@@ -560,10 +621,16 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
         out.append("")
     out.append("## 6. Declared decisions — what each member SAID about its own figure")
     out.append("")
-    decisions = load_decisions()
+    decisions, decisions_why = load_decisions()
     if not decisions:
-        out.append("No declaration record on file (`registry/kit-decisions.json` is absent), so "
-                   "every figure above is bare. A bare figure cannot be acted on.")
+        if decisions_why:
+            out.append("**No USABLE declaration record** — `registry/kit-decisions.json` "
+                       "exists but cannot be read (" + decisions_why + "), so every figure "
+                       "above is bare. A bare figure cannot be acted on.")
+        else:
+            out.append("No declaration record on file (`registry/kit-decisions.json` is "
+                       "absent), so every figure above is bare. A bare figure cannot be "
+                       "acted on.")
         out.append("")
     else:
         out.append("Read from `registry/kit-decisions.json` — OUR record of what each member")

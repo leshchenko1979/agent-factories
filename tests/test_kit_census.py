@@ -35,7 +35,13 @@ WHAT IT PINS, and why each arm is here:
      failed, because a bare `vendored` reads as adopted;
  13. an entry that cannot EXECUTE is not an absent one — a dangling symlink and a non-file
      under the tool's name are both BROKEN, each with a control that keeps the arm from
-     passing by calling every missing or off-path entry broken.
+     passing by calling every missing or off-path entry broken;
+ 14. an entry that cannot be LOADED is not an absent one either, for the PIN column — a
+     dangling link or a non-file pin reads PIN BROKEN, and the fleet bound does not count
+     it as non-adoption;
+ 15. a declaration or decisions record that PARSES but is not an object is reported
+     unreadable rather than raising, and a record that exists but cannot be read is never
+     described as absent.
 
 The leg AND the answering-path result are both injected, so these arms run with no live
 fleet, no live board and no live answering path: a probe that could only run against five
@@ -344,6 +350,98 @@ def main() -> int:
                   t17.count("BROKEN (dangling link)") == 1
                   and t17.count("BROKEN (not a file)") == 1,
                   "a state the table cannot show is a state the reader never sees")
+
+            # ARM 18 — AN ENTRY THAT CANNOT BE LOADED IS NOT AN ABSENT PIN. `is_file()` is
+            # False for a dangling symlink and for a directory, so a rotted pin read "no
+            # registry/kit.json in its tree" — a false statement — and section 7 counted it
+            # among the members that had vendored NO pin.
+            pin_link = tmp / "pin_link"
+            (pin_link / "registry").mkdir(parents=True)
+            (pin_link / "registry" / "kit.json").symlink_to(tmp / "gone" / "kit.json")
+            pin_dir = tmp / "pin_dir"
+            (pin_dir / "registry" / "kit.json").mkdir(parents=True)
+            ps18a = KC.pin_state(str(pin_link))
+            ps18b = KC.pin_state(str(pin_dir))
+            check("ARM 18: a DANGLING pin entry reads BROKEN, never 'no pin'",
+                  ps18a["vendored"] is True and ps18a["judged"] is False
+                  and "does not resolve" in ps18a["why"],
+                  "is_file() is False for a broken link; 'vendored nothing' is the opposite")
+            check("ARM 18: a NON-FILE pin entry reads BROKEN, never 'no pin'",
+                  ps18b["vendored"] is True and ps18b["judged"] is False
+                  and "non-file" in ps18b["why"],
+                  "a directory under the pin's name is an entry, not an absence")
+            check("ARM 18: control — a member with NO pin entry still reads no pin",
+                  KC.pin_state(str(absent_mem))["vendored"] is False,
+                  "otherwise this arm passes by calling every pin broken")
+            check("ARM 18: the rendered cell names the broken shape",
+                  "PIN BROKEN (dangling link)" in KC._cell_row(
+                      {"slug": "pinlink", "reachable": True, "root": str(pin_link),
+                       "same": 0, "DIFF": 0, "ABSENT": 0, "absent_files": [],
+                       "diff_files": []},
+                      {"declared": False, "why": "no record"}, {})
+                  and "PIN BROKEN (not a file)" in KC._cell_row(
+                      {"slug": "pindir", "reachable": True, "root": str(pin_dir),
+                       "same": 0, "DIFF": 0, "ABSENT": 0, "absent_files": [],
+                       "diff_files": []},
+                      {"declared": False, "why": "no record"}, {}),
+                  "a bare `vendored` reads as adopted")
+            t18 = KC.render(leg_with([member("pinlink", str(pin_link))]), TS)
+            check("ARM 18: the fleet bound does NOT count a broken pin as non-adoption",
+                  "0 of 1 members have vendored no pin" in t18
+                  and "CANNOT BE LOADED" in t18,
+                  "the bound must name the broken entry, not misreport it as no pin")
+
+            # ARM 19 — A FRAGMENT THAT PARSES IS NOT THEREBY READABLE. `load_declarations`
+            # promises that a member it could not describe must not take the whole census
+            # down; a list-shaped fragment raised AttributeError and did exactly that.
+            saved_fd = KC.FACTORY_DIR
+            fragdir = tmp / "fragdir"
+            fragdir.mkdir()
+            (fragdir / "listfrag.json").write_text("[]")
+            (fragdir / "zonefrag.json").write_text(
+                json.dumps({"zone": ["not", "an", "object"]}))
+            KC.FACTORY_DIR = fragdir
+            try:
+                d19 = KC.load_declarations("listfrag")
+                check("ARM 19: a list-shaped fragment is REPORTED unreadable, not raised",
+                      d19["declared"] is False and "not an object" in d19["why"],
+                      "an AttributeError here takes down every other member's row")
+                d19b = KC.load_declarations("zonefrag")
+                check("ARM 19: a non-object `zone` is read as no zone, not raised",
+                      d19b["declared"] is True and d19b["owns"] == 0
+                      and d19b["does_not_own"] == 0,
+                      "the declaration is readable; only its zone half is not")
+                t19 = KC.render(leg_with([member("listfrag", str(root_a))]), TS)
+                check("ARM 19: the census still RENDERS with that fragment on record",
+                      "not declared" in t19 and "not an object" in t19,
+                      "the one member it could not describe must not silence the rest")
+            finally:
+                KC.FACTORY_DIR = saved_fd
+
+            # ARM 20 — A DECISIONS RECORD THAT EXISTS BUT CANNOT BE READ IS NOT AN ABSENT
+            # ONE. The old collapse to `{}` made the artifact say the file IS ABSENT while
+            # it sat there malformed — a false statement about our own tree, in the section
+            # that reports what members said.
+            saved_decisions = KC.DECISIONS
+            bad_dec = tmp / "bad-decisions.json"
+            bad_dec.write_text("[]")
+            KC.DECISIONS = bad_dec
+            try:
+                got20, why20 = KC.load_decisions()
+                check("ARM 20: a non-object decisions record is unusable, WITH a reason",
+                      got20 == {} and "not an object" in why20,
+                      "collapsing it to {} made the artifact claim the file was absent")
+                t20 = KC.render(leg_with([member("alpha", str(root_a))]), TS)
+                check("ARM 20: the artifact says UNREADABLE, never 'is absent'",
+                      "No USABLE declaration record" in t20 and "is absent" not in t20,
+                      "a false absence claim, in a published artifact")
+                KC.DECISIONS = tmp / "no-such-decisions.json"
+                t20b = KC.render(leg_with([member("alpha", str(root_a))]), TS)
+                check("ARM 20: control — a genuinely absent record still reads as absent",
+                      "is absent" in t20b,
+                      "otherwise this arm passes by never saying absent")
+            finally:
+                KC.DECISIONS = saved_decisions
 
             # ARM 13 — THE FLEET LINE NAMES THE TREE, OR SAYS NONE.
             t13 = KC.render(leg_with([member("host", str(live_mem))]), TS, answering=ans_at_live)
