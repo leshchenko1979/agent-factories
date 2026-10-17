@@ -1,7 +1,7 @@
 {
   "_note": "THIS factory's landing-route debt, read by tests/test_cron_landing_route.py. Each entry is a cron envelope that DECLARES a `receipt_subject:` -- so it produces a receipt row -- and names no landing route for it, or names a route whose target is the pre-#445 pusher in the shared tree. The gate is a LIVE read over registry/state.json, so it reconciles this declaration against the measurement: an UNDECLARED violation is a new instance of the class and REDs, and a DECLARED entry that no longer reproduces REDs as stale -- a repaired envelope must be struck from this file in the same change that repairs it. An entry here is a TRACKED, VISIBLE defect, not an excuse: the gate prints every declared job on every run.",
-  "_measured_at": "2026-10-17T00:24Z",
-  "_measured_against": "registry/state.json (69 rows, 8 judged: rows declaring `receipt_subject:` other than `none`; `factory-publish` declares `none` and is excluded by construction -- it is the pusher)",
+  "_measured_at": "2026-10-17T06:58Z",
+  "_measured_against": "registry/state.json (70 rows, 9 judged: rows declaring a receipt_subject other than none; factory-publish declares none and is excluded by construction -- it is the pusher)",
   "declared": [
     {
       "job": "factory-growth-map-biweekly",
@@ -22,6 +22,11 @@
       "job": "factory-triage-patrol",
       "shape": "route-absent",
       "measured": "1 census hit over 2772 chars -- prose only ('lands the log in retired_logs'), no `tools/publish.py`; declares `receipt_subject: patrol-verify`"
+    },
+    {
+      "job": "factory-binding-sync",
+      "shape": "route-stale",
+      "measured": "1 site: /root/agent-factories/tools/sync_binding.py --apply, which is the row's OWN trigger_cmd quoted in the envelope's WHAT FIRED paragraph. The tool that actually runs is the shared tree's bytes, not a copy fetched from origin/main, so a lagging shared tree runs a lagging syncer -- the #480 execution shape, reached through trigger_cmd rather than through an ordered step. NOT repaired in this change: the envelope belongs to the lane that authored the job (created 2026-10-17T02:34:29Z), and its receipt path is already the modern <git-common-dir> one, so the residue is the tool SOURCE and not the receipt. Measured 2026-10-17T06:58Z by the 2026-10-17 registry-attestation round, which exposed it by refreshing registry/state.json to the live box."
     }
   ]
 }
