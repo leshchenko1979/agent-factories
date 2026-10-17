@@ -305,17 +305,31 @@ def pin_state(root: str) -> dict:
     r = Path(root)
     pin = r / "registry" / "kit.json"
     ex = r / "registry" / "kit-exemptions.json"
-    out = {"vendored": pin.is_file(), "exemptions": None, "why": ""}
+    out = {"vendored": pin.is_file(), "exemptions": None, "judged": False, "why": ""}
     if not out["vendored"]:
         out["why"] = "no registry/kit.json in the member's tree"
         return out
+    loaded, pin_problem = kit_pin.load_pin(pin)
+    if loaded is None:
+        # A pin that EXISTS but cannot be loaded is NOT an empty reference, and `load_pin`
+        # refuses one for exactly this reason: an empty `files` map agrees with every tree.
+        # Substituting `{}` here made the census report a CLEAN row for a pin its own gate
+        # reds on -- measured on a pin carrying no `files` map, which rendered
+        # `vendored · 1 exempt` with an empty `why`, the count computed against no reference
+        # at all. Unknown, never zero; `judged` False so the cell cannot read as adopted.
+        out["exemptions"] = None
+        out["why"] = f"pin unusable: {pin_problem}"
+        return out
+    # `judged` is set HERE, before the exemptions shortcut below: the pin has loaded, which
+    # is the only thing the flag reports. Set after it, a member with a VALID pin and no
+    # exemptions file rendered as `PIN UNREADABLE` (measured live on `infra-factory`).
+    out["judged"] = True
     if not ex.is_file():
         # The empty state, read from the filesystem rather than inferred from a problem
         # string: the pin admits none of a list that is not there.
         out["exemptions"] = 0
         return out
-    loaded, _pin_problem = kit_pin.load_pin(pin)
-    verdict = kit_pin.undeclared_divergence(loaded if loaded is not None else {}, r)
+    verdict = kit_pin.undeclared_divergence(loaded, r)
     if verdict.get("exemption_problem"):
         out["exemptions"] = None
         out["why"] = f"exemptions unreadable: {verdict['exemption_problem']}"
@@ -349,10 +363,17 @@ def _cell_row(m: dict, decl: dict, answering: dict | None = None) -> str:
         declared = f"**not declared** ({d.get('why', 'no record')})"
         zone = "—"
     ps = pin_state(m["root"])
-    if ps["vendored"]:
-        pin = f"vendored · {ps['exemptions']} exempt" if ps["exemptions"] is not None else "vendored"
-    else:
+    # An unloadable pin must not render as a bare `vendored`, which reads as adopted: the
+    # cell carries WHICH half failed, because a pin its own gate reds on and an exemptions
+    # file that cannot be judged are different faults with the same `exemptions is None`.
+    if not ps["vendored"]:
         pin = "**none**"
+    elif not ps["judged"]:
+        pin = "vendored · **PIN UNREADABLE**"
+    elif ps["exemptions"] is None:
+        pin = "vendored · **exemptions unreadable**"
+    else:
+        pin = f"vendored · {ps['exemptions']} exempt"
     return (
         f"| `{m['slug']}` | {m['same']} | {m['DIFF']} | {m['ABSENT']} | {pin} | "
         f"{cs['state']} | {zone} | {declared} |"
@@ -561,7 +582,9 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
     out.append("  forked, and those need opposite actions.")
     out.append("- **ABSENT is not a verdict.** A factory ports a subset by design; a path it")
     out.append("  never took cannot diverge from anything.")
-    nopin = [m["slug"] for m in members if not pin_state(m["root"])["vendored"]]
+    pins = {m["slug"]: pin_state(m["root"]) for m in members}
+    nopin = [s for s, ps in pins.items() if not ps["vendored"]]
+    unusable = [s for s, ps in pins.items() if ps["vendored"] and not ps["judged"]]
     out.append(f"- **The pin gate is the member's own view.** "
                f"{len(nopin)} of {len(members)} members have vendored no pin"
                + (f" ({', '.join('`' + s + '`' for s in nopin)})" if nopin else "")
@@ -569,6 +592,12 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
     out.append("  act on. The vehicle exists (`TEMPLATE/registry/kit.example.json`) and "
                "`tests/test_kit_pin.py`")
     out.append("  is the gate that judges it; this census is where that adoption is observed.")
+    if unusable:
+        # A pin that cannot be loaded is no more a figure of its own than an absent one: its
+        # gate refuses it, so counting it under "vendored" above would overstate adoption.
+        out.append(f"- **{len(unusable)} of {len(members)} carry a pin that CANNOT BE LOADED** "
+                   + (f"({', '.join('`' + s + '`' for s in unusable)})" if unusable else "")
+                   + " — its own gate reds on it, so it has no figure of its own either.")
     out.append("")
     return "\n".join(out) + "\n"
 

@@ -29,7 +29,10 @@ WHAT IT PINS, and why each arm is here:
  10. the census's declared count IS the pin's own judgement — an entry the pin IGNORES is
      never counted as a declaration (F5, #263), so the report cannot disagree with the gate;
  11. an UNREADABLE exemptions file reads None, never 0 — absent-vs-zero is a lie the count
-     must not tell, and the empty state stays a separate, real zero.
+     must not tell, and the empty state stays a separate, real zero;
+ 12. an UNUSABLE PIN reads None with the pin's own refusal carried, never an exemptions
+     count judged against no reference at all — and the rendered cell says WHICH half
+     failed, because a bare `vendored` reads as adopted.
 
 The leg AND the answering-path result are both injected, so these arms run with no live
 fleet, no live board and no live answering path: a probe that could only run against five
@@ -364,6 +367,66 @@ def main() -> int:
             check("ARM 15: the ABSENT file is 0, distinct from unreadable",
                   KC.pin_state(str(absent_ex))["exemptions"] == 0,
                   "the empty state is a real zero, not a failure")
+
+            # ARM 16 — AN UNUSABLE PIN IS NOT AN EMPTY ONE. `load_pin` REFUSES a pin it
+            # cannot load precisely because an empty `files` map agrees with every tree, and
+            # the census discarded that refusal, substituted `{}`, and then counted the
+            # exemptions against it — so a pin its own gate reds on rendered as
+            # `vendored · 1 exempt` with an empty `why`: a clean row for a broken pin, and a
+            # number computed against no reference at all.
+            brokenpin = tmp / "brokenpin"
+            (brokenpin / "registry").mkdir(parents=True)
+            (brokenpin / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
+            (brokenpin / "registry" / "kit-exemptions.json").write_text(json.dumps(
+                {"exempt": [{"path": "tools/foo"}]}))
+            ps16 = KC.pin_state(str(brokenpin))
+            check("ARM 16: an UNUSABLE pin reads None, never the exemptions count",
+                  ps16["exemptions"] is None,
+                  "that list was judged against NO pin, so its length is not a count")
+            check("ARM 16: the pin's own refusal is carried, not swallowed",
+                  "pin unusable" in ps16["why"], f"why={ps16['why']!r}")
+            check("ARM 16: the row cannot read as adopted",
+                  "PIN UNREADABLE" in KC._cell_row(
+                      {"slug": "brokenpin", "reachable": True, "root": str(brokenpin),
+                       "same": 0, "DIFF": 0, "ABSENT": 0, "absent_files": [],
+                       "diff_files": []},
+                      {"declared": False, "why": "no record"}, {}),
+                  "a broken pin must not render as a bare `vendored` cell")
+            # The control: the SAME exemptions list under a LOADABLE pin is still a count,
+            # so the arm above cannot pass by returning None for every pin it is handed.
+            goodpin = tmp / "goodpin"
+            (goodpin / "registry").mkdir(parents=True)
+            (goodpin / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "files": {"TEMPLATE/tools/ledger.py": "0" * 64},
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
+            (goodpin / "registry" / "kit-exemptions.json").write_text(json.dumps(
+                {"exempt": [{"path": "tools/foo"}]}))
+            check("ARM 16: control — the same list under a loadable pin IS a count",
+                  KC.pin_state(str(goodpin))["exemptions"] == 1,
+                  "otherwise this arm passes by returning None for everything")
+            # The control the FIRST version of this fix lacked: a VALID pin with NO
+            # exemptions file is a real zero AND is judged. With `judged` set after the
+            # exemptions shortcut, that member rendered `PIN UNREADABLE` — a live row
+            # (`infra-factory`) caught it; this arm would not have.
+            noex = tmp / "noex"
+            (noex / "registry").mkdir(parents=True)
+            (noex / "registry" / "kit.json").write_text(json.dumps(
+                {"kit_version": "testkit000001",
+                 "files": {"TEMPLATE/tools/ledger.py": "0" * 64},
+                 "classes": {"TEMPLATE/tools/ledger.py": "standalone"}}))
+            ps16b = KC.pin_state(str(noex))
+            check("ARM 16: a VALID pin with NO exemptions file is judged, and is a real zero",
+                  ps16b["judged"] is True and ps16b["exemptions"] == 0,
+                  f"judged={ps16b['judged']} exemptions={ps16b['exemptions']!r}")
+            check("ARM 16: and it renders as a count, never as PIN UNREADABLE",
+                  "0 exempt" in KC._cell_row(
+                      {"slug": "noex", "reachable": True, "root": str(noex), "same": 0,
+                       "DIFF": 0, "ABSENT": 0, "absent_files": [], "diff_files": []},
+                      {"declared": False, "why": "no record"}, {}),
+                  "a valid pin must not be reported as unreadable")
         finally:
             KC.DECISIONS, KC.P.kit_drift_leg, KC.answering_path = saved_decl, saved_leg, saved_ans
 
