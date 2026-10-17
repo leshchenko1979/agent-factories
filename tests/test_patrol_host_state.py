@@ -188,7 +188,8 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
-         shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None):
+         shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
+         duty_exemptions=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -312,6 +313,13 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # verdict. The default reads this tree's declaration through the SAME `_duty_scope`
         # the probes derive their own instants from, so probe and leg resolve by one path.
         duty_scope_fn=(duty_scope if duty_scope is not None else _duty_scope),
+        # The duty-receipt leg's declared-exemption store (#506) is injected for the same
+        # reason: a probe must not have its verdict decided by whichever exemptions this
+        # factory happens to hold, and the default here is an EMPTY store rather than the
+        # live one, so an entry added later can never silently change a probe's meaning.
+        duty_exemptions_fn=(
+            duty_exemptions if duty_exemptions is not None else (lambda: ({}, None))
+        ),
         # The stall-census leg's ONE read (#331 clause 2) is injected for the same reason as
         # every other declaration here: the default `lane_names_fn` resolves NO session id, so
         # an addressee can only resolve in a probe that supplied its own binding map — never
@@ -523,6 +531,11 @@ _WAKE_PROMPT = (
     "do NOT execute any project work yourself"
 )
 
+# The receipt disposition a wake-only row declares (#506). Every `_thin`/`_notify_row`
+# fixture carries it for the reason their own docstrings give: a probe must not red an
+# unrelated leg, or its exit code stops being attributable to the defect under test.
+_NONE_DECL = "receipt_subject: none"
+
 def _thin(name, *, prompt=None, **kw) -> dict:
     """A correctly-thin row: a session target whose prompt declares itself wake-only.
 
@@ -532,7 +545,8 @@ def _thin(name, *, prompt=None, **kw) -> dict:
     about the class it names.
     """
     body = _WAKE_PROMPT if prompt is None else f"{_WAKE_PROMPT} {prompt}"
-    return _cron(name, deliver_to=f"session:{_SESSION_UUID}", prompt=body, **kw)
+    return _cron(name, deliver_to=f"session:{_SESSION_UUID}",
+                 prompt=f"{body}\n\n{_NONE_DECL}", **kw)
 
 def _ledger_with(*subjects) -> Path:
     """A synthetic ledger in a temp dir — the guard is checked against DATA, not the live log."""
@@ -1233,7 +1247,7 @@ def _notify_row(name, *, row_id="row-1", home="probe-home") -> dict:
     exit code would not be attributable to the defect under test.
     """
     return {"id": row_id, "name": name, "home": home, "deliver_to": "session:probe",
-            "prompt": _WAKE_PROMPT}
+            "prompt": f"{_WAKE_PROMPT}\n\n{_NONE_DECL}"}
 
 def _run_row(name, *, started, completed, status, row_id="row-1") -> dict:
     """A `cron_job_runs` row — the daemon's per-fire record, carrying the run's OWN VERDICT.
@@ -1668,9 +1682,9 @@ def test_the_leg_prints_the_CURRENT_delivery_path_of_every_attributed_row() -> N
     """
     rows = [
         _cron("factory-prompt-notify",
-              prompt=f"{_WAKE_PROMPT} then run session notify for the lane"),
+              prompt=f"{_WAKE_PROMPT} then run session notify for the lane\n\n{_NONE_DECL}"),
         _cron("factory-session-target", deliver_to=f"session:{_SESSION_UUID}",
-              prompt=_WAKE_PROMPT),
+              prompt=f"{_WAKE_PROMPT}\n\n{_NONE_DECL}"),
     ]
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], unreached=[],
                       prefixes=["factory-"])
@@ -1691,9 +1705,9 @@ def test_a_row_this_factory_does_NOT_own_is_not_in_the_routes_block() -> None:
     """
     rows = [
         _cron("factory-mine",
-              prompt=f"{_WAKE_PROMPT} then run session notify for the lane"),
+              prompt=f"{_WAKE_PROMPT} then run session notify for the lane\n\n{_NONE_DECL}"),
         _cron("other-factory-job",
-              prompt=f"{_WAKE_PROMPT} then run session notify for the lane"),
+              prompt=f"{_WAKE_PROMPT} then run session notify for the lane\n\n{_NONE_DECL}"),
     ]
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], unreached=[],
                       prefixes=["factory-"])
@@ -2222,13 +2236,15 @@ _DUTY_TREE = _duty_tree()
 
 
 def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None,
-              read_at=None, fires=None, margin_for=None, predicate=None) -> dict:
+              read_at=None, fires=None, margin_for=None, predicate=None,
+              exemptions_fn=None) -> dict:
     return RUNNER.duty_receipt_leg(
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
         read_at=read_at if read_at is not None else _DUTY_READ_AT,
         store=store if store is not None else Path(tempfile.mkdtemp()),
         repo=repo if repo is not None else _DUTY_TREE,
         fires=fires, margin_for=margin_for, predicate=predicate,
+        exemptions_fn=exemptions_fn,
     )
 
 def _stub_predicate(**overrides):
@@ -2509,9 +2525,16 @@ def test_the_EXACT_match_case_still_resolves() -> None:
     assert leg["problems"] == [], leg["problems"]
     assert leg["coverage"]["duties_judged"][0]["receipts"] == 1, leg["coverage"]
 
-def test_a_row_declaring_no_receipt_is_NOT_JUDGED_and_is_COUNTED_by_name() -> None:
-    """P29: a clean verdict over a population that declared nothing must never be the same
-    output as one that examined the population — so the undeclared rows are NAMED."""
+def test_a_row_declaring_no_receipt_is_NOT_JUDGED_COUNTED_and_since_506_a_PROBLEM() -> None:
+    """P29, and #506 half 2 which SUPERSEDES this probe's original expectation.
+
+    The original assertion was `len(problems) == 1` with the comment "the undeclared row is
+    not judged and adds no problem" — the row added no problem, so `problems: 0` was
+    indistinguishable from a clean round for a duty the leg could not look at. That is the
+    exact false negative #506 closed: an unjudged duty is now a FINDING with the job named.
+    The P29 half is unchanged and still bites — the population is COUNTED by name, never a
+    bare zero.
+    """
     leg = _duty_leg(
         [_duty_row(), _duty_row(name="factory-measurement-daily", prompt="no declaration here")],
         [],
@@ -2519,13 +2542,28 @@ def test_a_row_declaring_no_receipt_is_NOT_JUDGED_and_is_COUNTED_by_name() -> No
     assert leg["coverage"]["jobs_declaring_receipt"] == 1, leg["coverage"]
     assert leg["coverage"]["jobs_undeclared"] == 1, leg["coverage"]
     assert leg["coverage"]["undeclared_jobs"] == ["factory-measurement-daily"], leg["coverage"]
-    assert len(leg["problems"]) == 1, "the undeclared row is not judged and adds no problem"
+    # the declared row is judged and MISSING (it owes a receipt nobody wrote), and the
+    # undeclared one REDS under #506 -- two problems, and the #506 one NAMES the job
+    assert len(leg["problems"]) == 2, leg["problems"]
+    findings = [p for p in leg["problems"] if "#506" in p]
+    assert len(findings) == 1, leg["problems"]
+    assert "factory-measurement-daily" in findings[0], findings[0]
+    assert any("NO duty receipt" in p for p in leg["problems"]), leg["problems"]
 
-def test_the_duty_leg_reports_NOT_RUN_when_no_row_declares_a_receipt() -> None:
+def test_a_census_where_NO_row_declares_a_receipt_is_a_FINDING_not_a_silent_NOT_RUN() -> None:
+    """#506 half 2. This probe used to assert `status == "NOT RUN"` and `problems == []` —
+    the silence itself. A census in which NOT ONE attributed duty declares a receipt is now
+    the loudest possible finding: the leg judged nothing because nothing was declarable, and
+    it says so by NAMING the jobs rather than by rendering a status that reads as deferred.
+    """
     leg = _duty_leg([_duty_row(prompt="no declaration here")], [])
-    assert leg["status"] == "NOT RUN", leg
+    assert leg["status"] == "ASSERTED", leg
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "factory-registry-attest" in leg["problems"][0], leg["problems"][0]
+    # the reason still names the POPULATION it enumerated, so the reader can tell a census
+    # that declared nothing from one that declared something and found it missing
     assert "receipt_subject:" in (leg["reason"] or ""), leg["reason"]
-    assert leg["problems"] == [], leg["problems"]
+    assert "NO DUTY WAS JUDGED" in (leg["reason"] or ""), leg["reason"]
 
 def test_the_round_comes_from_the_rows_own_fire_instant_never_a_parsed_schedule() -> None:
     """`last_run_at` is stamped at DISPATCH, so it names the round the trigger woke.
@@ -5097,7 +5135,9 @@ def test_probe_the_duty_reason_NAMES_its_population_and_refuses_the_conclusion()
              "last_run_at": _DUTY_FIRE}]
     leg = RUNNER.duty_receipt_leg(rows, ["probe-home"], [], ["factory-"], [],
                                   read_at="probe")
-    assert leg["status"] == "NOT RUN", leg["status"]
+    # the STATUS moved with #506 (a census that declares nothing now carries a finding, so
+    # the leg is ASSERTED); the clause-5 property below is about the REASON and is unchanged
+    assert leg["status"] == "ASSERTED", leg["status"]
     reason = leg["reason"]
     assert "NONE names a receipt STEM to judge" in reason, reason
     assert "NO DUTY WAS JUDGED" in reason, reason
@@ -6740,9 +6780,12 @@ def test_the_pacemaker_presence_leg_PRINTS_its_examined_population() -> None:
     its resolved session and the wake that satisfies it — the population travels with the
     verdict (#242).
     """
-    rows = [{"name": "factory-hq-pacemaker", "prompt": "", "deliver_to": "session:U-HQ"},
-            {"name": "factory-triage-patrol", "prompt": "", "deliver_to": "session:U-TRIAGE"},
-            {"name": "factory-measurement-daily", "prompt": "",
+    _thin_decl = f"{_WAKE_PROMPT}\n\n{_NONE_DECL}"
+    rows = [{"name": "factory-hq-pacemaker", "prompt": _thin_decl,
+             "deliver_to": "session:U-HQ"},
+            {"name": "factory-triage-patrol", "prompt": _thin_decl,
+             "deliver_to": "session:U-TRIAGE"},
+            {"name": "factory-measurement-daily", "prompt": _thin_decl,
              "deliver_to": "session:U-SURVEYS"}]
     leg = _presence_leg(rows)
     assert leg["problems"] == [], leg["problems"]
@@ -8868,3 +8911,168 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# --- #506: a duty's declaration is PROSE, so its SHAPE is load-bearing ---------------
+# The live instance: `factory-binding-sync` declared `receipt_subject: none` wrapped in
+# backticks with prose after it, the canonical line-anchored reader matched nothing, and the
+# patrol printed NOT JUDGED beside `problems: 0` for a whole round. The two arms below are
+# the issue's own two halves, and each carries its discriminating pair so a predicate that
+# reds EVERYTHING cannot pass them.
+_BACKTICKED_DECL_PROMPT = (
+    "Thin trigger only — do NOT execute any project work yourself. Run the pusher, then "
+    "stop.\n\n`receipt_subject: none` — the cron stamps no ledger row; the receipt is the "
+    "file.\n"
+)
+_UNDECLARED_PROMPT = (
+    "Thin trigger only — do NOT execute any project work yourself. Wake the lane, then "
+    "stop.\n"
+)
+
+def test_a_BACKTICKED_declaration_is_a_PROBLEM_named_with_its_SHAPE() -> None:
+    """#506 half 1. The declaration EXISTS and the reader cannot reach it — that is a finding,
+    not a third state that renders beside a clean problem count."""
+    row = _duty_row(name="factory-binding-sync", prompt=_BACKTICKED_DECL_PROMPT)
+    leg = _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0))
+    assert any("factory-binding-sync" in p and "backtick" in p for p in leg["problems"]), \
+        leg["problems"]
+    assert leg["coverage"]["jobs_malformed"] == 1, leg["coverage"]
+    assert leg["coverage"]["malformed_jobs"] == ["factory-binding-sync"], leg["coverage"]
+    # THE DISCRIMINATING PAIR: the SAME declaration on a canonical line is CLEAN. The two
+    # fixtures differ in nothing but the shape of that one line, so a verdict that does not
+    # move is attributable to the shape rather than to the population.
+    fixed = _duty_row(name="factory-binding-sync", prompt=_OWES_NONE_PROMPT)
+    assert _duty_leg([fixed], [], read_at=_plus(_DUTY_FIRE, 5.0))["problems"] == []
+
+def test_a_MENTION_is_a_PROBLEM_naming_prose_before_the_token_and_still_no_declaration() -> None:
+    """Ruling n=3527 criterion 4, which REVERSED the half this probe was written with.
+
+    The earlier form asserted a mid-sentence token was NOTHING AT ALL -- and that is the same
+    false negative as the backtick, one shape over: an author with the token in hand and no
+    canonical line is indistinguishable from a duty that never meant to declare one, so the
+    leg could not name the edit that un-declared it.
+
+    The NON-GOAL is asserted in the same breath, because the fix must not become the defect it
+    replaced: prose is never READ as a declaration, only reported as a defect to repair.
+    """
+    mention = ("Thin trigger only.\nThe old text said receipt_subject: registry-attest and "
+               "it was removed.\n")
+    found = RUNNER.malformed_receipt_declaration(mention)
+    assert found is not None, "a mid-sentence mention is still read as nothing at all"
+    line, text, shape = found
+    assert line == 2, (line, text)
+    assert "prose before the token" in shape, shape
+    # THE NON-GOAL: the row is a problem, never a declaration -- `declared_receipt_stem`
+    # stays anchored to a whole line, so nothing hunts a ledger subject read out of prose.
+    assert RUNNER.declared_receipt_stem(mention) is None
+    assert RUNNER.declared_receipt_disposition(mention) == ("malformed", shape)
+
+    # DISCRIMINATING CONTROL: the same sentence with the token at line start is canonical, so
+    # the arm tests the SHAPE and not the mere presence of the word.
+    assert RUNNER.declared_receipt_disposition(
+        "work order\nreceipt_subject: registry-attest\n") == ("declares", "registry-attest")
+    # and a prompt carrying BOTH is judged on its declaration: `declared_receipt_stem`
+    # answers first, so a correct prompt cannot be reded by a prose mention elsewhere.
+    mixed = ("The old text said receipt_subject: other and it was removed.\n"
+             "receipt_subject: registry-attest\n")
+    assert RUNNER.declared_receipt_disposition(mixed) == ("declares", "registry-attest")
+
+    # the backticked arm keeps its own shape assertions
+    found = RUNNER.malformed_receipt_declaration(_BACKTICKED_DECL_PROMPT)
+    assert found is not None, "the backticked line was not read as an attempt at all"
+    line, text, shape = found
+    assert line == 3, (line, text)
+    assert "backtick" in shape and "prose after the value" in shape, shape
+
+def test_an_UNDECLARED_duty_is_a_PROBLEM_unless_the_factory_DECLARED_it_EXEMPT() -> None:
+    """#506 half 2. NOT JUDGED is a finding; a declared exemption turns it into VISIBLE DEBT,
+    which is a different thing from a clean round."""
+    row = _duty_row(name="factory-silent", prompt=_UNDECLARED_PROMPT)
+    red = _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0))
+    assert any("factory-silent" in p and "NOT JUDGED" in p for p in red["problems"]), \
+        red["problems"]
+    assert red["coverage"]["jobs_undeclared"] == 1, red["coverage"]
+    assert red["coverage"]["jobs_undeclared_exempt"] == 0, red["coverage"]
+    assert red["excused"] == [], red["excused"]
+    # the SAME census, with the job declared exempt: no problem, and the debt is NAMED
+    ok = _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0),
+                   exemptions_fn=lambda: ({"factory-silent": "the probe's own reason"}, None))
+    assert ok["problems"] == [], ok["problems"]
+    assert ok["coverage"]["jobs_undeclared_exempt"] == 1, ok["coverage"]
+    assert ok["coverage"]["undeclared_exempt_jobs"] == ["factory-silent"], ok["coverage"]
+    assert any("factory-silent" in e and "DECLARED EXEMPTION" in e for e in ok["excused"]), \
+        ok["excused"]
+
+def test_an_UNREADABLE_exemption_store_is_a_PROBLEM_not_a_silent_empty_set() -> None:
+    """A store that exists and cannot be parsed must not read as `nothing is excused, and
+    nothing is wrong` — that is the same false CLEAN one layer down."""
+    row = _duty_row(name="factory-silent", prompt=_UNDECLARED_PROMPT)
+    leg = _duty_leg([row], [], read_at=_plus(_DUTY_FIRE, 5.0),
+                    exemptions_fn=lambda: ({}, "the store could not be read (JSONDecodeError)"))
+    assert any("could not be read" in p for p in leg["problems"]), leg["problems"]
+
+def test_the_MALFORMED_and_EXEMPT_buckets_REACH_the_report() -> None:
+    """A bucket that is counted but never PRINTED is invisible to the reader it exists for —
+    the class that hid #506 for a round. Driven from a MIXED population, because a leg whose
+    judged population is empty renders through the generic NOT-RUN block."""
+    malformed = _duty_row(name="factory-binding-sync", prompt=_BACKTICKED_DECL_PROMPT,
+                          row_id="a1b2c3d4-0000-4000-8000-000000000001")
+    silent = _duty_row(name="factory-silent", prompt=_UNDECLARED_PROMPT,
+                       row_id="a1b2c3d4-0000-4000-8000-000000000002")
+    rc, out, err = _run([], [], cron_rows=[malformed, silent, _duty_row()],
+                        prefixes=["factory-"], cron_fires=_fires((0.5,)))
+    assert "malformed declarations: 1" in out, out[-2500:]
+    assert "MALFORMED" in out and "backtick" in out, out[-2500:]
+    assert "declared exemptions: 0" in out, out[-2500:]
+    assert "factory-binding-sync" in out and "factory-silent" in out, out[-2500:]
+
+def test_a_BACKTICKED_VALUE_is_a_shape_not_a_stem() -> None:
+    """The canonical line matches a backticked VALUE, because a backtick is `\\S` — and the
+    stem it yields can never equal any ledger subject, so the duty is hunted forever against
+    a name that cannot exist and reads MISSING on every round. Measured while writing the
+    #506 probes: the shape list named "a backtick in the value" and this arm never reached
+    it, so the defect the reader was supposed to name was the one it silently accepted.
+
+    The discriminating pair is the SAME line without the ticks: a canonical declaration must
+    stay a declaration, or the fix has traded a false MISSING for a false finding.
+    """
+    ticked = "work order\nreceipt_subject: `survey`\n"
+    plain = "work order\nreceipt_subject: survey\n"
+
+    assert RUNNER.declared_receipt_stem(ticked) is None
+    assert RUNNER.declared_receipt_disposition(ticked) == (
+        "malformed", "a backtick in the value"), RUNNER.declared_receipt_disposition(ticked)
+
+    # the control: identical bytes minus the ticks is a declaration with a usable stem
+    assert RUNNER.declared_receipt_stem(plain) == "survey"
+    assert RUNNER.declared_receipt_disposition(plain) == ("declares", "survey")
+
+def test_a_STALE_exemption_is_a_PROBLEM_naming_the_job() -> None:
+    """Ruling n=3527 criterion 3. The store is the one lawful exit, and an exit naming a job
+    that is not an undeclared duty on this box has stopped describing reality: the job got a
+    declaration, or was renamed, or was retired. Left silent it rots into a rubber stamp --
+    the exemption would read as an active exit forever and nobody would see it excuse nothing.
+    """
+    silent = _duty_row(name="factory-silent", prompt=_UNDECLARED_PROMPT)
+    leg = _duty_leg([silent], [], read_at=_plus(_DUTY_FIRE, 5.0),
+                    exemptions_fn=lambda: ({"factory-retired": "the job was retired"}, None))
+    stale = [p for p in leg["problems"] if "stale debt" in p]
+    assert len(stale) == 1, leg["problems"]
+    assert "factory-retired" in stale[0], stale[0]
+    assert leg["coverage"]["jobs_stale_exempt"] == 1, leg["coverage"]
+    assert leg["coverage"]["stale_exempt_jobs"] == ["factory-retired"], leg["coverage"]
+
+    # DISCRIMINATING CONTROL: the same store naming the job that IS undeclared excuses it
+    # and is NOT stale -- so the arm flags rot, not the mere existence of an entry.
+    live = _duty_leg([silent], [], read_at=_plus(_DUTY_FIRE, 5.0),
+                     exemptions_fn=lambda: ({"factory-silent": "declared exempt"}, None))
+    assert not [p for p in live["problems"] if "stale debt" in p], live["problems"]
+    assert live["coverage"]["jobs_stale_exempt"] == 0, live["coverage"]
+    assert any("factory-silent" in e for e in live["excused"]), live["excused"]
+
+def test_the_STALE_exemption_line_prints_on_every_round_zero_included() -> None:
+    """A count that appears only when non-zero is indistinguishable from one the reader never
+    computed -- the class that hid #506 for a whole round, so the zero is printed too."""
+    rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"],
+                        cron_fires=_fires((0.5,)), duty_exemptions=lambda: ({}, None))
+    assert "stale exemptions: 0" in out, out[-2500:]

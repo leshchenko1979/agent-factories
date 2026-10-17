@@ -495,7 +495,8 @@
     "tests/test_template_sync.py": "script",
     "tools/hygiene.py": "script",
     "tools/ledger.py": "script",
-    "tools/roadmap.py": "script"
+    "tools/roadmap.py": "script",
+    "tests/test_duty_receipt_exemptions.py": "script"
   },
   "exits": {
     "tests/test_audit_inflight_guard.py": {
@@ -822,6 +823,10 @@
     },
     "tools/roadmap.py": {
       "class": "always-satisfiable"
+    },
+    "tests/test_duty_receipt_exemptions.py": {
+      "class": "exemption-table",
+      "table": "docs/duty-receipt-exemptions.json"
     }
   }
 }

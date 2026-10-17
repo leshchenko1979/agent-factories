@@ -1,0 +1,4 @@
+{
+  "_note": "Skeleton for a factory's own duty-receipt exemptions (#506). Copy to docs/duty-receipt-exemptions.json and add ONE entry per enabled cron job attributed to your factory that legitimately declares no `receipt_subject:`. `job` must equal the row's `name` in the cron store; `reason` is why the duty owes no receipt and is printed on every run. Absent or empty means no exemptions, never a failure. This file is the SKELETON and ships empty -- a malformed `receipt_subject` in a prompt is a PROBLEM no entry here can excuse.",
+  "exempt": []
+}

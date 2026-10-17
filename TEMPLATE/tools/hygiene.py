@@ -449,6 +449,9 @@ DECLARATION_SURFACES: tuple[
     ("close-board-exemptions", "docs/close-board-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`) and a ledger row `n`, neither of which this "
      "leg can read offline"),
+    ("duty-receipt-exemptions", "docs/duty-receipt-exemptions.json", (),
+     "entries name a CRON JOB (`job`), a registry label rather than a tree path, and the "
+     "duty-receipt leg reconciles them against a LIVE read of the enabled cron rows"),
     ("harness-bindings", "docs/harness-bindings.json",
      (("bindings", "repo_path", DECL_PATH),), ""),
     ("hygiene-protected", "docs/hygiene-protected.json", (),

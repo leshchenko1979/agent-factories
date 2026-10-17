@@ -2954,6 +2954,30 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_ledger_factory_scope.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_factory_scope.py"])
 
+    # 94. the duty-receipt exemption table's READER (#506). `docs/duty-receipt-exemptions.json`
+    #     is the ONE lawful silence in the duty-receipt leg -- a cron job whose prompt carries
+    #     no `receipt_subject:` is a PROBLEM since #506 unless the job is named here with a
+    #     reason. The table is factory DATA: it ships empty and each factory fills its own, so
+    #     it belongs to the class `tests/gate_registry.py` holds to two directions -- a table
+    #     no gate declares is an ORPHAN (an exit whose reader is unregistered), and a gate
+    #     that declares one must name it in its own source. This gate IS that registration.
+    #
+    #     It does not re-parse the store: `one field, one reader` (the skill's one-reader rule) means the tool's
+    #     own `receipt_declaration_exemptions()` decides what the file MEANS, and the gate asks
+    #     it -- then adds the strictness the reader deliberately does not carry, because the
+    #     reader must tolerate a reason-less entry (a half-written store must excuse nothing
+    #     rather than red the box) while an exemption nobody explained belongs to nobody.
+    #     SIX probes carry the arms: absence is the empty state and NOT a defect, an
+    #     unparseable store and a store with no `exempt` list and an entry naming no job are
+    #     each a named problem, a well-formed entry IS honoured (the discriminating arm: a
+    #     predicate that reds every store cannot pass it), and the reader's own tolerance is
+    #     pinned so it cannot become policy by accident. The population prints in BOTH states,
+    #     so a clean zero is never shaped like an unrun gate. Script-form, and it carries NO
+    #     `registry/gates.json` budget entry -- a budget value is the process owner's (n=574
+    #     PART 5), so it runs on the declared default and the audit prints that it did.
+    if (repo_root / "tests/test_duty_receipt_exemptions.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_duty_receipt_exemptions.py"])
+
     return gates_to_run
 
 

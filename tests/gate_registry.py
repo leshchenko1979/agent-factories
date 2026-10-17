@@ -723,6 +723,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_refs_preflight.py",
     "test_ledger_schema.py",
     "test_ontology.py",
+    "test_duty_receipt_exemptions.py",
     "test_patrol_host_state.py",
     "test_citation_clause_titles.py",
     # Added with its registration (board #441, ruled n=2907, dispatched n=2909). REQUIRED is

@@ -2789,6 +2789,15 @@ DUTY_INCOMPLETE_VALUES = ("failed", "skipped")
 # a leg that hardcoded this factory's date would judge a tree it does not describe.
 DUTY_RECEIPT_BOUNDARY_KEY = "duty_receipt_declared"
 
+# A DECLARATION THE CANONICAL READER CANNOT PARSE IS A PROBLEM, NOT SILENCE (#506). The
+# canonical line is anchored at BOTH ends, so a backtick, an indent, a list marker or a
+# trailing clause un-declares a duty silently: the leg printed NOT JUDGED beside
+# `problems: 0`, which is indistinguishable from a clean round. This regex is deliberately
+# NOT a wider declaration reader -- it reads only whether a LINE BEGINS with the token, which
+# is what separates an ATTEMPTED declaration from prose that merely mentions the field (the
+# n=405 clause 5 class: "the old text said receipt_subject: ..." begins with neither, so it is
+# correctly neither a declaration nor a defect). The canonical reader above is untouched, so
+# what COUNTS as a declaration is exactly as narrow as it was -- only the silence is closed.
 def declared_receipt_stem(prompt: str) -> str | None:
     """The receipt stem this row declares, or None — the line `receipt_subject: <stem>`.
 
@@ -2797,7 +2806,16 @@ def declared_receipt_stem(prompt: str) -> str | None:
     n=405 clause 5).
     """
     found = RECEIPT_DECL_RE.search(prompt or "")
-    return found.group(1) if found else None
+    if not found:
+        return None
+    stem = found.group(1)
+    # A BACKTICKED VALUE IS NOT A STEM (#506). The canonical line matches ``receipt_subject:
+    # `survey` `` because a backtick is \S, and the resulting stem can never equal any ledger
+    # subject -- so the duty would be hunted forever against a name that cannot exist and read
+    # MISSING on every round. Rejected here, named as a shape by the attempt reader.
+    if "`" in stem:
+        return None
+    return stem
 
 def declared_receipt_disposition(prompt: str) -> tuple[str, str | None]:
     """Which of the THREE buckets this row's `receipt_subject:` line puts it in.
@@ -2813,11 +2831,113 @@ def declared_receipt_disposition(prompt: str) -> tuple[str, str | None]:
     had no way to tell it from a row that had declared it owes none.
     """
     stem = declared_receipt_stem(prompt)
-    if stem is None:
-        return ("undeclared", None)
-    if stem == RECEIPT_OWES_NONE_TOKEN:
-        return ("owes_none", None)
-    return ("declares", stem)
+    if stem is not None:
+        if stem == RECEIPT_OWES_NONE_TOKEN:
+            return ("owes_none", None)
+        return ("declares", stem)
+    # THE FOURTH BUCKET (#506). A row that ATTEMPTED a declaration the reader cannot parse is
+    # neither a declaration nor a silence: it is evidence the author meant to declare
+    # something, and reporting it as a clean NOT JUDGED is the false negative this closes.
+    # The detail is the SHAPE, so the leg can name what to fix.
+    malformed = malformed_receipt_declaration(prompt)
+    if malformed is not None:
+        return ("malformed", malformed[2])
+    return ("undeclared", None)
+
+def malformed_receipt_declaration(prompt: str) -> tuple[int, str, str] | None:
+    """(1-based line, the line, the SHAPE it was found in) for an ATTEMPTED declaration the
+    canonical reader cannot parse -- or None where the prompt carries no attempt at all.
+
+    THE SHAPE IS NAMED, because the author has to be able to see which edit un-declared the
+    duty: "it is malformed" is not a repair, and the backticked form that produced #506 was
+    invisible to every reader for a whole round.
+
+    THE WALK IS PER LINE, and it finds the token ANYWHERE on one (ruling n=3527 criterion 4).
+    An earlier form anchored its pattern at the line start and therefore reported a token
+    sitting inside a sentence as NOTHING AT ALL -- the same false negative one indentation
+    over, because prose that says `The old text said receipt_subject: x` is evidence an
+    author had the token in hand, and the leg cannot tell a removed declaration from a
+    mangled one. Reporting it is the ruling's order; reading it as a declaration is the
+    non-goal. So the shape names `prose before the token`, and `declared_receipt_stem` --
+    which stays anchored to a whole line -- still refuses to call it one.
+
+    A line that carries BOTH a canonical declaration and prose elsewhere cannot reach here:
+    `declared_receipt_stem` answers first, so the row is judged on its declaration and this
+    reader is never consulted. That ordering is what keeps a correct prompt from reding.
+    """
+    text = prompt or ""
+    for index, raw in enumerate(text.splitlines(), start=1):
+        at = raw.find("receipt_subject")
+        if at < 0:
+            continue
+        canonical = RECEIPT_DECL_RE.fullmatch(raw.rstrip())
+        # A canonical line is a declaration -- unless its VALUE is backticked, in which case
+        # `declared_receipt_stem` refuses it and this reader has to say why (see above).
+        if canonical and "`" not in canonical.group(1):
+            continue
+        shapes: list[str] = []
+        prefix = raw[:at]
+        if prefix != prefix.lstrip():
+            shapes.append("indented")
+        stripped = prefix.lstrip()
+        marker = re.match(r"(?:[-*+]|\d+\.)[ \t]+", stripped)
+        if marker:
+            shapes.append("a list marker before it")
+            stripped = stripped[marker.end():]
+        if stripped:
+            shapes.append("prose before the token")
+        ticks = re.search(r"`+$", prefix)
+        if ticks:
+            shapes.append(f"wrapped in {len(ticks.group(0))} backtick(s)")
+        rest = raw[at + len("receipt_subject"):]
+        if not rest.startswith(":"):
+            shapes.append("no `:` after the token")
+        else:
+            value = rest[1:].strip()
+            if not value:
+                shapes.append("an empty value")
+            elif re.search(r"\s", value):
+                shapes.append("prose after the value")
+            elif "`" in value:
+                shapes.append("a backtick in the value")
+        shape = ", ".join(shapes) or "a shape the canonical reader cannot parse"
+        return index, raw.strip(), shape
+    return None
+
+# The jobs this factory DECLARES are legitimately NOT JUDGED (#506 half 2). An exemption is
+# factory data, never a manifest path: absence IS the empty state, the convention
+# `docs/kit-exemptions.json` already sets, so a factory that has never needed one carries no
+# file and reads clean rather than red.
+DUTY_RECEIPT_EXEMPTIONS = REPO / "docs" / "duty-receipt-exemptions.json"
+
+def receipt_declaration_exemptions(
+    path: Path | None = None,
+) -> tuple[dict[str, str], str | None]:
+    """(job name -> its declared reason, a PROBLEM where the store cannot be honoured).
+
+    A store that EXISTS but cannot be parsed is a problem rather than a silent empty set: an
+    unreadable exemption list would red every excused duty, and a typo'd one would hide a
+    real finding behind a name that matches nothing.
+    """
+    target = path or DUTY_RECEIPT_EXEMPTIONS
+    if not target.is_file():
+        return {}, None
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, (
+            f"{target.name} could not be read ({type(exc).__name__}), so no declared "
+            f"exemption can be honoured and every NOT JUDGED duty is a finding"
+        )
+    rows = data.get("exempt") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return {}, f"{target.name} declares no `exempt` list, so no exemption can be honoured"
+    out: dict[str, str] = {}
+    for entry in rows:
+        if not isinstance(entry, dict) or not isinstance(entry.get("job"), str) or not entry["job"]:
+            return {}, f"{target.name} carries an entry naming no `job`, so no exemption can be honoured"
+        out[entry["job"]] = str(entry.get("reason") or "")
+    return out, None
 
 def declared_log_stems(prompt: str) -> tuple[str, ...]:
     """The redirect STEMS a prompt declares — `/tmp/<stem>-$(date ...)`, in order, deduped.
@@ -4098,7 +4218,7 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                      read_at: str = "", store: Path = FRAGMENT_STORE,
                      predicate=None, repo: Path = REPO, now=None,
                      fires: list[dict] | None = None, margin_for=None,
-                     scope_fn=None) -> dict:
+                     scope_fn=None, exemptions_fn=None) -> dict:
     """The duty-completion leg: did the round each thin trigger woke LEAVE A RECEIPT?
 
     POPULATION. The ENABLED cron rows this factory DECLARES that carry a receipt
@@ -4122,18 +4242,75 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     # every round -- the false MISSING measured at n=3228.
     declared: list[tuple[dict, str]] = []
     owes_none: list[dict] = []
+    malformed: list[tuple[dict, str]] = []
     undeclared: list[dict] = []
+    undeclared_exempt: list[tuple[dict, str]] = []
+    # INJECTED like every other reader this leg takes (#487's shape): a probe drives its own
+    # store rather than reading this factory's, so the pair of halves stays honest in a
+    # member tree that has declared exemptions of its own.
+    exemptions, exemption_problem = (exemptions_fn or receipt_declaration_exemptions)()
     for row in attributed:
-        disposition, stem = declared_receipt_disposition(str(row.get("prompt") or ""))
+        disposition, detail = declared_receipt_disposition(str(row.get("prompt") or ""))
         if disposition == "declares":
-            declared.append((row, stem))
+            declared.append((row, detail or ""))
         elif disposition == "owes_none":
             owes_none.append(row)
+        elif disposition == "malformed":
+            malformed.append((row, detail or ""))
+        elif str(row.get("name") or "") in exemptions:
+            undeclared_exempt.append((row, exemptions[str(row.get("name") or "")]))
         else:
             undeclared.append(row)
 
     problems: list[str] = []
     excused: list[str] = []
+    if exemption_problem:
+        problems.append(exemption_problem)
+    # #506 HALF 1 -- A DECLARATION THE READER CANNOT PARSE IS A PROBLEM. The alternative is
+    # what the box did for a whole round: a duty printed NOT JUDGED beside `problems: 0`,
+    # which is indistinguishable from a clean round. The shape is NAMED so the author can
+    # see which edit un-declared it.
+    for row, shape in malformed:
+        problems.append(
+            f"{str(row.get('name') or '(unnamed row)')}: the prompt carries a "
+            f"`receipt_subject` the canonical reader cannot parse ({shape}), so the duty is "
+            f"NOT JUDGED -- a declaration that cannot be read is a PROBLEM, not silence (#506)"
+        )
+    # #506 HALF 2 -- NOT JUDGED IS A FINDING unless the factory DECLARED the job exempt. A
+    # third state that reads as silence is how a duty sat unjudged with a clean problem
+    # count; an exemption is visible debt, printed on every run like every other `excused:`.
+    for row in undeclared:
+        problems.append(
+            f"{str(row.get('name') or '(unnamed row)')}: NOT JUDGED -- the prompt declares no "
+            f"`receipt_subject:` line and the job is named in no declared exemption "
+            f"(docs/duty-receipt-exemptions.json), so this leg cannot tell whether it owes a "
+            f"receipt (#506)"
+        )
+    # #506 HALF 3 -- AN EXEMPTION THAT EXCUSES NOTHING IS VISIBLE DEBT (ruling n=3527
+    # criterion 3). The store is the one lawful exit, and an exit naming a job that is not an
+    # undeclared duty on this box has stopped describing reality: the job got a declaration,
+    # or was renamed, or was retired -- and the row sits there looking like an active
+    # exemption. A silent stale entry is how a store rots into a rubber stamp, so it is a
+    # problem with the job NAMED rather than a pass nobody reads.
+    # The population an exemption may lawfully name is BOTH halves: the rows the exemption
+    # left unjudged AND the rows it excused. Taking only `undeclared` here would have called
+    # every WORKING exemption stale -- the exempted rows are removed from `undeclared` above
+    # by construction, so a store doing its job would have redded on every round. Measured
+    # while writing this arm's own probe; the discriminating control is what caught it.
+    excusable_names = {str(row.get("name") or "") for row in undeclared}
+    excusable_names |= {str(row.get("name") or "") for row, _ in undeclared_exempt}
+    stale_exemptions = sorted(job for job in exemptions if job not in excusable_names)
+    for job in stale_exemptions:
+        problems.append(
+            f"declared exemption names {job!r}, which is NOT an undeclared duty on this box "
+            f"(docs/duty-receipt-exemptions.json) -- an exemption that excuses nothing is "
+            f"stale debt: remove the row, or it will keep reading as an active exit (#506)"
+        )
+    for row, why in undeclared_exempt:
+        excused.append(
+            f"{str(row.get('name') or '(unnamed row)')}: NOT JUDGED by DECLARED EXEMPTION "
+            f"(docs/duty-receipt-exemptions.json) -- {why or 'no reason stated'}"
+        )
     judged: list[dict] = []
     residuals: list[dict] = []
     rounds_superseded = 0
@@ -4381,7 +4558,10 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     state, state_reason = attestation_state(store)
     return {
         "name": "duty-receipt",
-        "status": "ASSERTED" if declared else "NOT RUN",
+        # A leg that FOUND problems has read the population, even where no row declared a
+        # stem: reporting NOT RUN beside a non-empty problem list would say the leg could not
+        # look in the same breath as it reports what it saw (#506).
+        "status": "ASSERTED" if (declared or problems) else "NOT RUN",
         # The reason NAMES ITS POPULATION and refuses the conclusion (#242 clause 5). The
         # old text ended "so no duty owes a receipt on this box" — a POSITIVE CLAIM ABOUT
         # THE BOX drawn from an enumeration that can be empty, which is how a lane
@@ -4413,6 +4593,18 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "owes_none_jobs": [str(r.get("name") or "") for r in owes_none],
             "jobs_undeclared": len(undeclared),
             "undeclared_jobs": [str(r.get("name") or "") for r in undeclared],
+            # THE FOURTH BUCKET (#506), named beside its siblings rather than folded into
+            # the silence it used to be counted as: a malformed declaration is evidence the
+            # author MEANT to declare, which is a different fact from declaring nothing.
+            "jobs_malformed": len(malformed),
+            "malformed_jobs": [str(r.get("name") or "") for r, _ in malformed],
+            "malformed_shapes": [shape for _, shape in malformed],
+            # And the declared exemptions, printed as debt rather than subtracted silently:
+            # a reader must be able to see WHICH duty was excused and on what authority.
+            "jobs_undeclared_exempt": len(undeclared_exempt),
+            "undeclared_exempt_jobs": [str(r.get("name") or "") for r, _ in undeclared_exempt],
+            "jobs_stale_exempt": len(stale_exemptions),
+            "stale_exempt_jobs": stale_exemptions,
             "jobs_unattributed": len(foreign),
             "duties_judged": judged,
             "bound": bound_text,
@@ -7922,8 +8114,46 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             for name in cov.get("undeclared_jobs", []):
                 lines.append(
-                    f"    NOT JUDGED — declares no `receipt_subject:`, so this leg cannot "
-                    f"tell whether it owes one: {name or '(unnamed row)'}"
+                    f"    NOT JUDGED — declares no `receipt_subject:` and is named in no "
+                    f"declared exemption, so this leg cannot tell whether it owes one "
+                    f"(a PROBLEM since #506): {name or '(unnamed row)'}"
+                )
+            # #506. Both new buckets print on EVERY run, an explicit 0 included: a count
+            # that appears only when non-zero is indistinguishable from one the reader never
+            # computed, which is the class that hid this defect for a round.
+            malformed = cov.get("malformed_jobs", [])
+            shapes = cov.get("malformed_shapes", [])
+            lines.append(
+                f"    malformed declarations: {len(malformed)} "
+                f"(a `receipt_subject` the canonical line cannot parse — a PROBLEM)"
+            )
+            for name, shape in zip(malformed, shapes):
+                lines.append(
+                    f"    MALFORMED — the declaration is not canonical ({shape}), so the "
+                    f"duty is NOT JUDGED: {name or '(unnamed row)'}"
+                )
+            exempt = cov.get("undeclared_exempt_jobs", [])
+            lines.append(
+                f"    declared exemptions: {len(exempt)} "
+                f"(NOT JUDGED on this factory's own declaration, printed as debt)"
+            )
+            for name in exempt:
+                lines.append(
+                    f"    NOT JUDGED by DECLARED EXEMPTION "
+                    f"(docs/duty-receipt-exemptions.json): {name or '(unnamed row)'}"
+                )
+            # #506 ruling n=3527 criterion 3. An exemption naming no undeclared duty is debt
+            # that has stopped describing the box: printed, never subtracted, so a store that
+            # has rotted into a rubber stamp is visible on every round.
+            stale = cov.get("stale_exempt_jobs", [])
+            lines.append(
+                f"    stale exemptions: {len(stale)} "
+                f"(an exemption naming no undeclared duty — a PROBLEM since #506)"
+            )
+            for name in stale:
+                lines.append(
+                    f"    STALE EXEMPTION — names no undeclared duty on this box, so it "
+                    f"excuses nothing (docs/duty-receipt-exemptions.json): {name or '(unnamed)'}"
                 )
             for duty in cov.get("duties_judged", []):
                 lines.append(
@@ -8793,6 +9023,11 @@ def main(
     scores_dir_fn=None,
     board_scope_fn=None,
     duty_scope_fn=None,
+    # #506: the declared-exemption store is injected for the sixth time and the same reason
+    # every other declaration here is -- a probe must never have its verdict decided by
+    # whichever exemptions the live factory happens to hold, and a probe that CANNOT drive
+    # an exemption cannot prove the store is reconciled at all.
+    duty_exemptions_fn=None,
     lane_names_fn=None,
     shared_tree_fn=None,
     out=print,
@@ -8973,6 +9208,8 @@ def main(
             # #487: the bound is injected, never read from the ambient tree the patrol runs
             # in -- the same reason the three board legs' bounds are.
             scope_fn=duty_scope,
+            # #506: and the exemption store with it, for the same reason one layer down.
+            exemptions_fn=duty_exemptions_fn,
         ), read_at),
         leg_guard("canonicality-tier", lambda: canonicality_leg(rows, read_at=read_at), read_at),
         leg_guard("workspace-blocked", lambda: workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn), read_at),

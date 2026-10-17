@@ -508,6 +508,7 @@ PAIRS = [
     ("tools/patrol_host_state.py", "TEMPLATE/tools/patrol_host_state.py"),
     ("tools/publish.py", "TEMPLATE/tools/publish.py"),
     ("tests/test_publish.py", "TEMPLATE/tests/test_publish.py"),
+    ("tests/test_duty_receipt_exemptions.py", "TEMPLATE/tests/test_duty_receipt_exemptions.py"),
     ("tests/test_patrol_host_state.py", "TEMPLATE/tests/test_patrol_host_state.py"),
     ("tests/test_score_artifact_sections.py", "TEMPLATE/tests/test_score_artifact_sections.py"),
     ("tests/test_score_artifact_measurable.py", "TEMPLATE/tests/test_score_artifact_measurable.py"),
