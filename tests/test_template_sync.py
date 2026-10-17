@@ -739,6 +739,12 @@ PAIRS = [
     # same question. Without this entry the gate would exist in both trees with nothing
     # enforcing that they stay identical.
     ("tests/test_declared_boundary_census.py", "TEMPLATE/tests/test_declared_boundary_census.py"),
+    # The cron landing-route gate (#485). Paired because the arm it enforces is the CRON
+    # SURFACE, which is a harness table in every factory: a factory that took the gate
+    # without the reader it drives, or the reverse, would carry half a check whose other
+    # half is invisible. The debt declaration is FACTORY DATA and ships as the `.example`
+    # skeleton, so the copy carries the mechanism and the factory carries its own routes.
+    ("tests/test_cron_landing_route.py", "TEMPLATE/tests/test_cron_landing_route.py"),
     # The binding-sync instrument and its gate (board #503, ordered by the ruling on #502).
     # Paired for the reason the freshness arm it serves is paired: the arm lives in BOTH
     # halves of `tools/patrol_host_state.py`, so a bootstrapped factory inherits a READER of
