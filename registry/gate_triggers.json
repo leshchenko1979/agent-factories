@@ -212,6 +212,7 @@
     ],
     "tests/test_hygiene_declaration_sweep.py": [
       "TEMPLATE/tools/hygiene.py",
+      "docs/**",
       "docs/hygiene-protected.json",
       "skills/**",
       "tools/hygiene.py"
