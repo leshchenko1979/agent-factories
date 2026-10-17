@@ -120,13 +120,13 @@
       ],
       "since": "2026-09-23",
       "review_by": "2026-11-06",
-      "evidence": "9 key blocks confirmed in BOTH the repo copy and the deployed copy today (grep -c \"BEGIN OPENSSH PRIVATE KEY\" = 9 on each). Third re-exposure measured 2026-09-29: the guard added in commit 51c07f57 printed both key blocks on its refuse arm; fixed in aab431f1, proven on synthetic material (9 markers in -> 9 placeholders out, no BEGIN/END, zero base64). Intake n=265/n=267; prior re-exposures n=275 and n=285."
+      "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 \u2014 was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285."
     },
     {
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "scope": "profile",
       "severity": "warning",
-      "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF, not because it sleeps: pmset reports sleep=0 (it never sleeps) and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off (Apple M4, Mac16,10). A powered-off Mac is offline on every transport, Tailscale included, so any browser task through the Mac CDP path fails for the whole window. CURRENT INSTANCE, read 2026-10-15T06:44:29Z: the Mac has been offline since 2026-10-02T16:31:38Z - 12.59 d - and tailscale on vpn reads mac-mini offline, last seen 12d ago; the fleet backup has not completed for 13.25 d (last real push success 2026-10-02T00:41:14Z). TWO CORRECTIONS to the earlier reading: (1) the mac-cdp-tunnel endpoint is NOT a Mac-host probe - its target is ssh://78.17.187.4:15259, the agents host, where it curls localhost:9222 - so its state is exposed to agents-host faults, not only Mac ones; (2) it went UNHEALTHY 2026-09-28T19:12:31Z, 4.35 d BEFORE the Mac went dark, so it is a separate pre-existing failure the Mac outage merely masks. Owner action owed: the Mac must be powered on; no lane can do it. Ruled at ledger n=1337; see also n=1333/n=1336.",
+      "text": "The Mac's CDP and SSH tunnels drop because the Mac is POWERED OFF, not because it sleeps: pmset reports sleep=0 (it never sleeps) and its only repeating power event is a 2:55AM WAKE, which cannot raise a machine that is off (Apple M4, Mac16,10). A powered-off Mac is offline on every transport, Tailscale included, so any browser task through the Mac CDP path fails for the whole window. CURRENT INSTANCE, read 2026-10-17T06:07Z: the Mac has been offline since 2026-10-02T16:31:38Z \u2014 14.57 d \u2014 and tailscale on vpn reads `mac-mini offline, last seen 14d ago`; the fleet backup has not completed for 15.23 d (Gatus endpoint 21 `infra_mac-backup`: last SUCCESS 2026-10-02T00:41:14Z, last probe 2026-10-16T21:19:55Z `heartbeat: no update received within 25h0m0s`). TWO CORRECTIONS to the earlier reading: (1) the mac-cdp-tunnel endpoint is NOT a Mac-host probe \u2014 its target is ssh://78.17.187.4:15259, the agents host, where it curls localhost:9222 \u2014 so its state is exposed to agents-host faults, not only Mac ones; (2) it went UNHEALTHY 2026-09-28T19:12:31Z, 4.35 d BEFORE the Mac went dark, so it is a separate pre-existing failure the Mac outage merely masks. Owner action owed: the Mac must be powered on; no lane can do it. Ruled at ledger n=1337; see also n=1333/n=1336.",
       "affects": [
         "profile"
       ],
@@ -237,7 +237,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-16T06:24:59Z",
+  "attested_at": "2026-10-17T06:16:00Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

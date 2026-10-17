@@ -89,7 +89,7 @@
       "affects": [
         "profile"
       ],
-      "evidence": "`[providers.fallback] providers = [\"inferhub\", \"openrouter\"]` \u2014 /root/.opencrabs/profiles/ops/config.toml:136, /root/.opencrabs/config.toml:203, /root/.opencrabs/profiles/family/config.toml:136 (all read 2026-10-07); ops daemon ps lstart = Thu Oct 1 02:57:00 2026"
+      "evidence": "`[providers.fallback] providers = [\"inferhub\", \"openrouter\"]` \u2014 /root/.opencrabs/profiles/ops/config.toml:136, /root/.opencrabs/config.toml:203, /root/.opencrabs/profiles/family/config.toml:136 (all read 2026-10-07); ops daemon ps lstart = Thu Oct 15 21:40:33 2026"
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-16T06:16:46Z",
+  "attested_at": "2026-10-17T06:12:31Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
