@@ -694,6 +694,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # so the manifest grain is what keeps a factory from dropping the runner and keeping the
     # file. The claim it guards is the one a factory READS BEFORE COPYING: a header saying
     # "byte-identical" about a file that needs three siblings is the defect it was filed for.
+    # (#312, 2026-10-17): the resolver is SCOPED to this factory's own fragment. It read
+    # EVERY factory fragment and returned the first matching lane as a bare role string, so a
+    # foreign lane whose role name collided (`hq` is declared by all six factories, `triage` by
+    # four, `worker` by three) passed membership AND authorization here. Measured on the live
+    # fleet before the fix: 20 of 33 resolvable sessions belonged to other factories. REQUIRED,
+    # not OPTIONAL, because the predicate is pure over its arguments and the live legs read only
+    # the fleet manifest and the tool itself; it SKIPS with a stated reason where no manifest
+    # exists, which is what a bootstrapped factory looks like.
+    "test_ledger_factory_scope.py",
     "test_ledger_header_closure.py",
     # Added with its registration (board #192). REQUIRED is the correct grain: the gate
     # drives the index's OWN SELFTEST against a THROWAWAY ledger under a temp directory —

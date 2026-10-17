@@ -2936,6 +2936,24 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "tests/test_hygiene_branch_occupancy.py"]
         )
 
+    # 93. the factory-scope leg (#312). `session_to_role` read EVERY factory fragment and
+    #     returned the first lane whose resolved session matched, as a bare role string, so
+    #     membership (`actor` is a known role) and authorization both passed for a FOREIGN
+    #     lane whose role name collided. Role names collide by design across this fleet: `hq`
+    #     is declared by all six factories, `triage` by four, `worker` by three. Measured on
+    #     the live fleet before the fix, 20 of the 33 resolvable sessions belonged to other
+    #     factories and every one inherited a meta role.
+    #
+    #     The arm that makes this a GATE rather than a comment is its DISCRIMINATING PAIR:
+    #     the same matches grant under an unplaceable tree and are refused under the real
+    #     slug, so the SCOPING is what refuses -- a resolver that refused everything would
+    #     pass every refusal arm without it. It also drives the issue's own reproduction end
+    #     to end (a foreign session appending to a throwaway ledger must write ZERO bytes)
+    #     beside a POSITIVE CONTROL (an own-factory lane on the same seam must still write),
+    #     and asserts the resolver still CALLS the predicate, so a revert reds here.
+    if (repo_root / "tests/test_ledger_factory_scope.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_factory_scope.py"])
+
     return gates_to_run
 
 

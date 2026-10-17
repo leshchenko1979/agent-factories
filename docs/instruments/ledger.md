@@ -131,6 +131,29 @@ this *event*). The law's own phrasing: **membership is not authorization**. Meas
 matrix existed: three `intake` rows in one member factory carried `actor=worker`, and `intake` is
 Triage's — the write path accepted every one.
 
+### The resolver is SCOPED to this factory (#312)
+
+Both checks above ask *what role* and *what event*. Neither asked **which factory the writing
+session belongs to**. `session_to_role` read EVERY fragment in the fleet store and returned the
+first lane whose resolved session matched, as a bare role string, so a lane of any other factory
+passed membership (its role *is* a known role) and then passed authorization for events its own
+factory never granted it. Role names collide by design: every factory declares `hq`, most declare
+`triage` and `worker`.
+
+Three facts make the scope mechanical rather than declarative:
+
+- **The identity is a property of the REPOSITORY, not the checkout.** `tree_repo_root()` resolves
+  through the common git dir, so a shared tree and every linked worktree of it answer one path —
+  the same anchor the append lock uses.
+- **The declaration is the fleet manifest**, matched on its `repo` field per slug. A fragment's own
+  `repo` is deliberately NOT consulted: the surface being scoped must not also be the surface that
+  decides what it is.
+- **The residual is stated, not hidden.** A tree that matches NO manifest row — a bootstrapped
+  factory whose enrollment is not written yet — keeps the fleet-wide reading, because the
+  alternative refuses every write including that factory's own `genesis` row. `decide_role` grants
+  on a match in this factory's fragment, refuses BY NAME on a match in any other, and falls back
+  only when the tree is unplaceable.
+
 ### Why the row stores the derived value
 
 The test is whether the derivation can be **re-run later**. Measured 2026-09-27, it cannot, on

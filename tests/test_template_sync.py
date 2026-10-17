@@ -579,6 +579,7 @@ PAIRS = [
     # guards — "this file is copied byte-identically" — is the thing a factory READS before
     # copying, and a header that drifts from the code it describes misleads every member.
     ("tests/test_ledger_header_closure.py", "TEMPLATE/tests/test_ledger_header_closure.py"),
+    ("tests/test_ledger_factory_scope.py", "TEMPLATE/tests/test_ledger_factory_scope.py"),
     # The claim half of the pre-flight (#137 half 2). It ships for the same reason the close
     # half does: a factory that ports the ledger must be able to check the sequence rule it
     # was given, and the leg's own law lives in the file it pins.

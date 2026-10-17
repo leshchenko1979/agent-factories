@@ -95,18 +95,18 @@
     "tests/test_criteria_count.py": [
       "docs/quality-criteria.md"
     ],
-    "tests/test_cron_thinness.py": [
-      "TEMPLATE/**",
-      "docs/cron*",
-      "registry/**",
-      "tools/**"
-    ],
     "tests/test_cron_landing_route.py": [
       "TEMPLATE/**",
       "docs/landing-route-debt.json",
       "registry/**",
       "tests/test_cron_landing_route.py",
       "tools/audit.py"
+    ],
+    "tests/test_cron_thinness.py": [
+      "TEMPLATE/**",
+      "docs/cron*",
+      "registry/**",
+      "tools/**"
     ],
     "tests/test_declaration_drift.py": [
       "TEMPLATE/SKILL.md.tmpl",
@@ -205,6 +205,10 @@
       "docs/best-practices.md",
       "skills/**"
     ],
+    "tests/test_hygiene_branch_occupancy.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "tools/hygiene.py"
+    ],
     "tests/test_hygiene_build_residue.py": [
       "TEMPLATE/tools/hygiene.py",
       "docs/hygiene-protected.json",
@@ -245,10 +249,6 @@
     "tests/test_hygiene_stale_dirs.py": [
       "TEMPLATE/tools/hygiene.py",
       "docs/hygiene-protected.json",
-      "tools/hygiene.py"
-    ],
-    "tests/test_hygiene_branch_occupancy.py": [
-      "TEMPLATE/tools/hygiene.py",
       "tools/hygiene.py"
     ],
     "tests/test_insights_audience.py": [
@@ -451,6 +451,10 @@
       "tools/hooks/**",
       "tools/ledger.py",
       "tools/ledger_declaration.py"
+    ],
+    "tests/test_ledger_factory_scope.py": [
+      "TEMPLATE/tools/ledger.py",
+      "tools/ledger.py"
     ],
     "tests/test_ledger_header_closure.py": [
       "TEMPLATE/tools/ledger.py",

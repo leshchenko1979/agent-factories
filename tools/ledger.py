@@ -415,6 +415,86 @@ def known_actors() -> tuple[str, ...]:
     return ACTORS + tuple(declared_extra)
 
 
+def tree_repo_root() -> Path:
+    """The REPOSITORY this ledger lives in — one path from every linked worktree.
+
+    `REPO` is the CHECKOUT, and a linked worktree is its own directory, so the same
+    repository answers two different paths depending on which tree the writer is in.
+    The factory a ledger belongs to is a property of the REPOSITORY, so identity is
+    resolved through the common git dir — which is the same from the shared tree and
+    from every worktree of it (#312, and the same anchor the append lock uses).
+    """
+    common = _git_common_dir()
+    if common.name == ".git":
+        return common.parent.resolve()
+    return REPO.resolve()
+
+def factory_slug_for_tree() -> tuple[str | None, str]:
+    """Which factory THIS tree is, from the fleet manifest's own `repo` declaration.
+
+    The manifest is the DECLARATION and the tree supplies only the mechanical fact of
+    which repository it is. A fragment's own `repo` field is deliberately NOT used:
+    the surface being scoped must not also be the surface that decides what it is.
+
+    Returns `(slug, reason)`. `slug` is None when the tree cannot be placed, and
+    `reason` then names what failed — never a silent default.
+    """
+    try:
+        import registry  # noqa: PLC0415 — lazy, as above
+    except Exception as exc:
+        return None, f"the fleet manifest is unavailable (registry import failed: {exc})"
+    root = tree_repo_root()
+    try:
+        matches = [
+            slug
+            for slug, record in registry.MANIFEST_RECORDS.items()
+            if record.get("repo") and Path(record["repo"]).resolve() == root
+        ]
+    except Exception as exc:
+        return None, f"the fleet manifest could not be read ({exc})"
+    if len(matches) == 1:
+        return matches[0], ""
+    if not matches:
+        return None, f"no factory in the fleet manifest declares this repository ({root})"
+    return None, (
+        f"{len(matches)} factories declare this repository ({root}): "
+        f"{', '.join(sorted(matches))}"
+    )
+
+def decide_role(
+    own_slug: str | None, matches: list[tuple[str, str]]
+) -> tuple[str | None, str]:
+    """PURE: the role a session may write under, given the fragments that matched it.
+
+    `matches` is `[(factory, role)]` in fragment order. A match in THIS factory's
+    fragment is the only thing that GRANTS a role. A match in another factory's
+    fragment is refused BY NAME, because role names collide across the fleet — `hq`
+    is declared by every factory, `triage` by four — so a foreign lane would
+    otherwise inherit this factory's capacity wholesale: it passes membership (its
+    role is a known role) and then passes authorization for an event its own factory
+    never granted it. Measured on the live fleet before this fix: 20 of the 33
+    resolvable sessions belong to other factories and every one of them resolved to a
+    meta role (#312).
+
+    `own_slug is None` means the tree could not be placed in the manifest, and that
+    case keeps the fleet-wide reading it has always had rather than refusing every
+    write: a bootstrapped factory whose manifest row is not written yet would
+    otherwise be unable to stamp its own genesis row, and the refusal would name no
+    remedy. The residual is stated rather than hidden — an UNPLACEABLE tree is not
+    scoped — and the caller prints the reason beside it.
+    """
+    for factory, role in matches:
+        if own_slug is None or factory == own_slug:
+            return role, ""
+    if matches:
+        factory, role = matches[0]
+        return None, (
+            f"session resolves to lane '{role}' in factory '{factory}', which is not "
+            f"this factory ('{own_slug}') — a lane of another factory cannot stamp a "
+            f"row here under a colliding role name (#312)"
+        )
+    return None, ""
+
 def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
     """The role of the lane that is WRITING, derived from its session.
 
@@ -450,6 +530,8 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
         paths = registry.live_fragment_paths([])
     except Exception as exc:
         return None, f"the lane resolver is unavailable (fragment read failed: {exc})"
+    own_slug, own_why = factory_slug_for_tree()
+    matches: list[tuple[str, str]] = []
     for path in paths:
         data, err = registry.load_fragment(path)
         if err or not isinstance(data, dict):
@@ -462,8 +544,14 @@ def session_to_role(session_id: str | None = None) -> tuple[str | None, str]:
             if resolved.get("session_id") and resolved["session_id"] == sid:
                 role = resolved.get("role") or lane.get("role")
                 if role:
-                    return str(role), ""
-    return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s)"
+                    matches.append((str(data.get("factory") or ""), str(role)))
+    role, why = decide_role(own_slug, matches)
+    if role:
+        return role, ""
+    if why:
+        return None, why
+    detail = f" (this tree is not a declared factory: {own_why})" if own_why else ""
+    return None, f"session {sid} matches no lane declared in {len(paths)} fragment(s){detail}"
 
 
 def writing_session_id() -> str | None:
