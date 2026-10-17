@@ -538,6 +538,11 @@ PAIRS = [
     # loads `PAIRS` from this file rather than keeping a copy, so a pair added here
     # is enforced at commit time with no second edit.
     ("tools/hooks/pre-commit", "TEMPLATE/tools/hooks/pre-commit"),
+    # The two companions that close the `--no-verify` bypass (#326). A citing
+    # subject landed past `commit-msg` because that flag disarms it; the refusal
+    # point git does NOT bypass, and the detector for the residual, ship beside it.
+    ("tools/hooks/prepare-commit-msg", "TEMPLATE/tools/hooks/prepare-commit-msg"),
+    ("tools/hooks/post-commit", "TEMPLATE/tools/hooks/post-commit"),
     # The factory registry. Its three tools and two gates ship whole: a
     # bootstrapped factory declares its own fleet in `registry/fleet.json` and
     # gets the same renderer, the same drift gate and the same attest pacemaker.

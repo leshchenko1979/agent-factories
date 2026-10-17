@@ -128,6 +128,31 @@ MISSING_REASON = (
     "makes its remedy (issue #47, ruled at n=405) is not shipped"
 )
 
+# The two companions the clause gained when a citing subject landed PAST the
+# refusal point (issue #326). `commit-msg` alone is disarmed by `--no-verify`:
+# measured 2026-10-16, both `git commit -m` and a `--no-ff` merge landed with a
+# citing subject under that flag, while `prepare-commit-msg` ran in both cases
+# and could refuse them (git rc=1, commit did not land). The residual — an
+# INTERACTIVE commit under `--no-verify`, where `prepare-commit-msg` sees an
+# empty message and `commit-msg` is bypassed — is `post-commit`'s: it cannot
+# fail a commit (measured rc=0, commit landed), so its product is a durable
+# receipt rather than a refusal. Each is a versioned hook, so each absence is a
+# RED here rather than a mechanism that quietly stopped existing.
+COMPANION_HOOKS = (
+    (
+        "tools/hooks/prepare-commit-msg",
+        "tools/hooks/prepare-commit-msg is missing — the refusal point that "
+        "SURVIVES `--no-verify` (issue #326) is not shipped, so a citing subject "
+        "lands past the commit-msg check exactly as it did before",
+    ),
+    (
+        "tools/hooks/post-commit",
+        "tools/hooks/post-commit is missing — the DETECTOR for a citing subject "
+        "that got past both refusal points (issue #326) is not shipped, so the "
+        "residual bypass leaves no durable record",
+    ),
+)
+
 # The SHIPPED DEFAULT marker: the first commit touching the ledger whose subject obeys
 # the clause IN THE TEMPLATE'S OWN HISTORY. It is a default and not a constant because a
 # factory bootstrapped from the template does not carry that history, and this file is
@@ -205,14 +230,38 @@ def hook_state_problems(*, exists: bool, executable: bool, configured: str) -> l
     )
 
 def hook_installation_problems(top: Path) -> list[str]:
-    """Read the installation state off the tree and git config, then judge it."""
-    hook = top / HOOK_PATH
+    """Read the installation state off the tree and git config, then judge it.
+
+    All three hooks are judged: the clause's refusal point, the point `--no-verify`
+    does not disarm, and the detector for what slips past both. Judging only the
+    first would let the mechanism this factory was ordered to build (#326) be
+    deleted in silence while the gate stayed green — the vacuous-pass shape the
+    marker rule exists to prevent.
+    """
     rc, out, _ = _git("config", "--get", "core.hooksPath")
-    return hook_state_problems(
-        exists=hook.is_file(),
-        executable=os.access(hook, os.X_OK),
-        configured=out.strip() if rc == 0 else "",
+    configured = out.strip() if rc == 0 else ""
+    problems: list[str] = []
+    hook = top / HOOK_PATH
+    problems.extend(
+        hook_state_problems(
+            exists=hook.is_file(),
+            executable=os.access(hook, os.X_OK),
+            configured=configured,
+        )
     )
+    for path, reason in COMPANION_HOOKS:
+        companion = top / path
+        problems.extend(
+            shared_hook_state_problems(
+                hook_path=path,
+                hooks_path_config=HOOKS_PATH_CONFIG,
+                exists=companion.is_file(),
+                executable=os.access(companion, os.X_OK),
+                configured=configured,
+                missing_reason=reason,
+            )
+        )
+    return problems
 
 def exemptions_file() -> Path:
     """The factory's exemption data, resolved against the git top level.

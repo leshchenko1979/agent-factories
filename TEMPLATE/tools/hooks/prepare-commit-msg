@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""prepare-commit-msg hook: the refusal point that SURVIVES `--no-verify`.
+
+The companion `commit-msg` hook refuses a citing subject, but `--no-verify`
+disarms it: git's own documentation says pre-commit and commit-msg "are
+bypassed". Measured 2026-10-16 on this repo's clone: `git commit -m <citing>
+--no-verify` and `git merge --no-ff -m <citing> --no-verify` both landed with
+the citing subject, while `prepare-commit-msg` ran in BOTH cases and could
+refuse them (git rc=1, commit did not land). `prepare-commit-msg` is not in
+git's bypass list, and for `-m`, `-F` and merges the subject ALREADY EXISTS
+when it runs -- which is what makes it able to judge where `commit-msg` cannot
+be reached.
+
+**One predicate, three call sites.** This hook implements no pattern. It loads
+`subject_cites_rows` from `tests/test_ledger_commit_cites_no_rows.py` -- the
+same function the gate and `commit-msg` call -- because two implementations
+drift and the drift is silent.
+
+**It refuses; it never rewrites.** The author's message is left byte-identical.
+
+**What it CANNOT cover, stated rather than implied.** An interactive commit
+(`git commit` with an editor) reaches this hook with an EMPTY message file, so
+there is nothing to judge. That residual is `post-commit`'s job: it reads the
+subject that actually landed and records it as durable debt.
+
+**Fail open, and loudly.** If the predicate cannot be loaded -- the gate file is
+absent, or this is not a git work tree -- it prints a WARNING and exits 0. A
+hook that refuses every commit on a packaging bug blocks the factory's own
+repair path, and it is not the authority: the audit gate (tools/audit.py, gate
+20) is, and it fails loudly on its own. What it must never do is pass SILENTLY.
+
+Run:  invoked by git, with the message file as $1 and the source as $2
+Exit: 0 nothing to judge, or the subject names the concern; 1 the subject cites
+      a ledger row number.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+import sys
+from pathlib import Path
+
+GATE_RELATIVE = "tests/test_ledger_commit_cites_no_rows.py"
+PREDICATE_NAME = "subject_cites_rows"
+
+REMEDY = """prepare-commit-msg: REFUSED -- the subject cites a ledger row number.
+
+  subject: {subject}
+
+A ledger row's number is assigned inside the append lock, so it cannot be known
+before the append, and by the time this commit runs another lane may have
+appended further rows. State the concern instead.
+
+This refusal point is deliberate: it is the one git does NOT bypass under
+`--no-verify`, which is how the same subject landed in an earlier commit.
+"""
+
+def repo_toplevel() -> Path | None:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    )
+    if proc.returncode != 0:
+        return None
+    top = proc.stdout.strip()
+    return Path(top) if top else None
+
+def subject_of(message_path: Path) -> str:
+    """The first non-empty, non-comment line -- the subject git will use."""
+    try:
+        text = message_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return ""
+
+def load_predicate(top: Path):
+    """`subject_cites_rows` from the gate module, or None if unreadable."""
+    path = top / GATE_RELATIVE
+    if not path.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("ledger_gate_predicate", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception:
+        return None
+    return getattr(module, PREDICATE_NAME, None)
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 2:
+        print(
+            "prepare-commit-msg: WARNING -- no message file was passed; nothing checked.",
+            file=sys.stderr,
+        )
+        return 0
+
+    top = repo_toplevel()
+    if top is None:
+        print(
+            "prepare-commit-msg: WARNING -- not inside a git work tree; nothing checked.",
+            file=sys.stderr,
+        )
+        return 0
+
+    predicate = load_predicate(top)
+    if predicate is None:
+        print(
+            f"prepare-commit-msg: WARNING -- could not load {PREDICATE_NAME} from "
+            f"{GATE_RELATIVE}; the subject was NOT checked against the ledger "
+            "clause. tools/audit.py still carries the gate.",
+            file=sys.stderr,
+        )
+        return 0
+
+    subject = subject_of(Path(argv[1]))
+    if not subject:
+        # Interactive commit: the message does not exist yet. post-commit covers it.
+        return 0
+    if predicate(subject):
+        print(REMEDY.format(subject=subject), file=sys.stderr)
+        return 1
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

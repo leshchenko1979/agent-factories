@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""post-commit hook: the DETECTOR for a citing subject that got past both refusals.
+
+Two refusal points already exist -- `commit-msg` (the ledger clause's own
+remedy, issue #47 / n=405) and `prepare-commit-msg` (the one `--no-verify` does
+not disarm). This hook is the third leg, and its job is the RESIDUAL they cannot
+cover: an interactive commit under `--no-verify`, where `prepare-commit-msg`
+sees an empty message and `commit-msg` is bypassed.
+
+**Why post-commit, measured.** A failing `post-commit` does NOT change `git
+commit`'s exit code -- measured 2026-10-16, rc=0 with the commit landing -- so
+this hook cannot FAIL anything and is not a gate. What it can do, and does, is
+read the subject that ACTUALLY LANDED (which no earlier hook can see) and leave
+a DURABLE record, because a warning on stderr from a bypassed commit is a
+warning nobody reads.
+
+**It never edits, never rewrites, never exempts.** The exemption list stays the
+authority and is only READ here: an exempted sha is reported as `excused:` and
+writes no receipt, exactly as the gate prints it.
+
+**The receipt is the durable half.** Each unexempted violation appends one JSON
+line to `evidence/commit-subject-bypasses.jsonl` -- subject, sha, instant, and
+the row numbers cited. Appending is idempotent by sha, so re-running the hook
+(a rebase, a cherry-pick) cannot inflate the debt.
+
+**Fail open, and loudly.** No predicate, no exemptions file, not a work tree: it
+prints a WARNING and exits 0. The authority remains gate 20 in tools/audit.py,
+which fails loudly on its own over MARKER..HEAD; this hook is the fast signal,
+not the verdict.
+
+Run:  invoked by git after a commit is created; takes no arguments it uses
+Exit: always 0. A non-zero exit here would not undo the commit and would only
+      mislead a caller into thinking it had.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+GATE_RELATIVE = "tests/test_ledger_commit_cites_no_rows.py"
+PREDICATE_NAME = "subject_cites_rows"
+EXEMPTIONS_PATH = "docs/ledger-commit-exemptions.json"
+RECEIPT_PATH = "evidence/commit-subject-bypasses.jsonl"
+
+WARNING = """post-commit: BYPASS DETECTED -- the landed subject cites a ledger row number.
+
+  commit:  {sha}
+  subject: {subject}
+
+Neither refusal point saw this commit (an interactive commit under --no-verify
+bypasses commit-msg and reaches prepare-commit-msg before a message exists).
+A receipt was appended to {receipt}.
+
+The subject is immutable once pushed; gate 20 (tools/audit.py) will keep failing
+on it until it is dispositioned. Do not move the marker to silence it.
+"""
+
+def git(*args: str) -> str:
+    proc = subprocess.run(["git", *args], capture_output=True, text=True)
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+def load_predicate(top: Path):
+    path = top / GATE_RELATIVE
+    if not path.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("ledger_gate_predicate", path)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception:
+        return None
+    return getattr(module, PREDICATE_NAME, None)
+
+def exempted_shas(top: Path) -> set[str]:
+    path = top / EXEMPTIONS_PATH
+    if not path.is_file():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return {
+        str(entry.get("sha", "")).strip()
+        for entry in data.get("exemptions", [])
+        if isinstance(entry, dict) and entry.get("sha")
+    }
+
+def already_recorded(top: Path, sha: str) -> bool:
+    path = top / RECEIPT_PATH
+    if not path.is_file():
+        return False
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                if json.loads(line).get("sha") == sha:
+                    return True
+            except ValueError:
+                continue
+    except OSError:
+        return False
+    return False
+
+def main() -> int:
+    top_text = git("rev-parse", "--show-toplevel")
+    if not top_text:
+        print("post-commit: WARNING -- not inside a git work tree; nothing checked.",
+              file=sys.stderr)
+        return 0
+    top = Path(top_text)
+
+    predicate = load_predicate(top)
+    if predicate is None:
+        print(
+            f"post-commit: WARNING -- could not load {PREDICATE_NAME} from "
+            f"{GATE_RELATIVE}; the landed subject was NOT checked.",
+            file=sys.stderr,
+        )
+        return 0
+
+    sha = git("rev-parse", "HEAD")
+    subject = git("log", "-1", "--format=%s")
+    if not sha or not subject:
+        return 0
+    if not predicate(subject):
+        return 0
+
+    if sha in exempted_shas(top):
+        print(f"post-commit: excused: {sha[:12]} {subject}", file=sys.stderr)
+        return 0
+
+    receipt = top / RECEIPT_PATH
+    if not already_recorded(top, sha):
+        record = {
+            "sha": sha,
+            "subject": subject,
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "detected_by": "tools/hooks/post-commit",
+        }
+        try:
+            receipt.parent.mkdir(parents=True, exist_ok=True)
+            with receipt.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
+        except OSError as exc:
+            print(f"post-commit: WARNING -- could not write the receipt: {exc}",
+                  file=sys.stderr)
+
+    print(WARNING.format(sha=sha[:12], subject=subject, receipt=RECEIPT_PATH),
+          file=sys.stderr)
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
