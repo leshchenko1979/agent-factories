@@ -2914,6 +2914,28 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "tests/test_binding_sync.py"]
         )
 
+    # 92. the branch-occupancy leg (#504). The worktree census has parsed every tree's
+    #     `branch` since it was written and NO leg read it, so two trees on one branch was
+    #     invisible to every check -- and it does not stay invisible in its EFFECT: when the
+    #     second tree commits, the branch ref moves and the SHARED tree's HEAD re-points
+    #     under an index that never moved, so a published ledger row renders as a staged
+    #     DELETION in a tree that lost nothing. Measured 2026-10-17: `/tmp/af-487` and
+    #     `/root/agent-factories` both held `main`, and the shared tree showed rows 3484/
+    #     3485/3486 as deleted three times running.
+    #
+    #     The leg is REPORT-ONLY (`removes: no`) and structurally asserted to be so: it must
+    #     not import `subprocess` and must not carry a write verb, because the remedy -- a
+    #     worktree detached off the branch -- is a decision about someone else's tree, and
+    #     rules 22/23 make that a human read, never an automatic one. The gate carries a
+    #     POSITIVE CONTROL (a synthetic census with two trees on one branch must read
+    #     VIOLATION) beside its DISCRIMINATING PAIR (the same census minus one tree must read
+    #     clean), because a leg that never fires is a shell and a leg that fires on
+    #     everything is noise (rule 6/7).
+    if (repo_root / "tests/test_hygiene_branch_occupancy.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_hygiene_branch_occupancy.py"]
+        )
+
     return gates_to_run
 
 

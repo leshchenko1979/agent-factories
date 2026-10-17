@@ -432,6 +432,7 @@
     "tests/test_hygiene_namespace.py": "pytest",
     "tests/test_hygiene_placement.py": "pytest",
     "tests/test_hygiene_stale_dirs.py": "pytest",
+    "tests/test_hygiene_branch_occupancy.py": "pytest",
     "tests/test_insights_audience.py": "pytest",
     "tests/test_insights_author.py": "pytest",
     "tests/test_insights_gate_recorded.py": "pytest",
@@ -610,6 +611,9 @@
       "class": "always-satisfiable"
     },
     "tests/test_hygiene_stale_dirs.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_hygiene_branch_occupancy.py": {
       "class": "always-satisfiable"
     },
     "tests/test_insights_audience.py": {

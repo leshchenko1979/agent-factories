@@ -860,6 +860,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # date is a set of CURRENT siblings, not a supersession. Report-only (`removes: no`),
     # asserted structurally; a marker naming nothing is its own debt, reported separately.
     "test_hygiene_evidence_supersession.py",
+    # G8 (#504, 2026-10-17): branch occupancy. The worktree census has always parsed each
+    # tree's `branch` and NO leg read it, so two trees on one branch was invisible to every
+    # leg -- while it silently corrupts the tree the whole factory reads: when the second
+    # tree commits, the branch ref moves and the SHARED tree's HEAD re-points under its own
+    # index, rendering a published ledger row as a staged deletion in a tree that lost
+    # nothing. Report-only (`removes: no`), asserted structurally (no subprocess, no write);
+    # the leg is shown to FIRE on a contended census and to read clean on the same census
+    # minus one tree, so a predicate that flags everything cannot pass.
+    "test_hygiene_branch_occupancy.py",
     # Added with its registration (board #270, ruled n=1925, dispatched n=1927). REQUIRED is
     # the correct grain and OPTIONAL is not, for the deciding fact the entries around it
     # state: the gate reads `evidence/ledger.jsonl` plus kit files loaded BY PATH -- the

@@ -1161,6 +1161,99 @@ def render_stale_dirs(leg: dict) -> str:
     return "\n".join(lines)
 
 
+"""Branch occupancy: a branch checked out in MORE THAN ONE tree, REPORTED (G8; #504).
+
+The census above parses each tree's `branch` and NOTHING READ IT, so two trees on one
+branch was invisible to every leg of this tool -- while it silently corrupts the tree the
+whole factory reads.
+
+Measured 2026-10-17: `/tmp/af-487` was on branch `main`, the same branch the shared tree
+`/root/agent-factories` holds. When af-487 committed on `main` the branch ref moved, so the
+SHARED tree's HEAD re-pointed while its index still held the old blob -- and the new ledger
+row rendered as a STAGED DELETION in a tree that had lost nothing. The owning lane restored
+the "deleted" row twice and wrote the misdiagnosis into a ledger row before another lane
+found the mechanism. The class is silent by construction: every surface reports a
+deletion, and the truth is a stale checkout.
+
+`removes: no`. Detaching another lane's tree is the interference rule 22/23 forbids, and
+`git worktree prune` is a write, so the leg PRINTS and a human acts.
+
+The population is PRINTED beside the verdict (`N tree(s) on M branch(es), K branch(es)
+multiply held`), so an unread census cannot render as a clean one. A multiply-held branch
+is a FINDING; when that branch is the PRIMARY one -- the tree every lane reads -- it is a
+VIOLATION, because that is the corruption class and not a transient peer branch.
+"""
+
+def branch_occupancy_leg(records_fn=None, root: Path | None = None) -> dict:
+    """Branches held by more than one worktree, from the ONE shared census (G8; #504)."""
+    root = Path(root) if root is not None else repo_root()
+    records_fn = records_fn or worktree_records
+    leg: dict = {
+        "class": "branch-occupancy",
+        "predicate": "a branch is checked out in at most one worktree",
+        "removes": False,
+        "root": str(root),
+        "total": 0,
+        "branches": 0,
+        "multiply_held": [],
+        "primary_branch": None,
+        "primary_contended": False,
+    }
+
+    records, error = records_fn(root)
+    if error:
+        leg["status"] = "NOT RUN"
+        leg["reason"] = error
+        return leg
+
+    leg["total"] = len(records)
+    # `git worktree list` reports the MAIN tree first, so its branch is the primary one:
+    # that is the tree every lane reads, which is why its contention is the fault class.
+    primary = records[0].get("branch") if records else None
+    leg["primary_branch"] = primary
+
+    held: dict[str, list[str]] = {}
+    for record in records:
+        branch = record.get("branch")
+        # A detached tree occupies no branch, and a tree git could not classify is not
+        # evidence of contention: skip both rather than folding them into one bucket.
+        if record.get("detached") or not branch:
+            continue
+        held.setdefault(branch, []).append(record["path"])
+
+    leg["branches"] = len(held)
+    for branch in sorted(held):
+        paths = held[branch]
+        if len(paths) > 1:
+            leg["multiply_held"].append({"branch": branch, "paths": paths})
+            if branch == primary:
+                leg["primary_contended"] = True
+
+    leg["status"] = "ASSERTED"
+    return leg
+
+def _short_branch(branch: str | None) -> str:
+    """`refs/heads/main` -> `main`, for a line a human reads."""
+    if not branch:
+        return "(none)"
+    return branch[len("refs/heads/"):] if branch.startswith("refs/heads/") else branch
+
+def render_branch_occupancy(leg: dict) -> str:
+    """One summary line, then one line per multiply-held branch (G8; #504)."""
+    if leg.get("status") == "NOT RUN":
+        return f"hygiene branch occupancy: NOT RUN — {leg.get('reason', 'no reason recorded')}"
+    lines = [
+        f"hygiene branch occupancy: {leg['total']} tree(s) on {leg['branches']} branch(es), "
+        f"{len(leg['multiply_held'])} branch(es) multiply held (removes: no)"
+    ]
+    for entry in leg["multiply_held"]:
+        marker = "VIOLATION" if entry["branch"] == leg.get("primary_branch") else "FINDING"
+        lines.append(
+            f"  {marker} {_short_branch(entry['branch'])} — checked out in "
+            f"{len(entry['paths'])} trees: " + ", ".join(entry["paths"])
+        )
+    return "\n".join(lines)
+
 # --- Evidence supersession: PROSE-ONLY supersessions are REPORTED (G7; q13) -----------
 """An evidence artifact superseded in PROSE but not MECHANICALLY, reported (G7; q13).
 
@@ -1595,6 +1688,12 @@ def main() -> int:
     # (G6). The reaper's glob is the whole of its vision, so a tree this factory created at
     # a path that does not match it -- every `git worktree add` -- is invisible to it.
     print(render_stale_dirs(stale_dirs_leg(namespace=args.namespace)))
+    # Branch occupancy: a branch checked out in MORE THAN ONE tree (G8; #504). The census
+    # already parsed every tree's branch and no leg read it, so two trees on one branch --
+    # which moves the SHARED tree's HEAD under its own index and renders a published ledger
+    # row as a staged deletion -- was invisible to every leg above.
+    occupancy = branch_occupancy_leg()
+    print(render_branch_occupancy(occupancy))
     # The evidence artifacts superseded in PROSE that carry no mechanical marker (G7).
     # A DEBT CENSUS and not a fault list: `evidence/` is append-only history, so an
     # unmarked supersession is the expected state and the number falls only as markers
@@ -1605,6 +1704,17 @@ def main() -> int:
         dry_run=dry_run, patterns=patterns, protected=protected
     )
     violations, advisories, explanations = inspect_git_working_tree()
+    # A multiply-held PRIMARY branch is the corruption class G8 exists for: the shared tree's
+    # HEAD moves under its own index and a published ledger row reads as a staged deletion.
+    # It is a violation, not an advisory, because no legitimate state produces it --
+    # `git worktree add` refuses a branch already checked out, so reaching it takes a force.
+    if occupancy.get("primary_contended"):
+        for entry in occupancy["multiply_held"]:
+            if entry["branch"] == occupancy.get("primary_branch"):
+                violations.append(
+                    f"branch {_short_branch(entry['branch'])} is checked out in "
+                    f"{len(entry['paths'])} worktrees: " + ", ".join(entry["paths"])
+                )
 
     if dry_run:
         # Audit mode: stale scratch, litter, stranded dirty paths and any path this

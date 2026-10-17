@@ -246,6 +246,10 @@
       "docs/hygiene-protected.json",
       "tools/hygiene.py"
     ],
+    "tests/test_hygiene_branch_occupancy.py": [
+      "TEMPLATE/tools/hygiene.py",
+      "tools/hygiene.py"
+    ],
     "tests/test_insights_audience.py": [
       "TEMPLATE/tools/insights.py",
       "evidence/insights.jsonl",

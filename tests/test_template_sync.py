@@ -493,6 +493,7 @@ PAIRS = [
     # the gate would ship a population nothing holds to git's own list, and one carrying the
     # gate without the leg would probe a function that does not exist.
     ("tests/test_hygiene_stale_dirs.py", "TEMPLATE/tests/test_hygiene_stale_dirs.py"),
+    ("tests/test_hygiene_branch_occupancy.py", "TEMPLATE/tests/test_hygiene_branch_occupancy.py"),
     # Added with its registration (G7, q13): the gate plants evidence fixtures that
     # `tools/hygiene.py`'s supersession leg reads, so a factory carrying the leg without the
     # gate would ship a debt census nothing holds to the naming convention, and one carrying
