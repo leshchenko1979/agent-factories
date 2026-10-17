@@ -603,6 +603,14 @@ PAIRS = [
     # Paired so every factory inherits the same predicate rather than a drifting copy,
     # and REQUIRED in `gate_registry.REQUIRED_GATES` for the same reason.
     ("tests/test_cron_thinness.py", "TEMPLATE/tests/test_cron_thinness.py"),
+    # The landing-route predicate (#485). Paired for the same reason as the cron-thinness
+    # one above: PURE over a LIST of cron rows and probeable with synthetic ones, so a
+    # bootstrapped factory judges ITS OWN envelopes rather than reading this box's. The
+    # class it closes: an envelope that declares `receipt_subject:` — a promise to land a
+    # receipt row — while naming no route, or naming one that executes the pre-#445 pusher
+    # out of the shared tree. Its own debt list is FACTORY DATA (`docs/landing-route-debt.json`,
+    # shipped as the `.example` skeleton), so the copy carries the predicate and the factory
+    # carries the measurements. REQUIRED in `gate_registry.REQUIRED_GATES`.
     # The close-telemetry provenance gate (#130). Paired for the same reason as the
     # cron-thinness predicate above, and with one property of its own that makes the copy
     # load-bearing: it carries NO date. Its boundary is a DECLARED FACTORY PARAMETER read

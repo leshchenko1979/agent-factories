@@ -583,6 +583,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # with a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
     # runner and keeping the file.
     "test_cron_thinness.py",
+    # Added with its registration (board #485, ruled n=3307, dispatched n=3308). REQUIRED is
+    # the correct grain and OPTIONAL is not: the predicate is PURE over a LIST of cron rows
+    # and reads no live `cron_jobs` table, so it passes in a bootstrapped factory exactly as
+    # it does here — there is no box-local fixture that would make it red. It is byte-paired
+    # with a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
+    # runner and keeping the file. THE MECHANISM IT GUARDS: an envelope that declares a
+    # `receipt_subject:` promises a receipt row, and four such envelopes in three days named
+    # no route to LAND it (#474, #479, #480, #481) with no gate able to see any of them. The
+    # census predicate that found them is a PRESENCE test, so it passes the shape that
+    # survived the repair — a route that is NAMED and points at the pre-#445 pusher in the
+    # shared tree. This gate's second leg (the target RESOLVES at `origin/main`) is the
+    # discriminating one, and its live arm reconciles against `docs/landing-route-debt.json`
+    # so an undeclared instance REDs and a repaired-but-still-declared one REDs as stale.
+    "test_cron_landing_route.py",
     # Added with its registration (board #313, ruling n=3360). REQUIRED is the correct grain
     # and OPTIONAL is not: the predicate reads SOURCE in both trees and never `evidence/`, so
     # it examines a bootstrapped factory's own law surfaces exactly as it examines this

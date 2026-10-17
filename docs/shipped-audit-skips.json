@@ -105,6 +105,11 @@
       "marker": "# STATED SKIP: TEMPLATE/",
       "reason": "both pair legs compare a shipped file against its twin under a nested TEMPLATE/, and the gate derives that root from its OWN file's location — so the shipped copy (`TEMPLATE/tests/…`, which the shipped audit runs with `cwd=TEMPLATE`) reads `TEMPLATE/` as its REPO and its twins resolve to `TEMPLATE/TEMPLATE/…`, which no tree carries. A tree with no nested TEMPLATE/ is either the shipped template itself or a bootstrapped factory, which receives the template's CONTENTS and keeps no second copy of them, so there is no twin to compare and the legs SKIP BY NAME rather than red a tree that legitimately has none (#68). The clause, the pointer and the metric legs still RUN there: the shipped tree carries the instrument's law and the reader, and the pointer leg skips separately where the root-only `skills/meta-factory/SKILL.md` is absent. The class is #459's"
     },
+    "tests/test_cron_landing_route.py": {
+      "artifact": "TEMPLATE/ (a tree with no shipped kit of its own; this leg cross-reads two FACTORY DATA sites)",
+      "marker": "# STATED SKIP: TEMPLATE/",
+      "reason": "the registration leg cross-reads the ROOT tree's four registration sites, two of which are FACTORY DATA that no shipped tree carries: the twin audit (`TEMPLATE/tools/audit.py`) and the live trigger map (`registry/gate_triggers.json`, of which only the `.example.json` skeleton ships). The gate derives its root from its OWN file's location, so the shipped copy (`TEMPLATE/tests/\u2026`, which the shipped audit runs with `cwd=TEMPLATE`) reads `TEMPLATE/` as its root and both of those resolve under a second `TEMPLATE/` that no tree carries. A tree with no nested TEMPLATE/ is either the shipped template itself or a bootstrapped factory, which receives the template's CONTENTS and keeps no second copy of them, so the leg SKIPS BY NAME there rather than reddening on a path no tree carries. The predicate itself is proven by the fixtures above it, and this gate's other probes still RUN at the shipped depth (#199, #459's class)"
+    },
     "tests/test_template_gate_pairing.py": {
       "artifact": "TEMPLATE/ (a tree with no shipped kit of its own)",
       "marker": "# STATED SKIP: TEMPLATE/",

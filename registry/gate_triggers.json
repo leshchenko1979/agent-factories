@@ -95,6 +95,13 @@
       "registry/**",
       "tools/**"
     ],
+    "tests/test_cron_landing_route.py": [
+      "TEMPLATE/**",
+      "docs/landing-route-debt.json",
+      "registry/**",
+      "tests/test_cron_landing_route.py",
+      "tools/audit.py"
+    ],
     "tests/test_declaration_drift.py": [
       "TEMPLATE/SKILL.md.tmpl",
       "TEMPLATE/docs/instruments/**",

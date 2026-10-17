@@ -412,6 +412,7 @@
     "tests/test_commit_pathspec_law.py": "script",
     "tests/test_commit_session_trailer.py": "script",
     "tests/test_criteria_count.py": "script",
+    "tests/test_cron_landing_route.py": "pytest",
     "tests/test_cron_thinness.py": "pytest",
     "tests/test_declaration_drift.py": "script",
     "tests/test_declared_boundary_census.py": "script",
@@ -548,6 +549,10 @@
     },
     "tests/test_criteria_count.py": {
       "class": "always-satisfiable"
+    },
+    "tests/test_cron_landing_route.py": {
+      "class": "exemption-table",
+      "table": "docs/landing-route-debt.json"
     },
     "tests/test_cron_thinness.py": {
       "class": "always-satisfiable"

@@ -1,0 +1,6 @@
+{
+  "_note": "Skeleton for docs/landing-route-debt.json -- the factory data file read by tests/test_cron_landing_route.py. Copy it into docs/ (the example itself is never read) and add an entry ONLY for a cron envelope that declares a `receipt_subject:` other than `none` -- so it produces a receipt row -- and names NO landing route for it, or names a route whose target is the pre-#445 pusher executed out of the shared tree. The gate is a LIVE read over registry/state.json and reconciles this file against its own measurement, so an entry is a DECLARATION OF A KNOWN, TRACKED DEFECT: an undeclared violation REDs as a new instance of the class, and a declared entry that no longer reproduces REDs as stale. The remedy is to repair the envelope and strike its entry in the same change -- not to add an entry for a defect you could fix. The TEMPLATE half ships this skeleton and no live table, so a bootstrapped factory starts with ZERO declarations: a clean file, not an excused one.",
+  "_measured_at": "<instant the entries below were measured, RFC3339 UTC>",
+  "_measured_against": "registry/state.json (<N> rows, <M> judged: rows declaring `receipt_subject:` other than `none`)",
+  "declared": []
+}

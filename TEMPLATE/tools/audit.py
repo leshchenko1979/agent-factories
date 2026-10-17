@@ -2853,6 +2853,40 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "tests/test_declaration_drift.py"]
         )
 
+    # 90. the landing-route leg (board #485, ruled n=3307, dispatched n=3308). A cron
+    #     envelope that DECLARES a `receipt_subject:` promises a receipt row; the class is an
+    #     envelope that promises the row and names no route to LAND it, so the receipt is
+    #     never written and the round reads complete. Four instances were recorded in three
+    #     days (#474, #479, #480, #481) and no gate could see any of them: the census
+    #     predicate that found them (`push|publish|land|origin/main`, case-insensitive) is a
+    #     PRESENCE test, so it passes the shape that survived the repair -- an envelope that
+    #     NAMES a route and points it at the pre-#445 pusher in the shared tree, which writes
+    #     the legacy receipt and lands nothing. The predicate is therefore TWO legs, and the
+    #     second is the discriminating one: (a) a route is PRESENT, and (b) its target
+    #     RESOLVES at `origin/main`. An EXECUTED path out of the shared tree is a violation; a
+    #     `git ... show origin/main:<path>` READ is not, and that is what keeps
+    #     `factory-publish` GREEN by construction -- it fetches the pusher from `origin/main`
+    #     at run time and declares `receipt_subject: none`.
+    #
+    #     PURE over a LIST of cron rows, and it must stay so: the rows live in the harness
+    #     `cron_jobs` table while the mechanical suite runs offline against a tree, so a gate
+    #     that read that table would RED in every bootstrapped factory that has no such table
+    #     (#68's class, measured on the gate this one mirrors). Its POPULATION is the rows
+    #     that declare a subject other than `none`, and it PRINTS that population, so an empty
+    #     run is never the same output as a clean one (#116's class).
+    #
+    #     The live arm reconciles against `docs/landing-route-debt.json`, and that
+    #     reconciliation is what makes it a gate rather than a report: an UNDECLARED violation
+    #     is a new instance of the class and REDs, and a DECLARED entry that no longer
+    #     reproduces REDs as stale, so a repaired envelope must be struck from the file in the
+    #     same change that repairs it. The TEMPLATE half ships the `.example.json` skeleton and
+    #     no live table, so a bootstrapped factory starts with zero declarations -- a clean
+    #     file, not an excused one.
+    if (repo_root / "tests/test_cron_landing_route.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_cron_landing_route.py"]
+        )
+
     return gates_to_run
 
 
