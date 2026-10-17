@@ -34,6 +34,8 @@ verified at landing time, not a tree property.
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -329,3 +331,118 @@ def test_exit_codes_and_the_actual_move(tmp_path) -> None:
                            capture_output=True, text=True).stdout.strip()
     assert after == before, "the refused run moved HEAD"
     assert level != moved, "leg 2 did not move the tree, so leg 3 proves nothing"
+
+def _scratch(tmp_path):
+    """A bare origin, a seed clone, and a tree clone that starts LEVEL.
+
+    Returns (origin, seed, tree). Every leg below mutates the seed and pushes, so the tree's
+    distance from the remote is the ONLY variable between rounds.
+    """
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", "-q", str(origin), str(seed)], check=True,
+                   capture_output=True)
+
+    def _commit(repo: Path, name: str, text: str) -> None:
+        (repo / name).write_text(text)
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.email=t@t.t", "-c", "user.name=T",
+             "commit", "-q", "-m", text],
+            check=True,
+        )
+
+    _commit(seed, "state.md", "v1")
+    subprocess.run(["git", "-C", str(seed), "push", "-q", "origin", "main"], check=True)
+    tree = tmp_path / "tree"
+    subprocess.run(["git", "clone", "-q", str(origin), str(tree)], check=True,
+                   capture_output=True)
+    return origin, seed, tree
+
+
+def test_a_read_never_overwrites_the_last_applys_receipt(tmp_path) -> None:
+    """#505 defect 1: a probe that comes to READ the evidence must not DESTROY it.
+
+    The receipt is the mechanism's only durable evidence and is deliberately never committed,
+    so nothing else holds it. Measured 2026-10-17T08:19:23Z: the file held a real
+    `fast-forward 5454d291 -> f29621fb` with `applied true`; a `--json --no-fetch` read two
+    seconds later replaced it with `action level / applied false` and the apply's trace was
+    gone. That is a read whose SIDE EFFECT is destruction -- the same class as reading a
+    metadata artefact as if it were state.
+
+    THE SENTINEL IS THE POSITIVE CONTROL. Asserting "the file did not change" passes trivially
+    if the tool never writes the file at all, so the leg plants a known record, proves the
+    READ leaves those bytes intact, and then proves an `--apply` round DOES overwrite them.
+    Same binary, same repository, one flag apart -- the flag is the only difference.
+    """
+    module = _module()
+    _, seed, tree = _scratch(tmp_path)
+    (seed / "state.md").write_text("v2")
+    subprocess.run(["git", "-C", str(seed), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(seed), "-c", "user.email=t@t.t", "-c", "user.name=T",
+                    "commit", "-q", "-m", "v2"], check=True)
+    subprocess.run(["git", "-C", str(seed), "push", "-q", "origin", "main"], check=True)
+
+    # leg 1: an APPLY round records, and the record says what it did
+    assert module.main(["--repo", str(tree), "--apply"]) == 0
+    receipt = module.receipt_path(tree)
+    assert receipt is not None and receipt.exists(), "the apply round recorded nothing"
+    recorded = json.loads(receipt.read_text())
+    assert recorded["applied"] is True, recorded
+    assert str(recorded["move"]).startswith("fast-forward"), recorded["move"]
+
+    # leg 2: plant a sentinel, then READ -- the sentinel must survive byte-identically
+    sentinel = b'{"sentinel": "the last apply record"}\n'
+    receipt.write_bytes(sentinel)
+    assert module.main(["--repo", str(tree), "--json", "--no-fetch"]) == 0
+    assert receipt.read_bytes() == sentinel, (
+        "a read overwrote the receipt: the probe destroyed the evidence it came to read")
+    assert module.main(["--repo", str(tree)]) == 0, "a plain dry run must not record either"
+    assert receipt.read_bytes() == sentinel, "a dry run overwrote the receipt"
+
+    # leg 3: the control -- the SAME repository with --apply DOES overwrite the sentinel
+    assert module.main(["--repo", str(tree), "--apply"]) == 0
+    assert receipt.read_bytes() != sentinel, (
+        "an apply round did not record, so leg 2 proved only that nothing ever writes")
+
+
+def test_the_payload_carries_the_checkout_that_wrote_it(tmp_path) -> None:
+    """#505 defect 2: the law declared a field the payload did not carry.
+
+    The receipt lives in the git COMMON dir and is last-writer-wins across every worktree of
+    the repository, so without `checkout` a reader cannot say WHICH tree the round it is
+    looking at actually read. A declared-but-absent field is worse than an undeclared one:
+    the reader trusts the declaration and stops looking.
+    """
+    module = _module()
+    _, _, tree = _scratch(tmp_path)
+    assert module.main(["--repo", str(tree), "--apply"]) == 0
+    payload = json.loads(module.receipt_path(tree).read_text())
+    assert "checkout" in payload, sorted(payload)
+    assert payload["checkout"] == str(tree.resolve()), payload["checkout"]
+    # ...and it sits in the GIT DIR, never in the working tree: a receipt that dirtied the
+    # tree would trip the tool's own dirty-path refusal on the next round.
+    assert ".git" in module.receipt_path(tree).parts, module.receipt_path(tree)
+    status = subprocess.run(["git", "-C", str(tree), "status", "--porcelain"],
+                            capture_output=True, text=True).stdout.strip()
+    assert not status, f"the receipt dirtied the tree it records: {status}"
+
+
+def test_the_law_names_no_key_the_payload_lacks(tmp_path) -> None:
+    """The declaration is checked against a REAL payload, not against another document.
+
+    Direction matters: `declared - actual` is the dangerous set (a reader trusts a field that
+    is not there). `actual - declared` is untidy, not dangerous, so it is reported and not
+    gated -- a new field landing before its prose must not RED the suite.
+    """
+    module = _module()
+    law = (REPO / "docs/instruments/binding-sync.md").read_text()
+    match = re.search(r"binding-sync-receipt\.json`\s*—\s*`\{([^}]*)\}", law, re.S)
+    assert match, "the law no longer declares the receipt's key set"
+    declared = {k.strip() for k in match.group(1).replace("\n", " ").split(",") if k.strip()}
+
+    _, _, tree = _scratch(tmp_path)
+    assert module.main(["--repo", str(tree), "--apply"]) == 0
+    actual = set(json.loads(module.receipt_path(tree).read_text()))
+    assert declared <= actual, f"the law declares keys the payload lacks: {sorted(declared - actual)}"

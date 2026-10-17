@@ -345,6 +345,11 @@ def main(argv: list[str] | None = None) -> int:
     payload = {
         "read_at": read_at,
         "repo": facts["repo"],
+        # WHICH CHECKOUT wrote this record. The receipt sits in the COMMON dir and is
+        # last-writer-wins across every worktree of the repository, so without this field
+        # a reader cannot say which tree the round it is looking at actually read
+        # (#505 defect 2; the law claimed the field before the payload carried it).
+        "checkout": str(Path(facts["repo"]).resolve()),
         "binding_rows": binding_rows,
         "binding_reason": binding_reason,
         "before": before,
@@ -359,8 +364,21 @@ def main(argv: list[str] | None = None) -> int:
         "move": moved,
         "applied": bool(args.apply),
     }
-    receipt_note = write_receipt(receipt_path(repo), payload)
+    # A READ NEVER WRITES THE STORE (#505 defect 1). This receipt is the mechanism's only
+    # durable evidence, and it is deliberately never committed -- so an unguarded write on
+    # every invocation meant a probe that came to READ the evidence DESTROYED it: at
+    # 2026-10-17T08:19:23Z the file held a real `fast-forward 5454d291 -> f29621fb` with
+    # `applied true`, and a `--json --no-fetch` read two seconds later replaced it with
+    # `action level / applied false`, erasing the only on-disk trace of that apply.
+    # Only an `--apply` round records, because only an apply round is the job's own report;
+    # a refusal on an apply round still records, since that IS the arm's evidence.
+    if args.apply:
+        receipt_note = write_receipt(receipt_path(repo), payload)
+    else:
+        receipt_note = ("receipt NOT WRITTEN: a read reports to stdout and never overwrites "
+                        "the record of the last apply (pass --apply to record)")
     payload["receipt"] = receipt_note
+
 
     if args.json:
         print(json.dumps(payload, indent=1, sort_keys=True))

@@ -90,8 +90,16 @@ statement of intent, never a load path that could be stale.
 
 ## 5. The receipt
 
-`<git-common-dir>/binding-sync-receipt.json` — `{read_at, repo, binding_rows, before, after,
-remote_tip, behind, local_only, dirty, action, reasons, move, applied}`.
+`<git-common-dir>/binding-sync-receipt.json` — `{read_at, repo, checkout, binding_rows,
+before, after, remote_tip, behind, local_only, dirty, loaded, action, reasons, move, applied}`.
+
+**Only an `--apply` round records.** A read reports to stdout and writes nothing, because this
+file is the mechanism's only durable evidence and it is deliberately never committed (below).
+An unguarded write on every invocation meant a probe that came to READ the evidence DESTROYED
+it: on 2026-10-17T08:19:23Z the file held a real `fast-forward 5454d291 -> f29621fb` with
+`applied true`, and a `--json --no-fetch` read two seconds later replaced it with
+`action level / applied false`, erasing the only on-disk trace of that apply (#505). A refusal
+on an `--apply` round DOES record, because that refusal is the arm's own evidence.
 
 **Why a file and not a ledger row.** `pacemaker.md` names the duty receipt as a `run` row
 written by the WOKEN LANE, and the ledger's actor set is closed and derived from a lane's own
@@ -100,7 +108,9 @@ no lane to derive an actor from. The file shape is the one `publish.py` uses, fo
 reasons: a receipt that rode the pushed history would move the remote tip PAST the sha it
 records, and a receipt written INSIDE the tree would make the tree dirty — which is the one
 condition this tool refuses on. It sits in the COMMON dir so every worktree of the repository
-reads ONE record, and it records the checkout that wrote it.
+reads ONE record, and its `checkout` field names the tree that wrote it — last-writer-wins
+across worktrees, so without that field a reader cannot say WHICH checkout it is looking at.
+
 
 ## 6. The cron
 
