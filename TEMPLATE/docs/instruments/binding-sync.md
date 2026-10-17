@@ -48,7 +48,7 @@ gate, whose third leg asserts that a refused run leaves HEAD exactly where it wa
 
 ## 3. What counts as work
 
-Four conditions, each of which alone forces `refuse`:
+Five conditions, each of which alone forces `refuse`:
 
 - **a local-only commit** — anything in `origin/main..HEAD`. Named by sha, up to eight of them.
 - **a path differing from HEAD** — `git status --porcelain`, which includes STAGED, UNSTAGED
@@ -57,6 +57,18 @@ Four conditions, each of which alone forces `refuse`:
 - **HEAD not on `main`** — a detached HEAD is not a tree this tool can move lawfully.
 - **a divergence** — HEAD differs from the remote tip but is neither behind nor ahead. Not a
   shape to guess at, so it is refused rather than classified.
+- **stale loaded bytes** — a tracked file under a declared `repo_path` whose ON-DISK content
+  does not hash to the blob the remote tip records. This is a condition of its own because
+  `HEAD == origin/main` says the COMMIT is level, never that the working tree holds its
+  content: a file restored from a backup, an `assume-unchanged` bit or a sparse checkout
+  leaves a tree that every git command calls current while the bound law loads old text —
+  which is precisely the state the issue measured (`state.md` at `8d354b69d8ac` under a tree
+  whose git commands reported currency). The comparison is `git hash-object` of the file
+  against `git ls-tree` of the tip, so no file content is read into the process, and a path
+  the tip records but the tree no longer has counts as stale too. A SYMLINK is compared as
+  a LINK — its blob at the tip is the target string, not the bytes it resolves to — because
+  hashing through it would report every correct link as stale (measured on this tree: 8 of
+  11 bound files, all symlinked instrument docs, on a level HEAD).
 
 **The bound, stated not hidden.** The tool cannot tell a lane's abandoned work from a lane's
 work in flight; both read as `refuse`. That is deliberate — the cron reports the paths and a

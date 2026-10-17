@@ -60,6 +60,7 @@ REMOTE = "origin"
 BRANCH = "main"
 DECLARATION = "docs/harness-bindings.json"
 RECEIPT_NAME = "binding-sync-receipt.json"
+SYMLINK_MODE = "120000"
 MAX_NAMED = 8
 
 
@@ -135,9 +136,73 @@ def read_binding(repo: Path) -> tuple[list[dict], str]:
     return [], f"no binding in {DECLARATION} resolves into {target}"
 
 
+def verify_loaded(repo: Path, binding_rows: list[dict], ref: str,
+                  remote: str = REMOTE, branch: str = BRANCH) -> dict:
+    """Do the files ON DISK still hold the bytes `ref` records? Read per binding prefix.
+
+    WHY THIS IS NOT HEAD EQUALITY. `HEAD == origin/main` says the tree's COMMIT matches.
+    It does not say the working tree holds that commit's content: `assume-unchanged`, a
+    `skip-worktree` bit from a sparse checkout, or a path restored from a backup all leave
+    a tree whose HEAD is level and whose loaded bytes are stale. That is the failure mode
+    this whole tool exists for -- a bound law file that loads OLD text while every git
+    command reports currency -- so it is measured directly rather than inferred.
+
+    The comparison is the WORKING TREE's bytes against `ref`'s blob, per tracked path under
+    each declared `repo_path`. `git hash-object` computes the blob sha of the file on disk,
+    which is the same digest `ls-tree` reports, so the two are directly comparable and no
+    content is read into this process.
+    """
+    prefixes = [
+        row["repo_path"] for row in binding_rows
+        if isinstance(row.get("repo_path"), str) and row.get("repo_path")
+    ]
+    facts: dict = {"checked": 0, "differing": [], "missing": [], "prefixes": prefixes}
+    if not prefixes:
+        facts["reason"] = "no declared `repo_path` to verify"
+        return facts
+    listing = _out(_git(repo, "ls-tree", "-r", ref, "--", *prefixes))
+    if not listing:
+        facts["reason"] = f"`{ref}` records no tracked path under {prefixes}"
+        return facts
+    for line in listing.splitlines():
+        meta, _, path = line.partition("\t")
+        parts = meta.split()
+        if len(parts) != 3 or not path:
+            continue
+        mode, recorded = parts[0], parts[2]
+        target = repo / path
+        if not (target.is_symlink() or target.is_file()):
+            facts["missing"].append(path)
+            continue
+        facts["checked"] += 1
+        if mode == SYMLINK_MODE:
+            # A symlink's blob is its LINK TARGET STRING, not the bytes it resolves to --
+            # `git hash-object` would FOLLOW the link and hash the target file's content,
+            # so comparing the two would report every correct symlink as stale (measured
+            # 2026-10-17: 8 of 11 bound files "differing" on a level tree, all of them the
+            # symlinked instrument docs). Read the recorded target and compare the link.
+            if not target.is_symlink():
+                facts["differing"].append(path)
+                continue
+            recorded_target = _out(_git(repo, "cat-file", "blob", recorded))
+            if recorded_target != os.readlink(target):
+                facts["differing"].append(path)
+            continue
+        on_disk = _out(_git(repo, "hash-object", "--", path))
+        if on_disk and on_disk != recorded:
+            facts["differing"].append(path)
+    return facts
+
+
 def gather(repo: Path, remote: str = REMOTE, branch: str = BRANCH,
-           fetch: bool = True, read_at: str = "") -> dict:
-    """Read every fact the predicate needs, from the repository itself."""
+           fetch: bool = True, read_at: str = "",
+           binding_rows: list[dict] | None = None) -> dict:
+    """Read every fact the predicate needs, from the repository itself.
+
+    `binding_rows` is optional and, when given, adds the LOADED-FILE leg: the on-disk bytes
+    under each declared `repo_path`, compared against the remote tip's own blobs. A caller
+    that omits it gets the commit-level facts only, which is what the pure probes drive.
+    """
     facts: dict = {
         "repo": str(repo.resolve()),
         "remote": remote,
@@ -162,6 +227,9 @@ def gather(repo: Path, remote: str = REMOTE, branch: str = BRANCH,
     ]
     behind = _out(_git(repo, "rev-list", "--count", f"HEAD..{remote}/{branch}"))
     facts["behind"] = int(behind) if behind.isdigit() else None
+    if binding_rows and facts.get("remote_tip"):
+        facts["loaded"] = verify_loaded(repo, binding_rows, facts["remote_tip"],
+                                        remote=remote, branch=branch)
     return facts
 
 
@@ -188,6 +256,15 @@ def assess(facts: dict) -> dict:
         named = ", ".join(line for line in dirty[:MAX_NAMED])
         more = f" (+{len(dirty) - MAX_NAMED} more)" if len(dirty) > MAX_NAMED else ""
         reasons.append(f"{len(dirty)} path(s) differing from HEAD: {named}{more}")
+    loaded = facts.get("loaded") or {}
+    stale = list(loaded.get("differing") or []) + list(loaded.get("missing") or [])
+    if stale:
+        named = ", ".join(stale[:MAX_NAMED])
+        more = f" (+{len(stale) - MAX_NAMED} more)" if len(stale) > MAX_NAMED else ""
+        reasons.append(
+            f"{len(stale)} loaded file(s) under the binding do NOT hold the bytes at "
+            f"{facts['remote']}/{facts['branch']}: {named}{more}"
+        )
     if reasons:
         return {"action": "refuse", "reasons": reasons}
     if facts["head"] == facts["remote_tip"]:
@@ -246,7 +323,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     binding_rows, binding_reason = read_binding(repo)
-    facts = gather(repo, fetch=not args.no_fetch, read_at=read_at)
+    facts = gather(repo, fetch=not args.no_fetch, read_at=read_at,
+                   binding_rows=binding_rows)
     decision = assess(facts)
 
     before = facts.get("head")
@@ -275,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         "behind": facts.get("behind"),
         "local_only": facts.get("local_only"),
         "dirty": facts.get("dirty"),
+        "loaded": facts.get("loaded"),
         "action": decision["action"],
         "reasons": decision.get("reasons", []),
         "move": moved,
@@ -304,6 +383,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  REFUSED -- {reason}")
         if binding_rows:
             print(f"  binding: {len(binding_rows)} row(s) resolve into this tree")
+            loaded = facts.get("loaded") or {}
+            if loaded.get("reason"):
+                print(f"  loaded NOT RUN -- {loaded['reason']}")
+            elif loaded:
+                print(f"  loaded: {loaded.get('checked', 0)} file(s) hashed against "
+                      f"{str(facts.get('remote_tip'))[:8]}")
         else:
             print(f"  binding NOT RUN -- {binding_reason}")
         print(f"  {receipt_note}")

@@ -142,6 +142,97 @@ def test_diverged_refuses() -> None:
     assert decision["action"] == "refuse", decision
 
 
+def test_stale_loaded_bytes_refuse() -> None:
+    """A bound law file whose ON-DISK bytes differ from the tip is a refusal, named.
+
+    WHY THIS IS A SEPARATE FACT FROM `HEAD == origin/main`. A tree can be perfectly level
+    and still LOAD old text -- a restored file, an `assume-unchanged` bit, a sparse
+    checkout -- and that is the exact failure the issue measured: every git command said
+    current while the loaded `state.md` was a revision behind. So the loaded leg is its own
+    refusal reason, and the control below proves it is the fact that decides it.
+    """
+    stale = {"checked": 3, "differing": ["skills/meta-factory/state.md"],
+             "missing": [], "prefixes": ["skills/meta-factory"]}
+    module = _module()
+    refused = module.assess(_facts(loaded=stale))
+    assert refused["action"] == "refuse", refused
+    assert "skills/meta-factory/state.md" in " ".join(refused["reasons"]), refused
+    control = module.assess(_facts())
+    assert control["action"] == "level", control
+
+def test_verify_loaded_reads_disk_bytes_not_head(tmp_path) -> None:
+    """The loaded leg measures the WORKING TREE, so a level HEAD cannot satisfy it.
+
+    HEAD stays put for the whole probe -- only the bytes on disk move -- which is what makes
+    it discriminating: an implementation that compared `HEAD` to the tip (the mistake this
+    leg exists to catch) would report clean on the stale arm and fail here.
+    """
+    repo = tmp_path / "repo"
+    (repo / "skills/meta-factory").mkdir(parents=True)
+    bound = repo / "skills/meta-factory/state.md"
+    bound.write_text("v1")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t.t", "-c", "user.name=T",
+         "commit", "-q", "-m", "v1"],
+        check=True,
+    )
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    rows = [{"skill": "meta-factory", "repo_path": "skills/meta-factory"}]
+    module = _module()
+
+    clean = module.verify_loaded(repo, rows, head)
+    assert clean["checked"] == 1 and not clean["differing"], clean
+
+    # The stale arm: same HEAD, different bytes on disk.
+    bound.write_text("v0 restored from a backup")
+    stale = module.verify_loaded(repo, rows, head)
+    assert stale["differing"] == ["skills/meta-factory/state.md"], stale
+
+    # A file the tip records but the tree no longer has is MISSING, not silently clean.
+    bound.unlink()
+    gone = module.verify_loaded(repo, rows, head)
+    assert gone["missing"] == ["skills/meta-factory/state.md"], gone
+
+def test_verify_loaded_reads_symlinks_as_links(tmp_path) -> None:
+    """A SYMLINK's blob is its link target, so comparing content reports every link stale.
+
+    Measured 2026-10-17 on the live bound tree: 8 of 11 files read "differing" on a LEVEL
+    tree, every one of them a symlinked instrument doc, because `git hash-object` FOLLOWS a
+    link and hashes the target's bytes while the tip records the link string. A detector
+    that fires on every correct declaration is not a detector -- it is noise with an exit
+    code -- so the link leg is pinned here: unchanged link is clean, RETARGETED link is not.
+    """
+    repo = tmp_path / "repo"
+    (repo / "skills/meta-factory").mkdir(parents=True)
+    (repo / "docs/instruments").mkdir(parents=True)
+    (repo / "docs/instruments/hygiene.md").write_text("# hygiene\n")
+    link = repo / "skills/meta-factory/hygiene.md"
+    link.symlink_to("../../docs/instruments/hygiene.md")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.email=t@t.t", "-c", "user.name=T",
+         "commit", "-q", "-m", "link"],
+        check=True,
+    )
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    rows = [{"skill": "meta-factory", "repo_path": "skills/meta-factory"}]
+    module = _module()
+
+    clean = module.verify_loaded(repo, rows, head)
+    assert clean["differing"] == [], f"a correct symlink read as stale: {clean}"
+
+    # The stale arm: same HEAD, same target file bytes, but the LINK now points elsewhere.
+    (repo / "docs/instruments/other.md").write_text("# other\n")
+    link.unlink()
+    link.symlink_to("../../docs/instruments/other.md")
+    stale = module.verify_loaded(repo, rows, head)
+    assert stale["differing"] == ["skills/meta-factory/hygiene.md"], stale
+
 def test_receipt_lives_outside_the_worktree(tmp_path) -> None:
     """The receipt must not dirty the tree -- that is the one condition it refuses on."""
     subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
