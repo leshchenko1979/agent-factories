@@ -443,6 +443,9 @@ DECL_COMMIT = "commit"
 DECLARATION_SURFACES: tuple[
     tuple[str, str, tuple[tuple[str | None, str | None, str], ...], str], ...
 ] = (
+    ("audit-rates-exemptions", "docs/audit-rates-exemptions.json", (),
+     "entries name a ledger row `n` and a BOARD ISSUE (`subject`); the ledger is "
+     "append-only, so a row cannot be stranded by a rename"),
     ("close-board-exemptions", "docs/close-board-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`) and a ledger row `n`, neither of which this "
      "leg can read offline"),
@@ -451,6 +454,9 @@ DECLARATION_SURFACES: tuple[
     ("hygiene-protected", "docs/hygiene-protected.json", (),
      "a PREVENTION surface by its own docstring -- an unmatched entry is legal, not a "
      "debt -- and its targets are absolute /tmp paths, not tree paths"),
+    ("landing-route-debt", "docs/landing-route-debt.json", (),
+     "entries name a CRON JOB (`job`), a registry label rather than a tree path, and the "
+     "gate reconciles them against a LIVE read of `registry/state.json`"),
     ("law-uuid-exemptions", "docs/law-uuid-exemptions.json",
      (("exempt", "path", DECL_PATH),), ""),
     ("ledger-authorizations", "docs/ledger-authorizations.json", (),
