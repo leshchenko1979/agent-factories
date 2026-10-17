@@ -781,12 +781,26 @@ def batch_return_address(entry):
     return (entry.get("session") or "").strip(), None
 
 
-# A question is CLOSED only once it is answered, withdrawn or expired.
-# "clarifying" is NOT closed: a Clarify request means the owner asked for more
-# context and is still waiting. Counting it as closed archived the WHOLE set and
-# silently removed it from the live register — the opposite of the contract
-# ("a Clarify request ... never silently closes the question").
-CLOSED_STATUSES = ("answered", "withdrawn", "expired")
+# A question is CLOSED once it is answered, withdrawn, expired, or closed by a
+# predicate. "clarifying" is NOT closed: a Clarify request means the owner asked
+# for more context and is still waiting. Counting it as closed archived the WHOLE
+# set and silently removed it from the live register — the opposite of the
+# contract ("a Clarify request ... never silently closes the question").
+#
+# "resolved_mechanically" BELONGS HERE and was missing (#497). The mechanical
+# writer in `apply_mechanical_closures` stamps that status TOGETHER with
+# `closed_at` and `closed_reason` — a CLOSED row by every other measure — while
+# this tuple, which `question_is_closed` is a plain membership test on, did not
+# name it. One omission, three readers wrong at once: the predicate said False,
+# so `set_is_closed` could never archive a mechanically-resolved set (its last
+# question never read as closed), and `cmd_answer`'s idempotent-by-contract guard
+# never fired, letting a resolved question be FLIPPED to `answered` by a
+# re-submit instead of being refused with rc 3. The law settles which side is
+# wrong — `docs/instruments/open-questions.md` §3: "Closure is mechanical
+# wherever it can be" — so the vocabulary is widened, not the writer changed.
+# ONE constant, because every reader derives from it: no reader-local special
+# case, no second list (#494's class, applied to closure).
+CLOSED_STATUSES = ("answered", "withdrawn", "expired", "resolved_mechanically")
 
 # The statuses whose row CARRIES AN ANSWER TO DELIVER (#494). Declared here,
 # once, beside CLOSED_STATUSES and for the same reason: a reader must ask the
@@ -5200,6 +5214,42 @@ def selftest():
         run("gc", "--json")
         ck(get_set(bare_set)["questions"][0]["status"] == "open",
            "the default arm closes NOTHING when no fork issue is named")
+
+        # -- 8e. #497: the closed vocabulary NAMES the status the mechanical
+        # writer writes. `apply_mechanical_closures` stamps `resolved_mechanically`
+        # together with `closed_at` and `closed_reason` -- a closed row by every
+        # other measure -- while CLOSED_STATUSES, which `question_is_closed` is a
+        # plain membership test on, did not name it. One omission, three readers
+        # wrong at once, so the legs below are the three readers plus the control.
+        ck(question_is_closed({"status": "resolved_mechanically"}),
+           "question_is_closed reads a mechanically-resolved row as CLOSED (#497)")
+        # The set predicate is the second reader, and it is what `gc` consults
+        # before it flips a fully-closed set. A set of ONE mechanically-resolved
+        # question was never closed, so the set stayed `open` forever.
+        ck(set_is_closed({"questions": [{"status": "resolved_mechanically"}]}),
+           "\u2026and set_is_closed reads a mechanically-resolved set as CLOSED")
+        ck(get_set(mech_set).get("status") == "answered",
+           "\u2026so gc marks the set itself answered once every question is "
+           "closed (status=%r)" % (get_set(mech_set) or {}).get("status"))
+        # The third reader is `cmd_answer`'s idempotent-by-contract guard. It must
+        # REFUSE (rc 3) and leave the row untouched -- not flip it to `answered`.
+        rc, out, _ = run("answer", mech_set, "q1", "0")
+        ck(rc == 3, "a re-submit on a mechanically-resolved question is REFUSED, "
+                    "idempotent-by-contract (rc=%d)" % rc)
+        ck(get_set(mech_set)["questions"][0]["status"] == "resolved_mechanically",
+           "\u2026and the row keeps its status instead of being flipped to "
+           "answered (%r)" % get_set(mech_set)["questions"][0]["status"])
+        # THE POSITIVE CONTROL. A fix that widened the guard to refuse everything
+        # would pass every leg above, so the three statuses that were ALREADY in
+        # the vocabulary must keep reading closed, and the three that were never
+        # closed must keep reading open. The vocabulary was WIDENED, not replaced.
+        for _closed in ("answered", "withdrawn", "expired"):
+            ck(question_is_closed({"status": _closed}),
+               "\u2026and the pre-existing status %r still reads CLOSED" % _closed)
+        for _open in ("open", "clarifying", "clarified"):
+            ck(not question_is_closed({"status": _open}),
+               "\u2026while %r still reads NOT closed, so the guard was widened "
+               "rather than made to refuse everything" % _open)
 
         # -- 9. the LOGGING path, unsuppressed -----------------------------
         # This leg exists because every other leg suppresses the unified log, so
