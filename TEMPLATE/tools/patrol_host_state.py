@@ -6257,8 +6257,93 @@ def committed_path_present(ref: str, *, repo: Path, rev: str) -> tuple[bool, str
         return False, f"git cat-file -e {rev}:{ref} could not run: {exc}"
     return proc.returncode == 0, ""
 
+CRITERION_PATH_EXEMPTIONS = REPO / "docs" / "criterion-path-exemptions.json"
+
+def load_criterion_path_exemptions(
+    path: Path | None = None,
+) -> tuple[list[dict], list[str]]:
+    """`(entries, problems)` for the declared criterion-path exemption surface (#507).
+
+    THE SURFACE EXISTS BECAUSE A PATH CAN BE ABSENT BY LAW. `docs/hygiene-protected.json`
+    never ships (`skills/meta-factory/SKILL.md:414`), so a criterion naming it is correct
+    and the leg was wrong to red it — ruling n=2693 had already returned that half of #422
+    as NOT UPHELD, which settles the declaration. The exemption is taken from the TREE's own
+    declaration rather than from a list inside this script, because a list inside the script
+    is a second copy of the law that goes stale silently.
+
+    THE ADMISSION RULE IS AN AUTHORITY OBLIGATION. An entry carries `path` (the exact
+    backticked token a criterion names), optional `issue` narrowing it to one board item,
+    and REQUIRED `authority` (a ruling row `n=` or a law file:line) plus `reason`: an
+    exemption nobody can check is forgiveness. Malformed and DUPLICATE entries are problems,
+    and an absent file is the shipped state of a new factory (`docs/kit-exemptions.json`
+    convention), never a failure.
+    """
+    target = path or CRITERION_PATH_EXEMPTIONS
+    if not target.is_file():
+        return [], []
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [
+            f"{target.name} could not be read ({type(exc).__name__}), so no declared "
+            f"exemption can be honoured and every absent path is a finding"
+        ]
+    rows = data.get("exempt") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return [], [
+            f"{target.name} declares no `exempt` list, so no exemption can be honoured"
+        ]
+    out: list[dict] = []
+    problems: list[str] = []
+    seen: set[tuple[str, int | None]] = set()
+    for index, entry in enumerate(rows):
+        if not isinstance(entry, dict):
+            problems.append(
+                f"{target.name} entry {index} is not an object, so it can excuse nothing"
+            )
+            continue
+        ref = str(entry.get("path") or "").strip()
+        issue = entry.get("issue")
+        authority = str(entry.get("authority") or "").strip()
+        reason = str(entry.get("reason") or "").strip()
+        if not ref:
+            problems.append(
+                f"{target.name} entry {index} names no `path`, so it can excuse nothing"
+            )
+            continue
+        if issue is not None and (not isinstance(issue, int) or isinstance(issue, bool)):
+            problems.append(
+                f"{target.name} entry {index} (`{ref}`) carries a non-integer `issue`, so "
+                f"its narrowing is unreadable"
+            )
+            continue
+        if not authority:
+            problems.append(
+                f"{target.name} entry {index} (`{ref}`) carries no `authority` -- an "
+                f"exemption nobody can check is forgiveness"
+            )
+            continue
+        if not reason:
+            problems.append(
+                f"{target.name} entry {index} (`{ref}`) carries no `reason` -- an exemption "
+                f"nobody explained belongs to nobody"
+            )
+            continue
+        key = (ref, issue if isinstance(issue, int) else None)
+        if key in seen:
+            problems.append(
+                f"{target.name} entry {index} duplicates (`{ref}`, issue {key[1]}) -- a "
+                f"second copy of one exemption reads as two"
+            )
+            continue
+        seen.add(key)
+        out.append({"path": ref, "issue": key[1],
+                    "authority": authority, "reason": reason})
+    return out, problems
+
 def criterion_path_leg(issues: list[dict], *, read_at: str,
-                       repo: Path = REPO, rev: str = "HEAD") -> dict:
+                       repo: Path = REPO, rev: str = "HEAD",
+                       exemptions_path: Path | None = None) -> dict:
     """Resolve the paths a board item's CRITERIA name (#48, ruling criterion 3/4).
 
     Candidate 1 closes the law-surface half and cannot reach two surfaces, because neither
@@ -6319,10 +6404,10 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
             },
         }
     examined = 0
-    problems: list[str] = []
     unreadable: list[str] = []
     open_items = 0
     closed_items = 0
+    absences: list[dict] = []
     for issue in issues:
         number = issue.get("number")
         if number is None:
@@ -6345,10 +6430,7 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
                     continue
                 if present:
                     continue
-                problems.append(
-                    f"issue #{number} criterion ({where}) names `{ref}` — ABSENT at "
-                    f"{read_at}; dispatch a work item naming `{ref}`"
-                )
+                absences.append({"issue": number, "where": where, "ref": ref})
     if unreadable:
         # A PARTIAL READ IS NOT A MEASUREMENT (template-instruments.md §7.5): if any path could not be probed, the
         # leg's count is a figure no reader can reproduce, so the whole verdict is NOT RUN
@@ -6371,17 +6453,64 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
                 "read_at": read_at,
             },
         }
+    # THE DECLARED EXEMPTION SURFACE (#507). A path can be ABSENT BY LAW rather than absent
+    # by neglect — `docs/hygiene-protected.json` never ships (skills/meta-factory/SKILL.md:414),
+    # and ruling n=2693 had already returned that half of #422 as NOT UPHELD, settling the
+    # declaration and leaving this leg as the defect. The exemption is read from the TREE's own
+    # declaration, never from a list inside this script: a list here would be a second copy of
+    # the law that goes stale silently. Every matched entry PRINTS as an `excused:` line and is
+    # counted in the population, so a green reads as examined-minus-exempt rather than as
+    # examined-nothing; an entry matching NO live absence is itself a problem, because retired
+    # debt must not sit here looking live.
+    entries, store_problems = load_criterion_path_exemptions(exemptions_path)
+    problems: list[str] = list(store_problems)
+    excused: list[str] = []
+    used: set[tuple[str, int | None]] = set()
+    for absence in absences:
+        number, ref = absence["issue"], absence["ref"]
+        match = next(
+            (e for e in entries
+             if e["path"] == ref and (e["issue"] is None or e["issue"] == number)),
+            None,
+        )
+        if match is None:
+            problems.append(
+                f"issue #{number} criterion ({absence['where']}) names `{ref}` — ABSENT at "
+                f"{read_at}; dispatch a work item naming `{ref}`"
+            )
+            continue
+        used.add((match["path"], match["issue"]))
+        excused.append(
+            f"issue #{number} criterion ({absence['where']}) names `{ref}`: DECLARED "
+            f"ABSENT-BY-LAW -- {match['reason']} (authority: {match['authority']})"
+        )
+    for entry in entries:
+        key = (entry["path"], entry["issue"])
+        if key in used:
+            continue
+        narrowed = f" (issue #{entry['issue']})" if entry["issue"] is not None else ""
+        problems.append(
+            # The file NAMED is the one actually read, not the module default: a probe
+            # injects its own store, and a finding that names the wrong file sends the
+            # reader to edit a surface the run never opened.
+            f"{(exemptions_path or CRITERION_PATH_EXEMPTIONS).name}: the exemption for "
+            f"`{entry['path']}`{narrowed} matches no live absence, so it excuses nothing"
+        )
     return {
         "name": "criterion-paths",
         "status": "ASSERTED",
         "problems": problems,
-        "excused": [],
+        "excused": excused,
         "coverage": {
             "refs_examined": examined,
             "issues_read": open_items,
             "closed_items_excluded": closed_items,
             "surfaces": ["body", "ruling comment"],
             "read_at": read_at,
+            "absences": len(absences),
+            "declared_exempt": len(used),
+            "unresolved": len(problems) - len(store_problems),
+            "exemptions_declared": len(entries),
             # The revision the verdict is reproducible from (template-instruments.md §7.5): a reader re-derives the
             # same set from this commit alone, whatever their own checkout holds on disk.
             "read_rev": commit,
@@ -8971,11 +9100,17 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(
                 f"  criterion paths (issue body and ruling comment): "
                 f"{cov['refs_examined']} reference(s) examined over "
-                f"{cov['issues_read']} issue(s), {len(leg['problems'])} unresolved — "
+                f"{cov['issues_read']} issue(s), {cov.get('unresolved', len(leg['problems']))} "
+                f"unresolved, {cov.get('declared_exempt', 0)} declared-exempt — "
                 f"{cov['closed_items_excluded']} closed item(s) outside the population — "
                 f"board read at {cov['read_at']}, judged against the tree at "
                 f"{cov.get('read_rev') or 'an unrecorded revision'}"
             )
+            # EVERY MATCHED EXEMPTION PRINTS, with its authority (#507): an exemption that
+            # is counted but never shown is indistinguishable from a leg that skipped the
+            # path, and the whole point of the store is that a reader can check it.
+            for line in leg["excused"]:
+                lines.append(f"  excused: {line}")
         elif leg["name"] == "score-conversion":
             # THE POPULATION IS PRINTED (#112, section 8, #67): "no regression" and "no
             # artifact parsed" are the same verdict otherwise, and the second is the state
@@ -9228,6 +9363,11 @@ def main(
     delivery_scope_fn=None,
     deliveries_fn=None,
     criterion_repo_fn=None,
+    # #507: the criterion-path exemption store, injected for the same reason every other
+    # declaration here is -- a probe must never have its verdict decided by whichever
+    # exemptions the live factory happens to hold, and a probe that CANNOT drive an
+    # exemption cannot prove the store is reconciled at all.
+    criterion_exemptions_fn=None,
     scores_dir_fn=None,
     board_scope_fn=None,
     duty_scope_fn=None,
@@ -9440,6 +9580,7 @@ def main(
         leg_guard("criterion-paths", lambda: criterion_path_leg(
             issues, read_at=read_at,
             repo=(criterion_repo_fn or (lambda: REPO))(),
+            exemptions_path=(criterion_exemptions_fn or (lambda: CRITERION_PATH_EXEMPTIONS))(),
         ), read_at),
         leg_guard("score-conversion", lambda: score_conversion_leg(
             rows, read_at=read_at, predicate=predicate,

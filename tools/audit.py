@@ -3003,6 +3003,33 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_ledger_ref_roles.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_ref_roles.py"])
 
+    # 96. the CRITERION-PATH EXEMPTION gate (#507). The `criterion-paths` leg resolves every
+    #     path a board item's criteria NAME — in the issue BODY and in the RULING COMMENT —
+    #     against the COMMITTED tree, and reds each name that resolves to nothing. It could
+    #     not tell a MISSING file from a DELIBERATELY UNSHIPPED one, so a correct criterion
+    #     naming `docs/hygiene-protected.json` — factory data that `skills/meta-factory/
+    #     SKILL.md:414` says never ships — read as a defect. Ruling n=2693 had already
+    #     returned that half of #422 as NOT UPHELD, which settled the declaration and left
+    #     the predicate as the thing to repair; n=3539 fixed its shape.
+    #
+    #     THE ARMS, and why this one is a control problem rather than a happy-path test. The
+    #     discriminating arm bites BOTH WAYS in a single run: an entry excuses its path and
+    #     prints its authority, while a path absent because its work is BLOCKED
+    #     (`TEMPLATE/tests/test_audit_cadence.py`, blocked on the owner design gate) STILL
+    #     reds with the store in place — a gate that only proved the exempt case would pass
+    #     on a leg that reports nothing at all. The store's three failure states are named
+    #     (no `authority`, no `reason`, a duplicate), an entry matching NO live absence is an
+    #     ERROR because retired debt must not sit here looking live, an unparseable store
+    #     fails CLOSED, and an absent store is the shipped empty state of a new factory. The
+    #     live arm reconciles this factory's own store against its own committed tree, so an
+    #     entry that stops describing the tree reds the AUDIT and not only the patrol.
+    #
+    #     Script-form, and it carries NO `registry/gates.json` budget entry -- a budget value
+    #     is the process owner's (n=574 PART 5), so it runs on the declared default and the
+    #     audit prints that it did.
+    if (repo_root / "tests/test_criterion_path_exemptions.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_criterion_path_exemptions.py"])
+
     return gates_to_run
 
 

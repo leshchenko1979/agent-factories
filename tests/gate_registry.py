@@ -576,6 +576,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_identity.py",
     "test_commit_pathspec_law.py",
     "test_criteria_count.py",
+    # Added with its registration (board #507, ruled n=3539). REQUIRED is the correct grain:
+    # the gate drives SYNTHETIC issues and a THROWAWAY git repository under a temp directory
+    # — no live board, no fleet manifest, no box-local fixture — so it passes in a
+    # bootstrapped factory exactly as it does here, and its live arm tolerates the absent
+    # store that a member factory ships (the `.example.json` skeleton is the shipped shape).
+    # It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory
+    # from dropping the runner and keeping the file. THE LEG IT GUARDS is the ABSENT-BY-LAW
+    # half of the `criterion-paths` leg: a criterion naming `docs/hygiene-protected.json` is
+    # correct because the law forbids that file from shipping, and the leg red it as a
+    # defect — while a path absent because its work is BLOCKED must STILL red, which is the
+    # arm that makes this gate discriminating rather than decorative.
+    "test_criterion_path_exemptions.py",
     # Added with its registration (issue #54, P7 + P28). REQUIRED is the correct grain and
     # OPTIONAL is not: the predicate is PURE over a LIST of cron rows and reads no live
     # table, so it passes in a bootstrapped factory exactly as it does here — there is no

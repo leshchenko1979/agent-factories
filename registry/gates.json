@@ -413,6 +413,7 @@
     "tests/test_commit_pathspec_law.py": "script",
     "tests/test_commit_session_trailer.py": "script",
     "tests/test_criteria_count.py": "script",
+    "tests/test_criterion_path_exemptions.py": "script",
     "tests/test_cron_landing_route.py": "pytest",
     "tests/test_cron_thinness.py": "pytest",
     "tests/test_declaration_drift.py": "script",
@@ -832,6 +833,10 @@
     "tests/test_ledger_ref_roles.py": {
       "class": "exemption-table",
       "table": "docs/ledger-ref-roles-exemptions.json"
+    },
+    "tests/test_criterion_path_exemptions.py": {
+      "class": "exemption-table",
+      "table": "docs/criterion-path-exemptions.json"
     }
   }
 }

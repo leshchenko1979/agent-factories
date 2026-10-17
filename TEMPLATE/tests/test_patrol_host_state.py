@@ -118,6 +118,17 @@ _NO_REF_ROLE_EXEMPTIONS = (
     Path(tempfile.mkdtemp(prefix="patrol-no-ref-roles-")) / "ledger-ref-roles-exemptions.json"
 )
 
+# The criterion-path leg's exemption store (#507) defaults to a path that is NEVER created,
+# for the reason `_NO_REF_ROLE_EXEMPTIONS` sets and one sharper one: the leg now reports an
+# entry that matches NO live absence as a PROBLEM, so a probe driven through `_run` against
+# the LIVE store would red on every probe's synthetic board — the store's real entries name
+# paths no probe's fixture mentions. Defaulting to an absent path keeps every pre-#507 probe
+# at the meaning it was written with, and a probe that asserts the store passes its own.
+_NO_CRITERION_EXEMPTIONS = (
+    Path(tempfile.mkdtemp(prefix="patrol-no-criterion-"))
+    / "criterion-path-exemptions.json"
+)
+
 # The stall-census leg's park clause (#331) needs NO injection point, and that is the point:
 # a park is declared by a `park:owner:<question>` line on the unit's OWN ledger row, so the
 # rows a probe already passes ARE the declaration. A probe that declares no park therefore
@@ -198,7 +209,8 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          delivery_scope=None, deliveries=None, criterion_repo=None,
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
-         duty_exemptions=None, ref_role_exemptions_path=None):
+         duty_exemptions=None, ref_role_exemptions_path=None,
+         criterion_exemptions_path=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -336,6 +348,15 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         ref_role_exemptions_path=(
             _NO_REF_ROLE_EXEMPTIONS if ref_role_exemptions_path is None
             else ref_role_exemptions_path
+        ),
+        # The criterion-path leg's declared-exemption store (#507) is injected for the same
+        # reason, and the default is a path that does NOT exist: the store ships absent in the
+        # kit's donor half, and an entry matching no live absence is a PROBLEM, so a probe
+        # reading the LIVE store would red against its own synthetic board. A probe that
+        # asserts the store passes a path of its own.
+        criterion_exemptions_fn=(
+            (lambda: _NO_CRITERION_EXEMPTIONS) if criterion_exemptions_path is None
+            else (lambda: criterion_exemptions_path)
         ),
         # The stall-census leg's ONE read (#331 clause 2) is injected for the same reason as
         # every other declaration here: the default `lane_names_fn` resolves NO session id, so
@@ -529,6 +550,8 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
         shared_tree_fn=_stub_shared_tree_rider,
         # #330: the ref-role store is injected for the same reason the ruling table is.
         ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
+        # #507: the criterion-path store, injected for the same reason.
+        criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
     )
     assert rc == 2, f"an unreadable board must exit 2, got rc={rc}"
     assert "FAILED" in err.getvalue(), err.getvalue()
@@ -3240,6 +3263,8 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             shared_tree_fn=_stub_shared_tree_rider,
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
+        # #507: the criterion-path store, injected for the same reason.
+        criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -3316,6 +3341,8 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             shared_tree_fn=_stub_shared_tree_rider,
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
+        # #507: the criterion-path store, injected for the same reason.
+        criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -5018,6 +5045,8 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             shared_tree_fn=_stub_shared_tree_rider,
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
+        # #507: the criterion-path store, injected for the same reason.
+        criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
         )
         text = out.getvalue()
 
@@ -5876,6 +5905,8 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         shared_tree_fn=_stub_shared_tree_rider,
         # #330: the ref-role store is injected for the same reason the ruling table is.
         ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
+        # #507: the criterion-path store, injected for the same reason.
+        criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
         ruling_scope_fn=lambda: RUNNER.UNBOUNDED_SCOPE,
         ruling_exemptions_path=_NO_RULING_EXEMPTIONS,
     )
@@ -8141,11 +8172,27 @@ def _criterion_tree_pair(*paths: str) -> tuple[Path, Path]:
     _git(main, "worktree", "add", "-q", str(linked))
     return main, linked
 
+def _criterion_leg(issues, *, repo, rev="HEAD", read_at=_CLOSE_TS, exemptions_path=None):
+    """Drive the criterion-path leg with an exemption store that is NEVER the live one (#507).
+
+    The leg now reads a DECLARED store, and an entry matching no live absence is a PROBLEM —
+    so a probe that let the leg fall to its default would red on this factory's own entries
+    (which name paths no fixture mentions) and would be asserting this box's adjudications
+    rather than the leg's behaviour. Every probe here therefore passes the never-created
+    sentinel unless it is the probe that asserts the store itself.
+    """
+    return RUNNER.criterion_path_leg(
+        issues, read_at=read_at, repo=repo, rev=rev,
+        exemptions_path=(
+            _NO_CRITERION_EXEMPTIONS if exemptions_path is None else exemptions_path
+        ),
+    )
+
 def test_the_criterion_path_leg_RESOLVES_a_named_path_and_states_its_population() -> None:
     """The clean arm, WITH its population — `examined 0` must not render as `examined 1`."""
     issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
     tree = _criterion_tree("tools/probe.py")
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=tree)
     assert leg["problems"] == [], leg["problems"]
     assert leg["name"] == "criterion-paths", leg["name"]
     assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
@@ -8158,7 +8205,7 @@ def test_the_criterion_path_leg_BITES_on_a_path_that_resolves_to_nothing() -> No
     `#148` discipline: a finding that cannot be dispatched is not a finding."""
     issues = [_issue_with_body(96, "OPEN", "Acceptance: `tests/test_ghost.py` passes.")]
     tree = _criterion_tree("tools/probe.py")
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=tree)
     assert leg["problems"], "a criterion naming an absent path must be reported"
     problem = leg["problems"][0]
     assert "#96" in problem, problem
@@ -8175,7 +8222,7 @@ def test_the_criterion_path_leg_reads_the_RULING_comment_through_the_SHARED_pred
         172, "OPEN", "## RULED — acceptance: `tools/questions` exists.\n"
     )]
     tree = _criterion_tree("tools/probe.py")
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=tree)
     assert leg["problems"], "a criterion named in a ruling must be judged"
     assert "ruling comment" in leg["problems"][0], leg["problems"][0]
     assert "`tools/questions`" in leg["problems"][0], leg["problems"][0]
@@ -8190,7 +8237,7 @@ def test_the_criterion_path_leg_does_NOT_judge_a_CLOSE_or_discussion_comment() -
          "author": {"login": "hq"}, "createdAt": _CLOSE_TS},
     ]
     tree = _criterion_tree("docs/real.md")
-    leg = RUNNER.criterion_path_leg([issue], read_at=_CLOSE_TS, repo=tree)
+    leg = _criterion_leg([issue], read_at=_CLOSE_TS, repo=tree)
     assert leg["problems"] == [], leg["problems"]
     assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
 
@@ -8202,11 +8249,11 @@ def test_the_criterion_path_leg_resolves_a_TEMPLATE_prefixed_name_as_the_shipped
         37, "OPEN", "Ship `TEMPLATE/docs/quality-criteria.md` beside the donor's copy."
     )]
     present = _criterion_tree("TEMPLATE/docs/quality-criteria.md")
-    assert RUNNER.criterion_path_leg(
+    assert _criterion_leg(
         issues, read_at=_CLOSE_TS, repo=present
     )["problems"] == []
     absent = _criterion_tree("docs/quality-criteria.md")
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=absent)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=absent)
     assert leg["problems"], "the `TEMPLATE/`-prefixed name must be judged as written"
     assert "`TEMPLATE/docs/quality-criteria.md`" in leg["problems"][0], leg["problems"][0]
 
@@ -8222,7 +8269,7 @@ def test_the_criterion_path_leg_does_NOT_judge_a_token_that_is_not_a_FILE() -> N
         "and `evidence/.ledger.lock`; the real name is `docs/real.md`.",
     )]
     tree = _criterion_tree("docs/real.md")
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=tree)
     assert leg["problems"] == [], leg["problems"]
     assert leg["coverage"]["refs_examined"] == 1, (
         f"only the file-shaped name is in the population: {leg['coverage']}"
@@ -8249,7 +8296,7 @@ def test_the_criterion_path_leg_EXCLUDES_a_CLOSED_item_and_PRINTS_the_exclusion(
         _issue_with_body(32, "OPEN", "Acceptance: `tools/probe.py` exists."),
     ]
     tree = _criterion_tree("tools/probe.py")
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=tree)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=tree)
     assert leg["problems"] == [], leg["problems"]
     assert leg["coverage"]["issues_read"] == 1, leg["coverage"]
     assert leg["coverage"]["closed_items_excluded"] == 1, leg["coverage"]
@@ -8303,8 +8350,8 @@ def test_the_criterion_path_leg_reads_the_COMMIT_never_the_WORKING_TREE() -> Non
     receipt = reader / "evidence" / "publish-receipt.json"
     receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt.write_text('{"sha": "probe"}\n', encoding="utf-8")
-    with_receipt = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=reader)
-    without = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=sibling)
+    with_receipt = _criterion_leg(issues, read_at=_CLOSE_TS, repo=reader)
+    without = _criterion_leg(issues, read_at=_CLOSE_TS, repo=sibling)
     assert with_receipt["problems"] == without["problems"], (
         "a working-tree file must not move the verdict\n"
         f"with: {with_receipt['problems']}\nwithout: {without['problems']}"
@@ -8328,7 +8375,7 @@ def test_the_criterion_path_leg_is_NOT_RUN_when_the_revision_cannot_be_RESOLVED(
     """
     issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
     plain = Path(tempfile.mkdtemp(prefix="criterion-notrepo-"))
-    leg = RUNNER.criterion_path_leg(issues, read_at=_CLOSE_TS, repo=plain)
+    leg = _criterion_leg(issues, read_at=_CLOSE_TS, repo=plain)
     assert leg["status"] == "NOT RUN", leg["status"]
     assert leg["problems"] == [], leg["problems"]
     assert "could not be resolved" in leg["coverage"]["reason"], leg["coverage"]

@@ -432,7 +432,10 @@ def render_build_residue(coverage: dict) -> str:
 # its target is a PATH in this tree or a COMMIT in this history: both are LOCAL, both are
 # decidable without the network, and both go stale in exactly the way this gap describes.
 # Every family whose entries name something ELSE is DECLARED below with its reason, so the
-# population is all fifteen and a zero on any line is a verdict rather than a silence.
+# population is every family in the table and a zero on any line is a verdict rather than a
+# silence. The count is deliberately NOT written here: it was, and it read "all fifteen"
+# against a table that had grown to twenty-three — a number in prose nobody re-reads is a
+# stale claim waiting to happen, and the table is its own population.
 DECL_PATH = "path"
 DECL_COMMIT = "commit"
 
@@ -449,6 +452,12 @@ DECLARATION_SURFACES: tuple[
     ("close-board-exemptions", "docs/close-board-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`) and a ledger row `n`, neither of which this "
      "leg can read offline"),
+    ("criterion-path-exemptions", "docs/criterion-path-exemptions.json", (),
+     "entries name a PATH and the path is absent BY CONSTRUCTION -- that is what the "
+     "exemption asserts -- so a `path` probe would report every correct entry as stale "
+     "debt, the false positive inverted. The criterion-path leg reconciles every entry "
+     "against a LIVE read of the board instead, and an entry matching no live absence is "
+     "an ERROR on that leg (`tools/patrol_host_state.py::criterion_path_leg`)"),
     ("duty-receipt-exemptions", "docs/duty-receipt-exemptions.json", (),
      "entries name a CRON JOB (`job`), a registry label rather than a tree path, and the "
      "duty-receipt leg reconciles them against a LIVE read of the enabled cron rows"),

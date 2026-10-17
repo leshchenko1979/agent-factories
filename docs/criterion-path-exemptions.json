@@ -1,0 +1,15 @@
+{
+  "_note": "THIS factory's declared exemptions for the criterion-path leg (tools/patrol_host_state.py::criterion_path_leg, #507). The leg resolves every path a board item's criteria NAME, in the issue BODY and in the RULING COMMENT, against the COMMITTED tree, and reports each name that resolves to nothing. This store exists because a path can be ABSENT BY LAW rather than absent by neglect, and the leg cannot tell the two apart: `docs/hygiene-protected.json` is factory data that skills/meta-factory/SKILL.md:414 says NEVER SHIPS, so a criterion naming it is correct and the leg is the thing that is wrong. THE ADMISSION RULE IS AN AUTHORITY OBLIGATION, NOT A LOOKUP: an entry carries `authority` (a ruling row `n=` or a law file:line a reader can open) and `reason`, because an exemption nobody can check is forgiveness. `path` is the exact backticked token the criterion names; `issue` optionally narrows the entry to one board item. A matched entry prints as an `excused:` line on EVERY run and is counted in the population, so green reads as examined-minus-exempt. An entry that matches NOTHING in the live population is an ERROR -- retired debt must not sit here looking live -- and a malformed or duplicated entry is an ERROR too. Absent or empty means no exemptions, never a failure. THE DISTINCTION THIS STORE MUST NOT LOSE: a path absent because the law forbids it is exempt; a path absent because its work is BLOCKED is unresolved work and stays a problem (see TEMPLATE/tests/test_audit_cadence.py below).",
+  "exempt": [
+    {
+      "path": "docs/hygiene-protected.json",
+      "authority": "skills/meta-factory/SKILL.md:414 + ruling n=2693",
+      "reason": "Factory data, deliberately not a manifest path: the meta-factory law states at SKILL.md:414 that this declaration never ships, and tools/hygiene.py:137-160 treats absence as the SUPPORTED state of a new factory. A criterion that demands it asks the tree to carry a file the law forbids. Ruling n=2693 already returned this half of #422 as NOT UPHELD, which settles the declaration and leaves the leg as the defect."
+    },
+    {
+      "path": "TEMPLATE/docs/hygiene-protected.json",
+      "authority": "skills/meta-factory/SKILL.md:414 + ruling n=2693",
+      "reason": "The shipped-twin spelling of the same declaration. It is absent for the same reason and with the same authority; a factory writes its own hygiene-protected.json and the kit never carries one."
+    }
+  ]
+}
