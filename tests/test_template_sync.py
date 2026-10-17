@@ -509,6 +509,11 @@ PAIRS = [
     ("tools/publish.py", "TEMPLATE/tools/publish.py"),
     ("tests/test_publish.py", "TEMPLATE/tests/test_publish.py"),
     ("tests/test_duty_receipt_exemptions.py", "TEMPLATE/tests/test_duty_receipt_exemptions.py"),
+    # Added with its registration (board #330, ruled n=3362): the gate drives
+    # `tools/patrol_host_state.py`'s `ledger_ref_roles_leg`, which is SHIPPED, so a factory
+    # carrying the leg without the gate would ship an unguarded reader — and a factory
+    # carrying the gate without the leg would probe a function that does not exist.
+    ("tests/test_ledger_ref_roles.py", "TEMPLATE/tests/test_ledger_ref_roles.py"),
     ("tests/test_patrol_host_state.py", "TEMPLATE/tests/test_patrol_host_state.py"),
     ("tests/test_score_artifact_sections.py", "TEMPLATE/tests/test_score_artifact_sections.py"),
     ("tests/test_score_artifact_measurable.py", "TEMPLATE/tests/test_score_artifact_measurable.py"),

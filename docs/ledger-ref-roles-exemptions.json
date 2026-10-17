@@ -1,0 +1,59 @@
+{
+  "_note": "THIS factory's adjudicated residuals for the ledger ref-role leg (tools/patrol_host_state.py::ledger_ref_roles_leg, #330). The leg reads every receipt whose detail asserts a ROLE for a named row -- `intake row n=X`, `dispatch row n=Y`, `close row n=Z` -- and requires that row's event to BE that role. An entry here is a residual a lane has READ and judged: the reason must name the class (CROSS-FACTORY / QUOTATION / DISCARDED LINEAGE / STALE) and say why the prose is either correct or already named by a correction row. An entry is VISIBLE DEBT, printed as a `DECLARED -- <reason>` line on every run, and an entry matching no live mismatch is itself a PROBLEM: a store that has rotted into a rubber stamp is visible on the round it rots. Keyed by the TRIPLE (row, asserted, asserted_row), because one row can carry several assertions and each is adjudicated on its own. Absent or empty means no exemptions, never a failure. Skeleton and field rules: TEMPLATE/docs/ledger-ref-roles-exemptions.example.json.",
+  "exempt": [
+    {
+      "row": 1215,
+      "asserted": "intake",
+      "asserted_row": 140,
+      "reason": "CROSS-FACTORY -- the prose is quoting miidas's own filing ('It filed units #72/#73/#74 with intake rows n=140/141/142', item 3 of the kit-adoption wave), and miidas's evidence/ledger.jsonl carries exactly those: n=140/141/142 are intake rows for leshchenko1979/miidas#72/#73/#74 (read 2026-10-17). This leg reads the meta-factory ledger, where n=140 is a dispatch of an unrelated unit."
+    },
+    {
+      "row": 2381,
+      "asserted": "intake",
+      "asserted_row": 2374,
+      "reason": "STALE by 6 -- this dispatch row was re-minted +6 in the 9c5751c fork reconciliation, so every number embedded in it is six low. Correction row n=2405 maps row:2374 -> row:2380 (the true #327 intake). The row is append-only, so the naming row IS the remedy and this entry points a reader at it."
+    },
+    {
+      "row": 2400,
+      "asserted": "intake",
+      "asserted_row": 2374,
+      "reason": "STALE by 6 -- the same re-mint as n=2381: this duty receipt's 'REPAIRED this round: intake row n=2374' should read n=2380, and correction row n=2405 records the mapping row by row."
+    },
+    {
+      "row": 2400,
+      "asserted": "dispatch",
+      "asserted_row": 2376,
+      "reason": "STALE by 6, and a RANGE -- 'Dispatch rows n=2376-n=2389' should read 2382-2395; correction row n=2405 maps the whole span (2374,2375,2376,2389,2390,2391,2392,2393 -> 2380,2381,2382,2395,2396,2397,2398,2399)."
+    },
+    {
+      "row": 2405,
+      "asserted": "intake",
+      "asserted_row": 2374,
+      "reason": "QUOTATION -- n=2405 IS the correction row; this match sits inside the stale text it exists to map (\"n=2400 prose 'intake row n=2374' -> n=2380\"). The row MENTIONS the defect rather than asserting the role, and deleting the quotation would delete the correction's own basis."
+    },
+    {
+      "row": 2958,
+      "asserted": "intake",
+      "asserted_row": 2951,
+      "reason": "DISCARDED LINEAGE -- the ruling names 'the discarded intake row (n=2951)' and quotes the Worker's store to make its point about re-mint CONTENT. That row was discarded before publication and the number was subsequently taken by the claim row at n=2951, so the published ledger holds a different event there BY CONSTRUCTION; the prose says 'discarded' and is therefore correct."
+    },
+    {
+      "row": 3309,
+      "asserted": "close",
+      "asserted_row": 237,
+      "reason": "CROSS-FACTORY -- 'the ai-antispam close row n=237' is ai-antispam's own ledger, where n=236 is claim #103 and n=237 is its close (read 2026-10-17). This leg reads the meta-factory ledger, where n=237 is intake #37."
+    },
+    {
+      "row": 3312,
+      "asserted": "intake",
+      "asserted_row": 3307,
+      "reason": "STALE by 3 -- the dispatch row cites n=3307, which is #485's RULING; the true #484 intake is n=3310 (intake #484, stamped immediately before this dispatch). The row is append-only, so this entry is the naming surface: the correction is recorded here and in #330's close row, and a reader following 3307 lands on a ruling that says nothing about #484."
+    },
+    {
+      "row": 3362,
+      "asserted": "intake",
+      "asserted_row": 2374,
+      "reason": "QUOTATION -- the ruling's own evidence table quotes 'intake row n=2374' as the #330 instance it was decided on (and notes n=2374 is a close). The match is the EVIDENCE this leg was built from, not an assertion the leg should judge."
+    }
+  ]
+}

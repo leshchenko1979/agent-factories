@@ -724,6 +724,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_schema.py",
     "test_ontology.py",
     "test_duty_receipt_exemptions.py",
+    # Added with its registration (board #330, ruled n=3362). REQUIRED is the correct
+    # grain: the gate drives SYNTHETIC ledger rows and SYNTHETIC stores under a temp
+    # directory — no live board, no fleet manifest, no box-local fixture — so it passes in
+    # a bootstrapped factory exactly as it does here. It is byte-paired with a TEMPLATE
+    # copy, so the manifest grain is what keeps a factory from dropping the runner and
+    # keeping the file. THE LEG IT GUARDS is the ROLE half of a `row:` pointer: the write
+    # path checks EXISTENCE only, so a receipt asserting `intake row n=X` for a row that is
+    # a CLOSE passes the write and misleads every reader who follows it.
+    "test_ledger_ref_roles.py",
     "test_patrol_host_state.py",
     "test_citation_clause_titles.py",
     # Added with its registration (board #441, ruled n=2907, dispatched n=2909). REQUIRED is

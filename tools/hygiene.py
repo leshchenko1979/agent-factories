@@ -472,6 +472,10 @@ DECLARATION_SURFACES: tuple[
      "entries are dates and ledger row numbers, neither of which a rename can strand"),
     ("ledger-no-shrink-exemptions", "docs/ledger-no-shrink-exemptions.json",
      (("exemptions", "sha", DECL_COMMIT),), ""),
+    ("ledger-ref-roles-exemptions", "docs/ledger-ref-roles-exemptions.json", (),
+     "entries name a ledger ROW (`row`, `asserted`, `asserted_row`) and the ledger is "
+     "append-only, so no number here can be stranded by a rename; the ref-role leg "
+     "reconciles every entry against a LIVE read of the ledger"),
     ("ledger-refs-kinds", "docs/ledger-refs-kinds.json", (),
      "entries are ledger VOCABULARY names (kinds and events), not a target object"),
     ("ledger-retirements", "docs/ledger-retirements.json", (),

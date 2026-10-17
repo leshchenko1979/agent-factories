@@ -4704,6 +4704,190 @@ def field_predicate_readers():
     spec.loader.exec_module(module)
     return module
 
+# ---- the ledger ref-role leg (#330, ruled at n=3362) ----------------------------------
+#
+# A receipt's PROSE asserts a ROLE for a named row -- "intake row n=2374", "dispatch row
+# n=2376", "close row n=Z" -- and `tools/ledger.py` validates a `row:` pointer for
+# EXISTENCE only: the token must be numeric and at most the current max `n`. A number
+# composed from a stale read therefore passes the write path while naming a DIFFERENT row,
+# and a reader following it lands on another lane's event and reads a green. That is #330's
+# own instance: the Triage 2026-10-05T12 patrol receipt carried eight refs six low, every
+# one of them resolving to the Worker lane's close rows.
+#
+# THE PREDICATE IS THE ROLE MATCH, and it was chosen by measurement over two alternatives
+# (ruling n=3362 section 2). "The ref's subject is claimed in the receipt's detail" passes
+# all eight of that receipt's refs -- a round receipt's detail is long and names many items
+# -- and would red 68 of 657 row-refs; "the noun the detail asserts for a ref is that row's
+# EVENT" bites the instance and its siblings. Existence is the WRITE path's leg and stays
+# there; identity is this one's.
+#
+# SCOPE, and it PRINTS on every run: the three roles the ruling names -- intake, dispatch,
+# close. The same class exists on `run` / `ruling` / `claim` assertions (measured
+# 2026-10-17: n=1688, n=3032, n=3033), and those are NOT judged here. Two further measured
+# instances (n=2724, n=3099) are citations of UNPUBLISHED or OWN-NUMBERING rows -- a
+# false-positive class the ruling never adjudicated -- and a predicate that reds on correct
+# prose is the permanent-false-positive class #507 names, where a leg with no exit teaches
+# the next reader to ignore a red patrol. Widening is a later question with its own
+# measurement, never an accident of this one.
+REF_ROLE_EXEMPTIONS = REPO / "docs" / "ledger-ref-roles-exemptions.json"
+
+# A COMPOUND label -- "ruling/dispatch rows n=2277" -- asserts NEITHER role, and the
+# lookbehind is what keeps it out of the population: measured on this corpus, the naive
+# pattern counted two such labels as mismatches, and a false positive here is a red that
+# teaches the reader to ignore the leg.
+REF_ROLE_ASSERTION = re.compile(
+    r"(?<![/\w-])(intake|dispatch|close)\s+rows?\s+`?n=(\d+)", re.IGNORECASE
+)
+REF_ROLES_JUDGED = ("intake", "dispatch", "close")
+
+def load_ref_role_exemptions(path: Path | None = None) -> tuple[list[dict], list[str]]:
+    """`(entries, problems)` for the declared ref-role exemption surface.
+
+    AN ABSENT FILE IS THE SHIPPED STATE of a new factory -- the convention
+    `docs/kit-exemptions.json` sets -- so absence is no problem and no exemption. A store
+    that EXISTS but cannot be honoured IS a problem: an unreadable exemption list would red
+    every adjudicated residual, and a typo'd entry would excuse nothing while reading as an
+    excuse. An entry must carry the three fields the match needs plus a REASON, because an
+    exemption nobody explained belongs to nobody (the same strictness gate 94 applies to the
+    duty-receipt store).
+    """
+    target = path or REF_ROLE_EXEMPTIONS
+    if not target.is_file():
+        return [], []
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [
+            f"{target.name} could not be read ({type(exc).__name__}), so no declared "
+            f"exemption can be honoured and every residual is a finding"
+        ]
+    rows = data.get("exempt") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return [], [
+            f"{target.name} declares no `exempt` list, so no exemption can be honoured"
+        ]
+    out: list[dict] = []
+    problems: list[str] = []
+    for index, entry in enumerate(rows):
+        if not isinstance(entry, dict):
+            problems.append(
+                f"{target.name} entry {index} is not an object, so it can excuse nothing"
+            )
+            continue
+        row_n = entry.get("row")
+        asserted = str(entry.get("asserted") or "").strip().lower()
+        asserted_row = entry.get("asserted_row")
+        reason = str(entry.get("reason") or "").strip()
+        if not isinstance(row_n, int) or isinstance(row_n, bool):
+            problems.append(
+                f"{target.name} entry {index} names no integer `row`, so it can excuse nothing"
+            )
+            continue
+        if asserted not in REF_ROLES_JUDGED:
+            problems.append(
+                f"{target.name} entry {index} asserts {asserted or 'nothing'!r}, which is not "
+                f"one of the roles this leg judges ({'/'.join(REF_ROLES_JUDGED)})"
+            )
+            continue
+        if not isinstance(asserted_row, int) or isinstance(asserted_row, bool):
+            problems.append(
+                f"{target.name} entry {index} names no integer `asserted_row`, so it can "
+                f"excuse nothing"
+            )
+            continue
+        if not reason:
+            problems.append(
+                f"{target.name} entry {index} (n={row_n}) carries no `reason` -- an exemption "
+                f"nobody explained belongs to nobody"
+            )
+            continue
+        out.append({"row": row_n, "asserted": asserted,
+                    "asserted_row": asserted_row, "reason": reason})
+    return out, problems
+
+def ledger_ref_roles_leg(rows: list[dict], *, read_at: str,
+                         exemptions_path: Path | None = None) -> dict:
+    """Does every role a receipt ASSERTS for a row name a row carrying that role?
+
+    The population is PRINTED on every run, an explicit zero included: "examined 0" and
+    "examined N and found nothing wrong" are the same verdict otherwise, and the first is
+    exactly what a broken reader produces (#242).
+    """
+    by_n = {row.get("n"): row for row in rows if isinstance(row.get("n"), int)}
+    assertions: list[tuple[int, str, int]] = []
+    for row in rows:
+        row_n = row.get("n")
+        if not isinstance(row_n, int):
+            continue
+        for match in REF_ROLE_ASSERTION.finditer(str(row.get("detail") or "")):
+            assertions.append((row_n, match.group(1).lower(), int(match.group(2))))
+    residuals: list[dict] = []
+    for row_n, asserted, asserted_row in assertions:
+        target = by_n.get(asserted_row)
+        actual = str((target or {}).get("event") or "") or None
+        if actual == asserted:
+            continue
+        residuals.append({
+            "row": row_n,
+            "asserted": asserted,
+            "asserted_row": asserted_row,
+            "actual_event": actual,
+            "declared": False,
+        })
+    entries, store_problems = load_ref_role_exemptions(exemptions_path)
+    problems: list[str] = list(store_problems)
+    excused: list[str] = []
+    live = {(r["row"], r["asserted"], r["asserted_row"]) for r in residuals}
+    used: set[tuple[int, str, int]] = set()
+    for entry in entries:
+        key = (entry["row"], entry["asserted"], entry["asserted_row"])
+        if key not in live:
+            # An exemption that matches no live mismatch is debt that has stopped describing
+            # the ledger: PRINTED and counted, never subtracted, so a store that has rotted
+            # into a rubber stamp is visible on the round it rots.
+            problems.append(
+                f"{REF_ROLE_EXEMPTIONS.name}: the exemption for n={entry['row']} asserting "
+                f"`{entry['asserted']}` of n={entry['asserted_row']} matches no live "
+                f"mismatch, so it excuses nothing"
+            )
+            continue
+        used.add(key)
+        excused.append(
+            f"n={entry['row']} asserting `{entry['asserted']}` of n={entry['asserted_row']}: "
+            f"DECLARED -- {entry['reason']}"
+        )
+    for residual in residuals:
+        key = (residual["row"], residual["asserted"], residual["asserted_row"])
+        residual["declared"] = key in used
+        if residual["declared"]:
+            continue
+        target_text = (
+            f"is a `{residual['actual_event']}`" if residual["actual_event"]
+            else "names no row in this ledger"
+        )
+        problems.append(
+            f"n={residual['row']} asserts `{residual['asserted']} row "
+            f"n={residual['asserted_row']}` and n={residual['asserted_row']} {target_text} "
+            f"-- the pointer resolves to a DIFFERENT role, so a reader following it lands on "
+            f"another row and reads a green"
+        )
+    return {
+        "name": "ledger-ref-roles",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "rows_read": len(rows),
+            "roles_judged": list(REF_ROLES_JUDGED),
+            "assertions_examined": len(assertions),
+            "residuals": residuals,
+            "exemptions_declared": len(entries),
+            "exempted": len(used),
+            "unresolved": sum(1 for r in residuals if not r["declared"]),
+            "read_at": read_at,
+        },
+    }
+
 def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
     """Every tier the ledger DECLARES, and every `T4` still standing.
 
@@ -8818,6 +9002,29 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{', '.join(cov['unanswered']) or 'none'}"
                 )
             lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+        elif leg["name"] == "ledger-ref-roles":
+            # THE POPULATION PRINTS, zeros included (#242): a leg that examined nothing and
+            # one that examined the corpus and found it clean must never render the same.
+            lines.append(
+                f"  role assertions (a receipt naming the role of a row): "
+                f"{cov['assertions_examined']} examined over {cov['rows_read']} ledger "
+                f"row(s); roles judged: {'/'.join(cov['roles_judged'])}; "
+                f"{len(cov['residuals'])} mismatch(es), {cov['exempted']} declared-exempt, "
+                f"{cov['unresolved']} unresolved"
+            )
+            for residual in cov["residuals"]:
+                lines.append(
+                    f"    n={residual['row']} asserts `{residual['asserted']}` of "
+                    f"n={residual['asserted_row']}, which is a "
+                    f"`{residual['actual_event'] or 'MISSING'}` — "
+                    + ("DECLARED-EXEMPT" if residual["declared"] else "UNRESOLVED")
+                )
+            lines.append(
+                f"  declared exemptions: {cov['exemptions_declared']} "
+                f"({REF_ROLE_EXEMPTIONS.name}; an entry matching no live mismatch is a "
+                f"PROBLEM)"
+            )
+            lines.append(f"  read at {cov['read_at']}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -9029,6 +9236,11 @@ def main(
     # whichever exemptions the live factory happens to hold, and a probe that CANNOT drive
     # an exemption cannot prove the store is reconciled at all.
     duty_exemptions_fn=None,
+    # #330: the ref-role exemption store, injected for the seventh time and the same
+    # reason -- a probe must never have its verdict decided by whichever exemptions the
+    # live factory happens to hold, and a probe that CANNOT drive an exemption cannot
+    # prove the store is reconciled at all.
+    ref_role_exemptions_path: Path | None = None,
     lane_names_fn=None,
     shared_tree_fn=None,
     out=print,
@@ -9213,6 +9425,12 @@ def main(
             exemptions_fn=duty_exemptions_fn,
         ), read_at),
         leg_guard("canonicality-tier", lambda: canonicality_leg(rows, read_at=read_at), read_at),
+        leg_guard("ledger-ref-roles", lambda: ledger_ref_roles_leg(
+            rows, read_at=read_at,
+            # #330: injected so no probe's verdict is decided by this factory's own
+            # declared exemptions.
+            exemptions_path=ref_role_exemptions_path,
+        ), read_at),
         leg_guard("workspace-blocked", lambda: workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn), read_at),
         leg_guard("stall-census", lambda: stall_census_leg(
             issues, rows, read_at=read_at,

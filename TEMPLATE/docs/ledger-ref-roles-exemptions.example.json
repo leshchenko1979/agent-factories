@@ -1,0 +1,4 @@
+{
+  "_note": "Skeleton for a factory's own adjudicated residuals of the ledger ref-role leg (#330). Copy to docs/ledger-ref-roles-exemptions.json and add ONE entry per residual a lane has READ: `row` is the receipt whose detail asserts a role, `asserted` is that role (intake / dispatch / close), `asserted_row` is the row the prose names, and `reason` must name the class (CROSS-FACTORY / QUOTATION / DISCARDED LINEAGE / STALE) and say why the prose is correct or already named by a correction row. Every entry PRINTS on every run, and an entry matching no live mismatch is itself a problem -- the store is visible debt, never a rubber stamp. Absent or empty means no exemptions, never a failure.",
+  "exempt": []
+}

@@ -109,6 +109,15 @@ _NO_RULING_EXEMPTIONS = (
     Path(tempfile.mkdtemp(prefix="patrol-no-exempt-")) / "ruling-board-exemptions.json"
 )
 
+# The ref-role leg's exemption store (#330) defaults to a path that is NEVER created, for
+# the reason `_NO_RULING_EXEMPTIONS` sets and one of its own: the store ships ABSENT in the
+# kit's donor half, so a probe that read the live factory's store would be asserting this
+# box's own adjudications rather than the leg's behaviour -- and a probe whose synthetic
+# rows happened to match a live triple would be silently excused by an entry it never wrote.
+_NO_REF_ROLE_EXEMPTIONS = (
+    Path(tempfile.mkdtemp(prefix="patrol-no-ref-roles-")) / "ledger-ref-roles-exemptions.json"
+)
+
 # The stall-census leg's park clause (#331) needs NO injection point, and that is the point:
 # a park is declared by a `park:owner:<question>` line on the unit's OWN ledger row, so the
 # rows a probe already passes ARE the declaration. A probe that declares no park therefore
@@ -189,7 +198,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          delivery_scope=None, deliveries=None, criterion_repo=None,
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
-         duty_exemptions=None):
+         duty_exemptions=None, ref_role_exemptions_path=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -319,6 +328,14 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # live one, so an entry added later can never silently change a probe's meaning.
         duty_exemptions_fn=(
             duty_exemptions if duty_exemptions is not None else (lambda: ({}, None))
+        ),
+        # The ref-role leg's declared-exemption store (#330) is injected for the same reason,
+        # and its default is a path that does NOT exist: the store ships absent in the kit's
+        # donor half, so a probe must never have its verdict decided by the adjudications this
+        # factory happens to hold. A probe that asserts the store passes its own path.
+        ref_role_exemptions_path=(
+            _NO_REF_ROLE_EXEMPTIONS if ref_role_exemptions_path is None
+            else ref_role_exemptions_path
         ),
         # The stall-census leg's ONE read (#331 clause 2) is injected for the same reason as
         # every other declaration here: the default `lane_names_fn` resolves NO session id, so
@@ -510,6 +527,8 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
         shared_tree_fn=_stub_shared_tree_rider,
+        # #330: the ref-role store is injected for the same reason the ruling table is.
+        ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
     )
     assert rc == 2, f"an unreadable board must exit 2, got rc={rc}"
     assert "FAILED" in err.getvalue(), err.getvalue()
@@ -2060,6 +2079,43 @@ def test_the_leg_reads_through_the_SHARED_predicate_never_a_private_split() -> N
     assert "keyed_value(" in body, "the value read must come from the module"
     assert '.split("=")' not in body, "a private split is exactly what the law bars"
 
+# ---- the ledger ref-role leg (#330, ruled at n=3362) --------------------------------
+
+def test_the_ref_role_leg_reaches_the_RENDER_and_reds_the_run() -> None:
+    """End to end: a receipt asserting the WRONG role for a row must red the round.
+
+    The instance is #330's own, shrunk to two rows: a receipt says `intake row n=2` and
+    n=2 is a close. Existence is satisfied — n=2 IS a row — which is exactly why the write
+    path passed it; the ROLE is what the reader needs and what the leg judges.
+    """
+    rows = [
+        _tier_row(1, "#900", "settled run=7 tier=T1", event="intake"),
+        _tier_row(2, "#900", "CLOSE #900. Intake row n=2.", event="close"),
+    ]
+    rc, out, _ = _run([], rows)
+    assert "LEG ledger-ref-roles" in out, out
+    assert "UNRESOLVED" in out, out
+    assert rc == 1, f"a wrong role assertion must red the run, got rc={rc}\n{out}"
+
+def test_the_ref_role_leg_PRINTS_its_population_even_when_clean() -> None:
+    """A leg that examined nothing and one that examined the corpus must never render alike.
+
+    The negative half: a correct assertion reads clean, and the render still carries the
+    counts — assertions examined, roles judged, mismatches, declared-exempt, unresolved.
+    """
+    rows = [
+        _tier_row(1, "#900", "settled run=7 tier=T1", event="intake"),
+        _tier_row(2, "#900", "CLOSE #900. Intake row n=1.", event="close"),
+    ]
+    rc, out, _ = _run([], rows)
+    assert "LEG ledger-ref-roles" in out, out
+    assert "1 examined over 2 ledger row(s)" in out, out
+    assert "0 mismatch(es), 0 declared-exempt, 0 unresolved" in out, out
+    # The rc is NOT asserted here: this fixture's board is empty while its rows name #900,
+    # so the board-intake leg reds for a reason this probe is not about. What this probe
+    # owns is that the ref-role leg contributes NO unresolved line of its own.
+    assert "UNRESOLVED" not in out, out
+
 
 # --- the duty-completion-receipt leg (#147) ------------------------------------
 #
@@ -3182,6 +3238,8 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
             shared_tree_fn=_stub_shared_tree_rider,
+            # #330: the ref-role store is injected for the same reason the ruling table is.
+            ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -3256,6 +3314,8 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
             shared_tree_fn=_stub_shared_tree_rider,
+            # #330: the ref-role store is injected for the same reason the ruling table is.
+            ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -4956,6 +5016,8 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
             shared_tree_fn=_stub_shared_tree_rider,
+            # #330: the ref-role store is injected for the same reason the ruling table is.
+            ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         )
         text = out.getvalue()
 
@@ -5812,6 +5874,8 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg, worktree_fn=_stub,
         shared_tree_fn=_stub_shared_tree_rider,
+        # #330: the ref-role store is injected for the same reason the ruling table is.
+        ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         ruling_scope_fn=lambda: RUNNER.UNBOUNDED_SCOPE,
         ruling_exemptions_path=_NO_RULING_EXEMPTIONS,
     )

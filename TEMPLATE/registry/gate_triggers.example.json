@@ -525,6 +525,13 @@
       "tools/patrol_host_state.py",
       "tools/registry*.py"
     ],
+    "tests/test_ledger_ref_roles.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/ledger-ref-roles-exemptions.json",
+      "evidence/ledger.jsonl",
+      "tools/patrol_host_state.py",
+      "tools/registry*.py"
+    ],
     "tests/test_patrol_host_state.py": [
       "TEMPLATE/tools/patrol_host_state.py",
       "registry/kit.json",

@@ -496,7 +496,8 @@
     "tools/hygiene.py": "script",
     "tools/ledger.py": "script",
     "tools/roadmap.py": "script",
-    "tests/test_duty_receipt_exemptions.py": "script"
+    "tests/test_duty_receipt_exemptions.py": "script",
+    "tests/test_ledger_ref_roles.py": "script"
   },
   "exits": {
     "tests/test_audit_inflight_guard.py": {
@@ -827,6 +828,10 @@
     "tests/test_duty_receipt_exemptions.py": {
       "class": "exemption-table",
       "table": "docs/duty-receipt-exemptions.json"
+    },
+    "tests/test_ledger_ref_roles.py": {
+      "class": "exemption-table",
+      "table": "docs/ledger-ref-roles-exemptions.json"
     }
   }
 }

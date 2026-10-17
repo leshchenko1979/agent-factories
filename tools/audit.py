@@ -2978,6 +2978,31 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_duty_receipt_exemptions.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_duty_receipt_exemptions.py"])
 
+    # 95. the ledger REF-ROLE gate (#330, ruled at n=3362). `tools/ledger.py` validates a
+    #     `row:` pointer for EXISTENCE only — numeric and at most the current max `n` — so a
+    #     number composed from a stale read passes the write path while naming a DIFFERENT
+    #     row, and a reader who follows it lands on another lane's event and reads a green.
+    #     #330's own instance: the Triage 2026-10-05T12 patrol receipt carried eight refs six
+    #     low, every one resolving to the Worker lane's close rows.
+    #
+    #     The predicate is the ROLE MATCH, chosen BY MEASUREMENT over two alternatives
+    #     (ruling n=3362 section 2): "the ref's subject is claimed in the receipt's detail"
+    #     passes all eight refs of the instance and would red 68 of 657 row-refs, while "the
+    #     noun the detail asserts for a ref is that row's EVENT" bites the instance and its
+    #     siblings at 12 of 288. So the leg judges `intake` / `dispatch` / `close` assertions
+    #     and this gate is its arm set: the bite, the MATCHING silence that makes the bite
+    #     discriminating, the compound label that asserts neither role (a measured false
+    #     positive), the roles outside the ruling's declared scope, and the exemption store's
+    #     three states — absent is the shipped empty state, declared prints its reason, and
+    #     STALE is a problem, because a store that has rotted into a rubber stamp must be
+    #     visible on the round it rots.
+    #
+    #     Script-form, and it carries NO `registry/gates.json` budget entry -- a budget value
+    #     is the process owner's (n=574 PART 5), so it runs on the declared default and the
+    #     audit prints that it did.
+    if (repo_root / "tests/test_ledger_ref_roles.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_ledger_ref_roles.py"])
+
     return gates_to_run
 
 
