@@ -942,6 +942,19 @@ REQUIRED_GATES: tuple[str, ...] = (
     # the OPEN-QUESTION COUNT as the human-gate metric, so each mis-routed question inflated
     # the owner's queue by exactly its own volume with nothing measuring the leak.
     "test_question_intake.py",
+    # Added with its registration (board #503, ordered by the ruling on #502). REQUIRED is
+    # the correct grain: the gate probes a PURE predicate over a synthetic FACTS dict and
+    # builds its one real repository under a temp directory, so it reads no live board, no
+    # fleet manifest and no box-local fixture, and passes in a bootstrapped factory exactly
+    # as it does here -- including a factory that has declared no binding at all, where the
+    # tool prints NOT RUN with its reason rather than a clean verdict. It is byte-paired with
+    # a TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the
+    # instrument and keeping the gate that would judge nothing. THE MECHANISM IT GUARDS: the
+    # tree serving a profile's law binding is a shared working tree that nothing fetches into,
+    # so its currency was owned by nobody and two crons computed against a ledger 812 rows
+    # behind; the tool that repairs it may move ONLY by `--ff-only`, and this gate proves the
+    # refusal fires before it proves the move works.
+    "test_binding_sync.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

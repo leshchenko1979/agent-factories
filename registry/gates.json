@@ -401,6 +401,7 @@
     "tests/test_audit_tree_condition.py": "script",
     "tests/test_audit_undefined_names.py": "script",
     "tests/test_binding_mechanism_exists.py": "pytest",
+    "tests/test_binding_sync.py": "pytest",
     "tests/test_board_intake_recorded.py": "pytest",
     "tests/test_brain_metrics.py": "script",
     "tests/test_citation_clause_titles.py": "script",
@@ -510,6 +511,9 @@
       "class": "always-satisfiable"
     },
     "tests/test_binding_mechanism_exists.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_binding_sync.py": {
       "class": "always-satisfiable"
     },
     "tests/test_board_intake_recorded.py": {

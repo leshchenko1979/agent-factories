@@ -2887,6 +2887,33 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "tests/test_cron_landing_route.py"]
         )
 
+    # 91. the binding-sync leg (board #503, ordered by the ruling on #502). The tree that
+    #     serves a profile's law binding is a SHARED WORKING TREE that nothing fetches into
+    #     and nothing checks out, so its currency was owned by nobody: measured
+    #     2026-10-17T00:58Z, HEAD `a0ba409b` against `origin/main` `65d954fe`, the loaded
+    #     `state.md` at `8d354b69d8ac` against `a93fe1d4600f`, its own ledger at 2657 rows
+    #     against 3469 -- and two crons resolve their REPO from `__file__`, so both computed
+    #     against a stale ledger. `tools/sync_binding.py` is the mechanism, and its REFUSAL
+    #     is the point: the hand reconciliation of 2026-10-17 was safe because a human read
+    #     the 192 displaced paths, and a cron that reset automatically would have destroyed
+    #     them silently. So `--ff-only` is the only move the tool may make, and this gate
+    #     proves the refusal fires on a local-only commit and on a dirty path before it
+    #     proves the move works.
+    #
+    #     PURE over a FACTS dict, which is what lets it ship: every branch of the predicate
+    #     is probed with a synthetic dict, and the one leg that needs a repository builds its
+    #     own under a temp directory, so the copy passes in a bootstrapped factory that has
+    #     no binding declared. The refusal probe carries a DISCRIMINATING PAIR -- the same
+    #     facts minus `local_only` must flip to fast-forward -- so a predicate that refused
+    #     everything cannot pass it (rule 6). SCOPE BOUND, stated in the gate: it proves the
+    #     TOOL, never the CRON that invokes it, because the job lives in the harness
+    #     `cron_jobs` table and a suite that read that table would RED in every factory
+    #     without one (#68's class).
+    if (repo_root / "tests/test_binding_sync.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_binding_sync.py"]
+        )
+
     return gates_to_run
 
 

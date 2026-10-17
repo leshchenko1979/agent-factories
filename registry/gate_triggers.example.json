@@ -30,6 +30,12 @@
       "docs/addons/**",
       "skills/**"
     ],
+    "tests/test_binding_sync.py": [
+      "TEMPLATE/tests/test_binding_sync.py",
+      "TEMPLATE/tools/sync_binding.py",
+      "tests/test_binding_sync.py",
+      "tools/sync_binding.py"
+    ],
     "tests/test_board_intake_recorded.py": [
       "evidence/ledger.jsonl"
     ],

@@ -739,6 +739,22 @@ PAIRS = [
     # same question. Without this entry the gate would exist in both trees with nothing
     # enforcing that they stay identical.
     ("tests/test_declared_boundary_census.py", "TEMPLATE/tests/test_declared_boundary_census.py"),
+    # The binding-sync instrument and its gate (board #503, ordered by the ruling on #502).
+    # Paired for the reason the freshness arm it serves is paired: the arm lives in BOTH
+    # halves of `tools/patrol_host_state.py`, so a bootstrapped factory inherits a READER of
+    # `docs/harness-bindings.json` with no mechanism that keeps the tree it reads fresh. A
+    # factory that took the arm without the tool would carry a measurement whose only cure
+    # is a hand reconciliation; one that took the tool without the arm would sync a tree
+    # nothing measures. The declaration itself is FACTORY DATA (shipped as the `.example`
+    # skeleton), so the copy carries the mechanism and the factory carries its bindings --
+    # an unbound tree prints NOT RUN with its reason rather than a clean verdict.
+    ("tools/sync_binding.py", "TEMPLATE/tools/sync_binding.py"),
+    ("tests/test_binding_sync.py", "TEMPLATE/tests/test_binding_sync.py"),
+    # The instrument's own law, paired for the reason `publish.md` is: a factory that took the
+    # tool without its contract would carry an executable whose three outcomes, exit codes and
+    # receipt path are written down nowhere a caller reads, and one that took the contract
+    # without the tool would carry law about a mechanism it does not have.
+    ("docs/instruments/binding-sync.md", "TEMPLATE/docs/instruments/binding-sync.md"),
 ]
 
 def main() -> int:
