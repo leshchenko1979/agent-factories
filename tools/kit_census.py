@@ -211,6 +211,13 @@ def member_copy_state(m: dict, answering: dict, tool_path: str = ANSWER_TOOL_PAT
     ABSENT is not inert. A member with no copy has installed nothing; rendering it inert
     would say it had something that does not run.
 
+    AND BROKEN IS NEITHER, which `exists()` alone cannot tell: it is False for a DANGLING
+    SYMLINK, so a member whose install had rotted read "it has installed nothing" -- the
+    opposite of what happened. A directory or special file under the tool's name is the
+    same class from the other side: it exists, and `inert` would promise a copy that works
+    for the member's own lane when it cannot execute anywhere. Both are entries that exist
+    and run nowhere, so both read `BROKEN` and say which shape they are.
+
     FAIL-OPEN, and this is the load-bearing branch: INERT is a claim that a copy is OFF
     the answering path, which cannot be made without the path. When the path was not
     measured -- no candidates, an ambiguous root, an unreadable copy -- the state is
@@ -224,6 +231,22 @@ def member_copy_state(m: dict, answering: dict, tool_path: str = ANSWER_TOOL_PAT
         return out
     root = Path(m["root"])
     copy = root / tool_path
+    # AN ENTRY THAT CANNOT EXECUTE IS NOT AN ABSENT ONE, and this branch precedes the
+    # `absent_files` cross-check ON PURPOSE: a patrol that tests `isfile()` lists a dangling
+    # link as absent, and its list must not overwrite what the entry itself says.
+    if not copy.exists() and copy.is_symlink():
+        out["copy"] = str(copy)
+        out["state"] = "BROKEN (dangling link)"
+        out["why"] = ("it holds a symlink that does not resolve — installed but dead: it "
+                      "reaches no owner tap, and it cannot run for its own lane either")
+        return out
+    if copy.exists() and not copy.is_file():
+        out["copy"] = str(copy)
+        out["state"] = "BROKEN (not a file)"
+        out["why"] = ("it holds a non-file where the tool should be (a directory or a "
+                      "special file) — it cannot execute, so it reaches no owner tap and "
+                      "no lane")
+        return out
     if tool_path in (m.get("absent_files") or []) or not copy.exists():
         out["state"] = "ABSENT"
         out["why"] = f"no `{tool_path}` in its tree — it has installed nothing"
@@ -502,7 +525,9 @@ def render(leg: dict, read_at: str, answering: dict | None = None) -> str:
     out.append("OUR manifest. **own copy** is a DIFFERENT PREDICATE from every figure beside it")
     out.append("— not a comparison of the same bytes but a statement about which copy an")
     out.append("owner's tap REACHES: LIVE (it is that copy), inert (off that path, so it reaches")
-    out.append("no owner tap), ABSENT (there is no copy to reach with), or undetermined when the")
+    out.append("no owner tap), ABSENT (there is no copy to reach with), BROKEN (an entry that")
+    out.append("cannot execute at all — a dangling link or a non-file: installed-but-dead, which")
+    out.append("is not installed-nothing), or undetermined when the")
     out.append("path itself was not measured. It is read from section 2, so it moves when the")
     out.append("answering path moves and not when a member's tree does. **declared** is when it")
     out.append("last attested. A member that has DECLARED a fork and one that has silently")

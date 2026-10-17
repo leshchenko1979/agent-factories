@@ -24,15 +24,18 @@ WHAT IT PINS, and why each arm is here:
   7. an AMBIGUOUS root renders as every tap REFUSED, not as a degraded reading;
   8. the two LEGS are reported on their own rows and are allowed to DISAGREE — one marker
      summarised as one verdict clears the leg it cannot see;
-  9. a member's own copy reads LIVE / inert / ABSENT / undetermined FROM the answering
-     path, and INERT is never claimed when that path was not measured.
+  9. a member's own copy reads LIVE / inert / ABSENT / BROKEN / undetermined FROM the
+     answering path, and INERT is never claimed when that path was not measured;
  10. the census's declared count IS the pin's own judgement — an entry the pin IGNORES is
      never counted as a declaration (F5, #263), so the report cannot disagree with the gate;
  11. an UNREADABLE exemptions file reads None, never 0 — absent-vs-zero is a lie the count
      must not tell, and the empty state stays a separate, real zero;
  12. an UNUSABLE PIN reads None with the pin's own refusal carried, never an exemptions
      count judged against no reference at all — and the rendered cell says WHICH half
-     failed, because a bare `vendored` reads as adopted.
+     failed, because a bare `vendored` reads as adopted;
+ 13. an entry that cannot EXECUTE is not an absent one — a dangling symlink and a non-file
+     under the tool's name are both BROKEN, each with a control that keeps the arm from
+     passing by calling every missing or off-path entry broken.
 
 The leg AND the answering-path result are both injected, so these arms run with no live
 fleet, no live board and no live answering path: a probe that could only run against five
@@ -307,6 +310,40 @@ def main() -> int:
             check("ARM 12: the rendered table carries the column for every member",
                   "| own copy |" in t12 and "| LIVE |" in t12
                   and "| inert |" in t12 and "| ABSENT |" in t12)
+
+            # ARM 17 — AN ENTRY THAT CANNOT EXECUTE IS NOT AN ABSENT ONE.
+            # `Path.exists()` is False for a dangling symlink, so a rotted install read "it
+            # has installed nothing" -- the opposite of what happened -- and a directory
+            # under the tool's name read `inert`, promising a copy that works for the
+            # member's own lane when it cannot execute anywhere. Both are entries that
+            # exist and run nowhere.
+            dangling_mem = tmp / "dangling_mem"
+            (dangling_mem / "tools").mkdir(parents=True)
+            (dangling_mem / "tools" / "questions").symlink_to(tmp / "gone" / "oc-questions")
+            dir_mem = tmp / "dir_mem"
+            (dir_mem / "tools" / "questions").mkdir(parents=True)
+            m_dangling = member("dangling", str(dangling_mem))
+            m_dir = member("dirmem", str(dir_mem))
+            check("ARM 17: a DANGLING LINK reads BROKEN, never ABSENT",
+                  KC.member_copy_state(m_dangling, ans_at_live)["state"]
+                  == "BROKEN (dangling link)",
+                  "exists() is False for a broken link; 'installed nothing' is the opposite "
+                  "of what happened")
+            check("ARM 17: control — a member with NO entry at all still reads ABSENT",
+                  KC.member_copy_state(m_absent, ans_at_live)["state"] == "ABSENT",
+                  "otherwise this arm passes by calling every missing entry broken")
+            check("ARM 17: a DIRECTORY under the tool's name reads BROKEN, never inert",
+                  KC.member_copy_state(m_dir, ans_at_live)["state"] == "BROKEN (not a file)",
+                  "inert promises a copy that works for its own lane; a directory runs "
+                  "nowhere")
+            check("ARM 17: control — a real file off the path still reads inert",
+                  KC.member_copy_state(m_inert, ans_at_live)["state"] == "inert",
+                  "otherwise this arm passes by calling every off-path entry broken")
+            t17 = KC.render(leg_with([m_dangling, m_dir, m_absent]), TS, answering=ans_at_live)
+            check("ARM 17: the rendered cell says WHICH shape is broken, for both",
+                  t17.count("BROKEN (dangling link)") == 1
+                  and t17.count("BROKEN (not a file)") == 1,
+                  "a state the table cannot show is a state the reader never sees")
 
             # ARM 13 — THE FLEET LINE NAMES THE TREE, OR SAYS NONE.
             t13 = KC.render(leg_with([member("host", str(live_mem))]), TS, answering=ans_at_live)
