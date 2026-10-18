@@ -790,6 +790,43 @@ def probe_a_declared_reconciliation_is_reconciled_not_clean() -> list[str]:
         fails.append(f"a matched declaration read as stale: {stale} {stale_declarations}")
     return fails
 
+def probe_a_reconciliation_for_a_MERGE_removal_is_not_stale() -> list[str]:
+    """#301's second harm, and the one that made the blindness loud in the wrong direction.
+
+    The issue states it exactly: "a reconciliation row naming an identity removed by a merge
+    would be matched against a walk that never saw the removal, so the row reads as a STALE
+    declaration and the gate REDS ON A TRUE STATEMENT". Before the merge read, the walker's
+    population excluded the commit, `matched_declarations` never received the identity, and
+    the reconciliation came back as stale debt. The honest row was punished for the
+    instrument's blindness, which is the failure mode a bound stated in prose cannot fix.
+
+    So this arm drives a MERGE transition whose removal is on the merged-in line, with the
+    identity declared. It must read RECONCILED, and `stale_declarations` must stay empty.
+    """
+    fails: list[str] = []
+    before = [_row(1), _row(2)]
+    merged_in = [_row(1), _row(2), _row(3)]
+    after = [_row(1), _row(3)]
+    declared = {identity_of(_row(2))}
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, before, after, merged_in=merged_in)], {}, declared
+    )
+    if problems:
+        fails.append(f"a declared merge removal was still a problem: {problems}")
+    if stale_declarations:
+        fails.append(
+            "a reconciliation naming a TRUE merge removal read as STALE, which is the "
+            f"exact harm #301 filed: {stale_declarations}"
+        )
+    if len(reconciled) != 1 or "n=2" not in reconciled[0]:
+        fails.append(f"the reconciliation did not name the merge removal: {reconciled}")
+    if stale:
+        fails.append(f"a matched exemption read as stale: {stale}")
+    if excused:
+        fails.append(f"a declared removal was reported as an exemption: {excused}")
+    return fails
+
+
 def probe_an_undeclared_removal_beside_a_declared_one_is_still_a_problem() -> list[str]:
     """A declaration excuses ONLY the identities it names — never the commit it rides on.
 
@@ -1321,6 +1358,7 @@ def main() -> int:
         probe_an_exempted_removal_is_excused_not_clean,
         probe_a_stale_exemption_is_an_error,
         probe_a_declared_reconciliation_is_reconciled_not_clean,
+        probe_a_reconciliation_for_a_MERGE_removal_is_not_stale,
         probe_an_undeclared_removal_beside_a_declared_one_is_still_a_problem,
         probe_a_declaration_for_a_removal_that_did_not_happen_is_an_error,
         probe_a_stale_reconciliation_is_an_error,
