@@ -1366,6 +1366,46 @@ rather than a mechanism (ruled on `#441`, ledger `n=3322`): a citation of a same
 own state in the same breath, so that *"I could not ask"* and *"there is nothing to ask about"* never
 render alike — the same rule the read itself follows one paragraph above.
 
+### 9.16 The provenance token is TOOL-OWNED, and it describes the ROW
+
+`telemetry=` carries the one distinction no structural read of a row can make: whether a number
+was TAKEN by the tool or TYPED by its author. `#130` established that it must be CARRIED rather
+than inferred. Two defects survived that establishment, and both are closed here.
+
+**It is not author-writable (`#483`).** The guard composes the token from the branch that decided
+it, and until this clause it then DISCARDED its own verdict whenever the detail already carried
+one — so a hand-typed `telemetry=measured` outlived the tool's `typed` and sat over the author's
+own numbers. The token was testimony, not evidence. The write path now **REFUSES** a close detail
+that declares one. Refused, not overwritten: overwriting would silently discard an author's
+declaration, and the point of the field is that a reader can tell what happened. The receipted
+instance fired on an **honest** actor — `n=237` in `leshchenko1979/ai-antispam`, whose author
+typed `telemetry=measured` while trying to DISCLOSE that the number was unmeasured, over a window
+the guard had measured at 45 s. The read is POSITIONAL, so a close row that merely DISCUSSES the
+token in prose is accepted, and the refusal is CLOSE-scoped: a `run` row has no guard to overrule.
+
+**And it describes the row, not the key (`#486`).** The token is per-ROW while the values it
+describes are per-KEY, and the natural reading is the stronger one — so the semantics are stated:
+
+| value | what it claims |
+|---|---|
+| `measured` | **EVERY** measurement key in the row was composed by the tool |
+| `typed` | **AT LEAST ONE** value in the row is the author's — the weaker, honest claim for a mixed row |
+| `unavailable` | nothing was measured, STATED rather than silently absent (`#129`) |
+
+Before this clause a detail declaring four keys left `missing` non-empty, the tool appended the
+fifth, and the row shipped `measured` over four hand-typed numbers: ONE contributed key flipped
+the whole row's claim. The conservative direction is deliberate — a consumer never over-trusts a
+mixed row, and the tool's own contribution is understated rather than the author's overstated.
+No fourth value was added: `typed` already carried the weaker claim, and widening its population
+changes no vocabulary any gate asserts on.
+
+**Both halves are gated, and both directions bite.** `tests/test_ledger.py` drives the real append
+path against a throwaway ledger and a throwaway telemetry source: an author-declared token is
+refused BY NAME and writes NO row; a mid-sentence mention is accepted (the positional
+discriminator); a mixed row reads `typed` with the author's values intact; and a fully
+tool-composed row still reads `measured` — the control that makes the fix unsatisfiable by writing
+`typed` unconditionally.
+
 ---
 
 ## 10. What this file does not own

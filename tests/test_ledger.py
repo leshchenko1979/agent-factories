@@ -2471,6 +2471,138 @@ def main() -> int:
             check(f"and it declared no {key} (the probe is not vacuous)",
                   not declares_field(detail, key), detail[-90:])
 
+        # ===== #483 / #486 — the provenance token is TOOL-OWNED, and it describes the ROW
+        print("\ntelemetry= is tool-owned (#483) and describes the ROW, not one key (#486)")
+        # #130 part 2 introduced the token so a consumer can tell a value the tool TOOK
+        # from one an author TYPED, and the close guard computes that verdict from the
+        # branch that decided it. Until #483 the guard then DISCARDED its own verdict
+        # whenever the detail already carried one, so a hand-typed `telemetry=measured`
+        # outlived the tool's `typed` and sat over the author's own numbers. #486 is the
+        # same field one layer up: ONE key contributed by the tool flipped the whole row's
+        # claim, so four hand-typed values shipped under `measured`.
+        #
+        # Every arm below runs the REAL append path against a throwaway ledger and a
+        # throwaway telemetry source, for the reason the legs above state: a probe that
+        # read the live database would pass or fail on this box's traffic.
+        owned = tdir / "owned.jsonl"
+        owned_actors = tdir / "owned-actors.txt"
+        owned_actors.write_text("worker\n", encoding="utf-8")
+        owned_db = seed_telemetry_db(tdir / "owned.db")
+        head_token = "head=0123456789abcdef0123456789abcdef01234567"
+
+        # ARM 1 — REFUSED, and refused BY NAME. The receipted instance is ai-antispam
+        # `n=237`, where an author typed `telemetry=measured` while trying to DISCLOSE
+        # that the number was unmeasured; the class fires on an honest actor.
+        write_ledger(owned, ("intake", "#92"), ("claim", "#92"))
+        r = run(
+            owned, "append", "--event", "close", "--actor", "worker", "--subject", "#92",
+            "--detail", f"Closed. {head_token} board=closed telemetry=measured",
+            actors=owned_actors, extra_env={"OPENCRABS_DB_PATH": str(owned_db)},
+        )
+        check("an author-declared telemetry= on a close row is REFUSED",
+              r.returncode != 0, (r.stdout or "").strip()[:90])
+        check("and the refusal names the rule, not just a failure",
+              "#483" in (r.stderr or ""), (r.stderr or "").strip()[:90])
+        # NON-VACUITY: a refusal that still wrote the row would be worse than none, and the
+        # ledger is append-only, so there would be no repair space for it.
+        check("and it wrote no row (the ledger is append-only)",
+              len(rows(owned)) == 2, f"{len(rows(owned))} row(s)")
+
+        # ARM 2 — THE OTHER DIRECTION, and it is why the read is POSITIONAL. `detail` is
+        # free prose that QUOTES trailers as evidence, so a close row that merely DISCUSSES
+        # the token must not be refused for mentioning it: a substring test here would be
+        # the `#88` / n=405 clause 5 damage, one field over.
+        r = run(
+            owned, "append", "--event", "close", "--actor", "worker", "--subject", "#92",
+            "--detail", "Closed. This row DISCUSSES telemetry=measured and "
+                        f"telemetry=typed in its prose, declaring neither. {head_token} "
+                        "board=closed",
+            actors=owned_actors, extra_env={"OPENCRABS_DB_PATH": str(owned_db)},
+        )
+        detail = close_row(owned).get("detail", "")
+        check("a mid-sentence mention of telemetry= is NOT a declaration, so it is accepted",
+              r.returncode == 0, (r.stderr or "").strip()[:90])
+        check("and the tool wrote the ONE token the trailer carries",
+              detail.count("telemetry=") == 3 and "telemetry=measured" in detail,
+              detail[-110:])
+
+        # ARM 3 — the scope is the CLOSE row, stated so a later widening is a decision
+        # rather than an accident. #483 is about the close guard's own verdict; a `run` row
+        # has no such guard to overrule.
+        r = run(
+            owned, "append", "--event", "run", "--actor", "worker", "--subject", "#92",
+            "--detail", "A run row that states telemetry=typed for itself.",
+            actors=owned_actors,
+        )
+        check("a run row may state its own telemetry= (the refusal is close-scoped)",
+              r.returncode == 0, (r.stderr or "").strip()[:90])
+
+        # ===== #486 — the token describes the ROW
+        # The issue's case A, reproduced exactly: the author declares FOUR of the five keys
+        # and the tool contributes the fifth (the window). Pre-fix that row shipped
+        # `measured` over four hand-typed numbers.
+        mixed = tdir / "mixed.jsonl"
+        write_ledger(mixed, ("intake", "#93"), ("claim", "#93"))
+        r = run(
+            mixed, "append", "--event", "close", "--actor", "worker", "--subject", "#93",
+            "--detail", f"Closed. {head_token} board=closed cost_usd=99.0000 tokens_in=111 "
+                        "tokens_out=222 turns=7",
+            actors=owned_actors, extra_env={"OPENCRABS_DB_PATH": str(owned_db)},
+        )
+        detail = close_row(mixed).get("detail", "")
+        check("a mixed row (four author keys, one tool key) is accepted",
+              r.returncode == 0, (r.stderr or "").strip()[:90])
+        check("and it does NOT claim the whole row was measured (#486)",
+              "telemetry=measured" not in detail, detail[-120:])
+        check("and it states the weaker, honest claim instead",
+              "telemetry=typed" in detail, detail[-120:])
+        # NON-VACUITY: the row must really BE mixed -- the author's values survive and the
+        # tool's own key is present. Without both, the arm would pass on a row the tool
+        # composed entirely, which is the control's population, not this one.
+        check("and the author's own values survived untouched",
+              "cost_usd=99.0000" in detail and "turns=7" in detail, detail[-120:])
+        check("and the tool did contribute its key",
+              declares_field(detail, "duration"), detail[-120:])
+
+        # THE CONTROL — a fully tool-composed row still reads `measured`. Without it the
+        # fix above would be satisfiable by writing `typed` unconditionally, which would
+        # destroy the distinction #130 exists to make.
+        composed = tdir / "composed.jsonl"
+        write_ledger(composed, ("intake", "#94"), ("claim", "#94"))
+        r = run(
+            composed, "append", "--event", "close", "--actor", "worker", "--subject", "#94",
+            "--detail", f"Closed. {head_token} board=closed",
+            actors=owned_actors, extra_env={"OPENCRABS_DB_PATH": str(owned_db)},
+        )
+        detail = close_row(composed).get("detail", "")
+        check("a row the tool composed entirely still reads measured (the control)",
+              r.returncode == 0 and "telemetry=measured" in detail,
+              (r.stderr or detail[-120:]).strip()[:120])
+        # And it composed MORE than one key, or the control would be indistinguishable from
+        # the mixed arm above.
+        check("and the tool composed every key it appended",
+              all(declares_field(detail, k)
+                  for k in ("cost_usd", "tokens_in", "tokens_out", "turns", "duration")),
+              detail[-140:])
+
+        # The third shape: the author states ONLY the window, so the tool contributes the
+        # four totals. One author key is enough to make the row `typed` (#486), and this arm
+        # is what proves the rule is per-ROW rather than "more author keys than tool keys".
+        window = tdir / "window.jsonl"
+        write_ledger(window, ("intake", "#95"), ("claim", "#95"))
+        r = run(
+            window, "append", "--event", "close", "--actor", "worker", "--subject", "#95",
+            "--detail", f"Closed. {head_token} board=closed duration=0s",
+            actors=owned_actors, extra_env={"OPENCRABS_DB_PATH": str(owned_db)},
+        )
+        detail = close_row(window).get("detail", "")
+        check("one author key among four tool keys still reads typed",
+              r.returncode == 0 and "telemetry=typed" in detail, detail[-120:])
+        check("and the tool's four values are present (the arm is not vacuous)",
+              all(declares_field(detail, k)
+                  for k in ("cost_usd", "tokens_in", "tokens_out", "turns")),
+              detail[-140:])
+
     # --- #213 leg 1, DRIVEN rather than grepped -------------------------------------
     # The refusal shipped with NO behavioural probe. It was "verified" by grepping its
     # own source for the word `reclose`, which proves the mechanism EXISTS and says

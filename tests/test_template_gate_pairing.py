@@ -146,19 +146,50 @@ def declared_skips(top: Path) -> dict[str, dict]:
         return {}
 
 
+def registered_invocation(rel: str, entry: dict) -> list[str] | None:
+    """The argv the registration ITSELF declares, or None when it cannot be built here.
+
+    The registration carries the arguments as well as the runner, and an earlier form of
+    this leg rebuilt the invocation from the runner KIND alone — so a target registered
+    as `tools/ledger.py verify` was run BARE, argparse exited 2 on the missing
+    subcommand, and the depth was declared unable to carry a gate it carries perfectly.
+    Measured: staging any touch of `TEMPLATE/tools/ledger.py` at origin reds this gate,
+    with or without a change to the file (#509).
+
+    Reading the argv is not a convenience. `gate_registry.registration_entries` projects
+    it as a DECLARED FORM (literals bare, computed elements as `<expr>`), so the one
+    placeholder this reader can resolve is `<sys.executable>`; any OTHER placeholder is a
+    bound computed at run time, and guessing it would trade a false red for a false
+    green. That case returns None, which the caller reads as "not carried" — the same
+    conservative answer a timeout gets, and for the same reason.
+    """
+    tokens = (entry.get("argv") or "").split()
+    if not tokens or rel not in tokens:
+        return None
+    argv: list[str] = []
+    for token in tokens:
+        if token == "<sys.executable>":
+            argv.append(sys.executable)
+        elif token.startswith("<") and token.endswith(">"):
+            return None
+        else:
+            argv.append(token)
+    return argv
+
 def carries_at_shipped_depth(top: Path, rel: str, entry: dict) -> bool:
     """Run the gate exactly as the shipped audit would, from `TEMPLATE/`.
 
-    The invocation comes from the registration's own RUNNER rather than from a guess: a
+    The invocation comes from the registration's own ARGV rather than from a guess: a
     pytest-style target invoked as a script runs no test at all and exits 0, which would
-    read here as "the depth carries it" while testing nothing (#107(d), HQ ruling n=639).
+    read here as "the depth carries it" while testing nothing (#107(d), HQ ruling n=639)
+    — and a target whose registration passes SUBCOMMAND arguments run without them exits
+    non-zero having tested nothing, which is the same defect with the opposite sign.
     """
     if not (top / "TEMPLATE" / rel).is_file():
         return False
-    if entry.get("runner") == "pytest":
-        argv = [sys.executable, "-m", "pytest", rel, "-q"]
-    else:
-        argv = [sys.executable, rel]
+    argv = registered_invocation(rel, entry)
+    if argv is None:
+        return False
     try:
         proc = subprocess.run(
             argv, cwd=str(top / "TEMPLATE"), capture_output=True, text=True,
@@ -300,9 +331,66 @@ def _probe() -> list[str]:
                   "and `docs/shipped-audit-skips.json` does not declare it"],
               str(unpaired_gates(top)))
 
+        # ARM 6 — the registration's ARGUMENTS are part of the invocation (#509). A target
+        # registered with a SUBCOMMAND exits 0 only when it receives it; the runner-kind
+        # form ran it bare, argparse exited 2, and the depth was declared unable to carry
+        # a gate it carries. The real instance is `tools/ledger.py verify`, which is
+        # registered with its subcommand and reds on ANY touch of the file.
+        subcmd = top / "TEMPLATE" / "tools" / "test_probe_subcmd.py"
+        subcmd.write_text(
+            '#!/usr/bin/env python3\n"""Gate: carries only when the registration\'s own '
+            'subcommand reaches it."""\n'
+            "import sys\n\n\n"
+            "def main() -> int:\n"
+            '    return 0 if "verify" in sys.argv else 2\n\n\n'
+            'if __name__ == "__main__":\n    sys.exit(main())\n',
+            encoding="utf-8",
+        )
+        subcmd_red = top / "TEMPLATE" / "tools" / "test_probe_subcmd_red.py"
+        _write_gate(subcmd_red, 1, "registered with arguments and still red")
+        placeholder = top / "TEMPLATE" / "tools" / "test_probe_placeholder.py"
+        _write_gate(placeholder, 0, "carries, but its registration cannot be rebuilt")
+        audit.write_text(
+            audit.read_text(encoding="utf-8")
+            + 'gates_to_run.append([sys.executable, "tools/test_probe_subcmd.py", "verify"])\n'
+            + 'gates_to_run.append([sys.executable, "tools/test_probe_subcmd_red.py", "verify"])\n'
+            + 'gates_to_run.append([sys.executable, "tools/test_probe_placeholder.py", '
+              'str(SOME_BOUND)])\n',
+            encoding="utf-8",
+        )
+        # Stage ONLY the audit: a bare `add` here would carry ARM 5's staged probe into
+        # this commit, leaving the control below with an empty population to read.
+        _stage_only(top, ["TEMPLATE/tools/audit.py"])
+        _git(top, "commit", "-q", "-m", "the arguments-bearing registrations land")
+
+        _stage_only(top, ["TEMPLATE/tools/test_probe_subcmd.py"])
+        check("ARM 6: a registration's ARGUMENTS are honoured — a subcommand target that "
+              "carries WITH them is not reported",
+              unpaired_gates(top) == [], str(unpaired_gates(top)))
+
+        _stage_only(top, ["TEMPLATE/tools/test_probe_subcmd_red.py"])
+        check("ARM 7: honouring the arguments is not a blanket excuse — the same shape "
+              "that still exits non-zero WITH them IS reported",
+              unpaired_gates(top) == [
+                  "TEMPLATE/tools/test_probe_subcmd_red.py (added) — REGISTERED in the "
+                  "shipped audit and UNPAIRED: it does not carry at the shipped depth "
+                  "and `docs/shipped-audit-skips.json` does not declare it"],
+              str(unpaired_gates(top)))
+
+        _stage_only(top, ["TEMPLATE/tools/test_probe_placeholder.py"])
+        check("ARM 8: a registration carrying an UNRESOLVABLE placeholder is reported, "
+              "never guessed — a bound computed at run time cannot be rebuilt here",
+              unpaired_gates(top) == [
+                  "TEMPLATE/tools/test_probe_placeholder.py (added) — REGISTERED in the "
+                  "shipped audit and UNPAIRED: it does not carry at the shipped depth "
+                  "and `docs/shipped-audit-skips.json` does not declare it"],
+              str(unpaired_gates(top)))
+
         # THE WORKING-INSTRUMENT CONTROL. A zero is a verdict only from an instrument
         # that could have read non-zero: the predicate must SEE the staged population
-        # before its silence on a clean index means anything.
+        # before its silence on a clean index means anything. The arms above re-stage the
+        # index, so it is put back to ARM 5's population rather than assumed.
+        _stage_only(top, ["TEMPLATE/tests/test_probe_green.py"])
         check("CONTROL: the instrument reads the staged population it is judging",
               touched_shipped_gates(top) == {"TEMPLATE/tests/test_probe_green.py": "M"},
               str(touched_shipped_gates(top)))

@@ -1967,6 +1967,49 @@ def cmd_append(args: argparse.Namespace) -> int:
                 )
         detail = args.detail
         if args.event == "close":
+            # `telemetry=` IS TOOL-OWNED: REFUSED AT THE WRITE PATH (#483).
+            #
+            # #130 part 2 added the provenance token so a consumer can tell a value the
+            # tool TOOK from one an author TYPED, and the guard below COMPUTES that
+            # verdict from the branch that decided it (`measured` / `typed` /
+            # `unavailable`). Until this refusal the guard then DISCARDED its own verdict
+            # whenever the detail already declared one -- `if not
+            # declared_telemetry_provenance(detail)` -- so a hand-typed
+            # `telemetry=measured` outlived the tool's `typed` and sat over the author's
+            # own numbers. The token was testimony, not evidence.
+            #
+            # THE CLASS IS RECEIPTED, and it fired on an HONEST actor: `n=237` in
+            # `leshchenko1979/ai-antispam` (the close row for service item `#103`)
+            # declares `duration=0s telemetry=measured` over a window the guard measured
+            # at 45 s, and the guard's verdict for that row was `typed`. The author was
+            # trying to DISCLOSE that the number was unmeasured; the effect was a false
+            # provenance claim in a durable row.
+            #
+            # REFUSED, not overwritten. Overwriting would silently discard an author's
+            # declaration, and #130's whole point is that a reader must be able to tell
+            # what happened -- a tool that quietly replaces a value teaches nothing and
+            # leaves the author believing their token was honoured. A refusal names the
+            # rule to the writer and leaves no row behind that needs a correcting row.
+            #
+            # POSITIONAL, through the shared predicate, never a substring test: `detail`
+            # is free prose that QUOTES trailers as evidence, so a row that merely
+            # DISCUSSES a provenance token must not be refused for mentioning it (the
+            # `#88` / `n=405` clause 5 damage). History is untouched -- this binds the row
+            # ABOUT TO BE WRITTEN, so it can never predate itself, and nothing is
+            # backfilled.
+            if declared_telemetry_provenance(detail):
+                sys.exit(
+                    "ledger append refused: a close row must NOT declare `telemetry=` "
+                    "itself -- the provenance token is TOOL-OWNED (#483). The close guard "
+                    "composes it from the branch that decided it: `measured` when the tool "
+                    "took every measurement key in the row, `typed` when at least one "
+                    "value is the author's, `unavailable` when it had no window basis. A "
+                    "token you declare is not evidence, and no reader can tell it from one "
+                    "the tool wrote. Drop `telemetry=` from --detail: declare the "
+                    "MEASUREMENT keys if you have them (that is what `typed` exists for) "
+                    "and the guard will state their provenance for you. A `telemetry=` "
+                    "quoted mid-sentence in prose is not a declaration and is not refused."
+                )
             # ONE form, and it is the bare NEIGHBOUR import -- the same form the three
             # sibling imports at the head of this file use, and for the same reason:
             # this tool runs as `python3 tools/ledger.py`, so `tools/` is on the path,
@@ -1992,6 +2035,30 @@ def cmd_append(args: argparse.Namespace) -> int:
             telem = (extract_task_telemetry(args.subject, ledger_path=target_ledger)
                      if extract_task_telemetry else None)
             if telem is not None:
+                # WHICH MEASUREMENT KEYS ARE THE AUTHOR'S, read BEFORE the guard appends
+                # anything (#486). `declares_field` is a DECLARED test, never a mention --
+                # the same rule the block below follows.
+                #
+                # THE TOKEN IS PER-ROW WHILE ITS SUBJECT MATTER IS PER-KEY, and that
+                # mismatch is what #486 measured: a detail hand-declaring four keys left
+                # `missing` non-empty, the tool appended the fifth, and the row shipped
+                # `measured` over four hand-typed numbers. ONE key contributed by the tool
+                # flipped the whole row's claim, and `measured` is precisely the value a
+                # consumer reads to decide a row's figures are trustworthy.
+                #
+                # Reading the author's keys FIRST is what lets the verdict below describe
+                # the ROW truthfully. The two values then mean what a consumer needs:
+                # `measured` = every measurement key in this row was composed by the tool;
+                # `typed` = at least one value in it is the author's. No fourth value and
+                # no vocabulary change: `typed` already carried the weaker claim, and
+                # widening it to "at least one" keeps the conservative direction -- a
+                # consumer never over-trusts a mixed row, and the tool's own contribution
+                # is understated rather than the author's overstated.
+                author_keys = [
+                    key
+                    for key in ("cost_usd", "tokens_in", "tokens_out", "turns", "duration")
+                    if declares_field(detail, key)
+                ]
                 missing = []
                 # A substring test here is what made this the third site of the
                 # prose-as-data class (#88, n=405 clause 5): a close row whose PROSE
@@ -2018,7 +2085,11 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # genuinely took, and taking them is not a judgement.
                 if missing:
                     detail = f"{detail} {' '.join(missing)}".strip()
-                    provenance = "measured"
+                    # THE TOOL CONTRIBUTED SOME KEYS -- but the token describes the ROW
+                    # (#486). If the author declared any measurement key, a `measured`
+                    # here would cover THEIR numbers too, so the row states the weaker,
+                    # honest claim.
+                    provenance = "typed" if author_keys else "measured"
                 elif not declares_field(detail, "duration"):
                     # The COMPLEMENT of the append above, and the half that was missing.
                     # The two branches have DIFFERENT populations, and the boundary is the
@@ -2040,7 +2111,9 @@ def cmd_append(args: argparse.Namespace) -> int:
                     # the window was too short, which IS the finding. Guarded on the
                     # DECLARED field so an author's own duration is never duplicated.
                     detail = f"{detail} duration={telem.get('duration_sec', 0)}s".strip()
-                    provenance = "measured"
+                    # Same per-row rule as the branch above (#486): the tool supplied
+                    # `duration=`, and any author key in the row still makes it `typed`.
+                    provenance = "typed" if author_keys else "measured"
                 else:
                     # THE TOOL CONTRIBUTED NOTHING, AND THE ROW NOW SAYS SO (#130 part 2).
                     # This is the branch every HAND-TYPED row reaches: the extractor found
@@ -2054,13 +2127,15 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # consumer must be able to tell a value the tool TOOK from one an author
                 # TYPED, and no structural read of a row can make that distinction, so the
                 # WRITER states it. `telemetry=` is the field #129 introduced for the
-                # absence case; these are its other two values. Written once, from the
-                # branch that decided it, and only when the row does not already declare
-                # one -- two tokens for one field have no canonical reading (SKILL.md
-                # section 8) -- which is also why the read is POSITIONAL through the shared
-                # predicate rather than a substring test here.
-                if not declared_telemetry_provenance(detail):
-                    detail = f"{detail} telemetry={provenance}".strip()
+                # absence case; these are its other two values.
+                #
+                # UNCONDITIONAL since #483: the write path REFUSES an author-declared
+                # token, so by this line the trailer cannot already carry one and the
+                # former `if not declared_telemetry_provenance(detail)` guard could no
+                # longer be false. A guard that cannot fail is not a guard -- it reads as
+                # protection while protecting nothing -- so the append states the verdict
+                # the branch above decided, and the decision has ONE site (the refusal).
+                detail = f"{detail} telemetry={provenance}".strip()
             else:
                 # TWO CAUSES LAND HERE, AND THE ROW NOW SAYS SO (#129, #130 part 3).
                 # `extract_task_telemetry` resolving to None used to skip this whole
@@ -2076,9 +2151,9 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # `tools/`, so the truthiness gate above skipped the block entirely.
                 # The token names the FIELD and its STATE, so a reader can see WHY the
                 # row carries no numbers; it is not one of the five keys
-                # `field_predicate` reads, so it declares no measurement.
-                if not declared_telemetry_provenance(detail):
-                    detail = f"{detail} telemetry=unavailable".strip()
+                # `field_predicate` reads, so it declares no measurement. UNCONDITIONAL
+                # for the reason the branch above states (#483's refusal is the guard).
+                detail = f"{detail} telemetry=unavailable".strip()
 
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,

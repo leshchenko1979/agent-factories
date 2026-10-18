@@ -746,21 +746,33 @@ def declared_outcome_values(detail: str) -> list[str]:
 # word — which is why the read below is positional and why `declares_token` exists where
 # a single named value is the question.
 #
-# Three values, and each names the WRITER:
-#   * `measured`    -- the tool TOOK the values: `tools/telemetry.py::format_detail_string`
-#                      emitted them, or `tools/ledger.py`'s close guard appended them.
-#   * `typed`       -- the values were NOT contributed by the tool. The guard's
-#                      contribution-free branch is exactly where a hand-typed row enters.
+# Three values, and each names the WRITER -- and the token is PER-ROW while the values it
+# describes are PER-KEY, so what it claims is stated here rather than left to the natural
+# (stronger) reading (#486):
+#   * `measured`    -- EVERY measurement key in the row was composed by the tool:
+#                      `tools/telemetry.py::format_detail_string` emitted them, or
+#                      `tools/ledger.py`'s close guard appended every one of them.
+#   * `typed`       -- AT LEAST ONE value in the row is the author's. This is the weaker
+#                      claim, and it is the honest one for a mixed row: one tool-composed
+#                      key beside four hand-typed numbers is still an author's row, and a
+#                      consumer must not read `measured` over those four (#486's case A,
+#                      where a single contributed key flipped the whole row's claim).
 #   * `unavailable` -- nothing was measured, STATED rather than silently absent (#129).
+#
+# AND IT IS TOOL-OWNED (#483): the close guard REFUSES an author-declared `telemetry=` at
+# the write path, because a token an author writes is testimony rather than evidence and
+# no reader can tell it from one the tool wrote. The guard composes it from the branch that
+# decided it; nothing else may write it.
 TELEMETRY_PROVENANCE_KEY = "telemetry"
 TELEMETRY_PROVENANCE_VALUES: tuple[str, ...] = ("measured", "typed", "unavailable")
 
 def declared_telemetry_provenance(detail: str) -> list[str]:
     """Every `telemetry` value `detail`'s CANONICAL TRAILER declares, in order.
 
-    The ONE positional read of this field, imported by both call sites — the close guard
-    in `tools/ledger.py`, which must not RESTATE a provenance the detail already carries
-    (two tokens for one field have no canonical reading, SKILL.md §Verdicts and claims), and
+    The ONE positional read of this field, imported by both call sites — the write path in
+    `tools/ledger.py`, which REFUSES a close detail that already declares one (#483: the
+    token is tool-owned, so an author-supplied value is refused rather than overwritten,
+    and a row therefore never carries two), and
     `tests/test_close_telemetry_provenance.py`, which asserts that a row declaring a
     measurement declares its provenance too. A private `token.split("=")` at either would
     be the class `n=405` PART 5 rules: one field, one predicate.
