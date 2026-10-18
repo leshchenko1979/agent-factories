@@ -2173,6 +2173,18 @@ def cmd_append(args: argparse.Namespace) -> int:
         print(f"{prefix}n={receipt['n']} run {receipt['subject']} — {receipt['detail']}")
     return 0
 
+def _line_separators(line: str) -> tuple[str, str]:
+    """The `(item, key)` separators a ledger LINE is serialised with.
+
+    Read from the line itself rather than assumed, because this artifact carries BOTH
+    styles: `json.dumps`' defaults (`", "`, `": "`) and the compact form (`", "` → `","`)
+    the bulk of the file uses. `repair` serialises the row it EDITS and the naming row it
+    appends in the style of the row it replaces, so a one-row correction shows up as a
+    one-row diff instead of a whole-artifact reformat.
+    """
+    return (", ", ": ") if '": ' in line else (",", ":")
+
+
 def cmd_repair(args: argparse.Namespace) -> int:
     """Correct ONE row's `detail` in place, then append the record of the repair.
 
@@ -2368,17 +2380,37 @@ def cmd_repair(args: argparse.Namespace) -> int:
         # truncates the ledger — the one outcome worse than the incomplete row this
         # command exists to correct — so the new text is built beside it and swapped in
         # with `os.replace`, which is atomic within a filesystem.
+        #
+        # A REPAIR REWRITES ONE ROW, NEVER THE FILE. The replace used to re-serialise
+        # EVERY row through `json.dumps`' defaults, so correcting one row reformatted the
+        # whole artifact: measured 2026-10-18 on the live n=3555, where the defaults
+        # (spaced separators) met a compact ledger and a one-row correction produced
+        # 3557 changed lines — the correction buried inside a whole-file reformat, and a
+        # diff no reader can review. The rows this command does not edit are carried
+        # through VERBATIM, and the two it does write (the repaired row and the naming
+        # run row) take the separators of the row being replaced, so the diff is the
+        # correction and nothing else.
+        original_lines = target_ledger.read_text(encoding="utf-8").splitlines()
+        separators = _line_separators(original_lines[index])
         rows[index] = repaired
         tmp = target_ledger.with_name(target_ledger.name + ".repair-tmp")
         with open(tmp, "w", encoding="utf-8") as fh:
-            for row in rows:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            for position, row in enumerate(rows):
+                if position == index:
+                    text = json.dumps(repaired, ensure_ascii=False, separators=separators)
+                elif position < len(original_lines):
+                    text = original_lines[position]
+                else:
+                    text = json.dumps(row, ensure_ascii=False, separators=separators)
+                fh.write(text + "\n")
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, target_ledger)
 
         with open(target_ledger, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(run_row, ensure_ascii=False) + "\n")
+            fh.write(
+                json.dumps(run_row, ensure_ascii=False, separators=separators) + "\n"
+            )
             fh.flush()
             os.fsync(fh.fileno())
 

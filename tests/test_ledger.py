@@ -1962,6 +1962,41 @@ def main() -> int:
             v = run(ledger, "verify")
             check("verify accepts the repaired ledger", v.returncode == 0, v.stderr.strip()[:90])
 
+            # A REPAIR REWRITES ONE ROW, NEVER THE FILE. The atomic replace used to
+            # re-serialise EVERY row through `json.dumps`' defaults, so correcting one
+            # row reformatted the whole artifact — measured 2026-10-18 on the live
+            # n=3555, where those defaults met a compact ledger and a one-row correction
+            # produced 3557 changed lines. The rows a repair does not edit are carried
+            # through VERBATIM, and the two it writes take the replaced row's separators,
+            # so the diff is the correction and nothing else. Both halves are probed: the
+            # untouched lines are BYTE-identical, and the edited line keeps the compact
+            # style of the file it landed in.
+            compact = ledger.with_name("compact.jsonl")
+            compact.write_text(
+                "\n".join(
+                    json.dumps(
+                        {"n": i, "ts": post_ts, "event": event, "actor": "worker",
+                         "subject": "#80", "detail": "probe"},
+                        separators=(",", ":"),
+                    )
+                    for i, event in enumerate(("intake", "claim", "close"), 1)
+                ) + "\n",
+                encoding="utf-8",
+            )
+            untouched_before = compact.read_text(encoding="utf-8").splitlines()[:2]
+            r = run(compact, "repair", "--actor", "worker", "--n", "3",
+                    "--append-detail", f"head={probe_sha}", "--note", "probe style")
+            err = r.stderr.strip()
+            check("a compact ledger can be repaired", r.returncode == 0, err[:140])
+            lines_after = compact.read_text(encoding="utf-8").splitlines()
+            check("a repair leaves the rows it did not edit BYTE-identical",
+                  lines_after[:2] == untouched_before,
+                  f"{lines_after[0][:70]!r} vs {untouched_before[0][:70]!r}")
+            check("the edited row keeps the file's own compact style",
+                  lines_after[2].startswith('{"n":3,"ts":'), lines_after[2][:70])
+            check("the naming run row is written in the same style",
+                  lines_after[3].startswith('{"n":4,"ts":'), lines_after[3][:70])
+
             # A repair must not DISPLACE the row's canonical trailer (#91, ruled at ledger
             # n=572 PART 3). The trailer is POSITIONAL, so text appended AFTER it terminates
             # the run and the row's declared telemetry leaves the trailing run that every
