@@ -196,7 +196,8 @@ def no_shrink_problems(
     `declared` holds the identity tuples a reconciliation row named, and each is matched
     VERBATIM against an identity the walk observed removed.
 
-    A RE-MINT IS NOT A SHRINK (#301, and §9.1's own bound). Three shapes are distinguished,
+    A RE-MINT IS NOT A SHRINK (#301, and the re-mint bound in
+    `docs/instruments/ledger.md` §9.1). Three shapes are distinguished,
     because conflating them is the trap the #301 ruling names -- a guard that fires on a
     legal re-mint is worse than none, since the lane learns to ignore it:
 
@@ -204,7 +205,8 @@ def no_shrink_problems(
          merge resolution dropped it. This is a PROBLEM: the one class the pre-#301 walker
          could not see, and the reason the gate exists.
       2. REMOVED AND ABSENT FROM EVERY MERGED-IN LINE -- the identity never reached the
-         published line, so §9.1's re-mint is free. EXCUSED, and printed, because "clean"
+         published line, so the re-mint bound (`docs/instruments/ledger.md` §9.1) makes the
+         re-mint free. EXCUSED, and printed, because "clean"
          and "a re-mint happened here" must not read the same.
       3. REMOVED BY A SINGLE-PARENT COMMIT -- there is no merged-in line to compare
          against, so absence proves nothing. The row must carry the re-mint SIGNATURE (the
@@ -631,7 +633,8 @@ def build_transitions(
         # A MERGE's remaining parents are the line that came IN, and
         # `--diff-merges=first-parent` diffs only against the first. Reading them is what
         # lets the predicate tell a RE-MINT from a SHRINK: an identity absent from every
-        # merged-in parent was never on the published line, so §9.1 makes re-minting it
+        # merged-in parent was never on the published line, so the re-mint bound
+        # (`docs/instruments/ledger.md` §9.1) makes re-minting it
         # free; an identity PRESENT on one of them was published, and a merge that drops it
         # is the removal this gate exists to catch. It is also the only read that sees the
         # inverse case -- a row that lived ONLY on the merged-in line and vanished in the
@@ -1141,7 +1144,8 @@ def probe_a_MERGE_that_only_REMINTS_does_not_raise_the_alarm() -> list[str]:
     it -- whether the removed identity was on the merged-in line:
 
       * arm A: the removed row is ABSENT from every merged-in parent -> it never reached the
-        published line, so §9.1 makes the re-mint free. The gate must be SILENT on it, and
+        published line, so the re-mint bound (`docs/instruments/ledger.md` §9.1) makes the
+        re-mint free. The gate must be SILENT on it, and
         must PRINT that a re-mint happened (a silent excuse is indistinguishable from no
         removal at all).
       * arm B: the SAME removal with the identity PRESENT on a merged-in parent -> it was
